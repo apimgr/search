@@ -1,0 +1,91 @@
+{{define "content"}}
+<div class="static-page about-page">
+    <h1>About {{.Config.Server.Branding.AppName}}</h1>
+
+    {{if .Config.Server.Pages.About.Content}}
+    <div class="page-content markdown">
+        {{.Config.Server.Pages.About.Content | safe}}
+    </div>
+    {{else}}
+    <div class="page-content">
+        <section class="about-section">
+            <h2>What is {{.Config.Server.Branding.AppName}}?</h2>
+            <p>{{.Config.Server.Branding.AppName}} is a privacy-respecting metasearch engine that aggregates results from multiple search engines without tracking you.</p>
+            <p>Version: {{version}}</p>
+        </section>
+
+        <section class="about-section">
+            <h2>Why Use a Metasearch Engine?</h2>
+            <ul class="feature-list">
+                <li>
+                    <span class="feature-icon">🔒</span>
+                    <div>
+                        <strong>Privacy First</strong>
+                        <p>No tracking, no profiling, no filter bubbles. Your searches stay private.</p>
+                    </div>
+                </li>
+                <li>
+                    <span class="feature-icon">🌐</span>
+                    <div>
+                        <strong>Multiple Sources</strong>
+                        <p>Get results from various search engines for more comprehensive answers.</p>
+                    </div>
+                </li>
+                <li>
+                    <span class="feature-icon">🧅</span>
+                    <div>
+                        <strong>Tor Support</strong>
+                        <p>Access via Tor hidden service for maximum anonymity.</p>
+                    </div>
+                </li>
+                <li>
+                    <span class="feature-icon">⚡</span>
+                    <div>
+                        <strong>Fast & Lightweight</strong>
+                        <p>No JavaScript required, minimal bandwidth usage, works everywhere.</p>
+                    </div>
+                </li>
+            </ul>
+        </section>
+
+        {{/* Tor section - shown only if enabled */}}
+        {{if .Config.Server.Tor.Enabled}}
+        <section class="about-section tor-access">
+            <h2>Tor Hidden Service</h2>
+            <p>This application is available via Tor for enhanced privacy.</p>
+            {{if .TorAddress}}
+            <div class="onion-address">
+                <code id="onion-addr">{{.TorAddress}}</code>
+                <button class="btn-copy" onclick="copyToClipboard('onion-addr')" aria-label="Copy address">Copy</button>
+            </div>
+            <p class="note">Requires Tor Browser or Tor-enabled browser.</p>
+            {{else}}
+            <p class="note">Tor address will be available once the service is connected.</p>
+            {{end}}
+        </section>
+        {{end}}
+
+        <section class="about-section">
+            <h2>Open Source</h2>
+            <p>This search engine is built with open source software. You can host your own instance and maintain complete control over your data.</p>
+            <p><a href="https://github.com/apimgr/search" target="_blank" rel="noopener">View on GitHub</a></p>
+        </section>
+    </div>
+    {{end}}
+</div>
+{{end}}
+
+{{define "extra_scripts"}}
+<script>
+function copyToClipboard(elementId) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        navigator.clipboard.writeText(element.textContent).then(() => {
+            showToast('Copied to clipboard!', 'success');
+        }).catch(() => {
+            showToast('Failed to copy', 'error');
+        });
+    }
+}
+</script>
+{{end}}

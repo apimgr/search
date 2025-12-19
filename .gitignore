@@ -1,0 +1,57 @@
+# Binaries and releases
+binaries/
+releases/
+search
+search.exe
+
+# Go build artifacts
+*.test
+*.out
+coverage.out
+coverage.html
+coverage.txt
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+go.work.sum
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+.*.swp
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Build cache
+.cache/
+
+# Test artifacts
+testdata/temp/
+
+# Documentation build artifacts
+docs/_build/
+docs/.doctrees/

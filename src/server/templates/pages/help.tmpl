@@ -1,0 +1,105 @@
+{{define "content"}}
+<div class="static-page help-page">
+    <h1>Help & Documentation</h1>
+
+    {{if .Config.Server.Pages.Help.Content}}
+    <div class="page-content markdown">
+        {{.Config.Server.Pages.Help.Content | safe}}
+    </div>
+    {{else}}
+    <div class="page-content">
+        <section class="help-section">
+            <h2>Getting Started</h2>
+            <p>{{.Config.Server.Branding.AppName}} is a privacy-respecting search engine. Simply type your query in the search box and press Enter or click the search button.</p>
+        </section>
+
+        <section class="help-section">
+            <h2>Search Categories</h2>
+            <p>Use the category tabs to filter your search results:</p>
+            <ul>
+                <li><strong>All:</strong> General web search</li>
+                <li><strong>Images:</strong> Search for images</li>
+                <li><strong>Videos:</strong> Search for videos</li>
+                <li><strong>News:</strong> Search news articles</li>
+                <li><strong>Maps:</strong> Search for locations</li>
+            </ul>
+        </section>
+
+        <section class="help-section">
+            <h2>Search Tips</h2>
+            <ul>
+                <li>Use specific keywords for better results</li>
+                <li>Put phrases in quotes for exact matches: <code>"exact phrase"</code></li>
+                <li>Use minus to exclude words: <code>apple -fruit</code></li>
+                <li>Search within a site: <code>site:example.com query</code></li>
+            </ul>
+        </section>
+
+        <section class="help-section">
+            <h2>Keyboard Shortcuts</h2>
+            <table class="shortcuts-table">
+                <thead>
+                    <tr>
+                        <th>Shortcut</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><kbd>/</kbd></td>
+                        <td>Focus search box</td>
+                    </tr>
+                    <tr>
+                        <td><kbd>Escape</kbd></td>
+                        <td>Clear search / Close dialogs</td>
+                    </tr>
+                    <tr>
+                        <td><kbd>t</kbd></td>
+                        <td>Toggle theme (dark/light)</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section class="help-section api-docs">
+            <h2>API Documentation</h2>
+            <p>This application provides a full REST API with interactive documentation.</p>
+            <ul>
+                <li><a href="/openapi">OpenAPI</a> - Interactive REST API explorer</li>
+            </ul>
+        </section>
+
+        <section class="help-section">
+            <h2>Privacy Features</h2>
+            <ul>
+                <li>No tracking or profiling</li>
+                <li>No search history stored</li>
+                <li>Tor hidden service available</li>
+                <li>Minimal cookies (only for preferences)</li>
+            </ul>
+        </section>
+
+        <section class="help-section">
+            <h2>FAQ</h2>
+            <details>
+                <summary>Why are some results different from other search engines?</summary>
+                <p>We aggregate results from multiple sources and don't personalize based on your history, so results may differ from what you see on other search engines.</p>
+            </details>
+            <details>
+                <summary>How can I access via Tor?</summary>
+                <p>Install Tor Browser and use our .onion address (available on the <a href="/server/about">About page</a>).</p>
+            </details>
+            <details>
+                <summary>Can I self-host this?</summary>
+                <p>Yes! This is open source software. Check our <a href="https://github.com/apimgr/search" target="_blank" rel="noopener">GitHub repository</a> for installation instructions.</p>
+            </details>
+        </section>
+
+        <section class="help-section">
+            <h2>Need More Help?</h2>
+            <p><a href="/server/contact">Contact us</a> if you have questions or need assistance.</p>
+        </section>
+    </div>
+    {{end}}
+</div>
+{{end}}

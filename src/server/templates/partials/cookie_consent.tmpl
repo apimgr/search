@@ -1,0 +1,43 @@
+{{/* Cookie consent popup partial */}}
+{{ define "cookie_consent" }}
+{{ if .CookieConsent }}
+{{ if .CookieConsent.Enabled }}
+<div class="cookie-consent" id="cookie-consent" style="display: none;">
+    <div class="cookie-consent-content">
+        <p class="cookie-consent-message">
+            {{ if .CookieConsent.Message }}
+                {{ .CookieConsent.Message }}
+            {{ else }}
+                We use cookies to enhance your browsing experience. By continuing to use this site, you agree to our use of cookies.
+            {{ end }}
+            {{ if .CookieConsent.PolicyURL }}
+            <a href="{{ .CookieConsent.PolicyURL }}" class="cookie-consent-link">Learn more</a>
+            {{ end }}
+        </p>
+        <div class="cookie-consent-actions">
+            <button class="cookie-consent-accept" onclick="acceptCookies()">Accept</button>
+            <button class="cookie-consent-decline" onclick="declineCookies()">Decline</button>
+        </div>
+    </div>
+</div>
+<script>
+(function() {
+    var consent = localStorage.getItem('cookie_consent');
+    if (consent === null) {
+        document.getElementById('cookie-consent').style.display = 'flex';
+    }
+})();
+
+function acceptCookies() {
+    localStorage.setItem('cookie_consent', 'accepted');
+    document.getElementById('cookie-consent').style.display = 'none';
+}
+
+function declineCookies() {
+    localStorage.setItem('cookie_consent', 'declined');
+    document.getElementById('cookie-consent').style.display = 'none';
+}
+</script>
+{{ end }}
+{{ end }}
+{{ end }}

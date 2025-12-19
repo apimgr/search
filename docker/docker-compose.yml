@@ -1,0 +1,25 @@
+name: search
+
+services:
+  search:
+    image: ghcr.io/apimgr/search:latest
+    container_name: search
+    restart: unless-stopped
+    environment:
+      # Hardcoded with sane defaults - NO .env files
+      - MODE=production
+      - TZ=America/New_York
+      - ENABLE_TOR=true
+    ports:
+      # Production: bound to Docker bridge only
+      - "172.17.0.1:64080:80"
+    volumes:
+      - ../rootfs/config/search:/config
+      - ../rootfs/data/search:/data
+    networks:
+      - search
+
+networks:
+  search:
+    name: search
+    external: false

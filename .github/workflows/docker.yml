@@ -1,0 +1,144 @@
+name: Docker Build
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - beta
+    tags:
+      - 'v*'
+      - '*.*.*'
+  workflow_dispatch:
+
+env:
+  PROJECT: search
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-binaries:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Set build info
+        run: |
+          echo "GIT_COMMIT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+          else
+            echo "VERSION=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          fi
+          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          mkdir -p binaries
+          LDFLAGS="-s -w -X 'github.com/apimgr/search/src/config.Version=${{ env.VERSION }}' -X 'github.com/apimgr/search/src/config.GitCommit=${{ env.GIT_COMMIT }}' -X 'github.com/apimgr/search/src/config.BuildTime=${{ env.BUILD_DATE }}'"
+          go build -ldflags "${LDFLAGS}" -o binaries/${{ env.PROJECT }}-${{ matrix.goos }}-${{ matrix.goarch }} ./src
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: binaries/${{ env.PROJECT }}-${{ matrix.goos }}-${{ matrix.goarch }}
+
+  build-docker:
+    needs: build-binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: binaries
+          pattern: binary-*
+          merge-multiple: true
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set build info
+        run: |
+          echo "GIT_COMMIT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "YYMM=$(date +"%y%m")" >> $GITHUB_ENV
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+            echo "IS_TAG=true" >> $GITHUB_ENV
+          else
+            echo "VERSION=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+            echo "IS_TAG=false" >> $GITHUB_ENV
+          fi
+          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
+
+      - name: Determine tags
+        id: tags
+        run: |
+          TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.GIT_COMMIT }}"
+
+          if [[ "${{ env.IS_TAG }}" == "true" ]]; then
+            # Version tag - add version, latest, YYMM
+            TAGS="$TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}"
+            TAGS="$TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+            TAGS="$TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.YYMM }}"
+          elif [[ "${{ github.ref }}" == refs/heads/beta ]]; then
+            # Beta branch
+            TAGS="$TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:beta"
+          else
+            # Main/master branch
+            TAGS="$TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev"
+          fi
+
+          echo "tags=$TAGS" >> $GITHUB_OUTPUT
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            VERSION=${{ env.VERSION }}
+            BUILD_DATE=${{ env.BUILD_DATE }}
+            VCS_REF=${{ env.GIT_COMMIT }}
+          labels: |
+            org.opencontainers.image.title=${{ env.PROJECT }}
+            org.opencontainers.image.version=${{ env.VERSION }}
+            org.opencontainers.image.created=${{ env.BUILD_DATE }}
+            org.opencontainers.image.revision=${{ env.GIT_COMMIT }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}

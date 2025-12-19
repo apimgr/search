@@ -1,0 +1,21 @@
+{{define "content"}}
+<div class="error-page">
+    <div class="error-container">
+        <div class="error-code">{{.ErrorCode}}</div>
+        <h1 class="error-title">{{.ErrorTitle}}</h1>
+        <p class="error-message">{{.ErrorMessage}}</p>
+
+        {{if and .Config.IsDevelopment .ErrorDetails}}
+        <details class="error-details">
+            <summary>Technical Details</summary>
+            <pre>{{.ErrorDetails}}</pre>
+        </details>
+        {{end}}
+
+        <div class="error-actions">
+            <a href="/" class="btn btn-primary">Go Home</a>
+            <button onclick="history.back()" class="btn btn-secondary">Go Back</button>
+        </div>
+    </div>
+</div>
+{{end}}

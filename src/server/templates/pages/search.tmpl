@@ -1,0 +1,240 @@
+{{define "content"}}
+<div class="search-results-page" data-query="{{.Query}}" data-category="{{.Category}}" data-page="{{if .Pagination}}{{.Pagination.CurrentPage}}{{else}}1{{end}}">
+    {{/* Category tabs */}}
+    <div class="search-categories">
+        <a href="/search?q={{urlquery .Query}}&category=general" class="category-link{{if eq .Category "general"}} active{{end}}">
+            <span class="cat-icon">🌐</span> All
+        </a>
+        <a href="/search?q={{urlquery .Query}}&category=images" class="category-link{{if eq .Category "images"}} active{{end}}">
+            <span class="cat-icon">🖼️</span> Images
+        </a>
+        <a href="/search?q={{urlquery .Query}}&category=videos" class="category-link{{if eq .Category "videos"}} active{{end}}">
+            <span class="cat-icon">🎥</span> Videos
+        </a>
+        <a href="/search?q={{urlquery .Query}}&category=news" class="category-link{{if eq .Category "news"}} active{{end}}">
+            <span class="cat-icon">📰</span> News
+        </a>
+        <a href="/search?q={{urlquery .Query}}&category=maps" class="category-link{{if eq .Category "maps"}} active{{end}}">
+            <span class="cat-icon">🗺️</span> Maps
+        </a>
+    </div>
+
+    {{/* Instant Answer Box */}}
+    {{if .InstantAnswer}}
+    <div class="instant-answer-box" data-type="{{.InstantAnswer.Type}}">
+        <div class="instant-answer-header">
+            <span class="instant-answer-title">{{.InstantAnswer.Title}}</span>
+            {{if .InstantAnswer.Source}}
+            <a href="{{.InstantAnswer.SourceURL}}" class="instant-answer-source" target="_blank" rel="noopener noreferrer">{{.InstantAnswer.Source}}</a>
+            {{end}}
+        </div>
+        <div class="instant-answer-content">
+            {{.InstantAnswer.Content | safeHTML}}
+        </div>
+    </div>
+    {{end}}
+
+    {{if .Error}}
+    <div class="search-error">
+        <p>{{.Error}}</p>
+    </div>
+    {{else if .Results}}
+    <div class="search-info">
+        <span class="result-count">{{.TotalResults}} results</span>
+        <span class="search-time">({{printf "%.2f" .SearchTime}} seconds)</span>
+    </div>
+
+    {{if eq .Category "images"}}
+    {{/* Image Grid Layout */}}
+    <div class="image-results" id="results-container">
+        {{range .Results}}
+        <div class="image-result" data-full-url="{{.URL}}">
+            <a href="{{.URL}}" target="_blank" rel="noopener noreferrer">
+                {{if .Thumbnail}}
+                <img src="{{.Thumbnail}}" alt="{{.Title}}" loading="lazy">
+                {{else}}
+                <div class="image-placeholder">
+                    <span>🖼️</span>
+                </div>
+                {{end}}
+            </a>
+            <div class="image-result-info">
+                <a href="{{.URL}}" class="image-title" target="_blank" rel="noopener noreferrer">{{.Title}}</a>
+                <div class="image-source">{{.Engine}}</div>
+            </div>
+        </div>
+        {{end}}
+    </div>
+    {{else}}
+    {{/* Standard Results List */}}
+    <div class="results-list" id="results-container">
+        {{range .Results}}
+        <article class="result-item">
+            <div class="result-favicon">
+                <img src="https://www.google.com/s2/favicons?domain={{.URL}}&sz=32"
+                     alt=""
+                     loading="lazy"
+                     onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+                <span class="favicon-placeholder" style="display:none;">{{slice (printf "%s" .Title) 0 1}}</span>
+            </div>
+            <div class="result-body">
+                <h3 class="result-title">
+                    <a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Title}}</a>
+                </h3>
+                <div class="result-url">
+                    <span class="result-url-text">{{.URL}}</span>
+                </div>
+                <p class="result-description">{{.Content}}</p>
+                <div class="result-meta">
+                    <span class="result-engine">{{.Engine}}</span>
+                    {{if .PublishedAt}}
+                    <span class="result-date">{{.PublishedAt.Format "Jan 2, 2006"}}</span>
+                    {{end}}
+                </div>
+            </div>
+        </article>
+        {{end}}
+    </div>
+    {{end}}
+
+    {{/* Infinite Scroll Trigger */}}
+    <div class="infinite-scroll-trigger" id="scroll-trigger"></div>
+    <div class="loading-more" id="loading-indicator" style="display: none;">
+        <div class="loading-spinner"></div>
+        <span>Loading more results...</span>
+    </div>
+    <div class="end-of-results" id="end-indicator" style="display: none;">
+        No more results
+    </div>
+
+    {{else}}
+    <div class="no-results">
+        <p>No results found for "<strong>{{.Query}}</strong>"</p>
+        <p class="no-results-hint">Try different keywords or check your spelling.</p>
+    </div>
+    {{end}}
+</div>
+
+<script>
+(function() {
+    'use strict';
+
+    const container = document.querySelector('.search-results-page');
+    if (!container) return;
+
+    const resultsContainer = document.getElementById('results-container');
+    const scrollTrigger = document.getElementById('scroll-trigger');
+    const loadingIndicator = document.getElementById('loading-indicator');
+    const endIndicator = document.getElementById('end-indicator');
+
+    if (!resultsContainer || !scrollTrigger) return;
+
+    const query = container.dataset.query;
+    const category = container.dataset.category;
+    let currentPage = parseInt(container.dataset.page) || 1;
+    let isLoading = false;
+    let hasMore = true;
+
+    // Create result card HTML
+    function createResultCard(result) {
+        const domain = new URL(result.url).hostname;
+        const firstLetter = result.title ? result.title.charAt(0).toUpperCase() : '?';
+
+        if (category === 'images') {
+            return `
+                <div class="image-result" data-full-url="${escapeHtml(result.url)}">
+                    <a href="${escapeHtml(result.url)}" target="_blank" rel="noopener noreferrer">
+                        ${result.thumbnail
+                            ? `<img src="${escapeHtml(result.thumbnail)}" alt="${escapeHtml(result.title)}" loading="lazy">`
+                            : `<div class="image-placeholder"><span>🖼️</span></div>`
+                        }
+                    </a>
+                    <div class="image-result-info">
+                        <a href="${escapeHtml(result.url)}" class="image-title" target="_blank" rel="noopener noreferrer">${escapeHtml(result.title)}</a>
+                        <div class="image-source">${escapeHtml(result.engine)}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        return `
+            <article class="result-item">
+                <div class="result-favicon">
+                    <img src="https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=32"
+                         alt=""
+                         loading="lazy"
+                         onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+                    <span class="favicon-placeholder" style="display:none;">${escapeHtml(firstLetter)}</span>
+                </div>
+                <div class="result-body">
+                    <h3 class="result-title">
+                        <a href="${escapeHtml(result.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(result.title)}</a>
+                    </h3>
+                    <div class="result-url">
+                        <span class="result-url-text">${escapeHtml(result.url)}</span>
+                    </div>
+                    <p class="result-description">${escapeHtml(result.description || '')}</p>
+                    <div class="result-meta">
+                        <span class="result-engine">${escapeHtml(result.engine)}</span>
+                        ${result.date ? `<span class="result-date">${escapeHtml(result.date)}</span>` : ''}
+                    </div>
+                </div>
+            </article>
+        `;
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    async function loadMoreResults() {
+        if (isLoading || !hasMore) return;
+
+        isLoading = true;
+        loadingIndicator.style.display = 'flex';
+
+        try {
+            const nextPage = currentPage + 1;
+            const response = await fetch(`/api/v1/search?q=${encodeURIComponent(query)}&category=${encodeURIComponent(category)}&page=${nextPage}&limit=20`);
+            const data = await response.json();
+
+            if (data.success && data.data.results && data.data.results.length > 0) {
+                data.data.results.forEach(result => {
+                    resultsContainer.insertAdjacentHTML('beforeend', createResultCard(result));
+                });
+                currentPage = nextPage;
+                hasMore = data.data.has_more;
+            } else {
+                hasMore = false;
+            }
+
+            if (!hasMore) {
+                endIndicator.style.display = 'block';
+                scrollTrigger.style.display = 'none';
+            }
+        } catch (error) {
+            console.error('Failed to load more results:', error);
+        } finally {
+            isLoading = false;
+            loadingIndicator.style.display = 'none';
+        }
+    }
+
+    // Intersection Observer for infinite scroll
+    if ('IntersectionObserver' in window) {
+        const observer = new IntersectionObserver(function(entries) {
+            entries.forEach(function(entry) {
+                if (entry.isIntersecting && hasMore) {
+                    loadMoreResults();
+                }
+            });
+        }, { rootMargin: '400px' });
+
+        observer.observe(scrollTrigger);
+    }
+})();
+</script>
+{{end}}

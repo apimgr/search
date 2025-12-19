@@ -1,0 +1,416 @@
+package backup
+
+import (
+	"archive/tar"
+	"compress/gzip"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/apimgr/search/src/config"
+)
+
+// BackupMetadata contains information about a backup
+type BackupMetadata struct {
+	Version     string    `json:"version"`
+	CreatedAt   time.Time `json:"created_at"`
+	ServerTitle string    `json:"server_title"`
+	Files       []string  `json:"files"`
+	Size        int64     `json:"size"`
+}
+
+// Manager handles backup and restore operations
+type Manager struct {
+	backupDir string
+	configDir string
+	dataDir   string
+}
+
+// NewManager creates a new backup manager
+func NewManager() *Manager {
+	return &Manager{
+		backupDir: config.GetBackupDir(),
+		configDir: config.GetConfigDir(),
+		dataDir:   config.GetDataDir(),
+	}
+}
+
+// Create creates a new backup archive
+func (m *Manager) Create(filename string) (string, error) {
+	// Ensure backup directory exists
+	if err := os.MkdirAll(m.backupDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create backup directory: %w", err)
+	}
+
+	// Generate filename if not specified
+	if filename == "" {
+		filename = fmt.Sprintf("search-backup-%s.tar.gz", time.Now().Format("20060102-150405"))
+	}
+
+	// Ensure .tar.gz extension
+	if !strings.HasSuffix(filename, ".tar.gz") {
+		filename += ".tar.gz"
+	}
+
+	backupPath := filepath.Join(m.backupDir, filename)
+
+	// Create the archive file
+	file, err := os.Create(backupPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to create backup file: %w", err)
+	}
+	defer file.Close()
+
+	gzWriter := gzip.NewWriter(file)
+	defer gzWriter.Close()
+
+	tarWriter := tar.NewWriter(gzWriter)
+	defer tarWriter.Close()
+
+	var totalSize int64
+	var files []string
+
+	// Backup config directory
+	configFiles, configSize, err := m.addDirectoryToTar(tarWriter, m.configDir, "config")
+	if err != nil {
+		return "", fmt.Errorf("failed to backup config: %w", err)
+	}
+	files = append(files, configFiles...)
+	totalSize += configSize
+
+	// Backup data directory (excluding logs and cache)
+	dataFiles, dataSize, err := m.addDirectoryToTar(tarWriter, m.dataDir, "data")
+	if err != nil {
+		return "", fmt.Errorf("failed to backup data: %w", err)
+	}
+	files = append(files, dataFiles...)
+	totalSize += dataSize
+
+	// Load config for metadata
+	cfg, _ := config.Load(filepath.Join(m.configDir, "server.yml"))
+	serverTitle := "Search"
+	if cfg != nil {
+		serverTitle = cfg.Server.Title
+	}
+
+	// Create metadata
+	metadata := BackupMetadata{
+		Version:     config.Version,
+		CreatedAt:   time.Now(),
+		ServerTitle: serverTitle,
+		Files:       files,
+		Size:        totalSize,
+	}
+
+	// Add metadata to archive
+	metaJSON, _ := json.MarshalIndent(metadata, "", "  ")
+	metaHeader := &tar.Header{
+		Name:    "backup.json",
+		Size:    int64(len(metaJSON)),
+		Mode:    0644,
+		ModTime: time.Now(),
+	}
+	if err := tarWriter.WriteHeader(metaHeader); err != nil {
+		return "", fmt.Errorf("failed to write metadata header: %w", err)
+	}
+	if _, err := tarWriter.Write(metaJSON); err != nil {
+		return "", fmt.Errorf("failed to write metadata: %w", err)
+	}
+
+	return backupPath, nil
+}
+
+// addDirectoryToTar adds a directory to the tar archive
+func (m *Manager) addDirectoryToTar(tw *tar.Writer, srcDir, prefix string) ([]string, int64, error) {
+	var files []string
+	var totalSize int64
+
+	err := filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Skip directories we don't want to backup
+		if info.IsDir() {
+			name := info.Name()
+			if name == "logs" || name == "cache" || name == "tmp" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		// Get relative path
+		relPath, err := filepath.Rel(srcDir, path)
+		if err != nil {
+			return err
+		}
+
+		// Skip large files (>100MB)
+		if info.Size() > 100*1024*1024 {
+			return nil
+		}
+
+		// Create tar header
+		header, err := tar.FileInfoHeader(info, "")
+		if err != nil {
+			return err
+		}
+		header.Name = filepath.Join(prefix, relPath)
+
+		if err := tw.WriteHeader(header); err != nil {
+			return err
+		}
+
+		// Write file content
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+
+		written, err := io.Copy(tw, file)
+		if err != nil {
+			return err
+		}
+
+		files = append(files, header.Name)
+		totalSize += written
+
+		return nil
+	})
+
+	return files, totalSize, err
+}
+
+// Restore restores from a backup archive
+func (m *Manager) Restore(backupPath string) error {
+	// Verify backup file exists
+	if _, err := os.Stat(backupPath); err != nil {
+		return fmt.Errorf("backup file not found: %w", err)
+	}
+
+	// Open the archive
+	file, err := os.Open(backupPath)
+	if err != nil {
+		return fmt.Errorf("failed to open backup file: %w", err)
+	}
+	defer file.Close()
+
+	gzReader, err := gzip.NewReader(file)
+	if err != nil {
+		return fmt.Errorf("failed to create gzip reader: %w", err)
+	}
+	defer gzReader.Close()
+
+	tarReader := tar.NewReader(gzReader)
+
+	// Create backup of current config before restoring
+	currentBackup := filepath.Join(m.backupDir, fmt.Sprintf("pre-restore-%s.tar.gz", time.Now().Format("20060102-150405")))
+	if _, err := m.Create(filepath.Base(currentBackup)); err != nil {
+		// Non-fatal, just warn
+		fmt.Printf("Warning: could not create pre-restore backup: %v\n", err)
+	}
+
+	// Extract files
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("error reading tar: %w", err)
+		}
+
+		// Skip metadata file
+		if header.Name == "backup.json" {
+			continue
+		}
+
+		// Determine target path
+		var targetPath string
+		if strings.HasPrefix(header.Name, "config/") {
+			relPath := strings.TrimPrefix(header.Name, "config/")
+			targetPath = filepath.Join(m.configDir, relPath)
+		} else if strings.HasPrefix(header.Name, "data/") {
+			relPath := strings.TrimPrefix(header.Name, "data/")
+			targetPath = filepath.Join(m.dataDir, relPath)
+		} else {
+			continue // Skip unknown paths
+		}
+
+		// Create parent directories
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+			return fmt.Errorf("failed to create directory: %w", err)
+		}
+
+		// Handle based on file type
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(targetPath, os.FileMode(header.Mode)); err != nil {
+				return fmt.Errorf("failed to create directory %s: %w", targetPath, err)
+			}
+		case tar.TypeReg:
+			outFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
+			if err != nil {
+				return fmt.Errorf("failed to create file %s: %w", targetPath, err)
+			}
+			if _, err := io.Copy(outFile, tarReader); err != nil {
+				outFile.Close()
+				return fmt.Errorf("failed to write file %s: %w", targetPath, err)
+			}
+			outFile.Close()
+		}
+	}
+
+	return nil
+}
+
+// List returns all available backups
+func (m *Manager) List() ([]BackupInfo, error) {
+	var backups []BackupInfo
+
+	if _, err := os.Stat(m.backupDir); os.IsNotExist(err) {
+		return backups, nil
+	}
+
+	entries, err := os.ReadDir(m.backupDir)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".tar.gz") {
+			continue
+		}
+
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		backupPath := filepath.Join(m.backupDir, entry.Name())
+		metadata, _ := m.GetMetadata(backupPath)
+
+		bi := BackupInfo{
+			Filename:  entry.Name(),
+			Path:      backupPath,
+			Size:      info.Size(),
+			CreatedAt: info.ModTime(),
+		}
+
+		if metadata != nil {
+			bi.Version = metadata.Version
+			bi.ServerTitle = metadata.ServerTitle
+			bi.FileCount = len(metadata.Files)
+		}
+
+		backups = append(backups, bi)
+	}
+
+	return backups, nil
+}
+
+// GetMetadata reads metadata from a backup archive
+func (m *Manager) GetMetadata(backupPath string) (*BackupMetadata, error) {
+	file, err := os.Open(backupPath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	gzReader, err := gzip.NewReader(file)
+	if err != nil {
+		return nil, err
+	}
+	defer gzReader.Close()
+
+	tarReader := tar.NewReader(gzReader)
+
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			return nil, fmt.Errorf("metadata not found in backup")
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		if header.Name == "backup.json" {
+			var metadata BackupMetadata
+			if err := json.NewDecoder(tarReader).Decode(&metadata); err != nil {
+				return nil, err
+			}
+			return &metadata, nil
+		}
+	}
+}
+
+// Delete deletes a backup file
+func (m *Manager) Delete(filename string) error {
+	backupPath := filepath.Join(m.backupDir, filename)
+
+	// Verify it's in the backup directory (security check)
+	if !strings.HasPrefix(backupPath, m.backupDir) {
+		return fmt.Errorf("invalid backup path")
+	}
+
+	return os.Remove(backupPath)
+}
+
+// BackupInfo contains summary information about a backup
+type BackupInfo struct {
+	Filename    string    `json:"filename"`
+	Path        string    `json:"path"`
+	Size        int64     `json:"size"`
+	CreatedAt   time.Time `json:"created_at"`
+	Version     string    `json:"version,omitempty"`
+	ServerTitle string    `json:"server_title,omitempty"`
+	FileCount   int       `json:"file_count,omitempty"`
+}
+
+// FormatSize returns a human-readable size
+func (bi BackupInfo) FormatSize() string {
+	const unit = 1024
+	if bi.Size < unit {
+		return fmt.Sprintf("%d B", bi.Size)
+	}
+	div, exp := int64(unit), 0
+	for n := bi.Size / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bi.Size)/float64(div), "KMGTPE"[exp])
+}
+
+// ScheduledBackup performs a scheduled backup with cleanup of old backups
+func (m *Manager) ScheduledBackup(keepCount int) error {
+	// Create new backup
+	_, err := m.Create("")
+	if err != nil {
+		return err
+	}
+
+	// List all backups
+	backups, err := m.List()
+	if err != nil {
+		return err
+	}
+
+	// Delete old backups if we have more than keepCount
+	if len(backups) > keepCount {
+		// Sort by creation time (newest first)
+		// Note: backups are already sorted by filename which includes timestamp
+		for i := keepCount; i < len(backups); i++ {
+			if err := m.Delete(backups[i].Filename); err != nil {
+				// Log but don't fail
+				fmt.Printf("Warning: failed to delete old backup %s: %v\n", backups[i].Filename, err)
+			}
+		}
+	}
+
+	return nil
+}

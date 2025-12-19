@@ -1,0 +1,59 @@
+{{define "content"}}
+<div class="static-page contact-page">
+    <h1>Contact Us</h1>
+
+    {{if .ContactSent}}
+    <div class="contact-success">
+        <h2>Message Sent!</h2>
+        <p>{{default "Thank you for your message. We'll respond soon." .Config.Server.Pages.Contact.SuccessMessage}}</p>
+        <a href="/" class="btn btn-primary">Return Home</a>
+    </div>
+    {{else}}
+    <div class="page-content">
+        <p>Have questions, feedback, or need help? Send us a message using the form below.</p>
+
+        <form action="/server/contact" method="POST" class="contact-form">
+            {{/* CSRF Token */}}
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+            <div class="form-group">
+                <label for="name">Name <span class="required">*</span></label>
+                <input type="text" id="name" name="name" required placeholder="Your name" autocomplete="name">
+            </div>
+
+            <div class="form-group">
+                <label for="email">Email <span class="required">*</span></label>
+                <input type="email" id="email" name="email" required placeholder="your@email.com" autocomplete="email">
+            </div>
+
+            <div class="form-group">
+                <label for="subject">Subject <span class="required">*</span></label>
+                <input type="text" id="subject" name="subject" required placeholder="What is this about?">
+            </div>
+
+            <div class="form-group">
+                <label for="message">Message <span class="required">*</span></label>
+                <textarea id="message" name="message" rows="6" required placeholder="Your message..."></textarea>
+            </div>
+
+            {{/* Simple captcha */}}
+            <div class="form-group captcha-group">
+                <label for="captcha">Verification: What is {{.CaptchaA}} + {{.CaptchaB}}? <span class="required">*</span></label>
+                <input type="hidden" name="captcha_id" value="{{.CaptchaID}}">
+                <input type="number" id="captcha" name="captcha" required placeholder="Answer" autocomplete="off">
+            </div>
+
+            {{if .ContactError}}
+            <div class="form-error">
+                {{.ContactError}}
+            </div>
+            {{end}}
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Send Message</button>
+            </div>
+        </form>
+    </div>
+    {{end}}
+</div>
+{{end}}

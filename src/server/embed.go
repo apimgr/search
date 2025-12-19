@@ -1,0 +1,352 @@
+package server
+
+import (
+	"embed"
+	"html/template"
+	"io"
+	"io/fs"
+	"net/http"
+	"net/url"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/apimgr/search/src/config"
+)
+
+//go:embed templates/layouts/*.tmpl templates/partials/*.tmpl templates/pages/*.tmpl static/*
+var EmbeddedFS embed.FS
+
+// TemplateRenderer handles template rendering
+type TemplateRenderer struct {
+	templates map[string]*template.Template
+	mu        sync.RWMutex
+	config    *config.Config
+	devMode   bool
+	funcMap   template.FuncMap
+}
+
+// NewTemplateRenderer creates a new template renderer
+func NewTemplateRenderer(cfg *config.Config) *TemplateRenderer {
+	tr := &TemplateRenderer{
+		templates: make(map[string]*template.Template),
+		config:    cfg,
+		devMode:   cfg.IsDevelopment(),
+	}
+
+	tr.funcMap = template.FuncMap{
+		"safe":     func(s string) template.HTML { return template.HTML(s) },
+		"safeHTML": func(s string) template.HTML { return template.HTML(s) },
+		"safeURL":  func(s string) template.URL { return template.URL(s) },
+		"safeCSS":  func(s string) template.CSS { return template.CSS(s) },
+		"safeJS":   func(s string) template.JS { return template.JS(s) },
+		"lower":    strings.ToLower,
+		"upper":    strings.ToUpper,
+		"title":    strings.Title,
+		"contains": strings.Contains,
+		"hasPrefix": strings.HasPrefix,
+		"hasSuffix": strings.HasSuffix,
+		"replace":  strings.ReplaceAll,
+		"trim":     strings.TrimSpace,
+		"join":     strings.Join,
+		"split":    strings.Split,
+		"default": func(def, val interface{}) interface{} {
+			if val == nil || val == "" {
+				return def
+			}
+			return val
+		},
+		"eq": func(a, b interface{}) bool { return a == b },
+		"ne": func(a, b interface{}) bool { return a != b },
+		"add": func(a, b int) int { return a + b },
+		"sub": func(a, b int) int { return a - b },
+		"mul": func(a, b int) int { return a * b },
+		"div": func(a, b int) int {
+			if b == 0 {
+				return 0
+			}
+			return a / b
+		},
+		"mod": func(a, b int) int {
+			if b == 0 {
+				return 0
+			}
+			return a % b
+		},
+		"seq": func(start, end int) []int {
+			var result []int
+			for i := start; i <= end; i++ {
+				result = append(result, i)
+			}
+			return result
+		},
+		"truncate": func(length int, s string) string {
+			if len(s) <= length {
+				return s
+			}
+			return s[:length] + "..."
+		},
+		"config": func() *config.Config { return cfg },
+		"version": func() string { return config.Version },
+		"year": func() int {
+			return time.Now().Year()
+		},
+		"urlquery": func(s string) string {
+			return url.QueryEscape(s)
+		},
+	}
+
+	tr.loadTemplates()
+	return tr
+}
+
+// loadTemplates loads all templates from embedded filesystem
+func (tr *TemplateRenderer) loadTemplates() error {
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+
+	// Load layout template
+	layoutContent, err := fs.ReadFile(EmbeddedFS, "templates/layouts/base.tmpl")
+	if err != nil {
+		return err
+	}
+
+	// Load all partials
+	partials := make(map[string]string)
+	partialsDir, err := fs.ReadDir(EmbeddedFS, "templates/partials")
+	if err == nil {
+		for _, entry := range partialsDir {
+			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".tmpl") {
+				content, err := fs.ReadFile(EmbeddedFS, "templates/partials/"+entry.Name())
+				if err != nil {
+					continue
+				}
+				name := strings.TrimSuffix(entry.Name(), ".tmpl")
+				partials[name] = string(content)
+			}
+		}
+	}
+
+	// Load all page templates
+	pagesDir, err := fs.ReadDir(EmbeddedFS, "templates/pages")
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range pagesDir {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".tmpl") {
+			continue
+		}
+
+		pageContent, err := fs.ReadFile(EmbeddedFS, "templates/pages/"+entry.Name())
+		if err != nil {
+			continue
+		}
+
+		name := strings.TrimSuffix(entry.Name(), ".tmpl")
+
+		// Combine layout + partials + page
+		combined := string(layoutContent)
+		for _, partialContent := range partials {
+			combined += "\n" + partialContent
+		}
+		combined += "\n" + string(pageContent)
+
+		tmpl, err := template.New(name).Funcs(tr.funcMap).Parse(combined)
+		if err != nil {
+			continue
+		}
+
+		tr.templates[name] = tmpl
+	}
+
+	return nil
+}
+
+// Render renders a template with the given data
+func (tr *TemplateRenderer) Render(w io.Writer, name string, data interface{}) error {
+	// In dev mode, reload templates on each request
+	if tr.devMode {
+		tr.loadTemplates()
+	}
+
+	tr.mu.RLock()
+	tmpl, ok := tr.templates[name]
+	tr.mu.RUnlock()
+
+	if !ok {
+		return &TemplateNotFoundError{Name: name}
+	}
+
+	return tmpl.ExecuteTemplate(w, "base", data)
+}
+
+// TemplateNotFoundError is returned when a template is not found
+type TemplateNotFoundError struct {
+	Name string
+}
+
+func (e *TemplateNotFoundError) Error() string {
+	return "template not found: " + e.Name
+}
+
+// StaticFileServer returns an http.Handler for serving static files
+func StaticFileServer() http.Handler {
+	staticFS, err := fs.Sub(EmbeddedFS, "static")
+	if err != nil {
+		return http.NotFoundHandler()
+	}
+	return http.FileServer(http.FS(staticFS))
+}
+
+// GetStaticFile returns the content of a static file
+func GetStaticFile(path string) ([]byte, error) {
+	return fs.ReadFile(EmbeddedFS, filepath.Join("static", path))
+}
+
+// PageData represents common data passed to all page templates
+type PageData struct {
+	Title          string
+	Description    string
+	Page           string
+	Theme          string
+	Config         *config.Config
+	User           interface{}
+	CSRF           string
+	CSRFToken      string
+	Flash          *FlashMessage
+	Data           interface{}
+	Query          string
+	Category       string
+	BuildDate      string
+	Announcements  []Announcement // Active announcements
+	TorAddress     string
+	WidgetsEnabled bool
+	DefaultWidgets string // JSON array of default widget types
+	CookieConsent  *CookieConsentData
+}
+
+// ErrorPageData extends PageData with error-specific fields
+type ErrorPageData struct {
+	PageData
+	ErrorCode    int
+	ErrorTitle   string
+	ErrorMessage string
+	ErrorDetails string
+}
+
+// SearchPageData extends PageData with search-specific fields
+type SearchPageData struct {
+	PageData
+	Query         string
+	Category      string
+	Results       interface{}
+	TotalResults  int
+	SearchTime    float64
+	Pagination    *Pagination
+	Error         string
+	InstantAnswer interface{} // Instant answer result (if any)
+}
+
+// HealthPageData extends PageData with health-specific fields
+type HealthPageData struct {
+	PageData
+	Health *HealthInfo
+}
+
+// HealthInfo represents health check information
+type HealthInfo struct {
+	Status    string
+	Uptime    string
+	Mode      string
+	Timestamp string
+	Checks    map[string]string
+	System    *SystemInfo
+}
+
+// SystemInfo represents system information
+type SystemInfo struct {
+	GoVersion    string
+	NumCPU       int
+	NumGoroutine int
+	MemAlloc     string
+}
+
+// Pagination represents pagination information
+type Pagination struct {
+	CurrentPage int
+	TotalPages  int
+	HasPrev     bool
+	HasNext     bool
+}
+
+// ContactPageData extends PageData with contact form fields
+type ContactPageData struct {
+	PageData
+	ContactSent  bool
+	ContactError string
+	CaptchaA     int
+	CaptchaB     int
+	CaptchaID    string
+}
+
+// FlashMessage represents a flash message
+type FlashMessage struct {
+	Type    string
+	Message string
+}
+
+// Announcement represents a site announcement (local type for templates)
+type Announcement struct {
+	ID          string
+	Type        string
+	Title       string
+	Message     string
+	Dismissible bool
+}
+
+// CookieConsentData represents cookie consent popup data
+type CookieConsentData struct {
+	Enabled   bool
+	Message   string
+	PolicyURL string
+}
+
+// NewPageData creates a new PageData with defaults
+func NewPageData(cfg *config.Config, title, page string) *PageData {
+	pd := &PageData{
+		Title:       title,
+		Description: cfg.Server.Description,
+		Page:        page,
+		Theme:       "dark",
+		Config:      cfg,
+		BuildDate:   time.Now().Format(time.RFC3339),
+	}
+
+	// Populate active announcements from config
+	if cfg.Server.Web.Announcements.Enabled {
+		active := cfg.Server.Web.Announcements.ActiveAnnouncements()
+		for _, a := range active {
+			pd.Announcements = append(pd.Announcements, Announcement{
+				ID:          a.ID,
+				Type:        a.Type,
+				Title:       a.Title,
+				Message:     a.Message,
+				Dismissible: a.Dismissible,
+			})
+		}
+	}
+
+	// Populate cookie consent if enabled
+	cc := cfg.Server.Web.CookieConsent
+	if cc.Enabled {
+		pd.CookieConsent = &CookieConsentData{
+			Enabled:   true,
+			Message:   cc.Message,
+			PolicyURL: cc.PolicyURL,
+		}
+	}
+
+	return pd
+}

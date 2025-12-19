@@ -1,0 +1,88 @@
+{{define "content"}}
+<div class="home-container">
+    <div class="logo-section">
+        {{if .Config.Server.Branding.LogoURL}}
+        <img src="{{.Config.Server.Branding.LogoURL}}" alt="{{.Config.Server.Title}}" class="home-logo-img">
+        {{else}}
+        <h1 class="home-logo">🔍 {{default "Search" .Config.Server.Branding.AppName}}</h1>
+        {{end}}
+        <p class="home-tagline">{{.Config.Server.Description}}</p>
+    </div>
+
+    <form action="/search" method="GET" class="search-form" id="searchForm">
+        <input type="hidden" name="category" id="categoryInput" value="general">
+        <div class="search-box">
+            <input type="text" name="q" id="searchQuery" placeholder="Search the web privately..." autofocus required autocomplete="off" class="search-input">
+            <button type="submit" class="search-btn" aria-label="Search">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.35-4.35"></path>
+                </svg>
+            </button>
+        </div>
+
+        <div class="category-tabs" role="tablist">
+            <button type="button" class="category-tab active" data-category="general" role="tab" aria-selected="true">
+                <span class="tab-icon">🌐</span>
+                <span class="tab-text">All</span>
+            </button>
+            <button type="button" class="category-tab" data-category="images" role="tab" aria-selected="false">
+                <span class="tab-icon">🖼️</span>
+                <span class="tab-text">Images</span>
+            </button>
+            <button type="button" class="category-tab" data-category="videos" role="tab" aria-selected="false">
+                <span class="tab-icon">🎥</span>
+                <span class="tab-text">Videos</span>
+            </button>
+            <button type="button" class="category-tab" data-category="news" role="tab" aria-selected="false">
+                <span class="tab-icon">📰</span>
+                <span class="tab-text">News</span>
+            </button>
+            <button type="button" class="category-tab" data-category="maps" role="tab" aria-selected="false">
+                <span class="tab-icon">🗺️</span>
+                <span class="tab-text">Maps</span>
+            </button>
+        </div>
+    </form>
+
+    {{/* Widget Grid Section */}}
+    {{if .WidgetsEnabled}}
+    <section class="widgets-section">
+        <div class="widget-grid" id="widget-grid" data-defaults="{{.DefaultWidgets}}">
+            <!-- Widgets are rendered client-side by widgets.js -->
+        </div>
+    </section>
+    {{end}}
+
+    <div class="home-features">
+        <div class="feature">
+            <span class="feature-icon">🔒</span>
+            <span class="feature-text">No Tracking</span>
+        </div>
+        <div class="feature">
+            <span class="feature-icon">🌐</span>
+            <span class="feature-text">Multiple Engines</span>
+        </div>
+        <div class="feature">
+            <span class="feature-icon">🧅</span>
+            <span class="feature-text">Tor Support</span>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{define "extra_scripts"}}
+<script>
+document.querySelectorAll('.category-tab').forEach(tab => {
+    tab.addEventListener('click', function() {
+        document.querySelectorAll('.category-tab').forEach(t => {
+            t.classList.remove('active');
+            t.setAttribute('aria-selected', 'false');
+        });
+        this.classList.add('active');
+        this.setAttribute('aria-selected', 'true');
+        document.getElementById('categoryInput').value = this.dataset.category;
+    });
+});
+</script>
+{{end}}

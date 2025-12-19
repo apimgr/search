@@ -1,0 +1,9 @@
+{{define "widgets"}}
+{{if .WidgetsEnabled}}
+<section class="widgets-section">
+    <div class="widget-grid" id="widget-grid" data-defaults='{{.DefaultWidgets}}'>
+        <!-- Widgets are rendered client-side by widgets.js -->
+    </div>
+</section>
+{{end}}
+{{end}}

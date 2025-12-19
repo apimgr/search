@@ -1,0 +1,42 @@
+{{/* Announcements partial - displays active announcements from config */}}
+{{ define "announcements" }}
+{{ if .Announcements }}
+<div class="announcements-container" id="announcements">
+    {{ range .Announcements }}
+    <div class="announcement announcement-{{ .Type }}" data-id="{{ .ID }}" {{ if .Dismissible }}data-dismissible="true"{{ end }}>
+        <div class="announcement-content">
+            {{ if .Title }}<strong class="announcement-title">{{ .Title }}</strong>{{ end }}
+            <span class="announcement-message">{{ .Message }}</span>
+        </div>
+        {{ if .Dismissible }}
+        <button class="announcement-dismiss" onclick="dismissAnnouncement('{{ .ID }}')" aria-label="Dismiss">&times;</button>
+        {{ end }}
+    </div>
+    {{ end }}
+</div>
+<script>
+function dismissAnnouncement(id) {
+    const el = document.querySelector('[data-id="' + id + '"]');
+    if (el) {
+        el.style.display = 'none';
+        // Store dismissed announcements in localStorage
+        const dismissed = JSON.parse(localStorage.getItem('dismissed_announcements') || '[]');
+        if (!dismissed.includes(id)) {
+            dismissed.push(id);
+            localStorage.setItem('dismissed_announcements', JSON.stringify(dismissed));
+        }
+    }
+}
+// Hide already dismissed announcements on page load
+(function() {
+    const dismissed = JSON.parse(localStorage.getItem('dismissed_announcements') || '[]');
+    dismissed.forEach(function(id) {
+        const el = document.querySelector('[data-id="' + id + '"]');
+        if (el && el.dataset.dismissible === 'true') {
+            el.style.display = 'none';
+        }
+    });
+})();
+</script>
+{{ end }}
+{{ end }}

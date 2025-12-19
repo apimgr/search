@@ -1,0 +1,928 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Search API",
+    "description": "Privacy-respecting metasearch engine API",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Search Support"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "/api/v1",
+      "description": "API v1"
+    }
+  ],
+  "paths": {
+    "/healthz": {
+      "get": {
+        "summary": "Health check",
+        "description": "Returns the health status of the API",
+        "operationId": "getHealthz",
+        "tags": ["System"],
+        "responses": {
+          "200": {
+            "description": "API is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/info": {
+      "get": {
+        "summary": "Server information",
+        "description": "Returns detailed information about the server",
+        "operationId": "getInfo",
+        "tags": ["System"],
+        "responses": {
+          "200": {
+            "description": "Server information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InfoResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/search": {
+      "get": {
+        "summary": "Search",
+        "description": "Perform a search query",
+        "operationId": "search",
+        "tags": ["Search"],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "Search query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "description": "Search category",
+            "schema": {
+              "type": "string",
+              "enum": ["general", "images", "videos", "news", "maps"],
+              "default": "general"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page number",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Results per page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "safe_search",
+            "in": "query",
+            "description": "Safe search level",
+            "schema": {
+              "type": "string",
+              "enum": ["off", "moderate", "strict"],
+              "default": "moderate"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Language preference",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Search (POST)",
+        "description": "Perform a search query with JSON body",
+        "operationId": "searchPost",
+        "tags": ["Search"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/autocomplete": {
+      "get": {
+        "summary": "Autocomplete suggestions",
+        "description": "Get autocomplete suggestions for a query",
+        "operationId": "autocomplete",
+        "tags": ["Search"],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "Partial search query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Autocomplete suggestions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/engines": {
+      "get": {
+        "summary": "List search engines",
+        "description": "Get list of all available search engines",
+        "operationId": "listEngines",
+        "tags": ["Engines"],
+        "responses": {
+          "200": {
+            "description": "List of engines",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/EngineInfo"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/engines/{id}": {
+      "get": {
+        "summary": "Get engine by ID",
+        "description": "Get information about a specific search engine",
+        "operationId": "getEngine",
+        "tags": ["Engines"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Engine ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Engine information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/EngineInfo"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Engine not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/categories": {
+      "get": {
+        "summary": "List categories",
+        "description": "Get list of all search categories",
+        "operationId": "listCategories",
+        "tags": ["Categories"],
+        "responses": {
+          "200": {
+            "description": "List of categories",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CategoryInfo"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/bangs": {
+      "get": {
+        "summary": "List bang shortcuts",
+        "description": "Get all available bang shortcuts for quick navigation",
+        "operationId": "listBangs",
+        "tags": ["Search"],
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "description": "Filter by category",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Search filter",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of bangs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BangsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/widgets": {
+      "get": {
+        "summary": "List available widgets",
+        "description": "Get list of all available homepage widgets",
+        "operationId": "listWidgets",
+        "tags": ["Widgets"],
+        "responses": {
+          "200": {
+            "description": "List of widgets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/WidgetInfo"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/widgets/{type}": {
+      "get": {
+        "summary": "Get widget data",
+        "description": "Get data for a specific widget type",
+        "operationId": "getWidgetData",
+        "tags": ["Widgets"],
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "description": "Widget type (weather, news, stocks, crypto, sports, rss)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Widget data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WidgetData"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Widget not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/instant": {
+      "get": {
+        "summary": "Get instant answer",
+        "description": "Get instant answer for a query (calculator, definitions, etc.)",
+        "operationId": "getInstantAnswer",
+        "tags": ["Search"],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "Query for instant answer",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Instant answer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstantAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "uptime": {
+                "type": "string"
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "InfoResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "uptime": {
+                "type": "string"
+              },
+              "mode": {
+                "type": "string"
+              },
+              "engines": {
+                "type": "object",
+                "properties": {
+                  "total": {
+                    "type": "integer"
+                  },
+                  "enabled": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "system": {
+                "type": "object",
+                "properties": {
+                  "go_version": {
+                    "type": "string"
+                  },
+                  "num_cpu": {
+                    "type": "integer"
+                  },
+                  "num_goroutine": {
+                    "type": "integer"
+                  },
+                  "mem_alloc": {
+                    "type": "string"
+                  }
+                }
+              },
+              "features": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      },
+      "SearchRequest": {
+        "type": "object",
+        "required": ["query"],
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": ["general", "images", "videos", "news", "maps"],
+            "default": "general"
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 1
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20
+          },
+          "engines": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "safe_search": {
+            "type": "string",
+            "enum": ["off", "moderate", "strict"]
+          },
+          "time_range": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          }
+        }
+      },
+      "SearchResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string"
+              },
+              "category": {
+                "type": "string"
+              },
+              "results": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/SearchResult"
+                }
+              },
+              "total_results": {
+                "type": "integer"
+              },
+              "page": {
+                "type": "integer"
+              },
+              "limit": {
+                "type": "integer"
+              },
+              "has_more": {
+                "type": "boolean"
+              },
+              "search_time_ms": {
+                "type": "number"
+              },
+              "engines_used": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/APIMeta"
+          }
+        }
+      },
+      "SearchResult": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "description": {
+            "type": "string"
+          },
+          "engine": {
+            "type": "string"
+          },
+          "score": {
+            "type": "number"
+          },
+          "category": {
+            "type": "string"
+          },
+          "thumbnail": {
+            "type": "string",
+            "format": "uri"
+          },
+          "date": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          }
+        }
+      },
+      "EngineInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "priority": {
+            "type": "integer"
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": {
+            "type": "string"
+          },
+          "homepage": {
+            "type": "string",
+            "format": "uri"
+          }
+        }
+      },
+      "CategoryInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          }
+        }
+      },
+      "APIMeta": {
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string"
+          },
+          "process_time_ms": {
+            "type": "number"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "integer"
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "type": "string"
+              }
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/APIMeta"
+          }
+        }
+      },
+      "BangInfo": {
+        "type": "object",
+        "properties": {
+          "shortcut": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "category": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "BangsResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "bangs": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BangInfo"
+                }
+              },
+              "total": {
+                "type": "integer"
+              },
+              "categories": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "WidgetInfo": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          }
+        }
+      },
+      "WidgetData": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "data": {
+                "type": "object"
+              },
+              "updated_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "InstantAnswer": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string"
+              },
+              "found": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "System",
+      "description": "System health and information"
+    },
+    {
+      "name": "Search",
+      "description": "Search operations"
+    },
+    {
+      "name": "Engines",
+      "description": "Search engine management"
+    },
+    {
+      "name": "Categories",
+      "description": "Search categories"
+    },
+    {
+      "name": "Widgets",
+      "description": "Homepage widgets"
+    }
+  ]
+}

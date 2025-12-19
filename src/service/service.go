@@ -1,0 +1,571 @@
+package service
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"text/template"
+
+	"github.com/apimgr/search/src/config"
+)
+
+// ServiceManager handles system service installation
+type ServiceManager struct {
+	config *config.Config
+}
+
+// NewServiceManager creates a new service manager
+func NewServiceManager(cfg *config.Config) *ServiceManager {
+	return &ServiceManager{config: cfg}
+}
+
+// Install installs the system service
+func (sm *ServiceManager) Install() error {
+	switch runtime.GOOS {
+	case "linux":
+		// Check for runit first (Void Linux, some Alpine setups)
+		if sm.hasRunit() {
+			return sm.installRunit()
+		}
+		return sm.installSystemd()
+	case "darwin":
+		return sm.installLaunchd()
+	case "freebsd", "openbsd", "netbsd":
+		return sm.installRCd()
+	case "windows":
+		return sm.installWindowsService()
+	default:
+		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+	}
+}
+
+// hasRunit checks if runit is the init system
+func (sm *ServiceManager) hasRunit() bool {
+	// Check for runit by looking for runsv
+	if _, err := exec.LookPath("runsv"); err == nil {
+		// Also check if /var/service or /service exists (runit service dir)
+		if _, err := os.Stat("/var/service"); err == nil {
+			return true
+		}
+		if _, err := os.Stat("/service"); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// Uninstall removes the system service
+func (sm *ServiceManager) Uninstall() error {
+	switch runtime.GOOS {
+	case "linux":
+		if sm.hasRunit() {
+			return sm.uninstallRunit()
+		}
+		return sm.uninstallSystemd()
+	case "darwin":
+		return sm.uninstallLaunchd()
+	case "freebsd", "openbsd", "netbsd":
+		return sm.uninstallRCd()
+	case "windows":
+		return sm.uninstallWindowsService()
+	default:
+		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+	}
+}
+
+// Status returns the service status
+func (sm *ServiceManager) Status() (string, error) {
+	switch runtime.GOOS {
+	case "linux":
+		if sm.hasRunit() {
+			return sm.statusRunit()
+		}
+		return sm.statusSystemd()
+	case "darwin":
+		return sm.statusLaunchd()
+	case "freebsd", "openbsd", "netbsd":
+		return sm.statusRCd()
+	case "windows":
+		return sm.statusWindowsService()
+	default:
+		return "", fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+	}
+}
+
+// Start starts the service
+func (sm *ServiceManager) Start() error {
+	switch runtime.GOOS {
+	case "linux":
+		if sm.hasRunit() {
+			return runCommand("sv", "start", "search")
+		}
+		return runCommand("systemctl", "start", "search")
+	case "darwin":
+		return runCommand("launchctl", "load", sm.getLaunchdPath())
+	case "freebsd", "openbsd", "netbsd":
+		return runCommand("service", "search", "start")
+	case "windows":
+		return runCommand("sc", "start", "search")
+	default:
+		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+	}
+}
+
+// Stop stops the service
+func (sm *ServiceManager) Stop() error {
+	switch runtime.GOOS {
+	case "linux":
+		if sm.hasRunit() {
+			return runCommand("sv", "stop", "search")
+		}
+		return runCommand("systemctl", "stop", "search")
+	case "darwin":
+		return runCommand("launchctl", "unload", sm.getLaunchdPath())
+	case "freebsd", "openbsd", "netbsd":
+		return runCommand("service", "search", "stop")
+	case "windows":
+		return runCommand("sc", "stop", "search")
+	default:
+		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+	}
+}
+
+// Restart restarts the service
+func (sm *ServiceManager) Restart() error {
+	switch runtime.GOOS {
+	case "linux":
+		if sm.hasRunit() {
+			return runCommand("sv", "restart", "search")
+		}
+		return runCommand("systemctl", "restart", "search")
+	case "darwin":
+		if err := sm.Stop(); err != nil {
+			// Ignore stop errors
+		}
+		return sm.Start()
+	case "freebsd", "openbsd", "netbsd":
+		return runCommand("service", "search", "restart")
+	case "windows":
+		if err := sm.Stop(); err != nil {
+			// Ignore stop errors
+		}
+		return sm.Start()
+	default:
+		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+	}
+}
+
+// Linux systemd
+
+const systemdTemplate = `[Unit]
+Description=Search - Privacy-Respecting Metasearch Engine
+After=network.target
+
+[Service]
+Type=simple
+User={{.User}}
+Group={{.Group}}
+WorkingDirectory={{.WorkDir}}
+ExecStart={{.Binary}} --config {{.ConfigFile}}
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=0
+LimitNOFILE=65536
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths={{.DataDir}}
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target
+`
+
+func (sm *ServiceManager) installSystemd() error {
+	data := map[string]string{
+		"User":       "search",
+		"Group":      "search",
+		"WorkDir":    config.GetDataDir(),
+		"Binary":     config.GetBinaryPath(),
+		"ConfigFile": filepath.Join(config.GetConfigDir(), "config.yaml"),
+		"DataDir":    config.GetDataDir(),
+	}
+
+	// Generate service file
+	content, err := sm.renderTemplate(systemdTemplate, data)
+	if err != nil {
+		return err
+	}
+
+	// Write service file
+	servicePath := "/etc/systemd/system/search.service"
+	if err := os.WriteFile(servicePath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write service file: %w", err)
+	}
+
+	// Reload systemd
+	if err := runCommand("systemctl", "daemon-reload"); err != nil {
+		return fmt.Errorf("failed to reload systemd: %w", err)
+	}
+
+	// Enable service
+	if err := runCommand("systemctl", "enable", "search"); err != nil {
+		return fmt.Errorf("failed to enable service: %w", err)
+	}
+
+	return nil
+}
+
+func (sm *ServiceManager) uninstallSystemd() error {
+	// Stop service
+	runCommand("systemctl", "stop", "search")
+
+	// Disable service
+	runCommand("systemctl", "disable", "search")
+
+	// Remove service file
+	os.Remove("/etc/systemd/system/search.service")
+
+	// Reload systemd
+	runCommand("systemctl", "daemon-reload")
+
+	return nil
+}
+
+func (sm *ServiceManager) statusSystemd() (string, error) {
+	out, err := exec.Command("systemctl", "is-active", "search").Output()
+	if err != nil {
+		return "inactive", nil
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// Linux runit
+
+const runitRunTemplate = `#!/bin/sh
+exec 2>&1
+exec chpst -u {{.User}}:{{.Group}} {{.Binary}} --config {{.ConfigFile}}
+`
+
+const runitLogRunTemplate = `#!/bin/sh
+exec svlogd -tt {{.LogDir}}
+`
+
+func (sm *ServiceManager) getRunitServiceDir() string {
+	// Prefer /etc/sv (Void Linux, Artix)
+	if _, err := os.Stat("/etc/sv"); err == nil {
+		return "/etc/sv/search"
+	}
+	// Fallback to /etc/runit/sv (some distros)
+	return "/etc/runit/sv/search"
+}
+
+func (sm *ServiceManager) getRunitActiveDir() string {
+	// Check for /var/service (most common)
+	if _, err := os.Stat("/var/service"); err == nil {
+		return "/var/service"
+	}
+	// Check for /service (Void Linux alternative)
+	if _, err := os.Stat("/service"); err == nil {
+		return "/service"
+	}
+	return "/var/service"
+}
+
+func (sm *ServiceManager) installRunit() error {
+	serviceDir := sm.getRunitServiceDir()
+	logDir := filepath.Join(serviceDir, "log")
+
+	data := map[string]string{
+		"User":       "search",
+		"Group":      "search",
+		"Binary":     config.GetBinaryPath(),
+		"ConfigFile": filepath.Join(config.GetConfigDir(), "config.yaml"),
+		"LogDir":     filepath.Join(config.GetDataDir(), "logs", "runit"),
+	}
+
+	// Create service directory structure
+	if err := os.MkdirAll(serviceDir, 0755); err != nil {
+		return fmt.Errorf("failed to create service directory: %w", err)
+	}
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return fmt.Errorf("failed to create log directory: %w", err)
+	}
+	if err := os.MkdirAll(data["LogDir"], 0755); err != nil {
+		return fmt.Errorf("failed to create log storage directory: %w", err)
+	}
+
+	// Generate and write run script
+	runContent, err := sm.renderTemplate(runitRunTemplate, data)
+	if err != nil {
+		return err
+	}
+	runPath := filepath.Join(serviceDir, "run")
+	if err := os.WriteFile(runPath, []byte(runContent), 0755); err != nil {
+		return fmt.Errorf("failed to write run script: %w", err)
+	}
+
+	// Generate and write log/run script
+	logRunContent, err := sm.renderTemplate(runitLogRunTemplate, data)
+	if err != nil {
+		return err
+	}
+	logRunPath := filepath.Join(logDir, "run")
+	if err := os.WriteFile(logRunPath, []byte(logRunContent), 0755); err != nil {
+		return fmt.Errorf("failed to write log run script: %w", err)
+	}
+
+	// Create symlink to enable the service
+	activeDir := sm.getRunitActiveDir()
+	linkPath := filepath.Join(activeDir, "search")
+
+	// Remove existing symlink if present
+	os.Remove(linkPath)
+
+	if err := os.Symlink(serviceDir, linkPath); err != nil {
+		return fmt.Errorf("failed to enable service (symlink): %w", err)
+	}
+
+	return nil
+}
+
+func (sm *ServiceManager) uninstallRunit() error {
+	// Stop the service first
+	runCommand("sv", "stop", "search")
+
+	// Remove the symlink from active services
+	activeDir := sm.getRunitActiveDir()
+	os.Remove(filepath.Join(activeDir, "search"))
+
+	// Remove the service directory
+	serviceDir := sm.getRunitServiceDir()
+	os.RemoveAll(serviceDir)
+
+	return nil
+}
+
+func (sm *ServiceManager) statusRunit() (string, error) {
+	out, err := exec.Command("sv", "status", "search").Output()
+	if err != nil {
+		return "inactive", nil
+	}
+	output := string(out)
+	if strings.HasPrefix(output, "run:") {
+		return "active", nil
+	}
+	if strings.HasPrefix(output, "down:") {
+		return "inactive", nil
+	}
+	return "unknown", nil
+}
+
+// macOS launchd
+
+const launchdTemplate = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.apimgr.search</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{.Binary}}</string>
+        <string>--config</string>
+        <string>{{.ConfigFile}}</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>{{.WorkDir}}</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>{{.LogDir}}/search.log</string>
+    <key>StandardErrorPath</key>
+    <string>{{.LogDir}}/search-error.log</string>
+</dict>
+</plist>
+`
+
+func (sm *ServiceManager) getLaunchdPath() string {
+	return "/Library/LaunchDaemons/com.apimgr.search.plist"
+}
+
+func (sm *ServiceManager) installLaunchd() error {
+	data := map[string]string{
+		"Binary":     config.GetBinaryPath(),
+		"ConfigFile": filepath.Join(config.GetConfigDir(), "config.yaml"),
+		"WorkDir":    config.GetDataDir(),
+		"LogDir":     filepath.Join(config.GetDataDir(), "logs"),
+	}
+
+	// Generate plist
+	content, err := sm.renderTemplate(launchdTemplate, data)
+	if err != nil {
+		return err
+	}
+
+	// Write plist file
+	plistPath := sm.getLaunchdPath()
+	if err := os.WriteFile(plistPath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write plist file: %w", err)
+	}
+
+	return nil
+}
+
+func (sm *ServiceManager) uninstallLaunchd() error {
+	plistPath := sm.getLaunchdPath()
+
+	// Unload service
+	runCommand("launchctl", "unload", plistPath)
+
+	// Remove plist
+	os.Remove(plistPath)
+
+	return nil
+}
+
+func (sm *ServiceManager) statusLaunchd() (string, error) {
+	out, err := exec.Command("launchctl", "list", "com.apimgr.search").Output()
+	if err != nil {
+		return "inactive", nil
+	}
+	if strings.Contains(string(out), "com.apimgr.search") {
+		return "active", nil
+	}
+	return "inactive", nil
+}
+
+// BSD rc.d
+
+const rcdTemplate = `#!/bin/sh
+#
+# PROVIDE: search
+# REQUIRE: DAEMON
+# KEYWORD: shutdown
+
+. /etc/rc.subr
+
+name="search"
+rcvar="search_enable"
+pidfile="/var/run/${name}.pid"
+command="{{.Binary}}"
+command_args="--config {{.ConfigFile}}"
+
+load_rc_config $name
+run_rc_command "$1"
+`
+
+func (sm *ServiceManager) installRCd() error {
+	data := map[string]string{
+		"Binary":     config.GetBinaryPath(),
+		"ConfigFile": filepath.Join(config.GetConfigDir(), "config.yaml"),
+	}
+
+	// Generate rc script
+	content, err := sm.renderTemplate(rcdTemplate, data)
+	if err != nil {
+		return err
+	}
+
+	// Write rc script
+	rcPath := "/etc/rc.d/search"
+	if err := os.WriteFile(rcPath, []byte(content), 0755); err != nil {
+		return fmt.Errorf("failed to write rc script: %w", err)
+	}
+
+	return nil
+}
+
+func (sm *ServiceManager) uninstallRCd() error {
+	runCommand("service", "search", "stop")
+	os.Remove("/etc/rc.d/search")
+	return nil
+}
+
+func (sm *ServiceManager) statusRCd() (string, error) {
+	out, err := exec.Command("service", "search", "status").Output()
+	if err != nil {
+		return "inactive", nil
+	}
+	if strings.Contains(string(out), "running") {
+		return "active", nil
+	}
+	return "inactive", nil
+}
+
+// Windows service
+
+func (sm *ServiceManager) installWindowsService() error {
+	binary := config.GetBinaryPath()
+	configFile := filepath.Join(config.GetConfigDir(), "config.yaml")
+
+	// Create Windows service
+	return runCommand("sc", "create", "search",
+		"binPath=", fmt.Sprintf("\"%s\" --config \"%s\"", binary, configFile),
+		"DisplayName=", "Search - Privacy-Respecting Metasearch Engine",
+		"start=", "auto")
+}
+
+func (sm *ServiceManager) uninstallWindowsService() error {
+	runCommand("sc", "stop", "search")
+	return runCommand("sc", "delete", "search")
+}
+
+func (sm *ServiceManager) statusWindowsService() (string, error) {
+	out, err := exec.Command("sc", "query", "search").Output()
+	if err != nil {
+		return "inactive", nil
+	}
+	if strings.Contains(string(out), "RUNNING") {
+		return "active", nil
+	}
+	return "inactive", nil
+}
+
+// Helper methods
+
+func (sm *ServiceManager) renderTemplate(tmpl string, data interface{}) (string, error) {
+	t, err := template.New("service").Parse(tmpl)
+	if err != nil {
+		return "", err
+	}
+
+	var buf strings.Builder
+	if err := t.Execute(&buf, data); err != nil {
+		return "", err
+	}
+
+	return buf.String(), nil
+}
+
+func runCommand(name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// GetServiceStatus returns formatted service status information
+func GetServiceStatus() string {
+	cfg := config.DefaultConfig()
+	sm := NewServiceManager(cfg)
+
+	status, err := sm.Status()
+	if err != nil {
+		return fmt.Sprintf("Service status: unknown (%v)", err)
+	}
+
+	return fmt.Sprintf("Service status: %s", status)
+}

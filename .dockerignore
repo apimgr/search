@@ -1,0 +1,47 @@
+# Version control
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+!LICENSE.md
+docs/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build artifacts
+binaries/
+releases/
+*.test
+*.out
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Development files
+tests/
+scripts/
+.env
+.env.*
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+Jenkinsfile
+
+# Dependencies
+vendor/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.log
