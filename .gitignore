@@ -1,8 +1,8 @@
 # Binaries and releases
 binaries/
 releases/
-search
-search.exe
+/search
+/search.exe
 
 # Go build artifacts
 *.test

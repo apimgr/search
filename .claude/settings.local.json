@@ -25,7 +25,10 @@
       "Bash(__NEW_LINE__ echo '=== VERIFICATION RESULTS ===')",
       "Bash(__NEW_LINE__ echo \"=== MAKE TARGETS ===\")",
       "Bash(go mod tidy:*)",
-      "Bash(gh run list:*)"
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)",
+      "Bash(git check-ignore:*)",
+      "Bash(git add:*)"
     ]
   }
 }
