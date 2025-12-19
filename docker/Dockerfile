@@ -1,11 +1,34 @@
-# Runtime stage
+# =============================================================================
+# Build Stage - Compile Go binary
+# =============================================================================
+FROM golang:alpine AS builder
+
+ARG TARGETARCH
+ARG VERSION=dev
+ARG BUILD_DATE
+ARG VCS_REF
+
+WORKDIR /build
+
+# Copy go.mod first for layer caching
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source and build
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
+    -ldflags "-s -w -X 'github.com/apimgr/search/src/config.Version=${VERSION}' -X 'github.com/apimgr/search/src/config.GitCommit=${VCS_REF}' -X 'github.com/apimgr/search/src/config.BuildTime=${BUILD_DATE}'" \
+    -o /app ./src
+
+# =============================================================================
+# Runtime Stage - Minimal Alpine image
+# =============================================================================
 FROM alpine:latest
 
 # ARGs for build-time values (set by docker build --build-arg)
 ARG VERSION=dev
 ARG BUILD_DATE
 ARG VCS_REF
-ARG TARGETARCH
 ARG LICENSE=MIT
 
 # Static Labels
@@ -38,19 +61,22 @@ RUN apk add --no-cache \
 # Create directories with proper structure
 RUN mkdir -p /config /data/db /data/logs /data/tor /data/geoip /data/backup
 
-# Copy the arch-specific binary from ./binaries/ (project root)
-COPY binaries/search-linux-${TARGETARCH} /usr/local/bin/search
+# Copy binary from builder stage (multi-stage build)
+COPY --from=builder /app /usr/local/bin/search
 
 # Copy entrypoint script from ./docker/rootfs/
 COPY docker/rootfs/ /
 
-# Make scripts executable
-RUN chmod +x /usr/local/bin/search /usr/local/bin/entrypoint.sh
+# Copy Dockerfile to image (for reference and backup)
+COPY docker/Dockerfile /root/Dockerfile
+
+# Make all binaries/scripts in /usr/local/bin executable (755)
+RUN chmod 755 /usr/local/bin/*
 
 # Set environment
 ENV MODE=development \
     TZ=America/New_York \
-    ENABLE_TOR=false
+    ENABLE_TOR=true
 
 # Expose internal port (always 80)
 EXPOSE 80

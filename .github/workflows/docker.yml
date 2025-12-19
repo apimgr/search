@@ -84,7 +84,7 @@ jobs:
           build-args: |
             VERSION="${{ env.VERSION }}"
             BUILD_DATE="${{ env.BUILD_DATE }}"
-            COMMIT_ID="${{ env.COMMIT_ID }}"
+            VCS_REF="${{ env.COMMIT_ID }}"
           labels: |
             org.opencontainers.image.title="${{ env.PROJECT }}"
             org.opencontainers.image.version="${{ env.VERSION }}"

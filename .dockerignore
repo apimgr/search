@@ -34,8 +34,12 @@ scripts/
 
 # CI/CD
 .github/
+.gitea/
 .gitlab-ci.yml
 Jenkinsfile
+
+# Runtime volume data (NEVER include in image)
+rootfs/
 
 # Dependencies
 vendor/

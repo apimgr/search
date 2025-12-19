@@ -14,8 +14,8 @@ services:
       # Production: bound to Docker bridge only
       - "172.17.0.1:64080:80"
     volumes:
-      - ../rootfs/config/search:/config
-      - ../rootfs/data/search:/data
+      - ./rootfs/config/search:/config
+      - ./rootfs/data/search:/data
     networks:
       - search
 

@@ -8,7 +8,7 @@ set -e
 
 APP_NAME="search"
 APP_BIN="/usr/local/bin/${APP_NAME}"
-TOR_ENABLED="${ENABLE_TOR:-false}"
+TOR_ENABLED="${ENABLE_TOR:-true}"
 TOR_DATA_DIR="/data/tor"
 
 # Array to track background PIDs

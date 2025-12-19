@@ -4,6 +4,9 @@ releases/
 /search
 /search.exe
 
+# Runtime volume data (NEVER commit)
+rootfs/
+
 # Go build artifacts
 *.test
 *.out
