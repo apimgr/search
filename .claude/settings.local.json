@@ -24,7 +24,8 @@
       "Bash(test:*)",
       "Bash(__NEW_LINE__ echo '=== VERIFICATION RESULTS ===')",
       "Bash(__NEW_LINE__ echo \"=== MAKE TARGETS ===\")",
-      "Bash(go mod tidy:*)"
+      "Bash(go mod tidy:*)",
+      "Bash(gh run list:*)"
     ]
   }
 }
