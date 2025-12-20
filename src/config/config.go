@@ -163,6 +163,9 @@ type ServerConfig struct {
 
 	// I18n (Internationalization)
 	I18n I18nConfig `yaml:"i18n"`
+
+	// Maintenance mode - when enabled, shows maintenance page to all users
+	MaintenanceMode bool `yaml:"maintenance_mode"`
 }
 
 // SSLConfig represents SSL/TLS configuration

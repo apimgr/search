@@ -563,9 +563,55 @@ func runService(action string) {
 		}
 		fmt.Println("✅ Service restarted successfully")
 
+	case "reload":
+		fmt.Println("Reloading service configuration...")
+		if err := sm.Reload(); err != nil {
+			fmt.Printf("❌ Failed to reload service: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("✅ Service configuration reloaded")
+
+	case "disable":
+		if !config.IsPrivileged() {
+			fmt.Println("❌ This command requires elevated privileges")
+			os.Exit(1)
+		}
+		fmt.Println("Disabling service autostart...")
+		if err := sm.Disable(); err != nil {
+			fmt.Printf("❌ Failed to disable service: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("✅ Service autostart disabled")
+
+	case "enable":
+		if !config.IsPrivileged() {
+			fmt.Println("❌ This command requires elevated privileges")
+			os.Exit(1)
+		}
+		fmt.Println("Enabling service autostart...")
+		if err := sm.Enable(); err != nil {
+			fmt.Printf("❌ Failed to enable service: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("✅ Service autostart enabled")
+
+	case "help", "--help":
+		fmt.Println("Service Management Commands:")
+		fmt.Println()
+		fmt.Println("  install     Install as system service")
+		fmt.Println("  uninstall   Remove system service")
+		fmt.Println("  start       Start the service")
+		fmt.Println("  stop        Stop the service")
+		fmt.Println("  restart     Restart the service")
+		fmt.Println("  reload      Reload configuration (SIGHUP)")
+		fmt.Println("  enable      Enable service autostart")
+		fmt.Println("  disable     Disable service autostart")
+		fmt.Println("  status      Show service status")
+		fmt.Println("  help        Show this help")
+
 	default:
 		fmt.Printf("❌ Unknown action: %s\n", action)
-		fmt.Println("Valid actions: install, uninstall, start, stop, status, restart")
+		fmt.Println("Valid actions: install, uninstall, start, stop, restart, reload, enable, disable, status, help")
 	}
 }
 
@@ -654,9 +700,57 @@ func runMaintenance(action string) {
 	case "update":
 		runUpdate("yes")
 
+	case "mode":
+		fmt.Println("Toggling maintenance mode...")
+		cfg, err := config.Initialize()
+		if err != nil {
+			fmt.Printf("❌ Failed to load config: %v\n", err)
+			os.Exit(1)
+		}
+		// Toggle maintenance mode
+		cfg.Server.MaintenanceMode = !cfg.Server.MaintenanceMode
+		if err := cfg.Save(config.GetConfigPath()); err != nil {
+			fmt.Printf("❌ Failed to save config: %v\n", err)
+			os.Exit(1)
+		}
+		if cfg.Server.MaintenanceMode {
+			fmt.Println("✅ Maintenance mode: ENABLED")
+			fmt.Println("   The server will show a maintenance page to users")
+		} else {
+			fmt.Println("✅ Maintenance mode: DISABLED")
+			fmt.Println("   The server is now accepting normal requests")
+		}
+
+	case "setup":
+		fmt.Println("🔧 Running initial setup...")
+		fmt.Println()
+		runInit()
+		fmt.Println()
+		fmt.Println("📋 Setup Complete!")
+		fmt.Println()
+		fmt.Println("Next steps:")
+		fmt.Println("  1. Edit configuration: ", config.GetConfigPath())
+		fmt.Println("  2. Start the server:   search")
+		fmt.Println("  3. Access admin panel: http://localhost:<port>/admin")
+		fmt.Println()
+		fmt.Println("For service installation:")
+		fmt.Println("  search --service install")
+		fmt.Println("  search --service start")
+
+	case "help":
+		fmt.Println("Maintenance Commands:")
+		fmt.Println()
+		fmt.Println("  backup [file]     Create backup archive")
+		fmt.Println("  restore <file>    Restore from backup")
+		fmt.Println("  list              List available backups")
+		fmt.Println("  update            Check and install updates")
+		fmt.Println("  mode              Toggle maintenance mode")
+		fmt.Println("  setup             Run initial setup wizard")
+		fmt.Println("  help              Show this help")
+
 	default:
 		fmt.Printf("❌ Unknown action: %s\n", action)
-		fmt.Println("Valid actions: backup, restore, list, update")
+		fmt.Println("Valid actions: backup, restore, list, update, mode, setup, help")
 	}
 }
 

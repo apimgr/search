@@ -4,13 +4,14 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/apimgr/search/src/config"
-	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/crypto/argon2"
 )
 
 // AuthManager handles admin authentication
@@ -57,6 +58,15 @@ func NewAuthManager(cfg *config.Config) *AuthManager {
 	return am
 }
 
+// Argon2id parameters per TEMPLATE.md specification
+const (
+	argon2Time    = 1
+	argon2Memory  = 64 * 1024 // 64 MB
+	argon2Threads = 4
+	argon2KeyLen  = 32
+	argon2SaltLen = 16
+)
+
 // Authenticate validates username and password
 func (am *AuthManager) Authenticate(username, password string) bool {
 	am.mu.RLock()
@@ -77,15 +87,55 @@ func (am *AuthManager) Authenticate(username, password string) bool {
 		return false
 	}
 
-	// Try bcrypt comparison first (for hashed passwords)
+	// Try Argon2id comparison first (for hashed passwords)
 	storedPassword := am.config.Server.Admin.Password
-	if err := bcrypt.CompareHashAndPassword([]byte(storedPassword), []byte(password)); err == nil {
+	if verifyArgon2idHash(password, storedPassword) {
 		return true
 	}
 
 	// Fall back to constant-time plain comparison for initial setup/migration
 	// This allows the first login with auto-generated password to work
 	return subtle.ConstantTimeCompare([]byte(password), []byte(storedPassword)) == 1
+}
+
+// verifyArgon2idHash verifies a password against an Argon2id hash
+func verifyArgon2idHash(password, encodedHash string) bool {
+	// Parse the encoded hash
+	parts := strings.Split(encodedHash, "$")
+	if len(parts) != 6 {
+		return false
+	}
+
+	if parts[1] != "argon2id" {
+		return false
+	}
+
+	var version int
+	if _, err := fmt.Sscanf(parts[2], "v=%d", &version); err != nil {
+		return false
+	}
+
+	var memory, time uint32
+	var threads uint8
+	if _, err := fmt.Sscanf(parts[3], "m=%d,t=%d,p=%d", &memory, &time, &threads); err != nil {
+		return false
+	}
+
+	salt, err := base64.RawStdEncoding.DecodeString(parts[4])
+	if err != nil {
+		return false
+	}
+
+	expectedHash, err := base64.RawStdEncoding.DecodeString(parts[5])
+	if err != nil {
+		return false
+	}
+
+	// Compute hash with same parameters
+	computedHash := argon2.IDKey([]byte(password), salt, time, memory, threads, uint32(len(expectedHash)))
+
+	// Constant-time comparison
+	return subtle.ConstantTimeCompare(computedHash, expectedHash) == 1
 }
 
 // CreateSession creates a new admin session
@@ -327,14 +377,23 @@ func generateSecureToken(length int) string {
 	return base64.URLEncoding.EncodeToString(bytes)[:length]
 }
 
-// hashPassword creates a bcrypt hash of the password
+// hashPassword creates an Argon2id hash of the password (per TEMPLATE.md - NEVER bcrypt)
 func hashPassword(password string) string {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		// This should never happen with valid input
+	// Generate random salt
+	salt := make([]byte, argon2SaltLen)
+	if _, err := rand.Read(salt); err != nil {
 		return ""
 	}
-	return string(hash)
+
+	// Generate hash using Argon2id
+	hash := argon2.IDKey([]byte(password), salt, argon2Time, argon2Memory, argon2Threads, argon2KeyLen)
+
+	// Encode as: $argon2id$v=19$m=65536,t=1,p=4$<base64-salt>$<base64-hash>
+	b64Salt := base64.RawStdEncoding.EncodeToString(salt)
+	b64Hash := base64.RawStdEncoding.EncodeToString(hash)
+
+	return fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s",
+		argon2.Version, argon2Memory, argon2Time, argon2Threads, b64Salt, b64Hash)
 }
 
 // HashPassword exports the hash function for use in config
@@ -342,9 +401,9 @@ func HashPassword(password string) string {
 	return hashPassword(password)
 }
 
-// VerifyPassword checks if a password matches a bcrypt hash
+// VerifyPassword checks if a password matches an Argon2id hash
 func VerifyPassword(password, hash string) bool {
-	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
+	return verifyArgon2idHash(password, hash)
 }
 
 // maskToken masks a token for display (shows first 8 and last 4 characters)

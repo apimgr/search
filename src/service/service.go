@@ -158,6 +158,74 @@ func (sm *ServiceManager) Restart() error {
 	}
 }
 
+// Reload reloads the service configuration (sends SIGHUP)
+func (sm *ServiceManager) Reload() error {
+	switch runtime.GOOS {
+	case "linux":
+		if sm.hasRunit() {
+			return runCommand("sv", "hup", "search")
+		}
+		return runCommand("systemctl", "reload", "search")
+	case "darwin":
+		// macOS doesn't have a standard reload, use restart
+		return sm.Restart()
+	case "freebsd", "openbsd", "netbsd":
+		return runCommand("service", "search", "reload")
+	case "windows":
+		// Windows doesn't support reload, use restart
+		return sm.Restart()
+	default:
+		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+	}
+}
+
+// Enable enables the service to start on boot
+func (sm *ServiceManager) Enable() error {
+	switch runtime.GOOS {
+	case "linux":
+		if sm.hasRunit() {
+			// For runit, enabling means creating the symlink
+			serviceDir := sm.getRunitServiceDir()
+			activeDir := sm.getRunitActiveDir()
+			linkPath := filepath.Join(activeDir, "search")
+			os.Remove(linkPath) // Remove if exists
+			return os.Symlink(serviceDir, linkPath)
+		}
+		return runCommand("systemctl", "enable", "search")
+	case "darwin":
+		return runCommand("launchctl", "load", "-w", sm.getLaunchdPath())
+	case "freebsd", "openbsd", "netbsd":
+		// Add search_enable="YES" to rc.conf
+		return appendToFile("/etc/rc.conf", "search_enable=\"YES\"\n")
+	case "windows":
+		return runCommand("sc", "config", "search", "start=", "auto")
+	default:
+		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+	}
+}
+
+// Disable disables the service from starting on boot
+func (sm *ServiceManager) Disable() error {
+	switch runtime.GOOS {
+	case "linux":
+		if sm.hasRunit() {
+			// For runit, disabling means removing the symlink
+			activeDir := sm.getRunitActiveDir()
+			return os.Remove(filepath.Join(activeDir, "search"))
+		}
+		return runCommand("systemctl", "disable", "search")
+	case "darwin":
+		return runCommand("launchctl", "unload", "-w", sm.getLaunchdPath())
+	case "freebsd", "openbsd", "netbsd":
+		// Remove search_enable from rc.conf (or set to NO)
+		return runCommand("sysrc", "search_enable=NO")
+	case "windows":
+		return runCommand("sc", "config", "search", "start=", "disabled")
+	default:
+		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+	}
+}
+
 // Linux systemd
 
 const systemdTemplate = `[Unit]
@@ -555,6 +623,16 @@ func runCommand(name string, args ...string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+func appendToFile(path, content string) error {
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.WriteString(content)
+	return err
 }
 
 // GetServiceStatus returns formatted service status information

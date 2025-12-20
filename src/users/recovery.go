@@ -3,14 +3,16 @@ package users
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/crypto/argon2"
 )
 
 // RecoveryManager handles recovery key generation and validation
@@ -69,8 +71,8 @@ func (rm *RecoveryManager) Generate(ctx context.Context, userID int64) ([]string
 		}
 		keys[i] = key
 
-		// Hash the key for storage
-		hash, err := bcrypt.GenerateFromPassword([]byte(normalizeRecoveryKey(key)), bcrypt.DefaultCost)
+		// Hash the key for storage using Argon2id
+		hash, err := hashRecoveryKey(normalizeRecoveryKey(key))
 		if err != nil {
 			return nil, fmt.Errorf("failed to hash recovery key: %w", err)
 		}
@@ -78,7 +80,7 @@ func (rm *RecoveryManager) Generate(ctx context.Context, userID int64) ([]string
 		// Store the hashed key
 		_, err = rm.db.ExecContext(ctx, `
 			INSERT INTO recovery_keys (user_id, key_hash, used, created_at) VALUES (?, ?, 0, ?)
-		`, userID, string(hash), now)
+		`, userID, hash, now)
 		if err != nil {
 			return nil, fmt.Errorf("failed to store recovery key: %w", err)
 		}
@@ -111,8 +113,8 @@ func (rm *RecoveryManager) Validate(ctx context.Context, userID int64, key strin
 			continue
 		}
 
-		// Check if this key matches
-		if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(key)); err == nil {
+		// Check if this key matches using Argon2id
+		if verifyRecoveryKey(key, hash) {
 			found = true
 			keyID = id
 			break
@@ -211,4 +213,66 @@ func FormatRecoveryKey(key string) string {
 		return key
 	}
 	return fmt.Sprintf("%s-%s-%s-%s", key[0:4], key[4:8], key[8:12], key[12:16])
+}
+
+// Argon2id parameters for recovery keys
+const (
+	recoveryArgon2Time    = 1
+	recoveryArgon2Memory  = 64 * 1024 // 64 MB
+	recoveryArgon2Threads = 4
+	recoveryArgon2KeyLen  = 32
+	recoveryArgon2SaltLen = 16
+)
+
+// hashRecoveryKey hashes a recovery key using Argon2id
+func hashRecoveryKey(key string) (string, error) {
+	salt := make([]byte, recoveryArgon2SaltLen)
+	if _, err := rand.Read(salt); err != nil {
+		return "", err
+	}
+
+	hash := argon2.IDKey([]byte(key), salt, recoveryArgon2Time, recoveryArgon2Memory, recoveryArgon2Threads, recoveryArgon2KeyLen)
+
+	b64Salt := base64.RawStdEncoding.EncodeToString(salt)
+	b64Hash := base64.RawStdEncoding.EncodeToString(hash)
+
+	return fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s",
+		argon2.Version, recoveryArgon2Memory, recoveryArgon2Time, recoveryArgon2Threads, b64Salt, b64Hash), nil
+}
+
+// verifyRecoveryKey verifies a recovery key against an Argon2id hash
+func verifyRecoveryKey(key, encodedHash string) bool {
+	parts := strings.Split(encodedHash, "$")
+	if len(parts) != 6 {
+		return false
+	}
+
+	if parts[1] != "argon2id" {
+		return false
+	}
+
+	var version int
+	if _, err := fmt.Sscanf(parts[2], "v=%d", &version); err != nil {
+		return false
+	}
+
+	var memory, time uint32
+	var threads uint8
+	if _, err := fmt.Sscanf(parts[3], "m=%d,t=%d,p=%d", &memory, &time, &threads); err != nil {
+		return false
+	}
+
+	salt, err := base64.RawStdEncoding.DecodeString(parts[4])
+	if err != nil {
+		return false
+	}
+
+	expectedHash, err := base64.RawStdEncoding.DecodeString(parts[5])
+	if err != nil {
+		return false
+	}
+
+	computedHash := argon2.IDKey([]byte(key), salt, time, memory, threads, uint32(len(expectedHash)))
+
+	return subtle.ConstantTimeCompare(computedHash, expectedHash) == 1
 }

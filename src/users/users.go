@@ -2,14 +2,17 @@ package users
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
 	"unicode"
 
-	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/crypto/argon2"
 )
 
 // User represents a registered user
@@ -313,19 +316,72 @@ func ValidatePassword(password string, minLength int) error {
 	return nil
 }
 
-// HashPassword hashes a password using bcrypt
+// Argon2id parameters per TEMPLATE.md specification
+const (
+	argon2Time    = 1
+	argon2Memory  = 64 * 1024 // 64 MB
+	argon2Threads = 4
+	argon2KeyLen  = 32
+	argon2SaltLen = 16
+)
+
+// HashPassword hashes a password using Argon2id (per TEMPLATE.md - NEVER bcrypt)
 func HashPassword(password string) (string, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
+	// Generate random salt
+	salt := make([]byte, argon2SaltLen)
+	if _, err := rand.Read(salt); err != nil {
 		return "", err
 	}
-	return string(hash), nil
+
+	// Generate hash using Argon2id
+	hash := argon2.IDKey([]byte(password), salt, argon2Time, argon2Memory, argon2Threads, argon2KeyLen)
+
+	// Encode as: $argon2id$v=19$m=65536,t=1,p=4$<base64-salt>$<base64-hash>
+	b64Salt := base64.RawStdEncoding.EncodeToString(salt)
+	b64Hash := base64.RawStdEncoding.EncodeToString(hash)
+
+	return fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s",
+		argon2.Version, argon2Memory, argon2Time, argon2Threads, b64Salt, b64Hash), nil
 }
 
-// CheckPassword compares a password with a hash
-func CheckPassword(password, hash string) bool {
-	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
-	return err == nil
+// CheckPassword compares a password with an Argon2id hash
+func CheckPassword(password, encodedHash string) bool {
+	// Parse the encoded hash
+	parts := strings.Split(encodedHash, "$")
+	if len(parts) != 6 {
+		return false
+	}
+
+	if parts[1] != "argon2id" {
+		return false
+	}
+
+	var version int
+	if _, err := fmt.Sscanf(parts[2], "v=%d", &version); err != nil {
+		return false
+	}
+
+	var memory, time uint32
+	var threads uint8
+	if _, err := fmt.Sscanf(parts[3], "m=%d,t=%d,p=%d", &memory, &time, &threads); err != nil {
+		return false
+	}
+
+	salt, err := base64.RawStdEncoding.DecodeString(parts[4])
+	if err != nil {
+		return false
+	}
+
+	expectedHash, err := base64.RawStdEncoding.DecodeString(parts[5])
+	if err != nil {
+		return false
+	}
+
+	// Compute hash with same parameters
+	computedHash := argon2.IDKey([]byte(password), salt, time, memory, threads, uint32(len(expectedHash)))
+
+	// Constant-time comparison
+	return subtle.ConstantTimeCompare(computedHash, expectedHash) == 1
 }
 
 // GenerateToken generates a secure random token
