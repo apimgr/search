@@ -28,7 +28,9 @@
       "Bash(gh run list:*)",
       "Bash(gh run view:*)",
       "Bash(git check-ignore:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(CGO_ENABLED=0 go build:*)",
+      "Bash(/tmp/search:*)"
     ]
   }
 }

@@ -16,6 +16,9 @@ import (
 )
 
 // User represents a registered user
+// Per TEMPLATE.md PART 31: Account email vs Notification email
+// - Email: Account email for security (password reset, 2FA, security alerts, login notifications)
+// - NotificationEmail: Non-security communications (newsletters, updates, general notifications)
 type User struct {
 	ID            int64      `json:"id" db:"id"`
 	Username      string     `json:"username" db:"username"`
@@ -30,6 +33,11 @@ type User struct {
 	CreatedAt     time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at" db:"updated_at"`
 	LastLogin     *time.Time `json:"last_login,omitempty" db:"last_login"`
+
+	// Notification email (per TEMPLATE.md PART 31)
+	// Optional separate email for non-security communications
+	NotificationEmail         string `json:"notification_email,omitempty" db:"notification_email"`
+	NotificationEmailVerified bool   `json:"notification_email_verified" db:"notification_email_verified"`
 }
 
 // UserSession represents an active user session
@@ -318,7 +326,7 @@ func ValidatePassword(password string, minLength int) error {
 
 // Argon2id parameters per TEMPLATE.md specification
 const (
-	argon2Time    = 1
+	argon2Time    = 3         // iterations (per TEMPLATE.md line 932)
 	argon2Memory  = 64 * 1024 // 64 MB
 	argon2Threads = 4
 	argon2KeyLen  = 32
@@ -482,5 +490,103 @@ func (u *User) ToPublicProfile() PublicProfile {
 		AvatarURL:   u.AvatarURL,
 		Bio:         u.Bio,
 		CreatedAt:   u.CreatedAt,
+	}
+}
+
+// Email type constants for dual email system (per TEMPLATE.md PART 31)
+const (
+	// EmailTypeAccount is for security-related communications
+	// Password reset, 2FA recovery, security alerts, login notifications
+	EmailTypeAccount = "account"
+
+	// EmailTypeNotification is for non-security communications
+	// Newsletters, updates, marketing, general notifications
+	EmailTypeNotification = "notification"
+)
+
+// GetAccountEmail returns the user's account email (primary email for security)
+// Per TEMPLATE.md PART 31: Account email receives security-sensitive communications ONLY
+func (u *User) GetAccountEmail() string {
+	return u.Email
+}
+
+// GetNotificationEmail returns the email to use for non-security notifications
+// Per TEMPLATE.md PART 31: If notification email is set and verified, use it
+// Otherwise fall back to the account email
+func (u *User) GetNotificationEmail() string {
+	if u.NotificationEmail != "" && u.NotificationEmailVerified {
+		return u.NotificationEmail
+	}
+	return u.Email
+}
+
+// GetEmailForType returns the appropriate email for the given email type
+// Per TEMPLATE.md PART 31: Account emails and notification emails have different purposes
+func (u *User) GetEmailForType(emailType string) string {
+	switch emailType {
+	case EmailTypeAccount:
+		return u.GetAccountEmail()
+	case EmailTypeNotification:
+		return u.GetNotificationEmail()
+	default:
+		return u.GetAccountEmail()
+	}
+}
+
+// HasSeparateNotificationEmail checks if user has a verified separate notification email
+func (u *User) HasSeparateNotificationEmail() bool {
+	return u.NotificationEmail != "" && u.NotificationEmailVerified && u.NotificationEmail != u.Email
+}
+
+// SetNotificationEmail sets the notification email (requires verification before use)
+func (u *User) SetNotificationEmail(email string) error {
+	if email == "" {
+		// Clear notification email
+		u.NotificationEmail = ""
+		u.NotificationEmailVerified = false
+		return nil
+	}
+
+	email = NormalizeEmail(email)
+	if err := ValidateEmail(email); err != nil {
+		return err
+	}
+
+	u.NotificationEmail = email
+	u.NotificationEmailVerified = false
+	return nil
+}
+
+// VerifyNotificationEmail marks the notification email as verified
+func (u *User) VerifyNotificationEmail() {
+	if u.NotificationEmail != "" {
+		u.NotificationEmailVerified = true
+	}
+}
+
+// ClearNotificationEmail removes the separate notification email
+// Notifications will fall back to the account email
+func (u *User) ClearNotificationEmail() {
+	u.NotificationEmail = ""
+	u.NotificationEmailVerified = false
+}
+
+// EmailInfo provides information about user's email configuration
+type EmailInfo struct {
+	AccountEmail              string `json:"account_email"`
+	AccountEmailVerified      bool   `json:"account_email_verified"`
+	NotificationEmail         string `json:"notification_email,omitempty"`
+	NotificationEmailVerified bool   `json:"notification_email_verified"`
+	UsingSeparateNotification bool   `json:"using_separate_notification"`
+}
+
+// GetEmailInfo returns detailed information about user's email configuration
+func (u *User) GetEmailInfo() EmailInfo {
+	return EmailInfo{
+		AccountEmail:              u.Email,
+		AccountEmailVerified:      u.EmailVerified,
+		NotificationEmail:         u.NotificationEmail,
+		NotificationEmailVerified: u.NotificationEmailVerified,
+		UsingSeparateNotification: u.HasSeparateNotificationEmail(),
 	}
 }

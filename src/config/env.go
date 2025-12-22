@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -119,9 +120,9 @@ func getEnv(keys ...string) string {
 }
 
 // ParseBool parses boolean from string (compatible with multiple formats)
-// Per spec: true/yes/on/1/enable/enabled are true
-// Per spec: false/no/off/0/disable/disabled are false
-// Any positive integer is true, 0 is false
+// Per TEMPLATE.md PART 3: Extended boolean handling
+// Truthy: true, yes, on, 1, enable, enabled, y, t, any positive integer
+// Falsy: false, no, off, 0, disable, disabled, n, f, empty string
 func ParseBool(val string) bool {
 	if val == "" {
 		return false
@@ -129,13 +130,13 @@ func ParseBool(val string) bool {
 
 	val = strings.ToLower(strings.TrimSpace(val))
 
-	// True values (per spec)
+	// True values (per TEMPLATE.md)
 	switch val {
 	case "1", "true", "yes", "on", "enable", "enabled", "y", "t":
 		return true
 	}
 
-	// False values (per spec)
+	// False values (per TEMPLATE.md)
 	switch val {
 	case "0", "false", "no", "off", "disable", "disabled", "n", "f":
 		return false
@@ -147,6 +148,69 @@ func ParseBool(val string) bool {
 	}
 
 	return false
+}
+
+// MustParseBool parses boolean from string and returns error for invalid values
+// Per TEMPLATE.md PART 3: Extended boolean handling
+// Returns error if value is not a recognized boolean format
+func MustParseBool(val string) (bool, error) {
+	if val == "" {
+		return false, nil
+	}
+
+	val = strings.ToLower(strings.TrimSpace(val))
+
+	// True values
+	switch val {
+	case "1", "true", "yes", "on", "enable", "enabled", "y", "t":
+		return true, nil
+	}
+
+	// False values
+	switch val {
+	case "0", "false", "no", "off", "disable", "disabled", "n", "f":
+		return false, nil
+	}
+
+	// Try parsing as integer
+	if i, err := strconv.Atoi(val); err == nil {
+		return i > 0, nil
+	}
+
+	return false, fmt.Errorf("invalid boolean value: %q", val)
+}
+
+// ParseFormBool parses boolean from HTML form values
+// Per TEMPLATE.md PART 3: Extended boolean handling
+// HTML checkboxes send "on" when checked, nothing when unchecked
+// HTML radio buttons send their value attribute
+func ParseFormBool(val string) bool {
+	if val == "" {
+		return false
+	}
+
+	val = strings.ToLower(strings.TrimSpace(val))
+
+	// HTML checkbox sends "on" when checked
+	// Other common form values
+	switch val {
+	case "1", "true", "yes", "on", "checked":
+		return true
+	}
+
+	return false
+}
+
+// IsTruthy is a semantic alias for ParseBool
+// Per TEMPLATE.md PART 3: Extended boolean handling
+func IsTruthy(val string) bool {
+	return ParseBool(val)
+}
+
+// IsFalsy returns true if the value is falsy
+// Per TEMPLATE.md PART 3: Extended boolean handling
+func IsFalsy(val string) bool {
+	return !ParseBool(val)
 }
 
 // parseBool is an alias for ParseBool (for internal use)

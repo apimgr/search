@@ -14,6 +14,7 @@ import (
 	"github.com/apimgr/search/src/admin"
 	"github.com/apimgr/search/src/api"
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/database"
 	"github.com/apimgr/search/src/email"
 	"github.com/apimgr/search/src/geoip"
 	"github.com/apimgr/search/src/instant"
@@ -25,6 +26,7 @@ import (
 	"github.com/apimgr/search/src/search/engines"
 	"github.com/apimgr/search/src/service"
 	searchtls "github.com/apimgr/search/src/tls"
+	"github.com/apimgr/search/src/users"
 	"github.com/apimgr/search/src/widgets"
 )
 
@@ -46,14 +48,23 @@ type Server struct {
 	apiHandler     *api.Handler
 	torService     *service.TorService
 	bangManager    *bangs.Manager
-	widgetManager   *widgets.Manager
-	logManager      *logging.Manager
-	tlsManager      *searchtls.Manager
-	instantManager  *instant.Manager
-	geoipLookup     *geoip.Lookup
-	mailer          *email.Mailer
-	scheduler       *scheduler.Scheduler
-	metrics         *Metrics
+	widgetManager  *widgets.Manager
+	logManager     *logging.Manager
+	tlsManager     *searchtls.Manager
+	instantManager *instant.Manager
+	geoipLookup    *geoip.Lookup
+	mailer         *email.Mailer
+	scheduler      *scheduler.Scheduler
+	metrics        *Metrics
+	dbManager      *database.DatabaseManager
+
+	// User management
+	userAuthManager *users.AuthManager
+	totpManager     *users.TOTPManager
+	recoveryManager *users.RecoveryManager
+	tokenManager    *users.TokenManager
+	authAPIHandler  *api.AuthHandler
+	userAPIHandler  *api.UserHandler
 }
 
 // registryAdapter wraps engines.Registry to implement admin.EngineRegistry
@@ -244,28 +255,85 @@ func New(cfg *config.Config) *Server {
 		log.Printf("[Scheduler] Initialized")
 	}
 
+	// Create database manager for user management
+	var dbMgr *database.DatabaseManager
+	var userAuthMgr *users.AuthManager
+	var totpMgr *users.TOTPManager
+	var recoveryMgr *users.RecoveryManager
+	var tokenMgr *users.TokenManager
+
+	if cfg.Server.Users.Enabled {
+		// Initialize database manager
+		dbConfig := &database.Config{
+			Driver:   "sqlite",
+			DataDir:  config.GetDatabaseDir(),
+			MaxOpen:  10,
+			MaxIdle:  5,
+			Lifetime: 300,
+		}
+		var err error
+		dbMgr, err = database.NewDatabaseManager(dbConfig)
+		if err != nil {
+			log.Printf("[Users] Warning: Failed to initialize database: %v", err)
+		} else {
+			// Get users database
+			usersDB := dbMgr.UsersDB().SQL()
+			if usersDB != nil {
+				// Create auth manager
+				authCfg := users.AuthConfig{
+					SessionDurationDays: cfg.Server.Users.GetSessionDurationDays(),
+					CookieName:          "user_session",
+					CookieSecure:        cfg.Server.SSL.Enabled,
+				}
+				userAuthMgr = users.NewAuthManager(usersDB, authCfg)
+				log.Printf("[Users] Auth manager initialized")
+
+				// Create TOTP manager if 2FA is allowed
+				if cfg.Server.Users.Auth.Allow2FA {
+					encKey := cfg.GetEncryptionKey()
+					if len(encKey) == 32 {
+						totpMgr, _ = users.NewTOTPManager(usersDB, cfg.Server.Title, encKey)
+						log.Printf("[Users] 2FA manager initialized")
+					}
+				}
+
+				// Create recovery manager
+				recoveryMgr = users.NewRecoveryManager(usersDB, 10)
+
+				// Create token manager
+				tokenMgr = users.NewTokenManager(usersDB)
+				log.Printf("[Users] Token manager initialized")
+			}
+		}
+	}
+
 	// Create metrics collector
 	metrics := NewMetrics(cfg)
 
 	s := &Server{
-		config:         cfg,
-		registry:       registry,
-		aggregator:     aggregator,
-		middleware:     mw,
-		rateLimiter:    rl,
-		csrf:           csrf,
-		renderer:       renderer,
-		apiHandler:     apiHandler,
-		torService:     torSvc,
-		bangManager:    bangMgr,
-		widgetManager:  widgetMgr,
-		logManager:     logMgr,
-		tlsManager:     tlsMgr,
-		instantManager: instantMgr,
-		geoipLookup:    geoLookup,
-		mailer:         mailer,
-		scheduler:      sched,
-		metrics:        metrics,
+		config:          cfg,
+		registry:        registry,
+		aggregator:      aggregator,
+		middleware:      mw,
+		rateLimiter:     rl,
+		csrf:            csrf,
+		renderer:        renderer,
+		apiHandler:      apiHandler,
+		torService:      torSvc,
+		bangManager:     bangMgr,
+		widgetManager:   widgetMgr,
+		logManager:      logMgr,
+		tlsManager:      tlsMgr,
+		instantManager:  instantMgr,
+		geoipLookup:     geoLookup,
+		mailer:          mailer,
+		scheduler:       sched,
+		metrics:         metrics,
+		dbManager:       dbMgr,
+		userAuthManager: userAuthMgr,
+		totpManager:     totpMgr,
+		recoveryManager: recoveryMgr,
+		tokenManager:    tokenMgr,
 	}
 
 	// Create admin handler (needs renderer interface)
@@ -287,6 +355,16 @@ func New(cfg *config.Config) *Server {
 
 	// Set instant answer manager on API handler
 	s.apiHandler.SetInstantManager(instantMgr)
+
+	// Create auth and user API handlers if user management is enabled
+	if cfg.Server.Users.Enabled && userAuthMgr != nil && dbMgr != nil {
+		usersDB := dbMgr.UsersDB().SQL()
+		if usersDB != nil {
+			s.authAPIHandler = api.NewAuthHandler(cfg, usersDB, userAuthMgr, totpMgr, recoveryMgr)
+			s.userAPIHandler = api.NewUserHandler(cfg, usersDB, userAuthMgr, totpMgr, recoveryMgr, tokenMgr)
+			log.Printf("[Users] API handlers initialized")
+		}
+	}
 
 	return s
 }
@@ -492,6 +570,13 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		}
 	}
 
+	// Close database connections
+	if s.dbManager != nil {
+		if err := s.dbManager.Close(); err != nil {
+			log.Printf("[Database] Close error: %v", err)
+		}
+	}
+
 	// Close log files
 	s.logManager.Close()
 
@@ -573,6 +658,34 @@ func (s *Server) setupRoutes() http.Handler {
 	// Admin routes (if enabled)
 	if s.config.Server.Admin.Enabled || s.config.Server.Admin.Username != "" {
 		s.adminHandler.RegisterRoutes(mux)
+	}
+
+	// User authentication routes (if user management is enabled)
+	if s.config.Server.Users.Enabled {
+		mux.HandleFunc("/auth/login", s.handleLogin)
+		mux.HandleFunc("/auth/logout", s.handleLogout)
+		mux.HandleFunc("/auth/register", s.handleRegister)
+		mux.HandleFunc("/auth/forgot", s.handleForgot)
+		mux.HandleFunc("/auth/verify", s.handleVerify)
+		mux.HandleFunc("/auth/2fa", s.handle2FA)
+		mux.HandleFunc("/auth/recovery", s.handleRecoveryLogin)
+
+		// User profile routes
+		mux.HandleFunc("/user/profile", s.handleUserProfile)
+		mux.HandleFunc("/user/security", s.handleUserSecurity)
+		mux.HandleFunc("/user/tokens", s.handleUserTokens)
+		mux.HandleFunc("/user/2fa/setup", s.handle2FASetup)
+		mux.HandleFunc("/user/2fa/disable", s.handle2FADisable)
+
+		// Auth API routes
+		if s.authAPIHandler != nil {
+			s.authAPIHandler.RegisterRoutes(mux)
+		}
+
+		// User API routes
+		if s.userAPIHandler != nil {
+			s.userAPIHandler.RegisterRoutes(mux)
+		}
 	}
 
 	// API routes

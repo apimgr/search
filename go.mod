@@ -3,8 +3,10 @@ module github.com/apimgr/search
 go 1.23
 
 require (
+	github.com/cretz/bine v0.2.0
 	github.com/google/uuid v1.6.0
 	github.com/graphql-go/graphql v0.8.1
+	github.com/oklog/ulid/v2 v2.1.0
 	github.com/pquerna/otp v1.4.0
 	golang.org/x/crypto v0.31.0
 	golang.org/x/net v0.33.0

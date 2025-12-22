@@ -2,12 +2,19 @@ package main
 
 import (
 	"context"
+	cryptoRand "crypto/rand"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
+	mathRand "math/rand"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
@@ -21,6 +28,8 @@ import (
 	"github.com/apimgr/search/src/server"
 	"github.com/apimgr/search/src/service"
 	"github.com/apimgr/search/src/update"
+
+	_ "modernc.org/sqlite"
 )
 
 // CLI flags (per TEMPLATE.md PART 17)
@@ -34,6 +43,7 @@ var (
 	flagService     string
 	flagMaintenance string
 	flagUpdate      string
+	flagBuild       string
 
 	// Required flags per TEMPLATE.md (lines 4514-4518)
 	flagMode    string
@@ -58,6 +68,7 @@ func init() {
 	flag.StringVar(&flagService, "service", "", "Service management: install|uninstall|start|stop|status|restart|reload")
 	flag.StringVar(&flagMaintenance, "maintenance", "", "Maintenance: backup|restore|update|mode")
 	flag.StringVar(&flagUpdate, "update", "", "Update management: check|yes|branch")
+	flag.StringVar(&flagBuild, "build", "", "Build for platforms: all|linux|darwin|windows|freebsd")
 
 	// Configuration override flags (NON-NEGOTIABLE per TEMPLATE.md PART 17)
 	flag.StringVar(&flagMode, "mode", "", "Set application mode (production|development)")
@@ -111,6 +122,13 @@ func main() {
 			subCmd = "yes"
 		}
 		runUpdate(subCmd)
+		return
+	case flagBuild != "" || (len(os.Args) > 1 && os.Args[1] == "--build"):
+		platform := flagBuild
+		if platform == "" {
+			platform = "all"
+		}
+		runBuild(platform)
 		return
 	}
 
@@ -180,6 +198,12 @@ func handleLegacyArgs() {
 			subCmd = os.Args[2]
 		}
 		runUpdate(subCmd)
+	case "--build":
+		platform := "all"
+		if len(os.Args) > 2 {
+			platform = os.Args[2]
+		}
+		runBuild(platform)
 	default:
 		fmt.Printf("Unknown command: %s\n", os.Args[1])
 		fmt.Println("Use --help for usage information")
@@ -294,6 +318,16 @@ Updates:
     yes                    Download and install update (default)
     branch <name>          Set update branch (stable|beta|daily)
 
+Build:
+  --build [platform]       Build binaries (requires Docker):
+    all                    Build for all 8 platforms (default)
+    linux                  Build for Linux (amd64, arm64)
+    darwin                 Build for macOS (amd64, arm64)
+    windows                Build for Windows (amd64, arm64)
+    freebsd                Build for FreeBSD (amd64, arm64)
+    host                   Build for current OS/ARCH only
+    linux/amd64            Build for specific OS/ARCH
+
 Environment Variables:
   SEARCH_SETTINGS_PATH     Path to configuration file
   SEARCH_CONFIG_DIR        Configuration directory
@@ -316,12 +350,14 @@ Examples:
   %s --service install               Install as system service
   %s --service reload                Reload configuration
   %s --update check                  Check for updates
+  %s --build all                     Build for all platforms
+  %s --build host                    Build for current platform
 
 For more information: https://github.com/apimgr/search
 `, config.ProjectName, config.ProjectName, config.ProjectName,
 		config.ProjectName, config.ProjectName, config.ProjectName, config.ProjectName,
 		config.ProjectName, config.ProjectName, config.ProjectName, config.ProjectName,
-		config.ProjectName)
+		config.ProjectName, config.ProjectName, config.ProjectName)
 }
 
 func runInit() {
@@ -722,20 +758,71 @@ func runMaintenance(action string) {
 		}
 
 	case "setup":
-		fmt.Println("🔧 Running initial setup...")
+		// Admin recovery per TEMPLATE.md PART 26
+		// Clears admin password and generates a new setup token
+		fmt.Println("🔧 Admin Recovery Setup")
 		fmt.Println()
-		runInit()
+
+		// Initialize database to reset credentials
+		cfg, err := config.Initialize()
+		if err != nil {
+			fmt.Printf("❌ Failed to load config: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Get data directory for server.db
+		dataDir := config.GetDataDir()
+		dbPath := fmt.Sprintf("%s/server.db", dataDir)
+
+		// Check if database exists
+		if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+			fmt.Println("No existing admin accounts found.")
+			fmt.Println("Run the server and visit /admin/setup to create the first admin.")
+			return
+		}
+
+		fmt.Println("This will:")
+		fmt.Println("  1. Clear the primary admin's password")
+		fmt.Println("  2. Generate a one-time setup token")
+		fmt.Println("  3. Allow password reset via /admin/setup")
 		fmt.Println()
-		fmt.Println("📋 Setup Complete!")
+		fmt.Print("Continue? (yes/no): ")
+		var confirm string
+		fmt.Scanln(&confirm)
+		if confirm != "yes" {
+			fmt.Println("Cancelled.")
+			return
+		}
+
+		// Generate setup token
+		setupToken := generateSetupToken()
+
+		// Store hashed setup token in database
+		if err := storeSetupToken(dbPath, setupToken); err != nil {
+			fmt.Printf("❌ Failed to create setup token: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Clear primary admin credentials
+		if err := resetAdminCredentials(dbPath); err != nil {
+			fmt.Printf("⚠️  Warning: Could not reset credentials: %v\n", err)
+		}
+
+		fmt.Println()
+		fmt.Println("✅ Setup token created successfully!")
+		fmt.Println()
+		fmt.Println("╔══════════════════════════════════════════════════════════╗")
+		fmt.Println("║  SETUP TOKEN (copy this - it will not be shown again)    ║")
+		fmt.Println("╠══════════════════════════════════════════════════════════╣")
+		fmt.Printf("║  %s                                  ║\n", setupToken)
+		fmt.Println("╚══════════════════════════════════════════════════════════╝")
 		fmt.Println()
 		fmt.Println("Next steps:")
-		fmt.Println("  1. Edit configuration: ", config.GetConfigPath())
-		fmt.Println("  2. Start the server:   search")
-		fmt.Println("  3. Access admin panel: http://localhost:<port>/admin")
+		fmt.Println("  1. Start the server: search")
+		fmt.Printf("  2. Visit: http://localhost:%d/admin/setup\n", cfg.Server.Port)
+		fmt.Println("  3. Enter the setup token above to create a new password")
 		fmt.Println()
-		fmt.Println("For service installation:")
-		fmt.Println("  search --service install")
-		fmt.Println("  search --service start")
+		fmt.Println("The token expires in 1 hour.")
 
 	case "help":
 		fmt.Println("Maintenance Commands:")
@@ -964,4 +1051,302 @@ func runTest() {
 		os.WriteFile(filename, jsonData, 0644)
 		fmt.Printf("\n💾 Results saved to: %s\n", filename)
 	}
+}
+
+// ============================================================
+// Admin Recovery Helpers (per TEMPLATE.md PART 26)
+// ============================================================
+
+// generateSetupToken creates a cryptographically secure setup token
+func generateSetupToken() string {
+	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	token := make([]byte, 32)
+
+	// Use crypto/rand for secure generation
+	randomBytes := make([]byte, 32)
+	if _, err := cryptoRand.Read(randomBytes); err != nil {
+		// Fallback to less secure method if crypto/rand fails
+		for i := range token {
+			token[i] = chars[mathRand.Intn(len(chars))]
+		}
+		return string(token)
+	}
+
+	for i, b := range randomBytes {
+		token[i] = chars[int(b)%len(chars)]
+	}
+	return string(token)
+}
+
+// storeSetupToken stores the hashed setup token in the database
+func storeSetupToken(dbPath, token string) error {
+	// Hash the token
+	hash := sha256.Sum256([]byte(token))
+	tokenHash := hex.EncodeToString(hash[:])
+
+	// Open database
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+	defer db.Close()
+
+	// Create setup_token table if it doesn't exist
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS setup_token (
+			id INTEGER PRIMARY KEY CHECK (id = 1),
+			token_hash TEXT NOT NULL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			expires_at DATETIME,
+			used_at DATETIME
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create table: %w", err)
+	}
+
+	// Clear any existing setup token and insert new one
+	expiresAt := time.Now().Add(1 * time.Hour)
+	_, err = db.Exec(`DELETE FROM setup_token`)
+	if err != nil {
+		return fmt.Errorf("failed to clear old tokens: %w", err)
+	}
+
+	_, err = db.Exec(`
+		INSERT INTO setup_token (id, token_hash, expires_at) VALUES (1, ?, ?)
+	`, tokenHash, expiresAt)
+	if err != nil {
+		return fmt.Errorf("failed to store token: %w", err)
+	}
+
+	return nil
+}
+
+// resetAdminCredentials clears the primary admin's password for recovery
+func resetAdminCredentials(dbPath string) error {
+	// Open database
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+	defer db.Close()
+
+	// Clear password for primary admin (is_primary = 1)
+	result, err := db.Exec(`
+		UPDATE admin_credentials
+		SET password_hash = '', token_hash = NULL, token_prefix = NULL, updated_at = datetime('now')
+		WHERE is_primary = 1
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to reset credentials: %w", err)
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		// Try legacy single-admin format
+		_, err = db.Exec(`
+			UPDATE admin_credentials
+			SET password_hash = '', token_hash = NULL, token_prefix = NULL, updated_at = datetime('now')
+			WHERE id = 1
+		`)
+		if err != nil {
+			return fmt.Errorf("failed to reset credentials: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// ============================================================
+// Build Command (per TEMPLATE.md PART 23)
+// ============================================================
+
+// BuildTarget represents a build target platform
+type BuildTarget struct {
+	OS   string
+	Arch string
+}
+
+// runBuild builds the binary for specified platforms using Docker
+// Per TEMPLATE.md PART 23: Binary must be able to build itself
+func runBuild(platform string) {
+	fmt.Println("🔧 Build Command")
+	fmt.Printf("   Version: %s\n", config.Version)
+	fmt.Println()
+
+	// Check if Docker is available
+	if _, err := exec.LookPath("docker"); err != nil {
+		fmt.Println("❌ Docker is required for cross-platform builds")
+		fmt.Println("   Please install Docker and try again")
+		os.Exit(1)
+	}
+
+	// Find the source directory
+	srcDir, err := findSourceDir()
+	if err != nil {
+		fmt.Printf("❌ Cannot find source directory: %v\n", err)
+		fmt.Println("   The build command requires access to the source code")
+		os.Exit(1)
+	}
+
+	// Define build targets
+	allTargets := []BuildTarget{
+		{"linux", "amd64"},
+		{"linux", "arm64"},
+		{"darwin", "amd64"},
+		{"darwin", "arm64"},
+		{"windows", "amd64"},
+		{"windows", "arm64"},
+		{"freebsd", "amd64"},
+		{"freebsd", "arm64"},
+	}
+
+	// Filter targets based on platform argument
+	var targets []BuildTarget
+	switch platform {
+	case "all", "":
+		targets = allTargets
+	case "linux":
+		targets = []BuildTarget{{"linux", "amd64"}, {"linux", "arm64"}}
+	case "darwin", "macos":
+		targets = []BuildTarget{{"darwin", "amd64"}, {"darwin", "arm64"}}
+	case "windows":
+		targets = []BuildTarget{{"windows", "amd64"}, {"windows", "arm64"}}
+	case "freebsd":
+		targets = []BuildTarget{{"freebsd", "amd64"}, {"freebsd", "arm64"}}
+	case "host":
+		targets = []BuildTarget{{runtime.GOOS, runtime.GOARCH}}
+	default:
+		// Check for OS/ARCH format
+		parts := strings.Split(platform, "/")
+		if len(parts) == 2 {
+			targets = []BuildTarget{{parts[0], parts[1]}}
+		} else {
+			fmt.Printf("❌ Unknown platform: %s\n", platform)
+			fmt.Println("   Valid options: all, linux, darwin, windows, freebsd, host, or OS/ARCH")
+			os.Exit(1)
+		}
+	}
+
+	// Create output directory
+	outputDir := filepath.Join(srcDir, "binaries")
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		fmt.Printf("❌ Failed to create output directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("📁 Source: %s\n", srcDir)
+	fmt.Printf("📁 Output: %s\n", outputDir)
+	fmt.Printf("🎯 Targets: %d platforms\n\n", len(targets))
+
+	// Build for each target
+	failed := 0
+	for _, target := range targets {
+		ext := ""
+		if target.OS == "windows" {
+			ext = ".exe"
+		}
+		outputName := fmt.Sprintf("search-%s-%s%s", target.OS, target.Arch, ext)
+		outputPath := filepath.Join(outputDir, outputName)
+
+		fmt.Printf("   Building %s/%s... ", target.OS, target.Arch)
+
+		if err := buildWithDocker(srcDir, outputPath, target.OS, target.Arch); err != nil {
+			fmt.Printf("❌ %v\n", err)
+			failed++
+		} else {
+			// Get file size
+			if info, err := os.Stat(outputPath); err == nil {
+				fmt.Printf("✅ (%s)\n", formatBytes(info.Size()))
+			} else {
+				fmt.Println("✅")
+			}
+		}
+	}
+
+	fmt.Println()
+	if failed > 0 {
+		fmt.Printf("⚠️  %d/%d builds failed\n", failed, len(targets))
+		os.Exit(1)
+	}
+	fmt.Printf("✅ Build complete: %d binaries in %s/\n", len(targets), outputDir)
+}
+
+// findSourceDir locates the source directory
+func findSourceDir() (string, error) {
+	// Try current directory first
+	if _, err := os.Stat("go.mod"); err == nil {
+		return ".", nil
+	}
+
+	// Try to find based on executable path
+	execPath, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+
+	// Check if we're in the binaries directory
+	dir := filepath.Dir(execPath)
+	parentDir := filepath.Dir(dir)
+	if _, err := os.Stat(filepath.Join(parentDir, "go.mod")); err == nil {
+		return parentDir, nil
+	}
+
+	// Check common development paths
+	homeDir, _ := os.UserHomeDir()
+	commonPaths := []string{
+		filepath.Join(homeDir, "Projects/github/apimgr/search"),
+		"/root/Projects/github/apimgr/search",
+		"/app",
+	}
+
+	for _, p := range commonPaths {
+		if _, err := os.Stat(filepath.Join(p, "go.mod")); err == nil {
+			return p, nil
+		}
+	}
+
+	return "", fmt.Errorf("could not find go.mod in any expected location")
+}
+
+// buildWithDocker builds a binary using Docker
+func buildWithDocker(srcDir, outputPath, goos, goarch string) error {
+	outputName := filepath.Base(outputPath)
+
+	// Docker command to build
+	// Per TEMPLATE.md PART 23: Must use golang:alpine for builds
+	cmd := exec.Command("docker", "run", "--rm",
+		"-v", srcDir+":/app",
+		"-w", "/app",
+		"-e", "CGO_ENABLED=0",
+		"-e", "GOOS="+goos,
+		"-e", "GOARCH="+goarch,
+		"golang:alpine",
+		"go", "build",
+		"-ldflags", fmt.Sprintf("-s -w -X github.com/apimgr/search/src/config.Version=%s -X github.com/apimgr/search/src/config.BuildTime=%s",
+			config.Version, time.Now().Format(time.RFC3339)),
+		"-o", "/app/binaries/"+outputName,
+		"./src",
+	)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%v: %s", err, string(output))
+	}
+
+	return nil
+}
+
+// formatBytes formats bytes as human-readable size
+func formatBytes(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }

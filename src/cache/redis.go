@@ -111,8 +111,9 @@ func (c *RedisCache) readResponse() (interface{}, error) {
 		if err != nil {
 			return nil, err
 		}
+		// Nil value
 		if length == -1 {
-			return nil, nil // Nil value
+			return nil, nil
 		}
 		data := make([]byte, length+2)
 		_, err = c.reader.Read(data)

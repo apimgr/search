@@ -1,0 +1,367 @@
+{{define "content"}}
+<div class="auth-page register-page">
+    <div class="auth-container">
+        <div class="auth-header">
+            <h1>{{t "auth.register"}}</h1>
+            <p class="auth-subtitle">{{t "auth.register.title"}}</p>
+        </div>
+
+        {{if .Error}}
+        <div class="alert alert-error" role="alert">
+            {{.Error}}
+        </div>
+        {{end}}
+
+        {{if .Success}}
+        <div class="alert alert-success" role="alert">
+            {{t "auth.register.success"}}
+            {{if .RequireEmailVerification}}
+            <p>{{t "auth.register.verify_email"}}</p>
+            {{end}}
+        </div>
+        {{else}}
+        <form method="POST" action="/auth/register" class="auth-form" id="register-form">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+            <div class="form-group">
+                <label for="username">{{t "auth.register.username"}} <span class="required">*</span></label>
+                <input type="text" id="username" name="username" value="{{.FormData.Username}}"
+                       autocomplete="username" required autofocus
+                       pattern="[a-z0-9_-]+" minlength="3" maxlength="32"
+                       aria-describedby="username-help">
+                <small id="username-help" class="form-help">
+                    {{t "validation.username.invalid"}}
+                </small>
+            </div>
+
+            <div class="form-group">
+                <label for="email">{{t "auth.register.email"}} <span class="required">*</span></label>
+                <input type="email" id="email" name="email" value="{{.FormData.Email}}"
+                       autocomplete="email" required
+                       aria-describedby="email-help">
+                <small id="email-help" class="form-help">
+                    {{t "validation.email"}}
+                </small>
+            </div>
+
+            <div class="form-group">
+                <label for="password">{{t "auth.register.password"}} <span class="required">*</span></label>
+                <div class="password-input-wrapper">
+                    <input type="password" id="password" name="password"
+                           autocomplete="new-password" required
+                           minlength="8"
+                           aria-describedby="password-help">
+                    <button type="button" class="password-toggle" aria-label="Toggle password visibility">
+                        <span class="icon-eye"></span>
+                    </button>
+                </div>
+                <small id="password-help" class="form-help">
+                    {{t "validation.min_length" 8}}
+                </small>
+                <div class="password-strength" id="password-strength"></div>
+            </div>
+
+            <div class="form-group">
+                <label for="confirm_password">{{t "auth.register.confirm_password"}} <span class="required">*</span></label>
+                <div class="password-input-wrapper">
+                    <input type="password" id="confirm_password" name="confirm_password"
+                           autocomplete="new-password" required
+                           aria-describedby="confirm-help">
+                    <button type="button" class="password-toggle" aria-label="Toggle password visibility">
+                        <span class="icon-eye"></span>
+                    </button>
+                </div>
+                <small id="confirm-help" class="form-help error-text" style="display: none;">
+                    {{t "validation.password_match"}}
+                </small>
+            </div>
+
+            {{if .InviteCode}}
+            <input type="hidden" name="invite_code" value="{{.InviteCode}}">
+            {{end}}
+
+            <button type="submit" class="btn btn-primary btn-block" id="submit-btn">
+                {{t "auth.register.submit"}}
+            </button>
+        </form>
+        {{end}}
+
+        <div class="auth-footer">
+            <p>{{t "auth.register.have_account"}} <a href="/auth/login">{{t "auth.login"}}</a></p>
+        </div>
+    </div>
+</div>
+
+<style>
+.auth-page {
+    min-height: calc(100vh - 200px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+}
+
+.auth-container {
+    width: 100%;
+    max-width: 400px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 2rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.auth-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.auth-header h1 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.75rem;
+}
+
+.auth-subtitle {
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+}
+
+.form-group label {
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.required {
+    color: var(--danger-color);
+}
+
+.form-group input[type="text"],
+.form-group input[type="email"],
+.form-group input[type="password"] {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 1rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.15);
+}
+
+.form-group input:invalid:not(:placeholder-shown) {
+    border-color: var(--danger-color);
+}
+
+.form-help {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.error-text {
+    color: var(--danger-color);
+}
+
+.password-input-wrapper {
+    position: relative;
+}
+
+.password-input-wrapper input {
+    padding-right: 3rem;
+}
+
+.password-toggle {
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0.25rem;
+}
+
+.password-toggle:hover {
+    color: var(--text-primary);
+}
+
+.password-strength {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--bg-tertiary);
+    margin-top: 0.5rem;
+    overflow: hidden;
+}
+
+.password-strength::after {
+    content: '';
+    display: block;
+    height: 100%;
+    width: var(--strength, 0%);
+    background: var(--strength-color, var(--danger-color));
+    transition: width 0.3s, background 0.3s;
+}
+
+.btn {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+}
+
+.btn:hover {
+    opacity: 0.9;
+}
+
+.btn:active {
+    transform: scale(0.98);
+}
+
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.btn-primary {
+    background: var(--accent-color);
+    color: var(--bg-primary);
+}
+
+.btn-block {
+    width: 100%;
+}
+
+.alert {
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+}
+
+.alert-error {
+    background: rgba(var(--danger-rgb), 0.1);
+    color: var(--danger-color);
+    border: 1px solid rgba(var(--danger-rgb), 0.2);
+}
+
+.alert-success {
+    background: rgba(var(--success-rgb), 0.1);
+    color: var(--success-color);
+    border: 1px solid rgba(var(--success-rgb), 0.2);
+}
+
+.auth-footer {
+    margin-top: 1.5rem;
+    text-align: center;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.auth-footer a {
+    color: var(--accent-color);
+    text-decoration: none;
+}
+
+.auth-footer a:hover {
+    text-decoration: underline;
+}
+
+.icon-eye::before {
+    content: '\1F441';
+}
+
+@media (max-width: 480px) {
+    .auth-container {
+        padding: 1.5rem;
+    }
+}
+</style>
+
+<script>
+(function() {
+    document.addEventListener('DOMContentLoaded', function() {
+        // Password visibility toggles
+        document.querySelectorAll('.password-toggle').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                const input = this.previousElementSibling;
+                const type = input.type === 'password' ? 'text' : 'password';
+                input.type = type;
+                this.querySelector('.icon-eye').style.opacity = type === 'text' ? '0.5' : '1';
+            });
+        });
+
+        // Password strength indicator
+        const passwordInput = document.getElementById('password');
+        const strengthIndicator = document.getElementById('password-strength');
+
+        if (passwordInput && strengthIndicator) {
+            passwordInput.addEventListener('input', function() {
+                const password = this.value;
+                let strength = 0;
+                let color = 'var(--danger-color)';
+
+                if (password.length >= 8) strength += 25;
+                if (password.length >= 12) strength += 15;
+                if (/[a-z]/.test(password)) strength += 15;
+                if (/[A-Z]/.test(password)) strength += 15;
+                if (/[0-9]/.test(password)) strength += 15;
+                if (/[^a-zA-Z0-9]/.test(password)) strength += 15;
+
+                if (strength >= 80) color = 'var(--success-color)';
+                else if (strength >= 50) color = 'var(--warning-color)';
+
+                strengthIndicator.style.setProperty('--strength', strength + '%');
+                strengthIndicator.style.setProperty('--strength-color', color);
+            });
+        }
+
+        // Password confirmation validation
+        const confirmInput = document.getElementById('confirm_password');
+        const confirmHelp = document.getElementById('confirm-help');
+
+        if (confirmInput && passwordInput && confirmHelp) {
+            function validateConfirm() {
+                if (confirmInput.value && confirmInput.value !== passwordInput.value) {
+                    confirmHelp.style.display = 'block';
+                    confirmInput.setCustomValidity('Passwords do not match');
+                } else {
+                    confirmHelp.style.display = 'none';
+                    confirmInput.setCustomValidity('');
+                }
+            }
+
+            confirmInput.addEventListener('input', validateConfirm);
+            passwordInput.addEventListener('input', validateConfirm);
+        }
+
+        // Username normalization
+        const usernameInput = document.getElementById('username');
+        if (usernameInput) {
+            usernameInput.addEventListener('input', function() {
+                this.value = this.value.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+            });
+        }
+    });
+})();
+</script>
+{{end}}

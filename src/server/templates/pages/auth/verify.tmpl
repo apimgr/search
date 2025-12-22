@@ -1,0 +1,168 @@
+{{define "content"}}
+<div class="auth-page verify-page">
+    <div class="auth-container">
+        <div class="auth-header">
+            <h1>{{t "auth.verify.title"}}</h1>
+        </div>
+
+        {{if .Error}}
+        <div class="alert alert-error" role="alert">
+            {{t "auth.verify.invalid"}}
+        </div>
+        <div class="verify-actions">
+            <a href="/auth/login" class="btn btn-primary btn-block">{{t "auth.login"}}</a>
+            {{if .CanResend}}
+            <form method="POST" action="/auth/verify/resend" class="resend-form">
+                <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                <input type="hidden" name="email" value="{{.Email}}">
+                <button type="submit" class="btn btn-secondary btn-block">
+                    {{t "auth.verify.resend"}}
+                </button>
+            </form>
+            {{end}}
+        </div>
+        {{else if .Success}}
+        <div class="alert alert-success" role="alert">
+            <div class="success-icon">&#x2713;</div>
+            {{t "auth.verify.success"}}
+        </div>
+        <div class="verify-actions">
+            <a href="/auth/login" class="btn btn-primary btn-block">{{t "auth.login"}}</a>
+        </div>
+        {{else}}
+        <div class="verifying">
+            <div class="spinner"></div>
+            <p>Verifying your email...</p>
+        </div>
+        {{end}}
+    </div>
+</div>
+
+<style>
+.auth-page {
+    min-height: calc(100vh - 200px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+}
+
+.auth-container {
+    width: 100%;
+    max-width: 400px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 2rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    text-align: center;
+}
+
+.auth-header {
+    margin-bottom: 2rem;
+}
+
+.auth-header h1 {
+    margin: 0;
+    font-size: 1.75rem;
+}
+
+.alert {
+    padding: 1.5rem;
+    border-radius: 6px;
+    margin-bottom: 1.5rem;
+    font-size: 1rem;
+}
+
+.alert-error {
+    background: rgba(var(--danger-rgb), 0.1);
+    color: var(--danger-color);
+    border: 1px solid rgba(var(--danger-rgb), 0.2);
+}
+
+.alert-success {
+    background: rgba(var(--success-rgb), 0.1);
+    color: var(--success-color);
+    border: 1px solid rgba(var(--success-rgb), 0.2);
+}
+
+.success-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+}
+
+.verify-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.resend-form {
+    margin: 0;
+}
+
+.btn {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    text-decoration: none;
+    text-align: center;
+}
+
+.btn:hover {
+    opacity: 0.9;
+}
+
+.btn:active {
+    transform: scale(0.98);
+}
+
+.btn-primary {
+    background: var(--accent-color);
+    color: var(--bg-primary);
+}
+
+.btn-secondary {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.btn-block {
+    width: 100%;
+    display: block;
+}
+
+.verifying {
+    padding: 2rem 0;
+}
+
+.verifying p {
+    color: var(--text-muted);
+    margin-top: 1rem;
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    margin: 0 auto;
+    border: 3px solid var(--bg-tertiary);
+    border-top-color: var(--accent-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+@media (max-width: 480px) {
+    .auth-container {
+        padding: 1.5rem;
+    }
+}
+</style>
+{{end}}

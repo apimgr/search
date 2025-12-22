@@ -11,16 +11,23 @@ import (
 type TemplateType string
 
 const (
-	TemplateWelcome          TemplateType = "welcome"
-	TemplatePasswordReset    TemplateType = "password_reset"
-	TemplatePasswordChanged  TemplateType = "password_changed"
+	TemplateWelcome           TemplateType = "welcome"
+	TemplatePasswordReset     TemplateType = "password_reset"
+	TemplatePasswordChanged   TemplateType = "password_changed"
 	TemplateLoginNotification TemplateType = "login_notification"
 	TemplateEmailVerification TemplateType = "email_verification"
-	TemplateAccountLocked    TemplateType = "account_locked"
-	TemplateAdminAlert       TemplateType = "admin_alert"
-	TemplateWeeklyReport     TemplateType = "weekly_report"
-	TemplateSecurityAlert    TemplateType = "security_alert"
-	TemplateAPITokenCreated  TemplateType = "api_token_created"
+	TemplateAccountLocked     TemplateType = "account_locked"
+	TemplateAdminAlert        TemplateType = "admin_alert"
+	TemplateWeeklyReport      TemplateType = "weekly_report"
+	TemplateSecurityAlert     TemplateType = "security_alert"
+	TemplateAPITokenCreated   TemplateType = "api_token_created"
+	// Additional templates per TEMPLATE.md PART 16
+	TemplateAdminInvite       TemplateType = "admin_invite"
+	Template2FAEnabled        TemplateType = "two_factor_enabled"
+	Template2FADisabled       TemplateType = "two_factor_disabled"
+	TemplateBackupCompleted   TemplateType = "backup_completed"
+	TemplateUpdateAvailable   TemplateType = "update_available"
+	TemplateMaintenanceNotice TemplateType = "maintenance_notice"
 )
 
 // TemplateData holds common template data
@@ -138,6 +145,62 @@ type APITokenCreatedData struct {
 	ExpiresAt   time.Time
 	CreatedAt   time.Time
 	IPAddress   string
+}
+
+// AdminInviteData holds data for admin invite email
+type AdminInviteData struct {
+	*TemplateData
+	InviterName string
+	InviteLink  string
+	ExpiresIn   string
+	Message     string
+}
+
+// TwoFactorEnabledData holds data for 2FA enabled notification
+type TwoFactorEnabledData struct {
+	*TemplateData
+	Username    string
+	EnabledAt   time.Time
+	IPAddress   string
+	Method      string
+}
+
+// TwoFactorDisabledData holds data for 2FA disabled notification
+type TwoFactorDisabledData struct {
+	*TemplateData
+	Username    string
+	DisabledAt  time.Time
+	IPAddress   string
+	Reason      string
+}
+
+// BackupCompletedData holds data for backup completion notification
+type BackupCompletedData struct {
+	*TemplateData
+	BackupName  string
+	BackupSize  string
+	CreatedAt   time.Time
+	FileCount   int
+	Duration    string
+}
+
+// UpdateAvailableData holds data for update available notification
+type UpdateAvailableData struct {
+	*TemplateData
+	CurrentVersion string
+	NewVersion     string
+	ReleaseDate    time.Time
+	ReleaseNotes   string
+	UpdateURL      string
+}
+
+// MaintenanceNoticeData holds data for maintenance notice email
+type MaintenanceNoticeData struct {
+	*TemplateData
+	ScheduledAt  time.Time
+	Duration     string
+	Reason       string
+	AffectedServices []string
 }
 
 // EmailTemplate manages email template rendering
@@ -479,4 +542,369 @@ var rawTemplates = map[TemplateType]string{
     </div>
 </body>
 </html>`,
+
+	TemplateAdminInvite: `You've Been Invited to Admin - {{.SiteName}}
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: #1a1a2e; color: #ffffff; padding: 30px; border-radius: 8px;">
+        <h1 style="color: #00d9ff; margin-top: 0;">Admin Invitation</h1>
+        <p>You've been invited by <strong>{{.InviterName}}</strong> to become an administrator of {{.SiteName}}.</p>
+        {{if .Message}}
+        <p style="background: #0f0f1a; padding: 15px; border-radius: 4px; border-left: 4px solid #00d9ff;">
+            "{{.Message}}"
+        </p>
+        {{end}}
+        <p>Click the button below to accept the invitation and create your admin account:</p>
+        <p><a href="{{.InviteLink}}" style="display: inline-block; background: #00d9ff; color: #1a1a2e; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">Accept Invitation</a></p>
+        <p style="color: #888; font-size: 14px;">This invitation expires in {{.ExpiresIn}}.</p>
+        <p style="color: #888; font-size: 14px;">If you weren't expecting this invitation, you can safely ignore this email.</p>
+        <hr style="border: 1px solid #333; margin: 20px 0;">
+        <p style="color: #888; font-size: 12px;">&copy; {{.Year}} {{.SiteName}}</p>
+    </div>
+</body>
+</html>`,
+
+	Template2FAEnabled: `Two-Factor Authentication Enabled - {{.SiteName}}
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: #1a1a2e; color: #ffffff; padding: 30px; border-radius: 8px;">
+        <h1 style="color: #00ff88; margin-top: 0;">2FA Enabled</h1>
+        <p>Hello {{.Username}},</p>
+        <p>Two-factor authentication has been successfully enabled for your account.</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            <tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">Method</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{.Method}}</td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">Enabled At</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{.EnabledAt.Format "Jan 2, 2006 3:04 PM"}}</td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">IP Address</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{.IPAddress}}</td></tr>
+        </table>
+        <p style="background: #00ff8822; border-left: 4px solid #00ff88; padding: 15px; margin: 20px 0;">
+            Your account is now more secure. Make sure to save your recovery codes in a safe place.
+        </p>
+        <p style="color: #ff6b6b;">If you didn't enable 2FA, please contact support immediately.</p>
+        <hr style="border: 1px solid #333; margin: 20px 0;">
+        <p style="color: #888; font-size: 12px;">&copy; {{.Year}} {{.SiteName}}</p>
+    </div>
+</body>
+</html>`,
+
+	Template2FADisabled: `Two-Factor Authentication Disabled - {{.SiteName}}
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: #1a1a2e; color: #ffffff; padding: 30px; border-radius: 8px;">
+        <h1 style="color: #ffd93d; margin-top: 0;">2FA Disabled</h1>
+        <p>Hello {{.Username}},</p>
+        <p>Two-factor authentication has been disabled for your account.</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            <tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">Disabled At</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{.DisabledAt.Format "Jan 2, 2006 3:04 PM"}}</td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">IP Address</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{.IPAddress}}</td></tr>
+            {{if .Reason}}<tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">Reason</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{.Reason}}</td></tr>{{end}}
+        </table>
+        <p style="background: #ffd93d22; border-left: 4px solid #ffd93d; padding: 15px; margin: 20px 0;">
+            Your account is now less secure. We recommend re-enabling 2FA as soon as possible.
+        </p>
+        <p style="color: #ff6b6b;">If you didn't disable 2FA, please change your password and contact support immediately.</p>
+        <hr style="border: 1px solid #333; margin: 20px 0;">
+        <p style="color: #888; font-size: 12px;">&copy; {{.Year}} {{.SiteName}}</p>
+    </div>
+</body>
+</html>`,
+
+	TemplateBackupCompleted: `Backup Completed - {{.SiteName}}
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: #1a1a2e; color: #ffffff; padding: 30px; border-radius: 8px;">
+        <h1 style="color: #00ff88; margin-top: 0;">Backup Completed</h1>
+        <p>A backup of your {{.SiteName}} data has been successfully created.</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            <tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">Backup Name</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{.BackupName}}</td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">Size</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{.BackupSize}}</td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">Files</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{.FileCount}} files</td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">Duration</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{.Duration}}</td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">Created At</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{.CreatedAt.Format "Jan 2, 2006 3:04 PM"}}</td></tr>
+        </table>
+        <p style="color: #888; font-size: 14px;">This is an automated notification from the {{.SiteName}} backup system.</p>
+        <hr style="border: 1px solid #333; margin: 20px 0;">
+        <p style="color: #888; font-size: 12px;">&copy; {{.Year}} {{.SiteName}}</p>
+    </div>
+</body>
+</html>`,
+
+	TemplateUpdateAvailable: `Update Available - {{.SiteName}}
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: #1a1a2e; color: #ffffff; padding: 30px; border-radius: 8px;">
+        <h1 style="color: #00d9ff; margin-top: 0;">Update Available</h1>
+        <p>A new version of {{.SiteName}} is available!</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            <tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">Current Version</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{.CurrentVersion}}</td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">New Version</td><td style="padding: 8px; border-bottom: 1px solid #333; color: #00ff88;"><strong>{{.NewVersion}}</strong></td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">Release Date</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{.ReleaseDate.Format "Jan 2, 2006"}}</td></tr>
+        </table>
+        {{if .ReleaseNotes}}
+        <h2 style="color: #00d9ff; font-size: 16px;">What's New</h2>
+        <div style="background: #0f0f1a; padding: 15px; border-radius: 4px; white-space: pre-wrap;">{{.ReleaseNotes}}</div>
+        {{end}}
+        <p style="margin-top: 20px;"><a href="{{.UpdateURL}}" style="display: inline-block; background: #00d9ff; color: #1a1a2e; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">View Update</a></p>
+        <hr style="border: 1px solid #333; margin: 20px 0;">
+        <p style="color: #888; font-size: 12px;">&copy; {{.Year}} {{.SiteName}}</p>
+    </div>
+</body>
+</html>`,
+
+	TemplateMaintenanceNotice: `Scheduled Maintenance - {{.SiteName}}
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: #1a1a2e; color: #ffffff; padding: 30px; border-radius: 8px;">
+        <h1 style="color: #ffd93d; margin-top: 0;">Scheduled Maintenance</h1>
+        <p>We have scheduled maintenance for {{.SiteName}}.</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            <tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">Scheduled Time</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{.ScheduledAt.Format "Jan 2, 2006 3:04 PM MST"}}</td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">Expected Duration</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{.Duration}}</td></tr>
+            {{if .Reason}}<tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">Reason</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{.Reason}}</td></tr>{{end}}
+        </table>
+        {{if .AffectedServices}}
+        <h2 style="color: #ffd93d; font-size: 16px;">Affected Services</h2>
+        <ul>
+        {{range .AffectedServices}}
+            <li>{{.}}</li>
+        {{end}}
+        </ul>
+        {{end}}
+        <p style="background: #ffd93d22; border-left: 4px solid #ffd93d; padding: 15px; margin: 20px 0;">
+            During maintenance, the service may be temporarily unavailable. We apologize for any inconvenience.
+        </p>
+        <hr style="border: 1px solid #333; margin: 20px 0;">
+        <p style="color: #888; font-size: 12px;">&copy; {{.Year}} {{.SiteName}}</p>
+    </div>
+</body>
+</html>`,
+}
+
+// TemplateInfo contains metadata about an email template
+// Per TEMPLATE.md PART 31: Account emails vs Notification emails
+type TemplateInfo struct {
+	Type           TemplateType `json:"type"`
+	Name           string       `json:"name"`
+	Description    string       `json:"description"`
+	IsAccountEmail bool         `json:"is_account_email"`
+}
+
+// GetAllTemplateTypes returns a list of all available email template types
+// Per TEMPLATE.md PART 16: Admin should be able to preview email templates
+// Per TEMPLATE.md PART 31: Templates are marked as account (security) or notification
+func GetAllTemplateTypes() []TemplateInfo {
+	return []TemplateInfo{
+		// Account emails (security-sensitive) - always sent to account email
+		{TemplateWelcome, "Welcome", "Sent when a new user registers", true},
+		{TemplatePasswordReset, "Password Reset", "Password reset request link", true},
+		{TemplatePasswordChanged, "Password Changed", "Notification after password change", true},
+		{TemplateLoginNotification, "Login Notification", "Alert for new login activity", true},
+		{TemplateEmailVerification, "Email Verification", "Email address verification link", true},
+		{TemplateAccountLocked, "Account Locked", "Notification when account is locked", true},
+		{TemplateSecurityAlert, "Security Alert", "Security-related notifications", true},
+		{Template2FAEnabled, "2FA Enabled", "Confirmation of 2FA activation", true},
+		{Template2FADisabled, "2FA Disabled", "Notification of 2FA deactivation", true},
+
+		// Notification emails (non-security) - sent to notification email if set
+		{TemplateAdminAlert, "Admin Alert", "System alerts for administrators", false},
+		{TemplateWeeklyReport, "Weekly Report", "Weekly usage statistics summary", false},
+		{TemplateAPITokenCreated, "API Token Created", "Notification for new API token", false},
+		{TemplateAdminInvite, "Admin Invite", "Invitation to become an admin", false},
+		{TemplateBackupCompleted, "Backup Completed", "Backup completion notification", false},
+		{TemplateUpdateAvailable, "Update Available", "New version available notification", false},
+		{TemplateMaintenanceNotice, "Maintenance Notice", "Scheduled maintenance alert", false},
+	}
+}
+
+// IsAccountEmail returns true if the template is for account/security emails
+// Per TEMPLATE.md PART 31: Account emails go to user's account email only
+func IsAccountEmail(templateType TemplateType) bool {
+	switch templateType {
+	case TemplateWelcome,
+		TemplatePasswordReset,
+		TemplatePasswordChanged,
+		TemplateLoginNotification,
+		TemplateEmailVerification,
+		TemplateAccountLocked,
+		TemplateSecurityAlert,
+		Template2FAEnabled,
+		Template2FADisabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// PreviewTemplate renders a template with sample data for preview
+// Per TEMPLATE.md PART 16: Template preview in admin panel
+func (et *EmailTemplate) PreviewTemplate(templateType TemplateType, siteName, siteURL string) (subject string, body string, err error) {
+	baseData := NewTemplateData(siteName, siteURL, "support@"+siteURL)
+	sampleTime := time.Now()
+
+	var data interface{}
+
+	switch templateType {
+	case TemplateWelcome:
+		data = &WelcomeData{
+			TemplateData: baseData,
+			Username:     "john_doe",
+			Email:        "john@example.com",
+		}
+	case TemplatePasswordReset:
+		data = &PasswordResetData{
+			TemplateData: baseData,
+			Username:     "john_doe",
+			ResetLink:    siteURL + "/auth/reset/sample-token-12345",
+			ExpiresIn:    "1 hour",
+			IPAddress:    "192.168.1.100",
+			RequestedAt:  sampleTime,
+		}
+	case TemplatePasswordChanged:
+		data = &PasswordChangedData{
+			TemplateData: baseData,
+			Username:     "john_doe",
+			ChangedAt:    sampleTime,
+			IPAddress:    "192.168.1.100",
+			UserAgent:    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0",
+		}
+	case TemplateLoginNotification:
+		data = &LoginNotificationData{
+			TemplateData: baseData,
+			Username:     "john_doe",
+			LoginTime:    sampleTime,
+			IPAddress:    "192.168.1.100",
+			UserAgent:    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0",
+			Location:     "New York, US",
+			IsNewDevice:  true,
+		}
+	case TemplateEmailVerification:
+		data = &EmailVerificationData{
+			TemplateData:     baseData,
+			Username:         "john_doe",
+			Email:            "john@example.com",
+			VerificationLink: siteURL + "/auth/verify/sample-token-12345",
+			ExpiresIn:        "24 hours",
+		}
+	case TemplateAccountLocked:
+		data = &AccountLockedData{
+			TemplateData:       baseData,
+			Username:           "john_doe",
+			Reason:             "Too many failed login attempts",
+			LockedAt:           sampleTime,
+			UnlockInstructions: "Contact support or wait 30 minutes for automatic unlock.",
+		}
+	case TemplateAdminAlert:
+		data = &AdminAlertData{
+			TemplateData: baseData,
+			AlertType:    "High CPU Usage",
+			AlertLevel:   "warning",
+			Message:      "Server CPU usage exceeded 90% threshold.",
+			Details: map[string]string{
+				"Current Usage": "92%",
+				"Threshold":     "90%",
+				"Duration":      "5 minutes",
+			},
+			OccurredAt: sampleTime,
+		}
+	case TemplateWeeklyReport:
+		data = &WeeklyReportData{
+			TemplateData:  baseData,
+			PeriodStart:   sampleTime.AddDate(0, 0, -7),
+			PeriodEnd:     sampleTime,
+			TotalSearches: 15423,
+			UniqueUsers:   2341,
+			TopQueries:    []string{"golang tutorial", "python web framework", "docker compose", "kubernetes guide", "rust async"},
+			EngineStats: map[string]int{
+				"Google":     8234,
+				"DuckDuckGo": 4521,
+				"Brave":      2668,
+			},
+			ErrorCount: 12,
+		}
+	case TemplateSecurityAlert:
+		data = &SecurityAlertData{
+			TemplateData:   baseData,
+			Event:          "Multiple Failed Login Attempts",
+			Severity:       "high",
+			IPAddress:      "45.33.32.156",
+			Details:        "5 failed login attempts for user 'admin' in the last 10 minutes.",
+			OccurredAt:     sampleTime,
+			ActionRequired: "Review the activity and consider blocking the IP address.",
+		}
+	case TemplateAPITokenCreated:
+		data = &APITokenCreatedData{
+			TemplateData: baseData,
+			Username:     "john_doe",
+			TokenName:    "CI/CD Pipeline",
+			Permissions:  []string{"read:search", "read:stats", "write:preferences"},
+			ExpiresAt:    sampleTime.AddDate(0, 3, 0),
+			CreatedAt:    sampleTime,
+			IPAddress:    "192.168.1.100",
+		}
+	case TemplateAdminInvite:
+		data = &AdminInviteData{
+			TemplateData: baseData,
+			InviterName:  "Primary Admin",
+			InviteLink:   siteURL + "/admin/invite/sample-invite-token",
+			ExpiresIn:    "48 hours",
+			Message:      "Welcome to the admin team! Please set up your account.",
+		}
+	case Template2FAEnabled:
+		data = &TwoFactorEnabledData{
+			TemplateData: baseData,
+			Username:     "john_doe",
+			EnabledAt:    sampleTime,
+			IPAddress:    "192.168.1.100",
+			Method:       "TOTP (Authenticator App)",
+		}
+	case Template2FADisabled:
+		data = &TwoFactorDisabledData{
+			TemplateData: baseData,
+			Username:     "john_doe",
+			DisabledAt:   sampleTime,
+			IPAddress:    "192.168.1.100",
+			Reason:       "User requested",
+		}
+	case TemplateBackupCompleted:
+		data = &BackupCompletedData{
+			TemplateData: baseData,
+			BackupName:   "search-backup-20251220-153045.tar.gz",
+			BackupSize:   "12.5 MB",
+			CreatedAt:    sampleTime,
+			FileCount:    247,
+			Duration:     "2.3 seconds",
+		}
+	case TemplateUpdateAvailable:
+		data = &UpdateAvailableData{
+			TemplateData:   baseData,
+			CurrentVersion: "1.2.3",
+			NewVersion:     "1.3.0",
+			ReleaseDate:    sampleTime,
+			ReleaseNotes:   "• New search engine integrations\n• Improved caching performance\n• Bug fixes and security updates",
+			UpdateURL:      "https://github.com/apimgr/search/releases/v1.3.0",
+		}
+	case TemplateMaintenanceNotice:
+		data = &MaintenanceNoticeData{
+			TemplateData:     baseData,
+			ScheduledAt:      sampleTime.Add(24 * time.Hour),
+			Duration:         "30 minutes",
+			Reason:           "Database maintenance and performance optimization",
+			AffectedServices: []string{"Search API", "Admin Panel", "GraphQL Endpoint"},
+		}
+	default:
+		return "", "", fmt.Errorf("unknown template type: %s", templateType)
+	}
+
+	return et.Render(templateType, data)
 }

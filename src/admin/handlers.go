@@ -2,6 +2,7 @@ package admin
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/apimgr/search/src/backup"
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/email"
 	"gopkg.in/yaml.v3"
 )
 
@@ -37,11 +39,66 @@ type ReloadCallback func() error
 type Handler struct {
 	config         *config.Config
 	auth           *AuthManager
+	service        *AdminService
+	cluster        ClusterManager
+	tor            TorManager
 	renderer       Renderer
 	startTime      time.Time
 	registry       EngineRegistry
 	reloadCallback ReloadCallback
 	configPath     string
+}
+
+// TorManager interface for Tor operations per TEMPLATE.md PART 32
+type TorManager interface {
+	IsRunning() bool
+	GetOnionAddress() string
+	GetTorStatus() map[string]interface{}
+	Start() error
+	Stop() error
+	Restart() error
+	RegenerateAddress() (string, error)
+	GenerateVanity(prefix string) error
+	CancelVanity()
+	GetVanityProgress() *VanityProgress
+	ExportKeys() ([]byte, error)
+	ImportKeys(privateKey []byte) (string, error)
+}
+
+// VanityProgress represents vanity address generation progress
+type VanityProgress struct {
+	Prefix    string
+	Attempts  int64
+	StartTime time.Time
+	Running   bool
+	Found     bool
+	Address   string
+	Error     string
+}
+
+// ClusterManager interface for cluster operations
+type ClusterManager interface {
+	Mode() string
+	IsClusterMode() bool
+	IsPrimary() bool
+	NodeID() string
+	Hostname() string
+	GetNodes(ctx context.Context) ([]ClusterNode, error)
+	GenerateJoinToken(ctx context.Context) (string, error)
+	LeaveCluster(ctx context.Context) error
+}
+
+// ClusterNode represents a cluster node
+type ClusterNode struct {
+	ID        string
+	Hostname  string
+	Address   string
+	Port      int
+	Version   string
+	IsPrimary bool
+	Status    string
+	LastSeen  time.Time
+	JoinedAt  time.Time
 }
 
 // NewHandler creates a new admin handler
@@ -69,11 +126,28 @@ func (h *Handler) SetConfigPath(path string) {
 	h.configPath = path
 }
 
+// SetAdminService sets the admin service for multi-admin support
+func (h *Handler) SetAdminService(svc *AdminService) {
+	h.service = svc
+}
+
+// SetClusterManager sets the cluster manager for node management
+func (h *Handler) SetClusterManager(cm ClusterManager) {
+	h.cluster = cm
+}
+
+// SetTorManager sets the Tor service manager per TEMPLATE.md PART 32
+func (h *Handler) SetTorManager(tm TorManager) {
+	h.tor = tm
+}
+
 // RegisterRoutes registers admin routes on the given mux
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	// Public routes (no auth required)
 	mux.HandleFunc("/admin/login", h.handleLogin)
 	mux.HandleFunc("/admin/logout", h.handleLogout)
+	mux.HandleFunc("/admin/setup", h.handleSetup)
+	mux.HandleFunc("/admin/invite/", h.handleInviteAccept)
 
 	// Protected routes (auth required)
 	mux.HandleFunc("/admin", h.requireAuth(h.handleDashboard))
@@ -96,6 +170,15 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/admin/server/metrics", h.requireAuth(h.handleServerMetrics))
 	mux.HandleFunc("/admin/scheduler", h.requireAuth(h.handleScheduler))
 
+	// Admin management routes (per TEMPLATE.md PART 31)
+	mux.HandleFunc("/admin/users/admins", h.requireAuth(h.handleAdmins))
+	mux.HandleFunc("/admin/users/admins/invite", h.requireAuth(h.handleAdminInvite))
+
+	// Cluster/Node management routes (per TEMPLATE.md PART 24)
+	mux.HandleFunc("/admin/server/nodes", h.requireAuth(h.handleNodes))
+	mux.HandleFunc("/admin/server/nodes/token", h.requireAuth(h.handleNodesToken))
+	mux.HandleFunc("/admin/server/nodes/leave", h.requireAuth(h.handleNodesLeave))
+
 	// API routes (bearer token auth)
 	mux.HandleFunc("/admin/api/v1/status", h.requireAPIAuth(h.apiStatus))
 	mux.HandleFunc("/admin/api/v1/config", h.requireAPIAuth(h.apiConfig))
@@ -106,7 +189,23 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/admin/api/v1/logs", h.requireAPIAuth(h.apiLogs))
 	mux.HandleFunc("/admin/api/v1/scheduler", h.requireAPIAuth(h.apiScheduler))
 	mux.HandleFunc("/admin/api/v1/email/test", h.requireAPIAuth(h.apiEmailTest))
+	mux.HandleFunc("/admin/api/v1/email/templates", h.requireAPIAuth(h.apiEmailTemplates))
+	mux.HandleFunc("/admin/api/v1/email/preview", h.requireAPIAuth(h.apiEmailPreview))
 	mux.HandleFunc("/admin/api/v1/update/check", h.requireAPIAuth(h.apiUpdateCheck))
+	mux.HandleFunc("/admin/api/v1/admins", h.requireAPIAuth(h.apiAdmins))
+	mux.HandleFunc("/admin/api/v1/admins/invite", h.requireAPIAuth(h.apiAdminInvite))
+
+	// Tor API routes per TEMPLATE.md PART 32
+	mux.HandleFunc("/admin/api/v1/tor/status", h.requireAPIAuth(h.apiTorStatus))
+	mux.HandleFunc("/admin/api/v1/tor/start", h.requireAPIAuth(h.apiTorStart))
+	mux.HandleFunc("/admin/api/v1/tor/stop", h.requireAPIAuth(h.apiTorStop))
+	mux.HandleFunc("/admin/api/v1/tor/restart", h.requireAPIAuth(h.apiTorRestart))
+	mux.HandleFunc("/admin/api/v1/tor/address/regenerate", h.requireAPIAuth(h.apiTorRegenerateAddress))
+	mux.HandleFunc("/admin/api/v1/tor/vanity/start", h.requireAPIAuth(h.apiTorVanityStart))
+	mux.HandleFunc("/admin/api/v1/tor/vanity/status", h.requireAPIAuth(h.apiTorVanityStatus))
+	mux.HandleFunc("/admin/api/v1/tor/vanity/cancel", h.requireAPIAuth(h.apiTorVanityCancel))
+	mux.HandleFunc("/admin/api/v1/tor/keys/export", h.requireAPIAuth(h.apiTorKeysExport))
+	mux.HandleFunc("/admin/api/v1/tor/keys/import", h.requireAPIAuth(h.apiTorKeysImport))
 }
 
 // requireAuth middleware checks for valid admin session
@@ -579,6 +678,7 @@ type AdminPageData struct {
 	Success        string
 	NewToken       string
 	SchedulerTasks map[string]*SchedulerTaskInfo
+	Extra          map[string]interface{}
 }
 
 // SchedulerTaskInfo holds information about a scheduled task
@@ -1161,7 +1261,8 @@ func readLastLines(path string, n int) ([]string, error) {
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		lines = append(lines, scanner.Text())
-		if len(lines) > n*2 { // Keep a buffer
+		// Keep a buffer to avoid storing entire file
+		if len(lines) > n*2 {
 			lines = lines[n:]
 		}
 	}
@@ -1282,6 +1383,73 @@ func (h *Handler) apiEmailTest(w http.ResponseWriter, r *http.Request) {
 	}, http.StatusOK)
 }
 
+// apiEmailTemplates returns list of available email templates
+// Per TEMPLATE.md PART 16: Template preview in admin panel
+func (h *Handler) apiEmailTemplates(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	templates := email.GetAllTemplateTypes()
+	h.jsonResponse(w, map[string]interface{}{
+		"templates": templates,
+		"count":     len(templates),
+	}, http.StatusOK)
+}
+
+// apiEmailPreview previews an email template with sample data
+// Per TEMPLATE.md PART 16: Template preview in admin panel
+func (h *Handler) apiEmailPreview(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
+		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get template type from query or body
+	templateType := r.URL.Query().Get("template")
+	if templateType == "" && r.Method == http.MethodPost {
+		var req struct {
+			Template string `json:"template"`
+		}
+		json.NewDecoder(r.Body).Decode(&req)
+		templateType = req.Template
+	}
+
+	if templateType == "" {
+		h.jsonError(w, "Template type is required (use ?template=welcome)", http.StatusBadRequest)
+		return
+	}
+
+	// Get site info from config
+	siteName := h.config.Server.Title
+	siteURL := fmt.Sprintf("http://%s:%d", h.config.Server.Address, h.config.Server.Port)
+	if h.config.Server.Address == "" || h.config.Server.Address == "0.0.0.0" {
+		siteURL = fmt.Sprintf("http://localhost:%d", h.config.Server.Port)
+	}
+
+	// Render the template with sample data
+	et := email.NewEmailTemplate()
+	subject, body, err := et.PreviewTemplate(email.TemplateType(templateType), siteName, siteURL)
+	if err != nil {
+		h.jsonError(w, fmt.Sprintf("Failed to preview template: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	// Check if HTML preview is requested
+	if r.URL.Query().Get("format") == "html" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(body))
+		return
+	}
+
+	h.jsonResponse(w, map[string]interface{}{
+		"template": templateType,
+		"subject":  subject,
+		"body":     body,
+	}, http.StatusOK)
+}
+
 // apiUpdateCheck checks for updates
 func (h *Handler) apiUpdateCheck(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -1324,4 +1492,859 @@ func GetClientIPFromString(remoteAddr string, headers http.Header) string {
 		}
 	}
 	return remoteAddr
+}
+
+// ============================================================
+// Multi-Admin Management per TEMPLATE.md PART 31
+// ============================================================
+
+// handleSetup handles first-run admin setup or password reset via setup token
+func (h *Handler) handleSetup(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h.service == nil {
+		http.Error(w, "Admin service not configured", http.StatusInternalServerError)
+		return
+	}
+
+	// Check if any admin exists
+	hasAdmin, err := h.service.HasAnyAdmin(ctx)
+	if err != nil {
+		log.Printf("[Admin] Error checking admin existence: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// If admin exists, require setup token
+	setupTokenRequired := hasAdmin
+
+	if r.Method == http.MethodPost {
+		h.processSetup(w, r, setupTokenRequired)
+		return
+	}
+
+	// If already have admin and no setup token required, redirect to login
+	if hasAdmin {
+		// Check if there's a valid setup token active
+		tokenValid := false
+		if token := r.URL.Query().Get("token"); token != "" {
+			tokenValid, _ = h.service.ValidateSetupToken(ctx, token)
+		}
+		if !tokenValid {
+			http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+			return
+		}
+	}
+
+	data := &AdminPageData{
+		Title:  "Admin Setup",
+		Page:   "admin-setup",
+		Config: h.config,
+		Error:  r.URL.Query().Get("error"),
+		Extra: map[string]interface{}{
+			"SetupTokenRequired": setupTokenRequired,
+		},
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	h.renderAdminPage(w, "setup", data)
+}
+
+// processSetup handles the setup form submission
+func (h *Handler) processSetup(w http.ResponseWriter, r *http.Request, requireToken bool) {
+	ctx := r.Context()
+
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/admin/setup?error=Invalid+form+data", http.StatusSeeOther)
+		return
+	}
+
+	// Validate setup token if required
+	if requireToken {
+		token := r.FormValue("setup_token")
+		valid, err := h.service.ValidateSetupToken(ctx, token)
+		if err != nil || !valid {
+			http.Redirect(w, r, "/admin/setup?error=Invalid+or+expired+setup+token", http.StatusSeeOther)
+			return
+		}
+		// Mark token as used
+		h.service.UseSetupToken(ctx, token)
+	}
+
+	username := r.FormValue("username")
+	email := r.FormValue("email")
+	password := r.FormValue("password")
+	confirmPassword := r.FormValue("confirm_password")
+
+	// Validate input
+	if username == "" || password == "" {
+		http.Redirect(w, r, "/admin/setup?error=Username+and+password+required", http.StatusSeeOther)
+		return
+	}
+
+	if password != confirmPassword {
+		http.Redirect(w, r, "/admin/setup?error=Passwords+do+not+match", http.StatusSeeOther)
+		return
+	}
+
+	if len(password) < 8 {
+		http.Redirect(w, r, "/admin/setup?error=Password+must+be+at+least+8+characters", http.StatusSeeOther)
+		return
+	}
+
+	// Create admin
+	admin, err := h.service.CreateAdmin(ctx, username, email, password, true)
+	if err != nil {
+		log.Printf("[Admin] Failed to create admin: %v", err)
+		http.Redirect(w, r, "/admin/setup?error=Failed+to+create+admin+account", http.StatusSeeOther)
+		return
+	}
+
+	log.Printf("[Admin] Primary admin created: %s", admin.Username)
+
+	// Create session and log in
+	session := h.auth.CreateSession(username, GetClientIP(r), r.UserAgent())
+	h.auth.SetSessionCookie(w, session)
+
+	http.Redirect(w, r, "/admin/dashboard", http.StatusSeeOther)
+}
+
+// handleAdmins renders the admin management page
+func (h *Handler) handleAdmins(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h.service == nil {
+		http.Error(w, "Admin service not configured", http.StatusInternalServerError)
+		return
+	}
+
+	// Get current admin from session
+	session, ok := h.auth.GetSessionFromRequest(r)
+	if !ok {
+		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		return
+	}
+
+	// Get admin by username
+	currentAdmin, err := h.service.GetAdminByUsername(ctx, session.Username)
+	if err != nil || currentAdmin == nil {
+		http.Error(w, "Admin not found", http.StatusInternalServerError)
+		return
+	}
+
+	// Get admins visible to this admin (privacy enforced)
+	admins, err := h.service.GetAdminsForAdmin(ctx, currentAdmin.ID)
+	if err != nil {
+		log.Printf("[Admin] Error getting admins: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Get total count (visible to all)
+	totalCount, _ := h.service.GetTotalAdminCount(ctx)
+
+	data := &AdminPageData{
+		Title:   "Server Admins",
+		Page:    "admin-admins",
+		Config:  h.config,
+		Error:   r.URL.Query().Get("error"),
+		Success: r.URL.Query().Get("success"),
+		Extra: map[string]interface{}{
+			"Admins":       admins,
+			"TotalCount":   totalCount,
+			"CurrentAdmin": currentAdmin,
+			"IsPrimary":    currentAdmin.IsPrimary,
+		},
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	h.renderAdminPage(w, "admins", data)
+}
+
+// handleAdminInvite creates a new admin invite
+func (h *Handler) handleAdminInvite(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if h.service == nil {
+		http.Redirect(w, r, "/admin/users/admins?error=Admin+service+not+configured", http.StatusSeeOther)
+		return
+	}
+
+	// Get current admin from session
+	session, ok := h.auth.GetSessionFromRequest(r)
+	if !ok {
+		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		return
+	}
+
+	currentAdmin, err := h.service.GetAdminByUsername(ctx, session.Username)
+	if err != nil || currentAdmin == nil {
+		http.Redirect(w, r, "/admin/users/admins?error=Admin+not+found", http.StatusSeeOther)
+		return
+	}
+
+	// Only primary admin can create invites
+	if !currentAdmin.IsPrimary {
+		http.Redirect(w, r, "/admin/users/admins?error=Only+primary+admin+can+create+invites", http.StatusSeeOther)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/admin/users/admins?error=Invalid+form+data", http.StatusSeeOther)
+		return
+	}
+
+	username := r.FormValue("username")
+
+	// Create invite (7 day expiry per TEMPLATE.md)
+	token, err := h.service.CreateInvite(ctx, currentAdmin.ID, username, 7*24*time.Hour)
+	if err != nil {
+		log.Printf("[Admin] Failed to create invite: %v", err)
+		http.Redirect(w, r, "/admin/users/admins?error=Failed+to+create+invite", http.StatusSeeOther)
+		return
+	}
+
+	log.Printf("[Admin] Invite created by %s for username: %s", currentAdmin.Username, username)
+
+	// Redirect with the invite URL shown
+	inviteURL := fmt.Sprintf("/admin/invite/%s", token)
+	http.Redirect(w, r, "/admin/users/admins?success=Invite+created&invite_url="+inviteURL, http.StatusSeeOther)
+}
+
+// handleInviteAccept handles the invite acceptance page
+func (h *Handler) handleInviteAccept(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h.service == nil {
+		http.Error(w, "Admin service not configured", http.StatusInternalServerError)
+		return
+	}
+
+	// Extract token from URL path
+	token := strings.TrimPrefix(r.URL.Path, "/admin/invite/")
+	if token == "" {
+		h.renderInviteError(w, "Invalid invite link")
+		return
+	}
+
+	// Validate token
+	invite, err := h.service.ValidateInvite(ctx, token)
+	if err != nil {
+		log.Printf("[Admin] Error validating invite: %v", err)
+		h.renderInviteError(w, "Invalid or expired invite")
+		return
+	}
+	if invite == nil {
+		h.renderInviteError(w, "Invalid or expired invite")
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		h.processInviteAccept(w, r, token, invite)
+		return
+	}
+
+	data := &AdminPageData{
+		Title:  "Accept Admin Invite",
+		Page:   "admin-invite",
+		Config: h.config,
+		Error:  r.URL.Query().Get("error"),
+		Extra: map[string]interface{}{
+			"Invite":           invite,
+			"SuggestedUsername": invite.Username,
+		},
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	h.renderAdminPage(w, "invite-accept", data)
+}
+
+// processInviteAccept processes the invite acceptance form
+func (h *Handler) processInviteAccept(w http.ResponseWriter, r *http.Request, token string, invite *AdminInvite) {
+	ctx := r.Context()
+
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, r.URL.Path+"?error=Invalid+form+data", http.StatusSeeOther)
+		return
+	}
+
+	username := r.FormValue("username")
+	email := r.FormValue("email")
+	password := r.FormValue("password")
+	confirmPassword := r.FormValue("confirm_password")
+
+	// Validate input
+	if username == "" || password == "" {
+		http.Redirect(w, r, r.URL.Path+"?error=Username+and+password+required", http.StatusSeeOther)
+		return
+	}
+
+	if password != confirmPassword {
+		http.Redirect(w, r, r.URL.Path+"?error=Passwords+do+not+match", http.StatusSeeOther)
+		return
+	}
+
+	if len(password) < 8 {
+		http.Redirect(w, r, r.URL.Path+"?error=Password+must+be+at+least+8+characters", http.StatusSeeOther)
+		return
+	}
+
+	// Accept invite and create admin
+	admin, err := h.service.AcceptInvite(ctx, token, username, email, password)
+	if err != nil {
+		log.Printf("[Admin] Failed to accept invite: %v", err)
+		http.Redirect(w, r, r.URL.Path+"?error=Failed+to+create+admin+account", http.StatusSeeOther)
+		return
+	}
+
+	log.Printf("[Admin] New admin created via invite: %s", admin.Username)
+
+	// Create session and log in
+	session := h.auth.CreateSession(username, GetClientIP(r), r.UserAgent())
+	h.auth.SetSessionCookie(w, session)
+
+	http.Redirect(w, r, "/admin/dashboard", http.StatusSeeOther)
+}
+
+// renderInviteError renders the invite error page
+func (h *Handler) renderInviteError(w http.ResponseWriter, message string) {
+	data := &AdminPageData{
+		Title:  "Invalid Invite",
+		Page:   "admin-invite-error",
+		Config: h.config,
+		Error:  message,
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	h.renderAdminPage(w, "invite-error", data)
+}
+
+// apiAdmins handles admin management API
+func (h *Handler) apiAdmins(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h.service == nil {
+		h.jsonError(w, "Admin service not configured", http.StatusInternalServerError)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		// For API, get token-based admin
+		// This is simplified - in production you'd have an admin context
+		admins, err := h.service.GetAdminsForAdmin(ctx, 1) // Assumes primary admin ID 1
+		if err != nil {
+			h.jsonError(w, "Failed to get admins", http.StatusInternalServerError)
+			return
+		}
+
+		// Convert to safe response (no password hashes)
+		response := make([]map[string]interface{}, len(admins))
+		for i, a := range admins {
+			response[i] = map[string]interface{}{
+				"id":           a.ID,
+				"username":     a.Username,
+				"email":        a.Email,
+				"is_primary":   a.IsPrimary,
+				"source":       a.Source,
+				"totp_enabled": a.TOTPEnabled,
+				"created_at":   a.CreatedAt,
+				"last_login":   a.LastLoginAt,
+			}
+		}
+
+		h.jsonResponse(w, map[string]interface{}{"admins": response}, http.StatusOK)
+
+	case http.MethodDelete:
+		// Delete admin
+		var req struct {
+			ID int64 `json:"id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			h.jsonError(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		if err := h.service.DeleteAdmin(ctx, req.ID, 1); err != nil {
+			h.jsonError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		h.jsonResponse(w, map[string]string{"status": "deleted"}, http.StatusOK)
+
+	default:
+		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// apiAdminInvite handles admin invite API
+func (h *Handler) apiAdminInvite(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h.service == nil {
+		h.jsonError(w, "Admin service not configured", http.StatusInternalServerError)
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Username string `json:"username"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.jsonError(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Create invite (7 day expiry)
+	token, err := h.service.CreateInvite(ctx, 1, req.Username, 7*24*time.Hour) // Assumes primary admin
+	if err != nil {
+		h.jsonError(w, "Failed to create invite", http.StatusInternalServerError)
+		return
+	}
+
+	h.jsonResponse(w, map[string]interface{}{
+		"token":      token,
+		"invite_url": fmt.Sprintf("/admin/invite/%s", token),
+		"expires_in": "7 days",
+	}, http.StatusCreated)
+}
+
+// ============================================================
+// Cluster/Node Management per TEMPLATE.md PART 24
+// ============================================================
+
+// handleNodes renders the cluster nodes management page
+func (h *Handler) handleNodes(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var nodes []ClusterNode
+	var mode string
+	var isPrimary bool
+	var nodeID string
+	var hostname string
+
+	if h.cluster != nil {
+		mode = h.cluster.Mode()
+		isPrimary = h.cluster.IsPrimary()
+		nodeID = h.cluster.NodeID()
+		hostname = h.cluster.Hostname()
+
+		clusterNodes, err := h.cluster.GetNodes(ctx)
+		if err != nil {
+			log.Printf("[Admin] Error getting nodes: %v", err)
+		} else {
+			nodes = clusterNodes
+		}
+	} else {
+		mode = "standalone"
+		isPrimary = true
+		hostname, _ = os.Hostname()
+		nodeID = "local"
+		nodes = []ClusterNode{{
+			ID:        nodeID,
+			Hostname:  hostname,
+			IsPrimary: true,
+			Status:    "online",
+			LastSeen:  time.Now(),
+			JoinedAt:  time.Now(),
+		}}
+	}
+
+	data := &AdminPageData{
+		Title:   "Cluster Nodes",
+		Page:    "nodes",
+		Config:  h.config,
+		Error:   r.URL.Query().Get("error"),
+		Success: r.URL.Query().Get("success"),
+		Extra: map[string]interface{}{
+			"Nodes":      nodes,
+			"Mode":       mode,
+			"IsPrimary":  isPrimary,
+			"NodeID":     nodeID,
+			"Hostname":   hostname,
+			"IsCluster":  mode != "standalone",
+		},
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	h.renderAdminPage(w, "nodes", data)
+}
+
+// handleNodesToken generates a join token for new nodes
+func (h *Handler) handleNodesToken(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if h.cluster == nil || !h.cluster.IsClusterMode() {
+		http.Redirect(w, r, "/admin/server/nodes?error=Not+in+cluster+mode", http.StatusSeeOther)
+		return
+	}
+
+	if !h.cluster.IsPrimary() {
+		http.Redirect(w, r, "/admin/server/nodes?error=Only+primary+node+can+generate+tokens", http.StatusSeeOther)
+		return
+	}
+
+	token, err := h.cluster.GenerateJoinToken(ctx)
+	if err != nil {
+		log.Printf("[Admin] Failed to generate join token: %v", err)
+		http.Redirect(w, r, "/admin/server/nodes?error=Failed+to+generate+token", http.StatusSeeOther)
+		return
+	}
+
+	http.Redirect(w, r, "/admin/server/nodes?success=Join+token+generated&token="+token, http.StatusSeeOther)
+}
+
+// handleNodesLeave removes this node from the cluster
+func (h *Handler) handleNodesLeave(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if h.cluster == nil || !h.cluster.IsClusterMode() {
+		http.Redirect(w, r, "/admin/server/nodes?error=Not+in+cluster+mode", http.StatusSeeOther)
+		return
+	}
+
+	if err := h.cluster.LeaveCluster(ctx); err != nil {
+		log.Printf("[Admin] Failed to leave cluster: %v", err)
+		http.Redirect(w, r, "/admin/server/nodes?error=Failed+to+leave+cluster:+"+err.Error(), http.StatusSeeOther)
+		return
+	}
+
+	http.Redirect(w, r, "/admin/server/nodes?success=Left+cluster+successfully", http.StatusSeeOther)
+}
+
+// ============================================================
+// Tor API Endpoints per TEMPLATE.md PART 32
+// ============================================================
+
+// apiTorStatus returns current Tor service status
+func (h *Handler) apiTorStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if h.tor == nil {
+		h.jsonResponse(w, map[string]interface{}{
+			"enabled":   false,
+			"running":   false,
+			"address":   "",
+			"message":   "Tor service not configured",
+		}, http.StatusOK)
+		return
+	}
+
+	status := h.tor.GetTorStatus()
+	status["enabled"] = h.config.Server.Tor.Enabled
+	status["running"] = h.tor.IsRunning()
+	status["address"] = h.tor.GetOnionAddress()
+
+	h.jsonResponse(w, status, http.StatusOK)
+}
+
+// apiTorStart starts the Tor service
+func (h *Handler) apiTorStart(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if h.tor == nil {
+		h.jsonError(w, "Tor service not configured", http.StatusBadRequest)
+		return
+	}
+
+	if h.tor.IsRunning() {
+		h.jsonError(w, "Tor service is already running", http.StatusConflict)
+		return
+	}
+
+	if err := h.tor.Start(); err != nil {
+		log.Printf("[Admin] Failed to start Tor: %v", err)
+		h.jsonError(w, fmt.Sprintf("Failed to start Tor: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("[Admin] Tor service started")
+	h.jsonResponse(w, map[string]interface{}{
+		"status":  "started",
+		"address": h.tor.GetOnionAddress(),
+	}, http.StatusOK)
+}
+
+// apiTorStop stops the Tor service
+func (h *Handler) apiTorStop(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if h.tor == nil {
+		h.jsonError(w, "Tor service not configured", http.StatusBadRequest)
+		return
+	}
+
+	if !h.tor.IsRunning() {
+		h.jsonError(w, "Tor service is not running", http.StatusConflict)
+		return
+	}
+
+	if err := h.tor.Stop(); err != nil {
+		log.Printf("[Admin] Failed to stop Tor: %v", err)
+		h.jsonError(w, fmt.Sprintf("Failed to stop Tor: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("[Admin] Tor service stopped")
+	h.jsonResponse(w, map[string]string{"status": "stopped"}, http.StatusOK)
+}
+
+// apiTorRestart restarts the Tor service
+func (h *Handler) apiTorRestart(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if h.tor == nil {
+		h.jsonError(w, "Tor service not configured", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.tor.Restart(); err != nil {
+		log.Printf("[Admin] Failed to restart Tor: %v", err)
+		h.jsonError(w, fmt.Sprintf("Failed to restart Tor: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("[Admin] Tor service restarted")
+	h.jsonResponse(w, map[string]interface{}{
+		"status":  "restarted",
+		"address": h.tor.GetOnionAddress(),
+	}, http.StatusOK)
+}
+
+// apiTorRegenerateAddress regenerates the .onion address
+func (h *Handler) apiTorRegenerateAddress(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if h.tor == nil {
+		h.jsonError(w, "Tor service not configured", http.StatusBadRequest)
+		return
+	}
+
+	oldAddress := h.tor.GetOnionAddress()
+	newAddress, err := h.tor.RegenerateAddress()
+	if err != nil {
+		log.Printf("[Admin] Failed to regenerate Tor address: %v", err)
+		h.jsonError(w, fmt.Sprintf("Failed to regenerate address: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("[Admin] Tor address regenerated: %s -> %s", oldAddress, newAddress)
+	h.jsonResponse(w, map[string]interface{}{
+		"status":      "regenerated",
+		"old_address": oldAddress,
+		"new_address": newAddress,
+	}, http.StatusOK)
+}
+
+// apiTorVanityStart starts vanity address generation
+func (h *Handler) apiTorVanityStart(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if h.tor == nil {
+		h.jsonError(w, "Tor service not configured", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		Prefix string `json:"prefix"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.jsonError(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if req.Prefix == "" {
+		h.jsonError(w, "Prefix is required", http.StatusBadRequest)
+		return
+	}
+
+	// Per TEMPLATE.md: max 6 chars for built-in vanity generation
+	if len(req.Prefix) > 6 {
+		h.jsonError(w, "Prefix too long (max 6 characters for built-in generation, use external tools for 7+)", http.StatusBadRequest)
+		return
+	}
+
+	// Validate prefix contains only valid base32 characters
+	validChars := "abcdefghijklmnopqrstuvwxyz234567"
+	for _, c := range strings.ToLower(req.Prefix) {
+		if !strings.ContainsRune(validChars, c) {
+			h.jsonError(w, "Invalid prefix: only a-z and 2-7 are valid", http.StatusBadRequest)
+			return
+		}
+	}
+
+	if err := h.tor.GenerateVanity(req.Prefix); err != nil {
+		log.Printf("[Admin] Failed to start vanity generation: %v", err)
+		h.jsonError(w, fmt.Sprintf("Failed to start vanity generation: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("[Admin] Vanity address generation started for prefix: %s", req.Prefix)
+	h.jsonResponse(w, map[string]interface{}{
+		"status": "started",
+		"prefix": req.Prefix,
+	}, http.StatusOK)
+}
+
+// apiTorVanityStatus returns vanity generation progress
+func (h *Handler) apiTorVanityStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if h.tor == nil {
+		h.jsonError(w, "Tor service not configured", http.StatusBadRequest)
+		return
+	}
+
+	progress := h.tor.GetVanityProgress()
+	if progress == nil {
+		h.jsonResponse(w, map[string]interface{}{
+			"running": false,
+			"message": "No vanity generation in progress",
+		}, http.StatusOK)
+		return
+	}
+
+	response := map[string]interface{}{
+		"running":    progress.Running,
+		"prefix":     progress.Prefix,
+		"attempts":   progress.Attempts,
+		"start_time": progress.StartTime,
+		"found":      progress.Found,
+	}
+
+	if progress.Found {
+		response["address"] = progress.Address
+	}
+
+	if progress.Error != "" {
+		response["error"] = progress.Error
+	}
+
+	// Calculate elapsed time
+	if !progress.StartTime.IsZero() {
+		response["elapsed"] = time.Since(progress.StartTime).String()
+	}
+
+	h.jsonResponse(w, response, http.StatusOK)
+}
+
+// apiTorVanityCancel cancels vanity address generation
+func (h *Handler) apiTorVanityCancel(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if h.tor == nil {
+		h.jsonError(w, "Tor service not configured", http.StatusBadRequest)
+		return
+	}
+
+	h.tor.CancelVanity()
+	log.Printf("[Admin] Vanity address generation cancelled")
+	h.jsonResponse(w, map[string]string{"status": "cancelled"}, http.StatusOK)
+}
+
+// apiTorKeysExport exports hidden service keys
+func (h *Handler) apiTorKeysExport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if h.tor == nil {
+		h.jsonError(w, "Tor service not configured", http.StatusBadRequest)
+		return
+	}
+
+	keys, err := h.tor.ExportKeys()
+	if err != nil {
+		log.Printf("[Admin] Failed to export Tor keys: %v", err)
+		h.jsonError(w, fmt.Sprintf("Failed to export keys: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Return as downloadable file
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", "attachment; filename=tor_hidden_service_keys.bin")
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(keys)))
+	w.Write(keys)
+}
+
+// apiTorKeysImport imports hidden service keys (for external vanity addresses)
+func (h *Handler) apiTorKeysImport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if h.tor == nil {
+		h.jsonError(w, "Tor service not configured", http.StatusBadRequest)
+		return
+	}
+
+	// Read private key from request body
+	privateKey, err := io.ReadAll(io.LimitReader(r.Body, 1024*10)) // Max 10KB
+	if err != nil {
+		h.jsonError(w, "Failed to read request body", http.StatusBadRequest)
+		return
+	}
+
+	if len(privateKey) == 0 {
+		h.jsonError(w, "Private key data is required", http.StatusBadRequest)
+		return
+	}
+
+	newAddress, err := h.tor.ImportKeys(privateKey)
+	if err != nil {
+		log.Printf("[Admin] Failed to import Tor keys: %v", err)
+		h.jsonError(w, fmt.Sprintf("Failed to import keys: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("[Admin] Tor keys imported, new address: %s", newAddress)
+	h.jsonResponse(w, map[string]interface{}{
+		"status":  "imported",
+		"address": newAddress,
+	}, http.StatusOK)
 }

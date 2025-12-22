@@ -180,22 +180,376 @@ func (e *Google) parseGoogleHTML(resp *http.Response, query *models.Query) ([]mo
 	return results, nil
 }
 
-// searchImages performs an image search (placeholder)
+// searchImages performs an image search
 func (e *Google) searchImages(ctx context.Context, query *models.Query) ([]models.Result, error) {
-	// TODO: Implement Google Images search
-	return []models.Result{}, nil
+	// Google Images search URL
+	baseURL := "https://www.google.com/search"
+
+	params := url.Values{}
+	params.Set("q", query.Text)
+	params.Set("tbm", "isch") // Image search
+	params.Set("num", "20")
+
+	if query.Page > 1 {
+		start := (query.Page - 1) * 20
+		params.Set("start", fmt.Sprintf("%d", start))
+	}
+
+	// Safe search
+	if query.SafeSearch == 2 {
+		params.Set("safe", "active")
+	}
+
+	// Language
+	if query.Language != "" {
+		params.Set("hl", query.Language)
+	}
+
+	reqURL := fmt.Sprintf("%s?%s", baseURL, params.Encode())
+
+	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+
+	resp, err := e.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Google Images returned status %d", resp.StatusCode)
+	}
+
+	return e.parseImageResults(resp, query)
 }
 
-// searchNews performs a news search (placeholder)
+// parseImageResults parses Google Images search results
+func (e *Google) parseImageResults(resp *http.Response, query *models.Query) ([]models.Result, error) {
+	results := make([]models.Result, 0)
+
+	body := make([]byte, 2*1024*1024) // 2MB max for images page
+	n, _ := resp.Body.Read(body)
+	html := string(body[:n])
+
+	// Google Images embeds image data in JSON within the page
+	// Pattern to extract image URLs and metadata
+	imgPattern := regexp.MustCompile(`\["(https?://[^"]+\.(jpg|jpeg|png|gif|webp)[^"]*)",\s*(\d+),\s*(\d+)\]`)
+	titlePattern := regexp.MustCompile(`\["([^"]{10,100})","[^"]*"\]`)
+
+	imgMatches := imgPattern.FindAllStringSubmatch(html, -1)
+	titleMatches := titlePattern.FindAllStringSubmatch(html, -1)
+
+	maxResults := len(imgMatches)
+	if maxResults > e.GetConfig().GetMaxResults() {
+		maxResults = e.GetConfig().GetMaxResults()
+	}
+
+	for i := 0; i < maxResults; i++ {
+		imgURL := imgMatches[i][1]
+
+		// Skip Google's own images
+		if strings.Contains(imgURL, "gstatic.com") || strings.Contains(imgURL, "google.com") {
+			continue
+		}
+
+		title := fmt.Sprintf("Image %d", i+1)
+		if i < len(titleMatches) {
+			title = cleanHTML(titleMatches[i][1])
+		}
+
+		// Extract dimensions
+		width := imgMatches[i][3]
+		height := imgMatches[i][4]
+
+		results = append(results, models.Result{
+			Title:     title,
+			URL:       imgURL,
+			Thumbnail: imgURL,
+			Content:   fmt.Sprintf("%sx%s", width, height),
+			Engine:    e.Name(),
+			Category:  models.CategoryImages,
+			Score:     calculateScore(e.GetPriority(), i, 1),
+			Position:  i,
+		})
+	}
+
+	return results, nil
+}
+
+// searchNews performs a news search
 func (e *Google) searchNews(ctx context.Context, query *models.Query) ([]models.Result, error) {
-	// TODO: Implement Google News search
-	return []models.Result{}, nil
+	// Google News search URL
+	baseURL := "https://www.google.com/search"
+
+	params := url.Values{}
+	params.Set("q", query.Text)
+	params.Set("tbm", "nws") // News search
+	params.Set("num", "20")
+
+	if query.Page > 1 {
+		start := (query.Page - 1) * 20
+		params.Set("start", fmt.Sprintf("%d", start))
+	}
+
+	// Safe search
+	if query.SafeSearch == 2 {
+		params.Set("safe", "active")
+	}
+
+	// Language
+	if query.Language != "" {
+		params.Set("hl", query.Language)
+	}
+
+	// Time range for news
+	switch query.TimeRange {
+	case "day":
+		params.Set("tbs", "qdr:d")
+	case "week":
+		params.Set("tbs", "qdr:w")
+	case "month":
+		params.Set("tbs", "qdr:m")
+	case "year":
+		params.Set("tbs", "qdr:y")
+	}
+
+	reqURL := fmt.Sprintf("%s?%s", baseURL, params.Encode())
+
+	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+
+	resp, err := e.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Google News returned status %d", resp.StatusCode)
+	}
+
+	return e.parseNewsResults(resp, query)
 }
 
-// searchVideos performs a video search (placeholder)
+// parseNewsResults parses Google News search results
+func (e *Google) parseNewsResults(resp *http.Response, query *models.Query) ([]models.Result, error) {
+	results := make([]models.Result, 0)
+
+	body := make([]byte, 1024*1024) // 1MB max
+	n, _ := resp.Body.Read(body)
+	html := string(body[:n])
+
+	// Google News result patterns
+	// News results have a distinct structure with source and time info
+	titlePattern := regexp.MustCompile(`<div[^>]*role="heading"[^>]*>([^<]+)</div>`)
+	urlPattern := regexp.MustCompile(`<a[^>]*href="(https?://(?!google\.com)[^"]+)"[^>]*>`)
+	snippetPattern := regexp.MustCompile(`<div[^>]*class="[^"]*GI74Re[^"]*"[^>]*>([^<]+)</div>`)
+	sourcePattern := regexp.MustCompile(`<div[^>]*class="[^"]*CEMjEf[^"]*"[^>]*>([^<]+)</div>`)
+	timePattern := regexp.MustCompile(`<span[^>]*class="[^"]*WG9SHc[^"]*"[^>]*>([^<]+)</span>`)
+
+	titles := titlePattern.FindAllStringSubmatch(html, -1)
+	urls := urlPattern.FindAllStringSubmatch(html, -1)
+	snippets := snippetPattern.FindAllStringSubmatch(html, -1)
+	sources := sourcePattern.FindAllStringSubmatch(html, -1)
+	times := timePattern.FindAllStringSubmatch(html, -1)
+
+	maxResults := len(titles)
+	if len(urls) < maxResults {
+		maxResults = len(urls)
+	}
+	if maxResults > e.GetConfig().GetMaxResults() {
+		maxResults = e.GetConfig().GetMaxResults()
+	}
+
+	for i := 0; i < maxResults; i++ {
+		if i >= len(titles) || i >= len(urls) {
+			break
+		}
+
+		title := cleanHTML(titles[i][1])
+		resultURL := urls[i][1]
+
+		// Skip Google's own URLs
+		if strings.Contains(resultURL, "google.com") {
+			continue
+		}
+
+		content := ""
+		if i < len(snippets) {
+			content = cleanHTML(snippets[i][1])
+		}
+
+		// Add source and time info
+		source := ""
+		if i < len(sources) {
+			source = cleanHTML(sources[i][1])
+		}
+		publishedTime := ""
+		if i < len(times) {
+			publishedTime = cleanHTML(times[i][1])
+		}
+
+		if source != "" || publishedTime != "" {
+			content = fmt.Sprintf("%s — %s | %s", source, publishedTime, content)
+		}
+
+		results = append(results, models.Result{
+			Title:    title,
+			URL:      resultURL,
+			Content:  content,
+			Engine:   e.Name(),
+			Category: models.CategoryNews,
+			Score:    calculateScore(e.GetPriority(), i, 1),
+			Position: i,
+		})
+	}
+
+	return results, nil
+}
+
+// searchVideos performs a video search
 func (e *Google) searchVideos(ctx context.Context, query *models.Query) ([]models.Result, error) {
-	// TODO: Implement Google Videos search
-	return []models.Result{}, nil
+	// Google Videos search URL
+	baseURL := "https://www.google.com/search"
+
+	params := url.Values{}
+	params.Set("q", query.Text)
+	params.Set("tbm", "vid") // Video search
+	params.Set("num", "20")
+
+	if query.Page > 1 {
+		start := (query.Page - 1) * 20
+		params.Set("start", fmt.Sprintf("%d", start))
+	}
+
+	// Safe search
+	if query.SafeSearch == 2 {
+		params.Set("safe", "active")
+	}
+
+	// Language
+	if query.Language != "" {
+		params.Set("hl", query.Language)
+	}
+
+	// Time range
+	switch query.TimeRange {
+	case "day":
+		params.Set("tbs", "qdr:d")
+	case "week":
+		params.Set("tbs", "qdr:w")
+	case "month":
+		params.Set("tbs", "qdr:m")
+	case "year":
+		params.Set("tbs", "qdr:y")
+	}
+
+	reqURL := fmt.Sprintf("%s?%s", baseURL, params.Encode())
+
+	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+
+	resp, err := e.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Google Videos returned status %d", resp.StatusCode)
+	}
+
+	return e.parseVideoResults(resp, query)
+}
+
+// parseVideoResults parses Google Videos search results
+func (e *Google) parseVideoResults(resp *http.Response, query *models.Query) ([]models.Result, error) {
+	results := make([]models.Result, 0)
+
+	body := make([]byte, 1024*1024) // 1MB max
+	n, _ := resp.Body.Read(body)
+	html := string(body[:n])
+
+	// Google Video result patterns
+	titlePattern := regexp.MustCompile(`<h3[^>]*>([^<]+)</h3>`)
+	urlPattern := regexp.MustCompile(`<a[^>]*href="(https?://(?:www\.)?(?:youtube\.com|vimeo\.com|dailymotion\.com)[^"]+)"`)
+	durationPattern := regexp.MustCompile(`<div[^>]*class="[^"]*J1mWY[^"]*"[^>]*>([^<]+)</div>`)
+	channelPattern := regexp.MustCompile(`<div[^>]*class="[^"]*Zg1NU[^"]*"[^>]*>([^<]+)</div>`)
+	thumbPattern := regexp.MustCompile(`<img[^>]*src="(https?://[^"]*(?:ytimg|vimeocdn|dmcdn)[^"]*)"`)
+
+	titles := titlePattern.FindAllStringSubmatch(html, -1)
+	urls := urlPattern.FindAllStringSubmatch(html, -1)
+	durations := durationPattern.FindAllStringSubmatch(html, -1)
+	channels := channelPattern.FindAllStringSubmatch(html, -1)
+	thumbs := thumbPattern.FindAllStringSubmatch(html, -1)
+
+	maxResults := len(urls)
+	if maxResults > e.GetConfig().GetMaxResults() {
+		maxResults = e.GetConfig().GetMaxResults()
+	}
+
+	for i := 0; i < maxResults; i++ {
+		if i >= len(urls) {
+			break
+		}
+
+		resultURL := urls[i][1]
+
+		title := fmt.Sprintf("Video %d", i+1)
+		if i < len(titles) {
+			title = cleanHTML(titles[i][1])
+		}
+
+		// Build content with duration and channel info
+		content := ""
+		if i < len(durations) {
+			content = cleanHTML(durations[i][1])
+		}
+		if i < len(channels) {
+			channel := cleanHTML(channels[i][1])
+			if content != "" {
+				content = fmt.Sprintf("%s — %s", channel, content)
+			} else {
+				content = channel
+			}
+		}
+
+		thumbnailURL := ""
+		if i < len(thumbs) {
+			thumbnailURL = thumbs[i][1]
+		}
+
+		results = append(results, models.Result{
+			Title:     title,
+			URL:       resultURL,
+			Thumbnail: thumbnailURL,
+			Content:   content,
+			Engine:    e.Name(),
+			Category:  models.CategoryVideos,
+			Score:     calculateScore(e.GetPriority(), i, 1),
+			Position:  i,
+		})
+	}
+
+	return results, nil
 }
 
 // extractGoogleURL extracts the actual URL from Google's redirect URL

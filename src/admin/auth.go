@@ -58,9 +58,9 @@ func NewAuthManager(cfg *config.Config) *AuthManager {
 	return am
 }
 
-// Argon2id parameters per TEMPLATE.md specification
+// Argon2id parameters per TEMPLATE.md specification (line 932)
 const (
-	argon2Time    = 1
+	argon2Time    = 3         // iterations
 	argon2Memory  = 64 * 1024 // 64 MB
 	argon2Threads = 4
 	argon2KeyLen  = 32

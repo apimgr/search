@@ -3,6 +3,8 @@ package backup
 import (
 	"archive/tar"
 	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,12 +17,14 @@ import (
 )
 
 // BackupMetadata contains information about a backup
+// Per TEMPLATE.md PART 26: manifest.json in backups with SHA256 checksums
 type BackupMetadata struct {
-	Version     string    `json:"version"`
-	CreatedAt   time.Time `json:"created_at"`
-	ServerTitle string    `json:"server_title"`
-	Files       []string  `json:"files"`
-	Size        int64     `json:"size"`
+	Version     string            `json:"version"`
+	CreatedAt   time.Time         `json:"created_at"`
+	ServerTitle string            `json:"server_title"`
+	Files       []string          `json:"files"`
+	Checksums   map[string]string `json:"checksums"` // SHA256 checksums per file
+	Size        int64             `json:"size"`
 }
 
 // Manager handles backup and restore operations
@@ -73,22 +77,29 @@ func (m *Manager) Create(filename string) (string, error) {
 
 	var totalSize int64
 	var files []string
+	checksums := make(map[string]string)
 
 	// Backup config directory
-	configFiles, configSize, err := m.addDirectoryToTar(tarWriter, m.configDir, "config")
+	configFiles, configSize, configChecksums, err := m.addDirectoryToTar(tarWriter, m.configDir, "config")
 	if err != nil {
 		return "", fmt.Errorf("failed to backup config: %w", err)
 	}
 	files = append(files, configFiles...)
 	totalSize += configSize
+	for k, v := range configChecksums {
+		checksums[k] = v
+	}
 
 	// Backup data directory (excluding logs and cache)
-	dataFiles, dataSize, err := m.addDirectoryToTar(tarWriter, m.dataDir, "data")
+	dataFiles, dataSize, dataChecksums, err := m.addDirectoryToTar(tarWriter, m.dataDir, "data")
 	if err != nil {
 		return "", fmt.Errorf("failed to backup data: %w", err)
 	}
 	files = append(files, dataFiles...)
 	totalSize += dataSize
+	for k, v := range dataChecksums {
+		checksums[k] = v
+	}
 
 	// Load config for metadata
 	cfg, _ := config.Load(filepath.Join(m.configDir, "server.yml"))
@@ -97,19 +108,20 @@ func (m *Manager) Create(filename string) (string, error) {
 		serverTitle = cfg.Server.Title
 	}
 
-	// Create metadata
+	// Create metadata per TEMPLATE.md PART 26: manifest.json with SHA256 checksums
 	metadata := BackupMetadata{
 		Version:     config.Version,
 		CreatedAt:   time.Now(),
 		ServerTitle: serverTitle,
 		Files:       files,
+		Checksums:   checksums,
 		Size:        totalSize,
 	}
 
-	// Add metadata to archive
+	// Add metadata to archive as manifest.json
 	metaJSON, _ := json.MarshalIndent(metadata, "", "  ")
 	metaHeader := &tar.Header{
-		Name:    "backup.json",
+		Name:    "manifest.json",
 		Size:    int64(len(metaJSON)),
 		Mode:    0644,
 		ModTime: time.Now(),
@@ -124,10 +136,12 @@ func (m *Manager) Create(filename string) (string, error) {
 	return backupPath, nil
 }
 
-// addDirectoryToTar adds a directory to the tar archive
-func (m *Manager) addDirectoryToTar(tw *tar.Writer, srcDir, prefix string) ([]string, int64, error) {
+// addDirectoryToTar adds a directory to the tar archive with SHA256 checksums
+// Per TEMPLATE.md PART 26: SHA256 checksums for all backup files
+func (m *Manager) addDirectoryToTar(tw *tar.Writer, srcDir, prefix string) ([]string, int64, map[string]string, error) {
 	var files []string
 	var totalSize int64
+	checksums := make(map[string]string)
 
 	err := filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -165,25 +179,30 @@ func (m *Manager) addDirectoryToTar(tw *tar.Writer, srcDir, prefix string) ([]st
 			return err
 		}
 
-		// Write file content
+		// Open file and compute checksum while copying
 		file, err := os.Open(path)
 		if err != nil {
 			return err
 		}
 		defer file.Close()
 
-		written, err := io.Copy(tw, file)
+		// Create a hash writer to compute SHA256 while copying
+		hash := sha256.New()
+		multiWriter := io.MultiWriter(tw, hash)
+
+		written, err := io.Copy(multiWriter, file)
 		if err != nil {
 			return err
 		}
 
 		files = append(files, header.Name)
 		totalSize += written
+		checksums[header.Name] = hex.EncodeToString(hash.Sum(nil))
 
 		return nil
 	})
 
-	return files, totalSize, err
+	return files, totalSize, checksums, err
 }
 
 // Restore restores from a backup archive
@@ -225,8 +244,8 @@ func (m *Manager) Restore(backupPath string) error {
 			return fmt.Errorf("error reading tar: %w", err)
 		}
 
-		// Skip metadata file
-		if header.Name == "backup.json" {
+		// Skip metadata file (manifest.json or legacy backup.json)
+		if header.Name == "manifest.json" || header.Name == "backup.json" {
 			continue
 		}
 
@@ -315,6 +334,7 @@ func (m *Manager) List() ([]BackupInfo, error) {
 }
 
 // GetMetadata reads metadata from a backup archive
+// Looks for manifest.json (per TEMPLATE.md PART 26) or legacy backup.json
 func (m *Manager) GetMetadata(backupPath string) (*BackupMetadata, error) {
 	file, err := os.Open(backupPath)
 	if err != nil {
@@ -339,7 +359,8 @@ func (m *Manager) GetMetadata(backupPath string) (*BackupMetadata, error) {
 			return nil, err
 		}
 
-		if header.Name == "backup.json" {
+		// Look for manifest.json (new format) or backup.json (legacy)
+		if header.Name == "manifest.json" || header.Name == "backup.json" {
 			var metadata BackupMetadata
 			if err := json.NewDecoder(tarReader).Decode(&metadata); err != nil {
 				return nil, err

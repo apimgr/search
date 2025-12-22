@@ -1,0 +1,346 @@
+{{define "content"}}
+<div class="auth-page login-page">
+    <div class="auth-container">
+        <div class="auth-header">
+            <h1>{{t "auth.login"}}</h1>
+            <p class="auth-subtitle">{{t "auth.login.title"}}</p>
+        </div>
+
+        {{if .Error}}
+        <div class="alert alert-error" role="alert">
+            {{.Error}}
+        </div>
+        {{end}}
+
+        <form method="POST" action="/auth/login" class="auth-form" id="login-form">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            {{if .Redirect}}
+            <input type="hidden" name="redirect" value="{{.Redirect}}">
+            {{end}}
+
+            <div class="form-group">
+                <label for="username">{{t "auth.login.username"}}</label>
+                <input type="text" id="username" name="username" value="{{.Username}}"
+                       autocomplete="username" required autofocus
+                       aria-describedby="username-help">
+                <small id="username-help" class="form-help">{{t "auth.login.username"}}</small>
+            </div>
+
+            <div class="form-group">
+                <label for="password">{{t "auth.login.password"}}</label>
+                <div class="password-input-wrapper">
+                    <input type="password" id="password" name="password"
+                           autocomplete="current-password" required
+                           aria-describedby="password-help">
+                    <button type="button" class="password-toggle" aria-label="Toggle password visibility">
+                        <span class="icon-eye"></span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="form-group form-group-inline">
+                <label class="checkbox-label">
+                    <input type="checkbox" name="remember" id="remember">
+                    <span>{{t "auth.login.remember"}}</span>
+                </label>
+                <a href="/auth/forgot" class="forgot-link">{{t "auth.login.forgot"}}</a>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block">
+                {{t "auth.login.submit"}}
+            </button>
+        </form>
+
+        {{if .RegistrationEnabled}}
+        <div class="auth-footer">
+            <p>{{t "auth.login.no_account"}} <a href="/auth/register">{{t "auth.register"}}</a></p>
+        </div>
+        {{end}}
+
+        {{if or .OIDCEnabled .LDAPEnabled}}
+        <div class="auth-divider">
+            <span>or</span>
+        </div>
+
+        <div class="auth-social">
+            {{if .OIDCEnabled}}
+            <a href="/auth/oidc" class="btn btn-secondary btn-block">
+                <span class="icon-key"></span>
+                Sign in with SSO
+            </a>
+            {{end}}
+        </div>
+        {{end}}
+    </div>
+</div>
+
+<style>
+.auth-page {
+    min-height: calc(100vh - 200px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+}
+
+.auth-container {
+    width: 100%;
+    max-width: 400px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 2rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.auth-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.auth-header h1 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.75rem;
+}
+
+.auth-subtitle {
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+}
+
+.form-group label {
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.form-group input[type="text"],
+.form-group input[type="email"],
+.form-group input[type="password"] {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 1rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.15);
+}
+
+.form-help {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    display: none;
+}
+
+.password-input-wrapper {
+    position: relative;
+}
+
+.password-input-wrapper input {
+    padding-right: 3rem;
+}
+
+.password-toggle {
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0.25rem;
+}
+
+.password-toggle:hover {
+    color: var(--text-primary);
+}
+
+.form-group-inline {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.checkbox-label input {
+    width: 1rem;
+    height: 1rem;
+}
+
+.forgot-link {
+    font-size: 0.9rem;
+    color: var(--accent-color);
+    text-decoration: none;
+}
+
+.forgot-link:hover {
+    text-decoration: underline;
+}
+
+.btn {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+}
+
+.btn:hover {
+    opacity: 0.9;
+}
+
+.btn:active {
+    transform: scale(0.98);
+}
+
+.btn-primary {
+    background: var(--accent-color);
+    color: var(--bg-primary);
+}
+
+.btn-secondary {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.btn-block {
+    width: 100%;
+}
+
+.alert {
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+}
+
+.alert-error {
+    background: rgba(var(--danger-rgb), 0.1);
+    color: var(--danger-color);
+    border: 1px solid rgba(var(--danger-rgb), 0.2);
+}
+
+.auth-footer {
+    margin-top: 1.5rem;
+    text-align: center;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.auth-footer a {
+    color: var(--accent-color);
+    text-decoration: none;
+}
+
+.auth-footer a:hover {
+    text-decoration: underline;
+}
+
+.auth-divider {
+    display: flex;
+    align-items: center;
+    margin: 1.5rem 0;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border-color);
+}
+
+.auth-divider span {
+    padding: 0 1rem;
+}
+
+.auth-social {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.icon-eye::before {
+    content: '\1F441';
+}
+
+.icon-key::before {
+    content: '\1F511';
+    margin-right: 0.5rem;
+}
+
+@media (max-width: 480px) {
+    .auth-container {
+        padding: 1.5rem;
+    }
+
+    .form-group-inline {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.75rem;
+    }
+}
+</style>
+
+<script>
+(function() {
+    document.addEventListener('DOMContentLoaded', function() {
+        // Password visibility toggle
+        const toggleBtn = document.querySelector('.password-toggle');
+        const passwordInput = document.getElementById('password');
+
+        if (toggleBtn && passwordInput) {
+            toggleBtn.addEventListener('click', function() {
+                const type = passwordInput.type === 'password' ? 'text' : 'password';
+                passwordInput.type = type;
+                this.querySelector('.icon-eye').style.opacity = type === 'text' ? '0.5' : '1';
+            });
+        }
+
+        // Form validation
+        const form = document.getElementById('login-form');
+        if (form) {
+            form.addEventListener('submit', function(e) {
+                const username = document.getElementById('username').value.trim();
+                const password = document.getElementById('password').value;
+
+                if (!username || !password) {
+                    e.preventDefault();
+                    return;
+                }
+            });
+        }
+    });
+})();
+</script>
+{{end}}

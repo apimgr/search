@@ -3,6 +3,7 @@ package admin
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -407,6 +408,8 @@ func (h *Handler) renderAdminPage(w http.ResponseWriter, page string, data *Admi
                 <li><a href="/admin/engines" class="%s"><span class="nav-icon">🔎</span> Search Engines</a></li>
                 <li><a href="/admin/tokens" class="%s"><span class="nav-icon">🔑</span> API Tokens</a></li>
                 <li><a href="/admin/logs" class="%s"><span class="nav-icon">📜</span> Logs</a></li>
+                <li><a href="/admin/users/admins" class="%s"><span class="nav-icon">👥</span> Server Admins</a></li>
+                <li><a href="/admin/server/nodes" class="%s"><span class="nav-icon">🖧</span> Cluster</a></li>
             </ul>
             <div style="padding: 10px 20px; margin-top: 10px; border-top: 1px solid var(--border-primary);">
                 <span style="color: var(--text-secondary); font-size: 12px; text-transform: uppercase;">Server Settings</span>
@@ -440,6 +443,8 @@ func (h *Handler) renderAdminPage(w http.ResponseWriter, page string, data *Admi
 		activeClass(page, "engines"),
 		activeClass(page, "tokens"),
 		activeClass(page, "logs"),
+		activeClass(page, "admins"),
+		activeClass(page, "nodes"),
 		activeClass(page, "server-settings"),
 		activeClass(page, "server-branding"),
 		activeClass(page, "server-ssl"),
@@ -485,6 +490,16 @@ func (h *Handler) renderAdminPage(w http.ResponseWriter, page string, data *Admi
 		h.renderServerMetricsContent(w, data)
 	case "scheduler":
 		h.renderSchedulerContent(w, data)
+	case "setup":
+		h.renderSetupContent(w, data)
+	case "admins":
+		h.renderAdminsContent(w, data)
+	case "invite-accept":
+		h.renderInviteAcceptContent(w, data)
+	case "invite-error":
+		h.renderInviteErrorContent(w, data)
+	case "nodes":
+		h.renderNodesContent(w, data)
 	}
 
 	// Render admin footer
@@ -1585,4 +1600,516 @@ func taskStatusText(enabled bool) string {
 		return "Enabled"
 	}
 	return "Disabled"
+}
+
+// ============================================================
+// Multi-Admin Templates per TEMPLATE.md PART 31
+// ============================================================
+
+// renderSetupContent renders the initial setup page
+func (h *Handler) renderSetupContent(w http.ResponseWriter, data *AdminPageData) {
+	setupTokenRequired := false
+	if data.Extra != nil {
+		if v, ok := data.Extra["SetupTokenRequired"].(bool); ok {
+			setupTokenRequired = v
+		}
+	}
+
+	tokenField := ""
+	if setupTokenRequired {
+		tokenField = `
+                    <div class="form-row">
+                        <label>Setup Token</label>
+                        <input type="text" name="setup_token" required placeholder="Enter the setup token from console">
+                        <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                            The setup token was displayed in the server console. Use <code>--maintenance setup</code> to regenerate.
+                        </p>
+                    </div>`
+	}
+
+	fmt.Fprintf(w, `
+            <div class="admin-section">
+                <h2>Create Admin Account</h2>
+                <p style="color: var(--text-secondary); margin-bottom: 20px;">
+                    Welcome! Create the primary administrator account to get started.
+                </p>
+                <form method="POST" action="/admin/setup">
+                    %s
+                    <div class="form-row">
+                        <label>Username</label>
+                        <input type="text" name="username" required pattern="[a-z][a-z0-9_-]{2,31}"
+                               placeholder="admin" autocomplete="username">
+                        <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                            3-32 characters, lowercase letters, numbers, underscore, hyphen
+                        </p>
+                    </div>
+                    <div class="form-row">
+                        <label>Email</label>
+                        <input type="email" name="email" placeholder="admin@example.com" autocomplete="email">
+                    </div>
+                    <div class="form-row">
+                        <label>Password</label>
+                        <input type="password" name="password" required minlength="8"
+                               placeholder="Min. 8 characters" autocomplete="new-password">
+                    </div>
+                    <div class="form-row">
+                        <label>Confirm Password</label>
+                        <input type="password" name="confirm_password" required minlength="8"
+                               placeholder="Repeat password" autocomplete="new-password">
+                    </div>
+                    <button type="submit" class="btn">Create Admin Account</button>
+                </form>
+            </div>`,
+		tokenField,
+	)
+}
+
+// renderAdminsContent renders the server admins management page
+func (h *Handler) renderAdminsContent(w http.ResponseWriter, data *AdminPageData) {
+	admins := []*Admin{}
+	totalCount := 0
+	isPrimary := false
+	inviteURL := ""
+
+	if data.Extra != nil {
+		if v, ok := data.Extra["Admins"].([]*Admin); ok {
+			admins = v
+		}
+		if v, ok := data.Extra["TotalCount"].(int); ok {
+			totalCount = v
+		}
+		if v, ok := data.Extra["IsPrimary"].(bool); ok {
+			isPrimary = v
+		}
+	}
+
+	// Check for invite URL in query params
+	if data.Success != "" {
+		inviteURL = data.Success
+	}
+
+	// Show invite URL if just created
+	inviteSection := ""
+	if inviteURL != "" && isPrimary {
+		inviteSection = fmt.Sprintf(`
+            <div class="admin-section" style="border-color: var(--green);">
+                <h2 style="color: var(--green);">Invite Created</h2>
+                <p>Share this link with the new admin:</p>
+                <div class="token-display">%s</div>
+                <p class="token-warning">This link expires in 7 days and can only be used once.</p>
+            </div>`,
+			inviteURL,
+		)
+	}
+
+	// Create invite form (primary admin only)
+	createInviteForm := ""
+	if isPrimary {
+		createInviteForm = `
+            <div class="admin-section">
+                <h2>Invite New Admin</h2>
+                <form method="POST" action="/admin/users/admins/invite">
+                    <div class="form-row">
+                        <label>Suggested Username (optional)</label>
+                        <input type="text" name="username" placeholder="Leave empty for invite to choose">
+                    </div>
+                    <button type="submit" class="btn">Create Invite Link</button>
+                </form>
+            </div>`
+	}
+
+	fmt.Fprintf(w, `
+            %s
+            %s
+            <div class="admin-section">
+                <h2>Server Admins (%d total)</h2>
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>Source</th>
+                            <th>2FA</th>
+                            <th>Last Login</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>`,
+		inviteSection,
+		createInviteForm,
+		totalCount,
+	)
+
+	if len(admins) == 0 {
+		fmt.Fprintf(w, `
+                        <tr>
+                            <td colspan="7" style="text-align: center; color: var(--text-secondary);">No admins to display</td>
+                        </tr>`)
+	} else {
+		for _, admin := range admins {
+			role := "Admin"
+			if admin.IsPrimary {
+				role = "Primary"
+			}
+			lastLogin := "Never"
+			if admin.LastLoginAt != nil {
+				lastLogin = admin.LastLoginAt.Format("Jan 2, 15:04")
+			}
+			totpStatus := "Disabled"
+			totpClass := "disabled"
+			if admin.TOTPEnabled {
+				totpStatus = "Enabled"
+				totpClass = "enabled"
+			}
+
+			// Only show delete button for non-primary admins, and only if viewer is primary
+			actionButtons := ""
+			if isPrimary && !admin.IsPrimary {
+				actionButtons = fmt.Sprintf(`
+                                <form method="POST" action="/admin/users/admins/%d/delete" style="display:inline;"
+                                      onsubmit="return confirm('Delete this admin account?');">
+                                    <button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;">Delete</button>
+                                </form>`,
+					admin.ID,
+				)
+			}
+
+			fmt.Fprintf(w, `
+                        <tr>
+                            <td>%s</td>
+                            <td>%s</td>
+                            <td><span class="status-badge %s">%s</span></td>
+                            <td>%s</td>
+                            <td><span class="status-badge %s">%s</span></td>
+                            <td>%s</td>
+                            <td>%s</td>
+                        </tr>`,
+				admin.Username,
+				maskEmail(admin.Email),
+				func() string {
+					if admin.IsPrimary {
+						return "enabled"
+					}
+					return ""
+				}(),
+				role,
+				admin.Source,
+				totpClass,
+				totpStatus,
+				lastLogin,
+				actionButtons,
+			)
+		}
+	}
+
+	fmt.Fprintf(w, `
+                    </tbody>
+                </table>
+            </div>`)
+
+	if !isPrimary {
+		fmt.Fprintf(w, `
+            <div class="admin-section">
+                <p style="color: var(--text-secondary);">
+                    <em>Note: For privacy, you can only view your own admin account.
+                    The primary admin can see all admins.</em>
+                </p>
+            </div>`)
+	}
+}
+
+// renderInviteAcceptContent renders the invite acceptance page
+func (h *Handler) renderInviteAcceptContent(w http.ResponseWriter, data *AdminPageData) {
+	suggestedUsername := ""
+	if data.Extra != nil {
+		if v, ok := data.Extra["SuggestedUsername"].(string); ok {
+			suggestedUsername = v
+		}
+	}
+
+	fmt.Fprintf(w, `
+            <div class="admin-section">
+                <h2>Accept Admin Invite</h2>
+                <p style="color: var(--text-secondary); margin-bottom: 20px;">
+                    You've been invited to become a server administrator. Create your account below.
+                </p>
+                <form method="POST">
+                    <div class="form-row">
+                        <label>Username</label>
+                        <input type="text" name="username" required value="%s" pattern="[a-z][a-z0-9_-]{2,31}"
+                               placeholder="admin" autocomplete="username">
+                        <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                            3-32 characters, lowercase letters, numbers, underscore, hyphen
+                        </p>
+                    </div>
+                    <div class="form-row">
+                        <label>Email</label>
+                        <input type="email" name="email" placeholder="admin@example.com" autocomplete="email">
+                    </div>
+                    <div class="form-row">
+                        <label>Password</label>
+                        <input type="password" name="password" required minlength="8"
+                               placeholder="Min. 8 characters" autocomplete="new-password">
+                    </div>
+                    <div class="form-row">
+                        <label>Confirm Password</label>
+                        <input type="password" name="confirm_password" required minlength="8"
+                               placeholder="Repeat password" autocomplete="new-password">
+                    </div>
+                    <button type="submit" class="btn">Create Admin Account</button>
+                </form>
+            </div>`,
+		suggestedUsername,
+	)
+}
+
+// renderInviteErrorContent renders the invite error page
+func (h *Handler) renderInviteErrorContent(w http.ResponseWriter, data *AdminPageData) {
+	fmt.Fprintf(w, `
+            <div class="admin-section" style="text-align: center;">
+                <h2 style="color: var(--red);">Invalid Invite</h2>
+                <p style="color: var(--text-secondary); margin: 20px 0;">
+                    %s
+                </p>
+                <p style="color: var(--text-secondary);">
+                    Please contact the server administrator for a new invite link.
+                </p>
+                <a href="/admin/login" class="btn" style="margin-top: 20px;">Go to Login</a>
+            </div>`,
+		data.Error,
+	)
+}
+
+// maskEmail masks an email for privacy (j***n@e***.com)
+func maskEmail(email string) string {
+	if email == "" {
+		return ""
+	}
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 {
+		return "***"
+	}
+	username := parts[0]
+	domain := parts[1]
+
+	maskedUsername := username
+	if len(username) > 2 {
+		maskedUsername = string(username[0]) + strings.Repeat("*", len(username)-2) + string(username[len(username)-1])
+	}
+
+	domainParts := strings.Split(domain, ".")
+	maskedDomain := domain
+	if len(domainParts) >= 2 && len(domainParts[0]) > 2 {
+		maskedDomain = string(domainParts[0][0]) + strings.Repeat("*", len(domainParts[0])-2) + string(domainParts[0][len(domainParts[0])-1])
+		for i := 1; i < len(domainParts); i++ {
+			maskedDomain += "." + domainParts[i]
+		}
+	}
+
+	return maskedUsername + "@" + maskedDomain
+}
+
+// ============================================================
+// Cluster/Node Management Templates per TEMPLATE.md PART 24
+// ============================================================
+
+// renderNodesContent renders the cluster nodes management page
+func (h *Handler) renderNodesContent(w http.ResponseWriter, data *AdminPageData) {
+	nodes := []ClusterNode{}
+	isPrimary := true
+	nodeID := "local"
+	hostname := "unknown"
+	isCluster := false
+	token := ""
+
+	if data.Extra != nil {
+		if v, ok := data.Extra["Nodes"].([]ClusterNode); ok {
+			nodes = v
+		}
+		if v, ok := data.Extra["IsPrimary"].(bool); ok {
+			isPrimary = v
+		}
+		if v, ok := data.Extra["NodeID"].(string); ok {
+			nodeID = v
+		}
+		if v, ok := data.Extra["Hostname"].(string); ok {
+			hostname = v
+		}
+		if v, ok := data.Extra["IsCluster"].(bool); ok {
+			isCluster = v
+		}
+	}
+
+	// Check for join token in query params
+	if data.Success != "" && strings.Contains(data.Success, "token=") {
+		parts := strings.Split(data.Success, "token=")
+		if len(parts) > 1 {
+			token = parts[1]
+		}
+	}
+
+	// Show token if just generated
+	tokenSection := ""
+	if token != "" && isPrimary {
+		tokenSection = fmt.Sprintf(`
+            <div class="admin-section" style="border-color: var(--green);">
+                <h2 style="color: var(--green);">Join Token Generated</h2>
+                <p>Use this token to join a new node to the cluster:</p>
+                <div class="token-display">%s</div>
+                <p class="token-warning">This token expires in 24 hours and can only be used once.</p>
+            </div>`,
+			token,
+		)
+	}
+
+	// Mode info section
+	modeClass := "enabled"
+	modeText := "Cluster Mode"
+	if !isCluster {
+		modeClass = "disabled"
+		modeText = "Standalone Mode"
+	}
+
+	fmt.Fprintf(w, `
+            %s
+            <div class="admin-section">
+                <h2>Cluster Status</h2>
+                <table class="admin-table" style="max-width: 400px;">
+                    <tr>
+                        <td style="color: var(--text-secondary);">Mode</td>
+                        <td><span class="status-badge %s">%s</span></td>
+                    </tr>
+                    <tr>
+                        <td style="color: var(--text-secondary);">This Node</td>
+                        <td>%s</td>
+                    </tr>
+                    <tr>
+                        <td style="color: var(--text-secondary);">Hostname</td>
+                        <td>%s</td>
+                    </tr>
+                    <tr>
+                        <td style="color: var(--text-secondary);">Role</td>
+                        <td><span class="status-badge %s">%s</span></td>
+                    </tr>
+                </table>
+            </div>`,
+		tokenSection,
+		modeClass, modeText,
+		nodeID,
+		hostname,
+		func() string {
+			if isPrimary {
+				return "enabled"
+			}
+			return ""
+		}(),
+		func() string {
+			if isPrimary {
+				return "Primary"
+			}
+			return "Secondary"
+		}(),
+	)
+
+	// Actions section (cluster mode only)
+	if isCluster {
+		actionsSection := ""
+		if isPrimary {
+			actionsSection = `
+            <div class="admin-section">
+                <h2>Cluster Actions</h2>
+                <form method="POST" action="/admin/server/nodes/token" style="display: inline-block; margin-right: 10px;">
+                    <button type="submit" class="btn">Generate Join Token</button>
+                </form>
+            </div>`
+		} else {
+			actionsSection = `
+            <div class="admin-section">
+                <h2>Node Actions</h2>
+                <form method="POST" action="/admin/server/nodes/leave"
+                      onsubmit="return confirm('Leave the cluster? This node will become standalone.');">
+                    <button type="submit" class="btn btn-danger">Leave Cluster</button>
+                </form>
+            </div>`
+		}
+		fmt.Fprintf(w, "%s", actionsSection)
+	}
+
+	// Nodes table
+	fmt.Fprintf(w, `
+            <div class="admin-section">
+                <h2>Cluster Nodes (%d)</h2>
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Hostname</th>
+                            <th>Node ID</th>
+                            <th>Role</th>
+                            <th>Status</th>
+                            <th>Last Seen</th>
+                            <th>Joined</th>
+                        </tr>
+                    </thead>
+                    <tbody>`,
+		len(nodes),
+	)
+
+	if len(nodes) == 0 {
+		fmt.Fprintf(w, `
+                        <tr>
+                            <td colspan="6" style="text-align: center; color: var(--text-secondary);">No nodes found</td>
+                        </tr>`)
+	} else {
+		for _, node := range nodes {
+			role := "Secondary"
+			roleClass := ""
+			if node.IsPrimary {
+				role = "Primary"
+				roleClass = "enabled"
+			}
+
+			statusClass := "disabled"
+			if node.Status == "online" {
+				statusClass = "enabled"
+			}
+
+			thisNode := ""
+			if node.ID == nodeID {
+				thisNode = " (this node)"
+			}
+
+			fmt.Fprintf(w, `
+                        <tr>
+                            <td>%s%s</td>
+                            <td style="font-family: monospace; font-size: 12px;">%s</td>
+                            <td><span class="status-badge %s">%s</span></td>
+                            <td><span class="status-badge %s">%s</span></td>
+                            <td>%s</td>
+                            <td>%s</td>
+                        </tr>`,
+				node.Hostname, thisNode,
+				node.ID,
+				roleClass, role,
+				statusClass, node.Status,
+				node.LastSeen.Format("Jan 2, 15:04"),
+				node.JoinedAt.Format("Jan 2, 2006"),
+			)
+		}
+	}
+
+	fmt.Fprintf(w, `
+                    </tbody>
+                </table>
+            </div>`)
+
+	if !isCluster {
+		fmt.Fprintf(w, `
+            <div class="admin-section">
+                <p style="color: var(--text-secondary);">
+                    <em>Note: Cluster mode requires a remote database (PostgreSQL or MySQL).
+                    In standalone mode, only this node is shown.</em>
+                </p>
+            </div>`)
+	}
 }

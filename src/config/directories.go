@@ -513,8 +513,9 @@ func GetServiceFile() string {
 		}
 		return os.ExpandEnv("$HOME/Library/LaunchAgents/com." + ProjectOrg + "." + ProjectName + ".plist")
 
+	// Windows uses Service Manager, not a file
 	case "windows":
-		return "" // Windows uses Service Manager, not a file
+		return ""
 
 	case "freebsd", "openbsd", "netbsd":
 		return "/usr/local/etc/rc.d/" + ProjectName

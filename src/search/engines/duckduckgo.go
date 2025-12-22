@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
-	
+
 	"github.com/apimgr/search/src/models"
 	"github.com/apimgr/search/src/search"
 )
@@ -565,12 +566,45 @@ func calculateScore(priority, position, duplicates int) float64 {
 }
 
 // extractTitle extracts title from DuckDuckGo result text
+// DuckDuckGo results often have format "Title - Site Name" or "Title | Site Name"
 func extractTitle(text string) string {
-	// DuckDuckGo results often have format "Title - Description"
-	// For now, just return the text as-is
-	// TODO: Better title extraction
-	if len(text) > 100 {
-		return text[:100] + "..."
+	text = strings.TrimSpace(text)
+
+	// Try to find title before common separators
+	// Check for " - " separator (most common)
+	if idx := strings.Index(text, " - "); idx > 10 && idx < len(text)-5 {
+		// Only split if we have meaningful content on both sides
+		title := strings.TrimSpace(text[:idx])
+		if len(title) > 5 {
+			return title
+		}
 	}
+
+	// Check for " | " separator
+	if idx := strings.Index(text, " | "); idx > 10 && idx < len(text)-5 {
+		title := strings.TrimSpace(text[:idx])
+		if len(title) > 5 {
+			return title
+		}
+	}
+
+	// Check for " :: " separator (used by some sites)
+	if idx := strings.Index(text, " :: "); idx > 10 && idx < len(text)-5 {
+		title := strings.TrimSpace(text[:idx])
+		if len(title) > 5 {
+			return title
+		}
+	}
+
+	// No separator found or too short - truncate if needed
+	if len(text) > 100 {
+		// Try to break at a word boundary
+		truncated := text[:100]
+		if lastSpace := strings.LastIndex(truncated, " "); lastSpace > 50 {
+			return truncated[:lastSpace] + "..."
+		}
+		return truncated + "..."
+	}
+
 	return text
 }

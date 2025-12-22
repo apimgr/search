@@ -317,6 +317,42 @@ func (c *CSRFMiddleware) GenerateToken() string {
 	return hex.EncodeToString(b)
 }
 
+// ValidateToken validates a CSRF token from the request
+func (c *CSRFMiddleware) ValidateToken(r *http.Request) bool {
+	csrf := c.config.Server.Security.CSRF
+
+	// Skip validation if CSRF is disabled
+	if !csrf.Enabled {
+		return true
+	}
+
+	// Get token from cookie
+	cookie, err := r.Cookie(csrf.CookieName)
+	if err != nil {
+		return false
+	}
+
+	// Get token from header or form
+	token := r.Header.Get(csrf.HeaderName)
+	if token == "" {
+		token = r.FormValue(csrf.FieldName)
+	}
+
+	// Validate token matches cookie
+	if token != cookie.Value {
+		return false
+	}
+
+	// Validate token exists in store
+	if _, ok := c.tokens.Load(token); !ok {
+		return false
+	}
+
+	// Delete used token (single use)
+	c.tokens.Delete(token)
+	return true
+}
+
 // Protect applies CSRF protection to handlers
 func (c *CSRFMiddleware) Protect(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -603,6 +639,125 @@ func (m *Middleware) GeoBlock(lookup *geoip.Lookup) func(http.Handler) http.Hand
 				}
 				http.Error(w, "Access Denied", http.StatusForbidden)
 				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// MaintenanceHandler is a function that checks maintenance mode
+type MaintenanceHandler interface {
+	IsInMaintenance() bool
+	GetMode() int
+	GetMessage() string
+}
+
+// MaintenanceMode middleware handles maintenance mode per TEMPLATE.md PART 6
+// - Allows admin routes even during maintenance
+// - Shows maintenance page to regular users
+// - Allows health checks for monitoring
+func (m *Middleware) MaintenanceMode(handler MaintenanceHandler) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Skip if not in maintenance mode
+			if !handler.IsInMaintenance() {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			path := r.URL.Path
+
+			// Always allow health checks
+			if path == "/healthz" || path == "/api/v1/healthz" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Always allow admin routes (admins can work during maintenance)
+			if strings.HasPrefix(path, "/admin") {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Always allow API maintenance status endpoint
+			if path == "/api/v1/maintenance" || path == "/api/v1/status" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Always allow static assets
+			if strings.HasPrefix(path, "/static/") {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Log maintenance block
+			if m.logManager != nil {
+				ip := getClientIP(r, m.config.Server.Security.TrustedProxies)
+				m.logManager.Security().LogBlocked(ip, path, "maintenance")
+			}
+
+			// Return maintenance page
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Retry-After", "300")
+			w.WriteHeader(http.StatusServiceUnavailable)
+
+			message := handler.GetMessage()
+			if message == "" {
+				message = "The system is currently undergoing maintenance. Please try again later."
+			}
+
+			// Simple maintenance page
+			maintenanceHTML := `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maintenance</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .container {
+            text-align: center;
+            padding: 2rem;
+            max-width: 600px;
+        }
+        h1 { color: #bd93f9; margin-bottom: 1rem; }
+        p { color: #999; line-height: 1.6; }
+        .icon { font-size: 4rem; margin-bottom: 1rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">🔧</div>
+        <h1>System Maintenance</h1>
+        <p>` + message + `</p>
+    </div>
+</body>
+</html>`
+			w.Write([]byte(maintenanceHTML))
+		})
+	}
+}
+
+// DegradedMode middleware handles degraded mode per TEMPLATE.md PART 6
+// Shows warnings to users when system is in degraded state
+func (m *Middleware) DegradedMode(handler MaintenanceHandler) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Check if in degraded mode (mode == 1)
+			if handler.GetMode() == 1 {
+				// Add header to indicate degraded state
+				w.Header().Set("X-System-Status", "degraded")
 			}
 
 			next.ServeHTTP(w, r)

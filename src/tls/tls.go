@@ -128,8 +128,9 @@ func (m *Manager) IsEnabled() bool {
 
 // ReloadCertificates reloads manual certificates
 func (m *Manager) ReloadCertificates() error {
+	// Let's Encrypt handles its own renewal
 	if m.config.LetsEncrypt.Enabled {
-		return nil // Let's Encrypt handles its own renewal
+		return nil
 	}
 
 	if m.config.CertFile == "" || m.config.KeyFile == "" {

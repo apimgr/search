@@ -225,6 +225,7 @@ type PageData struct {
 	WidgetsEnabled bool
 	DefaultWidgets string // JSON array of default widget types
 	CookieConsent  *CookieConsentData
+	Extra          map[string]interface{}
 }
 
 // ErrorPageData extends PageData with error-specific fields

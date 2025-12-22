@@ -1,0 +1,481 @@
+{{define "content"}}
+<div class="user-page security-page">
+    <div class="page-header">
+        <h1>{{t "user.security.title"}}</h1>
+        <p class="page-subtitle">Manage your security settings</p>
+    </div>
+
+    <div class="user-container">
+        <nav class="user-nav">
+            <a href="/user/profile" class="nav-item">{{t "user.profile"}}</a>
+            <a href="/user/security" class="nav-item active">{{t "user.security"}}</a>
+            <a href="/user/tokens" class="nav-item">{{t "user.tokens"}}</a>
+        </nav>
+
+        <div class="user-content">
+            {{if .Flash}}
+            <div class="alert alert-{{.Flash.Type}}" role="alert">
+                {{.Flash.Message}}
+            </div>
+            {{end}}
+
+            <div class="security-section">
+                <h2>{{t "user.security.change_password"}}</h2>
+                <form method="POST" action="/user/security/password" class="security-form">
+                    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+                    <div class="form-group">
+                        <label for="current_password">{{t "user.security.current_password"}}</label>
+                        <input type="password" id="current_password" name="current_password"
+                               autocomplete="current-password" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="new_password">{{t "user.security.new_password"}}</label>
+                        <input type="password" id="new_password" name="new_password"
+                               autocomplete="new-password" required minlength="8">
+                        <div class="password-strength" id="password-strength"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="confirm_password">{{t "user.security.confirm_password"}}</label>
+                        <input type="password" id="confirm_password" name="confirm_password"
+                               autocomplete="new-password" required>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">{{t "form.save"}}</button>
+                </form>
+            </div>
+
+            <div class="security-section">
+                <h2>{{t "user.security.2fa"}}</h2>
+                <div class="twofa-status">
+                    {{if .TwoFactorEnabled}}
+                    <div class="status-badge status-enabled">
+                        <span class="status-icon">&#x2713;</span>
+                        {{t "user.security.2fa.enabled"}}
+                    </div>
+                    <p class="status-text">Your account is protected with two-factor authentication.</p>
+                    <button type="button" class="btn btn-danger" id="disable-2fa-btn">
+                        {{t "user.security.2fa.disable"}}
+                    </button>
+                    {{else}}
+                    <div class="status-badge status-disabled">
+                        <span class="status-icon">&#x2717;</span>
+                        {{t "user.security.2fa.disabled"}}
+                    </div>
+                    <p class="status-text">Add an extra layer of security to your account.</p>
+                    <a href="/user/security/2fa/setup" class="btn btn-primary">
+                        {{t "user.security.2fa.enable"}}
+                    </a>
+                    {{end}}
+                </div>
+            </div>
+
+            {{if .TwoFactorEnabled}}
+            <div class="security-section">
+                <h2>{{t "user.security.recovery_keys"}}</h2>
+                <p class="section-description">
+                    Recovery keys can be used to access your account if you lose your 2FA device.
+                    You have <strong>{{.RecoveryKeysRemaining}}</strong> recovery keys remaining.
+                </p>
+                {{if le .RecoveryKeysRemaining 2}}
+                <div class="alert alert-warning">
+                    You have few recovery keys remaining. Consider regenerating them.
+                </div>
+                {{end}}
+                <a href="/user/security/recovery-keys" class="btn btn-secondary">
+                    View Recovery Keys
+                </a>
+            </div>
+            {{end}}
+
+            <div class="security-section">
+                <h2>{{t "user.security.sessions"}}</h2>
+                <p class="section-description">
+                    These are the devices currently logged into your account.
+                </p>
+
+                <div class="sessions-list">
+                    {{range .Sessions}}
+                    <div class="session-item {{if .IsCurrent}}session-current{{end}}">
+                        <div class="session-info">
+                            <div class="session-device">
+                                <span class="device-icon">&#x1F4BB;</span>
+                                <span class="device-name">{{.DeviceName}}</span>
+                                {{if .IsCurrent}}
+                                <span class="badge badge-primary">{{t "user.security.sessions.current"}}</span>
+                                {{end}}
+                            </div>
+                            <div class="session-meta">
+                                <span class="session-ip">{{.IPAddress}}</span>
+                                <span class="session-time">Last active: {{.LastUsed | formatTime}}</span>
+                            </div>
+                        </div>
+                        {{if not .IsCurrent}}
+                        <form method="POST" action="/user/security/sessions/revoke" class="session-action">
+                            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                            <input type="hidden" name="session_id" value="{{.ID}}">
+                            <button type="submit" class="btn btn-danger btn-sm">
+                                {{t "user.security.sessions.revoke"}}
+                            </button>
+                        </form>
+                        {{end}}
+                    </div>
+                    {{end}}
+                </div>
+
+                {{if gt (len .Sessions) 1}}
+                <form method="POST" action="/user/security/sessions/revoke-all" class="revoke-all-form">
+                    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                    <button type="submit" class="btn btn-danger">
+                        {{t "user.security.sessions.revoke_all"}}
+                    </button>
+                </form>
+                {{end}}
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.user-page {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+}
+
+.page-header h1 {
+    margin: 0 0 0.5rem 0;
+}
+
+.page-subtitle {
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.user-container {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 2rem;
+}
+
+.user-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.user-nav .nav-item {
+    padding: 0.75rem 1rem;
+    color: var(--text-primary);
+    text-decoration: none;
+    border-radius: 6px;
+    transition: background 0.2s;
+}
+
+.user-nav .nav-item:hover {
+    background: var(--bg-secondary);
+}
+
+.user-nav .nav-item.active {
+    background: var(--accent-color);
+    color: var(--bg-primary);
+}
+
+.user-content {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 2rem;
+}
+
+.security-section {
+    margin-bottom: 2rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.security-section:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.security-section h2 {
+    font-size: 1.1rem;
+    margin: 0 0 1rem 0;
+}
+
+.section-description {
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+}
+
+.security-form {
+    max-width: 400px;
+}
+
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.375rem;
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 1rem;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.15);
+}
+
+.password-strength {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--bg-tertiary);
+    margin-top: 0.5rem;
+    overflow: hidden;
+}
+
+.password-strength::after {
+    content: '';
+    display: block;
+    height: 100%;
+    width: var(--strength, 0%);
+    background: var(--strength-color, var(--danger-color));
+    transition: width 0.3s, background 0.3s;
+}
+
+.twofa-status {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.status-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-weight: 500;
+}
+
+.status-enabled {
+    background: rgba(var(--success-rgb), 0.15);
+    color: var(--success-color);
+}
+
+.status-disabled {
+    background: rgba(var(--warning-rgb), 0.15);
+    color: var(--warning-color);
+}
+
+.status-icon {
+    font-size: 1.2rem;
+}
+
+.status-text {
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.sessions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.session-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background: var(--bg-primary);
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+}
+
+.session-current {
+    border-color: var(--accent-color);
+}
+
+.session-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.session-device {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 500;
+}
+
+.device-icon {
+    font-size: 1.2rem;
+}
+
+.session-meta {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.revoke-all-form {
+    margin-top: 1rem;
+}
+
+.btn {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+    transition: opacity 0.2s;
+}
+
+.btn:hover {
+    opacity: 0.9;
+}
+
+.btn-primary {
+    background: var(--accent-color);
+    color: var(--bg-primary);
+}
+
+.btn-secondary {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.btn-danger {
+    background: var(--danger-color);
+    color: white;
+}
+
+.btn-sm {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+}
+
+.badge {
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.badge-primary {
+    background: rgba(var(--accent-rgb), 0.15);
+    color: var(--accent-color);
+}
+
+.alert {
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+}
+
+.alert-success {
+    background: rgba(var(--success-rgb), 0.1);
+    color: var(--success-color);
+}
+
+.alert-warning {
+    background: rgba(var(--warning-rgb), 0.1);
+    color: var(--warning-color);
+}
+
+.alert-error {
+    background: rgba(var(--danger-rgb), 0.1);
+    color: var(--danger-color);
+}
+
+@media (max-width: 768px) {
+    .user-container {
+        grid-template-columns: 1fr;
+    }
+
+    .user-nav {
+        flex-direction: row;
+        overflow-x: auto;
+    }
+
+    .session-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+}
+</style>
+
+<script>
+(function() {
+    document.addEventListener('DOMContentLoaded', function() {
+        // Password strength
+        const newPassword = document.getElementById('new_password');
+        const strength = document.getElementById('password-strength');
+
+        if (newPassword && strength) {
+            newPassword.addEventListener('input', function() {
+                const password = this.value;
+                let score = 0;
+                let color = 'var(--danger-color)';
+
+                if (password.length >= 8) score += 25;
+                if (password.length >= 12) score += 15;
+                if (/[a-z]/.test(password)) score += 15;
+                if (/[A-Z]/.test(password)) score += 15;
+                if (/[0-9]/.test(password)) score += 15;
+                if (/[^a-zA-Z0-9]/.test(password)) score += 15;
+
+                if (score >= 80) color = 'var(--success-color)';
+                else if (score >= 50) color = 'var(--warning-color)';
+
+                strength.style.setProperty('--strength', score + '%');
+                strength.style.setProperty('--strength-color', color);
+            });
+        }
+
+        // Confirm password match
+        const confirmPassword = document.getElementById('confirm_password');
+        if (newPassword && confirmPassword) {
+            confirmPassword.addEventListener('input', function() {
+                if (this.value !== newPassword.value) {
+                    this.setCustomValidity('Passwords do not match');
+                } else {
+                    this.setCustomValidity('');
+                }
+            });
+        }
+    });
+})();
+</script>
+{{end}}

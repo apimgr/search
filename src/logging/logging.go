@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/oklog/ulid/v2"
 )
 
 // LogType represents different log types
@@ -1041,46 +1044,95 @@ func (l *SecurityLogger) Close() error {
 
 // ============================================================
 // Audit Logger - Admin actions and configuration changes
+// Per TEMPLATE.md PART 25: ULID format IDs, Actor/Target, Categories, Severity
 // ============================================================
 
 // AuditAction represents an audit action type
 type AuditAction string
 
 const (
-	AuditActionLogin         AuditAction = "LOGIN"
-	AuditActionLogout        AuditAction = "LOGOUT"
-	AuditActionConfigChange  AuditAction = "CONFIG_CHANGE"
-	AuditActionEngineToggle  AuditAction = "ENGINE_TOGGLE"
-	AuditActionTokenCreate   AuditAction = "TOKEN_CREATE"
-	AuditActionTokenRevoke   AuditAction = "TOKEN_REVOKE"
-	AuditActionReload        AuditAction = "RELOAD"
-	AuditActionUserCreate    AuditAction = "USER_CREATE"
-	AuditActionUserDelete    AuditAction = "USER_DELETE"
+	AuditActionLogin           AuditAction = "LOGIN"
+	AuditActionLogout          AuditAction = "LOGOUT"
+	AuditActionConfigChange    AuditAction = "CONFIG_CHANGE"
+	AuditActionEngineToggle    AuditAction = "ENGINE_TOGGLE"
+	AuditActionTokenCreate     AuditAction = "TOKEN_CREATE"
+	AuditActionTokenRevoke     AuditAction = "TOKEN_REVOKE"
+	AuditActionReload          AuditAction = "RELOAD"
+	AuditActionUserCreate      AuditAction = "USER_CREATE"
+	AuditActionUserDelete      AuditAction = "USER_DELETE"
 	AuditActionPermissionChange AuditAction = "PERMISSION_CHANGE"
+	AuditActionBackupCreate    AuditAction = "BACKUP_CREATE"
+	AuditActionBackupRestore   AuditAction = "BACKUP_RESTORE"
+	AuditActionAdminInvite     AuditAction = "ADMIN_INVITE"
+	AuditAction2FAEnable       AuditAction = "2FA_ENABLE"
+	AuditAction2FADisable      AuditAction = "2FA_DISABLE"
 )
+
+// AuditCategory represents audit event categories per TEMPLATE.md PART 25
+type AuditCategory string
+
+const (
+	AuditCategoryAuth     AuditCategory = "auth"     // Authentication events
+	AuditCategoryAdmin    AuditCategory = "admin"    // Admin panel actions
+	AuditCategoryConfig   AuditCategory = "config"   // Configuration changes
+	AuditCategoryUser     AuditCategory = "user"     // User management
+	AuditCategorySecurity AuditCategory = "security" // Security-related events
+	AuditCategoryData     AuditCategory = "data"     // Data operations
+	AuditCategorySystem   AuditCategory = "system"   // System operations
+)
+
+// AuditSeverity represents audit event severity per TEMPLATE.md PART 25
+type AuditSeverity string
+
+const (
+	AuditSeverityInfo     AuditSeverity = "info"     // Informational events
+	AuditSeverityWarning  AuditSeverity = "warning"  // Warning events
+	AuditSeverityCritical AuditSeverity = "critical" // Critical security events
+)
+
+// AuditActor represents who performed the action per TEMPLATE.md PART 25
+type AuditActor struct {
+	ID       string `json:"id,omitempty"`       // Actor's user ID
+	Username string `json:"username,omitempty"` // Actor's username
+	IP       string `json:"ip"`                 // IP address
+	UserAgent string `json:"user_agent,omitempty"` // User agent
+}
+
+// AuditTarget represents what the action was performed on per TEMPLATE.md PART 25
+type AuditTarget struct {
+	Type string `json:"type"`           // Target type (user, config, engine, token, etc.)
+	ID   string `json:"id,omitempty"`   // Target ID
+	Name string `json:"name,omitempty"` // Target name
+}
 
 // AuditLogger logs administrative actions
 type AuditLogger struct {
-	mu   sync.Mutex
-	file *os.File
-	path string
+	mu     sync.Mutex
+	file   *os.File
+	path   string
+	entropy io.Reader
 }
 
-// AuditEntry represents an audit log entry
+// AuditEntry represents an audit log entry per TEMPLATE.md PART 25
+// Uses ULID format IDs: audit_01HQXYZ123ABC
 type AuditEntry struct {
-	Timestamp time.Time   `json:"timestamp"`
-	Action    AuditAction `json:"action"`
-	User      string      `json:"user"`
-	IP        string      `json:"ip"`
-	Resource  string      `json:"resource,omitempty"`
-	Details   string      `json:"details,omitempty"`
-	Success   bool        `json:"success"`
+	ID        string        `json:"id"`                   // ULID format: audit_01HQXYZ...
+	Timestamp time.Time     `json:"timestamp"`
+	Action    AuditAction   `json:"action"`
+	Category  AuditCategory `json:"category"`
+	Severity  AuditSeverity `json:"severity"`
+	Actor     AuditActor    `json:"actor"`
+	Target    *AuditTarget  `json:"target,omitempty"`
+	Details   string        `json:"details,omitempty"`
+	Success   bool          `json:"success"`
+	Metadata  map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // NewAuditLogger creates a new audit logger
 func NewAuditLogger(path string) *AuditLogger {
 	l := &AuditLogger{
-		path: path,
+		path:    path,
+		entropy: rand.Reader,
 	}
 	l.openFile()
 	return l
@@ -1102,10 +1154,25 @@ func (l *AuditLogger) openFile() error {
 	return nil
 }
 
+// generateAuditID generates a ULID-based audit ID per TEMPLATE.md PART 25
+// Format: audit_01HQXYZ123ABC
+func (l *AuditLogger) generateAuditID() string {
+	id := ulid.MustNew(ulid.Timestamp(time.Now()), l.entropy)
+	return "audit_" + id.String()
+}
+
 // Log logs an audit event
 func (l *AuditLogger) Log(entry AuditEntry) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
+	// Generate ULID if not set
+	if entry.ID == "" {
+		entry.ID = l.generateAuditID()
+	}
+	if entry.Timestamp.IsZero() {
+		entry.Timestamp = time.Now()
+	}
 
 	// JSON format for audit logs (easy to parse and analyze)
 	data, _ := json.Marshal(entry)
@@ -1119,42 +1186,50 @@ func (l *AuditLogger) Log(entry AuditEntry) {
 	if !entry.Success {
 		status = "FAILED"
 	}
-	fmt.Printf("[AUDIT] %s %s user=%s ip=%s resource=%s\n",
-		status, entry.Action, entry.User, entry.IP, entry.Resource)
+	targetInfo := ""
+	if entry.Target != nil {
+		targetInfo = fmt.Sprintf(" target=%s:%s", entry.Target.Type, entry.Target.Name)
+	}
+	fmt.Printf("[AUDIT] %s [%s] %s actor=%s ip=%s%s\n",
+		entry.ID, entry.Category, status, entry.Actor.Username, entry.Actor.IP, targetInfo)
 }
 
 // LogLogin logs a login attempt
 func (l *AuditLogger) LogLogin(user, ip string, success bool) {
+	severity := AuditSeverityInfo
+	if !success {
+		severity = AuditSeverityWarning
+	}
 	l.Log(AuditEntry{
-		Timestamp: time.Now(),
-		Action:    AuditActionLogin,
-		User:      user,
-		IP:        ip,
-		Success:   success,
+		Action:   AuditActionLogin,
+		Category: AuditCategoryAuth,
+		Severity: severity,
+		Actor:    AuditActor{Username: user, IP: ip},
+		Success:  success,
 	})
 }
 
 // LogLogout logs a logout
 func (l *AuditLogger) LogLogout(user, ip string) {
 	l.Log(AuditEntry{
-		Timestamp: time.Now(),
-		Action:    AuditActionLogout,
-		User:      user,
-		IP:        ip,
-		Success:   true,
+		Action:   AuditActionLogout,
+		Category: AuditCategoryAuth,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Username: user, IP: ip},
+		Success:  true,
 	})
 }
 
 // LogConfigChange logs a configuration change
 func (l *AuditLogger) LogConfigChange(user, ip, resource, details string) {
 	l.Log(AuditEntry{
-		Timestamp: time.Now(),
-		Action:    AuditActionConfigChange,
-		User:      user,
-		IP:        ip,
-		Resource:  resource,
-		Details:   details,
-		Success:   true,
+		Action:   AuditActionConfigChange,
+		Category: AuditCategoryConfig,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Username: user, IP: ip},
+		Target:   &AuditTarget{Type: "config", Name: resource},
+		Details:  details,
+		Success:  true,
 	})
 }
 
@@ -1165,49 +1240,128 @@ func (l *AuditLogger) LogEngineToggle(user, ip, engine string, enabled bool) {
 		action = "enabled"
 	}
 	l.Log(AuditEntry{
-		Timestamp: time.Now(),
-		Action:    AuditActionEngineToggle,
-		User:      user,
-		IP:        ip,
-		Resource:  engine,
-		Details:   action,
-		Success:   true,
+		Action:   AuditActionEngineToggle,
+		Category: AuditCategoryConfig,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Username: user, IP: ip},
+		Target:   &AuditTarget{Type: "engine", Name: engine},
+		Details:  action,
+		Success:  true,
 	})
 }
 
 // LogTokenCreate logs a token creation
 func (l *AuditLogger) LogTokenCreate(user, ip, tokenName string) {
 	l.Log(AuditEntry{
-		Timestamp: time.Now(),
-		Action:    AuditActionTokenCreate,
-		User:      user,
-		IP:        ip,
-		Resource:  tokenName,
-		Success:   true,
+		Action:   AuditActionTokenCreate,
+		Category: AuditCategorySecurity,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Username: user, IP: ip},
+		Target:   &AuditTarget{Type: "token", Name: tokenName},
+		Success:  true,
 	})
 }
 
 // LogTokenRevoke logs a token revocation
 func (l *AuditLogger) LogTokenRevoke(user, ip, tokenName string) {
 	l.Log(AuditEntry{
-		Timestamp: time.Now(),
-		Action:    AuditActionTokenRevoke,
-		User:      user,
-		IP:        ip,
-		Resource:  tokenName,
-		Success:   true,
+		Action:   AuditActionTokenRevoke,
+		Category: AuditCategorySecurity,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Username: user, IP: ip},
+		Target:   &AuditTarget{Type: "token", Name: tokenName},
+		Success:  true,
 	})
 }
 
 // LogReload logs a configuration reload
 func (l *AuditLogger) LogReload(user, ip string, success bool, details string) {
+	severity := AuditSeverityInfo
+	if !success {
+		severity = AuditSeverityWarning
+	}
 	l.Log(AuditEntry{
-		Timestamp: time.Now(),
-		Action:    AuditActionReload,
-		User:      user,
-		IP:        ip,
-		Details:   details,
-		Success:   success,
+		Action:   AuditActionReload,
+		Category: AuditCategorySystem,
+		Severity: severity,
+		Actor:    AuditActor{Username: user, IP: ip},
+		Details:  details,
+		Success:  success,
+	})
+}
+
+// LogUserCreate logs a user creation
+func (l *AuditLogger) LogUserCreate(actor, ip, targetUser string) {
+	l.Log(AuditEntry{
+		Action:   AuditActionUserCreate,
+		Category: AuditCategoryUser,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Username: actor, IP: ip},
+		Target:   &AuditTarget{Type: "user", Name: targetUser},
+		Success:  true,
+	})
+}
+
+// LogUserDelete logs a user deletion
+func (l *AuditLogger) LogUserDelete(actor, ip, targetUser string) {
+	l.Log(AuditEntry{
+		Action:   AuditActionUserDelete,
+		Category: AuditCategoryUser,
+		Severity: AuditSeverityCritical,
+		Actor:    AuditActor{Username: actor, IP: ip},
+		Target:   &AuditTarget{Type: "user", Name: targetUser},
+		Success:  true,
+	})
+}
+
+// LogBackupCreate logs a backup creation
+func (l *AuditLogger) LogBackupCreate(user, ip, filename string) {
+	l.Log(AuditEntry{
+		Action:   AuditActionBackupCreate,
+		Category: AuditCategoryData,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Username: user, IP: ip},
+		Target:   &AuditTarget{Type: "backup", Name: filename},
+		Success:  true,
+	})
+}
+
+// LogBackupRestore logs a backup restoration
+func (l *AuditLogger) LogBackupRestore(user, ip, filename string, success bool) {
+	severity := AuditSeverityInfo
+	if !success {
+		severity = AuditSeverityCritical
+	}
+	l.Log(AuditEntry{
+		Action:   AuditActionBackupRestore,
+		Category: AuditCategoryData,
+		Severity: severity,
+		Actor:    AuditActor{Username: user, IP: ip},
+		Target:   &AuditTarget{Type: "backup", Name: filename},
+		Success:  success,
+	})
+}
+
+// Log2FAEnable logs 2FA enablement
+func (l *AuditLogger) Log2FAEnable(user, ip string) {
+	l.Log(AuditEntry{
+		Action:   AuditAction2FAEnable,
+		Category: AuditCategorySecurity,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Username: user, IP: ip},
+		Success:  true,
+	})
+}
+
+// Log2FADisable logs 2FA disablement
+func (l *AuditLogger) Log2FADisable(actor, ip, targetUser string) {
+	l.Log(AuditEntry{
+		Action:   AuditAction2FADisable,
+		Category: AuditCategorySecurity,
+		Severity: AuditSeverityCritical,
+		Actor:    AuditActor{Username: actor, IP: ip},
+		Target:   &AuditTarget{Type: "user", Name: targetUser},
+		Success:  true,
 	})
 }
 

@@ -58,3 +58,100 @@ testdata/temp/
 # Documentation build artifacts
 docs/_build/
 docs/.doctrees/
+
+# Disable reminder in prompt
+ignoredirmessage
+
+# ignore .build_failed files
+**/.build_failed*
+
+# OS generated files
+### Linux ###
+
+# temporary files which can be created if a process still has a handle open of a deleted file
+.fuse_hidden*
+
+# KDE directory preferences
+.directory
+
+# Linux trash folder which might appear on any partition or disk
+.Trash-*
+
+# .nfs files are created when an open file is removed but is still being accessed
+.nfs*
+
+### macOS ###
+# General
+.AppleDouble
+.LSOverride
+
+# Thumbnails
+
+# Files that might appear in the root of a volume
+.DocumentRevisions-V100
+.fseventsd
+.TemporaryItems
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Directories potentially created on remote AFP share
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+### macOS Patch ###
+# iCloud generated files
+*.icloud
+
+### Windows ###
+# Windows thumbnail cache files
+Thumbs.db:encryptable
+ehthumbs_vista.db
+
+# Dump file
+*.stackdump
+
+# Folder config file
+[Dd]esktop.ini
+
+# Recycle Bin used on file shares
+$RECYCLE.BIN/
+
+# Windows Installer files
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+
+# misc
+!*/README*
+!inc/main.bash
+
+# Windows shortcuts
+*.lnk
+
+# ignore commit message
+**/.gitcommit
+
+# ignore .build_failed files
+**/.build_failed*
+
+# ignore .bak files
+**/*.bak
+
+# ignore .no_push files
+**/.no_push
+
+# ignore .no_git files
+**/.no_git
+
+# ignore .installed files
+**/.installed
+
+# ignore work in progress files
+**/*.rewrite.sh
+**/*.refactor.sh
+

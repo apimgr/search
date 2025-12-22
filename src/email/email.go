@@ -137,7 +137,7 @@ func (ml *Mailer) Send(msg *Message) error {
 
 // sendMail sends the raw email
 func (ml *Mailer) sendMail(recipients []string, message []byte) error {
-	addr := fmt.Sprintf("%s:%d", ml.config.SMTPHost, ml.config.SMTPPort)
+	addr := net.JoinHostPort(ml.config.SMTPHost, fmt.Sprintf("%d", ml.config.SMTPPort))
 
 	var conn net.Conn
 	var err error
@@ -284,7 +284,7 @@ func (ml *Mailer) TestConnection() error {
 		return fmt.Errorf("email is not enabled")
 	}
 
-	addr := fmt.Sprintf("%s:%d", ml.config.SMTPHost, ml.config.SMTPPort)
+	addr := net.JoinHostPort(ml.config.SMTPHost, fmt.Sprintf("%d", ml.config.SMTPPort))
 
 	var conn net.Conn
 	var err error
@@ -330,4 +330,124 @@ func (ml *Mailer) TestConnection() error {
 	}
 
 	return client.Quit()
+}
+
+// DetectedSMTP represents a detected SMTP server
+type DetectedSMTP struct {
+	Host        string
+	Port        int
+	TLS         bool
+	STARTTLS    bool
+	AuthRequired bool
+}
+
+// DetectSMTP auto-detects SMTP servers on the local system
+// Per TEMPLATE.md PART 16: SMTP auto-detection on first run
+// Tries common SMTP ports and hostnames to find available servers
+func DetectSMTP() *DetectedSMTP {
+	// Common SMTP hosts to check
+	hosts := []string{
+		"localhost",
+		"127.0.0.1",
+		"mail",
+		"smtp",
+		"mailserver",
+	}
+
+	// Common SMTP ports and their configurations
+	// Port, TLS, STARTTLS
+	ports := []struct {
+		port     int
+		tls      bool
+		starttls bool
+	}{
+		{587, false, true},  // Submission with STARTTLS (preferred)
+		{465, true, false},  // SMTPS (TLS)
+		{25, false, true},   // Standard SMTP with STARTTLS
+		{2525, false, true}, // Alternative submission port
+	}
+
+	for _, host := range hosts {
+		for _, p := range ports {
+			if detected := tryDetectSMTP(host, p.port, p.tls); detected != nil {
+				detected.STARTTLS = p.starttls
+				return detected
+			}
+		}
+	}
+
+	return nil
+}
+
+// tryDetectSMTP attempts to connect to an SMTP server
+func tryDetectSMTP(host string, port int, useTLS bool) *DetectedSMTP {
+	addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
+
+	var conn net.Conn
+	var err error
+
+	if useTLS {
+		tlsConfig := &tls.Config{
+			ServerName:         host,
+			InsecureSkipVerify: true,
+		}
+		conn, err = tls.DialWithDialer(&net.Dialer{Timeout: 2 * time.Second}, "tcp", addr, tlsConfig)
+	} else {
+		conn, err = net.DialTimeout("tcp", addr, 2*time.Second)
+	}
+
+	if err != nil {
+		return nil
+	}
+	defer conn.Close()
+
+	client, err := smtp.NewClient(conn, host)
+	if err != nil {
+		return nil
+	}
+	defer client.Close()
+
+	// Check if STARTTLS is supported
+	hasSTARTTLS := false
+	if !useTLS {
+		hasSTARTTLS, _ = client.Extension("STARTTLS")
+	}
+
+	// Check if AUTH is required
+	hasAuth, _ := client.Extension("AUTH")
+
+	client.Quit()
+
+	return &DetectedSMTP{
+		Host:         host,
+		Port:         port,
+		TLS:          useTLS,
+		STARTTLS:     hasSTARTTLS,
+		AuthRequired: hasAuth,
+	}
+}
+
+// DetectAndConfigure detects SMTP and returns a configured Config
+// Per TEMPLATE.md PART 16: SMTP auto-detection on first run
+func DetectAndConfigure() *Config {
+	detected := DetectSMTP()
+	if detected == nil {
+		return DefaultConfig()
+	}
+
+	return &Config{
+		Enabled:     true,
+		SMTPHost:    detected.Host,
+		SMTPPort:    detected.Port,
+		UseTLS:      detected.TLS,
+		UseSTARTTLS: detected.STARTTLS,
+		FromAddress: "noreply@localhost",
+		FromName:    "Scour Search",
+		AdminEmails: []string{},
+	}
+}
+
+// IsLocalSMTPAvailable checks if a local SMTP server is available
+func IsLocalSMTPAvailable() bool {
+	return DetectSMTP() != nil
 }

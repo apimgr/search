@@ -363,13 +363,15 @@ func (l *Lookup) IsBlocked(ipStr string, blockedCountries []string) bool {
 
 // IsAllowed checks if an IP is from an allowed country
 func (l *Lookup) IsAllowed(ipStr string, allowedCountries []string) bool {
+	// No restrictions when allowedCountries is empty
 	if len(allowedCountries) == 0 {
-		return true // No restrictions
+		return true
 	}
 
 	result := l.Lookup(ipStr)
+	// Allow if country unknown
 	if !result.Found {
-		return true // Allow if country unknown
+		return true
 	}
 
 	for _, allowed := range allowedCountries {

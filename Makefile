@@ -8,7 +8,7 @@ VERSION ?= $(shell cat release.txt 2>/dev/null || echo "0.1.0")
 # Format: "Thu Dec 17, 2025 at 18:19:24 EST"
 BUILD_DATE := $(shell date +"%a %b %d, %Y at %H:%M:%S %Z")
 COMMIT_ID := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-VCS_REF := $(COMMIT_ID)
+# COMMIT_ID used directly - no VCS_REF alias
 
 # Linker flags to embed build info
 LDFLAGS := -s -w \
@@ -108,37 +108,25 @@ release: build
 # =============================================================================
 # DOCKER - Build and push container to ghcr.io
 # =============================================================================
+# Uses multi-stage Dockerfile - Go compilation happens inside Docker
+# No pre-built binaries needed
 docker:
 	@echo "Building Docker image $(VERSION)..."
-	@mkdir -p $(GOCACHE) $(GOMODCACHE) $(BINDIR)
 
 	# Ensure buildx is available
 	@docker buildx version > /dev/null 2>&1 || (echo "docker buildx required" && exit 1)
-
-	# Download modules first (cached)
-	@echo "Downloading Go modules..."
-	@$(GO_DOCKER) go mod download
-
-	# Build Linux binaries for container (amd64 and arm64) to ./binaries/
-	@echo "Building Linux binaries for container..."
-	@$(GO_DOCKER) sh -c "GOOS=linux GOARCH=amd64 \
-		go build -ldflags \"$(LDFLAGS)\" \
-		-o $(BINDIR)/$(PROJECT)-linux-amd64 ./src"
-	@$(GO_DOCKER) sh -c "GOOS=linux GOARCH=arm64 \
-		go build -ldflags \"$(LDFLAGS)\" \
-		-o $(BINDIR)/$(PROJECT)-linux-arm64 ./src"
 
 	# Create/use builder
 	@docker buildx create --name $(PROJECT)-builder --use 2>/dev/null || \
 		docker buildx use $(PROJECT)-builder
 
-	# Build and push multi-arch (context is project root, Dockerfile in ./docker/)
+	# Build and push multi-arch (multi-stage Dockerfile handles Go compilation)
 	@docker buildx build \
 		-f ./docker/Dockerfile \
 		--platform linux/amd64,linux/arm64 \
 		--build-arg VERSION="$(VERSION)" \
 		--build-arg BUILD_DATE="$(BUILD_DATE)" \
-		--build-arg VCS_REF="$(VCS_REF)" \
+		--build-arg COMMIT_ID="$(COMMIT_ID)" \
 		-t $(REGISTRY):$(VERSION) \
 		-t $(REGISTRY):latest \
 		--push \

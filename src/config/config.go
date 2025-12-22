@@ -2,11 +2,13 @@ package config
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -130,6 +132,9 @@ type ServerConfig struct {
 
 	// Security
 	Security SecurityConfig `yaml:"security"`
+
+	// External Auth (OIDC/LDAP) per TEMPLATE.md PART 31
+	Auth AuthConfig `yaml:"auth"`
 
 	// Users
 	Users UsersConfig `yaml:"users"`
@@ -332,15 +337,58 @@ type SecurityConfig struct {
 	TrustedProxies []string `yaml:"trusted_proxies"`
 }
 
+// AuthConfig represents external authentication configuration per TEMPLATE.md PART 31
+type AuthConfig struct {
+	OIDC []OIDCProviderConfig `yaml:"oidc"`
+	LDAP []LDAPConfig         `yaml:"ldap"`
+}
+
+// OIDCProviderConfig represents an OIDC provider configuration
+type OIDCProviderConfig struct {
+	ID           string   `yaml:"id"`
+	Name         string   `yaml:"name"`
+	Enabled      bool     `yaml:"enabled"`
+	Issuer       string   `yaml:"issuer"`
+	ClientID     string   `yaml:"client_id"`
+	ClientSecret string   `yaml:"client_secret"`
+	RedirectURL  string   `yaml:"redirect_url"`
+	Scopes       []string `yaml:"scopes"`
+	// Admin group mapping per TEMPLATE.md PART 31
+	AdminGroups []string `yaml:"admin_groups"`
+	GroupsClaim string   `yaml:"groups_claim"`
+	AutoCreate  bool     `yaml:"auto_create"`
+}
+
+// LDAPConfig represents LDAP authentication configuration
+type LDAPConfig struct {
+	ID             string   `yaml:"id"`
+	Name           string   `yaml:"name"`
+	Enabled        bool     `yaml:"enabled"`
+	Host           string   `yaml:"host"`
+	Port           int      `yaml:"port"`
+	UseTLS         bool     `yaml:"use_tls"`
+	SkipTLSVerify  bool     `yaml:"skip_tls_verify"`
+	BindDN         string   `yaml:"bind_dn"`
+	BindPassword   string   `yaml:"bind_password"`
+	BaseDN         string   `yaml:"base_dn"`
+	UserFilter     string   `yaml:"user_filter"`
+	UsernameAttr   string   `yaml:"username_attr"`
+	EmailAttr      string   `yaml:"email_attr"`
+	// Admin group mapping per TEMPLATE.md PART 31
+	AdminGroups     []string `yaml:"admin_groups"`
+	GroupFilter     string   `yaml:"group_filter"`
+	GroupMemberAttr string   `yaml:"group_member_attr"`
+}
+
 // UsersConfig represents user management configuration
 type UsersConfig struct {
 	Enabled bool `yaml:"enabled"`
 	Registration struct {
-		Enabled                bool     `yaml:"enabled"`
-		RequireEmailVerification bool    `yaml:"require_email_verification"`
-		RequireApproval        bool     `yaml:"require_approval"`
-		AllowedDomains         []string `yaml:"allowed_domains"`
-		BlockedDomains         []string `yaml:"blocked_domains"`
+		Enabled                  bool     `yaml:"enabled"`
+		RequireEmailVerification bool     `yaml:"require_email_verification"`
+		RequireApproval          bool     `yaml:"require_approval"`
+		AllowedDomains           []string `yaml:"allowed_domains"`
+		BlockedDomains           []string `yaml:"blocked_domains"`
 	} `yaml:"registration"`
 	Roles struct {
 		Available []string `yaml:"available"`
@@ -357,18 +405,64 @@ type UsersConfig struct {
 		AllowBio         bool `yaml:"allow_bio"`
 	} `yaml:"profile"`
 	Auth struct {
-		SessionDuration         string `yaml:"session_duration"`
-		Require2FA              bool   `yaml:"require_2fa"`
-		Allow2FA                bool   `yaml:"allow_2fa"`
-		PasswordMinLength       int    `yaml:"password_min_length"`
+		SessionDuration          string `yaml:"session_duration"`
+		SessionDurationDays      int    `yaml:"session_duration_days"` // Parsed from SessionDuration
+		Require2FA               bool   `yaml:"require_2fa"`
+		Allow2FA                 bool   `yaml:"allow_2fa"`
+		PasswordMinLength        int    `yaml:"password_min_length"`
 		PasswordRequireUppercase bool   `yaml:"password_require_uppercase"`
-		PasswordRequireNumber   bool   `yaml:"password_require_number"`
-		PasswordRequireSpecial  bool   `yaml:"password_require_special"`
+		PasswordRequireNumber    bool   `yaml:"password_require_number"`
+		PasswordRequireSpecial   bool   `yaml:"password_require_special"`
 	} `yaml:"auth"`
 	Limits struct {
 		RequestsPerMinute int `yaml:"requests_per_minute"`
 		RequestsPerDay    int `yaml:"requests_per_day"`
 	} `yaml:"limits"`
+	SSO struct {
+		Enabled bool `yaml:"enabled"`
+		OIDC    map[string]struct {
+			Name         string `yaml:"name"`
+			ClientID     string `yaml:"client_id"`
+			ClientSecret string `yaml:"client_secret"`
+			Issuer       string `yaml:"issuer"`
+			IconURL      string `yaml:"icon_url"`
+		} `yaml:"oidc"`
+		LDAP struct {
+			Enabled  bool   `yaml:"enabled"`
+			Server   string `yaml:"server"`
+			Port     int    `yaml:"port"`
+			BaseDN   string `yaml:"base_dn"`
+			BindDN   string `yaml:"bind_dn"`
+			BindPass string `yaml:"bind_pass"`
+		} `yaml:"ldap"`
+	} `yaml:"sso"`
+}
+
+// GetSessionDurationDays returns the session duration in days, parsing from string if needed
+func (u *UsersConfig) GetSessionDurationDays() int {
+	// If explicitly set, use it
+	if u.Auth.SessionDurationDays > 0 {
+		return u.Auth.SessionDurationDays
+	}
+
+	// Parse from SessionDuration string (e.g., "30d", "7d")
+	dur := u.Auth.SessionDuration
+	if dur == "" {
+		return 30 // default 30 days
+	}
+
+	var days int
+	if n, _ := fmt.Sscanf(dur, "%dd", &days); n == 1 && days > 0 {
+		return days
+	}
+
+	// Try parsing as hours (e.g., "720h")
+	var hours int
+	if n, _ := fmt.Sscanf(dur, "%dh", &hours); n == 1 && hours > 0 {
+		return hours / 24
+	}
+
+	return 30 // default
 }
 
 // PagesConfig represents standard pages configuration
@@ -899,16 +993,18 @@ func DefaultConfig() *Config {
 					AllowBio:         true,
 				},
 				Auth: struct {
-					SessionDuration         string `yaml:"session_duration"`
-					Require2FA              bool   `yaml:"require_2fa"`
+					SessionDuration          string `yaml:"session_duration"`
+					SessionDurationDays      int    `yaml:"session_duration_days"`
+					Require2FA               bool   `yaml:"require_2fa"`
 					Allow2FA                bool   `yaml:"allow_2fa"`
 					PasswordMinLength       int    `yaml:"password_min_length"`
 					PasswordRequireUppercase bool   `yaml:"password_require_uppercase"`
 					PasswordRequireNumber   bool   `yaml:"password_require_number"`
 					PasswordRequireSpecial  bool   `yaml:"password_require_special"`
 				}{
-					SessionDuration:   "30d",
-					Require2FA:        false,
+					SessionDuration:     "30d",
+					SessionDurationDays: 30,
+					Require2FA:          false,
 					Allow2FA:          true,
 					PasswordMinLength: 8,
 				},
@@ -1207,7 +1303,19 @@ func (c *Config) Save(path string) error {
 }
 
 // LoadOrCreate loads configuration from file or creates default if not exists
+// Per TEMPLATE.md: If server.yaml found, auto-migrate to server.yml on startup
 func LoadOrCreate(path string) (*Config, bool, error) {
+	// Check for .yaml → .yml migration per TEMPLATE.md PART 3
+	if strings.HasSuffix(path, ".yml") {
+		yamlPath := strings.TrimSuffix(path, ".yml") + ".yaml"
+		if _, err := os.Stat(yamlPath); err == nil {
+			// .yaml file exists, migrate to .yml
+			if err := migrateYamlToYml(yamlPath, path); err != nil {
+				return nil, false, fmt.Errorf("failed to migrate %s to %s: %w", yamlPath, path, err)
+			}
+		}
+	}
+
 	// Try to load existing config
 	cfg, err := Load(path)
 	if err == nil {
@@ -1225,6 +1333,30 @@ func LoadOrCreate(path string) (*Config, bool, error) {
 	}
 
 	return nil, false, err
+}
+
+// migrateYamlToYml migrates a .yaml config file to .yml format
+// Per TEMPLATE.md PART 3: Auto-migrate .yaml to .yml on startup
+func migrateYamlToYml(yamlPath, ymlPath string) error {
+	// Read the .yaml file
+	data, err := os.ReadFile(yamlPath)
+	if err != nil {
+		return fmt.Errorf("failed to read yaml file: %w", err)
+	}
+
+	// Write to .yml file
+	if err := os.WriteFile(ymlPath, data, 0600); err != nil {
+		return fmt.Errorf("failed to write yml file: %w", err)
+	}
+
+	// Rename old file to .yaml.bak (don't delete in case of issues)
+	backupPath := yamlPath + ".bak"
+	if err := os.Rename(yamlPath, backupPath); err != nil {
+		// Non-fatal: file was copied successfully
+		_ = err
+	}
+
+	return nil
 }
 
 // ApplyEnv applies environment variable overrides to config
@@ -1359,6 +1491,7 @@ func GetConfigPath() string {
 }
 
 // Initialize initializes the configuration system
+// Per TEMPLATE.md PART 3: Environment variables only work on first run
 func Initialize() (*Config, error) {
 	// Ensure directories exist
 	if err := EnsureDirectories(); err != nil {
@@ -1371,23 +1504,32 @@ func Initialize() (*Config, error) {
 	// Get config path
 	configPath := GetConfigPath()
 
-	// Load or create config
+	// Load or create config (handles .yaml to .yml migration internally)
 	cfg, created, err := LoadOrCreate(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Apply environment overrides
-	cfg.ApplyEnv(env)
-
-	// If config was created, show credentials
+	// Per TEMPLATE.md PART 3: Environment overrides only apply on first run
+	// After config exists, environment variables are ignored
 	if created {
+		// Apply environment overrides only on first run
+		cfg.ApplyEnv(env)
+
+		// Save config with env overrides applied
+		if err := cfg.Save(configPath); err != nil {
+			fmt.Printf("⚠️  Warning: Could not save config with env overrides: %v\n", err)
+		}
+
 		fmt.Println("✅ Configuration created:", configPath)
 		fmt.Println()
 		fmt.Println("🔐 Admin Credentials (save these now - shown only once):")
 		fmt.Println("   Username:", cfg.Server.Admin.Username)
 		fmt.Println("   Password:", cfg.Server.Admin.Password)
 		fmt.Println("   Token:   ", cfg.Server.Admin.Token)
+		fmt.Println()
+		fmt.Println("ℹ️  Environment variables have been applied to the config file.")
+		fmt.Println("   Future runs will use config file values only.")
 		fmt.Println()
 	}
 
@@ -1426,4 +1568,20 @@ func (c *Config) Update(fn func(*ServerConfig)) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	fn(&c.Server)
+}
+
+// GetEncryptionKey returns a 32-byte encryption key derived from the SecretKey
+// Uses SHA256 to ensure consistent 32-byte length for AES-256
+func (c *Config) GetEncryptionKey() []byte {
+	c.mu.RLock()
+	secret := c.Server.SecretKey
+	c.mu.RUnlock()
+
+	if secret == "" {
+		return nil
+	}
+
+	// Use SHA256 to derive a consistent 32-byte key
+	h := sha256.Sum256([]byte(secret))
+	return h[:]
 }

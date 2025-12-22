@@ -1,0 +1,188 @@
+{{define "content"}}
+<div class="auth-page forgot-page">
+    <div class="auth-container">
+        <div class="auth-header">
+            <h1>{{t "auth.forgot.title"}}</h1>
+            <p class="auth-subtitle">Enter your email to receive a password reset link</p>
+        </div>
+
+        {{if .Error}}
+        <div class="alert alert-error" role="alert">
+            {{.Error}}
+        </div>
+        {{end}}
+
+        {{if .Success}}
+        <div class="alert alert-success" role="alert">
+            {{t "auth.forgot.sent"}}
+        </div>
+        <div class="auth-footer">
+            <a href="/auth/login" class="btn btn-secondary btn-block">{{t "auth.forgot.back"}}</a>
+        </div>
+        {{else}}
+        <form method="POST" action="/auth/forgot" class="auth-form" id="forgot-form">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+            <div class="form-group">
+                <label for="email">{{t "auth.forgot.email"}}</label>
+                <input type="email" id="email" name="email" value="{{.Email}}"
+                       autocomplete="email" required autofocus
+                       placeholder="you@example.com">
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block">
+                {{t "auth.forgot.submit"}}
+            </button>
+        </form>
+
+        <div class="auth-footer">
+            <a href="/auth/login">{{t "auth.forgot.back"}}</a>
+        </div>
+        {{end}}
+    </div>
+</div>
+
+<style>
+.auth-page {
+    min-height: calc(100vh - 200px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+}
+
+.auth-container {
+    width: 100%;
+    max-width: 400px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 2rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.auth-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.auth-header h1 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.75rem;
+}
+
+.auth-subtitle {
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+}
+
+.form-group label {
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.form-group input[type="email"] {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 1rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.15);
+}
+
+.btn {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    text-decoration: none;
+    text-align: center;
+}
+
+.btn:hover {
+    opacity: 0.9;
+}
+
+.btn:active {
+    transform: scale(0.98);
+}
+
+.btn-primary {
+    background: var(--accent-color);
+    color: var(--bg-primary);
+}
+
+.btn-secondary {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.btn-block {
+    width: 100%;
+    display: block;
+}
+
+.alert {
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+}
+
+.alert-error {
+    background: rgba(var(--danger-rgb), 0.1);
+    color: var(--danger-color);
+    border: 1px solid rgba(var(--danger-rgb), 0.2);
+}
+
+.alert-success {
+    background: rgba(var(--success-rgb), 0.1);
+    color: var(--success-color);
+    border: 1px solid rgba(var(--success-rgb), 0.2);
+}
+
+.auth-footer {
+    margin-top: 1.5rem;
+    text-align: center;
+    font-size: 0.9rem;
+}
+
+.auth-footer a {
+    color: var(--accent-color);
+    text-decoration: none;
+}
+
+.auth-footer a:hover {
+    text-decoration: underline;
+}
+
+@media (max-width: 480px) {
+    .auth-container {
+        padding: 1.5rem;
+    }
+}
+</style>
+{{end}}

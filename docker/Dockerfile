@@ -6,7 +6,7 @@ FROM golang:alpine AS builder
 ARG TARGETARCH
 ARG VERSION=dev
 ARG BUILD_DATE
-ARG VCS_REF
+ARG COMMIT_ID
 
 WORKDIR /build
 
@@ -17,7 +17,7 @@ RUN go mod download
 # Copy source and build
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
-    -ldflags "-s -w -X 'github.com/apimgr/search/src/config.Version=${VERSION}' -X 'github.com/apimgr/search/src/config.GitCommit=${VCS_REF}' -X 'github.com/apimgr/search/src/config.BuildTime=${BUILD_DATE}'" \
+    -ldflags "-s -w -X 'github.com/apimgr/search/src/config.Version=${VERSION}' -X 'github.com/apimgr/search/src/config.GitCommit=${COMMIT_ID}' -X 'github.com/apimgr/search/src/config.BuildTime=${BUILD_DATE}'" \
     -o /app ./src
 
 # =============================================================================
@@ -28,7 +28,7 @@ FROM alpine:latest
 # ARGs for build-time values (set by docker build --build-arg)
 ARG VERSION=dev
 ARG BUILD_DATE
-ARG VCS_REF
+ARG COMMIT_ID
 ARG LICENSE=MIT
 
 # Static Labels
@@ -49,7 +49,7 @@ LABEL org.opencontainers.image.licenses="${LICENSE}" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.schema-version="${VERSION}" \
-      org.opencontainers.image.revision="${VCS_REF}"
+      org.opencontainers.image.revision="${COMMIT_ID}"
 
 # Install required packages including Tor
 RUN apk add --no-cache \
