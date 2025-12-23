@@ -12,7 +12,7 @@ services:
       - ENABLE_TOR=true
     ports:
       # Production: bound to Docker bridge only
-      - "172.17.0.1:64080:80"
+      - "172.17.0.1:64580:80"
     volumes:
       - ./rootfs/config/search:/config
       - ./rootfs/data/search:/data

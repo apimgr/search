@@ -6,7 +6,7 @@ on:
       - beta
 
 env:
-  PROJECT: search
+  PROJECTNAME: search
 
 jobs:
   build:
@@ -33,20 +33,37 @@ jobs:
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
 
-      - name: Build
+      - name: Build server
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
           LDFLAGS="-s -w -X 'github.com/apimgr/search/src/config.Version=${{ env.VERSION }}' -X 'github.com/apimgr/search/src/config.GitCommit=${{ env.COMMIT_ID }}' -X 'github.com/apimgr/search/src/config.BuildTime=${{ env.BUILD_DATE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECT }}-${{ matrix.goos }}-${{ matrix.goarch }} ./src
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }} ./src
 
-      - name: Upload artifact
+      - name: Build CLI
+        if: hashFiles('src/client/') != ''
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          LDFLAGS="-s -w -X 'github.com/apimgr/search/src/client/cmd.ProjectName=${{ env.PROJECTNAME }}' -X 'github.com/apimgr/search/src/client/cmd.Version=${{ env.VERSION }}' -X 'github.com/apimgr/search/src/client/cmd.GitCommit=${{ env.COMMIT_ID }}' -X 'github.com/apimgr/search/src/client/cmd.BuildTime=${{ env.BUILD_DATE }}' -X 'github.com/apimgr/search/src/client/api.ProjectName=${{ env.PROJECTNAME }}' -X 'github.com/apimgr/search/src/client/api.Version=${{ env.VERSION }}'"
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }} ./src/client
+
+      - name: Upload server artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PROJECT }}-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ${{ env.PROJECT }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
+
+      - name: Upload CLI artifact
+        if: hashFiles('src/client/') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
 
   release:
     needs: build

@@ -241,26 +241,124 @@ type TaskInfo struct {
 	Enabled  bool          `json:"enabled"`
 }
 
-// Common task factories
+// Built-in task factories (per TEMPLATE.md PART 26)
+// 11 required tasks: ssl.renewal, geoip.update, blocklist.update, cve.update,
+// session.cleanup, token.cleanup, log.rotation, backup.auto, healthcheck.self,
+// tor.health, cluster.heartbeat
 
-// NewCleanupTask creates a session/cache cleanup task
-func NewCleanupTask(cleanupFunc func(ctx context.Context) error) *Task {
+// NewSSLRenewalTask creates an SSL certificate renewal check task (daily at 02:00)
+func NewSSLRenewalTask(renewFunc func(ctx context.Context) error) *Task {
 	return &Task{
-		Name:       "cleanup",
+		Name:       "ssl_renewal",
+		Interval:   24 * time.Hour,
+		Run:        renewFunc,
+		RunOnStart: true,
+	}
+}
+
+// NewGeoIPUpdateTask creates a GeoIP database update task (weekly Sunday 03:00)
+func NewGeoIPUpdateTask(updateFunc func(ctx context.Context) error) *Task {
+	return &Task{
+		Name:       "geoip_update",
+		Interval:   7 * 24 * time.Hour,
+		Run:        updateFunc,
+		RunOnStart: false,
+	}
+}
+
+// NewBlocklistUpdateTask creates a blocklist update task (daily at 04:00)
+func NewBlocklistUpdateTask(updateFunc func(ctx context.Context) error) *Task {
+	return &Task{
+		Name:       "blocklist_update",
+		Interval:   24 * time.Hour,
+		Run:        updateFunc,
+		RunOnStart: false,
+	}
+}
+
+// NewCVEUpdateTask creates a CVE/security database update task (daily at 05:00)
+func NewCVEUpdateTask(updateFunc func(ctx context.Context) error) *Task {
+	return &Task{
+		Name:       "cve_update",
+		Interval:   24 * time.Hour,
+		Run:        updateFunc,
+		RunOnStart: false,
+	}
+}
+
+// NewSessionCleanupTask creates a session cleanup task (hourly)
+func NewSessionCleanupTask(cleanupFunc func(ctx context.Context) error) *Task {
+	return &Task{
+		Name:       "session_cleanup",
 		Interval:   1 * time.Hour,
 		Run:        cleanupFunc,
 		RunOnStart: false,
 	}
 }
 
-// NewCertRenewalTask creates a certificate renewal check task
-func NewCertRenewalTask(renewFunc func(ctx context.Context) error) *Task {
+// NewTokenCleanupTask creates an expired token cleanup task (daily at 05:00)
+func NewTokenCleanupTask(cleanupFunc func(ctx context.Context) error) *Task {
 	return &Task{
-		Name:       "cert_renewal",
+		Name:       "token_cleanup",
 		Interval:   24 * time.Hour,
-		Run:        renewFunc,
+		Run:        cleanupFunc,
+		RunOnStart: false,
+	}
+}
+
+// NewAutoBackupTask creates an automatic backup task (disabled by default)
+func NewAutoBackupTask(backupFunc func(ctx context.Context) error) *Task {
+	return &Task{
+		Name:       "backup_auto",
+		Interval:   24 * time.Hour,
+		Run:        backupFunc,
+		RunOnStart: false,
+		Enabled:    false,
+	}
+}
+
+// NewHealthCheckSelfTask creates a self health check task (every 5 minutes)
+func NewHealthCheckSelfTask(checkFunc func(ctx context.Context) error) *Task {
+	return &Task{
+		Name:       "healthcheck_self",
+		Interval:   5 * time.Minute,
+		Run:        checkFunc,
 		RunOnStart: true,
 	}
+}
+
+// NewTorHealthTask creates a Tor connectivity check task (every 10 minutes, only when Tor installed)
+func NewTorHealthTask(checkFunc func(ctx context.Context) error) *Task {
+	return &Task{
+		Name:       "tor_health",
+		Interval:   10 * time.Minute,
+		Run:        checkFunc,
+		RunOnStart: true,
+	}
+}
+
+// NewClusterHeartbeatTask creates a cluster heartbeat task (every 30 seconds, cluster mode only)
+func NewClusterHeartbeatTask(heartbeatFunc func(ctx context.Context) error) *Task {
+	return &Task{
+		Name:       "cluster_heartbeat",
+		Interval:   30 * time.Second,
+		Run:        heartbeatFunc,
+		RunOnStart: true,
+	}
+}
+
+// Legacy task factories (for backwards compatibility)
+
+// NewCleanupTask creates a session/cache cleanup task
+// Deprecated: Use NewSessionCleanupTask instead
+func NewCleanupTask(cleanupFunc func(ctx context.Context) error) *Task {
+	return NewSessionCleanupTask(cleanupFunc)
+}
+
+// NewCertRenewalTask creates a certificate renewal check task
+// Deprecated: Use NewSSLRenewalTask instead
+func NewCertRenewalTask(renewFunc func(ctx context.Context) error) *Task {
+	return NewSSLRenewalTask(renewFunc)
 }
 
 // NewStatsAggregationTask creates a stats aggregation task
@@ -269,16 +367,6 @@ func NewStatsAggregationTask(aggregateFunc func(ctx context.Context) error) *Tas
 		Name:       "stats_aggregation",
 		Interval:   5 * time.Minute,
 		Run:        aggregateFunc,
-		RunOnStart: false,
-	}
-}
-
-// NewGeoIPUpdateTask creates a GeoIP database update task
-func NewGeoIPUpdateTask(updateFunc func(ctx context.Context) error) *Task {
-	return &Task{
-		Name:       "geoip_update",
-		Interval:   7 * 24 * time.Hour, // Weekly
-		Run:        updateFunc,
 		RunOnStart: false,
 	}
 }

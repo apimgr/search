@@ -16,6 +16,15 @@ LDFLAGS := -s -w \
 	-X 'github.com/$(ORG)/$(PROJECT)/src/config.GitCommit=$(COMMIT_ID)' \
 	-X 'github.com/$(ORG)/$(PROJECT)/src/config.BuildTime=$(BUILD_DATE)'
 
+# CLI linker flags
+CLI_LDFLAGS := -s -w \
+	-X 'github.com/$(ORG)/$(PROJECT)/src/client/cmd.ProjectName=$(PROJECT)' \
+	-X 'github.com/$(ORG)/$(PROJECT)/src/client/cmd.Version=$(VERSION)' \
+	-X 'github.com/$(ORG)/$(PROJECT)/src/client/cmd.GitCommit=$(COMMIT_ID)' \
+	-X 'github.com/$(ORG)/$(PROJECT)/src/client/cmd.BuildTime=$(BUILD_DATE)' \
+	-X 'github.com/$(ORG)/$(PROJECT)/src/client/api.ProjectName=$(PROJECT)' \
+	-X 'github.com/$(ORG)/$(PROJECT)/src/client/api.Version=$(VERSION)'
+
 # Directories
 BINDIR := ./binaries
 RELDIR := ./releases
@@ -56,7 +65,7 @@ build: clean
 	@$(GO_DOCKER) sh -c "GOOS=\$$(go env GOOS) GOARCH=\$$(go env GOARCH) \
 		go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(PROJECT) ./src"
 
-	# Build all platforms
+	# Build all platforms (server)
 	@for platform in $(PLATFORMS); do \
 		OS=$${platform%/*}; \
 		ARCH=$${platform#*/}; \
@@ -67,6 +76,23 @@ build: clean
 			go build -ldflags \"$(LDFLAGS)\" \
 			-o $$OUTPUT ./src" || exit 1; \
 	done
+
+	# Build CLI if src/client exists
+	@if [ -d "src/client" ]; then \
+		echo "Building CLI..."; \
+		$(GO_DOCKER) sh -c "GOOS=\$$(go env GOOS) GOARCH=\$$(go env GOARCH) \
+			go build -ldflags \"$(CLI_LDFLAGS)\" -o $(BINDIR)/$(PROJECT)-cli ./src/client"; \
+		for platform in $(PLATFORMS); do \
+			OS=$${platform%/*}; \
+			ARCH=$${platform#*/}; \
+			OUTPUT=$(BINDIR)/$(PROJECT)-cli-$$OS-$$ARCH; \
+			[ "$$OS" = "windows" ] && OUTPUT=$$OUTPUT.exe; \
+			echo "Building CLI $$OS/$$ARCH..."; \
+			$(GO_DOCKER) sh -c "GOOS=$$OS GOARCH=$$ARCH \
+				go build -ldflags \"$(CLI_LDFLAGS)\" \
+				-o $$OUTPUT ./src/client" || exit 1; \
+		done; \
+	fi
 
 	@echo "Build complete: $(BINDIR)/"
 
@@ -80,8 +106,16 @@ release: build
 	# Create version.txt
 	@echo "$(VERSION)" > $(RELDIR)/version.txt
 
-	# Copy binaries to releases (strip if needed)
+	# Copy server binaries to releases
 	@for f in $(BINDIR)/$(PROJECT)-*; do \
+		[ -f "$$f" ] || continue; \
+		echo "$$f" | grep -q "\-cli" && continue; \
+		strip "$$f" 2>/dev/null || true; \
+		cp "$$f" $(RELDIR)/; \
+	done
+
+	# Copy CLI binaries to releases (if they exist)
+	@for f in $(BINDIR)/$(PROJECT)-cli-*; do \
 		[ -f "$$f" ] || continue; \
 		strip "$$f" 2>/dev/null || true; \
 		cp "$$f" $(RELDIR)/; \

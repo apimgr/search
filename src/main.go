@@ -45,10 +45,12 @@ var (
 	flagUpdate      string
 	flagBuild       string
 
-	// Required flags per TEMPLATE.md (lines 4514-4518)
+	// Required flags per TEMPLATE.md PART 6 (lines 2972-2986)
 	flagMode    string
 	flagData    string
 	flagConfig  string
+	flagLog     string
+	flagPID     string
 	flagAddress string
 	flagPort    int
 )
@@ -70,10 +72,12 @@ func init() {
 	flag.StringVar(&flagUpdate, "update", "", "Update management: check|yes|branch")
 	flag.StringVar(&flagBuild, "build", "", "Build for platforms: all|linux|darwin|windows|freebsd")
 
-	// Configuration override flags (NON-NEGOTIABLE per TEMPLATE.md PART 17)
+	// Configuration override flags (NON-NEGOTIABLE per TEMPLATE.md PART 6)
 	flag.StringVar(&flagMode, "mode", "", "Set application mode (production|development)")
 	flag.StringVar(&flagData, "data", "", "Set data directory")
 	flag.StringVar(&flagConfig, "config", "", "Set config directory")
+	flag.StringVar(&flagLog, "log", "", "Set log directory")
+	flag.StringVar(&flagPID, "pid", "", "Set PID file path")
 	flag.StringVar(&flagAddress, "address", "", "Set listen address")
 	flag.IntVar(&flagPort, "port", 0, "Set listen port")
 }
@@ -155,6 +159,14 @@ func applyCliOverrides() {
 	if flagConfig != "" {
 		os.Setenv("SEARCH_CONFIG_DIR", flagConfig)
 		config.SetConfigDirOverride(flagConfig)
+	}
+	if flagLog != "" {
+		os.Setenv("SEARCH_LOG_DIR", flagLog)
+		config.SetLogDirOverride(flagLog)
+	}
+	if flagPID != "" {
+		os.Setenv("SEARCH_PID_FILE", flagPID)
+		config.SetPIDFileOverride(flagPID)
 	}
 	if flagAddress != "" {
 		os.Setenv("SEARCH_ADDRESS", flagAddress)

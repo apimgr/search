@@ -30,7 +30,7 @@
 | **CGO_ENABLED=0** | ALWAYS. No exceptions. Pure Go only. |
 | **Single static binary** | All assets embedded with Go `embed` package |
 | **8 platforms required** | linux, darwin, windows, freebsd × amd64, arm64 |
-| **Binary naming** | `search-{os}-{arch}` (windows adds `.exe`) |
+| **Binary naming** | `{project}-{os}-{arch}` (windows adds `.exe`) |
 | **NEVER use -musl suffix** | Alpine builds are NOT musl-specific |
 | **Build source** | ALWAYS `./src` directory |
 
@@ -72,8 +72,10 @@
 --help                       # Show help
 --version                    # Show version
 --mode {production|development}
+--config {configdir}
 --data {datadir}
---config {etcdir}
+--log {logdir}
+--pid {pidfile}
 --address {listen}
 --port {port}
 --status                     # Show status and health
@@ -88,12 +90,18 @@
 
 ```
 ./src/                      # Go source code (REQUIRED)
+./src/main.go               # Server application entry point
+./src/config/               # Configuration package
+./src/server/               # HTTP server package
+./src/client/               # CLI client (OPTIONAL - if project has CLI)
 ./docker/                   # Docker files (REQUIRED)
 ./docker/Dockerfile         # Multi-stage Dockerfile
 ./docker/rootfs/            # Container filesystem overlay
 ./binaries/                 # Build output (gitignored)
 ./releases/                 # Release artifacts (gitignored)
 ```
+
+**Note:** `./src/client/` is only present if the project includes a CLI client. See PART 33 for CLI details.
 
 ## Boolean Handling
 
@@ -117,6 +125,143 @@ Accept ALL of these (case-insensitive) → convert to `true`/`false`:
 | Modify ENTRYPOINT/CMD | Customize via entrypoint.sh |
 | Use CGO | CGO_ENABLED=0 always |
 
+## Project Directory Cleanliness (NON-NEGOTIABLE)
+
+**The project directory MUST be clean, minimal, and production-ready.**
+
+### NEVER Create These Files
+
+| Forbidden File | Reason |
+|----------------|--------|
+| `SUMMARY.md` | Unnecessary - AI.md is the spec |
+| `COMPLIANCE.md` | Unnecessary - compliance is in AI.md |
+| `NOTES.md` | Unnecessary - notes go in AI.md |
+| `CHANGELOG.md` | Use GitHub/Gitea releases instead |
+| `CONTRIBUTING.md` in root | Belongs in `.github/` |
+| `CODE_OF_CONDUCT.md` in root | Belongs in `.github/` |
+| `SECURITY.md` in root | Belongs in `.github/` |
+| `PULL_REQUEST_TEMPLATE.md` in root | Belongs in `.github/` |
+| `*.example.*` | No example files (defaults in binary) |
+| `*.sample.*` | No sample files |
+| `.env*` | No .env files |
+| `TODO.md` | Use `TODO.AI.md` for AI tasks only |
+
+### Allowed Root Files (Exhaustive List)
+
+| File | Required | Purpose |
+|------|:--------:|---------|
+| `AI.md` | ✓ | Project specification |
+| `TODO.AI.md` | Optional | AI task tracking (3+ tasks only) |
+| `README.md` | ✓ | Public documentation |
+| `LICENSE.md` | ✓ | License file |
+| `Makefile` | ✓ | Build targets |
+| `go.mod` | ✓ | Go module |
+| `go.sum` | ✓ | Go dependencies |
+| `release.txt` | ✓ | Version source of truth |
+| `.gitignore` | ✓ | Git ignore rules |
+| `.dockerignore` | ✓ | Docker ignore rules |
+| `.gitattributes` | Optional | Git attributes |
+| `Jenkinsfile` | Optional | Jenkins CI (if used) |
+
+### GitHub-Specific Files (`.github/` directory)
+
+| File | Location |
+|------|----------|
+| `CONTRIBUTING.md` | `.github/CONTRIBUTING.md` |
+| `CODE_OF_CONDUCT.md` | `.github/CODE_OF_CONDUCT.md` |
+| `SECURITY.md` | `.github/SECURITY.md` |
+| `FUNDING.yml` | `.github/FUNDING.yml` |
+| `ISSUE_TEMPLATE/` | `.github/ISSUE_TEMPLATE/` |
+| `PULL_REQUEST_TEMPLATE.md` | `.github/PULL_REQUEST_TEMPLATE.md` |
+| `workflows/*.yml` | `.github/workflows/` |
+
+### Gitea-Specific Files (`.gitea/` directory)
+
+| File | Location |
+|------|----------|
+| `ISSUE_TEMPLATE/` | `.gitea/ISSUE_TEMPLATE/` |
+| `PULL_REQUEST_TEMPLATE.md` | `.gitea/PULL_REQUEST_TEMPLATE.md` |
+| `workflows/*.yml` | `.gitea/workflows/` |
+
+**RULE: If a file doesn't appear in the allowed list, it probably shouldn't exist.**
+
+---
+
+# TERMINOLOGY
+
+**These terms have SPECIFIC meanings in this specification. Understand them before proceeding.**
+
+## Core Terms
+
+| Term | Definition |
+|------|------------|
+| **App / Application** | The server binary you are building (`search`) |
+| **App Instance** | A single running copy of the app (one process) |
+| **Server** | The machine (physical, VM, or container) running an app instance |
+
+## Clustering Terms
+
+| Term | Definition |
+|------|------------|
+| **Cluster** | Multiple app instances sharing config and state via shared database/cache |
+| **Cluster Node** | An app instance participating in a cluster (synonym: cluster member) |
+| **Config Sync** | Automatic propagation of settings changes across all cluster nodes |
+| **Primary Node** | The elected node that handles cluster-wide tasks (leader election) |
+| **Single Instance** | App running standalone without clustering (local SQLite, no shared state) |
+
+## Extended Functionality Terms
+
+| Term | Definition |
+|------|------------|
+| **Managed Node** | An EXTERNAL resource the app controls (NOT an app instance) |
+| **Extended Node Function** | What the app does with managed nodes beyond config sync |
+| **HA (High Availability)** | Automatic failover for critical apps - specialized, not standard |
+
+## Managed Nodes vs Cluster Nodes
+
+**CRITICAL DISTINCTION:**
+
+| Type | What It Is | Example |
+|------|------------|---------|
+| **Cluster Node** | Instance of YOUR app | 3 copies of `jokes` running, syncing config |
+| **Managed Node** | External thing your app CONTROLS | Docker hosts that Watchtower manages |
+
+**Most apps only have cluster nodes. Managed nodes are app-specific.**
+
+## Examples
+
+| App | Cluster Nodes | Managed Nodes | HA |
+|-----|:-------------:|:-------------:|:--:|
+| Jokes API | ✓ (app instances syncing) | ✗ | ✗ |
+| Watchtower-type | ✓ (app instances syncing) | ✓ (Docker hosts) | ✗ |
+| DNS Server | ✓ (app instances syncing) | ✗ | ✓ |
+| Monitoring App | ✓ (app instances syncing) | ✓ (monitored servers) | ✗ |
+
+## Account Types
+
+| Term | Definition |
+|------|------------|
+| **Server Admin** | Administrative account for managing the application (NOT a privileged user) |
+| **Primary Admin** | The first Server Admin created during setup wizard (cannot be deleted) |
+| **Additional Admin** | Server Admins added by Primary Admin or other admins |
+| **OIDC/LDAP Admin** | Server Admin access via external identity provider group mapping |
+| **Regular User** | End-user account that uses the application's features |
+
+**CRITICAL:** Server Admins and Regular Users are completely separate account types stored in different database tables. A Server Admin is NOT a "privileged user."
+
+## Other Terms
+
+| Term | Definition |
+|------|------------|
+| **CLI Client** | Optional companion binary (`search-cli`) for terminal access |
+| **TUI** | Terminal User Interface - interactive terminal app with menus/panels |
+| **Admin Panel** | Web UI at `/admin` for server administration |
+| **FQDN** | Fully Qualified Domain Name (e.g., `api.example.com`) |
+| **Config Dir** | Where config files live (`{configdir}`, default: `/etc/search`) |
+| **Data Dir** | Where runtime data lives (`{datadir}`, default: `/var/lib/search`) |
+| **Log Dir** | Where log files live (`{logdir}`, default: `/var/log/search`) |
+| **PID File** | Process ID file path (`{pidfile}`, default: `/var/run/search.pid`) |
+
 ---
 
 # HOW TO USE THIS TEMPLATE
@@ -132,7 +277,7 @@ The template file may be named:
 - Or any other name containing specification content
 
 **How to identify the template file:**
-- Contains `search`, `{projectorg}` variables (not replaced)
+- Contains `search`, `apimgr` variables (not replaced)
 - Contains "HOW TO USE THIS TEMPLATE" section
 - Contains multiple "PART X:" numbered sections
 - Much larger than a typical project AI.md
@@ -157,20 +302,22 @@ The template file may be named:
 ```
 Template File (read-only, organization-level)
      │
-     ├── AI.md missing? ────► Copy template to AI.md, replace variables
+     ├── AI.md missing? ────► Copy template to AI.md, replace variables (ONE-TIME)
      │
-     ├── AI.md exists? ─────► Update AI.md to reflect template changes
+     ├── AI.md exists? ─────► Use as-is (complete standalone spec for this project)
      │
      └── Old files exist? ──► Merge into AI.md, DELETE old files
            (CLAUDE.md, SPEC.md in project repo)
 ```
+
+**Note:** AI.md is created from template ONCE. After creation, AI.md is the complete standalone spec and does NOT sync with template updates.
 
 ## For New Projects
 
 1. **Copy template file** to your project as `AI.md`
 2. **Replace all variables** with your project values:
    - `search` → your project name (e.g., `jokes`)
-   - `{projectorg}` → your organization (e.g., `apimgr`)
+   - `apimgr` → your organization (e.g., `apimgr`)
    - `SEARCH` → uppercase project name (e.g., `JOKES`)
    - `{gitprovider}` → your git host (e.g., `github`)
 3. **Fill in project-specific sections**:
@@ -254,8 +401,9 @@ BEFORE writing ANY code:
 |------|-------------|
 | **NEVER modify template** | Template file is read-only (location varies) |
 | **Identify by content** | Has unreplaced `{variables}`, "HOW TO USE" section |
-| **AI.md is project spec** | Copy template → AI.md, customize for project |
-| **Keep AI.md current** | Update when template changes or project changes |
+| **AI.md is project spec** | Copy template → AI.md (ONE-TIME), customize for project |
+| **AI.md is standalone** | Does NOT reference or sync with template after creation |
+| **Keep AI.md current** | Update when project state changes (NOT template changes) |
 | **Delete old files** | Merge CLAUDE.md/SPEC.md (in project) → AI.md |
 
 ## Before Starting ANY Work
@@ -319,21 +467,23 @@ BEFORE writing ANY code:
 
 **How to identify the template file:**
 - Location varies: project root, org root, different org, ~/, or user-specified
-- Contains unreplaced `search`, `{projectorg}` variables
+- Contains unreplaced `search`, `apimgr` variables
 - Contains "HOW TO USE THIS TEMPLATE" section
 - Contains multiple "PART X:" numbered sections
 
 **Workflow:**
 1. If `AI.md` doesn't exist → Copy from template, apply migrations (see below)
-2. If `AI.md` exists → Read it, update if outdated
+2. If `AI.md` exists → Read it (it is the complete standalone spec for this project)
 3. If old spec files exist in project repo → Merge into `AI.md`, DELETE old files
+
+**Important:** AI.md is created from TEMPLATE.md **once**. After creation, AI.md is the complete standalone spec and does NOT reference or sync with TEMPLATE.md.
 
 **Migration Rules (when copying TEMPLATE.md → AI.md):**
 
 | Priority | Action | Description |
 |----------|--------|-------------|
 | 1 | **Copy template** | Copy TEMPLATE.md to project as AI.md |
-| 2 | **Replace variables** | `search`, `{projectorg}` with actual values |
+| 2 | **Replace variables** | `search`, `apimgr` with actual values |
 | 3 | **Replace references** | `TEMPLATE.md` → `AI.md`, `TEMPLATE` → `AI` |
 | 4 | **Update project sections** | Fill in PART 32 with actual project details |
 
@@ -341,7 +491,7 @@ BEFORE writing ANY code:
 | Find | Replace With | Example |
 |------|--------------|---------|
 | `search` | Actual project name | `jokes` |
-| `{projectorg}` | Actual org name | `apimgr` |
+| `apimgr` | Actual org name | `apimgr` |
 | `TEMPLATE.md` | `AI.md` | References to this file |
 | `TEMPLATE` (as document name) | `AI` | "read the TEMPLATE" → "read the AI" |
 
@@ -369,8 +519,8 @@ BEFORE writing ANY code:
 1. **Identify template vs AI.md** - template is read-only, AI.md is project spec
 2. **NEVER modify template file** - location varies, but it's always read-only
 3. **Read AI.md COMPLETELY** - not just parts you think are relevant
-4. **If AI.md missing** - create from template, replace all variables
-5. **If AI.md outdated** - update to reflect current template
+4. **If AI.md missing** - create from template (ONE-TIME), replace all variables
+5. **AI.md is standalone** - does NOT sync with template after creation
 6. **Check TODO.AI.md** - see pending tasks and their priority
 7. **Verify understanding** - if ANYTHING is unclear, ASK first
 8. **Never assume** - when in doubt, ask the user
@@ -526,6 +676,195 @@ When the specification is unclear:
 | Inline CSS | Use CSS files/classes only |
 
 ---
+
+# MIGRATING EXISTING PROJECTS
+
+## Migration Principles (NON-NEGOTIABLE)
+
+**The template is the source of truth. Projects conform to the template, not the other way around.**
+
+### What Migration Does
+
+| Action | Description |
+|--------|-------------|
+| **Standardizes structure** | Reorganizes files to match template directory layout |
+| **Standardizes CLI** | Updates flags, commands, help output to match spec |
+| **Standardizes build** | Updates Makefile, Dockerfile, CI/CD to match spec |
+| **Standardizes config** | Updates config format, paths, defaults to match spec |
+| **Preserves functionality** | App's core purpose and features remain intact |
+
+### What Projects CANNOT Change
+
+**These are defined by the template and MUST NOT be modified by projects:**
+
+| Element | Reason |
+|---------|--------|
+| **CLI flags** | `--help`, `--version`, `--config`, etc. - standardized across all apps |
+| **CLI commands** | `serve`, `migrate`, `--maintenance` - same interface everywhere |
+| **Flag formats** | Short/long flag patterns, output formats |
+| **Makefile structure** | Targets, variables, Docker commands |
+| **Makefile targets** | `build`, `release`, `docker`, `test`, `dev`, `clean` |
+| **CI/CD workflows** | GitHub/Gitea/Jenkins pipeline structure |
+| **Directory layout** | `src/`, `docker/`, `binaries/`, etc. |
+| **Config file format** | YAML structure, standard keys |
+| **Health endpoints** | `/healthz`, `/api/v1/healthz` format |
+| **API response format** | JSON structure, error format, pagination |
+
+### What Projects CAN Customize
+
+| Element | Allowed Changes | Example |
+|---------|-----------------|---------|
+| **Dockerfile packages** | Add packages app needs | `RUN apk add --no-cache ffmpeg` |
+| **Base image** | Change if app requires | `debian:bookworm-slim` instead of `alpine` |
+| **Config values** | App-specific settings | `search.engines`, `jokes.categories` |
+| **Routes** | App-specific endpoints | `/api/v1/search`, `/api/v1/jokes` |
+| **Database schema** | App-specific tables | `searches`, `jokes`, `engines` |
+| **Business logic** | App's core functionality | Search algorithms, joke selection |
+| **UI/branding** | App-specific styling | Colors, logos, page content |
+
+### What Migration Preserves
+
+**The template standardizes HOW the app works, not WHAT it does:**
+
+| App Type | Template Adds | Template Preserves |
+|----------|---------------|-------------------|
+| **Search engine** | Standard CLI, config, build | Search functionality, engines, algorithms |
+| **Jokes API** | Standard CLI, config, build | Joke database, categories, formats |
+| **Meta search** | Standard CLI, config, build | All search engines, aggregation logic |
+| **Monitoring** | Standard CLI, config, build | Monitored nodes, alert rules, dashboards |
+
+**Example - Jokes API Migration:**
+```
+BEFORE (non-standard)              AFTER (template-compliant)
+─────────────────────              ────────────────────────────
+./jokes                            ./src/main.go
+./config.json                      ./src/config/config.go
+./main.go                          ./src/server/server.go
+./handlers.go                      ./src/server/routes.go
+                                   ./src/service/jokes.go
+./run.sh                           ./Makefile
+./Dockerfile                       ./docker/Dockerfile
+
+--port 8080                        --address :8080 (standard flag)
+--jokes-file                       server.data.jokes_file (config)
+
+✓ All jokes preserved
+✓ All categories preserved
+✓ All API endpoints preserved (with standard format)
+```
+
+## Migration Process
+
+### Step 1: Inventory Existing Project
+
+| Check | Document |
+|-------|----------|
+| **Core functionality** | What does the app DO? (preserve this) |
+| **Custom config** | App-specific settings (migrate to config.yml) |
+| **Custom routes** | API endpoints (keep, standardize format) |
+| **Dependencies** | Required packages (add to Dockerfile) |
+| **Database schema** | Tables and relationships (preserve) |
+
+### Step 2: Create Template Structure
+
+```bash
+# Create standard directories
+mkdir -p src/{config,mode,paths,scheduler,server,service,ssl}
+mkdir -p docker .github/workflows binaries
+
+# Create required files
+touch AI.md README.md LICENSE.md Makefile go.mod
+touch docker/Dockerfile docker-compose.yml
+```
+
+### Step 3: Migrate Code
+
+| From | To | Action |
+|------|-----|--------|
+| Custom entry point | `src/main.go` | Rewrite with standard CLI |
+| Config handling | `src/config/config.go` | Migrate to standard format |
+| HTTP server | `src/server/server.go` | Use standard server setup |
+| Routes | `src/server/routes.go` | Keep endpoints, standard handlers |
+| Business logic | `src/service/*.go` | Minimal changes, organize by domain |
+
+### Step 4: Migrate Configuration
+
+**Old format (example):**
+```json
+{
+  "port": 8080,
+  "jokeFile": "/data/jokes.json",
+  "enableLogging": true
+}
+```
+
+**New format (template-compliant):**
+```yaml
+server:
+  address: ":8080"
+  mode: production
+
+# App-specific section (preserved functionality)
+jokes:
+  data_file: "/var/lib/jokes/jokes.json"
+  categories:
+    - programming
+    - dad
+    - puns
+
+logging:
+  level: info
+  format: json
+```
+
+### Step 5: Validate Migration
+
+| Check | Validation |
+|-------|------------|
+| **CLI flags** | `--help` output matches template spec |
+| **Config loading** | YAML config loads correctly |
+| **Health checks** | `/healthz` returns correct format |
+| **API format** | JSON responses match spec |
+| **Build** | `make build` succeeds |
+| **Docker** | `make docker` succeeds |
+| **Functionality** | App still does what it's supposed to do |
+
+## Migration Conflicts
+
+### When Project Conflicts with Template
+
+| Conflict | Resolution |
+|----------|------------|
+| **Project uses different flag** | Change to template flag, update docs |
+| **Project uses different config format** | Migrate to YAML, template structure |
+| **Project uses different directory layout** | Reorganize to template structure |
+| **Project needs different base image** | Allowed - document reason in AI.md |
+| **Project needs additional packages** | Allowed - add to Dockerfile |
+
+### When Template Would Break Functionality
+
+| Scenario | Solution |
+|----------|----------|
+| **App needs debian packages** | Use `debian:bookworm-slim` base image |
+| **App needs specific runtime** | Add to Dockerfile, document in AI.md |
+| **App has unique requirements** | Document in AI.md, request template update if common |
+
+**Rule:** If template requirement would genuinely break the app's core functionality, document the exception in AI.md and discuss with template maintainer.
+
+## Post-Migration Checklist
+
+- [ ] All source code in `src/` directory
+- [ ] Standard CLI flags working (`--help`, `--version`, `--config`, `--data`, `--log`, `--pid`)
+- [ ] Configuration in YAML format
+- [ ] Makefile with all standard targets
+- [ ] Dockerfile in `docker/` directory
+- [ ] CI/CD workflows in place
+- [ ] Health endpoints returning correct format
+- [ ] API responses in standard format
+- [ ] AI.md created with project specifics
+- [ ] README.md updated
+- [ ] **Core functionality verified working**
+
 ---
 
 # PART 1: CRITICAL RULES (NON-NEGOTIABLE)
@@ -569,14 +908,231 @@ These are not roleplay - they ARE these roles when the work requires it. Each pr
 | **NEVER run `go` directly** | Always prefix with `docker run ... golang:alpine` |
 
 ```bash
-# CORRECT - Always use Docker
-docker run --rm -v $(pwd):/build -w /build -e CGO_ENABLED=0 golang:alpine go build -o /build/binary/search ./src
+# CORRECT - Use Makefile (wraps Docker)
+make dev                    # Quick build to {tempdir}/apimgr.XXXXXX/search
+make build                  # Full build to binaries/
 
-# WRONG - Never do this
+# ALSO CORRECT - Direct Docker (for one-offs, use random temp dir)
+PROJECTORG=$(basename "$(dirname "$(pwd)")") && BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}.XXXXXX") && docker run --rm -v $(pwd):/build -w /build -e CGO_ENABLED=0 golang:alpine go build -o /build/binaries/search ./src
+
+# WRONG - Never run go directly on host
 go build -o binary/search ./src
+
+# WRONG - Never use predictable /tmp paths
+docker run ... go build -o /tmp/search ./src
 ```
 
 **See PART 12: TESTING & DEVELOPMENT for full containerized build/test procedures.**
+
+---
+
+## Security-First Design (NON-NEGOTIABLE)
+
+**Every project follows security-first design. Security MUST NOT compromise usability.**
+
+### Core Security Principles
+
+| Principle | Description |
+|-----------|-------------|
+| **Never Trust Input** | All input is validated before use - never executed directly |
+| **Defense in Depth** | Multiple layers of security, not single points of failure |
+| **Least Privilege** | Minimal permissions required for each operation |
+| **Fail Secure** | On error, deny access rather than grant it |
+| **Secure by Default** | Safe defaults, user opts-in to less secure options |
+
+### Input Validation (NON-NEGOTIABLE)
+
+**All input is SEARCHED, never EXECUTED.**
+
+| Rule | Implementation |
+|------|----------------|
+| **Validate everything** | Type, length, format, range - before processing |
+| **Sanitize for context** | HTML-encode for HTML, SQL-parameterize for SQL |
+| **Reject unknown** | Whitelist allowed values, reject everything else |
+| **No direct execution** | Never pass user input directly to shell, SQL, eval |
+
+```go
+// CORRECT - Parameterized query
+db.Query("SELECT * FROM users WHERE email = ?", email)
+
+// WRONG - SQL injection vulnerable
+db.Query("SELECT * FROM users WHERE email = '" + email + "'")
+```
+
+### Attack Prevention
+
+| Attack Type | Prevention |
+|-------------|------------|
+| **SQL Injection** | Parameterized queries ONLY - never string concatenation |
+| **XSS** | HTML-escape all user content, CSP headers |
+| **CSRF** | CSRF tokens for all state-changing forms |
+| **Command Injection** | Never shell out with user input, use libraries |
+| **Path Traversal** | Validate paths, use `filepath.Clean()`, reject `..` |
+| **Enumeration** | Consistent timing, vague auth errors, rate limiting |
+| **DDoS** | Rate limiting, request size limits, timeouts |
+
+### Rate Limiting Defaults
+
+| Endpoint Type | Limit | Window | Response |
+|---------------|-------|--------|----------|
+| **Login attempts** | 5 | 15 minutes | 429 + lockout |
+| **Password reset** | 3 | 1 hour | 429 + silent (no email hint) |
+| **API (authenticated)** | 100 | 1 minute | 429 + Retry-After header |
+| **API (unauthenticated)** | 20 | 1 minute | 429 + Retry-After header |
+| **Registration** | 5 | 1 hour | 429 |
+| **File upload** | 10 | 1 hour | 429 |
+
+### Error Message Rules
+
+**Different audiences need different levels of detail:**
+
+| Destination | Detail Level | Purpose |
+|-------------|--------------|---------|
+| **User (WebUI/API)** | Minimal, helpful | Guide user to fix issue, no internals |
+| **Admin (Panel)** | Actionable | Enough to diagnose, no stack traces |
+| **Console (stdout)** | Full | Debugging during development |
+| **Log file** | Full + context | Structured, timestamps, request IDs |
+| **Audit log** | Who/what/when | Security events, compliance |
+
+**Error Messages by Context:**
+
+| Error Type | User Sees | Admin Sees | Log Contains |
+|------------|-----------|------------|--------------|
+| **Invalid email format** | "Please enter a valid email address" | Same | `validation_error: email format invalid, input=[redacted]` |
+| **Login failed (wrong password)** | "Invalid credentials" | "Login failed for user@example.com" | `auth_failure: user_id=123, ip=1.2.3.4, reason=invalid_password` |
+| **Login failed (no such user)** | "Invalid credentials" | "Login attempt for unknown user" | `auth_failure: email=[redacted], ip=1.2.3.4, reason=user_not_found` |
+| **Rate limited** | "Too many attempts. Try again in 5 minutes" | "Rate limit hit: login, IP 1.2.3.4" | `rate_limit: endpoint=/auth/login, ip=1.2.3.4, limit=5/15m` |
+| **Database error** | "An error occurred. Please try again" | "Database connection failed" | `db_error: connection refused, host=db.local:5432, err=[full error]` |
+| **Permission denied** | "Access denied" | "User lacks permission: admin.settings" | `authz_failure: user_id=123, resource=admin.settings, action=write` |
+| **Internal panic** | "An unexpected error occurred" | "Internal error - check logs" | `panic: [full stack trace], request_id=abc123` |
+
+**Console Output (Development):**
+```
+[ERROR] 2025-01-15 10:30:45 database connection failed
+        host: localhost:5432
+        error: connection refused
+        stack: main.go:123 → db.go:45 → connect.go:12
+```
+
+**Log File (Production):**
+```json
+{
+  "level": "error",
+  "time": "2025-01-15T10:30:45Z",
+  "request_id": "abc123",
+  "component": "database",
+  "message": "connection failed",
+  "host": "db.local:5432",
+  "error": "connection refused",
+  "stack": "..."
+}
+```
+
+**User Response (API):**
+```json
+{
+  "error": "Service temporarily unavailable",
+  "code": "SERVICE_ERROR",
+  "retry_after": 30
+}
+```
+
+**Never reveal to users:**
+- Whether a username/email exists (use "If account exists, email sent")
+- Database structure, table names, or query details
+- Internal IP addresses, hostnames, or ports
+- Stack traces or file paths
+- Dependency versions or internal service names
+- Specific reason for auth failures (user not found vs wrong password)
+
+### Security vs Usability Balance
+
+| Scenario | Security Need | Usability Solution |
+|----------|---------------|-------------------|
+| Strong passwords | Prevent weak passwords | Show strength meter, suggest improvements |
+| Session timeout | Limit exposure | Warn before timeout, extend on activity |
+| Rate limiting | Prevent abuse | Clear error message with retry time |
+| CAPTCHA | Prevent bots | Only after failed attempts, not first try |
+| 2FA | Account security | Remember device option (30 days) |
+
+---
+
+## Code Style & Naming (NON-NEGOTIABLE)
+
+**All code must be written as if by a human - clear, readable, and maintainable.**
+
+### Naming Conventions
+
+| Element | Convention | Example |
+|---------|------------|---------|
+| **Files** | `lowercase_snake.go` | `user_handler.go`, `email_service.go` |
+| **Packages** | `lowercase` (single word preferred) | `server`, `config`, `auth` |
+| **Public functions/types** | `PascalCase` | `GetUserByEmail()`, `UserService` |
+| **Private functions/types** | `camelCase` | `validateInput()`, `dbConnection` |
+| **Constants** | `PascalCase` or `SCREAMING_SNAKE` | `MaxRetries`, `DEFAULT_TIMEOUT` |
+| **Variables** | `camelCase` | `userEmail`, `isValid`, `retryCount` |
+| **Interfaces** | `PascalCase` + `-er` suffix | `Reader`, `UserStore`, `Authenticator` |
+
+### Naming Rules
+
+| Rule | Good | Bad |
+|------|------|-----|
+| **Descriptive** | `getUserByEmail()` | `getUBE()`, `fetch()` |
+| **No abbreviations** | `configuration` | `cfg`, `conf` |
+| **Exceptions allowed** | `ID`, `URL`, `API`, `HTTP`, `HTML`, `JSON`, `SQL`, `CSS`, `JS` | |
+| **Verb for functions** | `CreateUser()`, `ValidateEmail()` | `User()`, `Email()` |
+| **Noun for types** | `UserService`, `EmailValidator` | `DoUser`, `Validating` |
+| **Boolean prefix** | `isValid`, `hasAccess`, `canDelete` | `valid`, `access`, `delete` |
+
+### Code Readability
+
+| Rule | Description |
+|------|-------------|
+| **Self-documenting** | Code should explain itself through clear naming |
+| **Comments for why** | Comment WHY, not WHAT (code shows what) |
+| **Single responsibility** | Each function does one thing well |
+| **Short functions** | Max ~50 lines, extract if longer |
+| **Early returns** | Return early for errors, avoid deep nesting |
+| **Consistent formatting** | Use `go fmt`, never manual formatting |
+
+```go
+// GOOD - Clear, self-documenting
+func GetUserByEmail(email string) (*User, error) {
+    if !isValidEmail(email) {
+        return nil, ErrInvalidEmail
+    }
+
+    user, err := db.FindUserByEmail(email)
+    if err != nil {
+        return nil, fmt.Errorf("finding user: %w", err)
+    }
+
+    return user, nil
+}
+
+// BAD - Cryptic, unclear
+func gUBE(e string) (*U, error) {
+    if !chk(e) {
+        return nil, err1
+    }
+    u, err := d.f(e)
+    if err != nil {
+        return nil, err
+    }
+    return u, nil
+}
+```
+
+### Project Structure Naming
+
+| Directory | Purpose | Naming |
+|-----------|---------|--------|
+| `src/server/` | HTTP server | `server.go`, `routes.go`, `middleware.go` |
+| `src/config/` | Configuration | `config.go`, `defaults.go`, `validate.go` |
+| `src/service/` | Business logic | `user_service.go`, `auth_service.go` |
+| `src/mode/` | Run modes | `mode.go`, `production.go`, `development.go` |
+
+---
 
 ### Required Documentation Files
 
@@ -593,8 +1149,9 @@ go build -o binary/search ./src
 | Rule | Description |
 |------|-------------|
 | **Template is READ-ONLY** | Never modify - it is the master specification |
-| **AI.md is the project spec** | Copy from template, customize for project |
-| **Keep AI.md current** | Update when template or project changes |
+| **AI.md is the project spec** | Copy from template (ONE-TIME), customize for project |
+| **AI.md is standalone** | Does NOT reference or sync with template after creation |
+| **Keep AI.md current** | Update when project state changes (NOT template changes) |
 | **Migrate old files** | Old spec files in project repo → merge into `AI.md`, DELETE |
 | **TODO.AI.md for >2 tasks** | Required when doing more than 2 tasks |
 
@@ -613,7 +1170,7 @@ Template File (master, read-only, organization-level)
 
 1. **Title & Badges** - Project name, build status, version badges
 2. **About** - Brief description of what the project does
-3. **Official Site** - Link to official site (if defined, e.g., `https://search.{projectorg}.us`)
+3. **Official Site** - Link to official site (if defined, e.g., `https://search.apimgr.us`)
 4. **Features** - Key features list
 5. **Production** - Production deployment instructions (Docker, binary)
 6. **Configuration** - Key configuration options
@@ -627,9 +1184,9 @@ Template File (master, read-only, organization-level)
 ```markdown
 # search
 
-[![Build Status](https://jenkins.casjay.cc/buildStatus/icon?job={projectorg}/search)](https://jenkins.casjay.cc/job/{projectorg}/job/search/)
-[![GitHub release](https://img.shields.io/github/v/release/{projectorg}/search)](https://github.com/{projectorg}/search/releases)
-[![License](https://img.shields.io/github/license/{projectorg}/search)](LICENSE.md)
+[![Build Status](https://jenkins.casjay.cc/buildStatus/icon?job=apimgr/search)](https://jenkins.casjay.cc/job/apimgr/job/search/)
+[![GitHub release](https://img.shields.io/github/v/release/apimgr/search)](https://github.com/apimgr/search/releases)
+[![License](https://img.shields.io/github/license/apimgr/search)](LICENSE.md)
 
 ## About
 
@@ -637,7 +1194,7 @@ Template File (master, read-only, organization-level)
 
 ## Official Site
 
-https://search.{projectorg}.us
+https://search.apimgr.us
 
 ## Features
 
@@ -655,13 +1212,13 @@ docker run -d \
   -p 64580:80 \
   -v ./rootfs/config/search:/config \
   -v ./rootfs/data/search:/data \
-  ghcr.io/{projectorg}/search:latest
+  ghcr.io/apimgr/search:latest
 ```
 
 ### Docker Compose
 
 ```bash
-curl -O https://raw.githubusercontent.com/{projectorg}/search/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/apimgr/search/main/docker-compose.yml
 docker compose up -d
 ```
 
@@ -669,7 +1226,7 @@ docker compose up -d
 
 ```bash
 # Download latest release
-curl -LO https://github.com/{projectorg}/search/releases/latest/download/search-linux-amd64
+curl -LO https://github.com/apimgr/search/releases/latest/download/search-linux-amd64
 
 # Make executable and run
 chmod +x search-linux-amd64
@@ -713,11 +1270,14 @@ API documentation available at `/api/v1/` when running.
 
 ```bash
 # Clone
-git clone https://github.com/{projectorg}/search
+git clone https://github.com/apimgr/search
 cd search
 
-# Build (containerized - ALWAYS use Docker)
-docker run --rm -v $(pwd):/build -w /build -e CGO_ENABLED=0 golang:alpine go build -o /tmp/search ./src
+# Quick dev build (outputs to OS temp dir)
+make dev
+
+# Full build (all platforms, outputs to binaries/)
+make build
 
 # Test
 make test
@@ -853,9 +1413,9 @@ Before proceeding, confirm you understand:
 | Field | Value |
 |-------|-------|
 | **Name** | search |
-| **Organization** | {projectorg} |
-| **Official Site** | https://search.{projectorg}.us |
-| **Repository** | https://github.com/{projectorg}/search |
+| **Organization** | apimgr |
+| **Official Site** | https://search.apimgr.us |
+| **Repository** | https://github.com/apimgr/search |
 | **README** | README.md |
 | **License** | MIT > LICENSE.md |
 | **Embedded Licenses** | Added to bottom of LICENSE.md |
@@ -874,35 +1434,73 @@ Before proceeding, confirm you understand:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `search` | Project name | `jokes` |
-| `{projectorg}` | Organization name | `apimgr` |
+| `search` | Project name (inferred from path) | `jokes` |
+| `apimgr` | Organization name (inferred from path) | `apimgr` |
 | `{gitprovider}` | Git hosting provider | `github`, `gitlab`, `private` |
 | **Rule** | Anything in `{}` is a variable | |
 | **Rule** | Anything NOT in `{}` is literal | `/etc/letsencrypt/live` is a real path |
 
+### Inferring Variables from Path (NON-NEGOTIABLE)
+
+**NEVER hardcode `search` or `apimgr` - always infer from path or git remote.**
+
+**Path structure:** `~/Projects/{gitprovider}/apimgr/search`
+
+```bash
+# Infer from current directory path
+PROJECTNAME=$(basename "$PWD")                    # jokes
+PROJECTORG=$(basename "$(dirname "$PWD")")        # apimgr
+
+# Or from git remote (preferred if available)
+# github.com/apimgr/jokes.git → PROJECTORG=apimgr, PROJECTNAME=jokes
+PROJECTNAME=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)(\.git)?$|\1|')
+PROJECTORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(\.git)?$|\1|')
+
+# Combined: git first, fallback to path
+PROJECTNAME=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)(\.git)?$|\1|' || basename "$PWD")
+PROJECTORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(\.git)?$|\1|' || basename "$(dirname "$PWD")")
+```
+
+### Variable Capitalization
+
+| Format | Use Case | Example |
+|--------|----------|---------|
+| `search` | Lowercase (filenames, paths, commands) | `jokes`, `/etc/apimgr/jokes/` |
+| `{projectName}` | camelCase (Go variables, JSON keys) | `projectName := "jokes"` |
+| `{Projectname}` | PascalCase (Go types, display names) | `type JokesServer struct` |
+| `SEARCH` | UPPERCASE (env vars, Makefile vars) | `PROJECTNAME=jokes` |
+
+**Examples:**
+
+| Path | `PROJECTORG` | `PROJECTNAME` |
+|------|--------------|---------------|
+| `~/Projects/github/apimgr/jokes` | `apimgr` | `jokes` |
+| `~/Projects/gitlab/casapps/cassearch` | `casapps` | `cassearch` |
+| `~/Projects/private/myorg/myproject` | `myorg` | `myproject` |
+
 ## Local Project Path Structure (NON-NEGOTIABLE)
 
-**Format:** `~/Projects/{gitprovider}/{projectorg}/search`
+**Format:** `~/Projects/{gitprovider}/apimgr/search`
 
 | Component | Description | Examples |
 |-----------|-------------|----------|
 | `~/Projects/` | Base projects directory | Always `~/Projects/` |
 | `{gitprovider}` | Git hosting provider or `local` | `github`, `gitlab`, `bitbucket`, `private`, `local` |
-| `{projectorg}` | Organization/username | `apimgr`, `casjay`, `myorg` |
-| `search` | Project name | `jokes`, `icons`, `myproject` |
+| `apimgr` | Organization/username (inferred) | `apimgr`, `casjay`, `myorg` |
+| `search` | Project name (inferred) | `jokes`, `icons`, `myproject` |
 
 **Examples:**
 ```
-~/Projects/github/apimgr/jokes        # GitHub, apimgr org, jokes project
-~/Projects/gitlab/casjay/icons        # GitLab, casjay user, icons project
-~/Projects/private/myorg/myproject    # Private/self-hosted git, myorg, myproject
-~/Projects/bitbucket/company/app      # Bitbucket, company org, app project
-~/Projects/local/apimgr/prototype     # Local only, no VCS, prototyping
+~/Projects/github/apimgr/jokes        # ORG=apimgr, PROJECT=jokes
+~/Projects/gitlab/casjay/icons        # ORG=casjay, PROJECT=icons
+~/Projects/private/myorg/myproject    # ORG=myorg, PROJECT=myproject
+~/Projects/bitbucket/company/app      # ORG=company, PROJECT=app
+~/Projects/local/apimgr/prototype     # ORG=apimgr, PROJECT=prototype
 ```
 
 ### Special: `local` Provider
 
-`~/Projects/local/{projectorg}/search` is used for:
+`~/Projects/local/apimgr/search` is used for:
 - **Prototyping** - Quick experiments and proof-of-concept
 - **Bootstrapping** - Initial project setup before pushing to VCS
 - **Local-only development** - Projects not intended for remote hosting
@@ -965,7 +1563,114 @@ Before proceeding, confirm you understand:
 
 ### .gitignore (REQUIRED)
 
+**Base: `gitignore --dir . default` + project-specific entries**
+
 ```gitignore
+# gitignore default template
+# Disable reminder in prompt
+ignoredirmessage
+
+# ignore .build_failed files
+**/.build_failed*
+
+# OS generated files
+### Linux ###
+*~
+
+# temporary files which can be created if a process still has a handle open of a deleted file
+.fuse_hidden*
+
+# KDE directory preferences
+.directory
+
+# Linux trash folder which might appear on any partition or disk
+.Trash-*
+
+# .nfs files are created when an open file is removed but is still being accessed
+.nfs*
+
+### macOS ###
+# General
+.DS_Store?
+.AppleDouble
+.LSOverride
+
+# Thumbnails
+._*
+
+# Files that might appear in the root of a volume
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Directories potentially created on remote AFP share
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+### macOS Patch ###
+# iCloud generated files
+*.icloud
+
+### Windows ###
+# Windows thumbnail cache files
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+
+# Dump file
+*.stackdump
+
+# Folder config file
+[Dd]esktop.ini
+
+# Recycle Bin used on file shares
+$RECYCLE.BIN/
+
+# Windows Installer files
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+
+# misc
+!*/README*
+!inc/main.bash
+
+# Windows shortcuts
+*.lnk
+
+# ignore commit message
+**/.gitcommit
+
+# ignore .bak files
+**/*.bak
+
+# ignore .no_push files
+**/.no_push
+
+# ignore .no_git files
+**/.no_git
+
+# ignore .installed files
+**/.installed
+
+# ignore work in progress files
+**/*.rewrite.sh
+**/*.refactor.sh
+
+# ============================================
+# PROJECT-SPECIFIC (add below default section)
+# ============================================
+
 # Build output
 binaries/
 releases/
@@ -978,10 +1683,6 @@ rootfs/
 .vscode/
 *.swp
 *.swo
-
-# OS
-.DS_Store
-Thumbs.db
 ```
 
 ### .dockerignore (REQUIRED)
@@ -1107,11 +1808,23 @@ cd /path/to/project && docker build -f ./docker/Dockerfile .
 
 | Rule | Description |
 |------|-------------|
-| **Always Latest Stable** | Use latest stable Go version |
+| **Minimum Version** | Go 1.23+ (latest stable at time of project creation) |
+| **Always Latest Stable** | Use latest stable Go version when starting new projects |
 | **Build Only** | Go is only for building, not runtime (single static binary) |
-| **go.mod** | Always use latest stable version |
-| **Docker** | Use `golang:alpine` for build/test/debug |
-| **No Pinning** | Don't pin to minor versions unless compatibility issue |
+| **go.mod** | Set `go 1.23` or higher in go.mod |
+| **Docker** | Use `golang:alpine` for build/test/debug (always latest Go) |
+| **No Pinning** | Don't pin to patch versions unless compatibility issue |
+
+**go.mod Example:**
+```
+module github.com/apimgr/search
+
+go 1.23
+
+require (
+    // dependencies...
+)
+```
 
 ## Required Go Libraries (NON-NEGOTIABLE)
 
@@ -1269,15 +1982,15 @@ Before proceeding, confirm you understand:
 | Type | Path |
 |------|------|
 | Binary | `/usr/local/bin/search` |
-| Config | `/etc/{projectorg}/search/` |
-| Config File | `/etc/{projectorg}/search/server.yml` |
-| Data | `/var/lib/{projectorg}/search/` |
-| Logs | `/var/log/{projectorg}/search/` |
-| Backup | `/mnt/Backups/{projectorg}/search/` |
-| PID File | `/var/run/{projectorg}/search.pid` |
-| SSL | `/etc/{projectorg}/search/ssl/` (letsencrypt/, local/) |
-| SQLite DB | `/var/lib/{projectorg}/search/db/` |
-| GeoIP | `/var/lib/{projectorg}/search/geoip/` |
+| Config | `/etc/apimgr/search/` |
+| Config File | `/etc/apimgr/search/server.yml` |
+| Data | `/var/lib/apimgr/search/` |
+| Logs | `/var/log/apimgr/search/` |
+| Backup | `/mnt/Backups/apimgr/search/` |
+| PID File | `/var/run/apimgr/search.pid` |
+| SSL | `/etc/apimgr/search/ssl/` (letsencrypt/, local/) |
+| SQLite DB | `/var/lib/apimgr/search/db/` |
+| GeoIP | `/var/lib/apimgr/search/geoip/` |
 | Service | `/etc/systemd/system/search.service` |
 
 ### User (non-privileged)
@@ -1285,15 +1998,15 @@ Before proceeding, confirm you understand:
 | Type | Path |
 |------|------|
 | Binary | `~/.local/bin/search` |
-| Config | `~/.config/{projectorg}/search/` |
-| Config File | `~/.config/{projectorg}/search/server.yml` |
-| Data | `~/.local/share/{projectorg}/search/` |
-| Logs | `~/.local/share/{projectorg}/search/logs/` |
-| Backup | `~/.local/backups/{projectorg}/search/` |
-| PID File | `~/.local/share/{projectorg}/search/search.pid` |
-| SSL | `~/.config/{projectorg}/search/ssl/` (letsencrypt/, local/) |
-| SQLite DB | `~/.local/share/{projectorg}/search/db/` |
-| GeoIP | `~/.local/share/{projectorg}/search/geoip/` |
+| Config | `~/.config/apimgr/search/` |
+| Config File | `~/.config/apimgr/search/server.yml` |
+| Data | `~/.local/share/apimgr/search/` |
+| Logs | `~/.local/share/apimgr/search/logs/` |
+| Backup | `~/.local/backups/apimgr/search/` |
+| PID File | `~/.local/share/apimgr/search/search.pid` |
+| SSL | `~/.config/apimgr/search/ssl/` (letsencrypt/, local/) |
+| SQLite DB | `~/.local/share/apimgr/search/db/` |
+| GeoIP | `~/.local/share/apimgr/search/geoip/` |
 
 ---
 
@@ -1304,32 +2017,32 @@ Before proceeding, confirm you understand:
 | Type | Path |
 |------|------|
 | Binary | `/usr/local/bin/search` |
-| Config | `/Library/Application Support/{projectorg}/search/` |
-| Config File | `/Library/Application Support/{projectorg}/search/server.yml` |
-| Data | `/Library/Application Support/{projectorg}/search/data/` |
-| Logs | `/Library/Logs/{projectorg}/search/` |
-| Backup | `/Library/Backups/{projectorg}/search/` |
-| PID File | `/var/run/{projectorg}/search.pid` |
-| SSL | `/Library/Application Support/{projectorg}/search/ssl/` (letsencrypt/, local/) |
-| SQLite DB | `/Library/Application Support/{projectorg}/search/db/` |
-| GeoIP | `/Library/Application Support/{projectorg}/search/geoip/` |
-| Service | `/Library/LaunchDaemons/com.{projectorg}.search.plist` |
+| Config | `/Library/Application Support/apimgr/search/` |
+| Config File | `/Library/Application Support/apimgr/search/server.yml` |
+| Data | `/Library/Application Support/apimgr/search/data/` |
+| Logs | `/Library/Logs/apimgr/search/` |
+| Backup | `/Library/Backups/apimgr/search/` |
+| PID File | `/var/run/apimgr/search.pid` |
+| SSL | `/Library/Application Support/apimgr/search/ssl/` (letsencrypt/, local/) |
+| SQLite DB | `/Library/Application Support/apimgr/search/db/` |
+| GeoIP | `/Library/Application Support/apimgr/search/geoip/` |
+| Service | `/Library/LaunchDaemons/com.apimgr.search.plist` |
 
 ### User (non-privileged)
 
 | Type | Path |
 |------|------|
 | Binary | `~/bin/search` or `/usr/local/bin/search` |
-| Config | `~/Library/Application Support/{projectorg}/search/` |
-| Config File | `~/Library/Application Support/{projectorg}/search/server.yml` |
-| Data | `~/Library/Application Support/{projectorg}/search/` |
-| Logs | `~/Library/Logs/{projectorg}/search/` |
-| Backup | `~/Library/Backups/{projectorg}/search/` |
-| PID File | `~/Library/Application Support/{projectorg}/search/search.pid` |
-| SSL | `~/Library/Application Support/{projectorg}/search/ssl/` (letsencrypt/, local/) |
-| SQLite DB | `~/Library/Application Support/{projectorg}/search/db/` |
-| GeoIP | `~/Library/Application Support/{projectorg}/search/geoip/` |
-| Service | `~/Library/LaunchAgents/com.{projectorg}.search.plist` |
+| Config | `~/Library/Application Support/apimgr/search/` |
+| Config File | `~/Library/Application Support/apimgr/search/server.yml` |
+| Data | `~/Library/Application Support/apimgr/search/` |
+| Logs | `~/Library/Logs/apimgr/search/` |
+| Backup | `~/Library/Backups/apimgr/search/` |
+| PID File | `~/Library/Application Support/apimgr/search/search.pid` |
+| SSL | `~/Library/Application Support/apimgr/search/ssl/` (letsencrypt/, local/) |
+| SQLite DB | `~/Library/Application Support/apimgr/search/db/` |
+| GeoIP | `~/Library/Application Support/apimgr/search/geoip/` |
+| Service | `~/Library/LaunchAgents/com.apimgr.search.plist` |
 
 ---
 
@@ -1340,15 +2053,15 @@ Before proceeding, confirm you understand:
 | Type | Path |
 |------|------|
 | Binary | `/usr/local/bin/search` |
-| Config | `/usr/local/etc/{projectorg}/search/` |
-| Config File | `/usr/local/etc/{projectorg}/search/server.yml` |
-| Data | `/var/db/{projectorg}/search/` |
-| Logs | `/var/log/{projectorg}/search/` |
-| Backup | `/var/backups/{projectorg}/search/` |
-| PID File | `/var/run/{projectorg}/search.pid` |
-| SSL | `/usr/local/etc/{projectorg}/search/ssl/` (letsencrypt/, local/) |
-| SQLite DB | `/var/db/{projectorg}/search/db/` |
-| GeoIP | `/var/db/{projectorg}/search/geoip/` |
+| Config | `/usr/local/etc/apimgr/search/` |
+| Config File | `/usr/local/etc/apimgr/search/server.yml` |
+| Data | `/var/db/apimgr/search/` |
+| Logs | `/var/log/apimgr/search/` |
+| Backup | `/var/backups/apimgr/search/` |
+| PID File | `/var/run/apimgr/search.pid` |
+| SSL | `/usr/local/etc/apimgr/search/ssl/` (letsencrypt/, local/) |
+| SQLite DB | `/var/db/apimgr/search/db/` |
+| GeoIP | `/var/db/apimgr/search/geoip/` |
 | Service | `/usr/local/etc/rc.d/search` |
 
 ### User (non-privileged)
@@ -1356,15 +2069,15 @@ Before proceeding, confirm you understand:
 | Type | Path |
 |------|------|
 | Binary | `~/.local/bin/search` |
-| Config | `~/.config/{projectorg}/search/` |
-| Config File | `~/.config/{projectorg}/search/server.yml` |
-| Data | `~/.local/share/{projectorg}/search/` |
-| Logs | `~/.local/share/{projectorg}/search/logs/` |
-| Backup | `~/.local/backups/{projectorg}/search/` |
-| PID File | `~/.local/share/{projectorg}/search/search.pid` |
-| SSL | `~/.config/{projectorg}/search/ssl/` (letsencrypt/, local/) |
-| SQLite DB | `~/.local/share/{projectorg}/search/db/` |
-| GeoIP | `~/.local/share/{projectorg}/search/geoip/` |
+| Config | `~/.config/apimgr/search/` |
+| Config File | `~/.config/apimgr/search/server.yml` |
+| Data | `~/.local/share/apimgr/search/` |
+| Logs | `~/.local/share/apimgr/search/logs/` |
+| Backup | `~/.local/backups/apimgr/search/` |
+| PID File | `~/.local/share/apimgr/search/search.pid` |
+| SSL | `~/.config/apimgr/search/ssl/` (letsencrypt/, local/) |
+| SQLite DB | `~/.local/share/apimgr/search/db/` |
+| GeoIP | `~/.local/share/apimgr/search/geoip/` |
 
 ---
 
@@ -1374,30 +2087,30 @@ Before proceeding, confirm you understand:
 
 | Type | Path |
 |------|------|
-| Binary | `C:\Program Files\{projectorg}\search\search.exe` |
-| Config | `%ProgramData%\{projectorg}\search\` |
-| Config File | `%ProgramData%\{projectorg}\search\server.yml` |
-| Data | `%ProgramData%\{projectorg}\search\data\` |
-| Logs | `%ProgramData%\{projectorg}\search\logs\` |
-| Backup | `%ProgramData%\Backups\{projectorg}\search\` |
-| SSL | `%ProgramData%\{projectorg}\search\ssl\` (letsencrypt\, local\) |
-| SQLite DB | `%ProgramData%\{projectorg}\search\db\` |
-| GeoIP | `%ProgramData%\{projectorg}\search\geoip\` |
+| Binary | `C:\Program Files\apimgr\search\search.exe` |
+| Config | `%ProgramData%\apimgr\search\` |
+| Config File | `%ProgramData%\apimgr\search\server.yml` |
+| Data | `%ProgramData%\apimgr\search\data\` |
+| Logs | `%ProgramData%\apimgr\search\logs\` |
+| Backup | `%ProgramData%\Backups\apimgr\search\` |
+| SSL | `%ProgramData%\apimgr\search\ssl\` (letsencrypt\, local\) |
+| SQLite DB | `%ProgramData%\apimgr\search\db\` |
+| GeoIP | `%ProgramData%\apimgr\search\geoip\` |
 | Service | Windows Service Manager |
 
 ### User (non-privileged)
 
 | Type | Path |
 |------|------|
-| Binary | `%LocalAppData%\{projectorg}\search\search.exe` |
-| Config | `%AppData%\{projectorg}\search\` |
-| Config File | `%AppData%\{projectorg}\search\server.yml` |
-| Data | `%LocalAppData%\{projectorg}\search\` |
-| Logs | `%LocalAppData%\{projectorg}\search\logs\` |
-| Backup | `%LocalAppData%\Backups\{projectorg}\search\` |
-| SSL | `%AppData%\{projectorg}\search\ssl\` (letsencrypt\, local\) |
-| SQLite DB | `%LocalAppData%\{projectorg}\search\db\` |
-| GeoIP | `%LocalAppData%\{projectorg}\search\geoip\` |
+| Binary | `%LocalAppData%\apimgr\search\search.exe` |
+| Config | `%AppData%\apimgr\search\` |
+| Config File | `%AppData%\apimgr\search\server.yml` |
+| Data | `%LocalAppData%\apimgr\search\` |
+| Logs | `%LocalAppData%\apimgr\search\logs\` |
+| Backup | `%LocalAppData%\Backups\apimgr\search\` |
+| SSL | `%AppData%\apimgr\search\ssl\` (letsencrypt\, local\) |
+| SQLite DB | `%LocalAppData%\apimgr\search\db\` |
+| GeoIP | `%LocalAppData%\apimgr\search\geoip\` |
 
 ---
 
@@ -1422,7 +2135,7 @@ Before proceeding, confirm you understand:
 - [ ] Each OS has specific paths for privileged and non-privileged users
 - [ ] Config file is ALWAYS `server.yml` (not .yaml)
 - [ ] Docker uses simplified paths (/config, /data)
-- [ ] All paths follow the {projectorg}/search pattern
+- [ ] All paths follow the apimgr/search pattern
 
 ---
 # PART 4: CONFIGURATION (NON-NEGOTIABLE)
@@ -1551,7 +2264,7 @@ func onConfigChange(db *sql.DB, key string, value interface{}) {
 1. Database connection error
 2. Cannot write to files (disk full, permissions, etc.)
 
-**All other errors are recoverable. The system ALWAYS attempts self-healing.**
+**All other errors are recoverable. The server ALWAYS attempts self-healing.**
 
 ### Critical Error Detection
 
@@ -1713,7 +2426,7 @@ Self-Healing Successful?                        │
   "error": "Service in maintenance mode",
   "code": "MAINTENANCE_MODE",
   "status": 503,
-  "message": "System is in maintenance mode due to: Database connection failed",
+  "message": "Server is in maintenance mode due to: Database connection failed",
   "reason": "database_connection",
   "self_healing": true,
   "retry_after": 30
@@ -1762,7 +2475,7 @@ X-Maintenance-Reason: database_connection
 1. Self-healing attempt succeeds
          │
          ▼
-2. Verify system is stable
+2. Verify server is stable
    - Run health checks
    - Verify read/write works
          │
@@ -1777,7 +2490,7 @@ X-Maintenance-Reason: database_connection
          │
          ▼
 5. Send notification (if email configured)
-   - "System recovered from maintenance mode"
+   - "Server recovered from maintenance mode"
    - Include duration and cause
          │
          ▼
@@ -2012,8 +2725,8 @@ _cache:
 
 | User Type | Path |
 |-----------|------|
-| Root | `/etc/{projectorg}/search/server.yml` |
-| Regular | `~/.config/{projectorg}/search/server.yml` |
+| Root | `/etc/apimgr/search/server.yml` |
+| Regular | `~/.config/apimgr/search/server.yml` |
 
 ### Migration
 
@@ -2260,14 +2973,107 @@ Before proceeding, confirm you understand:
 --help                       # Show help (can be run by anyone)
 --version                    # Show version (can be run by anyone)
 --mode {production|development}  # Set application mode
---data {datadir}             # Set data dir
---config {etcdir}            # Set the config dir
+--config {configdir}         # Set config directory
+--data {datadir}             # Set data directory
+--log {logdir}               # Set log directory
+--pid {pidfile}              # Set PID file path
 --address {listen}           # Set listen address
 --port {port}                # Set the port
 --status                     # Show status and health
 --service {start,restart,stop,reload,--install,--uninstall,--disable,--help}
 --maintenance {backup,restore,update,mode,setup} [optional-file-or-setting]
 --update [check|yes|branch {stable|beta|daily}]  # Check/perform updates
+```
+
+## Directory Flags (NON-NEGOTIABLE)
+
+**All directory flags MUST create directories if they don't exist.**
+
+| Flag | Type | Default (Linux root) | Default (Linux user) |
+|------|------|----------------------|----------------------|
+| `--config` | Directory | `/etc/apimgr/search/` | `~/.config/apimgr/search/` |
+| `--data` | Directory | `/var/lib/apimgr/search/` | `~/.local/share/apimgr/search/` |
+| `--log` | Directory | `/var/log/apimgr/search/` | `~/.local/share/apimgr/search/logs/` |
+| `--pid` | File | `/var/run/apimgr/search.pid` | `~/.local/share/apimgr/search/search.pid` |
+
+### Directory Validation Rules
+
+| Rule | Description |
+|------|-------------|
+| **Create if missing** | All directories are created with proper permissions if they don't exist |
+| **Permissions (root)** | Directories: `0755`, Files: `0644`, PID: `0644` |
+| **Permissions (user)** | Directories: `0700`, Files: `0600`, PID: `0600` |
+| **Parent dirs** | Create parent directories as needed (`mkdir -p` equivalent) |
+| **Validate writable** | Fail fast if directory is not writable |
+| **Log on create** | Log directory creation at INFO level |
+
+### Implementation
+
+```go
+// EnsureDir creates directory with proper permissions if it doesn't exist
+func EnsureDir(path string, isRoot bool) error {
+    perm := os.FileMode(0700)
+    if isRoot {
+        perm = 0755
+    }
+
+    if err := os.MkdirAll(path, perm); err != nil {
+        return fmt.Errorf("failed to create directory %s: %w", path, err)
+    }
+
+    // Verify writable
+    testFile := filepath.Join(path, ".write-test")
+    if err := os.WriteFile(testFile, []byte{}, 0600); err != nil {
+        return fmt.Errorf("directory %s is not writable: %w", path, err)
+    }
+    os.Remove(testFile)
+
+    return nil
+}
+
+// EnsurePIDFile creates PID file directory and validates path
+func EnsurePIDFile(path string, isRoot bool) error {
+    dir := filepath.Dir(path)
+    return EnsureDir(dir, isRoot)
+}
+```
+
+### Docker Compose Mapping
+
+**Directory flags enable clean volume mounts:**
+
+```yaml
+services:
+  search:
+    image: ghcr.io/apimgr/search:latest
+    command:
+      - --config=/config
+      - --data=/data
+      - --log=/logs
+      - --pid=/run/search.pid
+      - --port=8080
+    volumes:
+      - ./config:/config:ro          # Config (read-only)
+      - ./data:/data                 # Data (read-write)
+      - ./logs:/logs                 # Logs (read-write)
+      - /var/run:/run                # PID file
+    ports:
+      - "8080:8080"
+```
+
+**Minimal compose (uses container defaults):**
+
+```yaml
+services:
+  search:
+    image: ghcr.io/apimgr/search:latest
+    volumes:
+      - search-data:/data
+    ports:
+      - "8080:8080"
+
+volumes:
+  search-data:
 ```
 
 ### Commands Anyone Can Run (No Privileges)
@@ -2737,7 +3543,7 @@ ON --service --install:
 | UID/GID | **Must match** - same value for both UID and GID |
 | UID/GID Range | 100-999 (system user range) |
 | Shell | `/sbin/nologin` or `/usr/sbin/nologin` |
-| Home | Config directory (`/etc/{projectorg}/search`) or data directory (`/var/lib/{projectorg}/search`) |
+| Home | Config directory (`/etc/apimgr/search`) or data directory (`/var/lib/apimgr/search`) |
 | Type | System user (no password, no login) |
 | Gecos | `search service account` |
 
@@ -2789,7 +3595,7 @@ groupadd --system --gid {id} search
 
 # Create user with matching UID, same primary group
 useradd --system --uid {id} --gid {id} \
-  --home-dir /etc/{projectorg}/search \
+  --home-dir /etc/apimgr/search \
   --shell /sbin/nologin \
   --comment "search service account" \
   search
@@ -2834,7 +3640,7 @@ dscl . -create /Users/search UniqueID {id}
 dscl . -create /Users/search PrimaryGroupID {id}
 dscl . -create /Users/search UserShell /usr/bin/false
 dscl . -create /Users/search RealName "search service account"
-dscl . -create /Users/search NFSHomeDirectory /usr/local/var/{projectorg}/search
+dscl . -create /Users/search NFSHomeDirectory /usr/local/var/apimgr/search
 dscl . -create /Users/search Password "*"
 
 # Hide user from login window
@@ -2848,7 +3654,7 @@ dscl . -create /Users/search IsHidden 1
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>{projectorg}.search</string>
+    <string>apimgr.search</string>
 
     <key>ProgramArguments</key>
     <array>
@@ -2869,13 +3675,13 @@ dscl . -create /Users/search IsHidden 1
     <true/>
 
     <key>WorkingDirectory</key>
-    <string>/usr/local/var/{projectorg}/search</string>
+    <string>/usr/local/var/apimgr/search</string>
 
     <key>StandardOutPath</key>
-    <string>/usr/local/var/log/{projectorg}/search/stdout.log</string>
+    <string>/usr/local/var/log/apimgr/search/stdout.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/usr/local/var/log/{projectorg}/search/stderr.log</string>
+    <string>/usr/local/var/log/apimgr/search/stderr.log</string>
 </dict>
 </plist>
 ```
@@ -2885,10 +3691,10 @@ dscl . -create /Users/search IsHidden 1
 | Directory | Path | Purpose |
 |-----------|------|---------|
 | Binary | `/usr/local/bin/search` | Executable |
-| Config | `/usr/local/etc/{projectorg}/search/` | Configuration files |
-| Data | `/usr/local/var/{projectorg}/search/` | Application data |
-| Logs | `/usr/local/var/log/{projectorg}/search/` | Log files |
-| launchd plist | `/Library/LaunchDaemons/{projectorg}.search.plist` | Service definition |
+| Config | `/usr/local/etc/apimgr/search/` | Configuration files |
+| Data | `/usr/local/var/apimgr/search/` | Application data |
+| Logs | `/usr/local/var/log/apimgr/search/` | Log files |
+| launchd plist | `/Library/LaunchDaemons/apimgr.search.plist` | Service definition |
 
 **Go Implementation (macOS):**
 ```go
@@ -2943,7 +3749,7 @@ func createMacOSServiceUser(name string, id int, homeDir string) error {
 # Create user and group with matching ID
 pw groupadd -n search -g {id}
 pw useradd -n search -u {id} -g {id} \
-  -d /var/lib/{projectorg}/search \
+  -d /var/lib/apimgr/search \
   -s /usr/sbin/nologin \
   -c "search service account"
 ```
@@ -2971,7 +3777,7 @@ Virtual Service Accounts are automatically managed by Windows, require no passwo
 ```powershell
 # Create service with Virtual Service Account (automatic)
 New-Service -Name "search" `
-  -BinaryPathName "C:\Program Files\{projectorg}\search\search.exe" `
+  -BinaryPathName "C:\Program Files\apimgr\search\search.exe" `
   -DisplayName "search" `
   -Description "search service" `
   -StartupType Automatic
@@ -2983,7 +3789,7 @@ New-Service -Name "search" `
 **Directory Permissions:**
 ```powershell
 # Grant Virtual Service Account access to config/data directories
-$acl = Get-Acl "C:\ProgramData\{projectorg}\search"
+$acl = Get-Acl "C:\ProgramData\apimgr\search"
 $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
     "NT SERVICE\search",
     "FullControl",
@@ -2992,7 +3798,7 @@ $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
     "Allow"
 )
 $acl.SetAccessRule($rule)
-Set-Acl "C:\ProgramData\{projectorg}\search" $acl
+Set-Acl "C:\ProgramData\apimgr\search" $acl
 ```
 
 **Go Implementation (Windows):**
@@ -3035,17 +3841,17 @@ func installWindowsService() error {
 
 | Directory | Path | Purpose |
 |-----------|------|---------|
-| Binary | `C:\Program Files\{projectorg}\search\` | Executable |
-| Config | `C:\ProgramData\{projectorg}\search\config\` | Configuration files |
-| Data | `C:\ProgramData\{projectorg}\search\data\` | Application data |
-| Logs | `C:\ProgramData\{projectorg}\search\logs\` | Log files |
+| Binary | `C:\Program Files\apimgr\search\` | Executable |
+| Config | `C:\ProgramData\apimgr\search\config\` | Configuration files |
+| Data | `C:\ProgramData\apimgr\search\data\` | Application data |
+| Logs | `C:\ProgramData\apimgr\search\logs\` | Log files |
 
 ### Home Directory Selection
 
 | Directory | Use When |
 |-----------|----------|
-| Config dir (`/etc/{projectorg}/search`) | Default - user needs access to config files |
-| Data dir (`/var/lib/{projectorg}/search`) | When data dir contains user-writable content |
+| Config dir (`/etc/apimgr/search`) | Default - user needs access to config files |
+| Data dir (`/var/lib/apimgr/search`) | When data dir contains user-writable content |
 
 **Note:** Home directory must exist before user creation. Create directories first, then user, then set ownership.
 
@@ -3178,7 +3984,7 @@ format_version_tag() {
 |---------|------|---------|
 | Host Build | `./binaries/search` | `./binaries/jokes` |
 | Distribution | `search-{os}-{arch}` | `jokes-linux-amd64` |
-| Local/Testing | `/tmp/apimgr-build/search/search` | - |
+| Local/Testing | `$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}.XXXXXX")/search` | Org-prefixed temp dir |
 
 **If built with musl → strip binary before release. Final name has NO `-musl` suffix.**
 
@@ -3194,8 +4000,9 @@ format_version_tag() {
 ## Makefile Implementation
 
 ```makefile
-PROJECT := search
-ORG := {projectorg}
+# Infer PROJECTNAME and PROJECTORG from git remote or directory path (NEVER hardcode)
+PROJECTNAME := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)(\.git)?$$|\1|' || basename "$$(pwd)")
+PROJECTORG := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(\.git)?$$|\1|' || basename "$$(dirname "$$(pwd)")")
 
 # Version: env var > release.txt > default
 VERSION ?= $(shell cat release.txt 2>/dev/null || echo "0.1.0")
@@ -3224,7 +4031,7 @@ GOMODCACHE := $(HOME)/go/pkg/mod
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64 freebsd/amd64 freebsd/arm64
 
 # Docker
-REGISTRY := ghcr.io/$(ORG)/$(PROJECT)
+REGISTRY := ghcr.io/$(PROJECTORG)/$(PROJECTNAME)
 GO_DOCKER := docker run --rm \
 	-v $(PWD):/build \
 	-v $(GOCACHE):/root/.cache/go-build \
@@ -3233,7 +4040,7 @@ GO_DOCKER := docker run --rm \
 	-e CGO_ENABLED=0 \
 	golang:alpine
 
-.PHONY: build release docker test clean
+.PHONY: build release docker test dev clean
 
 # =============================================================================
 # BUILD - Build all platforms + host binary (via Docker with cached modules)
@@ -3250,13 +4057,13 @@ build: clean
 	# Build for host OS/ARCH
 	@echo "Building host binary..."
 	@$(GO_DOCKER) sh -c "GOOS=$$(go env GOOS) GOARCH=$$(go env GOARCH) \
-		go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(PROJECT) ./src"
+		go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(PROJECTNAME) ./src"
 
 	# Build all platforms
 	@for platform in $(PLATFORMS); do \
 		OS=$${platform%/*}; \
 		ARCH=$${platform#*/}; \
-		OUTPUT=$(BINDIR)/$(PROJECT)-$$OS-$$ARCH; \
+		OUTPUT=$(BINDIR)/$(PROJECTNAME)-$$OS-$$ARCH; \
 		[ "$$OS" = "windows" ] && OUTPUT=$$OUTPUT.exe; \
 		echo "Building $$OS/$$ARCH..."; \
 		$(GO_DOCKER) sh -c "GOOS=$$OS GOARCH=$$ARCH \
@@ -3277,7 +4084,7 @@ release: build
 	@echo "$(VERSION)" > $(RELDIR)/version.txt
 
 	# Copy binaries to releases (strip if needed)
-	@for f in $(BINDIR)/$(PROJECT)-*; do \
+	@for f in $(BINDIR)/$(PROJECTNAME)-*; do \
 		[ -f "$$f" ] || continue; \
 		strip "$$f" 2>/dev/null || true; \
 		cp "$$f" $(RELDIR)/; \
@@ -3286,7 +4093,7 @@ release: build
 	# Create source archive (exclude VCS and build artifacts)
 	@tar --exclude='.git' --exclude='.github' --exclude='.gitea' \
 		--exclude='binaries' --exclude='releases' --exclude='*.tar.gz' \
-		-czf $(RELDIR)/$(PROJECT)-$(VERSION)-source.tar.gz .
+		-czf $(RELDIR)/$(PROJECTNAME)-$(VERSION)-source.tar.gz .
 
 	# Delete existing release/tag if exists
 	@gh release delete $(VERSION) --yes 2>/dev/null || true
@@ -3295,7 +4102,7 @@ release: build
 
 	# Create new release (stable)
 	@gh release create $(VERSION) $(RELDIR)/* \
-		--title "$(PROJECT) $(VERSION)" \
+		--title "$(PROJECTNAME) $(VERSION)" \
 		--notes "Release $(VERSION)" \
 		--latest
 
@@ -3313,8 +4120,8 @@ docker:
 	@docker buildx version > /dev/null 2>&1 || (echo "docker buildx required" && exit 1)
 
 	# Create/use builder
-	@docker buildx create --name $(PROJECT)-builder --use 2>/dev/null || \
-		docker buildx use $(PROJECT)-builder
+	@docker buildx create --name $(PROJECTNAME)-builder --use 2>/dev/null || \
+		docker buildx use $(PROJECTNAME)-builder
 
 	# Build and push multi-arch (multi-stage Dockerfile handles Go compilation)
 	@docker buildx build \
@@ -3339,6 +4146,18 @@ test:
 	@$(GO_DOCKER) go mod download
 	@$(GO_DOCKER) go test -v -cover ./...
 	@echo "Tests complete"
+
+# =============================================================================
+# DEV - Quick build for local development/testing (to random temp dir)
+# =============================================================================
+# Fast: host platform only, no ldflags, random temp dir for isolation
+dev:
+	@mkdir -p $(GOCACHE) $(GOMODCACHE)
+	@BUILD_DIR=$$(mktemp -d "$${TMPDIR:-/tmp}/$(PROJECTORG).XXXXXX") && \
+		echo "Quick dev build..." && \
+		$(GO_DOCKER) go build -o $$BUILD_DIR/$(PROJECTNAME) ./src && \
+		echo "Built: $$BUILD_DIR/$(PROJECTNAME)" && \
+		echo "Test:  docker run --rm -v $$BUILD_DIR:/app alpine:latest /app/$(PROJECTNAME) --help"
 
 # =============================================================================
 # CLEAN - Remove build artifacts
@@ -3427,6 +4246,23 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 5. Tests all packages (`./...`)
 6. Container removed after completion (`--rm`)
 
+### `make dev`
+
+1. Quick build for local development/testing
+2. Builds host platform only (fastest)
+3. No `-ldflags` (version info not embedded)
+4. Outputs to `{tempdir}/apimgr.XXXXXX/search` (isolated, org-identifiable)
+5. Uses Docker (`golang:alpine`) - keeps host clean
+6. Easy cleanup: `rm -rf "${TMPDIR:-/tmp}"/${PROJECTORG}.*/` or auto-deleted on reboot
+
+**When to use:**
+
+| Command | Use Case |
+|---------|----------|
+| `make dev` | Quick iteration during development |
+| `make build` | Full build for testing all platforms |
+| `make test` | Run test suite |
+
 ## Directory Rules (NON-NEGOTIABLE)
 
 | Rule | Description |
@@ -3436,6 +4272,51 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 | **binaries/** | Build output only - temporary, gitignored |
 | **releases/** | Release artifacts only - packaged for distribution |
 | **version.txt** | Every release includes `version.txt` with current version |
+
+## Release Artifacts (NON-NEGOTIABLE)
+
+**Every GitHub release MUST include these files:**
+
+### Server Binaries (Always)
+
+| File | Description |
+|------|-------------|
+| `search-linux-amd64` | Linux AMD64 server binary |
+| `search-linux-arm64` | Linux ARM64 server binary |
+| `search-darwin-amd64` | macOS AMD64 server binary |
+| `search-darwin-arm64` | macOS ARM64 (Apple Silicon) server binary |
+| `search-windows-amd64.exe` | Windows AMD64 server binary |
+| `search-windows-arm64.exe` | Windows ARM64 server binary |
+| `search-freebsd-amd64` | FreeBSD AMD64 server binary |
+| `search-freebsd-arm64` | FreeBSD ARM64 server binary |
+
+### CLI Binaries (If Project Has CLI)
+
+| File | Description |
+|------|-------------|
+| `search-linux-amd64-cli` | Linux AMD64 CLI binary |
+| `search-linux-arm64-cli` | Linux ARM64 CLI binary |
+| `search-darwin-amd64-cli` | macOS AMD64 CLI binary |
+| `search-darwin-arm64-cli` | macOS ARM64 (Apple Silicon) CLI binary |
+| `search-windows-amd64-cli.exe` | Windows AMD64 CLI binary |
+| `search-windows-arm64-cli.exe` | Windows ARM64 CLI binary |
+| `search-freebsd-amd64-cli` | FreeBSD AMD64 CLI binary |
+| `search-freebsd-arm64-cli` | FreeBSD ARM64 CLI binary |
+
+### Metadata Files (Always)
+
+| File | Description | Example Content |
+|------|-------------|-----------------|
+| `version.txt` | Version string only | `1.2.3`, `20251218060432-beta`, `20251218060432` |
+| `search-{version}-source.tar.gz` | Source code archive | Excludes `.git`, `.github`, `binaries/`, `releases/` |
+
+### version.txt Content
+
+| Release Type | version.txt Content |
+|--------------|---------------------|
+| Stable | `1.2.3` (semver without `v` prefix) |
+| Beta | `20251205143022-beta` (timestamp-beta) |
+| Daily | `20251218060432` (timestamp only) |
 
 ## Release Types
 
@@ -3487,11 +4368,11 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 
 | Type | Method | Version Example | Max Releases |
 |------|--------|-----------------|--------------|
-| Stable | GitHub Actions (tag) or `make release` (local) | `1.2.3` | Unlimited |
-| Beta | GitHub Actions only | `20251205143022-beta` | Unlimited |
-| Daily | GitHub Actions only | `20251218060432` | **1** (rolling) |
+| Stable | CI/CD (tag) or `make release` (local) | `1.2.3` | Unlimited |
+| Beta | CI/CD only | `20251205143022-beta` | Unlimited |
+| Daily | CI/CD only | `20251218060432` | **1** (rolling) |
 
-**Note:** `make release` is for manual local releases only. All automated releases use GitHub Actions.
+**Note:** `make release` is for manual local releases only. All automated releases use CI/CD (GitHub Actions, Gitea Actions, or GitLab CI depending on git host).
 
 ---
 
@@ -3509,7 +4390,7 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 | `./logs/` | Project directory - will pollute repo |
 | `{project_path}/anything` | NEVER write test data to project |
 
-**The project directory is for SOURCE CODE ONLY. All runtime/test data goes to `/tmp/`.**
+**The project directory is for SOURCE CODE ONLY. All runtime/test data goes to the OS temp directory.**
 
 ## NEVER Create Example Files (NON-NEGOTIABLE)
 
@@ -3546,83 +4427,137 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 
 ## Temporary Directory Structure (NON-NEGOTIABLE)
 
-**Format:** `/tmp/{orgname}-{purpose}/search/`
+**NEVER hardcode `/tmp` - always use the OS temp directory with org prefix.**
 
-| Purpose | Path | Example |
-|---------|------|---------|
-| Build output | `/tmp/apimgr-build/search/` | `/tmp/apimgr-build/jokes/` |
-| Test config | `/tmp/apimgr-test/search/config/` | `/tmp/apimgr-test/jokes/config/` |
-| Test data | `/tmp/apimgr-test/search/data/` | `/tmp/apimgr-test/jokes/data/` |
-| Test logs | `/tmp/apimgr-test/search/logs/` | `/tmp/apimgr-test/jokes/logs/` |
-| Debug files | `/tmp/apimgr-debug/search/` | `/tmp/apimgr-debug/jokes/` |
-| Runtime temp | `/tmp/apimgr-runtime/search/` | `/tmp/apimgr-runtime/jokes/` |
+**See "Inferring Variables from Path" section for how to detect `ORG` and `PROJECT`.**
+
+### Creating Temp Directories
+
+**Always use `apimgr.` prefix for identifiable temp dirs:**
+
+| Language | How to Create Prefixed Temp Dir |
+|----------|--------------------------------|
+| Shell | `mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}.XXXXXX"` |
+| Go | `os.MkdirTemp(os.TempDir(), projectOrg+".")` |
+| Python | `tempfile.mkdtemp(prefix=f"{project_org}.")` |
+
+**Result:** `/tmp/apimgr.aB3xY9` or `/tmp/casapps.k9mN2p` (identifiable by org)
+
+### Directory Structure
+
+| Purpose | Path Pattern | Example |
+|---------|--------------|---------|
+| Dev build | `{tempdir}/apimgr.XXXXXX/` | `/tmp/apimgr.aB3xY9/jokes` |
+| Test runtime | `{tempdir}/apimgr.XXXXXX/{config,data,logs}/` | `/tmp/casapps.k9mN2p/config/` |
+
+### OS Temp Directories
+
+| OS | Default Temp Dir | Env Var |
+|----|------------------|---------|
+| Linux | `/tmp` | `$TMPDIR` |
+| macOS | `/var/folders/.../T/` | `$TMPDIR` |
+| Windows | `C:\Users\{user}\AppData\Local\Temp` | `%TEMP%` |
+| FreeBSD | `/tmp` | `$TMPDIR` |
 
 ### Rules
 
 | Rule | Description |
 |------|-------------|
 | **NEVER** | Use project directory for test/runtime data |
-| **NEVER** | Use `/tmp/search` directly |
-| **NEVER** | Use `/tmp/` root for project files |
-| **ALWAYS** | Use `/tmp/{orgname}-{purpose}/search/` format |
-| **ALWAYS** | Include organization prefix to avoid conflicts |
-| **ALWAYS** | Include purpose subdirectory for organization |
+| **NEVER** | Hardcode `/tmp` - use `os.TempDir()` or `mktemp` |
+| **NEVER** | Use bare `mktemp -d` without org prefix |
+| **ALWAYS** | Use `apimgr.` prefix for all temp dirs |
+| **ALWAYS** | Detect org from git remote or directory path |
 
-### Why This Structure?
+### Cleanup
 
-| Reason | Description |
-|--------|-------------|
-| **Avoid conflicts** | Multiple projects/orgs won't collide |
-| **Easy cleanup** | `rm -rf /tmp/apimgr-*` cleans all org temp files |
-| **Clear purpose** | Directory name shows what files are for |
-| **Debugging** | Easy to find specific project's temp files |
+```bash
+# Find all temp dirs for this org
+ls -la "${TMPDIR:-/tmp}"/${PROJECTORG}.*/
+
+# Clean all temp dirs for this org
+rm -rf "${TMPDIR:-/tmp}"/${PROJECTORG}.*/
+```
 
 ### Correct vs Incorrect
 
 | WRONG | RIGHT |
 |-------|-------|
-| `/tmp/jokes` | `/tmp/apimgr-build/jokes/` |
-| `/tmp/build/jokes` | `/tmp/apimgr-build/jokes/` |
-| `/tmp/test` | `/tmp/apimgr-test/jokes/` |
-| `/tmp/jokes-test` | `/tmp/apimgr-test/jokes/` |
+| `mktemp -d` | `mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}.XXXXXX"` |
+| `/tmp/jokes` | `os.MkdirTemp(os.TempDir(), projectOrg+".")` |
+| Hardcoded org | Detect from git remote or path |
 
 ## Container Usage (NON-NEGOTIABLE)
 
-**⚠️ THE HOST SYSTEM DOES NOT HAVE GO INSTALLED. DO NOT ATTEMPT TO RUN `go` COMMANDS DIRECTLY. ⚠️**
+**⚠️ NEVER RUN BINARIES DIRECTLY ON THE HOST. ALWAYS USE CONTAINERS. ⚠️**
 
-**ALL builds, tests, and debugging MUST use Docker containers. NEVER build directly on the host system.**
+**ALL builds, tests, and binary execution MUST use containers. The host is for orchestration only.**
 
 | Rule | Description |
 |------|-------------|
 | **Host has NO Go** | Go is NOT installed on the host - don't even try |
-| Build environment | Docker (preferred), Incus, or LXD |
-| Go Image | **`golang:alpine`** (Alpine-based, latest) |
-| Runtime Image | **`alpine:latest`** |
-| Test binaries | Temp directories only |
+| **NEVER run binaries on host** | All binaries run inside containers, never directly |
 | **NEVER** | Run `go build` directly on host |
 | **NEVER** | Run `go test` directly on host |
-| **NEVER** | Run `go mod` directly on host |
-| **NEVER** | Install Go on host system |
-| **ALWAYS** | Use containerized commands: `docker run ... golang:alpine go ...` |
+| **NEVER** | Run `./binaries/search` on host |
+| **NEVER** | Run `$BUILD_DIR/search` on host |
+| **ALWAYS** | Build inside container, run inside container |
 
-### Why Containerized Builds?
+### Container Types
+
+| Purpose | Tool | Image | When to Use |
+|---------|------|-------|-------------|
+| **Building** | Docker | `golang:alpine` | Compiling Go code |
+| **Container testing** | Docker | `alpine:latest` | Quick tests, CI/CD |
+| **Full OS testing** | Incus | `debian:latest` | Systemd, services, integration |
+
+### Incus vs Docker
+
+| Aspect | Docker | Incus |
+|--------|--------|-------|
+| **Use for** | Container/app testing | Full OS/systemd testing |
+| **Image** | `alpine:latest` | `debian:latest` |
+| **Init system** | None (single process) | Full systemd |
+| **Best for** | Quick tests, CI | Service install, integration |
+| **Startup** | Fast (~1s) | Slower (~5s) |
+
+### Testing Workflow
+
+```bash
+# Build in Docker
+BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}.XXXXXX")
+docker run --rm -v $(pwd):/build -w /build -e CGO_ENABLED=0 \
+  golang:alpine go build -o /build/binaries/search ./src
+
+# Quick test in Docker (container testing)
+docker run --rm -v $(pwd)/binaries:/app alpine:latest \
+  /app/search --help
+
+# Full OS test in Incus (systemd, services)
+incus launch images:debian/12 test-search
+incus file push binaries/search test-search/usr/local/bin/
+incus exec test-search -- search --help
+incus exec test-search -- search --service --install
+incus delete test-search --force
+```
+
+### Why Containerized Everything?
 
 | Reason | Description |
 |--------|-------------|
-| **Clean system** | No Go installation, no build artifacts on host |
-| **Cross-platform** | Works on any distro/platform with Docker |
-| **Consistent environment** | Same Go version and dependencies across all builds |
-| **Static binaries** | `CGO_ENABLED=0` produces binaries with no runtime dependencies |
-| **Reproducible** | Builds work regardless of host OS setup |
-| **No pollution** | Host system stays clean |
+| **Clean system** | No Go, no binaries, no artifacts on host |
+| **Isolation** | Each test runs in fresh environment |
+| **Reproducible** | Same results across all machines |
+| **Full OS testing** | Incus provides real systemd for service tests |
+| **No pollution** | Host system stays pristine |
 
 ### Container Images
 
 | Purpose | Image | Why |
 |---------|-------|-----|
 | Building Go | `golang:alpine` | Latest Go on Alpine, small image |
-| Runtime | `alpine:latest` | Minimal runtime with curl, bash, tini |
-| Testing | `golang:alpine` | Same as build for consistency |
+| Container runtime | `alpine:latest` | Minimal, fast, good for quick tests |
+| Full OS runtime | `debian:latest` (Incus) | Full systemd, realistic environment |
 
 ### Common Docker Commands
 
@@ -3632,9 +4567,9 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 # Set project path (adjust as needed)
 PROJECT_PATH="/root/Projects/github/apimgr/search"
 
-# Build
+# Build (outputs to binaries/ which can be mounted into test containers)
 docker run --rm -v $PROJECT_PATH:/build -w /build -e CGO_ENABLED=0 \
-  golang:alpine go build -o /tmp/apimgr-build/search/search ./src
+  golang:alpine go build -o /build/binaries/search ./src
 
 # Run tests
 docker run --rm -v $PROJECT_PATH:/build -w /build \
@@ -3665,55 +4600,85 @@ docker run --rm -it -v $PROJECT_PATH:/build -w /build \
   golang:alpine sh
 ```
 
-## Build Command (NON-NEGOTIABLE)
+## Build and Test (NON-NEGOTIABLE)
 
-**This is the REQUIRED build command. Not an example - this MUST be used.**
-
-```bash
-docker run --rm -v /path/to/project:/build -w /build -e CGO_ENABLED=0 \
-  golang:alpine go build -o /tmp/apimgr-build/search/search ./src
-```
-
-### Testing a Built Binary
+**Build outputs to `binaries/`, test by running in container.**
 
 ```bash
 # Build
-docker run --rm -v /root/Projects/github/apimgr/search:/build -w /build \
-  -e CGO_ENABLED=0 golang:alpine go build -o /tmp/apimgr-build/search/search ./src
+docker run --rm -v $(pwd):/build -w /build -e CGO_ENABLED=0 \
+  golang:alpine go build -o /build/binaries/search ./src
 
-# Basic tests (no config needed)
-/tmp/apimgr-build/search/search --help
-/tmp/apimgr-build/search/search --version
+# Test in Docker (quick)
+docker run --rm -v $(pwd)/binaries:/app alpine:latest /app/search --help
 
-# Full test with config/data (ALWAYS use temp directories)
-mkdir -p /tmp/apimgr-test/search/{config,data,logs}
-
-# Run with temp directories (use correct CLI flags)
-/tmp/apimgr-build/search/search \
-  --config /tmp/apimgr-test/search/config \
-  --data /tmp/apimgr-test/search/data
-
-# Cleanup after testing
-rm -rf /tmp/apimgr-test/search
-rm -rf /tmp/apimgr-build/search
+# Test in Incus (full OS with systemd)
+incus launch images:debian/12 test-search
+incus file push binaries/search test-search/usr/local/bin/
+incus exec test-search -- search --help
+incus delete test-search --force
 ```
 
-### Test Directory Setup
-
-**ALWAYS create temp directories before running tests:**
+### Testing with Config/Data
 
 ```bash
-# Create all test directories
-TEST_BASE="/tmp/apimgr-test/search"
-mkdir -p "$TEST_BASE"/{config,data/db,data/tor,data/geoip,logs}
+# Create prefixed temp dir for test data
+TEST_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}.XXXXXX")
+mkdir -p $TEST_DIR/{config,data,logs}
 
-# Run binary with test directories (use correct CLI flags)
-/tmp/apimgr-build/search/search \
-  --config "$TEST_BASE/config" \
-  --data "$TEST_BASE/data"
+# Build to binaries/
+docker run --rm -v $(pwd):/build -w /build -e CGO_ENABLED=0 \
+  golang:alpine go build -o /build/binaries/search ./src
+
+# Quick test in Docker
+docker run --rm -v $(pwd)/binaries:/app alpine:latest /app/search --help
+docker run --rm -v $(pwd)/binaries:/app alpine:latest /app/search --version
+
+# Full test with config/data in Docker
+docker run --rm \
+  -v $(pwd)/binaries:/app \
+  -v $TEST_DIR:/test \
+  alpine:latest /app/search \
+    --config /test/config \
+    --data /test/data \
+    --log /test/logs
+
+# Cleanup
+rm -rf $TEST_DIR
 ```
 
-**NEVER run the binary without specifying temp directories - it may default to project directory!**
+### Full OS Testing with Incus
+
+**For testing systemd services, use Incus with Debian:**
+
+```bash
+# Create prefixed temp dir
+TEST_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}.XXXXXX")
+mkdir -p $TEST_DIR/{config,data,logs}
+
+# Build
+docker run --rm -v $(pwd):/build -w /build -e CGO_ENABLED=0 \
+  golang:alpine go build -o /build/binaries/search ./src
+
+# Launch Incus container
+incus launch images:debian/12 test-search
+
+# Push binary and test data
+incus file push binaries/search test-search/usr/local/bin/
+incus exec test-search -- mkdir -p /etc/apimgr/search /var/lib/apimgr/search
+
+# Test
+incus exec test-search -- search --help
+incus exec test-search -- search --version
+incus exec test-search -- search --service --install
+incus exec test-search -- systemctl status search
+
+# Cleanup
+incus delete test-search --force
+rm -rf $TEST_DIR
+```
+
+**NEVER run binaries directly on host - always use Docker or Incus containers!**
 
 ## Process Management (NON-NEGOTIABLE)
 
@@ -3768,7 +4733,7 @@ mkdir -p "$TEST_BASE"/{config,data/db,data/tor,data/geoip,logs}
 |------|-------------|
 | **ONLY this project** | Only stop/remove containers named `search` |
 | **NEVER other containers** | Even if they look related or unused |
-| **NEVER images not ours** | Only remove `{projectorg}/search:*` images |
+| **NEVER images not ours** | Only remove `apimgr/search:*` images |
 | **NEVER base images** | Never remove `golang`, `alpine`, `ubuntu`, etc. |
 | **NEVER volumes** | Unless explicitly part of this project |
 
@@ -3780,9 +4745,9 @@ mkdir -p "$TEST_BASE"/{config,data/db,data/tor,data/geoip,logs}
 4. docker rm search                      # Remove container
 
 # For images:
-1. docker images {projectorg}/search     # List ONLY this project's images
+1. docker images apimgr/search     # List ONLY this project's images
 2. Verify output shows ONLY our images          # CHECK before removing
-3. docker rmi {projectorg}/search:tag    # Remove SPECIFIC tag
+3. docker rmi apimgr/search:tag    # Remove SPECIFIC tag
 ```
 
 ### Allowed Commands (Project-Scoped ONLY)
@@ -3793,9 +4758,9 @@ mkdir -p "$TEST_BASE"/{config,data/db,data/tor,data/geoip,logs}
 | `pkill -x search` | Exact binary name match only |
 | `docker stop search` | Stop specific container by name |
 | `docker rm search` | Remove specific container by name |
-| `docker rmi {projectorg}/search:tag` | Remove specific image:tag |
-| `rm -rf /tmp/apimgr-build/search/` | Remove specific project temp files |
-| `rm -rf /tmp/apimgr-*/search/` | Remove all temp files for one project |
+| `docker rmi apimgr/search:tag` | Remove specific image:tag |
+| `rm -rf $BUILD_DIR` | Remove temp build dir (from mktemp) |
+| `rm -rf $TEST_DIR` | Remove temp test dir (from mktemp) |
 
 ### Before ANY Kill/Remove Operation
 
@@ -3813,13 +4778,13 @@ mkdir -p "$TEST_BASE"/{config,data/db,data/tor,data/geoip,logs}
 
 | Purpose | Command |
 |---------|---------|
-| Project build temp | `rm -rf /tmp/apimgr-build/search/` |
-| Project test temp | `rm -rf /tmp/apimgr-test/search/` |
-| Project debug temp | `rm -rf /tmp/apimgr-debug/search/` |
-| All project temp | `rm -rf /tmp/apimgr-*/search/` |
-| All org temp | `rm -rf /tmp/apimgr-*/` |
+| Temp build dir | `rm -rf $BUILD_DIR` (saved from mktemp) |
+| Temp test dir | `rm -rf $TEST_DIR` (saved from mktemp) |
+| All mktemp dirs | Cleaned automatically on reboot |
 | Project binaries | `rm -rf ./binaries/search*` |
 | Project releases | `rm -rf ./releases/search*` |
+
+**Note:** Always use `mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}.XXXXXX"` and save the path to a variable for cleanup. Temp dirs are auto-cleaned on reboot.
 
 ### NEVER Delete Without Confirmation
 
@@ -3913,8 +4878,8 @@ All Dockerfiles MUST include these labels:
 | Label | Value |
 |-------|-------|
 | `maintainer` | `{maintainer_name} <{maintainer_email}>` |
-| `org.opencontainers.image.vendor` | `{projectorg}` |
-| `org.opencontainers.image.authors` | `{projectorg}` |
+| `org.opencontainers.image.vendor` | `apimgr` |
+| `org.opencontainers.image.authors` | `apimgr` |
 | `org.opencontainers.image.title` | `search` |
 | `org.opencontainers.image.base.name` | `search` |
 | `org.opencontainers.image.description` | `Containerized version of search` |
@@ -3923,9 +4888,9 @@ All Dockerfiles MUST include these labels:
 | `org.opencontainers.image.version` | `${VERSION}` (ARG) |
 | `org.opencontainers.image.schema-version` | `${VERSION}` (ARG) |
 | `org.opencontainers.image.revision` | `${COMMIT_ID}` (ARG) |
-| `org.opencontainers.image.url` | `https://github.com/{projectorg}/search` |
-| `org.opencontainers.image.source` | `https://github.com/{projectorg}/search` |
-| `org.opencontainers.image.documentation` | `https://github.com/{projectorg}/search` |
+| `org.opencontainers.image.url` | `https://github.com/apimgr/search` |
+| `org.opencontainers.image.source` | `https://github.com/apimgr/search` |
+| `org.opencontainers.image.documentation` | `https://github.com/apimgr/search` |
 | `org.opencontainers.image.vcs-type` | `Git` |
 | `com.github.containers.toolbox` | `false` |
 
@@ -3980,14 +4945,14 @@ ARG LICENSE=MIT
 
 # Static Labels
 LABEL maintainer="{maintainer_name} <{maintainer_email}>" \
-      org.opencontainers.image.vendor="{projectorg}" \
-      org.opencontainers.image.authors="{projectorg}" \
+      org.opencontainers.image.vendor="apimgr" \
+      org.opencontainers.image.authors="apimgr" \
       org.opencontainers.image.title="search" \
       org.opencontainers.image.base.name="search" \
       org.opencontainers.image.description="Containerized version of search" \
-      org.opencontainers.image.url="https://github.com/{projectorg}/search" \
-      org.opencontainers.image.source="https://github.com/{projectorg}/search" \
-      org.opencontainers.image.documentation="https://github.com/{projectorg}/search" \
+      org.opencontainers.image.url="https://github.com/apimgr/search" \
+      org.opencontainers.image.source="https://github.com/apimgr/search" \
+      org.opencontainers.image.documentation="https://github.com/apimgr/search" \
       org.opencontainers.image.vcs-type="Git" \
       com.github.containers.toolbox="false"
 
@@ -4302,16 +5267,16 @@ main "$@"
 **NEVER run docker compose in the project directory.**
 
 **Always use temp directory workflow:**
-1. Create unique temp dir: `/tmp/search-{unique}/`
+1. Create unique temp dir with apimgr prefix
 2. Copy `./docker/docker-compose.yml` to temp dir
 3. Create `rootfs/` structure in temp dir
 4. Run docker compose from temp dir
 5. Data lives in temp dir, isolated from project
 
 ```bash
-# Setup
+# Setup (uses OS temp dir with org prefix)
 PROJECT_ROOT="/path/to/project"
-TEMP_DIR="/tmp/search-$(date +%s)"
+TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}.XXXXXX")
 mkdir -p "$TEMP_DIR/rootfs/config/search"
 mkdir -p "$TEMP_DIR/rootfs/data/search"
 mkdir -p "$TEMP_DIR/rootfs/db"
@@ -4377,7 +5342,7 @@ name: search
 
 services:
   search:
-    image: ghcr.io/{projectorg}/search:latest
+    image: ghcr.io/apimgr/search:latest
     container_name: search
     restart: unless-stopped
     environment:
@@ -4411,7 +5376,7 @@ name: search
 
 services:
   search:
-    image: ghcr.io/{projectorg}/search:latest
+    image: ghcr.io/apimgr/search:latest
     container_name: search
     restart: unless-stopped
     environment:
@@ -4445,7 +5410,7 @@ name: search
 
 services:
   search:
-    image: ghcr.io/{projectorg}/search:latest
+    image: ghcr.io/apimgr/search:latest
     container_name: search
     restart: unless-stopped
     depends_on:
@@ -4540,10 +5505,10 @@ networks:
 
 | Tag | Description | Example |
 |-----|-------------|---------|
-| `ghcr.io/{projectorg}/search:latest` | Latest stable release | `ghcr.io/myorg/myapp:latest` |
-| `ghcr.io/{projectorg}/search:{version}` | Specific version | `ghcr.io/myorg/myapp:1.2.3` |
-| `ghcr.io/{projectorg}/search:{YYMM}` | Year/month tag | `ghcr.io/myorg/myapp:2512` |
-| `ghcr.io/{projectorg}/search:{commit}` | Git commit (7 char) | `ghcr.io/myorg/myapp:abc1234` |
+| `ghcr.io/apimgr/search:latest` | Latest stable release | `ghcr.io/myorg/myapp:latest` |
+| `ghcr.io/apimgr/search:{version}` | Specific version | `ghcr.io/myorg/myapp:1.2.3` |
+| `ghcr.io/apimgr/search:{YYMM}` | Year/month tag | `ghcr.io/myorg/myapp:2512` |
+| `ghcr.io/apimgr/search:{commit}` | Git commit (7 char) | `ghcr.io/myorg/myapp:abc1234` |
 
 ### Development Tags (Local)
 
@@ -4561,7 +5526,7 @@ networks:
 
 ### Tag Rules
 
-1. **Release builds** MUST push to `ghcr.io/{projectorg}/search`
+1. **Release builds** MUST push to `ghcr.io/apimgr/search`
 2. **Development builds** MUST use local-only tags (no registry prefix)
 3. **NEVER push `:dev` or `:test` tags to ghcr.io**
 4. All release images built for `linux/amd64` AND `linux/arm64`
@@ -4570,7 +5535,20 @@ networks:
 
 # PART 14: CI/CD WORKFLOWS (NON-NEGOTIABLE)
 
-**All projects MUST have GitHub Actions workflows.**
+**All projects MUST have CI/CD workflows appropriate for their git hosting platform.**
+
+| Git Host | CI System | Config Location | Self-Hosted |
+|----------|-----------|-----------------|-------------|
+| GitHub | GitHub Actions | `.github/workflows/*.yml` | No (github.com only) |
+| Gitea | Gitea Actions | `.gitea/workflows/*.yml` | Yes |
+| Forgejo | Forgejo Actions | `.forgejo/workflows/*.yml` | Yes (self-hosted only) |
+| GitLab | GitLab CI | `.gitlab-ci.yml` | Yes |
+
+**Note:** Forgejo is a fork of Gitea - Forgejo Actions are compatible with Gitea Actions. Use `.forgejo/workflows/` for Forgejo or `.gitea/workflows/` (both work).
+
+# GITHUB ACTIONS
+
+**GitHub Actions only works with github.com (no self-hosted option).**
 
 ## Workflow Files
 
@@ -4608,7 +5586,7 @@ on:
       - '[0-9]*.[0-9]*.[0-9]*'
 
 env:
-  PROJECT: search
+  PROJECTNAME: search
 
 jobs:
   build:
@@ -4649,20 +5627,38 @@ jobs:
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
 
-      - name: Build
+      - name: Build server
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
           LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECT }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src
 
-      - name: Upload artifact
+      # CLI build - only if src/client/ directory exists
+      - name: Build CLI
+        if: hashFiles('src/client/') != ''
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}'"
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli${{ matrix.ext }} ./src/client
+
+      - name: Upload server artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PROJECT }}-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ${{ env.PROJECT }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+
+      - name: Upload CLI artifact
+        if: hashFiles('src/client/') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
+          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli${{ matrix.ext }}
 
   release:
     needs: build
@@ -4700,7 +5696,7 @@ jobs:
         run: |
           tar --exclude='.git' --exclude='.github' --exclude='.gitea' \
             --exclude='binaries' --exclude='releases' --exclude='*.tar.gz' \
-            -czf binaries/${{ env.PROJECT }}-${{ env.VERSION }}-source.tar.gz .
+            -czf binaries/${{ env.PROJECTNAME }}-${{ env.VERSION }}-source.tar.gz .
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
@@ -4724,7 +5720,7 @@ on:
       - beta
 
 env:
-  PROJECT: search
+  PROJECTNAME: search
 
 jobs:
   build:
@@ -4751,20 +5747,38 @@ jobs:
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
 
-      - name: Build
+      - name: Build server
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
           LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECT }}-${{ matrix.goos }}-${{ matrix.goarch }} ./src
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }} ./src
 
-      - name: Upload artifact
+      # CLI build - only if src/client/ directory exists
+      - name: Build CLI
+        if: hashFiles('src/client/') != ''
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}'"
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli ./src/client
+
+      - name: Upload server artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PROJECT }}-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ${{ env.PROJECT }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
+
+      - name: Upload CLI artifact
+        if: hashFiles('src/client/') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
+          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
 
   release:
     needs: build
@@ -4813,7 +5827,7 @@ on:
   workflow_dispatch:
 
 env:
-  PROJECT: search
+  PROJECTNAME: search
 
 jobs:
   build:
@@ -4840,20 +5854,38 @@ jobs:
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
 
-      - name: Build
+      - name: Build server
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
           LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECT }}-${{ matrix.goos }}-${{ matrix.goarch }} ./src
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }} ./src
 
-      - name: Upload artifact
+      # CLI build - only if src/client/ directory exists
+      - name: Build CLI
+        if: hashFiles('src/client/') != ''
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}'"
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli ./src/client
+
+      - name: Upload server artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PROJECT }}-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ${{ env.PROJECT }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
+
+      - name: Upload CLI artifact
+        if: hashFiles('src/client/') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
+          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
 
   release:
     needs: build
@@ -4925,7 +5957,7 @@ on:
   workflow_dispatch:
 
 env:
-  PROJECT: search
+  PROJECTNAME: search
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
@@ -5001,7 +6033,7 @@ jobs:
             BUILD_DATE="${{ env.BUILD_DATE }}"
             COMMIT_ID="${{ env.COMMIT_ID }}"
           labels: |
-            org.opencontainers.image.title="${{ env.PROJECT }}"
+            org.opencontainers.image.title="${{ env.PROJECTNAME }}"
             org.opencontainers.image.version="${{ env.VERSION }}"
             org.opencontainers.image.created="${{ env.BUILD_DATE }}"
             org.opencontainers.image.revision="${{ env.COMMIT_ID }}"
@@ -5010,15 +6042,48 @@ jobs:
 
 ---
 
-# GITEA ACTIONS (Alternative to GitHub)
+# GITEA / FORGEJO ACTIONS
 
-**For projects hosted on Gitea, use these equivalent workflows.**
+**For projects hosted on Gitea or Forgejo (cloud or self-hosted), use these equivalent workflows.**
 
-Gitea Actions use nearly identical syntax to GitHub Actions. Key differences:
-- Directory: `.gitea/workflows/` instead of `.github/workflows/`
-- Use `gitea.com/actions/*` actions or compatible alternatives
-- Registry: Use Gitea's container registry or specify external registry
-- Some GitHub-specific variables have Gitea equivalents
+Forgejo is a community fork of Gitea - workflows are fully compatible between them.
+
+| Platform | Directory | Variables | Self-Hosted |
+|----------|-----------|-----------|-------------|
+| Gitea | `.gitea/workflows/` | `GITEA_*`, `${{ gitea.* }}` | Yes (gitea.com + self-hosted) |
+| Forgejo | `.forgejo/workflows/` | `FORGEJO_*`, `${{ forgejo.* }}` | Yes (self-hosted only) |
+
+**Compatibility:** Forgejo also reads `.gitea/workflows/` and accepts `GITEA_*` variables for backwards compatibility.
+
+Key differences from GitHub Actions:
+- Directory: `.gitea/workflows/` or `.forgejo/workflows/`
+- Use `gitea.com/actions/*` actions or compatible GitHub Actions
+- Registry: Auto-detected from server URL (works with self-hosted)
+- Some GitHub-specific variables have Gitea/Forgejo equivalents (see mapping table below)
+
+## Self-Hosted Configuration
+
+**Gitea:**
+
+| Setting | Value |
+|---------|-------|
+| Gitea version | 1.19+ (Actions support) |
+| Enable Actions | Site Administration → Actions → Enable Actions |
+| Runner | Register runner via `act_runner` |
+| Container Registry | Enable in Site Administration → Packages |
+| Token | User Settings → Applications → Generate Access Token |
+
+**Forgejo:**
+
+| Setting | Value |
+|---------|-------|
+| Forgejo version | 1.21+ (Actions support) |
+| Enable Actions | Site Administration → Actions → Enable Actions |
+| Runner | Register runner via `forgejo-runner` (or `act_runner`) |
+| Container Registry | Enable in Site Administration → Packages |
+| Token | User Settings → Applications → Generate Access Token |
+
+For self-hosted runners, change `runs-on: ubuntu-latest` to your runner label.
 
 ## Workflow Files
 
@@ -5043,7 +6108,7 @@ on:
       - '[0-9]*.[0-9]*.[0-9]*'
 
 env:
-  PROJECT: search
+  PROJECTNAME: search
 
 jobs:
   build:
@@ -5084,20 +6149,38 @@ jobs:
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
 
-      - name: Build
+      - name: Build server
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
           LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECT }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src
 
-      - name: Upload artifact
+      # CLI build - only if src/client/ directory exists
+      - name: Build CLI
+        if: hashFiles('src/client/') != ''
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}'"
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli${{ matrix.ext }} ./src/client
+
+      - name: Upload server artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PROJECT }}-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ${{ env.PROJECT }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+
+      - name: Upload CLI artifact
+        if: hashFiles('src/client/') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
+          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli${{ matrix.ext }}
 
   release:
     needs: build
@@ -5135,7 +6218,7 @@ jobs:
         run: |
           tar --exclude='.git' --exclude='.github' --exclude='.gitea' \
             --exclude='binaries' --exclude='releases' --exclude='*.tar.gz' \
-            -czf binaries/${{ env.PROJECT }}-${{ env.VERSION }}-source.tar.gz .
+            -czf binaries/${{ env.PROJECTNAME }}-${{ env.VERSION }}-source.tar.gz .
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
@@ -5159,7 +6242,7 @@ on:
       - beta
 
 env:
-  PROJECT: search
+  PROJECTNAME: search
 
 jobs:
   build:
@@ -5186,20 +6269,38 @@ jobs:
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
 
-      - name: Build
+      - name: Build server
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
           LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECT }}-${{ matrix.goos }}-${{ matrix.goarch }} ./src
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }} ./src
 
-      - name: Upload artifact
+      # CLI build - only if src/client/ directory exists
+      - name: Build CLI
+        if: hashFiles('src/client/') != ''
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}'"
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli ./src/client
+
+      - name: Upload server artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PROJECT }}-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ${{ env.PROJECT }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
+
+      - name: Upload CLI artifact
+        if: hashFiles('src/client/') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
+          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
 
   release:
     needs: build
@@ -5248,7 +6349,7 @@ on:
   workflow_dispatch:
 
 env:
-  PROJECT: search
+  PROJECTNAME: search
 
 jobs:
   build:
@@ -5275,20 +6376,38 @@ jobs:
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
 
-      - name: Build
+      - name: Build server
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
           LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECT }}-${{ matrix.goos }}-${{ matrix.goarch }} ./src
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }} ./src
 
-      - name: Upload artifact
+      # CLI build - only if src/client/ directory exists
+      - name: Build CLI
+        if: hashFiles('src/client/') != ''
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}'"
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli ./src/client
+
+      - name: Upload server artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PROJECT }}-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ${{ env.PROJECT }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
+
+      - name: Upload CLI artifact
+        if: hashFiles('src/client/') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
+          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
 
   release:
     needs: build
@@ -5345,8 +6464,9 @@ on:
   workflow_dispatch:
 
 env:
-  PROJECT: search
-  REGISTRY: gitea.{domain}  # or ghcr.io
+  PROJECTNAME: search
+  # Registry auto-detected from Gitea instance (works with self-hosted)
+  # Format: {gitea-server}/owner/repo -> extracts server for registry
   IMAGE_NAME: ${{ gitea.repository }}
 
 jobs:
@@ -5364,6 +6484,15 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Set registry from server URL
+        run: |
+          # Extract registry from Gitea server URL (works with self-hosted)
+          # Example: https://git.example.com -> git.example.com
+          SERVER_URL="${{ gitea.server_url }}"
+          REGISTRY="${SERVER_URL#https://}"
+          REGISTRY="${REGISTRY#http://}"
+          echo "REGISTRY=${REGISTRY}" >> $GITEA_ENV
 
       - name: Log in to Container Registry
         uses: docker/login-action@v3
@@ -5385,12 +6514,12 @@ jobs:
             echo "IS_TAG=false" >> $GITEA_ENV
           fi
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
-          echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
 
       - name: Determine tags
         id: tags
         run: |
-          TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.GIT_COMMIT }}"
+          # Use self-hosted registry URL
+          TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.COMMIT_ID }}"
 
           if [[ "${{ env.IS_TAG }}" == "true" ]]; then
             # Release tag - version, latest, YYMM
@@ -5422,46 +6551,462 @@ jobs:
             BUILD_DATE="${{ env.BUILD_DATE }}"
             COMMIT_ID="${{ env.COMMIT_ID }}"
           labels: |
-            org.opencontainers.image.title="${{ env.PROJECT }}"
+            org.opencontainers.image.title="${{ env.PROJECTNAME }}"
             org.opencontainers.image.version="${{ env.VERSION }}"
             org.opencontainers.image.created="${{ env.BUILD_DATE }}"
             org.opencontainers.image.revision="${{ env.COMMIT_ID }}"
             org.opencontainers.image.source="${{ gitea.server_url }}/${{ gitea.repository }}"
 ```
 
-## Gitea vs GitHub Variable Mapping
+## Variable Mapping (GitHub → Gitea → Forgejo)
 
-| GitHub | Gitea | Description |
-|--------|-------|-------------|
-| `${{ github.* }}` | `${{ gitea.* }}` | Context variables |
-| `GITHUB_ENV` | `GITEA_ENV` | Environment file |
-| `GITHUB_OUTPUT` | `GITEA_OUTPUT` | Output file |
-| `GITHUB_REF_NAME` | `GITEA_REF_NAME` | Reference name |
-| `github.token` | `secrets.GITEA_TOKEN` | Auth token |
-| `github.actor` | `gitea.actor` | Username |
-| `github.repository` | `gitea.repository` | Repo path |
-| `github.server_url` | `gitea.server_url` | Server URL |
+| GitHub | Gitea | Forgejo | Description |
+|--------|-------|---------|-------------|
+| `${{ github.* }}` | `${{ gitea.* }}` | `${{ forgejo.* }}` | Context variables |
+| `GITHUB_ENV` | `GITEA_ENV` | `FORGEJO_ENV` | Environment file |
+| `GITHUB_OUTPUT` | `GITEA_OUTPUT` | `FORGEJO_OUTPUT` | Output file |
+| `GITHUB_REF_NAME` | `GITEA_REF_NAME` | `FORGEJO_REF_NAME` | Reference name |
+| `github.token` | `secrets.GITEA_TOKEN` | `secrets.FORGEJO_TOKEN` | Auth token |
+| `github.actor` | `gitea.actor` | `forgejo.actor` | Username |
+| `github.repository` | `gitea.repository` | `forgejo.repository` | Repo path |
+| `github.server_url` | `gitea.server_url` | `forgejo.server_url` | Server URL |
+
+**Note:** Forgejo accepts both `FORGEJO_*` and `GITEA_*` variables for backwards compatibility.
 
 **Notes:**
-- Most GitHub Actions work on Gitea with minimal changes
-- Use `secrets.GITEA_TOKEN` for authentication (create in Gitea settings)
-- Container registry URL depends on Gitea instance configuration
-- Some advanced GitHub features may not be available
+- Most GitHub Actions work on Gitea/Forgejo with minimal changes
+- Use `secrets.GITEA_TOKEN` or `secrets.FORGEJO_TOKEN` for authentication
+- Works with gitea.com, self-hosted Gitea, and self-hosted Forgejo
+- Container registry auto-detected from server URL (e.g., `git.example.com/owner/repo`)
+- Self-hosted runners: change `runs-on: ubuntu-latest` to your runner label
+- Forgejo can use `.gitea/workflows/` directory for Gitea compatibility
+- Some advanced GitHub features may not be available on older versions
 
 ---
 
-## Jenkins (NON-NEGOTIABLE)
+# GITLAB CI
 
-### Configuration
+**For projects hosted on GitLab (gitlab.com or self-hosted), use this equivalent CI/CD configuration.**
+
+GitLab CI uses a single `.gitlab-ci.yml` file in the repository root with stages instead of separate workflow files.
+
+## Self-Hosted Configuration
 
 | Setting | Value |
 |---------|-------|
-| Server | `jenkins.casjay.cc` |
-| Agents | `arm64`, `amd64` |
-| Build | Both architectures in parallel |
-| Trigger | Push to main/master, tags, PRs |
+| GitLab version | 13.0+ (recommended 15.0+) |
+| Runners | Register via `gitlab-runner register` |
+| Container Registry | Enable in Admin Area → Settings → Container Registry |
+| CI/CD Variables | Project → Settings → CI/CD → Variables |
 
-### Jenkinsfile
+All `$CI_*` variables are auto-populated by GitLab (works with self-hosted).
+
+## Key Differences from GitHub/Gitea Actions
+
+| Feature | GitHub/Gitea Actions | GitLab CI |
+|---------|---------------------|-----------|
+| Config location | `.github/workflows/*.yml` | `.gitlab-ci.yml` (single file) |
+| Job grouping | Separate workflow files | Stages in single file |
+| Triggers | `on:` block | `rules:` or `only/except` |
+| Secrets | `${{ secrets.NAME }}` | `$NAME` (CI/CD variables) |
+| Artifacts | `actions/upload-artifact` | `artifacts:` block |
+| Matrix builds | `strategy.matrix` | `parallel:matrix` |
+| Container registry | `ghcr.io` | `$CI_REGISTRY` |
+
+## GitLab CI Configuration
+
+**File:** `.gitlab-ci.yml`
+
+```yaml
+# GitLab CI/CD Pipeline for search
+# Equivalent to GitHub Actions: release.yml, beta.yml, daily.yml, docker.yml
+
+variables:
+  PROJECTNAME: "search"
+  PROJECTORG: "apimgr"
+  CGO_ENABLED: "0"
+  GOOS: linux
+  GOARCH: amd64
+
+stages:
+  - build
+  - test
+  - package
+  - release
+  - docker
+
+# =============================================================================
+# BUILD TEMPLATES
+# =============================================================================
+
+.go-build-template: &go-build
+  image: golang:alpine
+  before_script:
+    - apk add --no-cache git
+    - export VERSION="${CI_COMMIT_TAG#v}"
+    - export COMMIT_ID="${CI_COMMIT_SHORT_SHA}"
+    - export BUILD_DATE="$(date +"%a %b %d, %Y at %H:%M:%S %Z")"
+    - export LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}'"
+
+# =============================================================================
+# RELEASE BUILDS (Tag Push: v* or semver)
+# =============================================================================
+
+build:linux-amd64:
+  <<: *go-build
+  stage: build
+  variables:
+    GOOS: linux
+    GOARCH: amd64
+  script:
+    - go build -ldflags "${LDFLAGS}" -o $SEARCH-linux-amd64 ./src
+    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-linux-amd64-cli ./src/client; fi
+  artifacts:
+    paths:
+      - $SEARCH-linux-amd64*
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
+
+build:linux-arm64:
+  <<: *go-build
+  stage: build
+  variables:
+    GOOS: linux
+    GOARCH: arm64
+  script:
+    - go build -ldflags "${LDFLAGS}" -o $SEARCH-linux-arm64 ./src
+    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-linux-arm64-cli ./src/client; fi
+  artifacts:
+    paths:
+      - $SEARCH-linux-arm64*
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
+
+build:darwin-amd64:
+  <<: *go-build
+  stage: build
+  variables:
+    GOOS: darwin
+    GOARCH: amd64
+  script:
+    - go build -ldflags "${LDFLAGS}" -o $SEARCH-darwin-amd64 ./src
+    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-darwin-amd64-cli ./src/client; fi
+  artifacts:
+    paths:
+      - $SEARCH-darwin-amd64*
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
+
+build:darwin-arm64:
+  <<: *go-build
+  stage: build
+  variables:
+    GOOS: darwin
+    GOARCH: arm64
+  script:
+    - go build -ldflags "${LDFLAGS}" -o $SEARCH-darwin-arm64 ./src
+    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-darwin-arm64-cli ./src/client; fi
+  artifacts:
+    paths:
+      - $SEARCH-darwin-arm64*
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
+
+build:windows-amd64:
+  <<: *go-build
+  stage: build
+  variables:
+    GOOS: windows
+    GOARCH: amd64
+  script:
+    - go build -ldflags "${LDFLAGS}" -o $SEARCH-windows-amd64.exe ./src
+    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-windows-amd64-cli.exe ./src/client; fi
+  artifacts:
+    paths:
+      - $SEARCH-windows-amd64*.exe
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
+
+build:windows-arm64:
+  <<: *go-build
+  stage: build
+  variables:
+    GOOS: windows
+    GOARCH: arm64
+  script:
+    - go build -ldflags "${LDFLAGS}" -o $SEARCH-windows-arm64.exe ./src
+    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-windows-arm64-cli.exe ./src/client; fi
+  artifacts:
+    paths:
+      - $SEARCH-windows-arm64*.exe
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
+
+build:freebsd-amd64:
+  <<: *go-build
+  stage: build
+  variables:
+    GOOS: freebsd
+    GOARCH: amd64
+  script:
+    - go build -ldflags "${LDFLAGS}" -o $SEARCH-freebsd-amd64 ./src
+    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-freebsd-amd64-cli ./src/client; fi
+  artifacts:
+    paths:
+      - $SEARCH-freebsd-amd64*
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
+
+build:freebsd-arm64:
+  <<: *go-build
+  stage: build
+  variables:
+    GOOS: freebsd
+    GOARCH: arm64
+  script:
+    - go build -ldflags "${LDFLAGS}" -o $SEARCH-freebsd-arm64 ./src
+    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-freebsd-arm64-cli ./src/client; fi
+  artifacts:
+    paths:
+      - $SEARCH-freebsd-arm64*
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
+
+# =============================================================================
+# TEST
+# =============================================================================
+
+test:
+  <<: *go-build
+  stage: test
+  script:
+    - go test -v -cover ./...
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
+    - if: $CI_COMMIT_BRANCH == "beta"
+
+# =============================================================================
+# RELEASE (GitLab Release)
+# =============================================================================
+
+release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  needs:
+    - build:linux-amd64
+    - build:linux-arm64
+    - build:darwin-amd64
+    - build:darwin-arm64
+    - build:windows-amd64
+    - build:windows-arm64
+    - build:freebsd-amd64
+    - build:freebsd-arm64
+    - test
+  script:
+    - echo "Creating release ${CI_COMMIT_TAG}"
+    - echo "${CI_COMMIT_TAG#v}" > version.txt
+  artifacts:
+    paths:
+      - version.txt
+      - $SEARCH-*
+  release:
+    tag_name: $CI_COMMIT_TAG
+    name: "Release $CI_COMMIT_TAG"
+    description: "Release created by GitLab CI"
+    assets:
+      links:
+        - name: "$SEARCH-linux-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$SEARCH-linux-amd64?job=build:linux-amd64"
+        - name: "$SEARCH-linux-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$SEARCH-linux-arm64?job=build:linux-arm64"
+        - name: "$SEARCH-darwin-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$SEARCH-darwin-amd64?job=build:darwin-amd64"
+        - name: "$SEARCH-darwin-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$SEARCH-darwin-arm64?job=build:darwin-arm64"
+        - name: "$SEARCH-windows-amd64.exe"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$SEARCH-windows-amd64.exe?job=build:windows-amd64"
+        - name: "$SEARCH-windows-arm64.exe"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$SEARCH-windows-arm64.exe?job=build:windows-arm64"
+        - name: "$SEARCH-freebsd-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$SEARCH-freebsd-amd64?job=build:freebsd-amd64"
+        - name: "$SEARCH-freebsd-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$SEARCH-freebsd-arm64?job=build:freebsd-arm64"
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
+
+# =============================================================================
+# BETA BUILDS (Push to beta branch)
+# =============================================================================
+
+build:beta:linux:
+  <<: *go-build
+  stage: build
+  variables:
+    GOOS: linux
+    GOARCH: amd64
+  before_script:
+    - apk add --no-cache git
+    - export VERSION="$(date +%Y%m%d%H%M%S)-beta"
+    - export COMMIT_ID="${CI_COMMIT_SHORT_SHA}"
+    - export BUILD_DATE="$(date +"%a %b %d, %Y at %H:%M:%S %Z")"
+    - export LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}'"
+  script:
+    - go build -ldflags "${LDFLAGS}" -o $SEARCH-linux-amd64 ./src
+    - go build -ldflags "${LDFLAGS}" -o $SEARCH-linux-arm64 ./src
+  artifacts:
+    paths:
+      - $SEARCH-linux-*
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_BRANCH == "beta"
+
+# =============================================================================
+# DAILY BUILDS (Scheduled + main/master push)
+# =============================================================================
+
+build:daily:linux:
+  <<: *go-build
+  stage: build
+  variables:
+    GOOS: linux
+    GOARCH: amd64
+  before_script:
+    - apk add --no-cache git
+    - export VERSION="$(date +%Y%m%d%H%M%S)"
+    - export COMMIT_ID="${CI_COMMIT_SHORT_SHA}"
+    - export BUILD_DATE="$(date +"%a %b %d, %Y at %H:%M:%S %Z")"
+    - export LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}'"
+  script:
+    - go build -ldflags "${LDFLAGS}" -o $SEARCH-linux-amd64 ./src
+    - go build -ldflags "${LDFLAGS}" -o $SEARCH-linux-arm64 ./src
+  artifacts:
+    paths:
+      - $SEARCH-linux-*
+    expire_in: 1 day
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
+      when: manual
+      allow_failure: true
+
+# =============================================================================
+# DOCKER BUILDS
+# =============================================================================
+
+docker:build:
+  stage: docker
+  image: docker:latest
+  services:
+    - docker:dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - |
+      # Determine tags based on trigger
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        # Release tag - version, latest, YYMM
+        VERSION="${CI_COMMIT_TAG#v}"
+        YYMM=$(date +%y%m)
+        TAGS="-t $CI_REGISTRY_IMAGE:$VERSION -t $CI_REGISTRY_IMAGE:latest -t $CI_REGISTRY_IMAGE:$YYMM"
+      elif [ "$CI_COMMIT_BRANCH" = "beta" ]; then
+        TAGS="-t $CI_REGISTRY_IMAGE:beta -t $CI_REGISTRY_IMAGE:devel"
+      else
+        TAGS="-t $CI_REGISTRY_IMAGE:devel -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
+      fi
+    - |
+      docker build \
+        -f ./docker/Dockerfile \
+        --build-arg VERSION="${VERSION:-devel}" \
+        --build-arg COMMIT_ID="${CI_COMMIT_SHORT_SHA}" \
+        --build-arg BUILD_DATE="$(date -Iseconds)" \
+        $TAGS \
+        .
+    - docker push $CI_REGISTRY_IMAGE --all-tags
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
+    - if: $CI_COMMIT_BRANCH == "beta"
+```
+
+## GitLab CI Variables
+
+Set these in GitLab Project → Settings → CI/CD → Variables:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `CI_REGISTRY` | GitLab container registry (auto-set) | `registry.gitlab.com` |
+| `CI_REGISTRY_USER` | Registry username (auto-set) | `gitlab-ci-token` |
+| `CI_REGISTRY_PASSWORD` | Registry password (auto-set) | `$CI_JOB_TOKEN` |
+| `CI_REGISTRY_IMAGE` | Full image path (auto-set) | `registry.gitlab.com/org/project` |
+
+## GitLab Scheduled Pipelines (for Daily Builds)
+
+Create in GitLab Project → Build → Pipeline schedules:
+
+| Field | Value |
+|-------|-------|
+| Description | Daily Build |
+| Interval Pattern | `0 3 * * *` (3am UTC daily) |
+| Cron Timezone | UTC |
+| Target Branch | `main` or `master` |
+| Activated | Yes |
+
+## Variable Mapping
+
+| GitHub Actions | GitLab CI | Description |
+|----------------|-----------|-------------|
+| `${{ github.ref_name }}` | `$CI_COMMIT_REF_NAME` | Branch or tag name |
+| `${{ github.sha }}` | `$CI_COMMIT_SHA` | Full commit SHA |
+| `${{ github.repository }}` | `$CI_PROJECT_PATH` | Repo path (org/project) |
+| `${{ github.server_url }}` | `$CI_SERVER_URL` | Server URL |
+| `${{ secrets.NAME }}` | `$NAME` | CI/CD variables |
+| `GITHUB_ENV` | `dotenv` artifact | Pass vars between jobs |
+
+**Notes:**
+- GitLab CI uses a single `.gitlab-ci.yml` file instead of multiple workflow files
+- Use `rules:` (preferred) or `only/except` for conditional job execution
+- GitLab has built-in container registry at `$CI_REGISTRY_IMAGE`
+- Scheduled pipelines configured in GitLab UI, not in YAML
+- Use `needs:` for job dependencies (DAG mode) instead of linear stages
+
+---
+
+# JENKINS
+
+**For projects using Jenkins CI/CD (self-hosted).**
+
+Jenkins provides equivalent functionality to GitHub Actions, Gitea Actions, and GitLab CI for self-hosted environments.
+
+## Configuration
+
+| Setting | Value |
+|---------|-------|
+| Agents | `arm64`, `amd64` (both required) |
+| Build | All 8 platforms in parallel |
+| Triggers | Tag push, beta branch, main/master, scheduled daily |
+
+## Triggers (Matching GitHub Actions)
+
+| Trigger | Jenkins Config | Equivalent To |
+|---------|----------------|---------------|
+| Tag push | `when { buildingTag() }` | `release.yml` |
+| Beta branch | `when { branch 'beta' }` | `beta.yml` |
+| Main/master | `when { anyOf { branch 'main'; branch 'master' } }` | `daily.yml` |
+| Scheduled | `triggers { cron('0 3 * * *') }` | `daily.yml` schedule |
+| All branches | Default (no `when`) | `docker.yml` |
+
+## Jenkinsfile
 
 All projects MUST have a `Jenkinsfile` in the repository root.
 
@@ -5469,14 +7014,45 @@ All projects MUST have a `Jenkinsfile` in the repository root.
 pipeline {
     agent none
 
+    triggers {
+        // Daily build at 3am UTC (matches GitHub Actions daily.yml)
+        cron('0 3 * * *')
+    }
+
     environment {
-        PROJECT = 'search'
-        ORG = '{projectorg}'
-        REGISTRY = "ghcr.io/${ORG}/${PROJECT}"
+        PROJECTNAME = 'search'
+        PROJECTORG = 'apimgr'
         BINDIR = 'binaries'
         RELDIR = 'releases'
         GOCACHE = '/tmp/go-cache'
         GOMODCACHE = '/tmp/go-mod-cache'
+
+        // =========================================================================
+        // GIT PROVIDER CONFIGURATION
+        // Uncomment ONE block below based on your git hosting platform
+        // =========================================================================
+
+        // ----- GITHUB (default) -----
+        GIT_FQDN = 'github.com'
+        GIT_TOKEN = credentials('github-token')  // Jenkins credentials ID
+        REGISTRY = "ghcr.io/${PROJECTORG}/$SEARCH"
+
+        // ----- GITEA / FORGEJO (self-hosted) -----
+        // GIT_FQDN = 'git.example.com'  // Your Gitea/Forgejo domain
+        // GIT_TOKEN = credentials('gitea-token')  // Jenkins credentials ID
+        // REGISTRY = "${GIT_FQDN}/${PROJECTORG}/$SEARCH"
+
+        // ----- GITLAB (gitlab.com or self-hosted) -----
+        // GIT_FQDN = 'gitlab.com'  // or your self-hosted GitLab domain
+        // GIT_TOKEN = credentials('gitlab-token')  // Jenkins credentials ID
+        // REGISTRY = "registry.${GIT_FQDN}/${PROJECTORG}/$SEARCH"
+
+        // ----- DOCKER HUB -----
+        // GIT_FQDN = 'github.com'  // Git host (separate from registry)
+        // GIT_TOKEN = credentials('github-token')
+        // REGISTRY = "docker.io/${PROJECTORG}/$SEARCH"
+
+        // =========================================================================
     }
 
     stages {
@@ -5484,21 +7060,35 @@ pipeline {
             agent { label 'amd64' }
             steps {
                 script {
-                    // Get VERSION from tag (strip v prefix) or fallback to release.txt
+                    // Determine build type and version
                     if (env.TAG_NAME) {
+                        // Release build (tag push) - matches release.yml
+                        env.BUILD_TYPE = 'release'
                         env.VERSION = env.TAG_NAME.replaceFirst('^v', '')
+                    } else if (env.BRANCH_NAME == 'beta') {
+                        // Beta build - matches beta.yml
+                        env.BUILD_TYPE = 'beta'
+                        env.VERSION = sh(script: 'date -u +"%Y%m%d%H%M%S"', returnStdout: true).trim() + '-beta'
+                    } else if (env.BRANCH_NAME == 'main' || env.BRANCH_NAME == 'master') {
+                        // Daily build - matches daily.yml
+                        env.BUILD_TYPE = 'daily'
+                        env.VERSION = sh(script: 'date -u +"%Y%m%d%H%M%S"', returnStdout: true).trim()
                     } else {
-                        env.VERSION = sh(script: 'cat release.txt 2>/dev/null || echo "0.1.0"', returnStdout: true).trim()
+                        // Other branches - dev build
+                        env.BUILD_TYPE = 'dev'
+                        env.VERSION = sh(script: 'date -u +"%Y%m%d%H%M%S"', returnStdout: true).trim() + '-dev'
                     }
                     env.COMMIT_ID = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
                     env.BUILD_DATE = sh(script: 'date +"%a %b %d, %Y at %H:%M:%S %Z"', returnStdout: true).trim()
                     env.LDFLAGS = "-s -w -X 'main.Version=${env.VERSION}' -X 'main.CommitID=${env.COMMIT_ID}' -X 'main.BuildDate=${env.BUILD_DATE}'"
+                    env.HAS_CLI = sh(script: '[ -d src/client ] && echo true || echo false', returnStdout: true).trim()
                 }
                 sh 'mkdir -p ${BINDIR} ${RELDIR}'
+                echo "Build type: ${BUILD_TYPE}, Version: ${VERSION}"
             }
         }
 
-        stage('Build') {
+        stage('Build Server') {
             parallel {
                 // Linux
                 stage('Linux AMD64') {
@@ -5514,7 +7104,7 @@ pipeline {
                                 -e GOOS=linux \
                                 -e GOARCH=amd64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT}-linux-amd64 ./src
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-linux-amd64 ./src
                         '''
                     }
                 }
@@ -5531,7 +7121,7 @@ pipeline {
                                 -e GOOS=linux \
                                 -e GOARCH=arm64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT}-linux-arm64 ./src
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-linux-arm64 ./src
                         '''
                     }
                 }
@@ -5549,7 +7139,7 @@ pipeline {
                                 -e GOOS=darwin \
                                 -e GOARCH=amd64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT}-darwin-amd64 ./src
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-darwin-amd64 ./src
                         '''
                     }
                 }
@@ -5566,7 +7156,7 @@ pipeline {
                                 -e GOOS=darwin \
                                 -e GOARCH=arm64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT}-darwin-arm64 ./src
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-darwin-arm64 ./src
                         '''
                     }
                 }
@@ -5584,7 +7174,7 @@ pipeline {
                                 -e GOOS=windows \
                                 -e GOARCH=amd64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT}-windows-amd64.exe ./src
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-windows-amd64.exe ./src
                         '''
                     }
                 }
@@ -5601,7 +7191,7 @@ pipeline {
                                 -e GOOS=windows \
                                 -e GOARCH=arm64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT}-windows-arm64.exe ./src
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-windows-arm64.exe ./src
                         '''
                     }
                 }
@@ -5619,7 +7209,7 @@ pipeline {
                                 -e GOOS=freebsd \
                                 -e GOARCH=amd64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT}-freebsd-amd64 ./src
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-freebsd-amd64 ./src
                         '''
                     }
                 }
@@ -5636,7 +7226,152 @@ pipeline {
                                 -e GOOS=freebsd \
                                 -e GOARCH=arm64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECT}-freebsd-arm64 ./src
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-freebsd-arm64 ./src
+                        '''
+                    }
+                }
+            }
+        }
+
+        // CLI builds - only if src/client/ exists (matches GitHub Actions)
+        stage('Build CLI') {
+            when {
+                expression { env.HAS_CLI == 'true' }
+            }
+            parallel {
+                stage('CLI Linux AMD64') {
+                    agent { label 'amd64' }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                -v ${WORKSPACE}:/build \
+                                -v ${GOCACHE}:/root/.cache/go-build \
+                                -v ${GOMODCACHE}:/go/pkg/mod \
+                                -w /build \
+                                -e CGO_ENABLED=0 \
+                                -e GOOS=linux \
+                                -e GOARCH=amd64 \
+                                golang:alpine \
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-linux-amd64-cli ./src/client
+                        '''
+                    }
+                }
+                stage('CLI Linux ARM64') {
+                    agent { label 'arm64' }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                -v ${WORKSPACE}:/build \
+                                -v ${GOCACHE}:/root/.cache/go-build \
+                                -v ${GOMODCACHE}:/go/pkg/mod \
+                                -w /build \
+                                -e CGO_ENABLED=0 \
+                                -e GOOS=linux \
+                                -e GOARCH=arm64 \
+                                golang:alpine \
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-linux-arm64-cli ./src/client
+                        '''
+                    }
+                }
+                stage('CLI Darwin AMD64') {
+                    agent { label 'amd64' }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                -v ${WORKSPACE}:/build \
+                                -v ${GOCACHE}:/root/.cache/go-build \
+                                -v ${GOMODCACHE}:/go/pkg/mod \
+                                -w /build \
+                                -e CGO_ENABLED=0 \
+                                -e GOOS=darwin \
+                                -e GOARCH=amd64 \
+                                golang:alpine \
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-darwin-amd64-cli ./src/client
+                        '''
+                    }
+                }
+                stage('CLI Darwin ARM64') {
+                    agent { label 'amd64' }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                -v ${WORKSPACE}:/build \
+                                -v ${GOCACHE}:/root/.cache/go-build \
+                                -v ${GOMODCACHE}:/go/pkg/mod \
+                                -w /build \
+                                -e CGO_ENABLED=0 \
+                                -e GOOS=darwin \
+                                -e GOARCH=arm64 \
+                                golang:alpine \
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-darwin-arm64-cli ./src/client
+                        '''
+                    }
+                }
+                stage('CLI Windows AMD64') {
+                    agent { label 'amd64' }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                -v ${WORKSPACE}:/build \
+                                -v ${GOCACHE}:/root/.cache/go-build \
+                                -v ${GOMODCACHE}:/go/pkg/mod \
+                                -w /build \
+                                -e CGO_ENABLED=0 \
+                                -e GOOS=windows \
+                                -e GOARCH=amd64 \
+                                golang:alpine \
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-windows-amd64-cli.exe ./src/client
+                        '''
+                    }
+                }
+                stage('CLI Windows ARM64') {
+                    agent { label 'amd64' }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                -v ${WORKSPACE}:/build \
+                                -v ${GOCACHE}:/root/.cache/go-build \
+                                -v ${GOMODCACHE}:/go/pkg/mod \
+                                -w /build \
+                                -e CGO_ENABLED=0 \
+                                -e GOOS=windows \
+                                -e GOARCH=arm64 \
+                                golang:alpine \
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-windows-arm64-cli.exe ./src/client
+                        '''
+                    }
+                }
+                stage('CLI FreeBSD AMD64') {
+                    agent { label 'amd64' }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                -v ${WORKSPACE}:/build \
+                                -v ${GOCACHE}:/root/.cache/go-build \
+                                -v ${GOMODCACHE}:/go/pkg/mod \
+                                -w /build \
+                                -e CGO_ENABLED=0 \
+                                -e GOOS=freebsd \
+                                -e GOARCH=amd64 \
+                                golang:alpine \
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-freebsd-amd64-cli ./src/client
+                        '''
+                    }
+                }
+                stage('CLI FreeBSD ARM64') {
+                    agent { label 'amd64' }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                -v ${WORKSPACE}:/build \
+                                -v ${GOCACHE}:/root/.cache/go-build \
+                                -v ${GOMODCACHE}:/go/pkg/mod \
+                                -w /build \
+                                -e CGO_ENABLED=0 \
+                                -e GOOS=freebsd \
+                                -e GOARCH=arm64 \
+                                golang:alpine \
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-freebsd-arm64-cli ./src/client
                         '''
                     }
                 }
@@ -5658,57 +7393,98 @@ pipeline {
             }
         }
 
-        stage('Release') {
+        // Stable Release - matches release.yml (tag push only)
+        stage('Release: Stable') {
             agent { label 'amd64' }
             when {
-                buildingTag()
+                expression { env.BUILD_TYPE == 'release' }
             }
             steps {
                 sh '''
-                    # Create version.txt
                     echo "${VERSION}" > ${RELDIR}/version.txt
 
-                    # Copy and strip binaries (strip only works on native arch)
-                    for f in ${BINDIR}/${PROJECT}-*; do
+                    for f in ${BINDIR}/$SEARCH-*; do
                         [ -f "$f" ] || continue
                         cp "$f" ${RELDIR}/
                     done
 
-                    # Create source archive
                     tar --exclude='.git' --exclude='.github' --exclude='.gitea' \
-                        --exclude='binaries' --exclude='releases' --exclude='*.tar.gz' \
-                        -czf ${RELDIR}/${PROJECT}-${VERSION}-source.tar.gz .
+                        --exclude='.forgejo' --exclude='binaries' --exclude='releases' \
+                        --exclude='*.tar.gz' \
+                        -czf ${RELDIR}/$SEARCH-${VERSION}-source.tar.gz .
                 '''
                 archiveArtifacts artifacts: 'releases/*', fingerprint: true
             }
         }
 
+        // Beta Release - matches beta.yml (beta branch only)
+        stage('Release: Beta') {
+            agent { label 'amd64' }
+            when {
+                expression { env.BUILD_TYPE == 'beta' }
+            }
+            steps {
+                sh '''
+                    echo "${VERSION}" > ${RELDIR}/version.txt
+
+                    for f in ${BINDIR}/$SEARCH-*; do
+                        [ -f "$f" ] || continue
+                        cp "$f" ${RELDIR}/
+                    done
+                '''
+                archiveArtifacts artifacts: 'releases/*', fingerprint: true
+            }
+        }
+
+        // Daily Release - matches daily.yml (main/master + scheduled)
+        stage('Release: Daily') {
+            agent { label 'amd64' }
+            when {
+                expression { env.BUILD_TYPE == 'daily' }
+            }
+            steps {
+                sh '''
+                    echo "${VERSION}" > ${RELDIR}/version.txt
+
+                    for f in ${BINDIR}/$SEARCH-*; do
+                        [ -f "$f" ] || continue
+                        cp "$f" ${RELDIR}/
+                    done
+                '''
+                archiveArtifacts artifacts: 'releases/*', fingerprint: true
+            }
+        }
+
+        // Docker - matches docker.yml (ALL branches and tags)
         stage('Docker') {
             agent { label 'amd64' }
-            // Runs on ALL branches and tags
-            // Multi-stage Dockerfile handles Go compilation - no pre-built binaries needed
             steps {
                 script {
                     def tags = "-t ${REGISTRY}:${COMMIT_ID}"
 
-                    if (env.TAG_NAME) {
+                    if (env.BUILD_TYPE == 'release') {
                         // Release tag - version, latest, YYMM
                         def yymm = new Date().format('yyMM')
                         tags += " -t ${REGISTRY}:${VERSION}"
                         tags += " -t ${REGISTRY}:latest"
                         tags += " -t ${REGISTRY}:${yymm}"
-                    } else {
-                        // All branches get devel tag
+                    } else if (env.BUILD_TYPE == 'beta') {
+                        // Beta branch - beta, devel
+                        tags += " -t ${REGISTRY}:beta"
                         tags += " -t ${REGISTRY}:devel"
-
-                        // Beta branch also gets beta tag
-                        if (env.BRANCH_NAME == 'beta') {
-                            tags += " -t ${REGISTRY}:beta"
-                        }
+                    } else {
+                        // All other branches - devel only
+                        tags += " -t ${REGISTRY}:devel"
                     }
 
+                    // Login to container registry
+                    // Works with: ghcr.io, registry.gitlab.com, gitea/forgejo, docker.io
                     sh """
-                        docker buildx create --name ${PROJECT}-builder --use 2>/dev/null || docker buildx use ${PROJECT}-builder
+                        echo "\${GIT_TOKEN}" | docker login ${REGISTRY.split('/')[0]} -u ${PROJECTORG} --password-stdin
+                    """
+
+                    sh """
+                        docker buildx create --name $SEARCH-builder --use 2>/dev/null || docker buildx use $SEARCH-builder
                         docker buildx build \
                             -f ./docker/Dockerfile \
                             --platform linux/amd64,linux/arm64 \
@@ -5732,15 +7508,67 @@ pipeline {
 }
 ```
 
-### Jenkins Requirements
+## Jenkins Configuration
 
-| Requirement | Description |
-|-------------|-------------|
+### Required Settings
+
+| Setting | Value |
+|---------|-------|
 | Agent labels | `amd64` and `arm64` MUST be available |
 | Docker | Required on all agents (builds use golang:alpine) |
-| Docker buildx | Required on amd64 agent for multi-arch container builds |
-| Registry auth | ghcr.io credentials configured in Jenkins |
-| Go module cache | `/tmp/go-cache` and `/tmp/go-mod-cache` for caching |
+| Docker buildx | Required on amd64 agent for multi-arch builds |
+| Go caches | `/tmp/go-cache` and `/tmp/go-mod-cache` |
+
+### Credentials Setup (Jenkins → Credentials → Add Credentials)
+
+Create a **Secret text** credential for your git provider's API token:
+
+| Git Provider | Credential ID | Token Source |
+|--------------|---------------|--------------|
+| GitHub | `github-token` | Settings → Developer settings → Personal access tokens |
+| Gitea | `gitea-token` | User Settings → Applications → Access Tokens |
+| Forgejo | `forgejo-token` | User Settings → Applications → Access Tokens |
+| GitLab | `gitlab-token` | User Settings → Access Tokens |
+| Docker Hub | `dockerhub-token` | Account Settings → Security → Access Tokens |
+
+**Required Token Permissions:**
+
+| Provider | Permissions |
+|----------|-------------|
+| GitHub | `write:packages`, `read:packages`, `delete:packages` |
+| Gitea/Forgejo | `package:write` (or `write:package`) |
+| GitLab | `write_registry`, `read_registry` |
+| Docker Hub | Read/Write access |
+
+### Provider Configuration
+
+In the Jenkinsfile, uncomment the appropriate block:
+
+```groovy
+// ----- GITHUB (default) -----
+GIT_FQDN = 'github.com'
+GIT_TOKEN = credentials('github-token')
+REGISTRY = "ghcr.io/${PROJECTORG}/$SEARCH"
+
+// ----- GITEA / FORGEJO (self-hosted) -----
+// GIT_FQDN = 'git.example.com'
+// GIT_TOKEN = credentials('gitea-token')
+// REGISTRY = "${GIT_FQDN}/${PROJECTORG}/$SEARCH"
+
+// ----- GITLAB (gitlab.com or self-hosted) -----
+// GIT_FQDN = 'gitlab.com'
+// GIT_TOKEN = credentials('gitlab-token')
+// REGISTRY = "registry.${GIT_FQDN}/${PROJECTORG}/$SEARCH"
+```
+
+### Triggers Comparison
+
+| Release Type | GitHub Actions | Jenkins |
+|--------------|----------------|---------|
+| Stable | `release.yml` (tag push) | `BUILD_TYPE == 'release'` (tag) |
+| Beta | `beta.yml` (beta branch) | `BUILD_TYPE == 'beta'` (beta branch) |
+| Daily | `daily.yml` (schedule + main) | `BUILD_TYPE == 'daily'` (cron + main/master) |
+| Docker | `docker.yml` (all branches) | Docker stage (always runs) |
 
 ---
 
@@ -5750,9 +7578,18 @@ Before proceeding, confirm you understand:
 - [ ] Docker uses tini as init, Alpine base
 - [ ] Makefile has exactly 4 targets: build, release, docker, test
 - [ ] Binary naming: NEVER include -musl suffix
-- [ ] 4 GitHub/Gitea workflows: release, beta, daily, docker
-- [ ] Jenkins builds for ARM64 and AMD64
 - [ ] All 8 platform builds required (4 OS x 2 arch)
+- [ ] CLI builds (if src/client/ exists): 8 additional binaries with `-cli` suffix
+
+**CI/CD Equivalence:**
+
+| Feature | GitHub Actions | Gitea/Forgejo | GitLab CI | Jenkins |
+|---------|----------------|---------------|-----------|---------|
+| Stable release | `release.yml` | `release.yml` | `rules: tag` | `BUILD_TYPE == 'release'` |
+| Beta release | `beta.yml` | `beta.yml` | `rules: beta` | `BUILD_TYPE == 'beta'` |
+| Daily release | `daily.yml` | `daily.yml` | `rules: schedule` | `BUILD_TYPE == 'daily'` |
+| Docker images | `docker.yml` | `docker.yml` | `docker:build` | Docker stage |
+| Self-hosted | No | Yes | Yes | Yes |
 
 ---
 # PART 15: HEALTH & VERSIONING (NON-NEGOTIABLE)
@@ -5837,6 +7674,24 @@ When not in cluster mode:
 
 ## Versioning
 
+### Semantic Versioning (SemVer) Rules
+
+**ALL stable releases MUST follow semantic versioning:**
+
+| Component | When to Increment | Example |
+|-----------|-------------------|---------|
+| **MAJOR** | Breaking API changes, incompatible config changes, database schema changes requiring migration | `1.0.0` → `2.0.0` |
+| **MINOR** | New features (backward compatible), new config options, new API endpoints | `1.0.0` → `1.1.0` |
+| **PATCH** | Bug fixes, security patches, documentation updates (no new features) | `1.0.0` → `1.0.1` |
+
+**Version Rules:**
+- Start at `1.0.0` for first stable release (NOT `0.x.x`)
+- Never reuse version numbers
+- Pre-release versions use suffix: `1.0.0-rc1`, `1.0.0-alpha`
+- No leading zeros: `1.0.1` (NOT `1.0.01`)
+- No `v` prefix in version string: `1.0.0` (NOT `v1.0.0`)
+- Git tags add `v` prefix: `v1.0.0`
+
 ### Format
 
 - Stable: Semantic versioning `MAJOR.MINOR.PATCH` (e.g., `1.0.0`)
@@ -5864,25 +7719,305 @@ OS/Arch: linux/amd64
 
 ## Requirements
 
-**ALL PROJECTS MUST HAVE A FANTASTIC FRONTEND BUILT IN.**
+**ALL PROJECTS MUST HAVE A PROFESSIONAL, WELL-DESIGNED FRONTEND BUILT IN.**
 
 | Requirement | Description |
 |-------------|-------------|
-| Mobile Support | Full responsive design |
-| HTML5 | Full web standards compliance |
-| Accessibility | Full a11y support |
-| UX | Readable, navigable, intuitive, self-explanatory |
+| **Professional UI/UX** | Clean, modern, polished design |
+| **Mobile Support** | Full responsive design with touch-friendly targets |
+| **HTML5** | Full web standards compliance |
+| **Accessibility** | WCAG 2.1 AA compliant, screen reader friendly |
+| **UX** | Readable, navigable, intuitive, user-friendly, self-explanatory |
+| **PWA Support** | Progressive Web App - installable, offline-capable |
+| **CORS** | `Access-Control-Allow-Origin: *` for API endpoints |
+
+## Responsive Layout (NON-NEGOTIABLE)
+
+**Content width adapts based on screen size:**
+
+| Screen Width | Content Width | Margins | Device Category |
+|--------------|---------------|---------|-----------------|
+| ≥720px | 90% | 5% left, 5% right | Desktop/Tablet |
+| <720px | 98% | 1% left, 1% right | Mobile |
+
+```css
+/* Responsive container */
+.container {
+  width: 98%;
+  margin: 0 auto;
+  max-width: 1400px;
+}
+
+@media (min-width: 720px) {
+  .container {
+    width: 90%;
+  }
+}
+```
+
+**Responsive Behavior by Element:**
+
+| Element | <720px (Mobile) | ≥720px (Desktop) |
+|---------|-----------------|------------------|
+| **Admin Sidebar** | Hidden, hamburger menu toggle | Visible, collapsible |
+| **Public Nav** | Hamburger menu | Horizontal links |
+| **Tables** | Horizontal scroll or card layout | Full table |
+| **Modals** | Full-width (98%) | Centered, max-width 600px |
+| **Forms** | Single column, full-width inputs | Multi-column where appropriate |
+| **Touch Targets** | Minimum 44x44px | Standard sizing |
+| **Font Size** | Base 16px minimum | Base 16px |
+
+**Footer Behavior:**
+- Footer is ALWAYS at the bottom of the page content
+- Footer scrolls with content (NOT fixed/sticky)
+- Uses flexbox or grid to push footer down on short pages
+- ALWAYS horizontally centered
+
+```css
+/* Footer always at bottom */
+body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+main {
+  flex: 1;
+}
+
+footer {
+  text-align: center;
+}
+```
 
 ## Technology Stack (NON-NEGOTIABLE)
 
 | Rule | Description |
 |------|-------------|
 | **Go Templates** | ALL HTML uses Go `html/template` - NO EXCEPTIONS |
-| Templates | Use partials (header, nav, body, footer, etc.) |
-| Vanilla JS/CSS | Preferred, no frameworks unless necessary |
+| **Templates** | Use partials (header, nav, body, footer, etc.) |
+| **Pure Vanilla JS** | NO frameworks (no React, Vue, Alpine, jQuery, etc.) |
+| **CSS-First** | Prefer CSS over JS for all UI interactions |
 | **NO JS Alerts** | NEVER use default JavaScript alerts/confirms/prompts |
-| Custom UI | Always use CSS modals, toast notifications |
+| **Custom UI** | Use buttons, toggles, modals, toast notifications |
 | **NO Inline CSS** | NEVER use inline styles |
+| **NO Inline JS** | Except for simple one-liners (see below) |
+
+## UI Components (NON-NEGOTIABLE)
+
+### Buttons
+
+| Type | Use For | Style |
+|------|---------|-------|
+| Primary | Main actions (Save, Submit, Create) | Filled, brand color |
+| Secondary | Alternative actions (Cancel, Back) | Outlined or muted |
+| Danger | Destructive actions (Delete, Remove) | Red, requires confirmation |
+| Icon | Compact actions (Edit, Copy, Refresh) | Icon only with tooltip |
+
+**Button States:** Normal, Hover, Active, Disabled, Loading
+
+### Toggle Switches
+
+**CSS-only toggle using hidden checkbox:**
+
+```html
+<label class="toggle">
+  <input type="checkbox" name="setting">
+  <span class="slider"></span>
+  Enable Feature
+</label>
+```
+
+### Modals
+
+**Modal Behavior (NON-NEGOTIABLE):**
+
+| Action | Modal Behavior |
+|--------|----------------|
+| Success (Save, Submit, Create) | Close automatically after success |
+| Error | Stay open, display error message |
+| Cancel button clicked | Close immediately |
+| Escape key pressed | Close immediately |
+| Backdrop clicked | Close immediately |
+| Form with unsaved changes | Warn before closing |
+
+**Modal Features:**
+- Focus trap (Tab stays within modal)
+- Escape key closes modal
+- Backdrop click closes modal
+- Body scroll locked while open
+- Centered vertically and horizontally
+- Responsive (full-width on mobile)
+
+**Accessibility (NON-NEGOTIABLE):**
+
+| Requirement | Implementation |
+|-------------|----------------|
+| **Focus trap** | Tab/Shift+Tab cycles through modal elements only |
+| **Initial focus** | First focusable element OR primary action button |
+| **Return focus** | Restore focus to trigger element on close |
+| **ARIA attributes** | `role="dialog"`, `aria-modal="true"`, `aria-labelledby` |
+| **Escape key** | Close modal (unless confirmation required) |
+| **Screen reader** | Announce modal title on open |
+
+```html
+<!-- Modal structure using native <dialog> -->
+<dialog id="confirm-modal" aria-labelledby="modal-title">
+  <header>
+    <h2 id="modal-title">Modal Title</h2>
+    <button type="button" aria-label="Close" onclick="this.closest('dialog').close()">✕</button>
+  </header>
+  <main>Modal content here</main>
+  <footer>
+    <button type="button" onclick="this.closest('dialog').close()">Cancel</button>
+    <button type="submit" autofocus>Confirm</button>
+  </footer>
+</dialog>
+```
+
+**Note:** Native `<dialog>` element handles focus trap and backdrop automatically. Use `showModal()` to open with backdrop, `close()` to close.
+
+### Toast Notifications
+
+**In-app notifications for immediate feedback:**
+
+| Type | Use For | Auto-dismiss |
+|------|---------|--------------|
+| Success | Action completed | 3 seconds |
+| Error | Action failed | Manual dismiss only |
+| Warning | Caution needed | 5 seconds |
+| Info | General information | 3 seconds |
+
+**Position:** Top-right corner, stacked vertically
+
+### Notification Bell
+
+**Built-in notification center accessible via bell icon in header:**
+
+- Bell icon with unread count badge
+- Click opens notification dropdown/panel
+- Mark as read on view
+- "Mark all as read" action
+- Links to full notification center
+- See PART 28: NOTIFICATIONS for full specification
+
+## Accessibility (NON-NEGOTIABLE)
+
+**WCAG 2.1 AA Compliance Required:**
+
+| Requirement | Implementation |
+|-------------|----------------|
+| **Keyboard Navigation** | All interactive elements focusable and operable via keyboard |
+| **Focus Indicators** | Visible focus ring on all focusable elements |
+| **ARIA Labels** | Proper `aria-label`, `aria-describedby`, `role` attributes |
+| **Color Contrast** | Minimum 4.5:1 for normal text, 3:1 for large text |
+| **Alt Text** | All images have descriptive `alt` attributes |
+| **Form Labels** | All inputs have associated `<label>` elements |
+| **Error Messages** | Announced to screen readers via `aria-live` |
+| **Skip Links** | "Skip to content" link for keyboard users |
+| **Semantic HTML** | Proper heading hierarchy (h1 → h2 → h3) |
+| **Reduced Motion** | Respect `prefers-reduced-motion` preference |
+
+```css
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+```
+
+## PWA Support (NON-NEGOTIABLE)
+
+**Progressive Web App features:**
+
+| Feature | Implementation |
+|---------|----------------|
+| **Manifest** | `/manifest.json` with app metadata |
+| **Icons** | Multiple sizes (192x192, 512x512 minimum) |
+| **Service Worker** | Cache static assets for offline use |
+| **Installable** | Meets PWA install criteria |
+| **HTTPS** | Required for service workers |
+
+**Offline Behavior:**
+
+| Resource Type | Cache Strategy | Offline Behavior |
+|---------------|----------------|------------------|
+| **Static assets** (CSS, JS, images) | Cache-first | Served from cache |
+| **HTML pages** | Network-first, cache fallback | Show cached version if offline |
+| **API calls** | Network-only | Show offline indicator, queue for retry |
+| **Fonts** | Cache-first | Served from cache |
+
+**Service Worker Caching:**
+- Cache static assets on install
+- Update cache on service worker activation
+- Maximum cache size: 50MB
+- Cache expiration: 7 days for static assets
+- Never cache: API responses, user-specific data
+
+**Offline Indicator:**
+- Show banner/toast when offline: "You are offline. Some features may be unavailable."
+- Hide automatically when connection restored
+- Do not block UI - allow browsing cached pages
+
+**manifest.json:**
+```json
+{
+  "name": "{App Name}",
+  "short_name": "{AppName}",
+  "description": "{App description}",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "icons": [
+    { "src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
+```
+
+**HTML head:**
+```html
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#000000">
+<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+```
+
+## HTTP Status Codes (NON-NEGOTIABLE)
+
+**Use standard HTTP status codes consistently:**
+
+| Code | Meaning | Use For |
+|------|---------|---------|
+| 200 | OK | Successful GET, PUT, PATCH |
+| 201 | Created | Successful POST creating resource |
+| 204 | No Content | Successful DELETE |
+| 301 | Moved Permanently | Permanent redirects |
+| 302 | Found | Temporary redirects |
+| 400 | Bad Request | Invalid input, validation errors |
+| 401 | Unauthorized | Not authenticated |
+| 403 | Forbidden | Authenticated but not authorized |
+| 404 | Not Found | Resource doesn't exist |
+| 405 | Method Not Allowed | Wrong HTTP method |
+| 409 | Conflict | Duplicate resource, version conflict |
+| 422 | Unprocessable Entity | Semantic validation errors |
+| 429 | Too Many Requests | Rate limit exceeded |
+| 500 | Internal Server Error | Server-side errors |
+| 503 | Service Unavailable | Maintenance mode |
+
+## CORS Configuration (NON-NEGOTIABLE)
+
+**API endpoints allow cross-origin requests:**
+
+```go
+// CORS headers for API endpoints
+w.Header().Set("Access-Control-Allow-Origin", "*")
+w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Token")
+w.Header().Set("Access-Control-Max-Age", "86400")
+```
 
 ### HTML5 & CSS Over JavaScript (NON-NEGOTIABLE)
 
@@ -5971,18 +8106,27 @@ OS/Arch: linux/amd64
 ```
 src/server/templates/
 ├── layouts/
-│   ├── base.tmpl           # Base layout with html, head, body
-│   └── admin.tmpl          # Admin-specific layout
+│   ├── public.tmpl         # Public-facing layout (/, /auth/*, /server/*)
+│   └── admin.tmpl          # Admin panel layout (/admin/*)
 ├── partials/
-│   ├── header.tmpl         # Site header
-│   ├── nav.tmpl            # Navigation
-│   ├── footer.tmpl         # Site footer
-│   ├── head.tmpl           # <head> contents (meta, css, etc.)
+│   ├── public/
+│   │   ├── header.tmpl     # Public header (logo, nav, login)
+│   │   ├── nav.tmpl        # Public navigation
+│   │   └── footer.tmpl     # Public footer (about, privacy, etc.)
+│   ├── admin/
+│   │   ├── header.tmpl     # Admin header (logo, search, notifications, logout)
+│   │   ├── sidebar.tmpl    # Admin sidebar navigation
+│   │   └── footer.tmpl     # Admin footer (version, docs)
+│   ├── head.tmpl           # <head> contents (meta, CSS)
 │   └── scripts.tmpl        # JavaScript includes
 ├── pages/
 │   ├── index.tmpl          # Home page
 │   ├── healthz.tmpl        # Health check page
 │   └── error.tmpl          # Error pages (404, 500, etc.)
+├── auth/
+│   ├── login.tmpl          # Login page
+│   ├── register.tmpl       # Registration page
+│   └── forgot.tmpl         # Password reset
 ├── admin/
 │   ├── dashboard.tmpl      # Admin dashboard
 │   ├── settings.tmpl       # Settings page
@@ -5993,31 +8137,142 @@ src/server/templates/
     └── ...
 ```
 
-**Mandatory Partials (NON-NEGOTIABLE):**
+## Layout Separation (NON-NEGOTIABLE)
 
-ALL pages MUST use these partials to ensure consistent site-wide layout:
+**Public and Admin routes use DIFFERENT layouts:**
 
-| Partial | Purpose | Required |
-|---------|---------|----------|
-| `header.tmpl` | Site header (logo, branding) | YES |
-| `nav.tmpl` | Navigation menu | YES |
-| `footer.tmpl` | Site footer (copyright, links) | YES |
-| `head.tmpl` | `<head>` contents (meta, CSS) | YES |
-| `scripts.tmpl` | JavaScript includes | YES |
+| Layout | Routes | Design Philosophy |
+|--------|--------|-------------------|
+| `public.tmpl` | `/`, `/auth/*`, `/server/*`, `/user/*` | Clean, marketing-friendly, top navigation |
+| `admin.tmpl` | `/admin/*` | Dashboard-style, sidebar navigation, data-dense |
 
-**Page Structure (NON-NEGOTIABLE):**
+### Public Layout (`public.tmpl`)
+
+**For end-users and public-facing pages:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  [Logo]              Home  API  Docs                [Login]     │  ← Header + Top Nav
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│                                                                 │
+│                         <main>                                  │  ← Page content
+│                     (centered, clean)                           │
+│                                                                 │
+│                                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│        About · Privacy · Contact · GitHub · v1.0.0              │  ← Footer (centered)
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Public Layout Characteristics:**
+- Top horizontal navigation bar
+- Clean, minimal design with whitespace
+- Centered content area
+- Marketing/product-focused styling
+- Simple footer with links
+
+**Public Navigation Rules (NON-NEGOTIABLE):**
+
+| Rule | Description |
+|------|-------------|
+| **App-focused** | Navigation reflects the application's features and purpose |
+| **NO admin links** | NEVER link to `/admin` from public pages |
+| **NO admin hints** | Do not advertise that an admin panel exists |
+| **Direct access only** | Admin panel accessed by navigating directly to `{fqdn}/admin` |
+
+**Public nav contains (project-specific):**
+- Home (`/`)
+- App-specific feature pages (e.g., API docs, features, pricing)
+- Login/Register (if multi-user) or just Login link
+- User menu (if logged in): Profile, Settings, Logout
+
+**Public nav NEVER contains:**
+- ❌ Admin link
+- ❌ Dashboard link (unless user dashboard)
+- ❌ Settings link to admin settings
+- ❌ Any hint of `/admin/*` routes
+
+### Admin Layout (`admin.tmpl`)
+
+**For server administrators:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  [Logo]        [Search...]              [🔔] [Admin ▼] [Logout] │  ← Header
+├──────────────┬──────────────────────────────────────────────────┤
+│              │                                                  │
+│  Dashboard   │                                                  │
+│              │                                                  │
+│  📦 Server   │              <main>                              │
+│  🔒 Security │          (content area)                          │
+│  🌐 Network  │                                                  │
+│  👥 Users    │                                                  │
+│  🔗 Cluster  │                                                  │
+│              │                                                  │
+│  Sidebar     │                                                  │
+├──────────────┴──────────────────────────────────────────────────┤
+│                    v1.0.0 · Docs · Status                       │  ← Footer
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Admin Layout Characteristics:**
+- Collapsible sidebar navigation (left)
+- Header with search, notifications bell, admin menu
+- Data-dense, dashboard-style design
+- Compact footer with version and links
+- Breadcrumbs for navigation context
+
+### Layout Partials
+
+| Partial | Public | Admin | Purpose |
+|---------|:------:|:-----:|---------|
+| `partials/public/header.tmpl` | ✓ | | Logo + top nav + login/user menu |
+| `partials/public/nav.tmpl` | ✓ | | Horizontal navigation links |
+| `partials/public/footer.tmpl` | ✓ | | About, Privacy, Contact links |
+| `partials/admin/header.tmpl` | | ✓ | Logo + search + bell + admin menu |
+| `partials/admin/sidebar.tmpl` | | ✓ | Collapsible sidebar navigation |
+| `partials/admin/footer.tmpl` | | ✓ | Version, docs, status |
+| `partials/head.tmpl` | ✓ | ✓ | Shared `<head>` contents |
+| `partials/scripts.tmpl` | ✓ | ✓ | Shared JavaScript includes |
+
+### CSS Organization
+
+```
+src/server/static/css/
+├── common.css          # Shared styles (reset, variables, utilities)
+├── public.css          # Public layout styles
+├── admin.css           # Admin layout styles
+└── components.css      # Shared component styles (modals, buttons, etc.)
+```
+
+**Page Structure - Public:**
 
 ```
 ┌─────────────────────────────────────────┐
-│              <header>                   │  ← header.tmpl (logo, branding)
+│              <header>                   │  ← public/header.tmpl
 ├─────────────────────────────────────────┤
-│               <nav>                     │  ← nav.tmpl (TOP - navigation links)
+│               <nav>                     │  ← public/nav.tmpl (TOP)
 ├─────────────────────────────────────────┤
 │                                         │
 │              <main>                     │  ← Page content
 │                                         │
 ├─────────────────────────────────────────┤
-│              <footer>                   │  ← footer.tmpl (BOTTOM - info links)
+│              <footer>                   │  ← public/footer.tmpl (BOTTOM)
+└─────────────────────────────────────────┘
+```
+
+**Page Structure - Admin:**
+
+```
+┌─────────────────────────────────────────┐
+│              <header>                   │  ← admin/header.tmpl
+├──────────┬──────────────────────────────┤
+│          │                              │
+│  <aside> │         <main>               │  ← admin/sidebar.tmpl + content
+│          │                              │
+├──────────┴──────────────────────────────┤
+│              <footer>                   │  ← admin/footer.tmpl
 └─────────────────────────────────────────┘
 ```
 
@@ -6394,7 +8649,7 @@ var staticFS embed.FS
 
 ## Branding & SEO (NON-NEGOTIABLE)
 
-**White labeling is cosmetic only - it changes what users see, not how the system works.**
+**White labeling is cosmetic only - it changes what users see, not how the server works.**
 
 ### What Branding Changes
 
@@ -6545,7 +8800,7 @@ messages:
     type: warning
     # warning, info, error, success
     title: "Scheduled Maintenance"
-    message: "The system will be down for maintenance on Jan 15, 2025 from 2-4 AM UTC."
+    message: "The server will be down for maintenance on Jan 15, 2025 from 2-4 AM UTC."
     start: "2025-01-14T00:00:00Z"
     # When to start showing
     end: "2025-01-15T04:00:00Z"
@@ -6676,7 +8931,7 @@ web:
 |----------|-------------|
 | `{currentyear}` | Current year (e.g., 2025) |
 | `search` | Project name |
-| `{projectorg}` | Organization name |
+| `apimgr` | Organization name |
 | `{projectversion}` | Application version |
 | `{builddatetime}` | Build date/time |
 
@@ -6699,7 +8954,7 @@ web:
 
   <!-- Application branding -->
   <p>
-    <a href="https://github.com/{projectorg}/search" target="_blank">search</a>
+    <a href="https://github.com/apimgr/search" target="_blank">search</a>
     <span>•</span>
     <span>Made with ❤️</span>
     <span>•</span>
@@ -6974,15 +9229,25 @@ server:
     # IMPORTANT: Use valkey/redis for cluster or mixed mode deployments
     type: memory
 
-    # Connection settings (for redis, valkey, memcache)
+    # Connection: Use EITHER url OR host/port/password (not both)
+    # url takes precedence if both are specified
+    url: ""  # redis://user:password@host:port/db or valkey://...
+
+    # Individual connection settings (alternative to url)
     host: localhost
     port: 6379
+    username: ""  # ACL username (Redis 6+)
     password: ""
     db: 0
 
     # TLS settings (for secure connections)
     tls: false
     tls_skip_verify: false
+
+    # Connection pool
+    pool_size: 10
+    min_idle: 2
+    timeout: 5s
 
     # Key prefix to avoid collisions (use unique prefix per app)
     prefix: "search:"
@@ -6995,9 +9260,34 @@ server:
     cluster_nodes: []  # ["node1:6379", "node2:6379", "node3:6379"]
 ```
 
+### Connection Methods
+
+**Two ways to configure connection (pick one):**
+
+| Method | When to Use |
+|--------|-------------|
+| `url` | Simple, single connection string, environment-friendly |
+| `host`/`port`/etc | More explicit, when fields come from different sources |
+
+**URL Format:**
+```
+redis://[[username:]password@]host[:port][/database]
+valkey://[[username:]password@]host[:port][/database]
+rediss://...  # Redis with TLS
+```
+
 ### Valkey/Redis Configuration Examples
 
-**Single Valkey/Redis server:**
+**Using connection URL:**
+```yaml
+server:
+  cache:
+    type: valkey
+    url: ${CACHE_URL}  # valkey://user:pass@valkey.example.com:6379/0
+    prefix: "search:"
+```
+
+**Using individual fields:**
 ```yaml
 server:
   cache:
@@ -7131,9 +9421,9 @@ All settings above MUST be configurable via admin panel:
 │  Users ▼     │                                                          │
 │  (if multi)  │  ┌─────────────────────────────────────────────────────┐ │
 │              │  │ FOOTER: Version | Docs | Status                     │ │
-│  System ▼    │  └─────────────────────────────────────────────────────┘ │
-│   Backup     │                                                          │
-│   Info       │                                                          │
+│  Cluster ▼   │  └─────────────────────────────────────────────────────┘ │
+│  (if enabled)│                                                          │
+│              │                                                          │
 └──────────────┴──────────────────────────────────────────────────────────┘
 ```
 
@@ -7160,7 +9450,11 @@ All settings above MUST be configurable via admin panel:
    ├── SSL/TLS
    ├── Scheduler
    ├── Email
-   └── Logs
+   ├── Logs
+   ├── Backup
+   ├── Maintenance
+   ├── Updates
+   └── Info
 
 🔒 Security
    ├── Authentication
@@ -7177,12 +9471,6 @@ All settings above MUST be configurable via admin panel:
    ├── User List
    ├── Invites
    └── Roles
-
-🖥️ System
-   ├── Backup & Restore
-   ├── Maintenance
-   ├── Updates
-   └── System Info
 
 🔗 Cluster (if enabled)
    ├── Nodes
@@ -7250,7 +9538,7 @@ All settings above MUST be configurable via admin panel:
 
 ### Dashboard (`/admin/dashboard`)
 
-**Overview of system status at a glance.**
+**Overview of server status and system resources at a glance.**
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -7327,10 +9615,10 @@ All settings above MUST be configurable via admin panel:
 | `/admin/network/blocklists` | Blocklists | IP/domain blocklists |
 | `/admin/users` | Users | User list (if multi-user) |
 | `/admin/users/invites` | Invites | Invite codes (if multi-user) |
-| `/admin/system/backup` | Backup | Create/restore backups |
-| `/admin/system/maintenance` | Maintenance | Maintenance mode |
-| `/admin/system/updates` | Updates | Check/apply updates |
-| `/admin/system/info` | System Info | Version, environment, deps |
+| `/admin/server/backup` | Backup | Create/restore backups |
+| `/admin/server/maintenance` | Maintenance | Maintenance mode |
+| `/admin/server/updates` | Updates | Check/apply updates |
+| `/admin/server/info` | Server Info | Version, environment, deps |
 | `/admin/cluster/nodes` | Nodes | Cluster node management |
 | `/admin/cluster/add` | Add Node | Generate join token |
 | `/admin/help` | Help | Documentation links |
@@ -7529,9 +9817,146 @@ The admin panel MUST include a scheduler section with:
 
 # PART 19: API STRUCTURE (NON-NEGOTIABLE)
 
+**Note:** This section covers API structure and requirements. For specific route listings, see:
+- Admin Web Routes: PART 18 (Admin Panel)
+- Admin API Routes: PART 18 (Admin Panel → API Routes)
+- Project-specific Routes: PART 32 (Project-Specific Sections)
+
 ## API Versioning
 
 **Use versioned API: `/api/v1`**
+
+## URL Parameters (NON-NEGOTIABLE)
+
+**Prefer path parameters over query parameters.**
+
+| Parameter Type | Use When | Example |
+|----------------|----------|---------|
+| **Path params** | Identifying a resource | `/api/v1/users/{id}`, `/api/v1/jokes/{category}` |
+| **Query params** | Filtering, sorting, pagination | `?page=2&limit=10&sort=date` |
+
+**Path Parameters (Preferred):**
+```
+GET /api/v1/users/123              ✓ Good - resource ID in path
+GET /api/v1/jokes/programming      ✓ Good - category in path
+GET /api/v1/search/golang          ✓ Good - search term in path
+
+GET /api/v1/users?id=123           ✗ Bad - should be path param
+GET /api/v1/jokes?category=prog    ✗ Bad - should be path param
+```
+
+**Query Parameters (When Needed):**
+```
+GET /api/v1/users?page=2&limit=10          ✓ Pagination
+GET /api/v1/jokes?sort=rating&order=desc   ✓ Sorting
+GET /api/v1/search/golang?safe=true        ✓ Filtering/options
+GET /api/v1/users?status=active&role=admin ✓ Multiple filters
+```
+
+**Rules:**
+| Rule | Description |
+|------|-------------|
+| **Resource identity → path** | IDs, slugs, categories in URL path |
+| **Modifiers → query** | Pagination, sorting, filtering as query params |
+| **No redundancy** | Don't duplicate path params as query params |
+| **Clean URLs** | Prefer `/jokes/random` over `/jokes?type=random` |
+
+## Content Negotiation (NON-NEGOTIABLE)
+
+**All endpoints respond based on how they are accessed.**
+
+### Accept Header Detection
+
+| Accept Header | Response Format |
+|---------------|-----------------|
+| `text/html` | HTML (full page or fragment) |
+| `application/json` | JSON |
+| `text/plain` | Plain text |
+| `*/*` or missing | Default for endpoint type |
+
+### Response by Endpoint Type
+
+| Endpoint | Default | Browser | curl/CLI | API Client |
+|----------|---------|---------|----------|------------|
+| `/` (public pages) | HTML | HTML | HTML | HTML |
+| `/admin/*` | HTML | HTML | HTML | HTML |
+| `/api/v1/*` | JSON | JSON | JSON | JSON |
+| `/healthz` | HTML | HTML | Text | JSON (if Accept: application/json) |
+| `*.txt` extension | Text | Text | Text | Text |
+
+### The `.txt` Extension (NON-NEGOTIABLE)
+
+**ALL endpoints support `.txt` extension for plain text output.**
+
+| Endpoint | Returns |
+|----------|---------|
+| `/api/v1/jokes/random` | JSON (default) |
+| `/api/v1/jokes/random.txt` | Plain text |
+| `/healthz` | HTML (default) |
+| `/healthz.txt` | Plain text |
+| `/api/v1/status` | JSON (default) |
+| `/api/v1/status.txt` | Plain text |
+
+**Use cases:**
+- `curl https://api.example.com/api/v1/joke/random.txt` → Just the joke text
+- `curl https://api.example.com/healthz.txt` → "OK" or "ERROR: ..."
+- Scripts that need plain output without JSON parsing
+
+### Content Negotiation Implementation
+
+```go
+func detectResponseFormat(r *http.Request) string {
+    // 1. Check for .txt extension
+    if strings.HasSuffix(r.URL.Path, ".txt") {
+        return "text/plain"
+    }
+
+    // 2. Check Accept header
+    accept := r.Header.Get("Accept")
+
+    switch {
+    case strings.Contains(accept, "application/json"):
+        return "application/json"
+    case strings.Contains(accept, "text/plain"):
+        return "text/plain"
+    case strings.Contains(accept, "text/html"):
+        return "text/html"
+    default:
+        // 3. Default based on endpoint
+        if strings.HasPrefix(r.URL.Path, "/api/") {
+            return "application/json"
+        }
+        return "text/html"
+    }
+}
+```
+
+### Response Examples
+
+**JSON (default for `/api/*`):**
+```json
+{
+  "joke": "Why do programmers prefer dark mode? Because light attracts bugs.",
+  "category": "programming",
+  "id": "joke_123"
+}
+```
+
+**Text (`.txt` extension or `Accept: text/plain`):**
+```
+Why do programmers prefer dark mode? Because light attracts bugs.
+```
+
+**HTML (browser request):**
+```html
+<!DOCTYPE html>
+<html>
+<head><title>Random Joke</title></head>
+<body>
+  <p>Why do programmers prefer dark mode? Because light attracts bugs.</p>
+</body>
+</html>
+```
 
 ## API Types
 
@@ -8697,11 +11122,11 @@ server:
 | `backup.restored` | Backup restored | Filename, restored by |
 | `backup.deleted` | Backup deleted | Filename, deleted by |
 | `backup.failed` | Backup failed | Error message |
-| `system.started` | Application started | Version, mode, node ID |
-| `system.stopped` | Application stopped | Reason, uptime |
-| `system.maintenance_entered` | Maintenance mode enabled | Reason, enabled by |
-| `system.maintenance_exited` | Maintenance mode disabled | Duration, disabled by |
-| `system.updated` | Application updated | Old version, new version |
+| `server.started` | Application started | Version, mode, node ID |
+| `server.stopped` | Application stopped | Reason, uptime |
+| `server.maintenance_entered` | Maintenance mode enabled | Reason, enabled by |
+| `server.maintenance_exited` | Maintenance mode disabled | Duration, disabled by |
+| `server.updated` | Application updated | Old version, new version |
 | `scheduler.task_failed` | Scheduled task failed | Task name, error |
 | `scheduler.task_manual_run` | Task manually triggered | Task name, triggered by |
 
@@ -8773,7 +11198,7 @@ server:
 | `info` | Successful normal operations | Login, config save, backup complete |
 | `warn` | Failed attempts, recoverable issues | Failed login, rate limit hit |
 | `error` | Failures requiring attention | Backup failed, scheduler error |
-| `critical` | Security incidents, system failures | Brute force detected, maintenance mode |
+| `critical` | Security incidents, server failures | Brute force detected, maintenance mode |
 
 ## Audit Log Configuration
 
@@ -8799,7 +11224,7 @@ server:
         tokens: true           # Token create/revoke
         users: true            # User management
         backup: true           # Backup/restore
-        system: true           # System events
+        server: true           # Server events (start, stop, maintenance)
         cluster: true          # Cluster events
         token_usage: false     # Individual token uses (high volume)
 
@@ -8935,14 +11360,14 @@ Group: audit group (if configured)
 
 ## Server Admin vs Regular Users (NON-NEGOTIABLE)
 
-**Server admins are SYSTEM ACCOUNTS responsible for managing the application itself. Regular users are end-users of the application.**
+**Server admins are ADMINISTRATIVE ACCOUNTS responsible for managing the application itself. Regular users are end-users of the application.**
 
 ### Key Distinction
 
 | Aspect | Server Admin | Regular User |
 |--------|--------------|--------------|
 | **Purpose** | Manage server, configuration, other users | Use the application features |
-| **Scope** | System-wide administration | Own account and data only |
+| **Scope** | Server-wide administration | Own account and data only |
 | **Storage** | `admin_credentials` table | `users` table |
 | **Login** | `/auth/login` → `/admin/*` | `/auth/login` → `/user/*` |
 | **Access** | Admin panel (`/admin/*`) | User routes (`/user/*`) |
@@ -9002,7 +11427,7 @@ Group: audit group (if configured)
 ║      http://localhost:64521/admin                                    ║
 ║                                                                      ║
 ║   🔑 Setup Token (use at /admin):                                     ║
-║      abc123-xyz789-setup-token-here                                  ║
+║      a1b2c3d4e5f67890abcdef1234567890                                ║
 ║                                                                      ║
 ║   📧 SMTP: Auto-detected (localhost:25)                               ║
 ║                                                                      ║
@@ -9079,7 +11504,7 @@ server:
 
 **What Setup Wizard Provides:**
 - Custom admin username/password (instead of generated)
-- Customize server name/branding
+- Customize app name/branding
 - Configure optional features (Tor, SSL, multi-user)
 - Receive API token for programmatic access
 
@@ -9117,7 +11542,7 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 **Step 3: Server Configuration**
 | Setting | Description |
 |---------|-------------|
-| Server name | Display name for the instance |
+| App name | Display name for the application |
 | Domain/FQDN | Primary domain (if known) |
 | Mode | Production / Development |
 | Timezone | Server timezone |
@@ -9141,6 +11566,18 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 - Displayed in console ONCE (never stored in plain text)
 - Single use - invalidated after setup complete
 - If lost, must reset database to regenerate
+
+**Setup Token Format:**
+```
+Format: {random-32-hex-chars}
+Example: a1b2c3d4e5f67890abcdef1234567890
+
+Display in console:
+  Setup Token: a1b2c3d4e5f67890abcdef1234567890
+```
+- 32 hexadecimal characters (128-bit random)
+- No prefix, no dashes (simple format for easy copy/paste)
+- Case-insensitive for input validation
 
 **Server Admin Credentials Storage:**
 - Stored in database (`admin_credentials` table) - NEVER in config file
@@ -9538,7 +11975,7 @@ var UsernameBlocklist = []string{
     "webmaster", "hostmaster", "abuse", "spam", "junk", "trash",
 
     // Project-specific (dynamic)
-    "search", "{projectorg}",
+    "search", "apimgr",
 }
 ```
 
@@ -9689,12 +12126,14 @@ User receives: "Password reset requested by administrator.
 **Recovery Keys (CRITICAL):**
 | Rule | Description |
 |------|-------------|
+| **Format** | `{8-hex-chars}-{4-hex-chars}` (e.g., `a1b2c3d4-e5f6`) |
+| **Count** | 10 recovery keys generated |
 | **Generated once** | Recovery keys generated when 2FA/passkey enabled |
 | **User must copy** | Displayed ONCE, user MUST save them |
-| **Hashed storage** | Keys are hashed, NOT stored in plain text |
+| **Hashed storage** | Keys are hashed (Argon2id), NOT stored in plain text |
 | **NOT recoverable** | If lost, cannot be retrieved - account recovery required |
 | **Single use** | Each recovery key can only be used once |
-| **Count** | 10 recovery keys generated |
+| **Case insensitive** | Keys are validated case-insensitively |
 
 **Recovery Key Flow:**
 ```
@@ -9753,7 +12192,7 @@ User receives: "Password reset requested by administrator.
 
 ### Server Admin Recovery (NON-NEGOTIABLE)
 
-The server admin (system administrator with access to the server/binary) has ONE recovery method:
+The server admin (administrator with access to the server/binary) has ONE recovery method:
 
 | Scenario | Recovery Method |
 |----------|-----------------|
@@ -9764,7 +12203,7 @@ The server admin (system administrator with access to the server/binary) has ONE
 | Admin lost everything | `search --maintenance setup` |
 
 **This requires:**
-- System-level access to run the binary
+- Console/SSH access to the server to run the binary
 - Console access to see the new setup token
 - The service should be stopped first
 
@@ -9985,7 +12424,7 @@ server:
 
 | Reason | Description |
 |--------|-------------|
-| **Security** | Server admin has system-level access, not app-level |
+| **Security** | Server admin has server-level access, not app-level |
 | **Simplicity** | Admin-only mode doesn't need user management |
 | **Isolation** | Server admin credentials separate from user data |
 | **Recovery** | Can access admin even if database is corrupted |
@@ -10120,7 +12559,7 @@ server:
 | Feature | Description |
 |---------|-------------|
 | TOTP | Time-based one-time passwords (Google Authenticator, etc.) |
-| Backup codes | One-time use recovery codes |
+| Recovery keys | 10 one-time use keys (format: `a1b2c3d4-e5f6`) |
 | Remember device | Optional "trust this device" for 30 days |
 
 ## User Profile
@@ -10341,7 +12780,7 @@ Example: jokes_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6
 | `/api/v1/user/2fa` | GET | Get 2FA status |
 | `/api/v1/user/2fa/enable` | POST | Enable 2FA |
 | `/api/v1/user/2fa/disable` | POST | Disable 2FA |
-| `/api/v1/user/2fa/backup-codes` | POST | Generate backup codes |
+| `/api/v1/user/2fa/recovery-keys` | POST | Regenerate recovery keys |
 
 ### Admin - Users (`/api/v1/admin/users/`)
 
@@ -10606,6 +13045,22 @@ All nodes need shared access to:
 - Sessions (no re-login when switching nodes)
 - API tokens (tokens work on any node)
 
+**Two ways to configure connection (pick one):**
+
+| Method | When to Use |
+|--------|-------------|
+| `url` | Simple, single connection string, environment-friendly |
+| `host`/`port`/etc | More explicit, when fields come from different sources |
+
+**Using connection URL:**
+```yaml
+server:
+  database:
+    driver: postgres
+    url: ${DATABASE_URL}  # postgres://user:pass@host:5432/dbname?sslmode=require
+```
+
+**Using individual fields:**
 ```yaml
 server:
   database:
@@ -10617,9 +13072,24 @@ server:
     password: ${DB_PASSWORD}
     sslmode: require
 
-    # All tables go in same database, different schemas/prefixes:
-    # - server_* tables (admin_credentials, admin_sessions, scheduler_state)
-    # - user_* tables (users, user_tokens, user_sessions, invites)
+    # Connection pool
+    max_open: 25
+    max_idle: 5
+    max_lifetime: 5m
+```
+
+**URL Format:**
+```
+postgres://[username[:password]@]host[:port]/database[?sslmode=mode]
+mysql://[username[:password]@]host[:port]/database[?params]
+```
+
+**Note:** `url` takes precedence if both url and individual fields are specified.
+
+```yaml
+# All tables go in same database, different schemas/prefixes:
+# - server_* tables (admin_credentials, admin_sessions, scheduler_state)
+# - user_* tables (users, user_tokens, user_sessions, invites)
 ```
 
 ### Table Prefixes in Shared Database
@@ -10775,15 +13245,22 @@ On restart, the application:
 
 ### Storage Backend Sync (Bidirectional)
 
+**This section covers ALL storage transitions, not just the initial SQLite → Remote migration.**
+
+The Migration Methods above describe the **initial migration** to cluster mode. This section describes:
+- Migrating back from Remote → SQLite (leaving cluster)
+- YAML config import/export for backup or migration
+- All possible storage transitions
+
 **Data always syncs TOWARD the new storage backend before switching.**
 
-| From | To | Sync Action |
-|------|-----|-------------|
-| **SQLite → Remote** | Push to remote | Export SQLite data → Import to remote DB → Switch to remote |
-| **Remote → SQLite** | Pull to local | Export remote data → Import to SQLite files → Disconnect remote → Switch to SQLite |
-| **SQLite → YAML** | Export to file | Export `server.db` settings → Write to `server.yml` |
-| **YAML → SQLite** | Import to DB | Read `server.yml` → Import settings to `server.db` |
-| **YAML → Remote** | Import to DB | Read `server.yml` → Import settings to remote DB |
+| From | To | Method | Sync Action |
+|------|-----|--------|-------------|
+| **SQLite → Remote** | Config file or Web UI | Export SQLite data → Import to remote DB → Switch to remote |
+| **Remote → SQLite** | Web UI only | Export remote data → Import to SQLite files → Disconnect → Switch to SQLite |
+| **SQLite → YAML** | CLI: `--maintenance backup` | Export `server.db` settings → Write to backup file |
+| **YAML → SQLite** | CLI: `--maintenance restore` | Read backup → Import settings to `server.db` |
+| **YAML → Remote** | CLI: `--maintenance restore` | Read backup → Import settings to remote DB |
 
 #### Remote → SQLite (Downgrade to Local)
 
@@ -10986,7 +13463,7 @@ Local MariaDB INSERT                     Local PostgreSQL INSERT
 
 1. Go to `/admin/server/nodes/add`
 2. Click "Generate Token" button
-3. System generates:
+3. Server generates:
    - Token: `node_{random_32_chars}`
    - URL: `{proto}://{fqdn}` (of this node)
 4. Display token and URL to admin (copy buttons)
@@ -11296,7 +13773,7 @@ Admin goes to /admin/server/nodes/add
 Clicks "Generate Token"
          │
          ▼
-System prompts: "Enable cluster mode?"
+Wizard prompts: "Enable cluster mode?"
   - Requires remote database connection
   - Enter PostgreSQL/MySQL details
          │
@@ -11481,21 +13958,120 @@ When using remote database, the same tables are created but with appropriate typ
 | Tracking | `schema_migrations` table |
 | Rollback | Automatic on failure |
 
-## Cluster Support
+## Cluster Support (NON-NEGOTIABLE)
 
-**ALL apps MUST support cluster mode.**
+**ALL apps MUST support cluster mode with config sync.**
+
+### What Clustering Provides (Standard for ALL Apps)
+
+| Feature | Description |
+|---------|-------------|
+| **Config Sync** | Change setting on one node → syncs to all nodes |
+| **Session Sharing** | User sessions shared across nodes |
+| **Distributed Locks** | Prevent duplicate task execution |
+| **Primary Election** | One node handles cluster-wide tasks |
+| **Health Monitoring** | Nodes monitor each other |
+
+**This is the BASE functionality. Every project gets this.**
 
 ### Single Instance (Auto-detected)
 
 - No external cache/database configured
 - Uses local file/SQLite for state
+- Fully functional, just not clustered
 
 ### Cluster Mode (Auto-detected)
 
 - Auto-enabled when external cache or shared database detected
-- Primary election for cluster-wide tasks
-- Distributed locks
-- Session sharing
+- Requires: PostgreSQL/MySQL + Valkey/Redis
+- All nodes share same database and cache
+- Config changes propagate automatically
+
+### Cluster Heartbeat & Failure Handling
+
+**Every cluster node sends heartbeats to detect failures.**
+
+| Setting | Value | Description |
+|---------|-------|-------------|
+| Heartbeat interval | 30 seconds | How often nodes send heartbeats |
+| Heartbeat timeout | 90 seconds | 3 missed heartbeats = node considered unresponsive |
+| Degraded threshold | 90 seconds | Node marked as `degraded` |
+| Offline threshold | 5 minutes | Node marked as `offline` |
+| Removal threshold | Manual | Offline nodes require manual removal |
+
+**Node States:**
+
+| State | Meaning | Action |
+|-------|---------|--------|
+| `healthy` | Heartbeat received within 30 seconds | Normal operation |
+| `degraded` | Heartbeat missed (30-90 seconds) | Logged, monitoring continues |
+| `offline` | No heartbeat for 5+ minutes | Node excluded from load balancing |
+| `removed` | Manually removed by admin | Node record deleted |
+
+**Failure Detection Flow:**
+
+```
+Node A sends heartbeat every 30 seconds
+         │
+         ▼
+Other nodes track "last_seen" timestamp
+         │
+         ▼
+If now - last_seen > 90 seconds:
+   Mark as "degraded", log warning
+         │
+         ▼
+If now - last_seen > 5 minutes:
+   Mark as "offline", exclude from cluster operations
+         │
+         ▼
+Admin manually removes dead nodes via:
+   /admin/server/cluster → Remove Node
+```
+
+**Primary Election:**
+
+| Event | Action |
+|-------|--------|
+| Cluster starts | Node with lowest ID becomes primary |
+| Primary goes offline | Next healthy node (by ID) becomes primary |
+| Primary comes back | Remains secondary (no preemption) |
+| Split-brain | Database is source of truth (latest write wins) |
+
+**What Primary Node Handles:**
+
+- Scheduled tasks (only primary runs cron jobs)
+- Cluster-wide maintenance
+- GeoIP/blocklist updates (once, shared via DB)
+
+### Extended Node Functions (PER-PROJECT)
+
+**Beyond config sync, what nodes DO varies by project.**
+
+| App Type | Base (Config Sync) | Extended Node Function |
+|----------|:------------------:|------------------------|
+| Jokes API | ✓ | None - sync only |
+| Quotes API | ✓ | None - sync only |
+| Watchtower-type | ✓ | + Manage Docker hosts |
+| DNS Server | ✓ | + HA failover |
+| Monitoring App | ✓ | + Monitor remote servers |
+| Proxmox-type | ✓ | + Manage VMs + HA failover |
+
+**Extended functions are defined in the project's AI.md under "Node Functions".**
+
+### High Availability (Specialized Apps Only)
+
+**HA is NOT standard - only for apps that specifically require failover.**
+
+| HA Requirement | Examples |
+|----------------|----------|
+| DNS failover | DNS servers, domain controllers |
+| Service continuity | Proxmox, cPanel, critical infrastructure |
+| Data redundancy | Database clusters, storage systems |
+
+**If your app needs HA, define it in AI.md under "High Availability Requirements".**
+
+Most apps (Jokes, Quotes, Airports, etc.) do NOT need HA - clustering with config sync is sufficient.
 
 ---
 
@@ -11582,7 +14158,7 @@ Restore completed. Primary admin re-authentication required.
 
 A new setup token has been generated:
 
-  Setup Token: abc123-xyz789-setup-token
+  Setup Token: a1b2c3d4e5f67890abcdef1234567890
 
 Go to: https://{host}:{port}/admin
 
@@ -11659,7 +14235,7 @@ search --maintenance setup
 # ║                                                                  ║
 # ║  NEW SETUP TOKEN (copy this now, shown ONCE):                    ║
 # ║  ┌────────────────────────────────────────────────────────────┐  ║
-# ║  │  setup_a7b9c2d4e6f8g0h1i3j5k7l9m1n3o5p7                    │  ║
+# ║  │  a1b2c3d4e5f67890abcdef1234567890                          │  ║
 # ║  └────────────────────────────────────────────────────────────┘  ║
 # ║                                                                  ║
 # ║  1. Start the service: search --service start             ║
@@ -11676,7 +14252,7 @@ search --service start
 
 | Consideration | Requirement |
 |---------------|-------------|
-| **Requires root/admin** | Must have system-level access to run binary |
+| **Requires root/admin** | Must have console/SSH access to run binary |
 | **Console access required** | Setup token only displayed in terminal |
 | **One-time token** | Token expires after use or after 24 hours |
 | **Logged** | Action logged to audit log (if available) |
@@ -11734,7 +14310,7 @@ Email templates allow server admins to customize ALL notification messages, incl
 
 **Key Points:**
 - ALL email templates are fully customizable via the admin panel
-- Account emails (password reset, verification, security alerts) follow the same customization pattern as system emails
+- Account emails (password reset, verification, security alerts) follow the same customization pattern as server notification emails
 - Each template has sensible defaults that work out-of-the-box
 - Changes take effect immediately (live reload)
 
@@ -11789,6 +14365,11 @@ Email templates allow server admins to customize ALL notification messages, incl
 - Test email button validates SMTP actually works before enabling email features
 
 ## Default Templates
+
+**Note:** Templates are defined for all functionality but are ONLY used when SMTP is configured. When SMTP is not configured:
+- Templates exist but are never rendered or sent
+- `email_verify` template is not used - email addresses are auto-verified
+- All email-dependent features are hidden/disabled
 
 | Template | Purpose | Account Email? |
 |----------|---------|:--------------:|
@@ -12664,7 +15245,7 @@ Send Test Email Dialog
 | Category | Events | Default | Can Disable? |
 |----------|--------|---------|--------------|
 | **Security** | Login alerts, 2FA changes, password changes | All ON | No (required) |
-| **System** | SSL expiring, updates available, disk space | All ON | Yes |
+| **Server** | SSL expiring, updates available, disk space | All ON | Yes |
 | **Backup** | Backup complete, backup failed | Failed ON, Complete OFF | Yes |
 | **Scheduler** | Task failed, task manual run | Failed ON | Yes |
 | **Other Admins** | Admin login/logout | ON | Yes |
@@ -12683,7 +15264,7 @@ Admin Notification Preferences (/admin/profile/notifications)
 │     ☑ 2FA enabled/disabled                                  │
 │     ☑ API token regenerated                                 │
 │                                                             │
-│  ⚙️ System                                          WebUI Email│
+│  ⚙️ Server                                          WebUI Email│
 │     SSL certificate expiring                        [✓]  [✓] │
 │     SSL certificate renewed                         [✓]  [ ] │
 │     Update available                                [✓]  [ ] │
@@ -12855,9 +15436,8 @@ Every project MUST include these scheduled tasks:
 ```yaml
 server:
   scheduler:
-    # Scheduler is ALWAYS enabled - cannot be disabled
-    # This setting only controls whether custom tasks run
-    enabled: true
+    # Scheduler is ALWAYS running - no enable/disable setting
+    # Individual tasks can be enabled/disabled below
 
     # Timezone for scheduled tasks (default: America/New_York)
     timezone: America/New_York
@@ -13251,7 +15831,7 @@ This prevents conflicts with any existing Tor installation on the system.
 2. Start DEDICATED Tor process:
    ├─ Use application's own DataDir: `{data_dir}/tor/`
    ├─ Use random available ControlPort (not 9051)
-   ├─ Use random available SocksPort (not 9050)
+   ├─ Disable SocksPort (server-only, not browsing)
    ├─ Completely isolated from system Tor
    ├─ Wait for bootstrap completion
    └─ Create hidden service via ADD_ONION
@@ -13337,11 +15917,11 @@ func shutdownTor(t *tor.Tor) error {
 
 | Port | System Tor | Our Tor |
 |------|------------|---------|
-| SocksPort | 9050 | Random available |
+| SocksPort | 9050 | 0 (disabled - server only) |
 | ControlPort | 9051 | Random available |
 | DataDir | `/var/lib/tor` | `{data_dir}/tor/` |
 
-**bine automatically selects available ports**, ensuring no conflict with system Tor.
+**bine automatically selects available ControlPort**, ensuring no conflict with system Tor. SocksPort is disabled since we're running as a hidden service server, not browsing through Tor.
 
 ### Tor Configuration Optimizations (NON-NEGOTIABLE)
 
@@ -13884,12 +16464,562 @@ search:
   # Custom settings here
 ```
 
+## Extended Node Functions (If Applicable)
+
+**Only define if nodes do MORE than config sync. Most projects leave this empty.**
+
+{Describe what nodes manage beyond config sync, if anything}
+
+| Function | Description |
+|----------|-------------|
+| {function} | {what nodes do} |
+
+**Examples:**
+- Watchtower-type: Nodes manage Docker hosts (update containers, monitor health)
+- Monitoring app: Nodes monitor remote servers (collect metrics, send alerts)
+- DNS server: Nodes provide HA failover (automatic DNS resolution failover)
+
+## High Availability Requirements (If Applicable)
+
+**Only define if this app requires HA. Most projects (Jokes, Quotes, etc.) do NOT need HA.**
+
+{Describe HA requirements if this is a specialized app}
+
+| Requirement | Description |
+|-------------|-------------|
+| Failover type | {automatic/manual} |
+| Recovery time | {target RTO} |
+| Data sync | {sync strategy} |
+
+**Leave empty for apps that only need clustering (config sync).**
+
 ## Notes
 
 {Any additional notes, decisions, or context for this project}
 
 ---
 
+# PART 33: CLI CLIENT (PER-PROJECT)
+
+## Overview
+
+**CLI client is a PER-PROJECT determination.** Not all projects require a CLI client.
+
+When a project includes a CLI client, it provides a terminal-based interface for interacting with the server. The CLI supports both standard command-line usage and an interactive TUI (Terminal User Interface) mode.
+
+| Attribute | Value |
+|-----------|-------|
+| Binary name | `search-cli` |
+| Versioning | Same as main application |
+| Build | Part of same Makefile (`make build` produces both binaries) |
+| Config location | `~/.config/search/cli.yml` |
+
+## Modes
+
+### Standard CLI Mode
+
+Traditional command-line interface with commands, subcommands, and flags:
+
+```bash
+# Examples
+jokes-cli get random
+jokes-cli search --query "programming" --limit 10
+jokes-cli list --output json
+airports-cli lookup JFK
+quotes-cli random --category motivation
+```
+
+### TUI Mode (Interactive)
+
+Full terminal user interface with menus, panels, and keyboard navigation:
+
+```bash
+# Launch TUI
+jokes-cli --tui
+jokes-cli tui
+
+# TUI provides:
+# - Interactive menus
+# - Search with live results
+# - Keyboard shortcuts
+# - Visual data display
+```
+
+**TUI Library:** Use `github.com/charmbracelet/bubbletea` for TUI implementation.
+
+## Configuration
+
+### Config File Location
+
+| OS | Path |
+|----|------|
+| Linux | `~/.config/search/cli.yml` |
+| macOS | `~/.config/search/cli.yml` |
+| Windows | `%APPDATA%\search\cli.yml` |
+
+### Config Structure
+
+```yaml
+# CLI client configuration
+server:
+  # Server address (FQDN or IP:port)
+  # Default: official site if defined for project, otherwise empty
+  address: "https://api.example.com"
+
+  # API token for authenticated requests (optional)
+  token: ""
+
+  # Request timeout in seconds
+  timeout: 30
+
+# Output preferences
+output:
+  # Default format: json, table, plain
+  format: table
+
+  # Colorize output (auto, always, never)
+  color: auto
+
+# TUI preferences
+tui:
+  # Theme: default, minimal, compact
+  theme: default
+
+  # Show help hints in TUI
+  show_hints: true
+```
+
+### Default Server Address
+
+| Scenario | `server.address` Default |
+|----------|--------------------------|
+| Project has official site | Official site URL (e.g., `https://jokes.example.com`) |
+| No official site defined | Empty (must be configured by user) |
+
+**Official site is defined in the project's AI.md specification.**
+
+## Standard Flags (NON-NEGOTIABLE)
+
+**ALL CLI clients MUST support these flags:**
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--help` | `-h` | Show help (same format as server `--help`) |
+| `--version` | `-v` | Show version (same format as server `--version`) |
+| `--server` | `-s` | Server address (overrides config) |
+| `--token` | `-t` | API token (overrides config) |
+| `--output` | `-o` | Output format: json, table, plain |
+| `--config` | `-c` | Path to config file |
+| `--no-color` | | Disable colored output |
+| `--timeout` | | Request timeout in seconds |
+| `--tui` | | Launch TUI mode |
+
+### --help Output
+
+```bash
+$ jokes-cli --help
+jokes-cli v1.2.3 - CLI client for Jokes API
+
+Usage:
+  jokes-cli [command] [flags]
+
+Commands:
+  random      Get a random joke
+  search      Search jokes
+  categories  List categories
+  get         Get joke by ID
+  config      Manage configuration
+  tui         Launch interactive TUI
+  version     Show version information
+
+Flags:
+  -s, --server string    Server address (default: config or https://jokes.example.com)
+  -t, --token string     API token for authentication
+  -o, --output string    Output format: json, table, plain (default: table)
+  -c, --config string    Path to config file
+      --no-color         Disable colored output
+      --timeout int      Request timeout in seconds (default: 30)
+      --tui              Launch TUI mode
+  -h, --help             Show help
+  -v, --version          Show version
+
+Use "jokes-cli [command] --help" for more information about a command.
+```
+
+### --version Output
+
+**MUST match server `--version` format:**
+
+```bash
+$ jokes-cli --version
+jokes-cli v1.2.3 (abc1234) built 2025-01-15
+```
+
+Same format as server:
+```bash
+$ jokes --version
+jokes v1.2.3 (abc1234) built 2025-01-15
+```
+
+## Standard Commands (NON-NEGOTIABLE)
+
+**ALL CLI clients MUST have these commands:**
+
+| Command | Description |
+|---------|-------------|
+| `config` | Manage configuration |
+| `config show` | Display current configuration |
+| `config set <key> <value>` | Set configuration value |
+| `config get <key>` | Get configuration value |
+| `config init` | Create default config file |
+| `version` | Show version information |
+| `tui` | Launch TUI mode |
+
+### Config Command Examples
+
+```bash
+# Initialize config file
+jokes-cli config init
+
+# Set server address
+jokes-cli config set server.address https://jokes.example.com
+
+# Set API token
+jokes-cli config set server.token abc123
+
+# Set default output format
+jokes-cli config set output.format json
+
+# Show current config
+jokes-cli config show
+
+# Get specific value
+jokes-cli config get server.address
+```
+
+## Authentication
+
+**Authentication requirements are PROJECT-DEPENDENT and ROUTE-DEPENDENT.**
+
+| Auth Type | When Used |
+|-----------|-----------|
+| None | Public endpoints (e.g., `GET /api/v1/jokes/random`) |
+| API Token | Protected endpoints, user-specific data |
+| Session | Admin operations (if CLI supports admin features) |
+
+**Token Storage:**
+- Stored in `cli.yml` under `server.token`
+- Can be overridden with `--token` flag
+- Environment variable: `SEARCH_CLI_TOKEN`
+
+**Priority (highest to lowest):**
+1. `--token` flag
+2. `SEARCH_CLI_TOKEN` environment variable
+3. `server.token` in config file
+
+## HTTP Client Identity (NON-NEGOTIABLE)
+
+### User-Agent Rule
+
+**The CLI binary can be renamed by users, but the User-Agent MUST always use the original project name.**
+
+| Aspect | Uses Filename | Uses Original Name |
+|--------|---------------|-------------------|
+| Display in `--help` | ✓ | |
+| Display in `--version` | ✓ | |
+| Error messages | ✓ | |
+| Config file path | ✓ | |
+| **User-Agent header** | | ✓ |
+
+**Why?** The server uses User-Agent to identify client types for:
+- Client-specific rate limits
+- Client-specific settings/features
+- Analytics and usage tracking
+- Version compatibility checks
+
+### User-Agent Format
+
+```
+search-cli/{version}
+```
+
+**Examples:**
+
+| Binary Name | User-Agent Header |
+|-------------|-------------------|
+| `jokes-cli` | `jokes-cli/1.2.3` |
+| `my-jokes` (renamed) | `jokes-cli/1.2.3` |
+| `jk` (renamed) | `jokes-cli/1.2.3` |
+| `airports-cli` | `airports-cli/1.2.3` |
+| `apt` (renamed) | `airports-cli/1.2.3` |
+
+### Implementation
+
+The project name is compiled into the binary at build time:
+
+```go
+// Set at build time via -ldflags
+var (
+    ProjectName = "jokes"      // Original project name (compiled in)
+    Version     = "1.2.3"
+)
+
+// GetUserAgent returns the fixed User-Agent regardless of binary name
+func GetUserAgent() string {
+    return fmt.Sprintf("%s-cli/%s", ProjectName, Version)
+}
+
+// GetBinaryName returns the actual executable name (for display)
+func GetBinaryName() string {
+    return filepath.Base(os.Args[0])
+}
+```
+
+**Build command:**
+```bash
+go build -ldflags "-X main.ProjectName=jokes -X main.Version=1.2.3" -o jokes-cli ./src/client
+```
+
+### Server-Side Client Detection
+
+The server can use the User-Agent to apply client-specific behavior:
+
+```go
+func getClientType(r *http.Request) string {
+    ua := r.Header.Get("User-Agent")
+    if strings.HasPrefix(ua, ProjectName+"-cli/") {
+        return "cli"
+    }
+    if strings.Contains(ua, "Mozilla") || strings.Contains(ua, "Chrome") {
+        return "browser"
+    }
+    return "api"
+}
+```
+
+## Output Formats
+
+### JSON
+
+```bash
+$ jokes-cli get random --output json
+{
+  "id": "abc123",
+  "text": "Why do programmers prefer dark mode? Because light attracts bugs.",
+  "category": "programming"
+}
+```
+
+### Table
+
+```bash
+$ jokes-cli list --output table
+┌──────────┬─────────────────────────────────────────────┬─────────────┐
+│ ID       │ Text                                        │ Category    │
+├──────────┼─────────────────────────────────────────────┼─────────────┤
+│ abc123   │ Why do programmers prefer dark mode?...     │ programming │
+│ def456   │ A SQL query walks into a bar...             │ programming │
+│ ghi789   │ There are 10 types of people...             │ programming │
+└──────────┴─────────────────────────────────────────────┴─────────────┘
+```
+
+### Plain
+
+```bash
+$ jokes-cli get random --output plain
+Why do programmers prefer dark mode? Because light attracts bugs.
+```
+
+## Project-Specific Commands
+
+Each project defines its own commands based on its API:
+
+```bash
+# Jokes project
+jokes-cli random
+jokes-cli search --query "programming"
+jokes-cli categories
+
+# Airports project
+airports-cli lookup JFK
+airports-cli search --city "New York"
+airports-cli nearby --lat 40.7128 --lon -74.0060
+
+# Quotes project
+quotes-cli random
+quotes-cli random --category motivation
+quotes-cli search --author "Einstein"
+```
+
+## Build Integration
+
+### Makefile Targets
+
+```makefile
+# Build both server and CLI (if src/client exists)
+build:
+	CGO_ENABLED=0 go build -o binaries/search ./src
+	@if [ -d "src/client" ]; then \
+		CGO_ENABLED=0 go build -o binaries/search-cli ./src/client; \
+	fi
+
+# Build CLI only
+build-cli:
+	CGO_ENABLED=0 go build -o binaries/search-cli ./src/client
+
+# Release builds (8 platforms)
+release:
+	# Server binaries
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o dist/search-linux-amd64 ./src
+	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o dist/search-linux-arm64 ./src
+	# ... (other platforms)
+
+	# CLI binaries (if src/client exists)
+	@if [ -d "src/client" ]; then \
+		GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o dist/search-linux-amd64-cli ./src/client; \
+		GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o dist/search-linux-arm64-cli ./src/client; \
+	fi
+	# ... (other platforms)
+```
+
+### Directory Structure
+
+```
+search/
+├── src/                    # Server application
+│   ├── main.go
+│   ├── config/
+│   ├── server/
+│   ├── ...
+│   └── client/             # CLI client (if project has CLI)
+│       ├── main.go
+│       ├── cmd/            # Command implementations
+│       │   ├── root.go
+│       │   ├── config.go
+│       │   ├── version.go
+│       │   └── {project-specific}.go
+│       ├── tui/            # TUI implementation
+│       │   ├── app.go
+│       │   ├── views/
+│       │   └── components/
+│       └── api/            # API client library
+│           └── client.go
+├── go.mod
+├── Makefile
+└── ...
+```
+
+## TUI Requirements
+
+### Minimum Features
+
+| Feature | Required |
+|---------|----------|
+| Keyboard navigation | ✓ |
+| Search/filter | ✓ |
+| Help screen (?) | ✓ |
+| Quit (q/Ctrl+C) | ✓ |
+| Responsive layout | ✓ |
+| Error display | ✓ |
+
+### Recommended Libraries
+
+| Library | Purpose |
+|---------|---------|
+| `github.com/charmbracelet/bubbletea` | TUI framework |
+| `github.com/charmbracelet/bubbles` | TUI components |
+| `github.com/charmbracelet/lipgloss` | TUI styling |
+
+### TUI Theme
+
+**TUI MUST use Dracula color scheme to match server frontend.**
+
+```go
+// Dracula colors for TUI
+var (
+    Background = lipgloss.Color("#282a36")
+    Foreground = lipgloss.Color("#f8f8f2")
+    Selection  = lipgloss.Color("#44475a")
+    Comment    = lipgloss.Color("#6272a4")
+    Cyan       = lipgloss.Color("#8be9fd")
+    Green      = lipgloss.Color("#50fa7b")
+    Orange     = lipgloss.Color("#ffb86c")
+    Pink       = lipgloss.Color("#ff79c6")
+    Purple     = lipgloss.Color("#bd93f9")
+    Red        = lipgloss.Color("#ff5555")
+    Yellow     = lipgloss.Color("#f1fa8c")
+)
+```
+
+## Error Handling
+
+### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | General error |
+| 2 | Configuration error |
+| 3 | Connection error |
+| 4 | Authentication error |
+| 5 | Not found |
+| 64 | Usage error (bad arguments) |
+
+### Error Messages
+
+```bash
+# Connection error
+$ jokes-cli random
+Error: cannot connect to server at https://jokes.example.com
+  Check your network connection and server address.
+  Use --server to specify a different server.
+
+# Auth error
+$ jokes-cli admin users --token invalid
+Error: authentication failed
+  Your API token is invalid or expired.
+  Use 'jokes-cli config set server.token <token>' to update.
+
+# Not found
+$ jokes-cli get abc123
+Error: joke not found: abc123
+```
+
+## Version Command
+
+```bash
+$ jokes-cli version
+jokes-cli v1.2.3
+
+Server: https://jokes.example.com
+Server Version: v1.2.3 (compatible)
+
+Build Info:
+  Go: go1.21.0
+  OS/Arch: linux/amd64
+  Commit: abc123
+  Date: 2025-01-15
+```
+
+**Version compatibility check:** CLI queries server `/api/v1/version` and warns if versions differ significantly.
+
+## Determining If Project Needs CLI
+
+**Add CLI client to project if ANY of these apply:**
+
+| Criterion | Example |
+|-----------|---------|
+| Data lookup/search use case | airports, zipcodes, countries |
+| Power users benefit from terminal access | developers, sysadmins |
+| Scripting/automation valuable | CI/CD integration, batch operations |
+| Offline-friendly interactions | cached data, local operations |
+
+**Skip CLI client if:**
+- Project is purely web-based with no terminal use case
+- API is too simple (single endpoint)
+- Target audience doesn't use terminal
+
+---
 
 # FINAL CHECKPOINT: COMPLIANCE CHECKLIST
 
@@ -13898,8 +17028,9 @@ search:
 ## Core Requirements
 
 - [ ] **NEVER modify TEMPLATE.md** - it is read-only
-- [ ] AI.md is the project specification (create from TEMPLATE.md if missing)
-- [ ] AI.md must be kept in sync with project state and TEMPLATE.md updates
+- [ ] AI.md is the complete project specification (create from TEMPLATE.md if missing)
+- [ ] AI.md is standalone - does NOT reference TEMPLATE.md after creation
+- [ ] AI.md must be kept in sync with project state (NOT with TEMPLATE.md updates)
 - [ ] TODO.AI.md required for more than 2 tasks
 - [ ] Migrate old files: `CLAUDE.md`, `SPEC.md` → merge into `AI.md`, DELETE old
 - [ ] Never assume or guess - ask questions
@@ -13950,6 +17081,18 @@ search:
 - [ ] 4 GitHub/Gitea workflows: release, beta, daily, docker
 - [ ] 8 platform builds (4 OS x 2 arch)
 - [ ] Docker uses tini, Alpine base
+
+## CLI Client (if applicable)
+
+- [ ] CLI is per-project determination (document in AI.md if included)
+- [ ] Binary named `search-cli`
+- [ ] Same version as main application
+- [ ] Both standard CLI and TUI modes
+- [ ] Config at `~/.config/search/cli.yml`
+- [ ] Standard flags: --server, --token, --output, --config, --tui
+- [ ] Standard commands: config, version, tui
+- [ ] Dracula theme for TUI
+- [ ] Built with `make build` alongside server
 
 ## Security
 

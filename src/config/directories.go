@@ -41,6 +41,13 @@ func SetLogDirOverride(dir string) {
 	cliOverrides["logs"] = dir
 }
 
+// SetPIDFileOverride sets a CLI override for the PID file path
+func SetPIDFileOverride(path string) {
+	cliOverrideMu.Lock()
+	defer cliOverrideMu.Unlock()
+	cliOverrides["pid"] = path
+}
+
 // getOverride returns a CLI override if set
 func getOverride(key string) (string, bool) {
 	cliOverrideMu.RLock()
@@ -215,7 +222,12 @@ func GetDataDir() string {
 
 // GetLogDir returns the OS-appropriate log directory
 func GetLogDir() string {
-	// Check environment variable first
+	// Check CLI override first (--log flag)
+	if dir, ok := getOverride("logs"); ok && dir != "" {
+		return dir
+	}
+
+	// Check environment variable
 	if dir := os.Getenv("SEARCH_LOG_DIR"); dir != "" {
 		return dir
 	}
@@ -342,6 +354,19 @@ func GetBackupDir() string {
 
 // GetPIDFile returns the OS-appropriate PID file path
 func GetPIDFile() string {
+	// Check CLI override first (--pid flag)
+	if path, ok := getOverride("pid"); ok && path != "" {
+		return path
+	}
+
+	// Check environment variable
+	if path := os.Getenv("SEARCH_PID_FILE"); path != "" {
+		return path
+	}
+	if path := os.Getenv("PID_FILE"); path != "" {
+		return path
+	}
+
 	// Container paths
 	if IsRunningInContainer() {
 		return "/data/" + ProjectName + ".pid"
