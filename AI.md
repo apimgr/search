@@ -45,7 +45,7 @@
 | **ENTRYPOINT** | `["tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh"]` |
 | **NEVER modify ENTRYPOINT/CMD** | All customization via entrypoint.sh |
 | **Required packages** | `curl`, `bash`, `tini`, `tor` |
-| **ENABLE_TOR default** | `true` |
+| **Tor** | Auto-enabled if `tor` binary installed (Docker image always has Tor) |
 
 ## CI/CD Rules
 
@@ -319,7 +319,7 @@ Template File (read-only, organization-level)
    - `search` → your project name (e.g., `jokes`)
    - `apimgr` → your organization (e.g., `apimgr`)
    - `SEARCH` → uppercase project name (e.g., `JOKES`)
-   - `{gitprovider}` → your git host (e.g., `github`)
+   - `github` → your git host (e.g., `github`)
 3. **Fill in project-specific sections**:
    - Header: Project name, description, and purpose
    - PART 32: Project-Specific API Endpoints, Data Files, Configuration
@@ -541,6 +541,109 @@ BEFORE writing ANY code:
 2. **Update TODO.AI.md** with any new tasks discovered
 3. **Verify compliance** - check against the FINAL CHECKPOINT
 4. **NEVER modify template file** - changes go in AI.md only
+5. **Update COMMIT_MESS** - write commit message for changes made
+
+## Commit Message File (NON-NEGOTIABLE)
+
+**AI assistants CANNOT run `git add`, `git commit`, or `git push`.** Instead, create/update the commit message file.
+
+**File:** `{projectdir}/.git/COMMIT_MESS`
+
+| Action | When |
+|--------|------|
+| **Create** | If file does not exist |
+| **Update** | If file exists (overwrite with new message) |
+
+**Format:**
+```
+{emoji} Title message (max 64 chars) {emoji}
+
+{detailed description of changes}
+
+- Bullet point 1
+- Bullet point 2
+- etc.
+```
+
+**Commit Type Emojis:**
+
+| Emoji | Type | Use For |
+|-------|------|---------|
+| ✨ | feat | New feature |
+| 🐛 | fix | Bug fix |
+| 📝 | docs | Documentation |
+| 🎨 | style | Formatting, no code change |
+| ♻️ | refactor | Code refactoring |
+| ⚡ | perf | Performance improvement |
+| ✅ | test | Adding tests |
+| 🔧 | chore | Config, build, tools |
+| 🔒 | security | Security fix |
+| 🗑️ | remove | Removing code/files |
+| 🚀 | deploy | Deployment related |
+| 📦 | deps | Dependency updates |
+
+**Example:**
+```
+✨ Add GeoIP country blocking feature ✨
+
+Implement country-based access control using ip-location-db.
+
+- Add GeoIP database download on first run
+- Add scheduler task for weekly updates
+- Add deny_countries config option
+- Add admin panel for country management
+```
+
+## TODO.AI.md Completion (NON-NEGOTIABLE)
+
+**When ALL items in TODO.AI.md are completed:**
+
+1. **Empty the TODO.AI.md file** - truncate to empty (keep the file, remove all content)
+2. **Write COMMIT_MESS** with the following format:
+
+**Title Format:**
+```
+✅ all todo items have been completed ✅
+```
+
+**Body Format:**
+```
+All tasks from TODO.AI.md have been completed.
+
+{summary of completed tasks}
+
+- Task 1 completed
+- Task 2 completed
+- etc.
+```
+
+**Example:**
+```
+✅ all todo items have been completed ✅
+
+All tasks from TODO.AI.md have been completed.
+
+Implemented core server functionality and admin panel.
+
+- Added mode package with production/development modes
+- Implemented SSL certificate handling
+- Created scheduler for background tasks
+- Built admin panel with authentication
+```
+
+**Rules:**
+- The ✅ emoji MUST be used for todo completion commits
+- Title is EXACTLY: `✅ all todo items have been completed ✅`
+- Body MUST summarize what was accomplished
+- Empty TODO.AI.md BEFORE writing COMMIT_MESS
+- File stays empty until new tasks are added
+
+**Rules:**
+- Title line: max 64 characters (including emojis)
+- Blank line after title
+- Detailed description follows
+- Use bullet points for multiple changes
+- Be specific about what changed and why
 
 ## Common Drift Patterns to Avoid
 
@@ -566,17 +669,20 @@ BEFORE writing ANY code:
 | Access | Description |
 |--------|-------------|
 | Full | All tools available |
-| **EXCEPT** | `git push`, `git commit` - require explicit user request |
-| Allowed | Stage files, create branches, check status, diff |
-| Required | User must explicitly request commits and pushes |
+| **PROHIBITED** | `git add`, `git commit`, `git push` - AI cannot run these |
+| Allowed | `git status`, `git diff`, `git log`, `git branch` (read-only) |
+| **Required** | Write `.git/COMMIT_MESS` file with commit message instead |
+
+**Since AI cannot commit, it MUST write the commit message to `.git/COMMIT_MESS` so the user can commit with:** `git commit -F .git/COMMIT_MESS`
 
 ## Prohibited Actions
 
 | Action | Reason |
 |--------|--------|
 | **Modifying TEMPLATE.md** | **Read-only master template - NEVER modify** |
-| `git push` without asking | May push unreviewed code |
-| `git commit` without asking | User should review changes first |
+| `git add` | AI cannot stage files - write COMMIT_MESS instead |
+| `git commit` | AI cannot commit - write COMMIT_MESS instead |
+| `git push` | AI cannot push - user must do this |
 | Deleting files without confirmation | Destructive action |
 | Changing NON-NEGOTIABLE sections | Specification violation |
 | Skipping validation | Security requirement |
@@ -913,7 +1019,7 @@ make dev                    # Quick build to {tempdir}/apimgr.XXXXXX/search
 make build                  # Full build to binaries/
 
 # ALSO CORRECT - Direct Docker (for one-offs, use random temp dir)
-PROJECTORG=$(basename "$(dirname "$(pwd)")") && BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}.XXXXXX") && docker run --rm -v $(pwd):/build -w /build -e CGO_ENABLED=0 golang:alpine go build -o /build/binaries/search ./src
+PROJECTORG=$(basename "$(dirname "$(pwd)")") && BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/$APIMGR.XXXXXX") && docker run --rm -v $(pwd):/build -w /build -e CGO_ENABLED=0 golang:alpine go build -o /build/binaries/search ./src
 
 # WRONG - Never run go directly on host
 go build -o binary/search ./src
@@ -1365,7 +1471,6 @@ MIT - See [LICENSE.md](LICENSE.md)
 - robots.txt / security.txt
 - Scheduler settings
 - SSL settings (except port)
-- Tor enable/disable
 - All feature toggles
 
 **What MAY require restart (with warning):**
@@ -1436,7 +1541,7 @@ Before proceeding, confirm you understand:
 |----------|-------------|---------|
 | `search` | Project name (inferred from path) | `jokes` |
 | `apimgr` | Organization name (inferred from path) | `apimgr` |
-| `{gitprovider}` | Git hosting provider | `github`, `gitlab`, `private` |
+| `github` | Git hosting provider | `github`, `gitlab`, `private` |
 | **Rule** | Anything in `{}` is a variable | |
 | **Rule** | Anything NOT in `{}` is literal | `/etc/letsencrypt/live` is a real path |
 
@@ -1444,7 +1549,7 @@ Before proceeding, confirm you understand:
 
 **NEVER hardcode `search` or `apimgr` - always infer from path or git remote.**
 
-**Path structure:** `~/Projects/{gitprovider}/apimgr/search`
+**Path structure:** `~/Projects/github/apimgr/search`
 
 ```bash
 # Infer from current directory path
@@ -1467,7 +1572,7 @@ PROJECTORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(
 |--------|----------|---------|
 | `search` | Lowercase (filenames, paths, commands) | `jokes`, `/etc/apimgr/jokes/` |
 | `{projectName}` | camelCase (Go variables, JSON keys) | `projectName := "jokes"` |
-| `{Projectname}` | PascalCase (Go types, display names) | `type JokesServer struct` |
+| `Search` | PascalCase (Go types, display names) | `type JokesServer struct` |
 | `SEARCH` | UPPERCASE (env vars, Makefile vars) | `PROJECTNAME=jokes` |
 
 **Examples:**
@@ -1480,12 +1585,12 @@ PROJECTORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(
 
 ## Local Project Path Structure (NON-NEGOTIABLE)
 
-**Format:** `~/Projects/{gitprovider}/apimgr/search`
+**Format:** `~/Projects/github/apimgr/search`
 
 | Component | Description | Examples |
 |-----------|-------------|----------|
 | `~/Projects/` | Base projects directory | Always `~/Projects/` |
-| `{gitprovider}` | Git hosting provider or `local` | `github`, `gitlab`, `bitbucket`, `private`, `local` |
+| `github` | Git hosting provider or `local` | `github`, `gitlab`, `bitbucket`, `private`, `local` |
 | `apimgr` | Organization/username (inferred) | `apimgr`, `casjay`, `myorg` |
 | `search` | Project name (inferred) | `jokes`, `icons`, `myproject` |
 
@@ -1989,8 +2094,8 @@ Before proceeding, confirm you understand:
 | Backup | `/mnt/Backups/apimgr/search/` |
 | PID File | `/var/run/apimgr/search.pid` |
 | SSL | `/etc/apimgr/search/ssl/` (letsencrypt/, local/) |
+| Security | `/etc/apimgr/search/security/` (geoip/, blocklists/, cve/, trivy/) |
 | SQLite DB | `/var/lib/apimgr/search/db/` |
-| GeoIP | `/var/lib/apimgr/search/geoip/` |
 | Service | `/etc/systemd/system/search.service` |
 
 ### User (non-privileged)
@@ -2005,8 +2110,8 @@ Before proceeding, confirm you understand:
 | Backup | `~/.local/backups/apimgr/search/` |
 | PID File | `~/.local/share/apimgr/search/search.pid` |
 | SSL | `~/.config/apimgr/search/ssl/` (letsencrypt/, local/) |
+| Security | `~/.config/apimgr/search/security/` (geoip/, blocklists/, cve/, trivy/) |
 | SQLite DB | `~/.local/share/apimgr/search/db/` |
-| GeoIP | `~/.local/share/apimgr/search/geoip/` |
 
 ---
 
@@ -2024,8 +2129,8 @@ Before proceeding, confirm you understand:
 | Backup | `/Library/Backups/apimgr/search/` |
 | PID File | `/var/run/apimgr/search.pid` |
 | SSL | `/Library/Application Support/apimgr/search/ssl/` (letsencrypt/, local/) |
+| Security | `/Library/Application Support/apimgr/search/security/` (geoip/, blocklists/, cve/, trivy/) |
 | SQLite DB | `/Library/Application Support/apimgr/search/db/` |
-| GeoIP | `/Library/Application Support/apimgr/search/geoip/` |
 | Service | `/Library/LaunchDaemons/com.apimgr.search.plist` |
 
 ### User (non-privileged)
@@ -2040,8 +2145,8 @@ Before proceeding, confirm you understand:
 | Backup | `~/Library/Backups/apimgr/search/` |
 | PID File | `~/Library/Application Support/apimgr/search/search.pid` |
 | SSL | `~/Library/Application Support/apimgr/search/ssl/` (letsencrypt/, local/) |
+| Security | `~/Library/Application Support/apimgr/search/security/` (geoip/, blocklists/, cve/, trivy/) |
 | SQLite DB | `~/Library/Application Support/apimgr/search/db/` |
-| GeoIP | `~/Library/Application Support/apimgr/search/geoip/` |
 | Service | `~/Library/LaunchAgents/com.apimgr.search.plist` |
 
 ---
@@ -2060,8 +2165,8 @@ Before proceeding, confirm you understand:
 | Backup | `/var/backups/apimgr/search/` |
 | PID File | `/var/run/apimgr/search.pid` |
 | SSL | `/usr/local/etc/apimgr/search/ssl/` (letsencrypt/, local/) |
+| Security | `/usr/local/etc/apimgr/search/security/` (geoip/, blocklists/, cve/, trivy/) |
 | SQLite DB | `/var/db/apimgr/search/db/` |
-| GeoIP | `/var/db/apimgr/search/geoip/` |
 | Service | `/usr/local/etc/rc.d/search` |
 
 ### User (non-privileged)
@@ -2076,8 +2181,8 @@ Before proceeding, confirm you understand:
 | Backup | `~/.local/backups/apimgr/search/` |
 | PID File | `~/.local/share/apimgr/search/search.pid` |
 | SSL | `~/.config/apimgr/search/ssl/` (letsencrypt/, local/) |
+| Security | `~/.config/apimgr/search/security/` (geoip/, blocklists/, cve/, trivy/) |
 | SQLite DB | `~/.local/share/apimgr/search/db/` |
-| GeoIP | `~/.local/share/apimgr/search/geoip/` |
 
 ---
 
@@ -2094,8 +2199,8 @@ Before proceeding, confirm you understand:
 | Logs | `%ProgramData%\apimgr\search\logs\` |
 | Backup | `%ProgramData%\Backups\apimgr\search\` |
 | SSL | `%ProgramData%\apimgr\search\ssl\` (letsencrypt\, local\) |
+| Security | `%ProgramData%\apimgr\search\security\` (geoip\, blocklists\, cve\, trivy\) |
 | SQLite DB | `%ProgramData%\apimgr\search\db\` |
-| GeoIP | `%ProgramData%\apimgr\search\geoip\` |
 | Service | Windows Service Manager |
 
 ### User (non-privileged)
@@ -2109,8 +2214,8 @@ Before proceeding, confirm you understand:
 | Logs | `%LocalAppData%\apimgr\search\logs\` |
 | Backup | `%LocalAppData%\Backups\apimgr\search\` |
 | SSL | `%AppData%\apimgr\search\ssl\` (letsencrypt\, local\) |
+| Security | `%AppData%\apimgr\search\security\` (geoip\, blocklists\, cve\, trivy\) |
 | SQLite DB | `%LocalAppData%\apimgr\search\db\` |
-| GeoIP | `%LocalAppData%\apimgr\search\geoip\` |
 
 ---
 
@@ -2121,10 +2226,10 @@ Before proceeding, confirm you understand:
 | Binary | `/usr/local/bin/search` |
 | Config | `/config/` |
 | Config File | `/config/server.yml` |
+| Security DBs | `/config/security/` (geoip, blocklists, cve, trivy) |
 | Data | `/data/` |
 | Logs | `/data/logs/` |
 | SQLite DB | `/data/db/` |
-| GeoIP | `/data/geoip/` |
 | Internal Port | `80` |
 
 ---
@@ -2880,9 +2985,53 @@ server:
       email: admin@{fqdn}
       challenge: http-01
 
-  # Scheduler
-  schedule:
+  # Scheduler - manages all background tasks
+  scheduler:
     enabled: true
+    # Built-in tasks with sane defaults (all enabled by default)
+    tasks:
+      # Security database updates
+      geoip_update:
+        enabled: true
+        schedule: "0 3 * * 0"  # Weekly: Sunday 3:00 AM
+        retry_on_fail: true
+        retry_delay: 1h
+      blocklist_update:
+        enabled: true
+        schedule: "0 4 * * *"  # Daily: 4:00 AM
+        retry_on_fail: true
+        retry_delay: 1h
+      cve_update:
+        enabled: true
+        schedule: "0 5 * * *"  # Daily: 5:00 AM
+        retry_on_fail: true
+        retry_delay: 1h
+      # Maintenance tasks
+      log_rotation:
+        enabled: true
+        schedule: "0 0 * * *"  # Daily: midnight
+        max_age: 30d
+        max_size: 100MB
+      session_cleanup:
+        enabled: true
+        schedule: "0 */6 * * *"  # Every 6 hours
+      backup:
+        enabled: true
+        schedule: "0 2 * * *"  # Daily: 2:00 AM
+        retention: 7  # Keep 7 backups
+      # SSL certificate management (only when app manages certs)
+      ssl_renewal:
+        enabled: true
+        schedule: "0 3 * * *"  # Daily: 3:00 AM
+        renew_before: 7d  # Renew 7 days before expiry
+      # Health checks
+      health_check:
+        enabled: true
+        schedule: "*/5 * * * *"  # Every 5 minutes
+      # Tor maintenance
+      tor_health:
+        enabled: true
+        schedule: "*/10 * * * *"  # Every 10 minutes
 
   # Rate Limiting
   rate_limit:
@@ -3906,11 +4055,126 @@ func installWindowsService() error {
 
 ## External Data (NOT Embedded)
 
-| Data Type | Description |
-|-----------|-------------|
-| GeoIP databases | Download, update via scheduler |
-| Blocklists | Download, update via scheduler |
-| Security databases | Any security-related data |
+**Security databases are NEVER embedded in the binary.** They are downloaded on first run and kept updated via the built-in scheduler.
+
+| Data Type | Location | Source | Update Frequency |
+|-----------|----------|--------|------------------|
+| GeoIP (ASN) | `{config_dir}/security/geoip/` | ip-location-db | Daily |
+| GeoIP (Country) | `{config_dir}/security/geoip/` | ip-location-db | Daily |
+| GeoIP (City) | `{config_dir}/security/geoip/` | ip-location-db | Daily |
+| GeoIP (WHOIS) | `{config_dir}/security/geoip/` | ip-location-db | Daily |
+| IP Blocklists | `{config_dir}/security/blocklists/` | Configurable sources | Daily |
+| Domain Blocklists | `{config_dir}/security/blocklists/` | Configurable sources | Daily |
+| CVE databases | `{config_dir}/security/cve/` | NVD/NIST feeds | Daily |
+| Trivy DB | `{config_dir}/security/trivy/` | Aqua Security | Daily |
+
+**Why NOT Embedded:**
+- Security data changes frequently (daily/weekly updates)
+- Embedding would require new binary releases for data updates
+- Allows immediate security updates without redeployment
+- Reduces binary size significantly
+
+**Download Behavior:**
+1. On first run, check if data exists in `{config_dir}/security/`
+2. If missing, download from configured sources
+3. If download fails, log warning and continue (graceful degradation)
+4. Scheduler keeps data updated automatically
+
+### Default Data Sources
+
+```yaml
+# Data source configuration (in server.yml)
+data:
+  # Base directory for all security databases
+  security_dir: "{config_dir}/security"
+
+  geoip:
+    # ip-location-db (https://github.com/sapics/ip-location-db)
+    # Free, no API key required, daily updates, CC0/PDDL licensed
+    provider: "ip-location-db"
+    databases:
+      asn:
+        enabled: true
+        url: "https://cdn.jsdelivr.net/npm/@ip-location-db/asn-mmdb/asn.mmdb"
+        file: "asn.mmdb"
+      country:
+        enabled: true
+        url: "https://cdn.jsdelivr.net/npm/@ip-location-db/geo-whois-asn-country-mmdb/geo-whois-asn-country.mmdb"
+        file: "country.mmdb"
+      city:
+        enabled: true
+        url: "https://cdn.jsdelivr.net/npm/@ip-location-db/dbip-city-mmdb/dbip-city-ipv4.mmdb"
+        file: "city.mmdb"
+      whois:
+        enabled: true
+        url: "https://cdn.jsdelivr.net/npm/@ip-location-db/geo-whois-asn-country-mmdb/geo-whois-asn-country.mmdb"
+        file: "whois.mmdb"
+
+  blocklists:
+    # Default blocklist sources (configurable)
+    sources:
+      - name: "firehol_level1"
+        url: "https://iplists.firehol.org/files/firehol_level1.netset"
+        type: ip
+        enabled: true
+      - name: "spamhaus_drop"
+        url: "https://www.spamhaus.org/drop/drop.txt"
+        type: ip
+        enabled: true
+      - name: "abuse_ch_urlhaus"
+        url: "https://urlhaus.abuse.ch/downloads/text/"
+        type: domain
+        enabled: false  # Optional
+
+  cve:
+    # NVD (NIST National Vulnerability Database)
+    source: "https://nvd.nist.gov/feeds/json/cve/1.1"
+    # Only download CVEs relevant to project dependencies
+    filter_by_cpe: true
+
+  trivy:
+    # Aqua Trivy vulnerability database
+    enabled: false  # Optional, for container scanning
+    source: "https://ghcr.io/aquasecurity/trivy-db"
+```
+
+### Security Directory Structure
+
+```
+{config_dir}/security/
+├── geoip/
+│   ├── asn.mmdb                 # ASN lookups (AS number, organization)
+│   ├── country.mmdb             # Country code lookups
+│   ├── city.mmdb                # City, region, coordinates, timezone
+│   ├── whois.mmdb               # WHOIS data (registrant, org)
+│   └── .last_updated            # Timestamp file
+├── blocklists/
+│   ├── firehol_level1.txt
+│   ├── spamhaus_drop.txt
+│   └── .last_updated
+├── cve/
+│   ├── nvd.json
+│   └── .last_updated
+└── trivy/
+    ├── db.tar.gz
+    └── .last_updated
+```
+
+### GeoIP Database Details (ip-location-db)
+
+| Database | File | Contains | Use Case |
+|----------|------|----------|----------|
+| ASN | `asn.mmdb` | AS number, AS organization | Network provider identification |
+| Country | `country.mmdb` | Country code (ISO 3166-1) | Geo-blocking, compliance |
+| City | `city.mmdb` | City, region, postal, lat/lon, timezone | Location-based features |
+| WHOIS | `whois.mmdb` | Registrant info, combined with ASN | Abuse detection, attribution |
+
+**Benefits of ip-location-db:**
+- No API key or account required (unlike MaxMind)
+- Daily updates via jsDelivr CDN
+- CC0/PDDL licensed (no restrictions)
+- MMDB format (same as MaxMind, compatible with existing Go libraries)
+- IPv4 and IPv6 support
 
 ---
 
@@ -3984,7 +4248,7 @@ format_version_tag() {
 |---------|------|---------|
 | Host Build | `./binaries/search` | `./binaries/jokes` |
 | Distribution | `search-{os}-{arch}` | `jokes-linux-amd64` |
-| Local/Testing | `$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}.XXXXXX")/search` | Org-prefixed temp dir |
+| Local/Testing | `$(mktemp -d "${TMPDIR:-/tmp}/$APIMGR.XXXXXX")/search` | Org-prefixed temp dir |
 
 **If built with musl → strip binary before release. Final name has NO `-musl` suffix.**
 
@@ -4253,7 +4517,7 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 3. No `-ldflags` (version info not embedded)
 4. Outputs to `{tempdir}/apimgr.XXXXXX/search` (isolated, org-identifiable)
 5. Uses Docker (`golang:alpine`) - keeps host clean
-6. Easy cleanup: `rm -rf "${TMPDIR:-/tmp}"/${PROJECTORG}.*/` or auto-deleted on reboot
+6. Easy cleanup: `rm -rf "${TMPDIR:-/tmp}"/$APIMGR.*/` or auto-deleted on reboot
 
 **When to use:**
 
@@ -4437,7 +4701,7 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 
 | Language | How to Create Prefixed Temp Dir |
 |----------|--------------------------------|
-| Shell | `mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}.XXXXXX"` |
+| Shell | `mktemp -d "${TMPDIR:-/tmp}/$APIMGR.XXXXXX"` |
 | Go | `os.MkdirTemp(os.TempDir(), projectOrg+".")` |
 | Python | `tempfile.mkdtemp(prefix=f"{project_org}.")` |
 
@@ -4473,17 +4737,17 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 
 ```bash
 # Find all temp dirs for this org
-ls -la "${TMPDIR:-/tmp}"/${PROJECTORG}.*/
+ls -la "${TMPDIR:-/tmp}"/$APIMGR.*/
 
 # Clean all temp dirs for this org
-rm -rf "${TMPDIR:-/tmp}"/${PROJECTORG}.*/
+rm -rf "${TMPDIR:-/tmp}"/$APIMGR.*/
 ```
 
 ### Correct vs Incorrect
 
 | WRONG | RIGHT |
 |-------|-------|
-| `mktemp -d` | `mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}.XXXXXX"` |
+| `mktemp -d` | `mktemp -d "${TMPDIR:-/tmp}/$APIMGR.XXXXXX"` |
 | `/tmp/jokes` | `os.MkdirTemp(os.TempDir(), projectOrg+".")` |
 | Hardcoded org | Detect from git remote or path |
 
@@ -4525,7 +4789,7 @@ rm -rf "${TMPDIR:-/tmp}"/${PROJECTORG}.*/
 
 ```bash
 # Build in Docker
-BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}.XXXXXX")
+BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/$APIMGR.XXXXXX")
 docker run --rm -v $(pwd):/build -w /build -e CGO_ENABLED=0 \
   golang:alpine go build -o /build/binaries/search ./src
 
@@ -4623,7 +4887,7 @@ incus delete test-search --force
 
 ```bash
 # Create prefixed temp dir for test data
-TEST_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}.XXXXXX")
+TEST_DIR=$(mktemp -d "${TMPDIR:-/tmp}/$APIMGR.XXXXXX")
 mkdir -p $TEST_DIR/{config,data,logs}
 
 # Build to binaries/
@@ -4653,7 +4917,7 @@ rm -rf $TEST_DIR
 
 ```bash
 # Create prefixed temp dir
-TEST_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}.XXXXXX")
+TEST_DIR=$(mktemp -d "${TMPDIR:-/tmp}/$APIMGR.XXXXXX")
 mkdir -p $TEST_DIR/{config,data,logs}
 
 # Build
@@ -4784,7 +5048,7 @@ rm -rf $TEST_DIR
 | Project binaries | `rm -rf ./binaries/search*` |
 | Project releases | `rm -rf ./releases/search*` |
 
-**Note:** Always use `mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}.XXXXXX"` and save the path to a variable for cleanup. Temp dirs are auto-cleaned on reboot.
+**Note:** Always use `mktemp -d "${TMPDIR:-/tmp}/$APIMGR.XXXXXX"` and save the path to a variable for cleanup. Temp dirs are auto-cleaned on reboot.
 
 ### NEVER Delete Without Confirmation
 
@@ -4862,11 +5126,11 @@ All Docker-related files MUST be in `./docker/`:
 | Path | Purpose |
 |------|---------|
 | `/config` | Configuration directory (server.yml, templates, SSL certs) |
-| `/data` | Data directory (databases, Tor keys, caches, GeoIP) |
+| `/config/security` | Security databases (geoip, blocklists, cve, trivy) |
+| `/data` | Data directory (databases, Tor keys, caches) |
 | `/data/db` | SQLite databases (server.db, users.db) |
 | `/data/logs` | Log files (access.log, error.log, audit.log, etc.) |
 | `/data/tor` | Tor data (hidden service keys) |
-| `/data/geoip` | GeoIP databases |
 | `/data/backup` | Backup archives |
 | `/usr/local/bin/search` | Application binary |
 | `/root/Dockerfile` | Build reference and backup |
@@ -4877,7 +5141,7 @@ All Dockerfiles MUST include these labels:
 
 | Label | Value |
 |-------|-------|
-| `maintainer` | `{maintainer_name} <{maintainer_email}>` |
+| `maintainer` | `Jason Hempstead <jason@casjaysdev.pro>` |
 | `org.opencontainers.image.vendor` | `apimgr` |
 | `org.opencontainers.image.authors` | `apimgr` |
 | `org.opencontainers.image.title` | `search` |
@@ -4944,7 +5208,7 @@ ARG COMMIT_ID
 ARG LICENSE=MIT
 
 # Static Labels
-LABEL maintainer="{maintainer_name} <{maintainer_email}>" \
+LABEL maintainer="Jason Hempstead <jason@casjaysdev.pro>" \
       org.opencontainers.image.vendor="apimgr" \
       org.opencontainers.image.authors="apimgr" \
       org.opencontainers.image.title="search" \
@@ -4971,7 +5235,7 @@ RUN apk add --no-cache \
     tor
 
 # Create directories with proper structure
-RUN mkdir -p /config /data/db /data/logs /data/tor /data/geoip /data/backup
+RUN mkdir -p /config /config/security /data/db /data/logs /data/tor /data/backup
 
 # Copy binary from builder stage (multi-stage build)
 COPY --from=builder /build/binary/search /usr/local/bin/search
@@ -4986,9 +5250,9 @@ COPY docker/Dockerfile /root/Dockerfile
 RUN chmod 755 /usr/local/bin/*
 
 # Set environment
+# Note: Tor auto-enabled because tor binary is installed above
 ENV MODE=development \
-    TZ=America/New_York \
-    ENABLE_TOR=true
+    TZ=America/New_York
 
 # Expose internal port (always 80)
 EXPOSE 80
@@ -5032,8 +5296,11 @@ set -e
 
 APP_NAME="search"
 APP_BIN="/usr/local/bin/${APP_NAME}"
-TOR_ENABLED="${ENABLE_TOR:-true}"
 TOR_DATA_DIR="/data/tor"
+
+# Tor auto-detection: if tor binary is installed, Tor is enabled
+# Docker image always installs tor, so always enabled in containers
+TOR_INSTALLED=$(command -v tor >/dev/null 2>&1 && echo "true" || echo "false")
 
 # Array to track background PIDs
 declare -a PIDS=()
@@ -5102,20 +5369,21 @@ trap cleanup SIGRTMIN+3 2>/dev/null || trap cleanup 37
 # -----------------------------------------------------------------------------
 setup_directories() {
     log "Setting up directories..."
-    mkdir -p /config /data/db /data/logs /data/tor /data/geoip /data/backup
+    mkdir -p /config /config/security /data/db /data/logs /data/tor /data/backup
 
     # Fix permissions for Tor (runs as tor user)
-    if [ "$TOR_ENABLED" = "true" ]; then
+    if [ "$TOR_INSTALLED" = "true" ]; then
         chown -R tor:tor "$TOR_DATA_DIR"
         chmod 700 "$TOR_DATA_DIR"
     fi
 }
 
 # -----------------------------------------------------------------------------
-# Start Tor (if enabled)
+# Start Tor (auto-detected: if tor binary installed, it's enabled)
 # -----------------------------------------------------------------------------
 start_tor() {
-    if [ "$TOR_ENABLED" != "true" ]; then
+    if [ "$TOR_INSTALLED" != "true" ]; then
+        log "Tor not installed, skipping..."
         return 0
     fi
 
@@ -5188,7 +5456,7 @@ main() {
     log "Container starting..."
     log "MODE: ${MODE:-development}"
     log "TZ: ${TZ:-UTC}"
-    log "ENABLE_TOR: ${TOR_ENABLED}"
+    log "TOR_INSTALLED: ${TOR_INSTALLED}"
 
     setup_directories
     start_tor
@@ -5228,7 +5496,8 @@ main "$@"
 |----------|---------|-------------|
 | `MODE` | `development` | Application mode |
 | `TZ` | `America/New_York` | Timezone |
-| `ENABLE_TOR` | `true` | Start Tor hidden service |
+
+**Note:** Tor is auto-enabled if the `tor` binary is installed. No `ENABLE_TOR` flag needed. Docker image always includes Tor.
 
 ## Docker Compose Requirements (NON-NEGOTIABLE)
 
@@ -5276,7 +5545,7 @@ main "$@"
 ```bash
 # Setup (uses OS temp dir with org prefix)
 PROJECT_ROOT="/path/to/project"
-TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}.XXXXXX")
+TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/$APIMGR.XXXXXX")
 mkdir -p "$TEMP_DIR/rootfs/config/search"
 mkdir -p "$TEMP_DIR/rootfs/data/search"
 mkdir -p "$TEMP_DIR/rootfs/db"
@@ -5347,9 +5616,9 @@ services:
     restart: unless-stopped
     environment:
       # Hardcoded with sane defaults - NO .env files
+      # Tor auto-enabled (tor binary installed in image)
       - MODE=development
       - TZ=America/New_York
-      - ENABLE_TOR=false
     ports:
       # Development: accessible from all interfaces
       - "64580:80"
@@ -5381,9 +5650,9 @@ services:
     restart: unless-stopped
     environment:
       # Hardcoded with sane defaults - NO .env files
+      # Tor auto-enabled (tor binary installed in image)
       - MODE=production
       - TZ=America/New_York
-      # ENABLE_TOR=true is default, no need to specify
     ports:
       # Production: bound to Docker bridge only
       - "172.17.0.1:64580:80"
@@ -5416,9 +5685,9 @@ services:
     depends_on:
       - postgres
     environment:
+      # Tor auto-enabled (tor binary installed in image)
       - MODE=production
       - TZ=America/New_York
-      # ENABLE_TOR=true is default
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=search
@@ -5460,11 +5729,11 @@ networks:
 |---------|-------|
 | Internal port | **80** (always) |
 | Config dir | `/config` |
+| Security dir | `/config/security` (geoip, blocklists, cve, trivy) |
 | Data dir | `/data` |
 | Database dir | `/data/db` (server.db, users.db) |
 | Log dir | `/data/logs` |
 | Tor data dir | `/data/tor` |
-| GeoIP dir | `/data/geoip` |
 | Backup dir | `/data/backup` |
 | Binary | `/usr/local/bin/search` |
 | HEALTHCHECK | `{binary} --status` |
@@ -5480,11 +5749,12 @@ networks:
 
 ## Tor in Container
 
-**Tor is included in the container image and managed by the application.**
+**Tor is included in the container image and auto-enabled (no configuration needed).**
 
 | Behavior | Description |
 |----------|-------------|
-| Auto-start | Application starts Tor automatically if enabled |
+| Auto-detection | Tor starts automatically if `tor` binary is installed |
+| Always enabled | Docker image includes `tor`, so always enabled in containers |
 | Data persistence | Tor keys stored in `/data/tor/site/` (survives container restart) |
 | .onion address | Persists across container restarts via volume mount |
 
@@ -7035,22 +7305,22 @@ pipeline {
         // ----- GITHUB (default) -----
         GIT_FQDN = 'github.com'
         GIT_TOKEN = credentials('github-token')  // Jenkins credentials ID
-        REGISTRY = "ghcr.io/${PROJECTORG}/$SEARCH"
+        REGISTRY = "ghcr.io/$APIMGR/$SEARCH"
 
         // ----- GITEA / FORGEJO (self-hosted) -----
         // GIT_FQDN = 'git.example.com'  // Your Gitea/Forgejo domain
         // GIT_TOKEN = credentials('gitea-token')  // Jenkins credentials ID
-        // REGISTRY = "${GIT_FQDN}/${PROJECTORG}/$SEARCH"
+        // REGISTRY = "${GIT_FQDN}/$APIMGR/$SEARCH"
 
         // ----- GITLAB (gitlab.com or self-hosted) -----
         // GIT_FQDN = 'gitlab.com'  // or your self-hosted GitLab domain
         // GIT_TOKEN = credentials('gitlab-token')  // Jenkins credentials ID
-        // REGISTRY = "registry.${GIT_FQDN}/${PROJECTORG}/$SEARCH"
+        // REGISTRY = "registry.${GIT_FQDN}/$APIMGR/$SEARCH"
 
         // ----- DOCKER HUB -----
         // GIT_FQDN = 'github.com'  // Git host (separate from registry)
         // GIT_TOKEN = credentials('github-token')
-        // REGISTRY = "docker.io/${PROJECTORG}/$SEARCH"
+        // REGISTRY = "docker.io/$APIMGR/$SEARCH"
 
         // =========================================================================
     }
@@ -7480,7 +7750,7 @@ pipeline {
                     // Login to container registry
                     // Works with: ghcr.io, registry.gitlab.com, gitea/forgejo, docker.io
                     sh """
-                        echo "\${GIT_TOKEN}" | docker login ${REGISTRY.split('/')[0]} -u ${PROJECTORG} --password-stdin
+                        echo "\${GIT_TOKEN}" | docker login ${REGISTRY.split('/')[0]} -u $APIMGR --password-stdin
                     """
 
                     sh """
@@ -7548,17 +7818,17 @@ In the Jenkinsfile, uncomment the appropriate block:
 // ----- GITHUB (default) -----
 GIT_FQDN = 'github.com'
 GIT_TOKEN = credentials('github-token')
-REGISTRY = "ghcr.io/${PROJECTORG}/$SEARCH"
+REGISTRY = "ghcr.io/$APIMGR/$SEARCH"
 
 // ----- GITEA / FORGEJO (self-hosted) -----
 // GIT_FQDN = 'git.example.com'
 // GIT_TOKEN = credentials('gitea-token')
-// REGISTRY = "${GIT_FQDN}/${PROJECTORG}/$SEARCH"
+// REGISTRY = "${GIT_FQDN}/$APIMGR/$SEARCH"
 
 // ----- GITLAB (gitlab.com or self-hosted) -----
 // GIT_FQDN = 'gitlab.com'
 // GIT_TOKEN = credentials('gitlab-token')
-// REGISTRY = "registry.${GIT_FQDN}/${PROJECTORG}/$SEARCH"
+// REGISTRY = "registry.${GIT_FQDN}/$APIMGR/$SEARCH"
 ```
 
 ### Triggers Comparison
@@ -8555,15 +8825,17 @@ var staticFS embed.FS
 | Images/Icons | YES | NO |
 | Fonts | YES | NO |
 | Application data (JSON) | YES | NO |
-| GeoIP databases | NO | YES - downloaded on first run |
-| Blocklists | NO | YES - downloaded on first run |
+| GeoIP databases | NO | YES - downloaded on first run, updated weekly |
+| IP/Domain Blocklists | NO | YES - downloaded on first run, updated daily |
+| CVE databases | NO | YES - downloaded on first run, updated daily |
 | SSL certificates | NO | YES - only when using ports 80,443 |
 
 **External Data Rules:**
-- Security-related data that needs frequent updates is NOT embedded
-- Downloaded automatically on first run
-- Updated automatically via built-in scheduler
-- Scheduler updates configurable via admin panel
+- Security-related data that needs frequent updates is NEVER embedded
+- Downloaded automatically on first run if not present
+- Updated automatically via built-in scheduler (see PART 26: SCHEDULER)
+- All scheduler tasks configurable via admin panel
+- Graceful degradation if download fails (continues without data)
 - SSL certificates only generated/managed when running on ports `80,443`
 
 **Benefits:**
@@ -8992,10 +9264,10 @@ web:
 | Version | Current version |
 | Description | From branding config or project-specific |
 | Features | Key features list (project-specific) |
-| Tor access | If Tor enabled, show .onion address with copy button |
+| Tor access | If Tor installed, show .onion address with copy button |
 | Links | GitHub, documentation, etc. |
 
-**Tor Section (shown only if `server.tor.enabled: true`):**
+**Tor Section (shown only if `tor` binary is installed - auto-detected):**
 
 ```html
 <!-- Example Tor section -->
@@ -9610,7 +9882,7 @@ All settings above MUST be configurable via admin panel:
 | `/admin/security/tokens` | API Tokens | Generate, revoke tokens |
 | `/admin/security/ratelimit` | Rate Limiting | Configure rate limits |
 | `/admin/security/firewall` | Firewall | IP allow/block lists |
-| `/admin/network/tor` | Tor | Enable/disable, onion address |
+| `/admin/network/tor` | Tor | View .onion address, status (auto-enabled if installed) |
 | `/admin/network/geoip` | GeoIP | Country blocking, database updates |
 | `/admin/network/blocklists` | Blocklists | IP/domain blocklists |
 | `/admin/users` | Users | User list (if multi-user) |
@@ -11083,8 +11355,6 @@ server:
 | `config.smtp_updated` | SMTP settings changed | Changed by (NOT credentials) |
 | `config.ssl_updated` | SSL certificate changed | Subject, expiry, changed by |
 | `config.ssl_expired` | SSL certificate expired | Domain |
-| `config.tor_enabled` | Tor hidden service enabled | Changed by |
-| `config.tor_disabled` | Tor hidden service disabled | Changed by |
 | `config.tor_address_regenerated` | Onion address regenerated | Changed by |
 | `config.branding_updated` | Branding settings changed | Changed by |
 | `config.oidc_provider_added` | OIDC provider configured | Provider name, added by |
@@ -11550,9 +11820,10 @@ On first run, a one-time setup token is generated and displayed in console. Admi
 **Step 4: Optional Services**
 | Setting | Description |
 |---------|-------------|
-| Enable Tor | Enable .onion hidden service |
 | Enable SSL | Configure HTTPS |
 | Enable Users | Enable multi-user mode |
+
+**Note:** Tor is auto-enabled if installed (no setup option needed).
 
 **Step 5: Complete**
 | Action | Notes |
@@ -15423,12 +15694,15 @@ Every project MUST include these scheduled tasks:
 | Task | Default Schedule | Purpose | Skippable |
 |------|-----------------|---------|-----------|
 | `ssl.renewal` | Daily at 02:00 | Renew `{config_dir}/ssl/letsencrypt/{fqdn}/` certs 7 days before expiry | No |
-| `geoip.update` | Weekly (Sunday 03:00) | Update GeoIP databases | Yes |
-| `blocklist.update` | Daily at 04:00 | Update IP blocklists | Yes |
+| `geoip.update` | Weekly (Sunday 03:00) | Download/update MaxMind GeoLite2 databases | Yes |
+| `blocklist.update` | Daily at 04:00 | Download/update IP/domain blocklists | Yes |
+| `cve.update` | Daily at 05:00 | Download/update CVE/security databases | Yes |
 | `session.cleanup` | Hourly | Remove expired sessions | No |
-| `token.cleanup` | Daily at 05:00 | Remove expired tokens | No |
+| `token.cleanup` | Daily at 06:00 | Remove expired tokens | No |
+| `log.rotation` | Daily at 00:00 | Rotate and compress old logs | No |
 | `backup.auto` | Disabled by default | Automatic backups | Yes |
 | `healthcheck.self` | Every 5 minutes | Self-health verification | No |
+| `tor.health` | Every 10 minutes | Check Tor connectivity, restart if needed | No (when Tor installed) |
 | `cluster.heartbeat` | Every 30 seconds | Cluster node heartbeat (cluster mode only) | No |
 
 ### Task Configuration
@@ -15458,14 +15732,29 @@ server:
       blocklist_update:
         schedule: "0 4 * * *"      # Daily at 04:00
         enabled: true
+        retry_on_fail: true
+        retry_delay: 1h
+
+      cve_update:
+        schedule: "0 5 * * *"      # Daily at 05:00
+        enabled: true
+        retry_on_fail: true
+        retry_delay: 1h
 
       session_cleanup:
         schedule: "@hourly"        # Every hour
         enabled: true
 
       token_cleanup:
-        schedule: "0 5 * * *"      # Daily at 05:00
+        schedule: "0 6 * * *"      # Daily at 06:00
         enabled: true
+
+      log_rotation:
+        schedule: "0 0 * * *"      # Daily at midnight
+        enabled: true
+        max_age: 30d               # Delete logs older than 30 days
+        max_size: 100MB            # Rotate when log exceeds 100MB
+        compress: true             # Compress rotated logs
 
       backup_auto:
         schedule: "0 1 * * *"      # Daily at 01:00
@@ -15475,6 +15764,11 @@ server:
       healthcheck_self:
         schedule: "@every 5m"      # Every 5 minutes
         enabled: true
+
+      tor_health:
+        schedule: "@every 10m"     # Every 10 minutes
+        enabled: true              # Only runs if Tor binary installed
+        restart_on_fail: true      # Auto-restart unhealthy Tor
 ```
 
 ### Schedule Format
@@ -15706,43 +16000,57 @@ server:
     enabled: true
 
     # Directory for downloaded MMDB files
-    dir: "{data_dir}/geoip"
+    dir: "{config_dir}/security/geoip"
 
-    # Update schedule: never, daily, weekly, monthly
-    update: weekly
+    # Update schedule (handled by scheduler, see PART 26)
+    # Default: weekly on Sunday 03:00
 
     # Block countries by ISO 3166-1 alpha-2 code
     deny_countries: []
 
     # Which databases to download and use
-    # Full IPv4 and IPv6 support - always both
+    # All use MMDB format, IPv4 and IPv6 support
     databases:
-      # ASN lookup - organization name and AS number
+      # ASN lookup - AS number and organization name
       asn: true
-      # Country lookup - country code and name
+      # Country lookup - country code (ISO 3166-1)
       country: true
-      # City lookup - city, region, postal, coordinates, timezone (larger download)
+      # City lookup - city, region, postal, coordinates, timezone
       city: true
+      # WHOIS lookup - registrant info combined with ASN
+      whois: true
 ```
 
-## Database Sources
+## Database Sources (ip-location-db)
 
-| Database | CDN URL |
-|----------|---------|
-| ASN | `https://cdn.jsdelivr.net/npm/@ip-location-db/asn-mmdb/asn.mmdb` |
-| Country | `https://cdn.jsdelivr.net/npm/@ip-location-db/geo-whois-asn-country-mmdb/geo-whois-asn-country.mmdb` |
-| City | `https://cdn.jsdelivr.net/npm/@ip-location-db/dbip-city-mmdb/dbip-city.mmdb` |
+All databases from [sapics/ip-location-db](https://github.com/sapics/ip-location-db) - no API key required.
 
-## Admin Panel (/admin/server/geoip)
+| Database | File | CDN URL |
+|----------|------|---------|
+| ASN | `asn.mmdb` | `https://cdn.jsdelivr.net/npm/@ip-location-db/asn-mmdb/asn.mmdb` |
+| Country | `country.mmdb` | `https://cdn.jsdelivr.net/npm/@ip-location-db/geo-whois-asn-country-mmdb/geo-whois-asn-country.mmdb` |
+| City | `city.mmdb` | `https://cdn.jsdelivr.net/npm/@ip-location-db/dbip-city-mmdb/dbip-city-ipv4.mmdb` |
+| WHOIS | `whois.mmdb` | `https://cdn.jsdelivr.net/npm/@ip-location-db/geo-whois-asn-country-mmdb/geo-whois-asn-country.mmdb` |
+
+**Database Contents:**
+
+| Database | Fields Available |
+|----------|------------------|
+| ASN | `autonomous_system_number`, `autonomous_system_organization` |
+| Country | `country_code` (ISO 3166-1 alpha-2) |
+| City | `city`, `region`, `postal_code`, `latitude`, `longitude`, `timezone` |
+| WHOIS | `registrant_org`, `asn`, `country_code` (combined lookup) |
+
+## Admin Panel (/admin/network/geoip)
 
 | Element | Type | Description |
 |---------|------|-------------|
 | Enable GeoIP | Toggle | Turn GeoIP on/off |
-| Update schedule | Dropdown | never, daily, weekly, monthly |
 | Deny countries | Tag input | ISO 3166-1 alpha-2 codes to block |
 | ASN database | Toggle | Enable ASN lookups |
 | Country database | Toggle | Enable country lookups |
 | City database | Toggle | Enable city lookups |
+| WHOIS database | Toggle | Enable WHOIS lookups |
 | Last update | Read-only | When databases were last updated |
 | Update now | Button | Force immediate update |
 
@@ -15800,16 +16108,19 @@ Tor integration uses **external Tor binary** via `github.com/cretz/bine`. This m
 ```yaml
 server:
   tor:
-    enabled: true  # Default: enabled
     # Path to Tor binary (auto-detected if empty)
     binary: ""
+    # Data directory for this instance's Tor data
+    data_dir: ""  # Default: {data_dir}/tor/
 ```
 
 **Notes:**
 - Uses external Tor binary (not embedded) for CGO_ENABLED=0 compatibility
-- Enabled by default - privacy out of the box
+- **Auto-enabled if tor binary is installed** - no enable flag needed
+- Binary manages its OWN Tor instance (not system Tor)
+- When binary stops, its Tor instance stops (clean shutdown)
 - .onion address derived from keys in `{data_dir}/tor/site/`
-- Application manages Tor process lifecycle
+- Completely isolated from any system Tor installation
 
 ## Tor Process Management (NON-NEGOTIABLE)
 
@@ -15997,8 +16308,8 @@ DisableDebuggerAttachment 1
 | **Regenerate .onion address** | Stop Tor → Delete keys → Start Tor | New random address |
 | **Apply vanity address** | Stop Tor → Replace keys → Start Tor | Use generated vanity keys |
 | **Import external keys** | Stop Tor → Replace keys → Start Tor | Use imported keys |
-| **Enable Tor** | Start Tor | Was disabled |
-| **Disable Tor** | Stop Tor | User disabled |
+| **Start Tor** | Start Tor | Manual start (auto-starts on boot if installed) |
+| **Stop Tor** | Stop Tor | Manual stop (temporary, restarts on reboot) |
 | **Tor process crash** | Restart Tor | Auto-recovery |
 | **Tor unresponsive** | Stop Tor → Start Tor | Health check failed |
 | **Config change** | Stop Tor → Start Tor | Settings changed |
@@ -16193,7 +16504,7 @@ No impact on binary size - Tor is external. Application binary remains small and
 
 | Element | Type | Description |
 |---------|------|-------------|
-| Enable Tor | Toggle switch | Turn hidden service on/off |
+| Tor Service | Toggle switch | Start/Stop hidden service (auto-starts on boot) |
 | Status | Indicator | ● Connected / ○ Disconnected / ⚠ Error |
 | .onion Address | Read-only text | Full address with copy button |
 | Regenerate Address | Button | Creates new random .onion (requires confirmation modal) |
