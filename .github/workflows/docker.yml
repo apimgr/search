@@ -86,7 +86,23 @@ jobs:
             COMMIT_ID="${{ env.COMMIT_ID }}"
           labels: |
             org.opencontainers.image.title="${{ env.PROJECTNAME }}"
+            org.opencontainers.image.description="Privacy-respecting metasearch engine"
+            org.opencontainers.image.vendor="apimgr"
             org.opencontainers.image.version="${{ env.VERSION }}"
             org.opencontainers.image.created="${{ env.BUILD_DATE }}"
             org.opencontainers.image.revision="${{ env.COMMIT_ID }}"
             org.opencontainers.image.source="${{ github.server_url }}/${{ github.repository }}"
+            org.opencontainers.image.url="${{ github.server_url }}/${{ github.repository }}"
+            org.opencontainers.image.documentation="${{ github.server_url }}/${{ github.repository }}"
+            org.opencontainers.image.licenses="MIT"
+          annotations: |
+            manifest:org.opencontainers.image.title=${{ env.PROJECTNAME }}
+            manifest:org.opencontainers.image.description=Privacy-respecting metasearch engine
+            manifest:org.opencontainers.image.vendor=apimgr
+            manifest:org.opencontainers.image.version=${{ env.VERSION }}
+            manifest:org.opencontainers.image.created=${{ env.BUILD_DATE }}
+            manifest:org.opencontainers.image.revision=${{ env.COMMIT_ID }}
+            manifest:org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            manifest:org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
+            manifest:org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}
+            manifest:org.opencontainers.image.licenses=MIT

@@ -17,7 +17,7 @@ RUN go mod download
 # Copy source and build
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
-    -ldflags "-s -w -X 'github.com/apimgr/search/src/config.Version=${VERSION}' -X 'github.com/apimgr/search/src/config.GitCommit=${COMMIT_ID}' -X 'github.com/apimgr/search/src/config.BuildTime=${BUILD_DATE}'" \
+    -ldflags "-s -w -X 'github.com/apimgr/search/src/config.Version=${VERSION}' -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/config.BuildDate=${BUILD_DATE}'" \
     -o /app ./src
 
 # =============================================================================
@@ -74,9 +74,10 @@ COPY docker/Dockerfile /root/Dockerfile
 RUN chmod 755 /usr/local/bin/*
 
 # Set environment
+# Note: Tor is auto-detected (enabled if tor binary installed) per TEMPLATE.md PART 29
+# No ENABLE_TOR env var needed - tor binary is always installed in this image
 ENV MODE=development \
-    TZ=America/New_York \
-    ENABLE_TOR=true
+    TZ=America/New_York
 
 # Expose internal port (always 80)
 EXPOSE 80

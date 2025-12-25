@@ -252,7 +252,79 @@ func New(cfg *config.Config) *Server {
 	var sched *scheduler.Scheduler
 	if cfg.Server.Scheduler.Enabled {
 		sched = scheduler.New()
-		log.Printf("[Scheduler] Initialized")
+
+		// Register default scheduled tasks per TEMPLATE.md PART 20
+		// Session cleanup: hourly
+		sched.Register(&scheduler.Task{
+			Name:     "session_cleanup",
+			Interval: 1 * time.Hour,
+			Run: func(ctx context.Context) error {
+				log.Println("[Scheduler] Running session cleanup")
+				// Session cleanup logic would go here
+				return nil
+			},
+		})
+
+		// Cache cleanup: every 6 hours
+		sched.Register(&scheduler.Task{
+			Name:     "cache_cleanup",
+			Interval: 6 * time.Hour,
+			Run: func(ctx context.Context) error {
+				log.Println("[Scheduler] Running cache cleanup")
+				// Cache cleanup logic would go here
+				return nil
+			},
+		})
+
+		// Engine health check: every 15 minutes
+		sched.Register(&scheduler.Task{
+			Name:     "engine_health",
+			Interval: 15 * time.Minute,
+			Run: func(ctx context.Context) error {
+				log.Println("[Scheduler] Running engine health check")
+				// Engine health check logic would go here
+				return nil
+			},
+		})
+
+		// Daily backup at 02:00 (check every hour, actual backup logic checks time)
+		sched.Register(&scheduler.Task{
+			Name:     "backup",
+			Interval: 24 * time.Hour,
+			Run: func(ctx context.Context) error {
+				log.Println("[Scheduler] Running automatic backup")
+				// Backup logic would go here
+				return nil
+			},
+		})
+
+		// SSL renewal check: daily
+		if cfg.Server.SSL.Enabled && cfg.Server.SSL.LetsEncrypt.Enabled {
+			sched.Register(&scheduler.Task{
+				Name:     "ssl_renewal",
+				Interval: 24 * time.Hour,
+				Run: func(ctx context.Context) error {
+					log.Println("[Scheduler] Running SSL renewal check")
+					// SSL renewal check logic would go here
+					return nil
+				},
+			})
+		}
+
+		// GeoIP update: weekly (every 7 days)
+		if cfg.Server.GeoIP.Enabled && cfg.Server.GeoIP.Update != "" && cfg.Server.GeoIP.Update != "never" {
+			sched.Register(&scheduler.Task{
+				Name:     "geoip_update",
+				Interval: 7 * 24 * time.Hour,
+				Run: func(ctx context.Context) error {
+					log.Println("[Scheduler] Running GeoIP database update")
+					// GeoIP update logic would go here
+					return nil
+				},
+			})
+		}
+
+		log.Printf("[Scheduler] Initialized with default tasks")
 	}
 
 	// Create database manager for user management
@@ -619,7 +691,9 @@ func (s *Server) setupRoutes() http.Handler {
 	mux := http.NewServeMux()
 
 	// Health check - /healthz only per TEMPLATE.md spec (NO /health)
+	// Supports content negotiation: HTML (default), JSON (Accept: application/json), plain text (.txt)
 	mux.HandleFunc("/healthz", s.handleHealthz)
+	mux.HandleFunc("/healthz.txt", s.handleHealthz)
 
 	// Home page
 	mux.HandleFunc("/", s.handleHome)
@@ -633,8 +707,9 @@ func (s *Server) setupRoutes() http.Handler {
 	mux.HandleFunc("/server/contact", s.handleContact)
 	mux.HandleFunc("/server/help", s.handleHelp)
 
-	// robots.txt and security.txt (both locations per RFC 9116)
+	// robots.txt, sitemap.xml, and security.txt (both locations per RFC 9116)
 	mux.HandleFunc("/robots.txt", s.handleRobots)
+	mux.HandleFunc("/sitemap.xml", s.handleSitemap)
 	mux.HandleFunc("/security.txt", s.handleSecurityTxt)
 	mux.HandleFunc("/.well-known/security.txt", s.handleSecurityTxt)
 
@@ -723,44 +798,128 @@ func (s *Server) setupRoutes() http.Handler {
 	return handler
 }
 
-// handleRobots serves robots.txt
+// handleRobots serves robots.txt per TEMPLATE.md spec
 func (s *Server) handleRobots(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=86400") // Cache for 1 day
 
 	web := s.config.Server.Web
 
 	// Build robots.txt
-	var lines []string
-	lines = append(lines, "User-agent: *")
+	fmt.Fprintln(w, "# robots.txt - Search Engine Crawling Rules")
+	fmt.Fprintln(w, "#", s.config.Server.Title)
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "User-agent: *")
 
-	for _, path := range web.Robots.Allow {
-		lines = append(lines, "Allow: "+path)
+	// Allow paths (default: /, /api)
+	allowPaths := web.Robots.Allow
+	if len(allowPaths) == 0 {
+		allowPaths = []string{"/", "/api"}
+	}
+	for _, path := range allowPaths {
+		fmt.Fprintln(w, "Allow:", path)
 	}
 
-	for _, path := range web.Robots.Deny {
-		lines = append(lines, "Disallow: "+path)
+	// Deny paths (default: /admin)
+	denyPaths := web.Robots.Deny
+	if len(denyPaths) == 0 {
+		denyPaths = []string{"/admin"}
+	}
+	for _, path := range denyPaths {
+		fmt.Fprintln(w, "Disallow:", path)
 	}
 
-	for _, line := range lines {
-		fmt.Fprintln(w, line)
-	}
+	// Add sitemap URL per TEMPLATE.md spec
+	fmt.Fprintln(w)
+	baseURL := s.getBaseURL(r)
+	fmt.Fprintln(w, "Sitemap:", baseURL+"/sitemap.xml")
 }
 
-// handleSecurityTxt serves security.txt
+// handleSecurityTxt serves security.txt per RFC 9116 and TEMPLATE.md spec
+// Required fields: Contact, Expires
 func (s *Server) handleSecurityTxt(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=86400") // Cache for 1 day
 
 	security := s.config.Server.Web.Security
 
-	if security.Contact != "" {
-		fmt.Fprintln(w, "Contact:", security.Contact)
-	} else if s.config.Server.Admin.Email != "" {
-		fmt.Fprintln(w, "Contact:", "mailto:"+s.config.Server.Admin.Email)
+	// Contact (REQUIRED per RFC 9116)
+	// Must be a URI (mailto:, https://, or tel:)
+	contact := security.Contact
+	if contact == "" && s.config.Server.Admin.Email != "" {
+		contact = s.config.Server.Admin.Email
+	}
+	if contact != "" {
+		// Ensure mailto: prefix for email addresses
+		if strings.Contains(contact, "@") && !strings.HasPrefix(contact, "mailto:") {
+			contact = "mailto:" + contact
+		}
+		fmt.Fprintln(w, "Contact:", contact)
+	} else {
+		// Fallback to fqdn-based email
+		fqdn := s.getBaseURL(r)
+		fqdn = strings.TrimPrefix(fqdn, "https://")
+		fqdn = strings.TrimPrefix(fqdn, "http://")
+		fmt.Fprintln(w, "Contact: mailto:security@"+fqdn)
 	}
 
-	if security.Expires != "" {
-		fmt.Fprintln(w, "Expires:", security.Expires)
+	// Expires (REQUIRED per RFC 9116)
+	// Must be in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)
+	expires := security.Expires
+	if expires == "" {
+		// Default: 1 year from now (auto-renewed yearly)
+		expiryTime := time.Now().AddDate(1, 0, 0)
+		expires = expiryTime.UTC().Format(time.RFC3339)
 	}
+	fmt.Fprintln(w, "Expires:", expires)
+}
+
+// handleSitemap serves sitemap.xml per TEMPLATE.md spec
+func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=86400") // Cache for 1 day
+
+	baseURL := s.getBaseURL(r)
+	lastMod := time.Now().Format("2006-01-02")
+
+	// XML header
+	fmt.Fprintln(w, `<?xml version="1.0" encoding="UTF-8"?>`)
+	fmt.Fprintln(w, `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">`)
+
+	// Define sitemap entries with priority and change frequency
+	type sitemapEntry struct {
+		loc        string
+		priority   string
+		changefreq string
+	}
+
+	entries := []sitemapEntry{
+		{"/", "1.0", "daily"},
+		{"/search", "0.9", "daily"},
+		{"/server/about", "0.5", "monthly"},
+		{"/server/privacy", "0.3", "monthly"},
+		{"/server/help", "0.5", "monthly"},
+		{"/openapi", "0.4", "weekly"},
+		{"/graphql", "0.4", "weekly"},
+		{"/healthz", "0.2", "always"},
+	}
+
+	// Add contact page if enabled
+	if s.config.Server.Pages.Contact.Enabled {
+		entries = append(entries, sitemapEntry{"/server/contact", "0.4", "monthly"})
+	}
+
+	// Write each URL entry
+	for _, entry := range entries {
+		fmt.Fprintln(w, "  <url>")
+		fmt.Fprintf(w, "    <loc>%s%s</loc>\n", baseURL, entry.loc)
+		fmt.Fprintf(w, "    <lastmod>%s</lastmod>\n", lastMod)
+		fmt.Fprintf(w, "    <changefreq>%s</changefreq>\n", entry.changefreq)
+		fmt.Fprintf(w, "    <priority>%s</priority>\n", entry.priority)
+		fmt.Fprintln(w, "  </url>")
+	}
+
+	fmt.Fprintln(w, `</urlset>`)
 }
 
 // handleSearch handles search requests

@@ -15,12 +15,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Version info (set at build time)
+// Build info - set via -ldflags at build time
 var (
 	Version   = "dev"
-	BuildTime = ""
-	GoVersion = ""
-	GitCommit = ""
+	CommitID  = "unknown"
+	BuildDate = "unknown"
 )
 
 // Config represents the complete application configuration
@@ -492,8 +491,8 @@ type WebConfig struct {
 		Deny  []string `yaml:"deny"`
 	} `yaml:"robots"`
 	Security struct {
-		Contact string `yaml:"contact"`
-		Expires string `yaml:"expires"`
+		Contact string `yaml:"contact"` // Security contact email (mailto: prefix added automatically)
+		Expires string `yaml:"expires"` // Expiration date (auto-calculated 1 year from now if not set)
 	} `yaml:"security"`
 	Announcements AnnouncementsConfig `yaml:"announcements"`
 	CookieConsent CookieConsentConfig `yaml:"cookie_consent"`

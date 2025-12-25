@@ -10,6 +10,7 @@ import (
 var openAPISpec []byte
 
 // ServeOpenAPISpec serves the OpenAPI JSON specification
+// Per TEMPLATE.md spec: JSON only, no YAML endpoint
 func (h *Handler) ServeOpenAPISpec(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -329,8 +330,9 @@ func (h *Handler) ServeSwaggerUI(w http.ResponseWriter, r *http.Request) {
 }
 
 // RegisterOpenAPIRoutes registers the OpenAPI/Swagger routes
+// Per TEMPLATE.md spec: /openapi (Swagger UI), /openapi.json (JSON only, no YAML)
 func (h *Handler) RegisterOpenAPIRoutes(mux *http.ServeMux) {
-	// OpenAPI JSON spec
+	// OpenAPI JSON spec (JSON only per spec)
 	mux.HandleFunc("/openapi.json", h.ServeOpenAPISpec)
 
 	// Swagger UI

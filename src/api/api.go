@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -107,12 +108,32 @@ type APIMeta struct {
 	Version     string  `json:"version"`
 }
 
-// HealthResponse represents health check response
+// HealthResponse represents health check response per TEMPLATE.md spec
 type HealthResponse struct {
-	Status    string `json:"status"`
-	Version   string `json:"version"`
-	Uptime    string `json:"uptime"`
-	Timestamp string `json:"timestamp"`
+	Status         string            `json:"status"`
+	Version        string            `json:"version"`
+	Mode           string            `json:"mode"`
+	Uptime         string            `json:"uptime"`
+	Timestamp      string            `json:"timestamp"`
+	Node           *NodeInfo         `json:"node,omitempty"`
+	Cluster        *ClusterInfo      `json:"cluster,omitempty"`
+	Checks         map[string]string `json:"checks"`
+	PendingRestart bool              `json:"pending_restart,omitempty"`
+	RestartReason  []string          `json:"restart_reason,omitempty"`
+}
+
+// NodeInfo represents node information for cluster mode
+type NodeInfo struct {
+	ID       string `json:"id"`
+	Hostname string `json:"hostname"`
+}
+
+// ClusterInfo represents cluster status
+type ClusterInfo struct {
+	Enabled bool   `json:"enabled"`
+	Status  string `json:"status"`
+	Nodes   int    `json:"nodes"`
+	Role    string `json:"role,omitempty"`
 }
 
 // InfoResponse represents server info response
@@ -201,15 +222,47 @@ type CategoryInfo struct {
 // Handler methods
 
 func (h *Handler) handleHealthz(w http.ResponseWriter, r *http.Request) {
-	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		Success: true,
-		Data: HealthResponse{
-			Status:    "ok",
-			Version:   config.Version,
-			Uptime:    h.formatDuration(time.Since(h.startTime)),
-			Timestamp: time.Now().UTC().Format(time.RFC3339),
+	hostname, _ := getHostname()
+
+	// Build checks map
+	checks := make(map[string]string)
+	checks["search"] = "ok"
+
+	// Determine overall status
+	status := "healthy"
+
+	// Check maintenance mode
+	if h.config.Server.MaintenanceMode {
+		status = "maintenance"
+	}
+
+	health := HealthResponse{
+		Status:    status,
+		Version:   config.Version,
+		Mode:      h.config.Server.Mode,
+		Uptime:    h.formatDuration(time.Since(h.startTime)),
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Node: &NodeInfo{
+			ID:       "standalone",
+			Hostname: hostname,
 		},
-		Meta: &APIMeta{Version: APIVersion},
+		Cluster: &ClusterInfo{
+			Enabled: false,
+			Status:  "disabled",
+			Nodes:   1,
+		},
+		Checks: checks,
+	}
+
+	statusCode := http.StatusOK
+	if status == "unhealthy" || status == "maintenance" {
+		statusCode = http.StatusServiceUnavailable
+	}
+
+	h.jsonResponse(w, statusCode, &APIResponse{
+		Success: status == "healthy",
+		Data:    health,
+		Meta:    &APIMeta{Version: APIVersion},
 	})
 }
 
@@ -564,6 +617,11 @@ func extractDomain(urlStr string) string {
 		urlStr = urlStr[:idx]
 	}
 	return urlStr
+}
+
+// getHostname returns the system hostname
+func getHostname() (string, error) {
+	return os.Hostname()
 }
 
 // BangInfo represents bang information for API

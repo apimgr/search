@@ -39,6 +39,7 @@ var (
 	flagInit        bool
 	flagConfigInfo  bool
 	flagStatus      bool
+	flagDaemon      bool
 	flagTest        string
 	flagService     string
 	flagMaintenance string
@@ -64,6 +65,8 @@ func init() {
 	flag.BoolVar(&flagInit, "init", false, "Initialize configuration")
 	flag.BoolVar(&flagConfigInfo, "config-info", false, "Show configuration paths and status")
 	flag.BoolVar(&flagStatus, "status", false, "Show server status")
+	flag.BoolVar(&flagDaemon, "daemon", false, "Daemonize (detach from terminal)")
+	flag.BoolVar(&flagDaemon, "d", false, "Daemonize (shorthand)")
 
 	// Commands with optional arguments
 	flag.StringVar(&flagTest, "test", "", "Test search engines with optional query")
@@ -80,6 +83,7 @@ func init() {
 	flag.StringVar(&flagPID, "pid", "", "Set PID file path")
 	flag.StringVar(&flagAddress, "address", "", "Set listen address")
 	flag.IntVar(&flagPort, "port", 0, "Set listen port")
+	flag.IntVar(&flagPort, "p", 0, "Set listen port (shorthand)")
 }
 
 func main() {
@@ -147,6 +151,7 @@ func main() {
 }
 
 // applyCliOverrides applies CLI flag overrides to the config system
+// Per TEMPLATE.md PART 6: Directory flags MUST create directories if they don't exist
 func applyCliOverrides() {
 	if flagMode != "" {
 		os.Setenv("SEARCH_MODE", flagMode)
@@ -174,6 +179,14 @@ func applyCliOverrides() {
 	if flagPort != 0 {
 		os.Setenv("SEARCH_PORT", fmt.Sprintf("%d", flagPort))
 		os.Setenv("PORT", fmt.Sprintf("%d", flagPort))
+	}
+
+	// Ensure directories exist after CLI overrides are applied
+	// Per TEMPLATE.md PART 6: All directory flags MUST create directories if they don't exist
+	if flagData != "" || flagConfig != "" || flagLog != "" || flagPID != "" {
+		if err := config.EnsureDirectories(); err != nil {
+			log.Printf("Warning: Failed to create directories: %v", err)
+		}
 	}
 }
 
@@ -216,6 +229,9 @@ func handleLegacyArgs() {
 			platform = os.Args[2]
 		}
 		runBuild(platform)
+	case "--daemon", "-d":
+		flagDaemon = true
+		runServer()
 	default:
 		fmt.Printf("Unknown command: %s\n", os.Args[1])
 		fmt.Println("Use --help for usage information")
@@ -223,6 +239,15 @@ func handleLegacyArgs() {
 }
 
 func runServer() {
+	// Handle daemonization per TEMPLATE.md PART 6
+	// Check if we should daemonize (only for manual starts, not --service start)
+	if flagDaemon && os.Getenv("_DAEMON_CHILD") != "1" {
+		if err := daemonize(); err != nil {
+			log.Fatalf("❌ Failed to daemonize: %v", err)
+		}
+		// Parent exits in daemonize(), only child continues
+	}
+
 	fmt.Println("🔍 Search - Privacy-Respecting Metasearch Engine")
 	fmt.Printf("Version: %s\n\n", config.Version)
 
@@ -231,6 +256,10 @@ func runServer() {
 	if err != nil {
 		log.Fatalf("❌ Configuration failed: %v", err)
 	}
+
+	// Check for first run and display setup token if needed
+	// Per TEMPLATE.md PART 6: Setup token displayed ONCE on first run
+	checkFirstRun(cfg)
 
 	// Create server
 	srv := server.New(cfg)
@@ -274,16 +303,36 @@ func runServer() {
 }
 
 func printVersion() {
-	fmt.Printf("%s v%s\n", config.ProjectName, config.Version)
-	fmt.Printf("Built: %s\n", config.BuildTime)
-	fmt.Printf("Go: %s\n", runtime.Version())
-	fmt.Printf("OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
-	if config.GitCommit != "" {
-		fmt.Printf("Commit: %s\n", config.GitCommit)
+	// Per TEMPLATE.md PART 6: --version format
+	// Format: {binary} v1.2.3 (abc1234) built 2025-01-15
+	binaryName := filepath.Base(os.Args[0])
+
+	// Build the version line
+	commitPart := ""
+	if config.CommitID != "" && config.CommitID != "unknown" {
+		// Truncate commit to 7 chars if longer
+		commit := config.CommitID
+		if len(commit) > 7 {
+			commit = commit[:7]
+		}
+		commitPart = fmt.Sprintf(" (%s)", commit)
 	}
+
+	// Format build date as YYYY-MM-DD
+	buildDate := config.BuildDate
+	if t, err := time.Parse("Mon Jan 02, 2006 at 15:04:05 MST", buildDate); err == nil {
+		buildDate = t.Format("2006-01-02")
+	} else if t, err := time.Parse(time.RFC3339, buildDate); err == nil {
+		buildDate = t.Format("2006-01-02")
+	}
+
+	fmt.Printf("%s v%s%s built %s\n", binaryName, config.Version, commitPart, buildDate)
 }
 
 func printHelp() {
+	// Per TEMPLATE.md PART 6: Use actual binary name in help
+	binaryName := filepath.Base(os.Args[0])
+
 	fmt.Printf(`%s - Privacy-Respecting Metasearch Engine
 
 Usage:
@@ -294,8 +343,11 @@ Runtime Flags:
   --mode <mode>            Set application mode (production|development)
   --data <dir>             Set data directory
   --config <dir>           Set config directory
+  --log <dir>              Set log directory
+  --pid <file>             Set PID file path
   --address <addr>         Set listen address
-  --port <port>            Set listen port
+  --port, -p <port>        Set listen port
+  --daemon, -d             Daemonize (detach from terminal, Unix only)
 
 Information:
   --help, -h               Show this help message
@@ -316,12 +368,14 @@ Service Management:
     status                 Check service status
     restart                Restart the service
     reload                 Reload configuration (SIGHUP)
+    enable                 Enable service autostart
+    disable                Disable service autostart
 
 Maintenance:
   --maintenance <action>   Maintenance commands:
     backup [file]          Create backup archive
     restore <file>         Restore from backup
-    update                 Check and install updates
+    setup                  Reset admin credentials (generates setup token)
     mode                   Toggle maintenance mode
 
 Updates:
@@ -329,6 +383,8 @@ Updates:
     check                  Check for available updates
     yes                    Download and install update (default)
     branch <name>          Set update branch (stable|beta|daily)
+    rollback               Rollback to previous version
+    list                   List available versions
 
 Build:
   --build [platform]       Build binaries (requires Docker):
@@ -350,11 +406,11 @@ Environment Variables:
   PORT, SEARCH_PORT        Server port
   MODE, SEARCH_MODE        Application mode (production|development)
   INSTANCE_NAME            Instance display name
-  USE_TOR, ENABLE_TOR      Enable Tor support
+  DISABLE_TOR              Disable Tor (auto-enabled if tor binary installed)
 
 Examples:
   %s                                 Start server with defaults
-  %s --port 8080                     Start on port 8080
+  %s -p 8080                         Start on port 8080
   %s --mode development              Start in dev mode
   %s --config /etc/search --data /var/lib/search  Custom directories
   %s --init                          Create configuration files
@@ -362,14 +418,15 @@ Examples:
   %s --service install               Install as system service
   %s --service reload                Reload configuration
   %s --update check                  Check for updates
+  %s --maintenance setup             Reset admin credentials
   %s --build all                     Build for all platforms
   %s --build host                    Build for current platform
 
 For more information: https://github.com/apimgr/search
-`, config.ProjectName, config.ProjectName, config.ProjectName,
-		config.ProjectName, config.ProjectName, config.ProjectName, config.ProjectName,
-		config.ProjectName, config.ProjectName, config.ProjectName, config.ProjectName,
-		config.ProjectName, config.ProjectName, config.ProjectName)
+`, binaryName, binaryName, binaryName,
+		binaryName, binaryName, binaryName, binaryName,
+		binaryName, binaryName, binaryName, binaryName,
+		binaryName, binaryName, binaryName)
 }
 
 func runInit() {
@@ -465,7 +522,7 @@ func showConfigInfo() {
 		fmt.Println("  DEBUG: enabled")
 	}
 	if env.UseTor {
-		fmt.Println("  USE_TOR: enabled")
+		fmt.Println("  TOR: enabled (auto-detected)")
 	}
 	if env.ConfigDir != "" {
 		fmt.Println("  CONFIG_DIR:", env.ConfigDir)
@@ -476,55 +533,168 @@ func showConfigInfo() {
 }
 
 func showStatus() {
-	fmt.Println("📊 Server Status")
-	fmt.Println()
+	// Per TEMPLATE.md PART 31 - --status output format
+	binaryName := filepath.Base(os.Args[0])
 
-	// Check PID file
+	// Check PID file and process status
 	pidFile := config.GetPIDFile()
-	if _, err := os.Stat(pidFile); err == nil {
-		pidData, err := os.ReadFile(pidFile)
-		if err == nil {
-			fmt.Printf("Server Status: Running (PID: %s)\n", strings.TrimSpace(string(pidData)))
-		} else {
-			fmt.Println("Server Status: Unknown (cannot read PID file)")
-		}
-	} else {
-		fmt.Println("Server Status: Not Running")
-	}
+	isRunning := false
+	var pid int
+	var startTime time.Time
 
-	fmt.Println()
-
-	// Load config to show settings
-	configPath := config.GetConfigPath()
-	if _, err := os.Stat(configPath); err == nil {
-		cfg, err := config.Load(configPath)
-		if err == nil {
-			fmt.Println("Configuration:")
-			fmt.Printf("  Port: %d\n", cfg.Server.Port)
-			fmt.Println("  Mode:", cfg.Server.Mode)
-			fmt.Println("  Title:", cfg.Server.Title)
-			fmt.Println()
-			fmt.Println("Tor Hidden Service:")
-			if cfg.Server.Tor.Enabled {
-				if cfg.Server.Tor.OnionAddress != "" {
-					fmt.Println("  Status: ● Connected")
-					fmt.Printf("  Address: %s\n", cfg.Server.Tor.OnionAddress)
-				} else {
-					fmt.Println("  Status: ○ Enabled (waiting for address)")
-				}
-			} else {
-				fmt.Println("  Status: ○ Disabled")
+	if pidData, err := os.ReadFile(pidFile); err == nil {
+		pidStr := strings.TrimSpace(string(pidData))
+		if p, err := fmt.Sscanf(pidStr, "%d", &pid); err == nil && p == 1 {
+			// Check if process is actually running
+			if isProcessRunning(pid) {
+				isRunning = true
+				// Try to get process start time for uptime calculation
+				startTime = getProcessStartTime(pid)
 			}
 		}
-	} else {
-		fmt.Println("Configuration: Not initialized (run --init)")
 	}
 
 	fmt.Println()
-	fmt.Println("System:")
-	fmt.Printf("  Go Version: %s\n", runtime.Version())
-	fmt.Printf("  OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
-	fmt.Printf("  CPUs: %d\n", runtime.NumCPU())
+
+	if isRunning {
+		fmt.Println("Server Status: Running")
+	} else {
+		fmt.Println("Server Status: Not Running")
+		fmt.Println()
+		fmt.Printf("Start the server with: %s\n", binaryName)
+		fmt.Printf("Or install as service: %s --service install\n", binaryName)
+		return
+	}
+
+	// Load config to show settings
+	var port int
+	var mode string
+	var torEnabled bool
+	var torAddress string
+
+	configPath := config.GetConfigPath()
+	if cfg, err := config.Load(configPath); err == nil {
+		port = cfg.Server.Port
+		mode = cfg.Server.Mode
+		torEnabled = cfg.Server.Tor.Enabled
+		torAddress = cfg.Server.Tor.OnionAddress
+	} else {
+		// Try to get from env or defaults
+		port = 64580
+		mode = "production"
+	}
+
+	// Calculate uptime
+	uptime := "unknown"
+	if !startTime.IsZero() {
+		uptime = formatUptime(time.Since(startTime))
+	}
+
+	fmt.Printf("  PID: %d\n", pid)
+	fmt.Printf("  Port: %d\n", port)
+	fmt.Printf("  Mode: %s\n", mode)
+	fmt.Printf("  Uptime: %s\n", uptime)
+	fmt.Println()
+
+	// Node status (standalone for now, cluster support later)
+	fmt.Println("Node: standalone")
+	fmt.Println("Cluster: disabled")
+	fmt.Println()
+
+	// Tor Hidden Service status
+	if torEnabled {
+		if torAddress != "" {
+			fmt.Println("Tor Hidden Service: Connected")
+			// Truncate address for display
+			displayAddr := torAddress
+			if len(torAddress) > 16 {
+				displayAddr = torAddress[:8] + "..." + torAddress[len(torAddress)-10:]
+			}
+			fmt.Printf("  Address: %s\n", displayAddr)
+		} else {
+			fmt.Println("Tor Hidden Service: Enabled (waiting for address)")
+		}
+	} else {
+		fmt.Println("Tor Hidden Service: Disabled")
+	}
+}
+
+// isProcessRunning checks if a process with given PID exists
+func isProcessRunning(pid int) bool {
+	if runtime.GOOS == "windows" {
+		// On Windows, try to open the process
+		process, err := os.FindProcess(pid)
+		if err != nil {
+			return false
+		}
+		// On Windows, FindProcess always succeeds, so we need another check
+		// Try to send signal 0 (doesn't work on Windows, but process handle is valid)
+		return process != nil
+	}
+
+	// On Unix, send signal 0 to check if process exists
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	err = process.Signal(syscall.Signal(0))
+	return err == nil
+}
+
+// getProcessStartTime attempts to get the start time of a process
+func getProcessStartTime(pid int) time.Time {
+	if runtime.GOOS == "linux" {
+		// Read /proc/{pid}/stat to get start time
+		statPath := fmt.Sprintf("/proc/%d/stat", pid)
+		data, err := os.ReadFile(statPath)
+		if err != nil {
+			return time.Time{}
+		}
+
+		// Parse stat file - field 22 is starttime in clock ticks since boot
+		fields := strings.Fields(string(data))
+		if len(fields) < 22 {
+			return time.Time{}
+		}
+
+		// Get system uptime
+		uptimeData, err := os.ReadFile("/proc/uptime")
+		if err != nil {
+			return time.Time{}
+		}
+		var systemUptime float64
+		fmt.Sscanf(string(uptimeData), "%f", &systemUptime)
+
+		// Parse process start time (in clock ticks)
+		var startTicks int64
+		fmt.Sscanf(fields[21], "%d", &startTicks)
+
+		// Convert to seconds (assuming 100 Hz clock)
+		clkTck := int64(100) // sysconf(_SC_CLK_TCK) is usually 100
+		processStartSeconds := float64(startTicks) / float64(clkTck)
+
+		// Calculate actual start time
+		bootTime := time.Now().Add(-time.Duration(systemUptime * float64(time.Second)))
+		return bootTime.Add(time.Duration(processStartSeconds * float64(time.Second)))
+	}
+
+	// For other platforms, return zero time (uptime will show as "unknown")
+	return time.Time{}
+}
+
+// formatUptime formats a duration as human-readable uptime string
+func formatUptime(d time.Duration) string {
+	days := int(d.Hours() / 24)
+	hours := int(d.Hours()) % 24
+	minutes := int(d.Minutes()) % 60
+
+	if days > 0 {
+		return fmt.Sprintf("%dd %dh %dm", days, hours, minutes)
+	}
+	if hours > 0 {
+		return fmt.Sprintf("%dh %dm", hours, minutes)
+	}
+	return fmt.Sprintf("%dm", minutes)
 }
 
 func runService(action string) {
@@ -1066,6 +1236,112 @@ func runTest() {
 }
 
 // ============================================================
+// First Run Detection (per TEMPLATE.md PART 6)
+// ============================================================
+
+// checkFirstRun checks if this is the first run and displays setup token if needed
+// Per TEMPLATE.md PART 6: Setup token displayed ONCE on first run
+func checkFirstRun(cfg *config.Config) {
+	dataDir := config.GetDataDir()
+	dbPath := filepath.Join(dataDir, "db", "server.db")
+
+	// Check if database exists
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		// Database doesn't exist yet, will be created on first use
+		// We'll display setup token after database creation
+		return
+	}
+
+	// Open database and check for admin
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		// Can't open database, skip first-run check
+		return
+	}
+	defer db.Close()
+
+	// Check if admin_credentials table exists
+	var tableName string
+	err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='admin_credentials'").Scan(&tableName)
+	if err != nil {
+		// Table doesn't exist, this is a fresh database
+		// Generate and display setup token
+		displayFirstRunSetupToken(cfg, dbPath)
+		return
+	}
+
+	// Check if any admin exists
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM admin_credentials").Scan(&count)
+	if err != nil {
+		// Can't query, skip check
+		return
+	}
+
+	if count == 0 {
+		// No admin exists, display setup token
+		displayFirstRunSetupToken(cfg, dbPath)
+	}
+}
+
+// displayFirstRunSetupToken generates and displays a setup token on first run
+func displayFirstRunSetupToken(cfg *config.Config, dbPath string) {
+	// Check if a valid setup token already exists
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return
+	}
+	defer db.Close()
+
+	// Check for unexpired setup token
+	var expiresAt string
+	err = db.QueryRow(`
+		SELECT expires_at FROM setup_token WHERE id = 1 AND used_at IS NULL
+	`).Scan(&expiresAt)
+
+	if err == nil {
+		// Token exists, check if still valid
+		expiry, err := time.Parse("2006-01-02 15:04:05", expiresAt)
+		if err == nil && expiry.After(time.Now()) {
+			// Valid token exists, don't regenerate (token only shown once)
+			fmt.Println("╔══════════════════════════════════════════════════════════════╗")
+			fmt.Println("║  FIRST RUN: Admin setup required                             ║")
+			fmt.Println("╠══════════════════════════════════════════════════════════════╣")
+			fmt.Printf("║  Visit: http://localhost:%d/admin/setup               ║\n", cfg.Server.Port)
+			fmt.Println("║  A setup token was previously generated.                     ║")
+			fmt.Println("║  Run 'search --maintenance setup' for a new token.           ║")
+			fmt.Println("╚══════════════════════════════════════════════════════════════╝")
+			fmt.Println()
+			return
+		}
+	}
+
+	// Generate new setup token
+	setupToken := generateSetupToken()
+
+	// Store the hashed token
+	if err := storeSetupToken(dbPath, setupToken); err != nil {
+		log.Printf("Warning: Failed to store setup token: %v", err)
+		return
+	}
+
+	// Display the token ONCE - per TEMPLATE.md this is the only time it's shown
+	fmt.Println()
+	fmt.Println("╔══════════════════════════════════════════════════════════════╗")
+	fmt.Println("║  FIRST RUN: Admin setup required                             ║")
+	fmt.Println("╠══════════════════════════════════════════════════════════════╣")
+	fmt.Println("║  SETUP TOKEN (copy this - it will not be shown again!)       ║")
+	fmt.Println("╠══════════════════════════════════════════════════════════════╣")
+	fmt.Printf("║  %s                                  ║\n", setupToken)
+	fmt.Println("╠══════════════════════════════════════════════════════════════╣")
+	fmt.Printf("║  Visit: http://localhost:%d/admin/setup               ║\n", cfg.Server.Port)
+	fmt.Println("║  Enter the token above to create your admin account.         ║")
+	fmt.Println("║  Token expires in 1 hour.                                     ║")
+	fmt.Println("╚══════════════════════════════════════════════════════════════╝")
+	fmt.Println()
+}
+
+// ============================================================
 // Admin Recovery Helpers (per TEMPLATE.md PART 26)
 // ============================================================
 
@@ -1335,8 +1611,8 @@ func buildWithDocker(srcDir, outputPath, goos, goarch string) error {
 		"-e", "GOARCH="+goarch,
 		"golang:alpine",
 		"go", "build",
-		"-ldflags", fmt.Sprintf("-s -w -X github.com/apimgr/search/src/config.Version=%s -X github.com/apimgr/search/src/config.BuildTime=%s",
-			config.Version, time.Now().Format(time.RFC3339)),
+		"-ldflags", fmt.Sprintf("-s -w -X github.com/apimgr/search/src/config.Version=%s -X github.com/apimgr/search/src/config.BuildDate=%s",
+			config.Version, time.Now().Format("Mon Jan 02, 2006 at 15:04:05 MST")),
 		"-o", "/app/binaries/"+outputName,
 		"./src",
 	)
@@ -1361,4 +1637,63 @@ func formatBytes(bytes int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// daemonize forks the process and detaches from terminal
+// Per TEMPLATE.md PART 6 - Daemonization
+func daemonize() error {
+	// Windows doesn't support traditional Unix daemonization
+	if runtime.GOOS == "windows" {
+		fmt.Fprintln(os.Stderr, "Warning: --daemon is not supported on Windows")
+		fmt.Fprintln(os.Stderr, "Use --service install && --service start for Windows Service")
+		return nil // Continue in foreground
+	}
+
+	// Already daemonized? Check if parent is init (PID 1)
+	if os.Getppid() == 1 {
+		return nil
+	}
+
+	// Check if we're already a daemon child
+	if os.Getenv("_DAEMON_CHILD") == "1" {
+		return nil
+	}
+
+	// Get executable path
+	execPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("getting executable path: %w", err)
+	}
+
+	// Build command with same args (minus --daemon to prevent loop)
+	args := filterDaemonFlag(os.Args[1:])
+
+	cmd := exec.Command(execPath, args...)
+	cmd.Env = append(os.Environ(), "_DAEMON_CHILD=1")
+
+	// Detach from parent's file descriptors
+	cmd.Stdin = nil
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+
+	// Start child process
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("starting daemon: %w", err)
+	}
+
+	// Parent exits, child continues
+	fmt.Printf("Daemon started with PID %d\n", cmd.Process.Pid)
+	os.Exit(0)
+	return nil
+}
+
+// filterDaemonFlag removes --daemon and -d from args to prevent infinite loop
+func filterDaemonFlag(args []string) []string {
+	filtered := make([]string, 0, len(args))
+	for _, arg := range args {
+		if arg != "--daemon" && arg != "-d" {
+			filtered = append(filtered, arg)
+		}
+	}
+	return filtered
 }

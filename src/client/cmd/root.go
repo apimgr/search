@@ -12,11 +12,11 @@ import (
 )
 
 var (
-	// Set at build time
+	// Build info - set via -ldflags at build time
 	ProjectName = "search"
 	Version     = "dev"
-	GitCommit   = "unknown"
-	BuildTime   = "unknown"
+	CommitID    = "unknown"
+	BuildDate   = "unknown"
 
 	cfgFile   string
 	server    string

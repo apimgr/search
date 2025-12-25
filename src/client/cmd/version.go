@@ -16,7 +16,7 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Show version information",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Printf("%s v%s (%s) built %s\n", getBinaryName(), Version, GitCommit, BuildTime)
+		fmt.Printf("%s v%s (%s) built %s\n", getBinaryName(), Version, CommitID, BuildDate)
 
 		serverAddr := viper.GetString("server.address")
 		if server != "" {
@@ -40,8 +40,8 @@ var versionCmd = &cobra.Command{
 		fmt.Printf("\nBuild Info:\n")
 		fmt.Printf("  Go: %s\n", runtime.Version())
 		fmt.Printf("  OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
-		fmt.Printf("  Commit: %s\n", GitCommit)
-		fmt.Printf("  Date: %s\n", BuildTime)
+		fmt.Printf("  Commit: %s\n", CommitID)
+		fmt.Printf("  Date: %s\n", BuildDate)
 
 		return nil
 	},

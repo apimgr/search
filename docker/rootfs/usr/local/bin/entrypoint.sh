@@ -4,12 +4,19 @@ set -e
 # =============================================================================
 # Container Entrypoint Script
 # Handles service startup, signal handling, and graceful shutdown
+# Per TEMPLATE.md PART 13: Tor auto-detection (no ENABLE_TOR env var)
 # =============================================================================
 
 APP_NAME="search"
 APP_BIN="/usr/local/bin/${APP_NAME}"
-TOR_ENABLED="${ENABLE_TOR:-true}"
 TOR_DATA_DIR="/data/tor"
+
+# Tor auto-detection: enabled if tor binary is installed
+# Per TEMPLATE.md: "Tor auto-enabled if tor binary installed"
+TOR_AVAILABLE=false
+if command -v tor >/dev/null 2>&1; then
+    TOR_AVAILABLE=true
+fi
 
 # Array to track background PIDs
 declare -a PIDS=()
@@ -81,21 +88,23 @@ setup_directories() {
     mkdir -p /config /data/db /data/logs /data/tor /data/geoip /data/backup
 
     # Fix permissions for Tor (runs as tor user)
-    if [ "$TOR_ENABLED" = "true" ]; then
+    if [ "$TOR_AVAILABLE" = "true" ]; then
         chown -R tor:tor "$TOR_DATA_DIR"
         chmod 700 "$TOR_DATA_DIR"
     fi
 }
 
 # -----------------------------------------------------------------------------
-# Start Tor (if enabled)
+# Start Tor (if tor binary is available - auto-detection)
+# Per TEMPLATE.md PART 29: Tor auto-enabled if tor binary installed
 # -----------------------------------------------------------------------------
 start_tor() {
-    if [ "$TOR_ENABLED" != "true" ]; then
+    if [ "$TOR_AVAILABLE" != "true" ]; then
+        log "Tor binary not found, skipping Tor hidden service"
         return 0
     fi
 
-    log "Starting Tor hidden service..."
+    log "Starting Tor hidden service (auto-detected)..."
 
     # Create torrc if not exists
     if [ ! -f /config/torrc ]; then
@@ -164,7 +173,7 @@ main() {
     log "Container starting..."
     log "MODE: ${MODE:-development}"
     log "TZ: ${TZ:-UTC}"
-    log "ENABLE_TOR: ${TOR_ENABLED}"
+    log "Tor: ${TOR_AVAILABLE} (auto-detected)"
 
     setup_directories
     start_tor

@@ -144,12 +144,28 @@ func (am *AuthManager) CreateSession(username, ip, userAgent string) *AdminSessi
 	defer am.mu.Unlock()
 
 	sessionID := generateSecureToken(32)
+
+	// Parse session duration from config (e.g., "30d", "24h")
+	// Falls back to Timeout if Duration parsing fails, or 24h if both are 0
+	var sessionDuration time.Duration
+	if am.config.Server.Session.Duration != "" {
+		if seconds, err := config.ParseDuration(am.config.Server.Session.Duration); err == nil && seconds > 0 {
+			sessionDuration = time.Duration(seconds) * time.Second
+		}
+	}
+	if sessionDuration == 0 && am.config.Server.Session.Timeout > 0 {
+		sessionDuration = time.Duration(am.config.Server.Session.Timeout) * time.Second
+	}
+	if sessionDuration == 0 {
+		sessionDuration = 24 * time.Hour // Default to 24 hours
+	}
+
 	session := &AdminSession{
 		ID:        sessionID,
 		UserID:    username,
 		Username:  username,
 		CreatedAt: time.Now(),
-		ExpiresAt: time.Now().Add(time.Duration(am.config.Server.Session.Timeout) * time.Second),
+		ExpiresAt: time.Now().Add(sessionDuration),
 		IP:        ip,
 		UserAgent: userAgent,
 	}
@@ -193,7 +209,22 @@ func (am *AuthManager) RefreshSession(sessionID string) bool {
 		return false
 	}
 
-	session.ExpiresAt = time.Now().Add(time.Duration(am.config.Server.Session.Timeout) * time.Second)
+	// Parse session duration from config (e.g., "30d", "24h")
+	// Falls back to Timeout if Duration parsing fails, or 24h if both are 0
+	var sessionDuration time.Duration
+	if am.config.Server.Session.Duration != "" {
+		if seconds, err := config.ParseDuration(am.config.Server.Session.Duration); err == nil && seconds > 0 {
+			sessionDuration = time.Duration(seconds) * time.Second
+		}
+	}
+	if sessionDuration == 0 && am.config.Server.Session.Timeout > 0 {
+		sessionDuration = time.Duration(am.config.Server.Session.Timeout) * time.Second
+	}
+	if sessionDuration == 0 {
+		sessionDuration = 24 * time.Hour // Default to 24 hours
+	}
+
+	session.ExpiresAt = time.Now().Add(sessionDuration)
 	return true
 }
 

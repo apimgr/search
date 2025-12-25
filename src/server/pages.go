@@ -1,14 +1,19 @@
 package server
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"net/http"
+	"os"
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/apimgr/search/src/config"
 )
 
 // handleHome renders the home page
@@ -138,17 +143,47 @@ func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleHealthz renders the health check page
+// handleHealthz handles the health check endpoint with content negotiation
+// Per TEMPLATE.md spec: supports HTML, JSON, and plain text responses
 func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
+	health := s.buildHealthInfo()
+
+	// Determine response format based on content negotiation
+	format := s.detectResponseFormat(r)
+
+	switch format {
+	case "application/json":
+		s.respondHealthJSON(w, health)
+	case "text/plain":
+		s.respondHealthText(w, health)
+	default:
+		s.respondHealthHTML(w, r, health)
+	}
+}
+
+// buildHealthInfo constructs the health information per TEMPLATE.md spec
+func (s *Server) buildHealthInfo() *HealthInfo {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
 
+	hostname, _ := getHostname()
+
 	health := &HealthInfo{
 		Status:    "healthy",
-		Uptime:    formatDuration(time.Since(s.startTime)),
+		Version:   getVersion(),
 		Mode:      s.config.Server.Mode,
+		Uptime:    formatDuration(time.Since(s.startTime)),
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 		Checks:    make(map[string]string),
+		Node: &NodeInfo{
+			ID:       "standalone",
+			Hostname: hostname,
+		},
+		Cluster: &ClusterInfo{
+			Enabled: false,
+			Status:  "disabled",
+			Nodes:   1,
+		},
 		System: &SystemInfo{
 			GoVersion:    runtime.Version(),
 			NumCPU:       runtime.NumCPU(),
@@ -157,8 +192,34 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
+	// Check maintenance mode
+	if s.config.Server.MaintenanceMode {
+		health.Status = "maintenance"
+		health.Maintenance = &MaintenanceInfo{
+			Reason:  "manual",
+			Message: "Server is in maintenance mode",
+			Since:   time.Now().UTC().Format(time.RFC3339),
+		}
+	}
+
 	// Add service checks
 	health.Checks["search"] = "ok"
+
+	// Database check
+	if s.dbManager != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := s.dbManager.Ping(ctx); err != nil {
+			health.Checks["database"] = "error"
+			if health.Status == "healthy" {
+				health.Status = "unhealthy"
+			}
+		} else {
+			health.Checks["database"] = "ok"
+		}
+	}
+
+	// Tor check
 	if s.config.Server.Tor.Enabled {
 		if s.torService != nil && s.torService.IsRunning() {
 			health.Checks["tor"] = "ok"
@@ -167,6 +228,69 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Scheduler check
+	if s.scheduler != nil {
+		health.Checks["scheduler"] = "ok"
+	}
+
+	return health
+}
+
+// detectResponseFormat determines the response format from the request
+func (s *Server) detectResponseFormat(r *http.Request) string {
+	// Check for .txt extension
+	if strings.HasSuffix(r.URL.Path, ".txt") {
+		return "text/plain"
+	}
+
+	// Check Accept header
+	accept := r.Header.Get("Accept")
+
+	switch {
+	case strings.Contains(accept, "application/json"):
+		return "application/json"
+	case strings.Contains(accept, "text/plain"):
+		return "text/plain"
+	case strings.Contains(accept, "text/html"):
+		return "text/html"
+	default:
+		return "text/html"
+	}
+}
+
+// respondHealthJSON responds with JSON health info
+func (s *Server) respondHealthJSON(w http.ResponseWriter, health *HealthInfo) {
+	w.Header().Set("Content-Type", "application/json")
+
+	statusCode := http.StatusOK
+	if health.Status == "unhealthy" || health.Status == "maintenance" {
+		statusCode = http.StatusServiceUnavailable
+	}
+	w.WriteHeader(statusCode)
+
+	data, _ := jsonMarshal(health)
+	w.Write(data)
+}
+
+// respondHealthText responds with plain text health info
+func (s *Server) respondHealthText(w http.ResponseWriter, health *HealthInfo) {
+	w.Header().Set("Content-Type", "text/plain")
+
+	statusCode := http.StatusOK
+	if health.Status == "unhealthy" || health.Status == "maintenance" {
+		statusCode = http.StatusServiceUnavailable
+	}
+	w.WriteHeader(statusCode)
+
+	if health.Status == "healthy" {
+		fmt.Fprint(w, "OK")
+	} else {
+		fmt.Fprintf(w, "ERROR: %s", health.Status)
+	}
+}
+
+// respondHealthHTML responds with HTML health page
+func (s *Server) respondHealthHTML(w http.ResponseWriter, r *http.Request, health *HealthInfo) {
 	data := &HealthPageData{
 		PageData: PageData{
 			Title:       "Health",
@@ -257,4 +381,19 @@ func formatBytes(b uint64) string {
 // isContactEnabled checks if contact form is enabled
 func (s *Server) isContactEnabled() bool {
 	return s.config.Server.Pages.Contact.Enabled
+}
+
+// getHostname returns the system hostname
+func getHostname() (string, error) {
+	return os.Hostname()
+}
+
+// getVersion returns the application version
+func getVersion() string {
+	return config.Version
+}
+
+// jsonMarshal marshals data to JSON with indentation
+func jsonMarshal(v interface{}) ([]byte, error) {
+	return json.Marshal(v)
 }

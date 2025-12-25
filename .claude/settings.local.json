@@ -31,7 +31,23 @@
       "Bash(git add:*)",
       "Bash(CGO_ENABLED=0 go build:*)",
       "Bash(/tmp/search:*)",
-      "Bash(go get:*)"
+      "Bash(go get:*)",
+      "Bash(make dev:*)",
+      "Bash(make clean:*)",
+      "Bash(./binaries/search:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker kill:*)",
+      "Bash(ss:*)",
+      "Bash(timeout 5 curl:*)",
+      "Bash(docker restart:*)",
+      "Bash(timeout 10 curl -s -c /tmp/cookies6.txt -b /tmp/cookies6.txt -L -X POST \"http://127.0.0.1:8899/admin/login\" -d \"username=administrator&password=25bd5671a600c001dca0f93fd473b74aab78a7a5a4af130e83da2de8a7d6d584\")",
+      "Bash(timeout 10 curl -s -c /tmp/cookies7.txt -b /tmp/cookies7.txt -X POST \"http://127.0.0.1:8899/admin/login\" -d \"username=administrator&password=25bd5671a600c001dca0f93fd473b74aab78a7a5a4af130e83da2de8a7d6d584\" -w \"\\\\nHTTP: %{http_code}\\\\nRedirect: %{redirect_url}\" -o /tmp/login_resp.txt)",
+      "Bash(for i in 1 2 3)",
+      "Bash(do sleep 2)",
+      "Bash(done)",
+      "Bash(for i in 1 2 3 4 5)",
+      "Bash(do echo '=== Request $i ===')",
+      "Bash(do timeout 5 curl -s -c /tmp/cookies_final.txt -b /tmp/cookies_final.txt http://127.0.0.1:8899/admin/dashboard)"
     ]
   }
 }

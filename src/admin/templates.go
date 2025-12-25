@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/apimgr/search/src/config"
 )
 
 // renderAdminLogin renders the admin login page
@@ -490,6 +492,18 @@ func (h *Handler) renderAdminPage(w http.ResponseWriter, page string, data *Admi
 		h.renderServerMetricsContent(w, data)
 	case "scheduler":
 		h.renderSchedulerContent(w, data)
+	case "server-backup":
+		h.renderServerBackupContent(w, data)
+	case "server-maintenance":
+		h.renderServerMaintenanceContent(w, data)
+	case "server-updates":
+		h.renderServerUpdatesContent(w, data)
+	case "server-info":
+		h.renderServerInfoContent(w, data)
+	case "server-security":
+		h.renderServerSecurityContent(w, data)
+	case "help":
+		h.renderHelpContent(w, data)
 	case "setup":
 		h.renderSetupContent(w, data)
 	case "admins":
@@ -523,59 +537,173 @@ func (h *Handler) renderDashboardContent(w http.ResponseWriter, data *AdminPageD
 	}
 	s := data.Stats
 
+	// Status indicator color
+	statusColor := "green"
+	statusIcon := "●"
+	if s.Status == "Maintenance" {
+		statusColor = "orange"
+	} else if s.Status == "Error" {
+		statusColor = "red"
+	}
+
+	// Top stat cards: Status, Uptime, Requests, Errors
 	fmt.Fprintf(w, `
             <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Status</h3>
+                    <div class="value %s">%s %s</div>
+                </div>
                 <div class="stat-card">
                     <h3>Uptime</h3>
                     <div class="value green">%s</div>
                 </div>
                 <div class="stat-card">
-                    <h3>Version</h3>
-                    <div class="value purple">%s</div>
+                    <h3>Requests (24h)</h3>
+                    <div class="value cyan">%d</div>
                 </div>
                 <div class="stat-card">
-                    <h3>Memory</h3>
-                    <div class="value cyan">%s</div>
-                </div>
-                <div class="stat-card">
-                    <h3>Goroutines</h3>
+                    <h3>Errors (24h)</h3>
                     <div class="value orange">%d</div>
                 </div>
-            </div>
-
-            <div class="admin-section">
-                <h2>System Information</h2>
-                <table class="admin-table">
-                    <tr><td>Go Version</td><td>%s</td></tr>
-                    <tr><td>CPUs</td><td>%d</td></tr>
-                    <tr><td>Server Mode</td><td>%s</td></tr>
-                    <tr><td>Total Memory Allocated</td><td>%s</td></tr>
-                </table>
-            </div>
-
-            <div class="admin-section">
-                <h2>Features Status</h2>
-                <table class="admin-table">
-                    <tr>
-                        <td>SSL/TLS</td>
-                        <td><span class="status-badge %s">%s</span></td>
-                    </tr>
-                    <tr>
-                        <td>Tor Hidden Service</td>
-                        <td><span class="status-badge %s">%s</span></td>
-                    </tr>
-                    <tr>
-                        <td>Search Engines</td>
-                        <td>%d enabled</td>
-                    </tr>
-                </table>
             </div>`,
+		statusColor, statusIcon, s.Status,
 		s.Uptime,
+		s.Requests24h,
+		s.Errors24h,
+	)
+
+	// System Resources and Quick Actions row
+	fmt.Fprintf(w, `
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px;">
+                <div class="admin-section" style="margin-bottom: 0;">
+                    <h2>System Resources</h2>
+                    <div style="margin-bottom: 16px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span>CPU</span><span>%.0f%%</span>
+                        </div>
+                        <div style="background: var(--bg-tertiary); height: 8px; border-radius: 4px; overflow: hidden;">
+                            <div style="background: var(--accent-primary); height: 100%%; width: %.0f%%;"></div>
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 16px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span>Memory</span><span>%.0f%% (%s)</span>
+                        </div>
+                        <div style="background: var(--bg-tertiary); height: 8px; border-radius: 4px; overflow: hidden;">
+                            <div style="background: var(--cyan); height: 100%%; width: %.0f%%;"></div>
+                        </div>
+                    </div>
+                    <div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <span>Disk</span><span>%.0f%%</span>
+                        </div>
+                        <div style="background: var(--bg-tertiary); height: 8px; border-radius: 4px; overflow: hidden;">
+                            <div style="background: var(--green); height: 100%%; width: %.0f%%;"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="admin-section" style="margin-bottom: 0;">
+                    <h2>Quick Actions</h2>
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                        <a href="/api/v1/admin/reload" class="btn" style="text-align: center;">Reload Config</a>
+                        <a href="/api/v1/admin/backups" class="btn" style="text-align: center;">Create Backup</a>
+                        <a href="/admin/logs" class="btn" style="text-align: center;">View Logs</a>
+                    </div>
+                </div>
+            </div>`,
+		s.CPUPercent, s.CPUPercent,
+		s.MemPercent, s.MemAlloc, s.MemPercent,
+		s.DiskPercent, s.DiskPercent,
+	)
+
+	// Recent Activity and Scheduled Tasks row
+	fmt.Fprintf(w, `
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px;">
+                <div class="admin-section" style="margin-bottom: 0;">
+                    <h2>Recent Activity</h2>
+                    <table class="admin-table">`)
+
+	if len(s.RecentActivity) == 0 {
+		fmt.Fprintf(w, `<tr><td colspan="2" style="text-align: center; color: var(--text-secondary);">No recent activity</td></tr>`)
+	} else {
+		for _, activity := range s.RecentActivity {
+			fmt.Fprintf(w, `<tr><td style="width: 60px; color: var(--text-secondary);">%s</td><td>%s</td></tr>`, activity.Time, activity.Message)
+		}
+	}
+
+	fmt.Fprintf(w, `
+                    </table>
+                </div>
+                <div class="admin-section" style="margin-bottom: 0;">
+                    <h2>Scheduled Tasks</h2>
+                    <table class="admin-table">`)
+
+	if len(s.ScheduledTasks) == 0 {
+		fmt.Fprintf(w, `<tr><td colspan="2" style="text-align: center; color: var(--text-secondary);">No scheduled tasks</td></tr>`)
+	} else {
+		for _, task := range s.ScheduledTasks {
+			fmt.Fprintf(w, `<tr><td>%s</td><td style="text-align: right; color: var(--text-secondary);">%s</td></tr>`, task.Name, task.NextRun)
+		}
+	}
+
+	fmt.Fprintf(w, `
+                    </table>
+                </div>
+            </div>`)
+
+	// Alerts/Warnings section (only if there are alerts)
+	if len(s.Alerts) > 0 {
+		fmt.Fprintf(w, `
+            <div class="admin-section" style="border-color: var(--orange);">
+                <h2>Alerts &amp; Warnings</h2>`)
+		for _, alert := range s.Alerts {
+			icon := "ℹ️"
+			if alert.Type == "warning" {
+				icon = "⚠️"
+			} else if alert.Type == "error" {
+				icon = "❌"
+			}
+			fmt.Fprintf(w, `<div style="padding: 8px 0; border-bottom: 1px solid var(--border-primary);">%s %s</div>`, icon, alert.Message)
+		}
+		fmt.Fprintf(w, `</div>`)
+	}
+
+	// System Information and Features Status
+	fmt.Fprintf(w, `
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div class="admin-section" style="margin-bottom: 0;">
+                    <h2>System Information</h2>
+                    <table class="admin-table">
+                        <tr><td>Version</td><td>%s</td></tr>
+                        <tr><td>Go Version</td><td>%s</td></tr>
+                        <tr><td>CPUs</td><td>%d</td></tr>
+                        <tr><td>Goroutines</td><td>%d</td></tr>
+                        <tr><td>Server Mode</td><td>%s</td></tr>
+                        <tr><td>Total Memory Allocated</td><td>%s</td></tr>
+                    </table>
+                </div>
+                <div class="admin-section" style="margin-bottom: 0;">
+                    <h2>Features Status</h2>
+                    <table class="admin-table">
+                        <tr>
+                            <td>SSL/TLS</td>
+                            <td><span class="status-badge %s">%s</span></td>
+                        </tr>
+                        <tr>
+                            <td>Tor Hidden Service</td>
+                            <td><span class="status-badge %s">%s</span></td>
+                        </tr>
+                        <tr>
+                            <td>Search Engines</td>
+                            <td>%d enabled</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>`,
 		s.Version,
-		s.MemAlloc,
-		s.NumGoroutines,
 		s.GoVersion,
 		s.NumCPU,
+		s.NumGoroutines,
 		s.ServerMode,
 		s.MemTotal,
 		enabledClass(s.SSLEnabled), enabledText(s.SSLEnabled),
@@ -1468,7 +1596,7 @@ func (h *Handler) renderSchedulerContent(w http.ResponseWriter, data *AdminPageD
             <script>
             function runTask(taskName) {
                 if (!confirm('Run task "' + taskName + '" now?')) return;
-                fetch('/admin/api/v1/scheduler', {
+                fetch('/api/v1/admin/scheduler', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({action: 'run', task: taskName})
@@ -1487,7 +1615,7 @@ func (h *Handler) renderSchedulerContent(w http.ResponseWriter, data *AdminPageD
 
             // Load task history
             document.addEventListener('DOMContentLoaded', function() {
-                fetch('/admin/api/v1/scheduler?history=true')
+                fetch('/api/v1/admin/scheduler?history=true')
                 .then(r => r.json())
                 .then(data => {
                     const tbody = document.getElementById('history-body');
@@ -2112,4 +2240,290 @@ func (h *Handler) renderNodesContent(w http.ResponseWriter, data *AdminPageData)
                 </p>
             </div>`)
 	}
+}
+
+// renderServerBackupContent renders the backup management page content
+func (h *Handler) renderServerBackupContent(w http.ResponseWriter, data *AdminPageData) {
+	fmt.Fprintf(w, `
+            <div class="admin-section">
+                <h2>Create Backup</h2>
+                <p style="color: var(--text-secondary); margin-bottom: 16px;">
+                    Create a backup of your database, configuration, and data files.
+                </p>
+                <form method="POST" action="/admin/server/backup">
+                    <input type="hidden" name="action" value="create">
+                    <button type="submit" class="btn">Create Backup Now</button>
+                </form>
+            </div>
+
+            <div class="admin-section">
+                <h2>Available Backups</h2>
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Filename</th>
+                            <th>Size</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td colspan="4" style="text-align: center; color: var(--text-secondary);">No backups available</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="admin-section">
+                <h2>Backup Settings</h2>
+                <form method="POST" action="/admin/server/backup">
+                    <input type="hidden" name="action" value="settings">
+                    <div class="form-row">
+                        <label>Automatic Backups</label>
+                        <select name="auto_backup">
+                            <option value="daily">Daily at 02:00</option>
+                            <option value="weekly">Weekly on Sunday</option>
+                            <option value="disabled">Disabled</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <label>Maximum Backups to Keep</label>
+                        <input type="number" name="max_backups" value="4" min="1" max="30">
+                    </div>
+                    <button type="submit" class="btn">Save Settings</button>
+                </form>
+            </div>`)
+}
+
+// renderServerMaintenanceContent renders the maintenance mode page content
+func (h *Handler) renderServerMaintenanceContent(w http.ResponseWriter, data *AdminPageData) {
+	maintenanceEnabled := ""
+	if data.Config.Server.MaintenanceMode {
+		maintenanceEnabled = "checked"
+	}
+
+	fmt.Fprintf(w, `
+            <div class="admin-section">
+                <h2>Maintenance Mode</h2>
+                <p style="color: var(--text-secondary); margin-bottom: 16px;">
+                    When enabled, all users will see a maintenance page. Admins can still access the admin panel.
+                </p>
+                <form method="POST" action="/admin/server/maintenance">
+                    <div class="form-row">
+                        <label>
+                            <input type="checkbox" name="enabled" %s style="margin-right: 8px;">
+                            Enable Maintenance Mode
+                        </label>
+                    </div>
+                    <button type="submit" class="btn">Save Changes</button>
+                </form>
+            </div>
+
+            <div class="admin-section">
+                <h2>Quick Actions</h2>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <a href="/api/v1/admin/reload" class="btn">Reload Configuration</a>
+                    <a href="/admin/server/backup" class="btn">Create Backup</a>
+                </div>
+            </div>`, maintenanceEnabled)
+}
+
+// renderServerUpdatesContent renders the updates page content
+func (h *Handler) renderServerUpdatesContent(w http.ResponseWriter, data *AdminPageData) {
+	fmt.Fprintf(w, `
+            <div class="admin-section">
+                <h2>Current Version</h2>
+                <table class="admin-table">
+                    <tr><td>Version</td><td>%s</td></tr>
+                    <tr><td>Commit</td><td>%s</td></tr>
+                    <tr><td>Build Date</td><td>%s</td></tr>
+                </table>
+            </div>
+
+            <div class="admin-section">
+                <h2>Check for Updates</h2>
+                <p style="color: var(--text-secondary); margin-bottom: 16px;">
+                    Check if a newer version is available.
+                </p>
+                <div id="update-status" style="margin-bottom: 16px; padding: 12px; background: var(--bg-tertiary); border-radius: 8px;">
+                    Click the button below to check for updates.
+                </div>
+                <button class="btn" onclick="checkUpdates()">Check for Updates</button>
+            </div>
+
+            <script>
+            function checkUpdates() {
+                document.getElementById('update-status').innerHTML = 'Checking for updates...';
+                fetch('/api/v1/admin/update/check', {
+                    method: 'GET',
+                    headers: {'Authorization': 'Bearer ' + document.cookie}
+                })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.update_available) {
+                        document.getElementById('update-status').innerHTML =
+                            'Update available: ' + data.latest_version +
+                            '<br><a href="/admin/server/updates?action=update" class="btn" style="margin-top: 10px;">Update Now</a>';
+                    } else {
+                        document.getElementById('update-status').innerHTML = 'You are running the latest version.';
+                    }
+                })
+                .catch(e => {
+                    document.getElementById('update-status').innerHTML = 'Error checking for updates.';
+                });
+            }
+            </script>`,
+		config.Version,
+		config.CommitID,
+		config.BuildDate,
+	)
+}
+
+// renderServerInfoContent renders the server info page content
+func (h *Handler) renderServerInfoContent(w http.ResponseWriter, data *AdminPageData) {
+	if data.Stats == nil {
+		fmt.Fprintf(w, `<div class="admin-section"><p>Unable to load server info.</p></div>`)
+		return
+	}
+
+	s := data.Stats
+	fmt.Fprintf(w, `
+            <div class="admin-section">
+                <h2>Application</h2>
+                <table class="admin-table">
+                    <tr><td>Application</td><td>Search</td></tr>
+                    <tr><td>Version</td><td>%s</td></tr>
+                    <tr><td>Go Version</td><td>%s</td></tr>
+                    <tr><td>Uptime</td><td>%s</td></tr>
+                </table>
+            </div>
+
+            <div class="admin-section">
+                <h2>System</h2>
+                <table class="admin-table">
+                    <tr><td>CPUs</td><td>%d</td></tr>
+                    <tr><td>Goroutines</td><td>%d</td></tr>
+                    <tr><td>Memory Allocated</td><td>%s</td></tr>
+                    <tr><td>Total Memory</td><td>%s</td></tr>
+                </table>
+            </div>
+
+            <div class="admin-section">
+                <h2>Paths</h2>
+                <table class="admin-table">
+                    <tr><td>Config Directory</td><td><code>/config</code></td></tr>
+                    <tr><td>Data Directory</td><td><code>/data</code></td></tr>
+                    <tr><td>Log Directory</td><td><code>/data/logs</code></td></tr>
+                </table>
+            </div>`,
+		s.Version,
+		s.GoVersion,
+		s.Uptime,
+		s.NumCPU,
+		s.NumGoroutines,
+		s.MemAlloc,
+		s.MemTotal,
+	)
+}
+
+// renderServerSecurityContent renders the security settings page content
+func (h *Handler) renderServerSecurityContent(w http.ResponseWriter, data *AdminPageData) {
+	rateLimitEnabled := ""
+	if data.Config.Server.RateLimit.Enabled {
+		rateLimitEnabled = "checked"
+	}
+
+	fmt.Fprintf(w, `
+            <div class="admin-section">
+                <h2>Rate Limiting</h2>
+                <form method="POST" action="/admin/server/security">
+                    <div class="form-row">
+                        <label>
+                            <input type="checkbox" name="rate_limit_enabled" %s style="margin-right: 8px;">
+                            Enable Rate Limiting
+                        </label>
+                    </div>
+                    <div class="form-row">
+                        <label>Requests per Minute</label>
+                        <input type="number" name="rate_limit_rpm" value="%d" min="1" max="1000">
+                    </div>
+                    <div class="form-row">
+                        <label>Burst Size</label>
+                        <input type="number" name="rate_limit_burst" value="%d" min="1" max="100">
+                    </div>
+                    <button type="submit" class="btn">Save Security Settings</button>
+                </form>
+            </div>
+
+            <div class="admin-section">
+                <h2>Security Headers</h2>
+                <table class="admin-table">
+                    <tr><td>X-Frame-Options</td><td><span class="status-badge enabled">DENY</span></td></tr>
+                    <tr><td>X-Content-Type-Options</td><td><span class="status-badge enabled">nosniff</span></td></tr>
+                    <tr><td>X-XSS-Protection</td><td><span class="status-badge enabled">1; mode=block</span></td></tr>
+                    <tr><td>Referrer-Policy</td><td><span class="status-badge enabled">strict-origin-when-cross-origin</span></td></tr>
+                </table>
+            </div>
+
+            <div class="admin-section">
+                <h2>Related Settings</h2>
+                <ul style="color: var(--text-secondary); padding-left: 20px;">
+                    <li><a href="/admin/server/ssl">SSL/TLS Settings</a></li>
+                    <li><a href="/admin/server/geoip">GeoIP Blocking</a></li>
+                    <li><a href="/admin/tokens">API Tokens</a></li>
+                </ul>
+            </div>`,
+		rateLimitEnabled,
+		data.Config.Server.RateLimit.RequestsPerMinute,
+		data.Config.Server.RateLimit.BurstSize,
+	)
+}
+
+// renderHelpContent renders the help/documentation page content
+func (h *Handler) renderHelpContent(w http.ResponseWriter, data *AdminPageData) {
+	fmt.Fprintf(w, `
+            <div class="admin-section">
+                <h2>Documentation</h2>
+                <ul style="list-style: none; padding: 0;">
+                    <li style="margin-bottom: 12px;">
+                        <a href="https://apimgr-search.readthedocs.io" target="_blank" style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: 20px;">📚</span>
+                            <div>
+                                <strong>Official Documentation</strong>
+                                <p style="margin: 0; color: var(--text-secondary); font-size: 14px;">Complete guides and reference</p>
+                            </div>
+                        </a>
+                    </li>
+                    <li style="margin-bottom: 12px;">
+                        <a href="https://github.com/apimgr/search" target="_blank" style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: 20px;">💻</span>
+                            <div>
+                                <strong>GitHub Repository</strong>
+                                <p style="margin: 0; color: var(--text-secondary); font-size: 14px;">Source code and issues</p>
+                            </div>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="admin-section">
+                <h2>Quick Links</h2>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                    <a href="/openapi" target="_blank" class="btn" style="text-align: center;">API Documentation</a>
+                    <a href="/graphql" target="_blank" class="btn" style="text-align: center;">GraphQL Explorer</a>
+                    <a href="/admin/logs" class="btn" style="text-align: center;">View Logs</a>
+                </div>
+            </div>
+
+            <div class="admin-section">
+                <h2>Keyboard Shortcuts</h2>
+                <table class="admin-table">
+                    <tr><td><kbd>g</kbd> then <kbd>d</kbd></td><td>Go to Dashboard</td></tr>
+                    <tr><td><kbd>g</kbd> then <kbd>c</kbd></td><td>Go to Configuration</td></tr>
+                    <tr><td><kbd>g</kbd> then <kbd>e</kbd></td><td>Go to Engines</td></tr>
+                    <tr><td><kbd>g</kbd> then <kbd>l</kbd></td><td>Go to Logs</td></tr>
+                    <tr><td><kbd>?</kbd></td><td>Show this help</td></tr>
+                </table>
+            </div>`)
 }

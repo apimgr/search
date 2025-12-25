@@ -7,9 +7,9 @@ services:
     restart: unless-stopped
     environment:
       # Hardcoded with sane defaults - NO .env files
+      # Note: Tor is auto-detected (enabled if tor binary installed)
       - MODE=production
       - TZ=America/New_York
-      - ENABLE_TOR=true
     ports:
       # Production: bound to Docker bridge only
       - "172.17.0.1:64580:80"

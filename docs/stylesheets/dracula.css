@@ -1,0 +1,118 @@
+/* Dracula Theme Colors for MkDocs Material */
+
+:root {
+  /* Dracula color palette */
+  --dracula-background: #282a36;
+  --dracula-current-line: #44475a;
+  --dracula-foreground: #f8f8f2;
+  --dracula-comment: #6272a4;
+  --dracula-cyan: #8be9fd;
+  --dracula-green: #50fa7b;
+  --dracula-orange: #ffb86c;
+  --dracula-pink: #ff79c6;
+  --dracula-purple: #bd93f9;
+  --dracula-red: #ff5555;
+  --dracula-yellow: #f1fa8c;
+}
+
+/* Dark mode (slate scheme) customization */
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: var(--dracula-background);
+  --md-default-fg-color: var(--dracula-foreground);
+  --md-primary-fg-color: var(--dracula-purple);
+  --md-primary-bg-color: var(--dracula-background);
+  --md-accent-fg-color: var(--dracula-pink);
+  --md-typeset-a-color: var(--dracula-cyan);
+  --md-code-bg-color: var(--dracula-current-line);
+  --md-code-fg-color: var(--dracula-foreground);
+}
+
+/* Code block styling */
+[data-md-color-scheme="slate"] .highlight {
+  background: var(--dracula-current-line);
+}
+
+[data-md-color-scheme="slate"] .highlight .hll {
+  background: var(--dracula-comment);
+}
+
+/* Admonition customization */
+[data-md-color-scheme="slate"] .md-typeset .admonition.note,
+[data-md-color-scheme="slate"] .md-typeset details.note {
+  border-color: var(--dracula-cyan);
+}
+
+[data-md-color-scheme="slate"] .md-typeset .note > .admonition-title,
+[data-md-color-scheme="slate"] .md-typeset .note > summary {
+  background-color: rgba(139, 233, 253, 0.1);
+}
+
+[data-md-color-scheme="slate"] .md-typeset .admonition.warning,
+[data-md-color-scheme="slate"] .md-typeset details.warning {
+  border-color: var(--dracula-orange);
+}
+
+[data-md-color-scheme="slate"] .md-typeset .warning > .admonition-title,
+[data-md-color-scheme="slate"] .md-typeset .warning > summary {
+  background-color: rgba(255, 184, 108, 0.1);
+}
+
+[data-md-color-scheme="slate"] .md-typeset .admonition.danger,
+[data-md-color-scheme="slate"] .md-typeset details.danger {
+  border-color: var(--dracula-red);
+}
+
+[data-md-color-scheme="slate"] .md-typeset .danger > .admonition-title,
+[data-md-color-scheme="slate"] .md-typeset .danger > summary {
+  background-color: rgba(255, 85, 85, 0.1);
+}
+
+[data-md-color-scheme="slate"] .md-typeset .admonition.tip,
+[data-md-color-scheme="slate"] .md-typeset details.tip {
+  border-color: var(--dracula-green);
+}
+
+[data-md-color-scheme="slate"] .md-typeset .tip > .admonition-title,
+[data-md-color-scheme="slate"] .md-typeset .tip > summary {
+  background-color: rgba(80, 250, 123, 0.1);
+}
+
+/* Navigation styling */
+[data-md-color-scheme="slate"] .md-nav__link--active {
+  color: var(--dracula-purple);
+}
+
+[data-md-color-scheme="slate"] .md-nav__link:hover {
+  color: var(--dracula-cyan);
+}
+
+/* Search highlight */
+[data-md-color-scheme="slate"] .md-search-result__meta {
+  color: var(--dracula-comment);
+}
+
+[data-md-color-scheme="slate"] .md-search-result mark {
+  background-color: rgba(189, 147, 249, 0.3);
+  color: var(--dracula-foreground);
+}
+
+/* Table styling */
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) th {
+  background-color: var(--dracula-current-line);
+  color: var(--dracula-purple);
+}
+
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) tr:hover {
+  background-color: rgba(68, 71, 90, 0.5);
+}
+
+/* Button styling */
+[data-md-color-scheme="slate"] .md-button--primary {
+  background-color: var(--dracula-purple);
+  border-color: var(--dracula-purple);
+}
+
+[data-md-color-scheme="slate"] .md-button--primary:hover {
+  background-color: var(--dracula-pink);
+  border-color: var(--dracula-pink);
+}

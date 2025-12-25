@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 )
@@ -71,8 +72,13 @@ func LoadFromEnv() *EnvConfig {
 	cfg.ConfigDir = getEnv("SEARCH_CONFIG_DIR", "CONFIG_DIR")
 	cfg.LogDir = getEnv("SEARCH_LOG_DIR", "LOG_DIR")
 	
-	// Tor
-	cfg.UseTor = parseBool(getEnv("USE_TOR", "ENABLE_TOR"))
+	// Tor - Auto-detection per TEMPLATE.md PART 29
+	// Tor is auto-enabled if tor binary is installed
+	// Can be explicitly disabled via DISABLE_TOR=true
+	cfg.UseTor = isTorAvailable()
+	if parseBool(getEnv("DISABLE_TOR", "")) {
+		cfg.UseTor = false
+	}
 	cfg.TorProxy = getEnv("TOR_PROXY", "SEARCH_TOR_PROXY", "127.0.0.1:9050")
 	cfg.TorControlPort = getEnv("TOR_CONTROL_PORT", "SEARCH_TOR_CONTROL", "127.0.0.1:9051")
 	cfg.TorControlPass = getEnv("TOR_CONTROL_PASSWORD", "TOR_PASSWORD")
@@ -293,4 +299,17 @@ func (e *EnvConfig) IsDevelopment() bool {
 // IsProduction returns true if in production mode
 func (e *EnvConfig) IsProduction() bool {
 	return e.GetMode() == "production"
+}
+
+// isTorAvailable checks if the tor binary is installed and available
+// Per TEMPLATE.md PART 29: Tor auto-enabled if tor binary installed
+func isTorAvailable() bool {
+	_, err := exec.LookPath("tor")
+	return err == nil
+}
+
+// IsTorAvailable is an exported version of isTorAvailable
+// Per TEMPLATE.md PART 29: Tor auto-enabled if tor binary installed
+func IsTorAvailable() bool {
+	return isTorAvailable()
 }

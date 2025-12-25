@@ -256,22 +256,49 @@ type HealthPageData struct {
 	Health *HealthInfo
 }
 
-// HealthInfo represents health check information
+// HealthInfo represents health check information per TEMPLATE.md spec
 type HealthInfo struct {
-	Status    string
-	Uptime    string
-	Mode      string
-	Timestamp string
-	Checks    map[string]string
-	System    *SystemInfo
+	Status         string            `json:"status"`
+	Version        string            `json:"version"`
+	Mode           string            `json:"mode"`
+	Uptime         string            `json:"uptime"`
+	Timestamp      string            `json:"timestamp"`
+	Node           *NodeInfo         `json:"node,omitempty"`
+	Cluster        *ClusterInfo      `json:"cluster,omitempty"`
+	Checks         map[string]string `json:"checks"`
+	System         *SystemInfo       `json:"system,omitempty"`
+	PendingRestart bool              `json:"pending_restart,omitempty"`
+	RestartReason  []string          `json:"restart_reason,omitempty"`
+	Maintenance    *MaintenanceInfo  `json:"maintenance,omitempty"`
+}
+
+// NodeInfo represents node information for cluster mode
+type NodeInfo struct {
+	ID       string `json:"id"`
+	Hostname string `json:"hostname"`
+}
+
+// ClusterInfo represents cluster status
+type ClusterInfo struct {
+	Enabled bool   `json:"enabled"`
+	Status  string `json:"status"`
+	Nodes   int    `json:"nodes"`
+	Role    string `json:"role,omitempty"`
+}
+
+// MaintenanceInfo represents maintenance mode status
+type MaintenanceInfo struct {
+	Reason  string `json:"reason,omitempty"`
+	Message string `json:"message,omitempty"`
+	Since   string `json:"since,omitempty"`
 }
 
 // SystemInfo represents system information
 type SystemInfo struct {
-	GoVersion    string
-	NumCPU       int
-	NumGoroutine int
-	MemAlloc     string
+	GoVersion    string `json:"go_version"`
+	NumCPU       int    `json:"num_cpu"`
+	NumGoroutine int    `json:"num_goroutine"`
+	MemAlloc     string `json:"mem_alloc"`
 }
 
 // Pagination represents pagination information

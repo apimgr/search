@@ -13,15 +13,15 @@ COMMIT_ID := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 # Linker flags to embed build info
 LDFLAGS := -s -w \
 	-X 'github.com/$(ORG)/$(PROJECT)/src/config.Version=$(VERSION)' \
-	-X 'github.com/$(ORG)/$(PROJECT)/src/config.GitCommit=$(COMMIT_ID)' \
-	-X 'github.com/$(ORG)/$(PROJECT)/src/config.BuildTime=$(BUILD_DATE)'
+	-X 'github.com/$(ORG)/$(PROJECT)/src/config.CommitID=$(COMMIT_ID)' \
+	-X 'github.com/$(ORG)/$(PROJECT)/src/config.BuildDate=$(BUILD_DATE)'
 
 # CLI linker flags
 CLI_LDFLAGS := -s -w \
 	-X 'github.com/$(ORG)/$(PROJECT)/src/client/cmd.ProjectName=$(PROJECT)' \
 	-X 'github.com/$(ORG)/$(PROJECT)/src/client/cmd.Version=$(VERSION)' \
-	-X 'github.com/$(ORG)/$(PROJECT)/src/client/cmd.GitCommit=$(COMMIT_ID)' \
-	-X 'github.com/$(ORG)/$(PROJECT)/src/client/cmd.BuildTime=$(BUILD_DATE)' \
+	-X 'github.com/$(ORG)/$(PROJECT)/src/client/cmd.CommitID=$(COMMIT_ID)' \
+	-X 'github.com/$(ORG)/$(PROJECT)/src/client/cmd.BuildDate=$(BUILD_DATE)' \
 	-X 'github.com/$(ORG)/$(PROJECT)/src/client/api.ProjectName=$(PROJECT)' \
 	-X 'github.com/$(ORG)/$(PROJECT)/src/client/api.Version=$(VERSION)'
 
@@ -46,7 +46,36 @@ GO_DOCKER := docker run --rm \
 	-e CGO_ENABLED=0 \
 	golang:alpine
 
-.PHONY: build release docker test clean
+.PHONY: dev build release docker test clean
+
+# =============================================================================
+# DEV - Quick dev build to temp directory (per TEMPLATE.md PART 11)
+# =============================================================================
+# Outputs to /tmp/apimgr.XXXXXX/search for quick testing
+# ALWAYS uses Docker for building - host has NO Go installed
+# Test using Docker (quick) or Incus (full systemd environment)
+dev:
+	@mkdir -p $(GOCACHE) $(GOMODCACHE) $(BINDIR)
+	@DEVDIR=$$(mktemp -d /tmp/$(ORG).XXXXXX); \
+	echo "Building dev binary to $$DEVDIR/$(PROJECT) (Docker)..."; \
+	$(GO_DOCKER) go build -ldflags "$(LDFLAGS)" -o $(BINDIR)/.dev-$(PROJECT) ./src; \
+	mv $(BINDIR)/.dev-$(PROJECT) "$$DEVDIR/$(PROJECT)"; \
+	if [ -d "src/client" ]; then \
+		echo "Building dev CLI to $$DEVDIR/$(PROJECT)-cli..."; \
+		$(GO_DOCKER) go build -ldflags "$(CLI_LDFLAGS)" -o $(BINDIR)/.dev-$(PROJECT)-cli ./src/client; \
+		mv $(BINDIR)/.dev-$(PROJECT)-cli "$$DEVDIR/$(PROJECT)-cli"; \
+	fi; \
+	echo ""; \
+	echo "Built: $$DEVDIR/$(PROJECT)"; \
+	echo ""; \
+	echo "Test (Docker - quick):"; \
+	echo "  docker run --rm -v $$DEVDIR:/app alpine:latest /app/$(PROJECT) --help"; \
+	echo "  docker run --rm -v $$DEVDIR:/app alpine:latest /app/$(PROJECT) --version"; \
+	echo "  docker run --rm -p 8080:80 -v $$DEVDIR:/app alpine:latest /app/$(PROJECT)"; \
+	echo ""; \
+	echo "Test (Incus - full systemd):"; \
+	echo "  incus file push $$DEVDIR/$(PROJECT) <container>/usr/local/bin/$(PROJECT)"; \
+	echo "  incus exec <container> -- $(PROJECT) --help"
 
 # =============================================================================
 # BUILD - Build all platforms + host binary (via Docker with cached modules)
@@ -85,8 +114,8 @@ build: clean
 		for platform in $(PLATFORMS); do \
 			OS=$${platform%/*}; \
 			ARCH=$${platform#*/}; \
-			OUTPUT=$(BINDIR)/$(PROJECT)-cli-$$OS-$$ARCH; \
-			[ "$$OS" = "windows" ] && OUTPUT=$$OUTPUT.exe; \
+			OUTPUT=$(BINDIR)/$(PROJECT)-$$OS-$$ARCH-cli; \
+			[ "$$OS" = "windows" ] && OUTPUT=$(BINDIR)/$(PROJECT)-$$OS-$$ARCH-cli.exe; \
 			echo "Building CLI $$OS/$$ARCH..."; \
 			$(GO_DOCKER) sh -c "GOOS=$$OS GOARCH=$$ARCH \
 				go build -ldflags \"$(CLI_LDFLAGS)\" \
@@ -115,7 +144,7 @@ release: build
 	done
 
 	# Copy CLI binaries to releases (if they exist)
-	@for f in $(BINDIR)/$(PROJECT)-cli-*; do \
+	@for f in $(BINDIR)/$(PROJECT)-*-cli $(BINDIR)/$(PROJECT)-*-cli.exe; do \
 		[ -f "$$f" ] || continue; \
 		strip "$$f" 2>/dev/null || true; \
 		cp "$$f" $(RELDIR)/; \
