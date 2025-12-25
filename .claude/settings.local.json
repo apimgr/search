@@ -47,7 +47,20 @@
       "Bash(done)",
       "Bash(for i in 1 2 3 4 5)",
       "Bash(do echo '=== Request $i ===')",
-      "Bash(do timeout 5 curl -s -c /tmp/cookies_final.txt -b /tmp/cookies_final.txt http://127.0.0.1:8899/admin/dashboard)"
+      "Bash(do timeout 5 curl -s -c /tmp/cookies_final.txt -b /tmp/cookies_final.txt http://127.0.0.1:8899/admin/dashboard)",
+      "Bash(for f in AI.md README.md LICENSE.md Makefile go.mod go.sum .gitignore .dockerignore)",
+      "Bash(do )",
+      "Bash(if [ -f \"/root/Projects/github/apimgr/search/$f\" ])",
+      "Bash(then )",
+      "Bash(echo:*)",
+      "Bash(else )",
+      "Bash(fi)",
+      "Bash(for d in src docker .github/workflows docs)",
+      "Bash(if [ -d \"/root/Projects/github/apimgr/search/$d\" ])",
+      "Bash(for f in docker/Dockerfile docker/docker-compose.yml)",
+      "Bash(if [ -f \"/root/Projects/github/apimgr/search/docker/rootfs/usr/local/bin/entrypoint.sh\" ])",
+      "Bash(for f in release.yml beta.yml daily.yml docker.yml)",
+      "Bash(if [ -f \"/root/Projects/github/apimgr/search/.github/workflows/$f\" ])"
     ]
   }
 }
