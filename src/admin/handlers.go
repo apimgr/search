@@ -214,6 +214,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/admin/tor/vanity/cancel", h.requireAPIAuth(h.apiTorVanityCancel))
 	mux.HandleFunc("/api/v1/admin/tor/keys/export", h.requireAPIAuth(h.apiTorKeysExport))
 	mux.HandleFunc("/api/v1/admin/tor/keys/import", h.requireAPIAuth(h.apiTorKeysImport))
+
+	// Bang management API routes (per AI.md PART 36 line 28288)
+	mux.HandleFunc("/api/v1/admin/bangs", h.requireAPIAuth(h.apiBangs))
 }
 
 // requireAuth middleware checks for valid admin session
@@ -2570,4 +2573,113 @@ func (h *Handler) apiTorKeysImport(w http.ResponseWriter, r *http.Request) {
 		"status":  "imported",
 		"address": newAddress,
 	}, http.StatusOK)
+}
+
+// apiBangs manages custom bangs
+// Per AI.md PART 36 line 28288: /api/v1/admin/bangs GET/POST endpoint
+func (h *Handler) apiBangs(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		// Get current bangs configuration
+		bangs := h.config.Search.Bangs.Custom
+
+		// Convert to API response format
+		response := make([]map[string]interface{}, len(bangs))
+		for i, bang := range bangs {
+			response[i] = map[string]interface{}{
+				"shortcut":    bang.Shortcut,
+				"name":        bang.Name,
+				"url":         bang.URL,
+				"category":    bang.Category,
+				"description": bang.Description,
+				"aliases":     bang.Aliases,
+			}
+		}
+
+		h.jsonResponse(w, map[string]interface{}{
+			"bangs":  response,
+			"count":  len(response),
+			"enabled": h.config.Search.Bangs.Enabled,
+		}, http.StatusOK)
+
+	case http.MethodPost:
+		// Add or update custom bang
+		var req struct {
+			Shortcut    string   `json:"shortcut"`
+			Name        string   `json:"name"`
+			URL         string   `json:"url"`
+			Category    string   `json:"category"`
+			Description string   `json:"description"`
+			Aliases     []string `json:"aliases"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			h.jsonError(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		// Validate required fields
+		if req.Shortcut == "" || req.Name == "" || req.URL == "" {
+			h.jsonError(w, "Shortcut, name, and URL are required", http.StatusBadRequest)
+			return
+		}
+
+		// Ensure shortcut starts with !
+		if !strings.HasPrefix(req.Shortcut, "!") {
+			req.Shortcut = "!" + req.Shortcut
+		}
+
+		// Create new bang config
+		newBang := config.BangConfig{
+			Shortcut:    req.Shortcut,
+			Name:        req.Name,
+			URL:         req.URL,
+			Category:    req.Category,
+			Description: req.Description,
+			Aliases:     req.Aliases,
+		}
+
+		// Add to configuration
+		// Note: This modifies in-memory config; should also persist to server.yml or database
+		h.config.Search.Bangs.Custom = append(h.config.Search.Bangs.Custom, newBang)
+
+		log.Printf("[Admin] Custom bang added: %s -> %s", req.Shortcut, req.Name)
+
+		h.jsonResponse(w, map[string]interface{}{
+			"status":   "created",
+			"shortcut": req.Shortcut,
+			"name":     req.Name,
+		}, http.StatusCreated)
+
+	case http.MethodDelete:
+		// Delete custom bang by shortcut
+		shortcut := r.URL.Query().Get("shortcut")
+		if shortcut == "" {
+			h.jsonError(w, "Shortcut parameter required", http.StatusBadRequest)
+			return
+		}
+
+		// Find and remove bang
+		bangs := h.config.Search.Bangs.Custom
+		found := false
+		for i, bang := range bangs {
+			if bang.Shortcut == shortcut {
+				// Remove from slice
+				h.config.Search.Bangs.Custom = append(bangs[:i], bangs[i+1:]...)
+				found = true
+				log.Printf("[Admin] Custom bang deleted: %s", shortcut)
+				break
+			}
+		}
+
+		if !found {
+			h.jsonError(w, "Bang not found", http.StatusNotFound)
+			return
+		}
+
+		h.jsonResponse(w, map[string]string{"status": "deleted"}, http.StatusOK)
+
+	default:
+		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
 }

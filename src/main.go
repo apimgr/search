@@ -68,7 +68,6 @@ func init() {
 	flag.BoolVar(&flagConfigInfo, "config-info", false, "Show configuration paths and status")
 	flag.BoolVar(&flagStatus, "status", false, "Show server status")
 	flag.BoolVar(&flagDaemon, "daemon", false, "Daemonize (detach from terminal)")
-	flag.BoolVar(&flagDaemon, "d", false, "Daemonize (shorthand)")
 	flag.BoolVar(&flagDebug, "debug", false, "Enable debug mode (verbose logging, debug endpoints)")
 
 	// Commands with optional arguments
@@ -363,7 +362,7 @@ Runtime Flags:
   --pid <file>             Set PID file path
   --address <addr>         Set listen address
   --port <port>            Set listen port
-  --daemon, -d             Daemonize (detach from terminal, Unix only)
+  --daemon                 Daemonize (detach from terminal, Unix only)
   --debug                  Enable debug mode (verbose logging, debug endpoints)
 
 Information:

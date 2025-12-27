@@ -701,6 +701,9 @@ func (s *Server) setupRoutes() http.Handler {
 	// Search
 	mux.HandleFunc("/search", s.handleSearch)
 
+	// Autocomplete (per AI.md PART 36 line 28280)
+	mux.HandleFunc("/autocomplete", s.handleAutocomplete)
+
 	// Standard server pages (per TEMPLATE.md spec)
 	mux.HandleFunc("/server/about", s.handleAbout)
 	mux.HandleFunc("/server/privacy", s.handlePrivacy)

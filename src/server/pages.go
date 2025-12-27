@@ -397,3 +397,29 @@ func getVersion() string {
 func jsonMarshal(v interface{}) ([]byte, error) {
 	return json.Marshal(v)
 }
+
+// handleAutocomplete handles autocomplete requests
+// Per AI.md PART 36 line 28280: /autocomplete GET endpoint for autocomplete suggestions
+func (s *Server) handleAutocomplete(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query().Get("q")
+
+	// If no query, return empty suggestions
+	if query == "" {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]string{})
+		return
+	}
+
+	// Delegate to API handler for actual autocomplete logic
+	// This ensures consistent behavior between frontend and API endpoints
+	if s.apiHandler != nil {
+		// Forward to API autocomplete handler
+		r.URL.Path = "/api/v1/autocomplete"
+		s.apiHandler.ServeHTTP(w, r)
+		return
+	}
+
+	// Fallback: return empty suggestions if API handler not available
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode([]string{})
+}
