@@ -256,6 +256,166 @@ window.copyToClipboard = function(text, button) {
     }
 })();
 
+// Toast Notification System (per AI.md PART 17)
+// Position: top-right corner, stacked vertically
+// Types: success (3s auto-dismiss), error (manual dismiss only), warning (5s), info (3s)
+(function() {
+    'use strict';
+
+    // Create toast container if it doesn't exist
+    function getToastContainer() {
+        let container = document.getElementById('toast-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'toast-container';
+            container.setAttribute('role', 'alert');
+            container.setAttribute('aria-live', 'polite');
+            container.setAttribute('aria-atomic', 'true');
+            document.body.appendChild(container);
+        }
+        return container;
+    }
+
+    // Show toast notification
+    window.showToast = function(message, type) {
+        type = type || 'info';
+        const container = getToastContainer();
+
+        const toast = document.createElement('div');
+        toast.className = 'toast toast-' + type;
+        toast.setAttribute('role', 'status');
+
+        // Icon based on type
+        const icons = {
+            success: '✓',
+            error: '✗',
+            warning: '⚠',
+            info: 'ℹ'
+        };
+
+        toast.innerHTML = '<span class="toast-icon">' + (icons[type] || icons.info) + '</span>' +
+                         '<span class="toast-message">' + escapeHtml(message) + '</span>' +
+                         '<button class="toast-close" aria-label="Dismiss">&times;</button>';
+
+        // Close button handler
+        toast.querySelector('.toast-close').addEventListener('click', function() {
+            dismissToast(toast);
+        });
+
+        container.appendChild(toast);
+
+        // Auto-dismiss based on type (error requires manual dismiss)
+        const delays = {
+            success: 3000,
+            error: 0,      // No auto-dismiss
+            warning: 5000,
+            info: 3000
+        };
+
+        const delay = delays[type] || 3000;
+        if (delay > 0) {
+            setTimeout(function() {
+                dismissToast(toast);
+            }, delay);
+        }
+
+        // Trigger animation
+        requestAnimationFrame(function() {
+            toast.classList.add('toast-visible');
+        });
+
+        return toast;
+    };
+
+    function dismissToast(toast) {
+        toast.classList.remove('toast-visible');
+        toast.classList.add('toast-hiding');
+        setTimeout(function() {
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
+            }
+        }, 300);
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+})();
+
+// Confirmation Dialog (per AI.md PART 17 - replaces confirm())
+// Uses native <dialog> element with proper accessibility
+(function() {
+    'use strict';
+
+    // Create confirmation dialog if it doesn't exist
+    function getConfirmDialog() {
+        let dialog = document.getElementById('confirm-dialog');
+        if (!dialog) {
+            dialog = document.createElement('dialog');
+            dialog.id = 'confirm-dialog';
+            dialog.setAttribute('role', 'alertdialog');
+            dialog.setAttribute('aria-modal', 'true');
+            dialog.setAttribute('aria-labelledby', 'confirm-dialog-title');
+            dialog.innerHTML =
+                '<header>' +
+                    '<h2 id="confirm-dialog-title">Confirm</h2>' +
+                '</header>' +
+                '<main id="confirm-dialog-message"></main>' +
+                '<footer>' +
+                    '<button type="button" class="btn btn-secondary" data-action="cancel">Cancel</button>' +
+                    '<button type="button" class="btn btn-danger" data-action="confirm">Confirm</button>' +
+                '</footer>';
+            document.body.appendChild(dialog);
+        }
+        return dialog;
+    }
+
+    // Show confirmation dialog (returns Promise)
+    window.showConfirm = function(message, options) {
+        options = options || {};
+        return new Promise(function(resolve) {
+            const dialog = getConfirmDialog();
+            const titleEl = dialog.querySelector('#confirm-dialog-title');
+            const messageEl = dialog.querySelector('#confirm-dialog-message');
+            const confirmBtn = dialog.querySelector('[data-action="confirm"]');
+            const cancelBtn = dialog.querySelector('[data-action="cancel"]');
+
+            titleEl.textContent = options.title || 'Confirm Action';
+            messageEl.textContent = message;
+            confirmBtn.textContent = options.confirmText || 'Confirm';
+            cancelBtn.textContent = options.cancelText || 'Cancel';
+
+            // Set danger styling if specified
+            if (options.danger) {
+                confirmBtn.className = 'btn btn-danger';
+            } else {
+                confirmBtn.className = 'btn btn-primary';
+            }
+
+            function cleanup(result) {
+                dialog.close();
+                confirmBtn.removeEventListener('click', handleConfirm);
+                cancelBtn.removeEventListener('click', handleCancel);
+                dialog.removeEventListener('close', handleClose);
+                resolve(result);
+            }
+
+            function handleConfirm() { cleanup(true); }
+            function handleCancel() { cleanup(false); }
+            function handleClose() { cleanup(false); }
+
+            confirmBtn.addEventListener('click', handleConfirm);
+            cancelBtn.addEventListener('click', handleCancel);
+            dialog.addEventListener('close', handleClose);
+
+            dialog.showModal();
+            confirmBtn.focus();
+        });
+    };
+})();
+
 // Service Worker registration
 (function() {
     'use strict';

@@ -401,9 +401,14 @@ func GenerateToken(length int) (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
-// GenerateSessionToken generates a session token (32 bytes = 64 hex chars)
+// GenerateSessionToken generates a session token with ses_ prefix
+// Per AI.md PART 23: Session token prefix must be "ses_"
 func GenerateSessionToken() (string, error) {
-	return GenerateToken(32)
+	token, err := GenerateToken(32)
+	if err != nil {
+		return "", err
+	}
+	return "ses_" + token, nil
 }
 
 // NormalizeUsername normalizes a username (lowercase, trimmed)

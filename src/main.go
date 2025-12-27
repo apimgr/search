@@ -13,7 +13,6 @@ import (
 	mathRand "math/rand"
 	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -28,6 +27,7 @@ import (
 	"github.com/apimgr/search/src/search/engines"
 	"github.com/apimgr/search/src/server"
 	"github.com/apimgr/search/src/service"
+	sigsvc "github.com/apimgr/search/src/signal"
 	"github.com/apimgr/search/src/update"
 
 	_ "modernc.org/sqlite"
@@ -279,37 +279,12 @@ func runServer() {
 	// Create server
 	srv := server.New(cfg)
 
-	// Handle graceful shutdown
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
-
-	go func() {
-		sig := <-quit
-		fmt.Printf("\n⚠️  Received signal: %v\n", sig)
-
-		if sig == syscall.SIGHUP {
-			fmt.Println("🔄 Reloading configuration...")
-			// Reload config on SIGHUP
-			newCfg, err := config.Initialize()
-			if err != nil {
-				log.Printf("❌ Failed to reload config: %v", err)
-				return
-			}
-			srv.UpdateConfig(newCfg)
-			fmt.Println("✅ Configuration reloaded")
-			return
-		}
-
-		fmt.Println("🛑 Shutting down gracefully...")
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-
-		if err := srv.Shutdown(ctx); err != nil {
-			log.Printf("❌ Shutdown error: %v", err)
-		}
-		fmt.Println("✅ Server stopped")
-		os.Exit(0)
-	}()
+	// Setup signal handling per AI.md PART 7
+	// Uses platform-dependent signal handling via src/signal package
+	sigsvc.Setup(sigsvc.ShutdownConfig{
+		ShutdownFunc: srv.Shutdown,
+		PIDFile:      config.GetPIDFile(),
+	})
 
 	// Start server
 	if err := srv.Start(); err != nil {

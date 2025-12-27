@@ -36,7 +36,7 @@
                         <div class="avatar-actions">
                             <label class="btn btn-secondary btn-sm">
                                 {{t "common.upload"}}
-                                <input type="file" name="avatar" accept="image/*" style="display: none;">
+                                <input type="file" name="avatar" accept="image/*" class="hidden">
                             </label>
                             {{if .User.AvatarURL}}
                             <button type="button" class="btn btn-danger btn-sm" name="remove_avatar" value="1">

@@ -55,7 +55,8 @@ var (
 )
 
 // Token prefix for user API tokens
-const userTokenPrefix = "ust_" // user search token
+// Per AI.md PART 23: API key prefix must be "key_"
+const userTokenPrefix = "key_"
 
 // NewTokenManager creates a new token manager
 func NewTokenManager(db *sql.DB) *TokenManager {

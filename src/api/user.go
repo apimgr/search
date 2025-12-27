@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/models"
 	"github.com/apimgr/search/src/users"
 )
 
@@ -735,7 +736,8 @@ func (h *UserHandler) errorResponse(w http.ResponseWriter, status int, message, 
 	h.jsonResponse(w, status, &APIResponse{
 		Success: false,
 		Error: &APIError{
-			Code:    status,
+			Code:    models.ErrorCodeFromHTTP(status),
+			Status:  status,
 			Message: message,
 			Details: details,
 		},

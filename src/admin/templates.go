@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	tlspkg "github.com/apimgr/search/src/tls"
+
 	"github.com/apimgr/search/src/config"
 )
 
@@ -19,92 +21,7 @@ func (h *Handler) renderAdminLogin(w http.ResponseWriter, data *AdminPageData) {
     <meta name="robots" content="noindex, nofollow">
     <title>%s - %s</title>
     <link rel="stylesheet" href="/static/css/main.css">
-    <style>
-        .login-container {
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
-        .login-box {
-            background: var(--bg-secondary);
-            padding: 40px;
-            border-radius: 12px;
-            width: 100%%;
-            max-width: 400px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-        }
-        .login-header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .login-header h1 {
-            color: var(--accent-primary);
-            font-size: 24px;
-            margin: 0 0 10px 0;
-        }
-        .login-header p {
-            color: var(--text-secondary);
-            margin: 0;
-        }
-        .form-group {
-            margin-bottom: 20px;
-        }
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            color: var(--text-primary);
-            font-weight: 500;
-        }
-        .form-group input {
-            width: 100%%;
-            padding: 12px 16px;
-            background: var(--bg-primary);
-            border: 2px solid var(--border-primary);
-            border-radius: 8px;
-            color: var(--text-primary);
-            font-size: 16px;
-            transition: border-color 0.3s;
-        }
-        .form-group input:focus {
-            outline: none;
-            border-color: var(--accent-primary);
-        }
-        .login-btn {
-            width: 100%%;
-            padding: 14px;
-            background: var(--accent-primary);
-            color: var(--bg-primary);
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-        .login-btn:hover {
-            background: var(--accent-secondary);
-        }
-        .error-message {
-            background: rgba(255, 85, 85, 0.1);
-            border: 1px solid var(--red);
-            color: var(--red);
-            padding: 12px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-        .back-link {
-            display: block;
-            text-align: center;
-            margin-top: 20px;
-            color: var(--text-secondary);
-        }
-        .back-link a {
-            color: var(--accent-primary);
-        }
-    </style>
+    <link rel="stylesheet" href="/static/css/admin.css">
 </head>
 <body>
     <div class="login-container">
@@ -154,249 +71,7 @@ func (h *Handler) renderAdminPage(w http.ResponseWriter, page string, data *Admi
     <meta name="robots" content="noindex, nofollow">
     <title>%s - Admin - %s</title>
     <link rel="stylesheet" href="/static/css/main.css">
-    <style>
-        .admin-layout {
-            display: flex;
-            min-height: 100vh;
-        }
-        .admin-sidebar {
-            width: 250px;
-            background: var(--bg-secondary);
-            border-right: 1px solid var(--border-primary);
-            padding: 20px 0;
-            flex-shrink: 0;
-        }
-        .admin-logo {
-            padding: 0 20px 20px;
-            border-bottom: 1px solid var(--border-primary);
-            margin-bottom: 20px;
-        }
-        .admin-logo a {
-            color: var(--accent-primary);
-            text-decoration: none;
-            font-size: 20px;
-            font-weight: bold;
-        }
-        .admin-nav {
-            list-style: none;
-            margin: 0;
-            padding: 0;
-        }
-        .admin-nav li {
-            margin: 4px 0;
-        }
-        .admin-nav a {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 12px 20px;
-            color: var(--text-secondary);
-            text-decoration: none;
-            transition: all 0.2s;
-        }
-        .admin-nav a:hover {
-            background: var(--bg-tertiary);
-            color: var(--text-primary);
-        }
-        .admin-nav a.active {
-            background: rgba(189, 147, 249, 0.1);
-            color: var(--accent-primary);
-            border-right: 3px solid var(--accent-primary);
-        }
-        .admin-nav .nav-icon {
-            font-size: 18px;
-        }
-        .admin-main {
-            flex: 1;
-            padding: 30px;
-            overflow-y: auto;
-        }
-        .admin-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 30px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid var(--border-primary);
-        }
-        .admin-header h1 {
-            margin: 0;
-            color: var(--text-primary);
-            font-size: 28px;
-        }
-        .admin-user {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-        .admin-user span {
-            color: var(--text-secondary);
-        }
-        .logout-btn {
-            padding: 8px 16px;
-            background: transparent;
-            border: 1px solid var(--red);
-            color: var(--red);
-            border-radius: 6px;
-            cursor: pointer;
-            text-decoration: none;
-            font-size: 14px;
-        }
-        .logout-btn:hover {
-            background: var(--red);
-            color: var(--bg-primary);
-        }
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        .stat-card {
-            background: var(--bg-secondary);
-            padding: 20px;
-            border-radius: 12px;
-            border: 1px solid var(--border-primary);
-        }
-        .stat-card h3 {
-            color: var(--text-secondary);
-            font-size: 14px;
-            margin: 0 0 8px 0;
-            text-transform: uppercase;
-        }
-        .stat-card .value {
-            color: var(--text-primary);
-            font-size: 28px;
-            font-weight: bold;
-        }
-        .stat-card .value.green { color: var(--green); }
-        .stat-card .value.purple { color: var(--accent-primary); }
-        .stat-card .value.cyan { color: var(--cyan); }
-        .stat-card .value.orange { color: var(--orange); }
-        .admin-section {
-            background: var(--bg-secondary);
-            padding: 24px;
-            border-radius: 12px;
-            border: 1px solid var(--border-primary);
-            margin-bottom: 24px;
-        }
-        .admin-section h2 {
-            color: var(--text-primary);
-            margin: 0 0 20px 0;
-            font-size: 20px;
-        }
-        .admin-table {
-            width: 100%%;
-            border-collapse: collapse;
-        }
-        .admin-table th {
-            text-align: left;
-            padding: 12px;
-            background: var(--bg-tertiary);
-            color: var(--text-secondary);
-            font-weight: 500;
-            font-size: 14px;
-        }
-        .admin-table td {
-            padding: 12px;
-            border-bottom: 1px solid var(--border-primary);
-            color: var(--text-primary);
-        }
-        .status-badge {
-            display: inline-block;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 500;
-        }
-        .status-badge.enabled {
-            background: rgba(80, 250, 123, 0.2);
-            color: var(--green);
-        }
-        .status-badge.disabled {
-            background: rgba(255, 85, 85, 0.2);
-            color: var(--red);
-        }
-        .btn {
-            display: inline-block;
-            padding: 10px 20px;
-            background: var(--accent-primary);
-            color: var(--bg-primary);
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            text-decoration: none;
-            font-size: 14px;
-            font-weight: 500;
-        }
-        .btn:hover {
-            background: var(--accent-secondary);
-        }
-        .btn-danger {
-            background: var(--red);
-        }
-        .btn-danger:hover {
-            background: #ff3333;
-        }
-        .form-row {
-            margin-bottom: 16px;
-        }
-        .form-row label {
-            display: block;
-            margin-bottom: 6px;
-            color: var(--text-secondary);
-            font-size: 14px;
-        }
-        .form-row input, .form-row textarea, .form-row select {
-            width: 100%%;
-            padding: 10px 14px;
-            background: var(--bg-primary);
-            border: 1px solid var(--border-primary);
-            border-radius: 6px;
-            color: var(--text-primary);
-            font-size: 14px;
-        }
-        .form-row input:focus, .form-row textarea:focus {
-            outline: none;
-            border-color: var(--accent-primary);
-        }
-        .token-display {
-            background: var(--bg-primary);
-            padding: 16px;
-            border-radius: 8px;
-            font-family: monospace;
-            word-break: break-all;
-            margin-bottom: 16px;
-            border: 2px solid var(--green);
-        }
-        .token-warning {
-            color: var(--orange);
-            font-size: 14px;
-            margin-bottom: 16px;
-        }
-        @media (max-width: 768px) {
-            .admin-layout {
-                flex-direction: column;
-            }
-            .admin-sidebar {
-                width: 100%%;
-                border-right: none;
-                border-bottom: 1px solid var(--border-primary);
-            }
-            .admin-nav {
-                display: flex;
-                overflow-x: auto;
-                padding: 0 10px;
-            }
-            .admin-nav a {
-                padding: 10px 15px;
-            }
-            .admin-nav a.active {
-                border-right: none;
-                border-bottom: 3px solid var(--accent-primary);
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="/static/css/admin.css">
 </head>
 <body>
     <div class="admin-layout">
@@ -413,8 +88,8 @@ func (h *Handler) renderAdminPage(w http.ResponseWriter, page string, data *Admi
                 <li><a href="/admin/users/admins" class="%s"><span class="nav-icon">👥</span> Server Admins</a></li>
                 <li><a href="/admin/server/nodes" class="%s"><span class="nav-icon">🖧</span> Cluster</a></li>
             </ul>
-            <div style="padding: 10px 20px; margin-top: 10px; border-top: 1px solid var(--border-primary);">
-                <span style="color: var(--text-secondary); font-size: 12px; text-transform: uppercase;">Server Settings</span>
+            <div class="sidebar-section-header">
+                <span>Server Settings</span>
             </div>
             <ul class="admin-nav">
                 <li><a href="/admin/server/settings" class="%s"><span class="nav-icon">🖥️</span> General</a></li>
@@ -574,40 +249,40 @@ func (h *Handler) renderDashboardContent(w http.ResponseWriter, data *AdminPageD
 
 	// System Resources and Quick Actions row
 	fmt.Fprintf(w, `
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px;">
-                <div class="admin-section" style="margin-bottom: 0;">
+            <div class="dashboard-grid">
+                <div class="admin-section mb-0">
                     <h2>System Resources</h2>
-                    <div style="margin-bottom: 16px;">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <div class="mb-16">
+                        <div class="flex-bar">
                             <span>CPU</span><span>%.0f%%</span>
                         </div>
-                        <div style="background: var(--bg-tertiary); height: 8px; border-radius: 4px; overflow: hidden;">
-                            <div style="background: var(--accent-primary); height: 100%%; width: %.0f%%;"></div>
+                        <div class="progress-bar">
+                            <div class="progress-bar-fill primary" style="width: %.0f%%;"></div>
                         </div>
                     </div>
-                    <div style="margin-bottom: 16px;">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <div class="mb-16">
+                        <div class="flex-bar">
                             <span>Memory</span><span>%.0f%% (%s)</span>
                         </div>
-                        <div style="background: var(--bg-tertiary); height: 8px; border-radius: 4px; overflow: hidden;">
-                            <div style="background: var(--cyan); height: 100%%; width: %.0f%%;"></div>
+                        <div class="progress-bar">
+                            <div class="progress-bar-fill cyan" style="width: %.0f%%;"></div>
                         </div>
                     </div>
                     <div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <div class="flex-bar">
                             <span>Disk</span><span>%.0f%%</span>
                         </div>
-                        <div style="background: var(--bg-tertiary); height: 8px; border-radius: 4px; overflow: hidden;">
-                            <div style="background: var(--green); height: 100%%; width: %.0f%%;"></div>
+                        <div class="progress-bar">
+                            <div class="progress-bar-fill green" style="width: %.0f%%;"></div>
                         </div>
                     </div>
                 </div>
-                <div class="admin-section" style="margin-bottom: 0;">
+                <div class="admin-section mb-0">
                     <h2>Quick Actions</h2>
-                    <div style="display: flex; flex-direction: column; gap: 10px;">
-                        <a href="/api/v1/admin/reload" class="btn" style="text-align: center;">Reload Config</a>
-                        <a href="/api/v1/admin/backups" class="btn" style="text-align: center;">Create Backup</a>
-                        <a href="/admin/logs" class="btn" style="text-align: center;">View Logs</a>
+                    <div class="quick-actions">
+                        <a href="/api/v1/admin/reload" class="btn">Reload Config</a>
+                        <a href="/api/v1/admin/backups" class="btn">Create Backup</a>
+                        <a href="/admin/logs" class="btn">View Logs</a>
                     </div>
                 </div>
             </div>`,
@@ -618,31 +293,31 @@ func (h *Handler) renderDashboardContent(w http.ResponseWriter, data *AdminPageD
 
 	// Recent Activity and Scheduled Tasks row
 	fmt.Fprintf(w, `
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px;">
-                <div class="admin-section" style="margin-bottom: 0;">
+            <div class="dashboard-grid">
+                <div class="admin-section mb-0">
                     <h2>Recent Activity</h2>
                     <table class="admin-table">`)
 
 	if len(s.RecentActivity) == 0 {
-		fmt.Fprintf(w, `<tr><td colspan="2" style="text-align: center; color: var(--text-secondary);">No recent activity</td></tr>`)
+		fmt.Fprintf(w, `<tr><td colspan="2" class="empty-message">No recent activity</td></tr>`)
 	} else {
 		for _, activity := range s.RecentActivity {
-			fmt.Fprintf(w, `<tr><td style="width: 60px; color: var(--text-secondary);">%s</td><td>%s</td></tr>`, activity.Time, activity.Message)
+			fmt.Fprintf(w, `<tr><td class="td-time">%s</td><td>%s</td></tr>`, activity.Time, activity.Message)
 		}
 	}
 
 	fmt.Fprintf(w, `
                     </table>
                 </div>
-                <div class="admin-section" style="margin-bottom: 0;">
+                <div class="admin-section mb-0">
                     <h2>Scheduled Tasks</h2>
                     <table class="admin-table">`)
 
 	if len(s.ScheduledTasks) == 0 {
-		fmt.Fprintf(w, `<tr><td colspan="2" style="text-align: center; color: var(--text-secondary);">No scheduled tasks</td></tr>`)
+		fmt.Fprintf(w, `<tr><td colspan="2" class="empty-message">No scheduled tasks</td></tr>`)
 	} else {
 		for _, task := range s.ScheduledTasks {
-			fmt.Fprintf(w, `<tr><td>%s</td><td style="text-align: right; color: var(--text-secondary);">%s</td></tr>`, task.Name, task.NextRun)
+			fmt.Fprintf(w, `<tr><td>%s</td><td class="text-right text-secondary">%s</td></tr>`, task.Name, task.NextRun)
 		}
 	}
 
@@ -654,7 +329,7 @@ func (h *Handler) renderDashboardContent(w http.ResponseWriter, data *AdminPageD
 	// Alerts/Warnings section (only if there are alerts)
 	if len(s.Alerts) > 0 {
 		fmt.Fprintf(w, `
-            <div class="admin-section" style="border-color: var(--orange);">
+            <div class="admin-section border-warning">
                 <h2>Alerts &amp; Warnings</h2>`)
 		for _, alert := range s.Alerts {
 			icon := "ℹ️"
@@ -663,15 +338,15 @@ func (h *Handler) renderDashboardContent(w http.ResponseWriter, data *AdminPageD
 			} else if alert.Type == "error" {
 				icon = "❌"
 			}
-			fmt.Fprintf(w, `<div style="padding: 8px 0; border-bottom: 1px solid var(--border-primary);">%s %s</div>`, icon, alert.Message)
+			fmt.Fprintf(w, `<div class="alert-box">%s %s</div>`, icon, alert.Message)
 		}
 		fmt.Fprintf(w, `</div>`)
 	}
 
 	// System Information and Features Status
 	fmt.Fprintf(w, `
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-                <div class="admin-section" style="margin-bottom: 0;">
+            <div class="d-grid grid-2 gap-20">
+                <div class="admin-section mb-0">
                     <h2>System Information</h2>
                     <table class="admin-table">
                         <tr><td>Version</td><td>%s</td></tr>
@@ -682,7 +357,7 @@ func (h *Handler) renderDashboardContent(w http.ResponseWriter, data *AdminPageD
                         <tr><td>Total Memory Allocated</td><td>%s</td></tr>
                     </table>
                 </div>
-                <div class="admin-section" style="margin-bottom: 0;">
+                <div class="admin-section mb-0">
                     <h2>Features Status</h2>
                     <table class="admin-table">
                         <tr>
@@ -830,7 +505,7 @@ func (h *Handler) renderTokensContent(w http.ResponseWriter, data *AdminPageData
 	if len(data.Tokens) == 0 {
 		fmt.Fprintf(w, `
                         <tr>
-                            <td colspan="6" style="text-align: center; color: var(--text-secondary);">No API tokens created yet</td>
+                            <td colspan="6" class="empty-message">No API tokens created yet</td>
                         </tr>`)
 	} else {
 		for _, token := range data.Tokens {
@@ -862,7 +537,7 @@ func (h *Handler) renderLogsContent(w http.ResponseWriter, data *AdminPageData) 
 	fmt.Fprintf(w, `
             <div class="admin-section">
                 <h2>Server Logs</h2>
-                <p style="color: var(--text-secondary);">Log viewing coming soon. Check server output for logs.</p>
+                <p class="text-secondary">Log viewing coming soon. Check server output for logs.</p>
             </div>`)
 }
 
@@ -925,7 +600,7 @@ func (h *Handler) renderServerSettingsContent(w http.ResponseWriter, data *Admin
                     <div class="form-row">
                         <label>Port</label>
                         <input type="number" name="port" value="%d">
-                        <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">0 = random port in 64000-64999 range</p>
+                        <p class="help-text">0 = random port in 64000-64999 range</p>
                     </div>
                     <div class="form-row">
                         <label>HTTPS Port (optional, for dual port mode)</label>
@@ -1035,48 +710,82 @@ func (h *Handler) renderServerBrandingContent(w http.ResponseWriter, data *Admin
 }
 
 func (h *Handler) renderServerSSLContent(w http.ResponseWriter, data *AdminPageData) {
+	// Get DNS providers from Extra data
+	dnsProviders, _ := data.Extra["DNSProviders"].([]tlspkg.DNSProviderInfo)
+	currentProvider, _ := data.Extra["CurrentDNSProvider"].(string)
+	dns01Configured, _ := data.Extra["DNS01Configured"].(bool)
+	dns01ValidatedAt, _ := data.Extra["DNS01ValidatedAt"].(string)
+
+	// Get current challenge type
+	challengeType := h.config.Server.SSL.LetsEncrypt.Challenge
+	if challengeType == "" {
+		challengeType = "http-01"
+	}
+
 	fmt.Fprintf(w, `
             <div class="admin-section">
                 <h2>SSL/TLS Configuration</h2>
-                <form method="POST" action="/admin/server/ssl">
+                <form method="POST" action="/admin/server/ssl" id="ssl-form">
                     <div class="form-row">
-                        <label><input type="checkbox" name="enabled" %s> Enable SSL/TLS</label>
+                        <label class="toggle">
+                            <input type="checkbox" name="enabled" %s>
+                            <span class="slider"></span>
+                            Enable SSL/TLS
+                        </label>
                     </div>
                     <div class="form-row">
-                        <label><input type="checkbox" name="auto_tls" %s> Auto TLS (automatic certificate management)</label>
+                        <label class="toggle">
+                            <input type="checkbox" name="auto_tls" %s>
+                            <span class="slider"></span>
+                            Auto TLS (automatic certificate management)
+                        </label>
                     </div>
                     <div class="form-row">
-                        <label>Certificate File</label>
-                        <input type="text" name="cert_file" value="%s" placeholder="/path/to/cert.pem">
+                        <label for="cert_file">Certificate File</label>
+                        <input type="text" id="cert_file" name="cert_file" value="%s" placeholder="/path/to/cert.pem">
+                        <span class="help-text">Path to the SSL certificate file (PEM format)</span>
                     </div>
                     <div class="form-row">
-                        <label>Key File</label>
-                        <input type="text" name="key_file" value="%s" placeholder="/path/to/key.pem">
+                        <label for="key_file">Key File</label>
+                        <input type="text" id="key_file" name="key_file" value="%s" placeholder="/path/to/key.pem">
+                        <span class="help-text">Path to the private key file (PEM format)</span>
                     </div>
-                    <button type="submit" class="btn">Save SSL Settings</button>
-                </form>
-            </div>
 
-            <div class="admin-section">
-                <h2>Let's Encrypt</h2>
-                <form method="POST" action="/admin/server/ssl/letsencrypt">
+                    <h3>Let's Encrypt</h3>
                     <div class="form-row">
-                        <label><input type="checkbox" name="le_enabled" %s> Enable Let's Encrypt</label>
+                        <label class="toggle">
+                            <input type="checkbox" name="letsencrypt_enabled" %s>
+                            <span class="slider"></span>
+                            Enable Let's Encrypt
+                        </label>
                     </div>
                     <div class="form-row">
-                        <label>Email Address</label>
-                        <input type="email" name="le_email" value="%s" placeholder="admin@example.com">
+                        <label for="letsencrypt_email">Email Address</label>
+                        <input type="email" id="letsencrypt_email" name="letsencrypt_email" value="%s" placeholder="admin@example.com">
+                        <span class="help-text">Required for certificate expiration notices</span>
                     </div>
                     <div class="form-row">
-                        <label>Domains (one per line)</label>
-                        <textarea name="le_domains" rows="3" placeholder="example.com&#10;www.example.com">%s</textarea>
+                        <label for="le_domains">Domains (one per line)</label>
+                        <textarea id="le_domains" name="le_domains" rows="3" placeholder="example.com&#10;www.example.com">%s</textarea>
+                        <span class="help-text">Domains to request certificates for</span>
                     </div>
                     <div class="form-row">
-                        <label><input type="checkbox" name="le_staging" %s> Use Staging Server (for testing)</label>
+                        <label class="toggle">
+                            <input type="checkbox" name="le_staging" %s>
+                            <span class="slider"></span>
+                            Use Staging Server (for testing)
+                        </label>
                     </div>
-                    <button type="submit" class="btn">Save Let's Encrypt Settings</button>
-                </form>
-            </div>`,
+
+                    <div class="form-row">
+                        <label for="letsencrypt_challenge">ACME Challenge Type</label>
+                        <select id="letsencrypt_challenge" name="letsencrypt_challenge" onchange="toggleDNSProvider(this.value)">
+                            <option value="http-01" %s>HTTP-01 (requires port 80)</option>
+                            <option value="tls-alpn-01" %s>TLS-ALPN-01 (requires port 443)</option>
+                            <option value="dns-01" %s>DNS-01 (wildcard certs, no port requirements)</option>
+                        </select>
+                        <span class="help-text">Select how Let's Encrypt verifies domain ownership</span>
+                    </div>`,
 		checked(h.config.Server.SSL.Enabled),
 		checked(h.config.Server.SSL.AutoTLS),
 		h.config.Server.SSL.CertFile,
@@ -1085,7 +794,123 @@ func (h *Handler) renderServerSSLContent(w http.ResponseWriter, data *AdminPageD
 		h.config.Server.SSL.LetsEncrypt.Email,
 		joinStrings(h.config.Server.SSL.LetsEncrypt.Domains),
 		checked(h.config.Server.SSL.LetsEncrypt.Staging),
+		selectedBool(challengeType == "http-01"),
+		selectedBool(challengeType == "tls-alpn-01"),
+		selectedBool(challengeType == "dns-01"),
 	)
+
+	// DNS-01 Provider Section - shown when DNS-01 is selected
+	hiddenClass := ""
+	if challengeType != "dns-01" {
+		hiddenClass = " hidden"
+	}
+
+	fmt.Fprintf(w, `
+                    <div id="dns01-config" class="dns01-section%s">
+                        <h3>DNS Provider Configuration</h3>
+                        <div class="form-row">
+                            <label for="dns_provider">DNS Provider</label>
+                            <select id="dns_provider" name="dns_provider" onchange="showProviderFields(this.value)">
+                                <option value="">Select a provider...</option>`, hiddenClass)
+
+	// Output provider options
+	for _, provider := range dnsProviders {
+		selectedAttr := ""
+		if provider.ID == currentProvider {
+			selectedAttr = " selected"
+		}
+		fmt.Fprintf(w, `
+                                <option value="%s"%s>%s</option>`,
+			provider.ID, selectedAttr, provider.Name)
+	}
+
+	fmt.Fprintf(w, `
+                            </select>
+                            <span class="help-text">Select your DNS provider for DNS-01 challenge</span>
+                        </div>`)
+
+	// Output provider-specific credential fields (hidden by default)
+	for _, provider := range dnsProviders {
+		hiddenProviderClass := " hidden"
+		if provider.ID == currentProvider {
+			hiddenProviderClass = ""
+		}
+		fmt.Fprintf(w, `
+                        <div id="provider-%s" class="provider-fields%s">`, provider.ID, hiddenProviderClass)
+
+		for _, field := range provider.Fields {
+			inputType := field.Type
+			if inputType == "" {
+				inputType = "text"
+			}
+			requiredAttr := ""
+			if field.Required {
+				requiredAttr = " required"
+			}
+			fmt.Fprintf(w, `
+                            <div class="form-row">
+                                <label for="dns_%s">%s</label>
+                                <input type="%s" id="dns_%s" name="dns_%s" placeholder="%s"%s>
+                                <span class="help-text">%s</span>
+                            </div>`,
+				field.Name, field.Label, inputType, field.Name, field.Name,
+				field.Placeholder, requiredAttr, field.Help)
+		}
+
+		fmt.Fprintf(w, `
+                        </div>`)
+	}
+
+	// Show status if DNS-01 is configured
+	if dns01Configured && currentProvider != "" {
+		fmt.Fprintf(w, `
+                        <div class="status-box status-success">
+                            <span class="status-icon">&#10003;</span>
+                            <span>DNS-01 configured with %s (validated: %s)</span>
+                        </div>`, currentProvider, dns01ValidatedAt)
+	}
+
+	fmt.Fprintf(w, `
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Save SSL Settings</button>
+                </form>
+            </div>
+
+            <script>
+            function toggleDNSProvider(value) {
+                var dns01Config = document.getElementById('dns01-config');
+                if (value === 'dns-01') {
+                    dns01Config.classList.remove('hidden');
+                } else {
+                    dns01Config.classList.add('hidden');
+                }
+            }
+
+            function showProviderFields(provider) {
+                // Hide all provider fields
+                var allFields = document.querySelectorAll('.provider-fields');
+                allFields.forEach(function(el) {
+                    el.classList.add('hidden');
+                });
+
+                // Show selected provider fields
+                if (provider) {
+                    var selected = document.getElementById('provider-' + provider);
+                    if (selected) {
+                        selected.classList.remove('hidden');
+                    }
+                }
+            }
+            </script>`)
+}
+
+// selectedBool returns "selected" if condition is true
+func selectedBool(b bool) string {
+	if b {
+		return "selected"
+	}
+	return ""
 }
 
 func (h *Handler) renderServerTorContent(w http.ResponseWriter, data *AdminPageData) {
@@ -1252,15 +1077,15 @@ func (h *Handler) renderServerEmailContent(w http.ResponseWriter, data *AdminPag
                         <label><input type="checkbox" name="starttls" %s> Use STARTTLS</label>
                     </div>
                     <button type="submit" class="btn">Save Email Settings</button>
-                    <button type="button" class="btn" style="margin-left: 10px; background: var(--cyan);" onclick="testEmail()">Send Test Email</button>
+                    <button type="button" class="btn ml-10 btn-cyan" onclick="testEmail()">Send Test Email</button>
                 </form>
             </div>
             <script>
             function testEmail() {
                 fetch('/admin/api/email/test', {method: 'POST'})
                     .then(r => r.json())
-                    .then(d => alert(d.message || 'Test email sent!'))
-                    .catch(e => alert('Failed to send test email: ' + e));
+                    .then(d => showToast(d.message || 'Test email sent!', 'success'))
+                    .catch(e => showToast('Failed to send test email: ' + e, 'error'));
             }
             </script>`,
 		checked(h.config.Server.Email.Enabled),
@@ -1346,7 +1171,7 @@ func (h *Handler) renderServerAnnouncementsContent(w http.ResponseWriter, data *
 	if len(h.config.Server.Web.Announcements.Messages) == 0 {
 		fmt.Fprintf(w, `
                         <tr>
-                            <td colspan="6" style="text-align: center; color: var(--text-secondary);">No announcements configured</td>
+                            <td colspan="6" class="empty-message">No announcements configured</td>
                         </tr>`)
 	} else {
 		for _, a := range h.config.Server.Web.Announcements.Messages {
@@ -1358,9 +1183,9 @@ func (h *Handler) renderServerAnnouncementsContent(w http.ResponseWriter, data *
                             <td>%s</td>
                             <td>%s</td>
                             <td>
-                                <form method="POST" action="/admin/server/announcements/delete" style="display:inline;">
+                                <form method="POST" action="/admin/server/announcements/delete" class="form-inline">
                                     <input type="hidden" name="id" value="%s">
-                                    <button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;">Delete</button>
+                                    <button type="submit" class="btn btn-danger btn-sm">Delete</button>
                                 </form>
                             </td>
                         </tr>`,
@@ -1385,7 +1210,7 @@ func (h *Handler) renderServerGeoIPContent(w http.ResponseWriter, data *AdminPag
 	fmt.Fprintf(w, `
             <div class="admin-section">
                 <h2>GeoIP Configuration</h2>
-                <p style="color: var(--text-secondary); margin-bottom: 20px;">Uses MMDB format databases from sapics/ip-location-db (free, no API key required).</p>
+                <p class="desc-text">Uses MMDB format databases from sapics/ip-location-db (free, no API key required).</p>
                 <form method="POST" action="/admin/server/geoip">
                     <div class="form-row">
                         <label><input type="checkbox" name="enabled" %s> Enable GeoIP</label>
@@ -1448,7 +1273,7 @@ func (h *Handler) renderServerMetricsContent(w http.ResponseWriter, data *AdminP
 	fmt.Fprintf(w, `
             <div class="admin-section">
                 <h2>Prometheus Metrics</h2>
-                <p style="color: var(--text-secondary); margin-bottom: 20px;">Expose Prometheus-compatible metrics endpoint for monitoring.</p>
+                <p class="desc-text">Expose Prometheus-compatible metrics endpoint for monitoring.</p>
                 <form method="POST" action="/admin/server/metrics">
                     <div class="form-row">
                         <label><input type="checkbox" name="enabled" %s> Enable Metrics Endpoint</label>
@@ -1463,7 +1288,7 @@ func (h *Handler) renderServerMetricsContent(w http.ResponseWriter, data *AdminP
                     <div class="form-row">
                         <label>Bearer Token (empty = no authentication)</label>
                         <input type="text" name="token" value="%s" placeholder="Leave empty for no auth">
-                        <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                        <p class="help-text">
                             If set, requests must include: <code>Authorization: Bearer &lt;token&gt;</code>
                         </p>
                     </div>
@@ -1506,7 +1331,7 @@ func (h *Handler) renderSchedulerContent(w http.ResponseWriter, data *AdminPageD
 	fmt.Fprintf(w, `
             <div class="admin-section">
                 <h2>Scheduled Tasks</h2>
-                <p style="color: var(--text-secondary); margin-bottom: 20px;">Manage background tasks that run on a schedule.</p>
+                <p class="desc-text">Manage background tasks that run on a schedule.</p>
 
                 <table class="admin-table">
                     <thead>
@@ -1521,53 +1346,53 @@ func (h *Handler) renderSchedulerContent(w http.ResponseWriter, data *AdminPageD
                     </thead>
                     <tbody>
                         <tr>
-                            <td><strong>Backup</strong><br><small style="color: var(--text-secondary);">Create automatic backups of configuration and data</small></td>
+                            <td><strong>Backup</strong><br><small class="text-secondary">Create automatic backups of configuration and data</small></td>
                             <td><code>0 3 * * *</code><br><small>Daily at 3:00 AM</small></td>
                             <td>%s</td>
                             <td>%s</td>
                             <td><span class="status-badge %s">%s</span></td>
                             <td>
-                                <button class="btn" style="padding: 5px 10px; font-size: 12px;" onclick="runTask('backup')">Run Now</button>
+                                <button class="btn btn-xs" onclick="runTask('backup')">Run Now</button>
                             </td>
                         </tr>
                         <tr>
-                            <td><strong>Cache Cleanup</strong><br><small style="color: var(--text-secondary);">Remove expired cache entries</small></td>
+                            <td><strong>Cache Cleanup</strong><br><small class="text-secondary">Remove expired cache entries</small></td>
                             <td><code>0 */6 * * *</code><br><small>Every 6 hours</small></td>
                             <td>%s</td>
                             <td>%s</td>
                             <td><span class="status-badge %s">%s</span></td>
                             <td>
-                                <button class="btn" style="padding: 5px 10px; font-size: 12px;" onclick="runTask('cache_cleanup')">Run Now</button>
+                                <button class="btn btn-xs" onclick="runTask('cache_cleanup')">Run Now</button>
                             </td>
                         </tr>
                         <tr>
-                            <td><strong>Log Rotation</strong><br><small style="color: var(--text-secondary);">Rotate and compress old log files</small></td>
+                            <td><strong>Log Rotation</strong><br><small class="text-secondary">Rotate and compress old log files</small></td>
                             <td><code>0 0 * * 0</code><br><small>Weekly on Sunday</small></td>
                             <td>%s</td>
                             <td>%s</td>
                             <td><span class="status-badge %s">%s</span></td>
                             <td>
-                                <button class="btn" style="padding: 5px 10px; font-size: 12px;" onclick="runTask('log_rotation')">Run Now</button>
+                                <button class="btn btn-xs" onclick="runTask('log_rotation')">Run Now</button>
                             </td>
                         </tr>
                         <tr>
-                            <td><strong>GeoIP Update</strong><br><small style="color: var(--text-secondary);">Download latest GeoIP database</small></td>
+                            <td><strong>GeoIP Update</strong><br><small class="text-secondary">Download latest GeoIP database</small></td>
                             <td><code>0 4 * * 3</code><br><small>Weekly on Wednesday</small></td>
                             <td>%s</td>
                             <td>%s</td>
                             <td><span class="status-badge %s">%s</span></td>
                             <td>
-                                <button class="btn" style="padding: 5px 10px; font-size: 12px;" onclick="runTask('geoip_update')">Run Now</button>
+                                <button class="btn btn-xs" onclick="runTask('geoip_update')">Run Now</button>
                             </td>
                         </tr>
                         <tr>
-                            <td><strong>Engine Health Check</strong><br><small style="color: var(--text-secondary);">Verify all search engines are responding</small></td>
+                            <td><strong>Engine Health Check</strong><br><small class="text-secondary">Verify all search engines are responding</small></td>
                             <td><code>*/15 * * * *</code><br><small>Every 15 minutes</small></td>
                             <td>%s</td>
                             <td>%s</td>
                             <td><span class="status-badge %s">%s</span></td>
                             <td>
-                                <button class="btn" style="padding: 5px 10px; font-size: 12px;" onclick="runTask('engine_health')">Run Now</button>
+                                <button class="btn btn-xs" onclick="runTask('engine_health')">Run Now</button>
                             </td>
                         </tr>
                     </tbody>
@@ -1587,15 +1412,20 @@ func (h *Handler) renderSchedulerContent(w http.ResponseWriter, data *AdminPageD
                             </tr>
                         </thead>
                         <tbody id="history-body">
-                            <tr><td colspan="4" style="text-align: center; color: var(--text-secondary);">Loading history...</td></tr>
+                            <tr><td colspan="4" class="empty-message">Loading history...</td></tr>
                         </tbody>
                     </table>
                 </div>
             </div>
 
             <script>
-            function runTask(taskName) {
-                if (!confirm('Run task "' + taskName + '" now?')) return;
+            async function runTask(taskName) {
+                const confirmed = await showConfirm('Run task "' + taskName + '" now?', {
+                    title: 'Run Scheduled Task',
+                    confirmText: 'Run Now',
+                    cancelText: 'Cancel'
+                });
+                if (!confirmed) return;
                 fetch('/api/v1/admin/scheduler', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
@@ -1604,13 +1434,13 @@ func (h *Handler) renderSchedulerContent(w http.ResponseWriter, data *AdminPageD
                 .then(r => r.json())
                 .then(data => {
                     if (data.success) {
-                        alert('Task started successfully');
+                        showToast('Task started successfully', 'success');
                         location.reload();
                     } else {
-                        alert('Error: ' + (data.error || 'Unknown error'));
+                        showToast('Error: ' + (data.error || 'Unknown error'), 'error');
                     }
                 })
-                .catch(err => alert('Error: ' + err));
+                .catch(err => showToast('Error: ' + err, 'error'));
             }
 
             // Load task history
@@ -1620,7 +1450,7 @@ func (h *Handler) renderSchedulerContent(w http.ResponseWriter, data *AdminPageD
                 .then(data => {
                     const tbody = document.getElementById('history-body');
                     if (!data.history || data.history.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-secondary);">No task history available</td></tr>';
+                        tbody.innerHTML = '<tr><td colspan="4" class="empty-message">No task history available</td></tr>';
                         return;
                     }
                     tbody.innerHTML = data.history.map(h =>
@@ -1628,7 +1458,7 @@ func (h *Handler) renderSchedulerContent(w http.ResponseWriter, data *AdminPageD
                     ).join('');
                 })
                 .catch(() => {
-                    document.getElementById('history-body').innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-secondary);">Failed to load history</td></tr>';
+                    document.getElementById('history-body').innerHTML = '<tr><td colspan="4" class="empty-message">Failed to load history</td></tr>';
                 });
             });
             </script>`,
@@ -1749,7 +1579,7 @@ func (h *Handler) renderSetupContent(w http.ResponseWriter, data *AdminPageData)
                     <div class="form-row">
                         <label>Setup Token</label>
                         <input type="text" name="setup_token" required placeholder="Enter the setup token from console">
-                        <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                        <p class="help-text">
                             The setup token was displayed in the server console. Use <code>--maintenance setup</code> to regenerate.
                         </p>
                     </div>`
@@ -1758,7 +1588,7 @@ func (h *Handler) renderSetupContent(w http.ResponseWriter, data *AdminPageData)
 	fmt.Fprintf(w, `
             <div class="admin-section">
                 <h2>Create Admin Account</h2>
-                <p style="color: var(--text-secondary); margin-bottom: 20px;">
+                <p class="desc-text">
                     Welcome! Create the primary administrator account to get started.
                 </p>
                 <form method="POST" action="/admin/setup">
@@ -1767,7 +1597,7 @@ func (h *Handler) renderSetupContent(w http.ResponseWriter, data *AdminPageData)
                         <label>Username</label>
                         <input type="text" name="username" required pattern="[a-z][a-z0-9_-]{2,31}"
                                placeholder="admin" autocomplete="username">
-                        <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                        <p class="help-text">
                             3-32 characters, lowercase letters, numbers, underscore, hyphen
                         </p>
                     </div>
@@ -1820,8 +1650,8 @@ func (h *Handler) renderAdminsContent(w http.ResponseWriter, data *AdminPageData
 	inviteSection := ""
 	if inviteURL != "" && isPrimary {
 		inviteSection = fmt.Sprintf(`
-            <div class="admin-section" style="border-color: var(--green);">
-                <h2 style="color: var(--green);">Invite Created</h2>
+            <div class="admin-section border-success">
+                <h2 class="text-success">Invite Created</h2>
                 <p>Share this link with the new admin:</p>
                 <div class="token-display">%s</div>
                 <p class="token-warning">This link expires in 7 days and can only be used once.</p>
@@ -1872,7 +1702,7 @@ func (h *Handler) renderAdminsContent(w http.ResponseWriter, data *AdminPageData
 	if len(admins) == 0 {
 		fmt.Fprintf(w, `
                         <tr>
-                            <td colspan="7" style="text-align: center; color: var(--text-secondary);">No admins to display</td>
+                            <td colspan="7" class="empty-message">No admins to display</td>
                         </tr>`)
 	} else {
 		for _, admin := range admins {
@@ -1895,11 +1725,11 @@ func (h *Handler) renderAdminsContent(w http.ResponseWriter, data *AdminPageData
 			actionButtons := ""
 			if isPrimary && !admin.IsPrimary {
 				actionButtons = fmt.Sprintf(`
-                                <form method="POST" action="/admin/users/admins/%d/delete" style="display:inline;"
-                                      onsubmit="return confirm('Delete this admin account?');">
-                                    <button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;">Delete</button>
+                                <form id="delete-admin-%d" method="POST" action="/admin/users/admins/%d/delete" class="form-inline">
+                                    <button type="button" class="btn btn-danger btn-sm"
+                                            onclick="confirmDeleteAdmin(%d)">Delete</button>
                                 </form>`,
-					admin.ID,
+					admin.ID, admin.ID, admin.ID,
 				)
 			}
 
@@ -1934,12 +1764,25 @@ func (h *Handler) renderAdminsContent(w http.ResponseWriter, data *AdminPageData
 	fmt.Fprintf(w, `
                     </tbody>
                 </table>
-            </div>`)
+            </div>
+            <script>
+            async function confirmDeleteAdmin(adminId) {
+                const confirmed = await showConfirm('Delete this admin account? This action cannot be undone.', {
+                    title: 'Delete Admin',
+                    confirmText: 'Delete',
+                    cancelText: 'Cancel',
+                    danger: true
+                });
+                if (confirmed) {
+                    document.getElementById('delete-admin-' + adminId).submit();
+                }
+            }
+            </script>`)
 
 	if !isPrimary {
 		fmt.Fprintf(w, `
             <div class="admin-section">
-                <p style="color: var(--text-secondary);">
+                <p class="text-secondary">
                     <em>Note: For privacy, you can only view your own admin account.
                     The primary admin can see all admins.</em>
                 </p>
@@ -1959,7 +1802,7 @@ func (h *Handler) renderInviteAcceptContent(w http.ResponseWriter, data *AdminPa
 	fmt.Fprintf(w, `
             <div class="admin-section">
                 <h2>Accept Admin Invite</h2>
-                <p style="color: var(--text-secondary); margin-bottom: 20px;">
+                <p class="desc-text">
                     You've been invited to become a server administrator. Create your account below.
                 </p>
                 <form method="POST">
@@ -1967,7 +1810,7 @@ func (h *Handler) renderInviteAcceptContent(w http.ResponseWriter, data *AdminPa
                         <label>Username</label>
                         <input type="text" name="username" required value="%s" pattern="[a-z][a-z0-9_-]{2,31}"
                                placeholder="admin" autocomplete="username">
-                        <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                        <p class="help-text">
                             3-32 characters, lowercase letters, numbers, underscore, hyphen
                         </p>
                     </div>
@@ -1995,15 +1838,15 @@ func (h *Handler) renderInviteAcceptContent(w http.ResponseWriter, data *AdminPa
 // renderInviteErrorContent renders the invite error page
 func (h *Handler) renderInviteErrorContent(w http.ResponseWriter, data *AdminPageData) {
 	fmt.Fprintf(w, `
-            <div class="admin-section" style="text-align: center;">
-                <h2 style="color: var(--red);">Invalid Invite</h2>
-                <p style="color: var(--text-secondary); margin: 20px 0;">
+            <div class="admin-section text-center">
+                <h2 class="text-danger">Invalid Invite</h2>
+                <p class="text-secondary my-20">
                     %s
                 </p>
-                <p style="color: var(--text-secondary);">
+                <p class="text-secondary">
                     Please contact the server administrator for a new invite link.
                 </p>
-                <a href="/admin/login" class="btn" style="margin-top: 20px;">Go to Login</a>
+                <a href="/admin/login" class="btn mt-20">Go to Login</a>
             </div>`,
 		data.Error,
 	)
@@ -2081,8 +1924,8 @@ func (h *Handler) renderNodesContent(w http.ResponseWriter, data *AdminPageData)
 	tokenSection := ""
 	if token != "" && isPrimary {
 		tokenSection = fmt.Sprintf(`
-            <div class="admin-section" style="border-color: var(--green);">
-                <h2 style="color: var(--green);">Join Token Generated</h2>
+            <div class="admin-section border-success">
+                <h2 class="text-success">Join Token Generated</h2>
                 <p>Use this token to join a new node to the cluster:</p>
                 <div class="token-display">%s</div>
                 <p class="token-warning">This token expires in 24 hours and can only be used once.</p>
@@ -2103,21 +1946,21 @@ func (h *Handler) renderNodesContent(w http.ResponseWriter, data *AdminPageData)
             %s
             <div class="admin-section">
                 <h2>Cluster Status</h2>
-                <table class="admin-table" style="max-width: 400px;">
+                <table class="admin-table max-w-400">
                     <tr>
-                        <td style="color: var(--text-secondary);">Mode</td>
+                        <td class="text-secondary">Mode</td>
                         <td><span class="status-badge %s">%s</span></td>
                     </tr>
                     <tr>
-                        <td style="color: var(--text-secondary);">This Node</td>
+                        <td class="text-secondary">This Node</td>
                         <td>%s</td>
                     </tr>
                     <tr>
-                        <td style="color: var(--text-secondary);">Hostname</td>
+                        <td class="text-secondary">Hostname</td>
                         <td>%s</td>
                     </tr>
                     <tr>
-                        <td style="color: var(--text-secondary);">Role</td>
+                        <td class="text-secondary">Role</td>
                         <td><span class="status-badge %s">%s</span></td>
                     </tr>
                 </table>
@@ -2147,7 +1990,7 @@ func (h *Handler) renderNodesContent(w http.ResponseWriter, data *AdminPageData)
 			actionsSection = `
             <div class="admin-section">
                 <h2>Cluster Actions</h2>
-                <form method="POST" action="/admin/server/nodes/token" style="display: inline-block; margin-right: 10px;">
+                <form method="POST" action="/admin/server/nodes/token" class="d-inline-block mr-10">
                     <button type="submit" class="btn">Generate Join Token</button>
                 </form>
             </div>`
@@ -2155,11 +1998,23 @@ func (h *Handler) renderNodesContent(w http.ResponseWriter, data *AdminPageData)
 			actionsSection = `
             <div class="admin-section">
                 <h2>Node Actions</h2>
-                <form method="POST" action="/admin/server/nodes/leave"
-                      onsubmit="return confirm('Leave the cluster? This node will become standalone.');">
-                    <button type="submit" class="btn btn-danger">Leave Cluster</button>
+                <form id="leave-cluster-form" method="POST" action="/admin/server/nodes/leave">
+                    <button type="button" class="btn btn-danger" onclick="confirmLeaveCluster()">Leave Cluster</button>
                 </form>
-            </div>`
+            </div>
+            <script>
+            async function confirmLeaveCluster() {
+                const confirmed = await showConfirm('Leave the cluster? This node will become standalone.', {
+                    title: 'Leave Cluster',
+                    confirmText: 'Leave',
+                    cancelText: 'Cancel',
+                    danger: true
+                });
+                if (confirmed) {
+                    document.getElementById('leave-cluster-form').submit();
+                }
+            }
+            </script>`
 		}
 		fmt.Fprintf(w, "%s", actionsSection)
 	}
@@ -2186,7 +2041,7 @@ func (h *Handler) renderNodesContent(w http.ResponseWriter, data *AdminPageData)
 	if len(nodes) == 0 {
 		fmt.Fprintf(w, `
                         <tr>
-                            <td colspan="6" style="text-align: center; color: var(--text-secondary);">No nodes found</td>
+                            <td colspan="6" class="empty-message">No nodes found</td>
                         </tr>`)
 	} else {
 		for _, node := range nodes {
@@ -2210,7 +2065,7 @@ func (h *Handler) renderNodesContent(w http.ResponseWriter, data *AdminPageData)
 			fmt.Fprintf(w, `
                         <tr>
                             <td>%s%s</td>
-                            <td style="font-family: monospace; font-size: 12px;">%s</td>
+                            <td class="td-mono">%s</td>
                             <td><span class="status-badge %s">%s</span></td>
                             <td><span class="status-badge %s">%s</span></td>
                             <td>%s</td>
@@ -2234,7 +2089,7 @@ func (h *Handler) renderNodesContent(w http.ResponseWriter, data *AdminPageData)
 	if !isCluster {
 		fmt.Fprintf(w, `
             <div class="admin-section">
-                <p style="color: var(--text-secondary);">
+                <p class="text-secondary">
                     <em>Note: Cluster mode requires a remote database (PostgreSQL or MySQL).
                     In standalone mode, only this node is shown.</em>
                 </p>
@@ -2247,7 +2102,7 @@ func (h *Handler) renderServerBackupContent(w http.ResponseWriter, data *AdminPa
 	fmt.Fprintf(w, `
             <div class="admin-section">
                 <h2>Create Backup</h2>
-                <p style="color: var(--text-secondary); margin-bottom: 16px;">
+                <p class="desc-text mb-16">
                     Create a backup of your database, configuration, and data files.
                 </p>
                 <form method="POST" action="/admin/server/backup">
@@ -2269,7 +2124,7 @@ func (h *Handler) renderServerBackupContent(w http.ResponseWriter, data *AdminPa
                     </thead>
                     <tbody>
                         <tr>
-                            <td colspan="4" style="text-align: center; color: var(--text-secondary);">No backups available</td>
+                            <td colspan="4" class="empty-message">No backups available</td>
                         </tr>
                     </tbody>
                 </table>
@@ -2306,13 +2161,13 @@ func (h *Handler) renderServerMaintenanceContent(w http.ResponseWriter, data *Ad
 	fmt.Fprintf(w, `
             <div class="admin-section">
                 <h2>Maintenance Mode</h2>
-                <p style="color: var(--text-secondary); margin-bottom: 16px;">
+                <p class="desc-text mb-16">
                     When enabled, all users will see a maintenance page. Admins can still access the admin panel.
                 </p>
                 <form method="POST" action="/admin/server/maintenance">
                     <div class="form-row">
                         <label>
-                            <input type="checkbox" name="enabled" %s style="margin-right: 8px;">
+                            <input type="checkbox" name="enabled" %s class="mr-8">
                             Enable Maintenance Mode
                         </label>
                     </div>
@@ -2322,7 +2177,7 @@ func (h *Handler) renderServerMaintenanceContent(w http.ResponseWriter, data *Ad
 
             <div class="admin-section">
                 <h2>Quick Actions</h2>
-                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <div class="d-flex gap-10 flex-wrap">
                     <a href="/api/v1/admin/reload" class="btn">Reload Configuration</a>
                     <a href="/admin/server/backup" class="btn">Create Backup</a>
                 </div>
@@ -2343,10 +2198,10 @@ func (h *Handler) renderServerUpdatesContent(w http.ResponseWriter, data *AdminP
 
             <div class="admin-section">
                 <h2>Check for Updates</h2>
-                <p style="color: var(--text-secondary); margin-bottom: 16px;">
+                <p class="desc-text mb-16">
                     Check if a newer version is available.
                 </p>
-                <div id="update-status" style="margin-bottom: 16px; padding: 12px; background: var(--bg-tertiary); border-radius: 8px;">
+                <div id="update-status" class="status-box">
                     Click the button below to check for updates.
                 </div>
                 <button class="btn" onclick="checkUpdates()">Check for Updates</button>
@@ -2364,7 +2219,7 @@ func (h *Handler) renderServerUpdatesContent(w http.ResponseWriter, data *AdminP
                     if (data.update_available) {
                         document.getElementById('update-status').innerHTML =
                             'Update available: ' + data.latest_version +
-                            '<br><a href="/admin/server/updates?action=update" class="btn" style="margin-top: 10px;">Update Now</a>';
+                            '<br><a href="/admin/server/updates?action=update" class="btn mt-10">Update Now</a>';
                     } else {
                         document.getElementById('update-status').innerHTML = 'You are running the latest version.';
                     }
@@ -2440,7 +2295,7 @@ func (h *Handler) renderServerSecurityContent(w http.ResponseWriter, data *Admin
                 <form method="POST" action="/admin/server/security">
                     <div class="form-row">
                         <label>
-                            <input type="checkbox" name="rate_limit_enabled" %s style="margin-right: 8px;">
+                            <input type="checkbox" name="rate_limit_enabled" %s class="mr-8">
                             Enable Rate Limiting
                         </label>
                     </div>
@@ -2468,7 +2323,7 @@ func (h *Handler) renderServerSecurityContent(w http.ResponseWriter, data *Admin
 
             <div class="admin-section">
                 <h2>Related Settings</h2>
-                <ul style="color: var(--text-secondary); padding-left: 20px;">
+                <ul class="text-secondary pl-20">
                     <li><a href="/admin/server/ssl">SSL/TLS Settings</a></li>
                     <li><a href="/admin/server/geoip">GeoIP Blocking</a></li>
                     <li><a href="/admin/tokens">API Tokens</a></li>
@@ -2485,22 +2340,22 @@ func (h *Handler) renderHelpContent(w http.ResponseWriter, data *AdminPageData) 
 	fmt.Fprintf(w, `
             <div class="admin-section">
                 <h2>Documentation</h2>
-                <ul style="list-style: none; padding: 0;">
-                    <li style="margin-bottom: 12px;">
-                        <a href="https://apimgr-search.readthedocs.io" target="_blank" style="display: flex; align-items: center; gap: 10px;">
-                            <span style="font-size: 20px;">📚</span>
+                <ul class="resource-list">
+                    <li>
+                        <a href="https://apimgr-search.readthedocs.io" target="_blank">
+                            <span class="icon">📚</span>
                             <div>
                                 <strong>Official Documentation</strong>
-                                <p style="margin: 0; color: var(--text-secondary); font-size: 14px;">Complete guides and reference</p>
+                                <p>Complete guides and reference</p>
                             </div>
                         </a>
                     </li>
-                    <li style="margin-bottom: 12px;">
-                        <a href="https://github.com/apimgr/search" target="_blank" style="display: flex; align-items: center; gap: 10px;">
-                            <span style="font-size: 20px;">💻</span>
+                    <li>
+                        <a href="https://github.com/apimgr/search" target="_blank">
+                            <span class="icon">💻</span>
                             <div>
                                 <strong>GitHub Repository</strong>
-                                <p style="margin: 0; color: var(--text-secondary); font-size: 14px;">Source code and issues</p>
+                                <p>Source code and issues</p>
                             </div>
                         </a>
                     </li>
@@ -2509,10 +2364,10 @@ func (h *Handler) renderHelpContent(w http.ResponseWriter, data *AdminPageData) 
 
             <div class="admin-section">
                 <h2>Quick Links</h2>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
-                    <a href="/openapi" target="_blank" class="btn" style="text-align: center;">API Documentation</a>
-                    <a href="/graphql" target="_blank" class="btn" style="text-align: center;">GraphQL Explorer</a>
-                    <a href="/admin/logs" class="btn" style="text-align: center;">View Logs</a>
+                <div class="d-grid grid-auto gap-15">
+                    <a href="/openapi" target="_blank" class="btn text-center">API Documentation</a>
+                    <a href="/graphql" target="_blank" class="btn text-center">GraphQL Explorer</a>
+                    <a href="/admin/logs" class="btn text-center">View Logs</a>
                 </div>
             </div>
 

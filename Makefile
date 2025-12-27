@@ -1,5 +1,7 @@
-PROJECT := search
-ORG := apimgr
+# Infer PROJECTNAME and PROJECTORG from git remote (per AI.md PART 12)
+# Note: Strip .git suffix from URL if present
+PROJECT := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)$$|\1|; s|\.git$$||' || basename "$$(pwd)")
+ORG := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+$$|\1|' || basename "$$(dirname "$$(pwd)")")
 
 # Version: env var > release.txt > default
 VERSION ?= $(shell cat release.txt 2>/dev/null || echo "0.1.0")

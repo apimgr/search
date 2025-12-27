@@ -523,7 +523,8 @@ func (s *AdminService) GenerateAPIToken(ctx context.Context, adminID int64) (str
 	if _, err := rand.Read(tokenBytes); err != nil {
 		return "", err
 	}
-	token := "search_" + base64.URLEncoding.EncodeToString(tokenBytes)[:32]
+	// Per AI.md PART 23: Admin token prefix must be "adm_"
+	token := "adm_" + base64.URLEncoding.EncodeToString(tokenBytes)[:32]
 
 	// Hash token for storage
 	tokenHash := sha256.Sum256([]byte(token))

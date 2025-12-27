@@ -62,7 +62,12 @@
       "Bash(for f in release.yml beta.yml daily.yml docker.yml)",
       "Bash(if [ -f \"/root/Projects/github/apimgr/search/.github/workflows/$f\" ])",
       "Bash(do [ -f \"/root/Projects/github/apimgr/search/.github/workflows/$f\" ])",
-      "Bash(printf:*)"
+      "Bash(printf:*)",
+      "Bash(CGO_ENABLED=0 /root/go/bin/go build:*)",
+      "Bash(/root/go/bin/go get:*)",
+      "Bash(for dir in config server swagger graphql mode paths ssl scheduler service admin database users backup email client)",
+      "Bash(do [ -d \"/root/Projects/github/apimgr/search/src/$dir\" ])",
+      "Bash(make:*)"
     ]
   }
 }

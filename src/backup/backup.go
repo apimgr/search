@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -17,16 +18,21 @@ import (
 )
 
 // BackupMetadata contains information about a backup
-// Per TEMPLATE.md PART 26: manifest.json in backups with SHA256 checksums
+// Per AI.md PART 25: manifest.json format with required fields
 type BackupMetadata struct {
-	Version          string            `json:"version"`
-	CreatedAt        time.Time         `json:"created_at"`
-	ServerTitle      string            `json:"server_title"`
-	Files            []string          `json:"files"`
-	Checksums        map[string]string `json:"checksums"` // SHA256 checksums per file
-	Size             int64             `json:"size"`
-	Encrypted        bool              `json:"encrypted"`         // Per TEMPLATE.md PART 24
-	EncryptionMethod string            `json:"encryption_method"` // "AES-256-GCM"
+	Version          string            `json:"version"`           // Manifest format version (e.g., "1.0.0")
+	CreatedAt        time.Time         `json:"created_at"`        // When backup was created
+	CreatedBy        string            `json:"created_by"`        // Who created the backup (per PART 25)
+	AppVersion       string            `json:"app_version"`       // Application version (per PART 25)
+	Contents         []string          `json:"contents"`          // List of files/directories in backup
+	Checksums        map[string]string `json:"checksums"`         // SHA256 checksums per file
+	Checksum         string            `json:"checksum"`          // Overall archive checksum (per PART 25)
+	Encrypted        bool              `json:"encrypted"`         // Per AI.md PART 25
+	EncryptionMethod string            `json:"encryption_method"` // "AES-256-GCM" if encrypted
+	// Legacy fields for backwards compatibility
+	ServerTitle string `json:"server_title,omitempty"` // Server title (optional)
+	Size        int64  `json:"size,omitempty"`         // Total size in bytes (optional)
+	Files       []string `json:"files,omitempty"`      // Deprecated: use Contents
 }
 
 // Manager handles backup and restore operations
@@ -35,6 +41,12 @@ type Manager struct {
 	configDir string
 	dataDir   string
 	password  string // Backup encryption password (never stored on disk)
+	createdBy string // Username of who created the backup (per PART 25)
+}
+
+// SetCreatedBy sets the username for backup attribution (per AI.md PART 25)
+func (m *Manager) SetCreatedBy(username string) {
+	m.createdBy = username
 }
 
 // SetPassword sets the backup encryption password
@@ -117,14 +129,28 @@ func (m *Manager) Create(filename string) (string, error) {
 		serverTitle = cfg.Server.Title
 	}
 
-	// Create metadata per TEMPLATE.md PART 26: manifest.json with SHA256 checksums
+	// Determine created_by (per AI.md PART 25)
+	createdBy := m.createdBy
+	if createdBy == "" {
+		createdBy = "system" // Default for CLI/scheduled backups
+	}
+
+	// Calculate overall checksum from individual file checksums (per AI.md PART 25)
+	// This provides a single verification value for the entire backup
+	overallChecksum := computeOverallChecksum(checksums)
+
+	// Create metadata per AI.md PART 25: manifest.json format
 	metadata := BackupMetadata{
-		Version:     config.Version,
+		Version:     "1.0.0",                     // Manifest format version
 		CreatedAt:   time.Now(),
-		ServerTitle: serverTitle,
-		Files:       files,
+		CreatedBy:   createdBy,                   // Per PART 25: who created the backup
+		AppVersion:  config.Version,              // Per PART 25: application version
+		Contents:    files,                       // Per PART 25: list of contents
 		Checksums:   checksums,
-		Size:        totalSize,
+		Checksum:    "sha256:" + overallChecksum, // Per PART 25: overall checksum
+		ServerTitle: serverTitle,                 // Legacy/optional
+		Size:        totalSize,                   // Legacy/optional
+		Files:       files,                       // Legacy/deprecated: use Contents
 	}
 
 	// Add metadata to archive as manifest.json
@@ -212,6 +238,25 @@ func (m *Manager) addDirectoryToTar(tw *tar.Writer, srcDir, prefix string) ([]st
 	})
 
 	return files, totalSize, checksums, err
+}
+
+// computeOverallChecksum calculates a combined checksum from individual file checksums
+// Per AI.md PART 25: overall checksum for backup verification
+func computeOverallChecksum(checksums map[string]string) string {
+	// Sort keys for deterministic output
+	keys := make([]string, 0, len(checksums))
+	for k := range checksums {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	// Combine all checksums into one hash
+	hash := sha256.New()
+	for _, k := range keys {
+		hash.Write([]byte(k))
+		hash.Write([]byte(checksums[k]))
+	}
+	return hex.EncodeToString(hash.Sum(nil))
 }
 
 // Restore restores from a backup archive

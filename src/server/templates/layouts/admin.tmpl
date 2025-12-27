@@ -6,6 +6,9 @@
     {{block "extra_head" .}}{{end}}
 </head>
 <body class="admin-page {{.Page}}-page">
+    {{/* Skip link for keyboard navigation - WCAG 2.1 AA */}}
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
     {{/* Admin-specific header */}}
     {{template "admin/header" .}}
 
@@ -13,7 +16,7 @@
         {{/* Admin sidebar navigation */}}
         {{template "admin/sidebar" .}}
 
-        <main class="admin-main">
+        <main id="main-content" class="admin-main" role="main">
             {{/* Flash messages */}}
             {{if .Flash}}
             <div class="flash flash-{{.Flash.Type}}" role="alert">

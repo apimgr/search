@@ -6,13 +6,16 @@
     {{block "extra_head" .}}{{end}}
 </head>
 <body class="public-page {{.Page}}-page">
+    {{/* Skip link for keyboard navigation - WCAG 2.1 AA */}}
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
     {{/* Public header */}}
     {{template "public/header" .}}
 
     {{/* Public navigation */}}
     {{template "public/nav" .}}
 
-    <main class="main-content">
+    <main id="main-content" class="main-content" role="main">
         {{/* Announcements banners */}}
         {{template "announcements" .}}
 

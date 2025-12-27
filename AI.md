@@ -1,4 +1,4 @@
-# SEARCH Specification
+# Search Specification
 
 **Name**: search
 
@@ -6,27 +6,21 @@
 
 # PROJECT DESCRIPTION
 
-**A privacy-respecting metasearch engine that aggregates results from multiple search engines without tracking users.**
+**{Provide a brief description of what this project does and its primary purpose}**
 
-Search is a Go-based metasearch engine that queries multiple search providers (Google, Bing, DuckDuckGo, Brave, Qwant) in parallel, aggregates and de-duplicates results, and presents them through a clean, privacy-first interface with no user tracking or data collection.
+Example:
+- A REST API service that provides random jokes
+- A timezone conversion API with city lookup
+- A GitHub .gitignore template generator
 
 **Key Features:**
-- Privacy-first metasearch with zero tracking
-- Multi-engine aggregation (Google, Bing, DuckDuckGo, Brave, Qwant, SearXNG)
-- Tor integration with .onion hidden service
-- DuckDuckGo-style !bangs support
-- OpenSearch browser integration
-- Real-time widgets (weather, news, stocks, crypto, sports, RSS)
-- Image proxy for privacy-preserving image loading
-- Instant answers (calculations, conversions, time zones)
-- Multi-category search (web, images, videos, maps, news)
+- {Feature 1}
+- {Feature 2}
+- {Feature 3}
 
 **Target Users:**
-- Privacy-conscious individuals seeking Google alternatives
-- Organizations requiring self-hosted search solutions
-- Users in restricted regions needing Tor access
-- Developers wanting customizable metasearch infrastructure
-- Anyone who values privacy and wants to avoid tracking
+- {Who uses this?}
+- {What problem does it solve?}
 
 ---
 
@@ -57,40 +51,40 @@ When using this template to build or modify a project:
 
 | ❌ WRONG | ✅ CORRECT |
 |----------|-----------|
-| Create files relative to TEMPLATE.md location | Create files relative to PROJECT root directory |
+| Create files relative to AI.md location | Create files relative to PROJECT root directory |
 | `/root/Projects/github/apimgr/src/` | `{project_root}/src/` |
 | Where this template lives | Where the project being built lives |
 
 **Common Mistake Example:**
 ```
-User: "Use TEMPLATE.md to build myproject in ~/Documents/myproject"
+User: "Use AI.md to build myproject in ~/Documents/myproject"
 AI (WRONG): Creates files in /root/Projects/github/apimgr/src/
 AI (RIGHT): Creates files in ~/Documents/myproject/src/
 ```
 
 **Rules:**
-- **TEMPLATE.md location** = Reference document (can be anywhere: ~/Projects/github/apimgr/, ~/, etc.)
+- **AI.md location** = Reference document (can be anywhere: ~/Projects/github/apimgr/, ~/, etc.)
 - **Project root** = Where YOUR project lives (can be anywhere: ~/Documents/myproject, ~/myproject, /workspace/project, etc.)
 - **ALL file operations** = Relative to PROJECT root, NOT template location
 - **Use `git rev-parse --show-toplevel`** when in a git repo to find project root
 - **Never assume** cwd or template location is the project root
 
-## ⚠️ CRITICAL: NEVER Reference TEMPLATE.md in Generated Files ⚠️
+## ⚠️ CRITICAL: NEVER Reference AI.md in Generated Files ⚠️
 
 **When generating code, comments, or documentation for a project:**
 
 | ❌ NEVER Write This | ✅ Always Write This |
 |---------------------|---------------------|
-| `// See TEMPLATE.md for details` | `// See AI.md for details` |
-| `# Based on TEMPLATE.md` | `# Based on AI.md` |
-| `Read TEMPLATE.md` | `Read AI.md` |
-| `Check TEMPLATE.md` | `Check AI.md` |
-| `Consult TEMPLATE.md` | `Consult AI.md` |
-| `From TEMPLATE.md` | `From AI.md` |
+| `// See AI.md for details` | `// See AI.md for details` |
+| `# Based on AI.md` | `# Based on AI.md` |
+| `Read AI.md` | `Read AI.md` |
+| `Check AI.md` | `Check AI.md` |
+| `Consult AI.md` | `Consult AI.md` |
+| `From AI.md` | `From AI.md` |
 
-**Why?** Projects don't have TEMPLATE.md - they have AI.md (the project-specific spec created from TEMPLATE.md). Writing "TEMPLATE.md" in project files creates broken references.
+**Why?** Projects don't have AI.md - they have AI.md (the project-specific spec created from AI.md). Writing "AI.md" in project files creates broken references.
 
-**Rule:** In ALL generated code, comments, documentation, and messages, reference **AI.md**, never TEMPLATE.md.
+**Rule:** In ALL generated code, comments, documentation, and messages, reference **AI.md**, never AI.md.
 
 ## ⚠️ CRITICAL: NEVER Overwrite AI.md (Unless Explicitly Told) ⚠️
 
@@ -100,12 +94,12 @@ AI (RIGHT): Creates files in ~/Documents/myproject/src/
 
 | ❌ NEVER Do This | ✅ Always Do This |
 |------------------|-------------------|
-| Regenerate AI.md from TEMPLATE.md | Update only PART 36 in AI.md |
+| Regenerate AI.md from AI.md | Update only PART 36 in AI.md |
 | Overwrite entire AI.md | Edit specific sections that changed |
 | "Refresh" AI.md on your own | Keep AI.md intact, update targeted content only |
 | Delete and recreate AI.md | Preserve all existing content |
 
-**Exception:** If user explicitly says "re-read template and update AI.md", then copy TEMPLATE.md → AI.md and immediately update PART 36 with current project info (see details below).
+**Exception:** If user explicitly says "re-read template and update AI.md", then copy AI.md → AI.md and immediately update PART 36 with current project info (see details below).
 
 **AI.md Structure:**
 
@@ -124,7 +118,7 @@ AI (RIGHT): Creates files in ~/Documents/myproject/src/
 │     → Add all endpoints, features, configurations              │
 │     → This section will be LARGER than template version        │
 │                                                                 │
-│ Size: AI.md will be AT LEAST ~1.1MB (TEMPLATE.md size)           │
+│ Size: AI.md will be AT LEAST ~1.1MB (AI.md size)           │
 │       Often LARGER due to detailed PART 36 content             │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -141,7 +135,11 @@ AI (RIGHT): Creates files in ~/Documents/myproject/src/
 
 **Rules for Updating Documentation:**
 
-1. **AI.md project section**: When you add/remove features, update PART 36 to reflect current state
+1. **AI.md PART 36**: Update business logic, data models, features (NOT implementation patterns)
+   - Add new business rules
+   - Update data structures/models
+   - Document new features and their purpose
+   - Do NOT add route formats, HTML patterns, etc. (those are in PARTS 1-35)
 2. **README.md**: Keep feature list, usage examples, and installation steps current
 3. **docs/**: Update relevant .md files when config options, API routes, or behavior changes
 4. **Swagger**: Add/update/remove annotations when endpoints change
@@ -167,7 +165,7 @@ AI (RIGHT): Creates files in ~/Documents/myproject/src/
 
 ✗ WRONG:
 1. Write the code
-2. Regenerate AI.md from TEMPLATE.md (loses project-specific content!)
+2. Regenerate AI.md from AI.md (loses project-specific content!)
 3. Leave README.md unchanged (documentation now lies)
 ```
 
@@ -179,7 +177,7 @@ When the user **explicitly asks** to refresh/update AI.md from the template:
 
 ```
 User: "Re-read the template and update AI.md"
-User: "Refresh AI.md from TEMPLATE.md"
+User: "Refresh AI.md from AI.md"
 User: "Update AI.md with latest template"
 ```
 
@@ -187,10 +185,10 @@ User: "Update AI.md with latest template"
 
 ```
 ✓ CORRECT WORKFLOW:
-1. Copy ENTIRE TEMPLATE.md → AI.md (COMPLETE file, ~1.1MB, ALL sections)
+1. Copy ENTIRE AI.md → AI.md (COMPLETE file, ~1.1MB, ALL sections)
    ⚠️  DO NOT shorten, summarize, or remove ANY sections from PARTS 1-35
    ⚠️  AI.md will be AT LEAST ~1.1MB (often larger when PART 36 is filled in)
-2. Replace search, apimgr, SEARCH variables
+2. Replace search, apimgr, Search variables
 3. IMMEDIATELY update PART 36 with current project-specific info:
    - Read actual project code
    - Document actual features/endpoints/config
@@ -207,7 +205,7 @@ User: "Update AI.md with latest template"
 ```
 
 **Why this is allowed:**
-- TEMPLATE.md gets improvements and updates over time
+- AI.md gets improvements and updates over time
 - Refreshing brings bug fixes, new features, better organization
 - PART 36 gets repopulated with current project reality
 - No information is lost if PART 36 is updated immediately
@@ -271,7 +269,7 @@ User: "Update AI.md with latest template"
 |------|-------------|
 | **NEVER use Makefile in CI** | Workflows have explicit commands with all env vars |
 | **GitHub/Gitea/Jenkins must match** | Same platforms, same env vars, same logic |
-| **VERSION from tag** | Strip `v` prefix: `v1.2.3` → `1.2.3` |
+| **VERSION from tag** | Strip `v` prefix from semver only: `v1.2.3` → `1.2.3`, `dev` → `dev` |
 | **LDFLAGS** | `-s -w -X 'main.Version=...' -X 'main.CommitID=...' -X 'main.BuildDate=...'` |
 | **Docker builds on EVERY push** | Any branch push triggers Docker image build |
 | **Docker tags** | Any push → `devel`, `{commit}`; beta → adds `beta`; tag → `{version}`, `latest`, `YYMM`, `{commit}` |
@@ -504,7 +502,7 @@ Accept ALL of these (case-insensitive) → convert to `true`/`false`:
 | `CONTRIBUTING.md` in root | Belongs in `.github/` |
 | `CODE_OF_CONDUCT.md` in root | Belongs in `.github/` |
 | `SECURITY.md` in root | Belongs in `.github/` |
-| `PULL_REQUEST_TEMPLATE.md` in root | Belongs in `.github/` |
+| `PULL_REQUEST_AI.md` in root | Belongs in `.github/` |
 | `*.example.*` | No example files (defaults in binary) |
 | `*.sample.*` | No sample files |
 | `.env*` | No .env files |
@@ -551,7 +549,7 @@ Accept ALL of these (case-insensitive) → convert to `true`/`false`:
 | `SECURITY.md` | `.github/SECURITY.md` |
 | `FUNDING.yml` | `.github/FUNDING.yml` |
 | `ISSUE_TEMPLATE/` | `.github/ISSUE_TEMPLATE/` |
-| `PULL_REQUEST_TEMPLATE.md` | `.github/PULL_REQUEST_TEMPLATE.md` |
+| `PULL_REQUEST_AI.md` | `.github/PULL_REQUEST_AI.md` |
 | `workflows/*.yml` | `.github/workflows/` |
 
 ### Gitea-Specific Files (`.gitea/` directory)
@@ -559,7 +557,7 @@ Accept ALL of these (case-insensitive) → convert to `true`/`false`:
 | File | Location |
 |------|----------|
 | `ISSUE_TEMPLATE/` | `.gitea/ISSUE_TEMPLATE/` |
-| `PULL_REQUEST_TEMPLATE.md` | `.gitea/PULL_REQUEST_TEMPLATE.md` |
+| `PULL_REQUEST_AI.md` | `.gitea/PULL_REQUEST_AI.md` |
 | `workflows/*.yml` | `.gitea/workflows/` |
 
 **RULE: If a file doesn't appear in the allowed list, it probably shouldn't exist.**
@@ -643,8 +641,6 @@ Accept ALL of these (case-insensitive) → convert to `true`/`false`:
 | **Log Dir** | Where log files live (`{logdir}`, default: `/var/log/search`) |
 | **PID File** | Process ID file path (`{pidfile}`, default: `/var/run/search.pid`) |
 
----
-
 
 # AI ASSISTANT INSTRUCTIONS (READ THIS ENTIRE SECTION)
 
@@ -655,11 +651,11 @@ Accept ALL of these (case-insensitive) → convert to `true`/`false`:
 ```bash
 # Check if AI.md exists in the project directory
 if [ -f "AI.md" ]; then
-    # ✓ AI.md EXISTS → Use AI.md, DO NOT use TEMPLATE.md
-    # Exception: Only use TEMPLATE.md if user explicitly says:
+    # ✓ AI.md EXISTS → Use AI.md, DO NOT use AI.md
+    # Exception: Only use AI.md if user explicitly says:
     #   "re-read template", "refresh from template", etc.
 else
-    # ✗ AI.md MISSING → Use TEMPLATE.md to create AI.md
+    # ✗ AI.md MISSING → Use AI.md to create AI.md
 fi
 ```
 
@@ -667,21 +663,21 @@ fi
 
 | Situation | File to Use | Action |
 |-----------|-------------|--------|
-| **AI.md exists** | **Use AI.md** | Read AI.md for ALL project work, ignore TEMPLATE.md |
-| **AI.md exists** + user says "refresh from template" | **Use TEMPLATE.md** | Copy TEMPLATE.md → AI.md, update PART 36 |
-| **AI.md missing** | **Use TEMPLATE.md** | Create AI.md from TEMPLATE.md |
+| **AI.md exists** | **Use AI.md** | Read AI.md for ALL project work, ignore AI.md |
+| **AI.md exists** + user says "refresh from template" | **Use AI.md** | Copy AI.md → AI.md, update PART 36 |
+| **AI.md missing** | **Use AI.md** | Create AI.md from AI.md |
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                    ⚠️  CRITICAL RULE  ⚠️                                │
 │                                                                         │
 │   IF AI.md EXISTS in project:                                           │
-│     → Use AI.md ONLY (ignore TEMPLATE.md)                              │
-│     → Do NOT reference TEMPLATE.md                                      │
-│     → Do NOT look at TEMPLATE.md                                        │
-│     → Do NOT compare against TEMPLATE.md                                │
+│     → Use AI.md ONLY (ignore AI.md)                              │
+│     → Do NOT reference AI.md                                      │
+│     → Do NOT look at AI.md                                        │
+│     → Do NOT compare against AI.md                                │
 │                                                                         │
-│   EXCEPTION - Only use TEMPLATE.md if user explicitly says:            │
+│   EXCEPTION - Only use AI.md if user explicitly says:            │
 │     → "Re-read the template"                                            │
 │     → "Refresh AI.md from template"                                     │
 │     → "Update AI.md with latest template"                               │
@@ -689,7 +685,7 @@ fi
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-## CRITICAL: TEMPLATE.md vs AI.md - Know The Difference
+## CRITICAL: AI.md vs AI.md - Know The Difference
 
 **STOP. Understand this before doing ANYTHING.**
 
@@ -697,7 +693,7 @@ fi
 
 | File | What It Is | Location | Use When? |
 |------|------------|----------|-----------|
-| **TEMPLATE.md** | Master template (this file) | Organization/shared location | **ONLY when AI.md missing OR user says "refresh"** |
+| **AI.md** | Master template (this file) | Organization/shared location | **ONLY when AI.md missing OR user says "refresh"** |
 | **AI.md** | Project specification | Each project repository | **ALWAYS (if it exists)** |
 
 ### The Rule
@@ -705,15 +701,15 @@ fi
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                                                                         │
-│   TEMPLATE.md is used to CREATE AI.md (when AI.md doesn't exist)       │
-│   After AI.md exists, AI.md IS THE SPEC. Use AI.md, not TEMPLATE.md    │
+│   AI.md is used to CREATE AI.md (when AI.md doesn't exist)       │
+│   After AI.md exists, AI.md IS THE SPEC. Use AI.md, not AI.md    │
 │                                                                         │
 │   When working on a project with AI.md:                                 │
 │     ✓ Read and follow AI.md (the project spec)                         │
-│     ✗ Do NOT reference TEMPLATE.md                                      │
-│     ✗ Do NOT compare against TEMPLATE.md                                │
-│     ✗ Do NOT look at TEMPLATE.md                                        │
-│     ✗ Do NOT check TEMPLATE.md for updates                              │
+│     ✗ Do NOT reference AI.md                                      │
+│     ✗ Do NOT compare against AI.md                                │
+│     ✗ Do NOT look at AI.md                                        │
+│     ✗ Do NOT check AI.md for updates                              │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -721,10 +717,10 @@ fi
 ### Workflow
 
 ```
-TEMPLATE.md (this file ~1.1MB)
+AI.md (this file ~1.1MB)
     │
     │  INITIAL COPY (when AI.md doesn't exist)
-    │  - Copy ENTIRE TEMPLATE.md → AI.md (~1.1MB complete copy)
+    │  - Copy ENTIRE AI.md → AI.md (~1.1MB complete copy)
     │  - ⚠️  DO NOT shorten, summarize, or remove ANY sections
     │  - Replace search, apimgr variables
     │  - Fill in PART 36 (project-specific sections)
@@ -745,7 +741,7 @@ AI.md (project specification ~1.1MB+)
     │                        │
     │  EXCEPTION: Template Refresh (when user explicitly requests)
     │  - User says: "Re-read template and update AI.md"
-    │  - Copy ENTIRE TEMPLATE.md → AI.md (complete fresh copy)
+    │  - Copy ENTIRE AI.md → AI.md (complete fresh copy)
     │  - ⚠️  DO NOT shorten or summarize
     │  - Immediately update PART 36 with current project info
     │  - Result: Complete latest template + current project details
@@ -754,7 +750,8 @@ AI.md (project specification ~1.1MB+)
 Project Implementation
     │
     │  KEEP DOCUMENTATION IN SYNC
-    │  - Update AI.md PART 36 when features change
+    │  - Update AI.md PART 36 when features change (business logic only)
+    │  - Implementation follows PARTS 1-35 standards (no custom patterns)
     │  - Update README.md when functionality changes
     │  - Update docs/ when API/config changes
     │  - Update Swagger annotations when routes change
@@ -766,43 +763,43 @@ All Documentation Reflects Current Code
 
 ### How to Know Which File You're In
 
-| You're in TEMPLATE.md if... | You're in AI.md if... |
+| You're in AI.md if... | You're in AI.md if... |
 |-----------------------------|----------------------|
 | File contains `search` variables | Variables are replaced with real values |
 | Has "HOW TO USE THIS TEMPLATE" section | That section is deleted |
 | Located in organization/shared folder | Located in project repository |
-| ~1.1MB / ~29,000 lines | ~1.1MB+ / ~29,000+ lines (at least same size, often larger) |
+| ~1.1MB / ~30,000 lines | ~1.1MB+ / ~29,000+ lines (at least same size, often larger) |
 
 ### What To Do
 
 | Scenario | Action |
 |----------|--------|
 | **Starting work on project** | **Check if AI.md exists - if YES, use AI.md ONLY** |
-| Project has AI.md | **Use AI.md only** - DO NOT open/read TEMPLATE.md |
-| Project missing AI.md | Create AI.md from TEMPLATE.md (one-time) |
+| Project has AI.md | **Use AI.md only** - DO NOT open/read AI.md |
+| Project missing AI.md | Create AI.md from AI.md (one-time) |
 | Asked to update spec | Update AI.md PART 36 only, never overwrite entire file |
-| Asked to check compliance | Check against AI.md, NOT TEMPLATE.md |
-| Asked for rules/requirements | Read AI.md, NOT TEMPLATE.md |
+| Asked to check compliance | Check against AI.md, NOT AI.md |
+| Asked for rules/requirements | Read AI.md, NOT AI.md |
 | Template was updated | Does NOT affect existing AI.md files |
 | Code changes | Update AI.md PART 36, README.md, docs/, Swagger, GraphQL |
 | Feature added | Update all documentation to match new reality |
 | Feature removed | Update all documentation to remove references |
-| **User says "re-read template"** | **Copy ENTIRE TEMPLATE.md → AI.md, then update PART 36** |
+| **User says "re-read template"** | **Copy ENTIRE AI.md → AI.md, then update PART 36** |
 
 ### Common Mistakes
 
 | Mistake | Why It's Wrong | Correct Action |
 |---------|----------------|----------------|
-| **Using TEMPLATE.md when AI.md exists** | **AI.md IS the project spec** | **Check if AI.md exists first, use AI.md** |
-| **Looking at TEMPLATE.md during project work** | **TEMPLATE.md is not the project spec** | **Use AI.md only** |
-| **Checking TEMPLATE.md for rules** | **Rules are in AI.md (project copy)** | **Read AI.md instead** |
-| Reading TEMPLATE.md for project work | Project spec is AI.md | Read AI.md instead |
-| "Syncing" AI.md with TEMPLATE.md | AI.md is standalone after creation | Keep AI.md independent |
-| Updating TEMPLATE.md | Template is read-only | Ask maintainer for template changes |
-| Referencing TEMPLATE.md line numbers | AI.md has different line numbers | Use AI.md line numbers |
+| **Using AI.md when AI.md exists** | **AI.md IS the project spec** | **Check if AI.md exists first, use AI.md** |
+| **Looking at AI.md during project work** | **AI.md is not the project spec** | **Use AI.md only** |
+| **Checking AI.md for rules** | **Rules are in AI.md (project copy)** | **Read AI.md instead** |
+| Reading AI.md for project work | Project spec is AI.md | Read AI.md instead |
+| "Syncing" AI.md with AI.md | AI.md is standalone after creation | Keep AI.md independent |
+| Updating AI.md | Template is read-only | Ask maintainer for template changes |
+| Referencing AI.md line numbers | AI.md has different line numbers | Use AI.md line numbers |
 | **Shortening/summarizing AI.md** | **AI.md MUST be ≥1MB (complete PARTS 1-35)** | **Copy ENTIRE template, do NOT remove from PARTS 1-35** |
 | **Removing sections from PARTS 1-35** | **Breaks the complete specification** | **Keep ALL template sections identical** |
-| **Regenerating AI.md from TEMPLATE.md** | **Loses all project-specific content** | **NEVER do this - update PART 36 only** |
+| **Regenerating AI.md from AI.md** | **Loses all project-specific content** | **NEVER do this - update PART 36 only** |
 | **Overwriting entire AI.md** | **Destroys the source of truth** | **Edit specific sections only** |
 | **Leaving docs out of sync** | **Documentation lies about features** | **Update README, docs/, Swagger, GraphQL** |
 
@@ -810,18 +807,18 @@ All Documentation Reflects Current Code
 
 ## CRITICAL: How to Handle This Large File
 
-**This template file is ~1.1MB and ~29,000 lines. You CANNOT read it all at once. Follow these procedures.**
+**This template file is ~1.1MB and ~30,000 lines. You CANNOT read it all at once. Follow these procedures.**
 
-**NOTE: This section applies when you ARE reading TEMPLATE.md (to create AI.md for a new project). For existing projects, read AI.md instead - it's the complete project spec created from this template (at least ~1.1MB, often larger with project details).**
+**NOTE: This section applies when you ARE reading AI.md (to create AI.md for a new project). For existing projects, read AI.md instead - it's the complete project spec created from this template (at least ~1.1MB, often larger with project details).**
 
 ### File Size Reality
 
 | Constraint | Value |
 |------------|-------|
 | File size | ~1.1MB (~1100KB) |
-| Line count | ~29,000 lines |
+| Line count | ~30,000 lines |
 | Read limit | ~500 lines per read |
-| Full reads needed | ~58 reads (impractical) |
+| Full reads needed | ~60 reads (impractical) |
 
 **You MUST read strategically, not sequentially.**
 
@@ -829,50 +826,50 @@ All Documentation Reflects Current Code
 
 **⚠️ IMPORTANT: Line numbers in this index are approximate and may drift as the template is updated.**
 
-**ALWAYS use `grep -n "^# PART" TEMPLATE.md` to get exact current line numbers.**
+**ALWAYS use `grep -n "^# PART" AI.md` to get exact current line numbers.**
 
 Use this index for general navigation only. Do not rely on these line numbers for precise location.
 
 | PART | Lines | Topic | When to Read |
 |------|-------|-------|--------------|
-| 0 | 1170-2142 | AI Assistant Rules | **ALWAYS READ FIRST** |
-| 1 | 2143-2747 | Critical Rules | **ALWAYS READ FIRST** |
-| 2 | 2748-3118 | License & Attribution | License requirements |
-| 3 | 3119-3880 | Project Structure | Setting up new project |
-| 4 | 3881-4046 | OS-Specific Paths | Path handling |
-| 5 | 4047-5055 | Configuration | Config file work |
-| 6 | 5056-5659 | Application Modes | Mode handling, debug endpoints |
-| 7 | 5660-8046 | Server Binary CLI | CLI flags/commands |
-| 8 | 8047-8102 | Update Command | Update feature |
-| 9 | 8103-8488 | Privilege Escalation & Service | Service/privilege work |
-| 10 | 8489-8506 | Service Support | Systemd/service |
-| 11 | 8507-8663 | Binary Requirements | Binary building |
-| 12 | 8664-9126 | Makefile | Build system |
-| 13 | 9127-10140 | Testing & Development | Testing/dev workflow |
-| 14 | 10141-11101 | Docker | Docker/containers |
-| 15 | 11102-13265 | CI/CD Workflows | GitHub/Gitea Actions |
-| 16 | 13266-13389 | Health & Versioning | Health endpoints |
-| 17 | 13390-15283 | Web Frontend | Frontend/UI work |
-| 18 | 15284-15522 | Server Configuration | Server settings |
-| 19 | 15523-16243 | Admin Panel | Admin UI |
-| 20 | 16244-17089 | API Structure | REST/GraphQL/Compatibility API |
-| 21 | 17090-17767 | SSL/TLS & Let's Encrypt | SSL certificates |
-| 22 | 17768-19243 | Security & Logging | Security features |
-| 23 | 19244-22169 | User Management | Users/auth/sessions |
-| 24 | 22170-22302 | Database & Cluster | Database work |
-| 25 | 22303-22707 | Backup & Restore | Backup features |
-| 26 | 22708-24041 | Email & Notifications | Email/SMTP |
-| 27 | 24042-24369 | Scheduler | Background tasks |
-| 28 | 24370-24442 | GeoIP | GeoIP features |
-| 29 | 24443-25463 | Metrics | Metrics/monitoring |
-| 30 | 25464-26056 | Tor Hidden Service | Tor support |
-| 31 | 26057-26114 | Error Handling & Caching | Error/cache |
-| 32 | 26115-26137 | I18N & A11Y | Internationalization |
-| 33 | 26138-26854 | ReadTheDocs Documentation | Documentation |
-| 34 | 26855-27417 | CLI Client | **OPTIONAL** - CLI tool |
-| 35 | 27418-28333 | Custom Domains | **OPTIONAL** - user/org branded domains |
-| 36 | 28334-28395 | Project-Specific Sections | Project customization |
-| FINAL | 28396-29177 | Compliance Checklist | Final verification |
+| 0 | 1175-2238 | AI Assistant Rules | **ALWAYS READ FIRST** |
+| 1 | 2239-2843 | Critical Rules | **ALWAYS READ FIRST** |
+| 2 | 2844-3214 | License & Attribution | License requirements |
+| 3 | 3215-3976 | Project Structure | Setting up new project |
+| 4 | 3977-4142 | OS-Specific Paths | Path handling |
+| 5 | 4143-5178 | Configuration | Config file work |
+| 6 | 5179-5782 | Application Modes | Mode handling, debug endpoints |
+| 7 | 5783-8169 | Server Binary CLI | CLI flags/commands |
+| 8 | 8170-8225 | Update Command | Update feature |
+| 9 | 8226-8611 | Privilege Escalation & Service | Service/privilege work |
+| 10 | 8612-8629 | Service Support | Systemd/service |
+| 11 | 8630-8786 | Binary Requirements | Binary building |
+| 12 | 8787-9311 | Makefile | Build system |
+| 13 | 9312-10420 | Testing & Development | Testing/dev workflow |
+| 14 | 10421-11381 | Docker | Docker/containers |
+| 15 | 11382-13545 | CI/CD Workflows | GitHub/Gitea Actions |
+| 16 | 13546-13669 | Health & Versioning | Health endpoints |
+| 17 | 13670-15563 | Web Frontend | Frontend/UI work |
+| 18 | 15564-15802 | Server Configuration | Server settings |
+| 19 | 15803-16523 | Admin Panel | Admin UI |
+| 20 | 16524-17543 | API Structure | REST/GraphQL/Compatibility API |
+| 21 | 17544-18221 | SSL/TLS & Let's Encrypt | SSL certificates |
+| 22 | 18222-19697 | Security & Logging | Security features |
+| 23 | 19698-22744 | User Management | Users/auth/sessions |
+| 24 | 22745-22877 | Database & Cluster | Database work |
+| 25 | 22878-23282 | Backup & Restore | Backup features |
+| 26 | 23283-24616 | Email & Notifications | Email/SMTP |
+| 27 | 24617-24944 | Scheduler | Background tasks |
+| 28 | 24945-25017 | GeoIP | GeoIP features |
+| 29 | 25018-26038 | Metrics | Metrics/monitoring |
+| 30 | 26039-26631 | Tor Hidden Service | Tor support |
+| 31 | 26632-26689 | Error Handling & Caching | Error/cache |
+| 32 | 26690-26712 | I18N & A11Y | Internationalization |
+| 33 | 26713-27429 | ReadTheDocs Documentation | Documentation |
+| 34 | 27430-27992 | CLI Client | **OPTIONAL** - CLI tool |
+| 35 | 27993-28926 | Custom Domains | **OPTIONAL** - user/org branded domains |
+| 36 | 28927-29151 | Project-Specific Sections | Business logic only |
+| FINAL | 29152-29933 | Compliance Checklist | Final verification |
 
 ### How to Read This File
 
@@ -882,7 +879,7 @@ Use this index for general navigation only. Do not rely on these line numbers fo
 
 ```
 Read lines 1-220      # Critical rules summary (includes file naming conventions)
-Read lines 635-900    # HOW TO USE + TEMPLATE.md vs AI.md distinction (CRITICAL)
+Read lines 635-900    # HOW TO USE + AI.md vs AI.md distinction (CRITICAL)
 Read lines 1170-1400  # AI rules (PART 0 start)
 Read lines 2143-2400  # Critical rules (PART 1 start)
 ```
@@ -903,8 +900,8 @@ Read lines 671-700    # For New Projects section
 
 Use `grep` to find the PART you need:
 ```bash
-grep -n "^# PART" TEMPLATE.md    # List all PARTs with line numbers
-grep -n "keyword" TEMPLATE.md    # Find specific content
+grep -n "^# PART" AI.md    # List all PARTs with line numbers
+grep -n "keyword" AI.md    # Find specific content
 ```
 
 **Step 3: Read the specific PART completely**
@@ -940,16 +937,16 @@ Read lines 9921-10881  # PART 14: Docker (complete section)
 
 ```bash
 # Find specific topics
-grep -n "rate limit" TEMPLATE.md
-grep -n "CSRF" TEMPLATE.md
-grep -n "server.yml" TEMPLATE.md
+grep -n "rate limit" AI.md
+grep -n "CSRF" AI.md
+grep -n "server.yml" AI.md
 
 # Find code examples
-grep -n "```go" TEMPLATE.md
-grep -n "```yaml" TEMPLATE.md
+grep -n "```go" AI.md
+grep -n "```yaml" AI.md
 
 # Find tables
-grep -n "^|" TEMPLATE.md | head -50
+grep -n "^|" AI.md | head -50
 ```
 
 ### Common Mistakes When Reading This File
@@ -1105,24 +1102,31 @@ BEFORE writing ANY code:
 
 **Rule: NEVER guess, assume, or work from memory - ALWAYS read the spec section.**
 
-| Task | Read This PART | Example |
-|------|----------------|---------|
-| Implementing users/auth | PART 23: User Management | "Reading PART 23 for user implementation..." |
-| Setting up UI/frontend | PART 17: Web Frontend | "Checking PART 17 for UI requirements..." |
-| Configuring SSL | PART 21: SSL/TLS & Let's Encrypt | "Referencing PART 21 for SSL setup..." |
-| Adding API endpoints | PART 20: API Structure | "Following PART 20 for API design..." |
-| Writing tests | PART 13: Testing & Development | "Using PART 13 for test structure..." |
-| Creating Dockerfile | PART 14: Docker | "Implementing per PART 14 Docker rules..." |
-| Adding config options | PART 5: Configuration | "Checking PART 5 for config format..." |
-| CLI commands | PART 7: Server Binary CLI | "Following PART 7 for CLI structure..." |
+| Task | Read For Business Logic | Read For Implementation | Example |
+|------|-------------------------|------------------------|---------|
+| Implementing users/auth | PART 36 (if custom logic) | PART 23: User Management | "Reading PART 36 for business rules, PART 23 for implementation..." |
+| Setting up UI/frontend | PART 36 (what to display) | PART 17: Web Frontend | "PART 36 defines content, PART 17 defines UI patterns..." |
+| Configuring SSL | N/A | PART 21: SSL/TLS & Let's Encrypt | "Following PART 21 for SSL setup..." |
+| Adding API endpoints | PART 36 (endpoint purpose) | PART 20: API Structure | "PART 36 defines what endpoints do, PART 20 defines how..." |
+| Writing tests | PART 36 (what to test) | PART 13: Testing & Development | "PART 36 lists features to test, PART 13 defines test structure..." |
+| Creating Dockerfile | N/A | PART 14: Docker | "Implementing per PART 14 Docker rules..." |
+| Adding config options | PART 36 (what settings) | PART 5: Configuration | "PART 36 defines settings needed, PART 5 defines YAML format..." |
+| CLI commands | N/A | PART 7: Server Binary CLI | "Following PART 7 for CLI structure..." |
 
 **Workflow:**
 ```
-1. User: "Add user authentication"
-2. AI: Reads PART 23 (User Management) from AI.md
-3. AI: Implements according to spec
-4. AI: Updates AI.md PART 36, README.md, docs/
+1. User: "Add joke rating feature"
+2. AI: Reads PART 36 for business logic (what a joke rating means, validation rules)
+3. AI: Reads PART 20 for API patterns (how to structure endpoints)
+4. AI: Reads PART 17 for frontend patterns (how to display ratings)
+5. AI: Implements using standards from PARTS 17, 20 with logic from PART 36
+6. AI: Updates PART 36 with new feature, updates README.md, docs/
 ```
+
+**Key Principle:**
+- **PART 36 = WHAT** (business logic, data, rules)
+- **PARTS 1-35 = HOW** (implementation patterns, standards)
+- **AI combines both** to build features correctly
 
 **DO NOT:**
 - Guess how features should work
@@ -1137,7 +1141,7 @@ BEFORE writing ANY code:
 
 | File | Action | Description |
 |------|--------|-------------|
-| **Template file** | **NEVER MODIFY** | Read-only master (may be named TEMPLATE.md, SPEC.md, etc.) |
+| **Template file** | **NEVER MODIFY** | Read-only master (may be named AI.md, SPEC.md, etc.) |
 | **AI.md** | Create/Update | Project-specific specification |
 | **TODO.AI.md** | Create/Update | Task tracking |
 
@@ -1152,15 +1156,15 @@ BEFORE writing ANY code:
 2. If `AI.md` exists → Read it (it is the complete standalone spec for this project)
 3. If old spec files exist in project repo → Merge into `AI.md`, DELETE old files
 
-**Important:** AI.md is created from TEMPLATE.md **once**. After creation, AI.md is the complete standalone spec and does NOT reference or sync with TEMPLATE.md.
+**Important:** AI.md is created from AI.md **once**. After creation, AI.md is the complete standalone spec and does NOT reference or sync with AI.md.
 
-**Migration Rules (when copying TEMPLATE.md → AI.md):**
+**Migration Rules (when copying AI.md → AI.md):**
 
 | Priority | Action | Description |
 |----------|--------|-------------|
-| 1 | **Copy template** | Copy TEMPLATE.md to project as AI.md |
+| 1 | **Copy template** | Copy AI.md to project as AI.md |
 | 2 | **Replace variables** | `search`, `apimgr` with actual values |
-| 3 | **Replace references** | `TEMPLATE.md` → `AI.md`, `TEMPLATE` → `AI` |
+| 3 | **Replace references** | `AI.md` → `AI.md`, `TEMPLATE` → `AI` |
 | 4 | **Update project sections** | Fill in PART 36 with actual project details |
 
 **Variable Replacements:**
@@ -1168,7 +1172,7 @@ BEFORE writing ANY code:
 |------|--------------|---------|
 | `search` | Actual project name | `jokes` |
 | `apimgr` | Actual org name | `apimgr` |
-| `TEMPLATE.md` | `AI.md` | References to this file |
+| `AI.md` | `AI.md` | References to this file |
 | `TEMPLATE` (as document name) | `AI` | "read the TEMPLATE" → "read the AI" |
 
 **Project-Specific Sections (PART 36) - MUST be updated:**
@@ -1355,7 +1359,7 @@ Implemented core server functionality and admin panel.
 
 | Action | Reason |
 |--------|--------|
-| **Modifying TEMPLATE.md** | **Read-only master template - NEVER modify** |
+| **Modifying AI.md** | **Read-only master template - NEVER modify** |
 | `git add` | AI cannot stage files - write COMMIT_MESS instead |
 | `git commit` | AI cannot commit - write COMMIT_MESS instead |
 | `git push` | AI cannot push - user must do this |
@@ -1409,15 +1413,17 @@ type Config struct {
 # Enable multi-user mode
 enabled: false
 
-# Allow public registration
+# User registration mode
+# Options: disabled, public, private, approval
 registration:
-  enabled: false
+  mode: disabled
 ```
 
 ### Code Quality Rules
 
 | Rule | Description |
 |------|-------------|
+| **No inline comments** | Comments ALWAYS go above code, NEVER on same line |
 | **No magic numbers** | Use named constants |
 | **No hardcoded strings** | Use constants or config |
 | **Error handling** | Always handle errors, never ignore |
@@ -1425,6 +1431,88 @@ registration:
 | **SQL injection** | Use parameterized queries only |
 | **XSS prevention** | Escape all output in templates |
 | **CSRF protection** | All forms must have CSRF tokens |
+
+**Comment Style (NON-NEGOTIABLE):**
+
+```yaml
+# WRONG: Inline comments
+enabled: true  # Enable feature
+port: 8080     # Server port
+
+# CORRECT: Comments above
+# Enable feature
+enabled: true
+
+# Server port
+port: 8080
+```
+
+```go
+// WRONG: Inline comments
+var port = 8080  // Server port
+db.Exec(query, id)  // Delete user
+
+// CORRECT: Comments above
+// Server port
+var port = 8080
+
+// Delete user
+db.Exec(query, id)
+```
+
+**Rule: ALL comments go on lines ABOVE the code, NEVER inline. This prevents confusion and improves readability.**
+
+### Formatting and Indentation (NON-NEGOTIABLE)
+
+**ALL code, responses, and files MUST be properly formatted.**
+
+| File Type | Indentation | Trailing Newline | Format Tool |
+|-----------|-------------|------------------|-------------|
+| **Go** | Tabs | Single `\n` | `gofmt`, `go fmt` |
+| **HTML** | 2 spaces | Single `\n` | Manual or prettier |
+| **JSON** | 2 spaces | Single `\n` | `json.MarshalIndent(data, "", "  ")` |
+| **YAML** | 2 spaces | Single `\n` | Manual |
+| **CSS** | 2 spaces | Single `\n` | Manual or prettier |
+| **JavaScript** | 2 spaces | Single `\n` | Manual or prettier |
+| **Makefile** | Tabs (required) | Single `\n` | Manual |
+| **Shell scripts** | 2 spaces | Single `\n` | shellcheck/shfmt |
+| **Text responses** | N/A | Single `\n` | `fmt.Fprintf(w, "%s\n", text)` |
+
+**Universal Rules:**
+- **Every file** ends with exactly ONE newline character
+- **Every response** (JSON, TXT, HTML, XML) ends with exactly ONE newline
+- **No trailing whitespace** on any line
+- **Consistent indentation** throughout each file
+- **2 spaces** is default (except Go and Makefiles which use tabs)
+
+**Examples:**
+
+HTML (2 spaces):
+```html
+<html>
+  <head>
+    <title>Title</title>
+  </head>
+</html>
+⏎
+```
+
+JSON (2 spaces):
+```json
+{
+  "name": "value"
+}
+⏎
+```
+
+YAML (2 spaces):
+```yaml
+server:
+  port: 80
+⏎
+```
+
+**See PART 20 (API Structure) for detailed response formatting rules.**
 
 ### File Organization
 
@@ -2351,7 +2439,7 @@ func gUBE(e string) (*U, error) {
 | **AI.md** | Project repository | Project-specific specification | **YES** |
 | **TODO.AI.md** | Project repository | Task tracking (>2 tasks) | **YES** |
 
-**Note:** Template file may be named `TEMPLATE.md`, `SPEC.md`, `CLAUDE.md`, or other. Location varies (project root, org root, ~/, etc.). Identify by content: unreplaced `{variables}`, "HOW TO USE" section, multiple PART X: sections.
+**Note:** Template file may be named `AI.md`, `SPEC.md`, `CLAUDE.md`, or other. Location varies (project root, org root, ~/, etc.). Identify by content: unreplaced `{variables}`, "HOW TO USE" section, multiple PART X: sections.
 
 ### Documentation Rules (NON-NEGOTIABLE)
 
@@ -3064,7 +3152,7 @@ package main
 |----------|-------------|---------|
 | `search` | Project name (inferred from path) | `jokes` |
 | `apimgr` | Organization name (inferred from path) | `apimgr` |
-| `github` | Git hosting provider | `github`, `gitlab`, `private` |
+| `{gitprovider}` | Git hosting provider | `github`, `gitlab`, `private` |
 | **Rule** | Anything in `{}` is a variable | |
 | **Rule** | Anything NOT in `{}` is literal | `/etc/letsencrypt/live` is a real path |
 
@@ -3072,7 +3160,7 @@ package main
 
 **NEVER hardcode `search` or `apimgr` - always infer from git remote or directory path.**
 
-**Recommended path structure:** `~/Projects/github/apimgr/search` (but works with any location)
+**Recommended path structure:** `~/Projects/{gitprovider}/apimgr/search` (but works with any location)
 
 ```bash
 # Method 1: Infer from git remote (PREFERRED - works regardless of directory location)
@@ -3090,7 +3178,7 @@ PROJECTNAME=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)(\.git
 PROJECTORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(\.git)?$|\1|' || basename "$(dirname "$PWD")")
 ```
 
-**Note:** When using path-based inference, `PROJECTORG` will be the parent directory name, which may not match the git organization unless you follow the recommended `~/Projects/github/apimgr/search` structure. Git remote inference is always more reliable.
+**Note:** When using path-based inference, `PROJECTORG` will be the parent directory name, which may not match the git organization unless you follow the recommended `~/Projects/{gitprovider}/apimgr/search` structure. Git remote inference is always more reliable.
 
 ### Variable Capitalization
 
@@ -3099,7 +3187,7 @@ PROJECTORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(
 | `search` | Lowercase (filenames, paths, commands) | `jokes`, `/etc/apimgr/jokes/` |
 | `{projectName}` | camelCase (Go variables, JSON keys) | `projectName := "jokes"` |
 | `{Projectname}` | PascalCase (Go types, display names) | `type JokesServer struct` |
-| `SEARCH` | UPPERCASE (env vars, Makefile vars) | `PROJECTNAME=jokes` |
+| `Search` | UPPERCASE (env vars, Makefile vars) | `PROJECTNAME=jokes` |
 
 **Examples (assuming no git remote, inferred from path):**
 
@@ -3117,12 +3205,12 @@ PROJECTORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(
 
 **IMPORTANT: Project root can be located ANYWHERE on your system. This section describes a RECOMMENDED organizational structure, not a requirement.**
 
-**Recommended Format:** `~/Projects/github/apimgr/search`
+**Recommended Format:** `~/Projects/{gitprovider}/apimgr/search`
 
 | Component | Description | Examples |
 |-----------|-------------|----------|
 | `~/Projects/` | Base projects directory (recommended) | Can be `~/Projects/`, `~/Documents/`, `/opt/`, etc. |
-| `github` | Git hosting provider or `local` | `github`, `gitlab`, `bitbucket`, `private`, `local` |
+| `{gitprovider}` | Git hosting provider or `local` | `github`, `gitlab`, `bitbucket`, `private`, `local` |
 | `apimgr` | Organization/username (inferred) | `apimgr`, `casjay`, `myorg` |
 | `search` | Project name (inferred) | `jokes`, `icons`, `myproject` |
 
@@ -3217,7 +3305,7 @@ PROJECTORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(
 ├── releases/               # Release binaries (gitignored)
 ├── README.md               # Production first, dev last
 ├── LICENSE.md              # MIT + embedded licenses
-├── AI.md                   # Project specification (from TEMPLATE.md)
+├── AI.md                   # Project specification (from AI.md)
 ├── TODO.AI.md              # Task tracking for >2 tasks
 ├── Jenkinsfile             # Jenkins pipeline
 └── release.txt             # Version tracking
@@ -3405,7 +3493,7 @@ releases/
 
 **⚠️ IMPORTANT: Project root ≠ Template location ≠ Current working directory**
 
-If you're reading this TEMPLATE.md from `/root/Projects/github/apimgr/TEMPLATE.md` to build a project in `~/Documents/myproject`, all file operations must be in `~/Documents/myproject/`, NOT in `/root/Projects/github/apimgr/`.
+If you're reading this AI.md from `/root/Projects/github/apimgr/AI.md` to build a project in `~/Documents/myproject`, all file operations must be in `~/Documents/myproject/`, NOT in `/root/Projects/github/apimgr/`.
 
 ### Defining Project Root
 
@@ -3963,6 +4051,33 @@ Before proceeding, confirm you understand:
 ---
 
 # PART 5: CONFIGURATION (NON-NEGOTIABLE)
+
+## YAML Comment Style (NON-NEGOTIABLE)
+
+**CRITICAL: ALL comments in YAML files MUST go ABOVE the setting, NEVER inline.**
+
+**WRONG:**
+```yaml
+enabled: true  # Enable feature
+port: 8080     # Server port
+```
+
+**CORRECT:**
+```yaml
+# Enable feature
+enabled: true
+
+# Server port
+port: 8080
+```
+
+**Reason:** Inline comments create confusion, make YAML harder to parse visually, and can cause issues with some YAML parsers. Comments above are clear and unambiguous.
+
+**This applies to:**
+- `server.yml` configuration
+- `docker-compose.yml` files
+- All YAML in the project
+- All code examples in documentation
 
 ## Configuration Storage
 
@@ -8604,37 +8719,72 @@ data:
 
 ### Version Tag `v` Prefix Rules (NON-NEGOTIABLE)
 
-**Only add `v` prefix if BOTH conditions are met:**
-1. Tag does NOT already start with `v`
-2. Tag IS a semantic version (matches `X.Y.Z` pattern)
+**CRITICAL: Only add `v` prefix to NUMERIC semantic versions, NEVER to text versions.**
 
-| Tag Input | Is Semver? | Has `v`? | Display As |
-|-----------|------------|----------|------------|
-| `1.2.0` | ✓ | ✗ | `v1.2.0` |
-| `v1.2.0` | ✓ | ✓ | `v1.2.0` |
-| `1.2.3-rc1` | ✓ | ✗ | `v1.2.3-rc1` |
-| `dev` | ✗ | - | `dev` |
-| `beta` | ✗ | - | `beta` |
-| `daily` | ✗ | - | `daily` |
-| `20251218060432` | ✗ | - | `20251218060432` |
-| `20251218060432-beta` | ✗ | - | `20251218060432-beta` |
+**Rule: Add `v` prefix ONLY if tag is a NUMBER (semantic version X.Y.Z), NEVER if it's TEXT.**
+
+**When creating git tags:**
+- ✓ Numeric versions: `git tag v0.2.0` or `git tag 0.2.0` (both become v0.2.0)
+- ✓ Text versions: `git tag dev` or `git tag beta` (stay as dev, beta - NO v)
+- ✗ NEVER create: `git tag vdev`, `git tag vbeta` (wrong!)
+
+**When extracting VERSION variable from tag:**
+- Git tag `v1.2.3` → VERSION=`1.2.3` (strip v for internal use)
+- Git tag `dev` → VERSION=`dev` (no v to strip)
+- Git tag `beta` → VERSION=`beta` (no v to strip)
+
+| Tag Input | Type | Add `v`? | Display As | Why |
+|-----------|------|----------|------------|-----|
+| `0.2.0` | Number (semver) | ✓ YES | `v0.2.0` | Numeric version gets v |
+| `1.2.3` | Number (semver) | ✓ YES | `v1.2.3` | Numeric version gets v |
+| `v1.2.0` | Number (has v) | ✗ NO | `v1.2.0` | Already has v |
+| `1.2.3-rc1` | Number (semver+suffix) | ✓ YES | `v1.2.3-rc1` | Numeric version gets v |
+| `dev` | Text | ✗ NO | `dev` | Text version NO v |
+| `beta` | Text | ✗ NO | `beta` | Text version NO v |
+| `daily` | Text | ✗ NO | `daily` | Text version NO v |
+| `20251218060432` | Timestamp | ✗ NO | `20251218060432` | Not semver NO v |
+| `20251218060432-beta` | Timestamp+text | ✗ NO | `20251218060432-beta` | Not semver NO v |
+
+**Examples of WRONG:**
+- ❌ `vdev` - NEVER add v to text
+- ❌ `vbeta` - NEVER add v to text
+- ❌ `v20251218` - NEVER add v to timestamps
+- ❌ `vv0.3.0` - NEVER double the v prefix
+
+**Examples of CORRECT:**
+- ✓ `dev` - Text version, no v
+- ✓ `beta` - Text version, no v
+- ✓ `v0.2.0` - Numeric version, has v (input: 0.2.0 or v0.2.0)
+- ✓ `v1.2.3` - Numeric version, has v (input: 1.2.3 or v1.2.3)
+- ✓ `20251218-beta` - Timestamp+text, no v
 
 ```bash
-# Shell function to format version tag
+# Shell function to format version tag (prevents vv prefix, only adds v to numbers)
 format_version_tag() {
     local tag="$1"
-    # Check if already starts with v
+
+    # Step 1: If already starts with v, return as-is (prevents vv0.3.0)
     if [[ "$tag" == v* ]]; then
         echo "$tag"
         return
     fi
-    # Check if it's a semantic version (X.Y.Z with optional suffix)
+
+    # Step 2: If it's a semantic version (starts with digit.digit.digit), add v
+    # Matches: 0.2.0, 1.2.3, 10.5.2-rc1
+    # Does NOT match: dev, beta, daily, 20251218
     if [[ "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-        echo "v$tag"
+        echo "v$tag"        # 0.2.0 → v0.2.0
     else
-        echo "$tag"
+        echo "$tag"         # dev → dev (no v)
     fi
 }
+
+# Usage examples:
+# format_version_tag "0.2.0"         → "v0.2.0"
+# format_version_tag "v0.2.0"        → "v0.2.0" (not vv0.2.0)
+# format_version_tag "dev"           → "dev" (not vdev)
+# format_version_tag "beta"          → "beta" (not vbeta)
+# format_version_tag "20251218-beta" → "20251218-beta" (not v...)
 ```
 
 ### Version Priority
@@ -8989,38 +9139,65 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 
 | Property | Value |
 |----------|-------|
-| Trigger | Git tag push (`v*`, `*.*.*`) |
-| Version format | Semantic (`X.Y.Z`) |
-| Release name | `{tag}` or `v{tag}` if semver without `v` (see v prefix rules) |
-| version.txt | `{version}` (without `v` prefix) |
+| Trigger | Git tag push with semver pattern (`v*`, `*.*.*`) |
+| Version format | Semantic (`X.Y.Z`) - NUMBERS only |
+| Git tag | `v1.2.3`, `v0.2.0`, or `1.2.3` (numeric versions) |
+| Release name | `v{version}` (always with v: `v1.2.3`, `v0.2.0`) |
+| version.txt | `{version}` (without `v`: `1.2.3`, `0.2.0`) |
 | GitHub release | Yes, marked as latest |
+
+**Examples:**
+- Git tag `v1.2.3` → Release `v1.2.3`, version.txt `1.2.3`
+- Git tag `0.2.0` → Release `v0.2.0`, version.txt `0.2.0`
 
 ### Beta Release
 
 | Property | Value |
 |----------|-------|
 | Trigger | Push to `beta` branch |
-| Version format | `{YYYYMMDDHHMMSS}-beta` (e.g., `20251205143022-beta`) |
-| Release name | `{YYYYMMDDHHMMSS}-beta` |
+| Version format | `{YYYYMMDDHHMMSS}-beta` - TEXT, NO `v` prefix |
+| Release name | `{YYYYMMDDHHMMSS}-beta` (e.g., `20251205143022-beta`) |
 | version.txt | `{YYYYMMDDHHMMSS}-beta` |
 | GitHub release | Yes, marked as pre-release |
+
+**Example:**
+- Beta build → Release `20251205143022-beta`, version.txt `20251205143022-beta`
+- NO `v` prefix (not a semantic version)
 
 ### Daily Build
 
 | Property | Value |
 |----------|-------|
 | Trigger | Daily schedule (3am UTC) + push to main/master |
-| Version format | `{YYYYMMDDHHMMSS}` (e.g., `20251218060432`) |
+| Version format | `{YYYYMMDDHHMMSS}` - TIMESTAMP, NO `v` prefix |
 | Release name | `daily` (single rolling release) |
-| version.txt | `{YYYYMMDDHHMMSS}` |
+| version.txt | `{YYYYMMDDHHMMSS}` (e.g., `20251218060432`) |
 | GitHub release | Yes, **replaces previous daily** |
 | Max releases | **1** (always overwrites previous daily) |
+
+**Example:**
+- Daily build → Release name `daily`, version.txt `20251218060432`
+- NO `v` prefix (not a semantic version)
 
 **Daily Build Rules:**
 - Only ONE daily release exists at any time
 - Each daily build **deletes and replaces** the previous `daily` release
 - Prevents accumulation of thousands of releases
-- Users always get the latest daily build
+
+## Version Tag Summary (Quick Reference)
+
+| Release Type | Git Tag | Has `v` Prefix? | Release Name | version.txt |
+|--------------|---------|-----------------|--------------|-------------|
+| **Stable** | `v1.2.3` or `1.2.3` | ✓ YES (numbers) | `v1.2.3` | `1.2.3` |
+| **Stable** | `v0.2.0` or `0.2.0` | ✓ YES (numbers) | `v0.2.0` | `0.2.0` |
+| **Beta** | (branch push) | ✗ NO (timestamp) | `20251205-beta` | `20251205-beta` |
+| **Daily** | (branch push) | ✗ NO (timestamp) | `daily` | `20251218` |
+| **Dev** | `dev` | ✗ NO (text) | `dev` | `dev` |
+
+**NEVER:**
+- ❌ `vdev`, `vbeta`, `vdaily` (text versions never get v)
+- ❌ `v20251218` (timestamps never get v)
+- ❌ `vv1.2.3` (don't double the v)
 
 ## Version Files
 
@@ -9093,7 +9270,18 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 
 ## Temporary Directory Structure (NON-NEGOTIABLE)
 
-**NEVER hardcode `/tmp` - always use the OS temp directory with org prefix.**
+**CRITICAL: NEVER use `/tmp` root directory directly. ALWAYS use `/tmp/apimgr/search-XXXXXX` structure.**
+
+**FORBIDDEN:**
+- ❌ `/tmp/myfile` - Root tmp directory
+- ❌ `/tmp/search` - Missing org prefix
+- ❌ `mktemp -d` - No org/project structure
+- ❌ `/tmp/test-data` - Generic paths
+
+**REQUIRED:**
+- ✓ `/tmp/apimgr/search-XXXXXX/` - Full structure
+- ✓ `/tmp/apimgr/jokes-aB3xY9/` - Org + project + random
+- ✓ `mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/$Search-XXXXXX"` - Proper command
 
 **See "Inferring Variables from Path" section for how to detect `ORG` and `PROJECT`.**
 
@@ -9103,7 +9291,7 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 
 | Language | How to Create Prefixed Temp Dir |
 |----------|--------------------------------|
-| Shell | `mkdir -p "${TMPDIR:-/tmp}/${PROJECTORG}" && mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/$SEARCH-XXXXXX"` |
+| Shell | `mkdir -p "${TMPDIR:-/tmp}/${PROJECTORG}" && mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/$Search-XXXXXX"` |
 | Go | `os.MkdirAll(filepath.Join(os.TempDir(), projectOrg), 0755); os.MkdirTemp(filepath.Join(os.TempDir(), projectOrg), projectName+"-")` |
 | Python | `os.makedirs(f"{tempfile.gettempdir()}/{project_org}", exist_ok=True); tempfile.mkdtemp(prefix=f"{project_name}-", dir=f"{tempfile.gettempdir()}/{project_org}")` |
 
@@ -9148,11 +9336,47 @@ rm -rf "${TMPDIR:-/tmp}"/${PROJECTORG}.*/
 
 ### Correct vs Incorrect
 
-| WRONG | RIGHT |
-|-------|-------|
-| `mktemp -d` | `mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}.XXXXXX"` |
-| `/tmp/jokes` | `os.MkdirTemp(os.TempDir(), projectOrg+".")` |
-| Hardcoded org | Detect from git remote or path |
+| WRONG | RIGHT | Why |
+|-------|-------|-----|
+| `/tmp/` | `/tmp/apimgr/search-XXXXXX/` | NEVER use root tmp |
+| `/tmp/myfile` | `/tmp/apimgr/jokes-aB3xY9/myfile` | Always use org/project structure |
+| `/tmp/jokes` | `/tmp/apimgr/jokes-kL9mN2/` | Missing org, missing random suffix |
+| `/tmp/test-data/` | `/tmp/apimgr/jokes-Qw5rT1/test-data/` | Generic path not allowed |
+| `mktemp -d` | `mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/$Search-XXXXXX"` | Must include org/project |
+| `os.TempDir()` alone | `os.MkdirTemp(filepath.Join(os.TempDir(), projectOrg), projectName+"-")` | Must nest under org |
+| Hardcoded org name | Detect from git remote or path | Auto-detect, never hardcode |
+
+**Rule: ALL temp directories MUST be under `/tmp/apimgr/search-XXXXXX/` - no exceptions.**
+
+### Summary: Temp Directory Rules
+
+**The ONLY acceptable temp directory pattern:**
+```
+/tmp/apimgr/search-XXXXXX/
+```
+
+**Breaking it down:**
+- `/tmp/` or `$TMPDIR` - OS temp directory base
+- `apimgr/` - Organization directory (apimgr, casapps, etc.)
+- `search-XXXXXX` - Project directory with random suffix
+
+**Examples of CORRECT paths:**
+- `/tmp/apimgr/jokes-aB3xY9/` ✓
+- `/tmp/casapps/linktree-k9mN2p/` ✓
+- `/tmp/myorg/myproject-Qw5rT1/` ✓
+
+**Examples of WRONG paths:**
+- `/tmp/jokes/` ❌ (missing org)
+- `/tmp/myfile` ❌ (no structure at all)
+- `/tmp/test-data/` ❌ (generic path)
+- `/tmp/apimgr/` ❌ (no project directory)
+
+**Why this structure:**
+- Prevents conflicts between projects
+- Makes cleanup easy (`rm -rf /tmp/apimgr.*`)
+- Identifies which project created temp files
+- Prevents pollution of root `/tmp` directory
+- Multiple projects can run simultaneously
 
 ## Container Usage (NON-NEGOTIABLE)
 
@@ -9232,6 +9456,54 @@ curl /users                    # CLI → plain text (smart detection)
 browser /users                 # Browser → HTML page (smart detection)
 curl -H "Accept: text/plain" /users/1   # Plain text (Accept header)
 curl -H "Accept: text/html" /users/1    # HTML (Accept header)
+```
+
+**Example: Jokes API (read-only) MUST test:**
+```bash
+# API endpoints
+GET /api/v1/jokes/random             # Random joke (JSON)
+GET /api/v1/jokes/random.txt         # Random joke (text)
+GET /api/v1/jokes/programming        # Category filter (JSON)
+GET /api/v1/jokes/search?q=bug       # Search (JSON)
+
+# Frontend endpoints (smart detection)
+curl /jokes/random                   # CLI auto-detects → text
+curl /jokes                          # CLI → text list
+curl -H "Accept: text/html" /jokes   # Browser → HTML
+```
+
+**Example: Weather API (external integration) MUST test:**
+```bash
+# API endpoints with location params
+GET /api/v1/weather/current/New%20York        # Current weather (JSON)
+GET /api/v1/weather/current/New%20York.txt    # Current weather (text)
+GET /api/v1/weather/forecast/10001            # ZIP code forecast (JSON)
+GET /api/v1/weather/alerts/40.7128,-74.0060   # Lat/long alerts (JSON)
+
+# Test caching behavior
+GET /api/v1/weather/current/Chicago           # First call (cache miss)
+GET /api/v1/weather/current/Chicago           # Second call (cache hit, faster)
+
+# Frontend (smart detection)
+curl /weather/Chicago                # CLI → text
+curl /weather/forecast/90210         # CLI → text forecast
+```
+
+**Example: Link Shortener (URL mapping) MUST test:**
+```bash
+# API CRUD for short links
+POST   /api/v1/links -d '{"url":"https://example.com/long/url"}'  # Create
+GET    /api/v1/links/abc123         # Get link details (JSON)
+PUT    /api/v1/links/abc123 -d '{"url":"https://new.com"}'        # Update
+DELETE /api/v1/links/abc123         # Delete
+
+# Redirect resolution
+GET /abc123                          # Should redirect to destination
+GET /abc123/stats                    # Link statistics (JSON or HTML)
+
+# Frontend (smart detection)
+curl /links                          # User's links list (text)
+curl /links/abc123                   # Link details (text)
 ```
 
 ### Go Unit Test Requirements
@@ -9396,27 +9668,27 @@ docker run --rm \
   -v "$(pwd):/build" \
   -w /build \
   -e CGO_ENABLED=0 \
-  golang:alpine go build -o "$BUILD_DIR/$SEARCH" src
+  golang:alpine go build -o "$BUILD_DIR/$Search" src
 
 echo "Testing in Docker (Alpine)..."
 docker run --rm \
   -v "$BUILD_DIR:/app" \
   alpine:latest sh -c "
     set -e
-    chmod +x /app/$SEARCH
+    chmod +x /app/$Search
 
     echo '=== Version Check ==='
-    /app/$SEARCH --version
+    /app/$Search --version
 
     echo '=== Help Check ==='
-    /app/$SEARCH --help
+    /app/$Search --help
 
     echo '=== Binary Info ==='
-    ls -lh /app/$SEARCH
-    file /app/$SEARCH
+    ls -lh /app/$Search
+    file /app/$Search
 
     echo '=== Starting Server for API Tests ==='
-    /app/$SEARCH --port 64580 &
+    /app/$Search --port 64580 &
     SERVER_PID=\$!
     sleep 3
 
@@ -9490,7 +9762,7 @@ fi
 # Detect project info
 PROJECTNAME=$(basename "$PWD")
 PROJECTORG=$(basename "$(dirname "$PWD")")
-CONTAINER_NAME="test-$SEARCH-$$"
+CONTAINER_NAME="test-$Search-$$"
 
 # Create temp directory for build
 BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}.XXXXXX")
@@ -9501,7 +9773,7 @@ docker run --rm \
   -v "$(pwd):/build" \
   -w /build \
   -e CGO_ENABLED=0 \
-  golang:alpine go build -o "$BUILD_DIR/$SEARCH" src
+  golang:alpine go build -o "$BUILD_DIR/$Search" src
 
 echo "Launching Incus container (Debian + systemd)..."
 incus launch images:debian/12 "$CONTAINER_NAME"
@@ -9510,33 +9782,33 @@ incus launch images:debian/12 "$CONTAINER_NAME"
 sleep 2
 
 echo "Copying binary to container..."
-incus file push "$BUILD_DIR/$SEARCH" "$CONTAINER_NAME/usr/local/bin/"
-incus exec "$CONTAINER_NAME" -- chmod +x "/usr/local/bin/$SEARCH"
+incus file push "$BUILD_DIR/$Search" "$CONTAINER_NAME/usr/local/bin/"
+incus exec "$CONTAINER_NAME" -- chmod +x "/usr/local/bin/$Search"
 
 echo "Running tests in Incus..."
 incus exec "$CONTAINER_NAME" -- bash -c "
     set -e
 
     echo '=== Version Check ==='
-    $SEARCH --version
+    $Search --version
 
     echo '=== Help Check ==='
-    $SEARCH --help
+    $Search --help
 
     echo '=== Binary Info ==='
-    ls -lh /usr/local/bin/$SEARCH
-    file /usr/local/bin/$SEARCH
+    ls -lh /usr/local/bin/$Search
+    file /usr/local/bin/$Search
 
     echo '=== Service Install Test ==='
-    $SEARCH --service --install
+    $Search --service --install
 
     echo '=== Service Status ==='
-    systemctl status $SEARCH || true
+    systemctl status $Search || true
 
     echo '=== Service Start Test ==='
-    systemctl start $SEARCH
+    systemctl start $Search
     sleep 2
-    systemctl status $SEARCH
+    systemctl status $Search
 
     echo '=== API Endpoint Tests ==='
     # Test JSON response (default)
@@ -9582,7 +9854,7 @@ incus exec "$CONTAINER_NAME" -- bash -c "
     # Test ALL project-specific endpoints defined in PART 36
 
     echo '=== Service Stop Test ==='
-    systemctl stop $SEARCH
+    systemctl stop $Search
 
     echo '=== All tests passed ==='
 "
@@ -9649,7 +9921,7 @@ set -euo pipefail
 echo '=== Admin Authentication Tests ==='
 
 # Start server normally (authentication required)
-/app/$SEARCH --port 64580 &
+/app/$Search --port 64580 &
 SERVER_PID=$!
 sleep 3
 
@@ -10673,7 +10945,7 @@ $TEMP_DIR/
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"  # Use git top-level
 # Or use absolute path: PROJECT_ROOT="/path/to/your/project"
 mkdir -p "${TMPDIR:-/tmp}/${PROJECTORG}"
-TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/$SEARCH-XXXXXX")
+TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/$Search-XXXXXX")
 mkdir -p "$TEMP_DIR/rootfs/config" "$TEMP_DIR/rootfs/data"
 
 # Copy docker-compose.yml
@@ -12194,11 +12466,11 @@ build:linux-amd64:
     GOOS: linux
     GOARCH: amd64
   script:
-    - go build -ldflags "${LDFLAGS}" -o $SEARCH-linux-amd64 src
-    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-linux-amd64-cli src/client; fi
+    - go build -ldflags "${LDFLAGS}" -o $Search-linux-amd64 src
+    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $Search-linux-amd64-cli src/client; fi
   artifacts:
     paths:
-      - $SEARCH-linux-amd64*
+      - $Search-linux-amd64*
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
@@ -12210,11 +12482,11 @@ build:linux-arm64:
     GOOS: linux
     GOARCH: arm64
   script:
-    - go build -ldflags "${LDFLAGS}" -o $SEARCH-linux-arm64 src
-    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-linux-arm64-cli src/client; fi
+    - go build -ldflags "${LDFLAGS}" -o $Search-linux-arm64 src
+    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $Search-linux-arm64-cli src/client; fi
   artifacts:
     paths:
-      - $SEARCH-linux-arm64*
+      - $Search-linux-arm64*
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
@@ -12226,11 +12498,11 @@ build:darwin-amd64:
     GOOS: darwin
     GOARCH: amd64
   script:
-    - go build -ldflags "${LDFLAGS}" -o $SEARCH-darwin-amd64 src
-    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-darwin-amd64-cli src/client; fi
+    - go build -ldflags "${LDFLAGS}" -o $Search-darwin-amd64 src
+    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $Search-darwin-amd64-cli src/client; fi
   artifacts:
     paths:
-      - $SEARCH-darwin-amd64*
+      - $Search-darwin-amd64*
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
@@ -12242,11 +12514,11 @@ build:darwin-arm64:
     GOOS: darwin
     GOARCH: arm64
   script:
-    - go build -ldflags "${LDFLAGS}" -o $SEARCH-darwin-arm64 src
-    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-darwin-arm64-cli src/client; fi
+    - go build -ldflags "${LDFLAGS}" -o $Search-darwin-arm64 src
+    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $Search-darwin-arm64-cli src/client; fi
   artifacts:
     paths:
-      - $SEARCH-darwin-arm64*
+      - $Search-darwin-arm64*
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
@@ -12258,11 +12530,11 @@ build:windows-amd64:
     GOOS: windows
     GOARCH: amd64
   script:
-    - go build -ldflags "${LDFLAGS}" -o $SEARCH-windows-amd64.exe src
-    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-windows-amd64-cli.exe src/client; fi
+    - go build -ldflags "${LDFLAGS}" -o $Search-windows-amd64.exe src
+    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $Search-windows-amd64-cli.exe src/client; fi
   artifacts:
     paths:
-      - $SEARCH-windows-amd64*.exe
+      - $Search-windows-amd64*.exe
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
@@ -12274,11 +12546,11 @@ build:windows-arm64:
     GOOS: windows
     GOARCH: arm64
   script:
-    - go build -ldflags "${LDFLAGS}" -o $SEARCH-windows-arm64.exe src
-    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-windows-arm64-cli.exe src/client; fi
+    - go build -ldflags "${LDFLAGS}" -o $Search-windows-arm64.exe src
+    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $Search-windows-arm64-cli.exe src/client; fi
   artifacts:
     paths:
-      - $SEARCH-windows-arm64*.exe
+      - $Search-windows-arm64*.exe
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
@@ -12290,11 +12562,11 @@ build:freebsd-amd64:
     GOOS: freebsd
     GOARCH: amd64
   script:
-    - go build -ldflags "${LDFLAGS}" -o $SEARCH-freebsd-amd64 src
-    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-freebsd-amd64-cli src/client; fi
+    - go build -ldflags "${LDFLAGS}" -o $Search-freebsd-amd64 src
+    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $Search-freebsd-amd64-cli src/client; fi
   artifacts:
     paths:
-      - $SEARCH-freebsd-amd64*
+      - $Search-freebsd-amd64*
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
@@ -12306,11 +12578,11 @@ build:freebsd-arm64:
     GOOS: freebsd
     GOARCH: arm64
   script:
-    - go build -ldflags "${LDFLAGS}" -o $SEARCH-freebsd-arm64 src
-    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-freebsd-arm64-cli src/client; fi
+    - go build -ldflags "${LDFLAGS}" -o $Search-freebsd-arm64 src
+    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $Search-freebsd-arm64-cli src/client; fi
   artifacts:
     paths:
-      - $SEARCH-freebsd-arm64*
+      - $Search-freebsd-arm64*
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
@@ -12352,29 +12624,29 @@ release:
   artifacts:
     paths:
       - version.txt
-      - $SEARCH-*
+      - $Search-*
   release:
     tag_name: $CI_COMMIT_TAG
     name: "Release $CI_COMMIT_TAG"
     description: "Release created by GitLab CI"
     assets:
       links:
-        - name: "$SEARCH-linux-amd64"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$SEARCH-linux-amd64?job=build:linux-amd64"
-        - name: "$SEARCH-linux-arm64"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$SEARCH-linux-arm64?job=build:linux-arm64"
-        - name: "$SEARCH-darwin-amd64"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$SEARCH-darwin-amd64?job=build:darwin-amd64"
-        - name: "$SEARCH-darwin-arm64"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$SEARCH-darwin-arm64?job=build:darwin-arm64"
-        - name: "$SEARCH-windows-amd64.exe"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$SEARCH-windows-amd64.exe?job=build:windows-amd64"
-        - name: "$SEARCH-windows-arm64.exe"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$SEARCH-windows-arm64.exe?job=build:windows-arm64"
-        - name: "$SEARCH-freebsd-amd64"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$SEARCH-freebsd-amd64?job=build:freebsd-amd64"
-        - name: "$SEARCH-freebsd-arm64"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$SEARCH-freebsd-arm64?job=build:freebsd-arm64"
+        - name: "$Search-linux-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$Search-linux-amd64?job=build:linux-amd64"
+        - name: "$Search-linux-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$Search-linux-arm64?job=build:linux-arm64"
+        - name: "$Search-darwin-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$Search-darwin-amd64?job=build:darwin-amd64"
+        - name: "$Search-darwin-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$Search-darwin-arm64?job=build:darwin-arm64"
+        - name: "$Search-windows-amd64.exe"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$Search-windows-amd64.exe?job=build:windows-amd64"
+        - name: "$Search-windows-arm64.exe"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$Search-windows-arm64.exe?job=build:windows-arm64"
+        - name: "$Search-freebsd-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$Search-freebsd-amd64?job=build:freebsd-amd64"
+        - name: "$Search-freebsd-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$Search-freebsd-arm64?job=build:freebsd-arm64"
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
 
@@ -12395,11 +12667,11 @@ build:beta:linux:
     - export BUILD_DATE="$(date +"%a %b %d, %Y at %H:%M:%S %Z")"
     - export LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}'"
   script:
-    - go build -ldflags "${LDFLAGS}" -o $SEARCH-linux-amd64 src
-    - go build -ldflags "${LDFLAGS}" -o $SEARCH-linux-arm64 src
+    - go build -ldflags "${LDFLAGS}" -o $Search-linux-amd64 src
+    - go build -ldflags "${LDFLAGS}" -o $Search-linux-arm64 src
   artifacts:
     paths:
-      - $SEARCH-linux-*
+      - $Search-linux-*
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_BRANCH == "beta"
@@ -12421,11 +12693,11 @@ build:daily:linux:
     - export BUILD_DATE="$(date +"%a %b %d, %Y at %H:%M:%S %Z")"
     - export LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}'"
   script:
-    - go build -ldflags "${LDFLAGS}" -o $SEARCH-linux-amd64 src
-    - go build -ldflags "${LDFLAGS}" -o $SEARCH-linux-arm64 src
+    - go build -ldflags "${LDFLAGS}" -o $Search-linux-amd64 src
+    - go build -ldflags "${LDFLAGS}" -o $Search-linux-arm64 src
   artifacts:
     paths:
-      - $SEARCH-linux-*
+      - $Search-linux-*
     expire_in: 1 day
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
@@ -12473,9 +12745,9 @@ docker:build:
         --build-arg BUILD_DATE="${BUILD_DATE}" \
         --label "org.opencontainers.image.vendor=${PROJECTORG}" \
         --label "org.opencontainers.image.authors=${PROJECTORG}" \
-        --label "org.opencontainers.image.title=$SEARCH" \
-        --label "org.opencontainers.image.base.name=$SEARCH" \
-        --label "org.opencontainers.image.description=Containerized version of $SEARCH" \
+        --label "org.opencontainers.image.title=$Search" \
+        --label "org.opencontainers.image.base.name=$Search" \
+        --label "org.opencontainers.image.description=Containerized version of $Search" \
         --label "org.opencontainers.image.licenses=MIT" \
         --label "org.opencontainers.image.version=${VERSION}" \
         --label "org.opencontainers.image.created=${BUILD_DATE}" \
@@ -12485,8 +12757,8 @@ docker:build:
         --label "org.opencontainers.image.documentation=${CI_PROJECT_URL}" \
         --annotation "manifest:org.opencontainers.image.vendor=${PROJECTORG}" \
         --annotation "manifest:org.opencontainers.image.authors=${PROJECTORG}" \
-        --annotation "manifest:org.opencontainers.image.title=$SEARCH" \
-        --annotation "manifest:org.opencontainers.image.description=Containerized version of $SEARCH" \
+        --annotation "manifest:org.opencontainers.image.title=$Search" \
+        --annotation "manifest:org.opencontainers.image.description=Containerized version of $Search" \
         --annotation "manifest:org.opencontainers.image.licenses=MIT" \
         --annotation "manifest:org.opencontainers.image.version=${VERSION}" \
         --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE}" \
@@ -12599,22 +12871,22 @@ pipeline {
         // ----- GITHUB (default) -----
         GIT_FQDN = 'github.com'
         GIT_TOKEN = credentials('github-token')  // Jenkins credentials ID
-        REGISTRY = "ghcr.io/${PROJECTORG}/$SEARCH"
+        REGISTRY = "ghcr.io/${PROJECTORG}/$Search"
 
         // ----- GITEA / FORGEJO (self-hosted) -----
         // GIT_FQDN = 'git.example.com'  // Your Gitea/Forgejo domain
         // GIT_TOKEN = credentials('gitea-token')  // Jenkins credentials ID
-        // REGISTRY = "${GIT_FQDN}/${PROJECTORG}/$SEARCH"
+        // REGISTRY = "${GIT_FQDN}/${PROJECTORG}/$Search"
 
         // ----- GITLAB (gitlab.com or self-hosted) -----
         // GIT_FQDN = 'gitlab.com'  // or your self-hosted GitLab domain
         // GIT_TOKEN = credentials('gitlab-token')  // Jenkins credentials ID
-        // REGISTRY = "registry.${GIT_FQDN}/${PROJECTORG}/$SEARCH"
+        // REGISTRY = "registry.${GIT_FQDN}/${PROJECTORG}/$Search"
 
         // ----- DOCKER HUB -----
         // GIT_FQDN = 'github.com'  // Git host (separate from registry)
         // GIT_TOKEN = credentials('github-token')
-        // REGISTRY = "docker.io/${PROJECTORG}/$SEARCH"
+        // REGISTRY = "docker.io/${PROJECTORG}/$Search"
 
         // =========================================================================
     }
@@ -12668,7 +12940,7 @@ pipeline {
                                 -e GOOS=linux \
                                 -e GOARCH=amd64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-linux-amd64 src
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$Search-linux-amd64 src
                         '''
                     }
                 }
@@ -12685,7 +12957,7 @@ pipeline {
                                 -e GOOS=linux \
                                 -e GOARCH=arm64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-linux-arm64 src
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$Search-linux-arm64 src
                         '''
                     }
                 }
@@ -12703,7 +12975,7 @@ pipeline {
                                 -e GOOS=darwin \
                                 -e GOARCH=amd64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-darwin-amd64 src
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$Search-darwin-amd64 src
                         '''
                     }
                 }
@@ -12720,7 +12992,7 @@ pipeline {
                                 -e GOOS=darwin \
                                 -e GOARCH=arm64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-darwin-arm64 src
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$Search-darwin-arm64 src
                         '''
                     }
                 }
@@ -12738,7 +13010,7 @@ pipeline {
                                 -e GOOS=windows \
                                 -e GOARCH=amd64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-windows-amd64.exe src
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$Search-windows-amd64.exe src
                         '''
                     }
                 }
@@ -12755,7 +13027,7 @@ pipeline {
                                 -e GOOS=windows \
                                 -e GOARCH=arm64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-windows-arm64.exe src
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$Search-windows-arm64.exe src
                         '''
                     }
                 }
@@ -12773,7 +13045,7 @@ pipeline {
                                 -e GOOS=freebsd \
                                 -e GOARCH=amd64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-freebsd-amd64 src
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$Search-freebsd-amd64 src
                         '''
                     }
                 }
@@ -12790,7 +13062,7 @@ pipeline {
                                 -e GOOS=freebsd \
                                 -e GOARCH=arm64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-freebsd-arm64 src
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$Search-freebsd-arm64 src
                         '''
                     }
                 }
@@ -12816,7 +13088,7 @@ pipeline {
                                 -e GOOS=linux \
                                 -e GOARCH=amd64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-linux-amd64-cli src/client
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$Search-linux-amd64-cli src/client
                         '''
                     }
                 }
@@ -12833,7 +13105,7 @@ pipeline {
                                 -e GOOS=linux \
                                 -e GOARCH=arm64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-linux-arm64-cli src/client
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$Search-linux-arm64-cli src/client
                         '''
                     }
                 }
@@ -12850,7 +13122,7 @@ pipeline {
                                 -e GOOS=darwin \
                                 -e GOARCH=amd64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-darwin-amd64-cli src/client
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$Search-darwin-amd64-cli src/client
                         '''
                     }
                 }
@@ -12867,7 +13139,7 @@ pipeline {
                                 -e GOOS=darwin \
                                 -e GOARCH=arm64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-darwin-arm64-cli src/client
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$Search-darwin-arm64-cli src/client
                         '''
                     }
                 }
@@ -12884,7 +13156,7 @@ pipeline {
                                 -e GOOS=windows \
                                 -e GOARCH=amd64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-windows-amd64-cli.exe src/client
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$Search-windows-amd64-cli.exe src/client
                         '''
                     }
                 }
@@ -12901,7 +13173,7 @@ pipeline {
                                 -e GOOS=windows \
                                 -e GOARCH=arm64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-windows-arm64-cli.exe src/client
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$Search-windows-arm64-cli.exe src/client
                         '''
                     }
                 }
@@ -12918,7 +13190,7 @@ pipeline {
                                 -e GOOS=freebsd \
                                 -e GOARCH=amd64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-freebsd-amd64-cli src/client
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$Search-freebsd-amd64-cli src/client
                         '''
                     }
                 }
@@ -12935,7 +13207,7 @@ pipeline {
                                 -e GOOS=freebsd \
                                 -e GOARCH=arm64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-freebsd-arm64-cli src/client
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$Search-freebsd-arm64-cli src/client
                         '''
                     }
                 }
@@ -12967,7 +13239,7 @@ pipeline {
                 sh '''
                     echo "${VERSION}" > ${RELDIR}/version.txt
 
-                    for f in ${BINDIR}/$SEARCH-*; do
+                    for f in ${BINDIR}/$Search-*; do
                         [ -f "$f" ] || continue
                         cp "$f" ${RELDIR}/
                     done
@@ -12975,7 +13247,7 @@ pipeline {
                     tar --exclude='.git' --exclude='.github' --exclude='.gitea' \
                         --exclude='.forgejo' --exclude='binaries' --exclude='releases' \
                         --exclude='*.tar.gz' \
-                        -czf ${RELDIR}/$SEARCH-${VERSION}-source.tar.gz .
+                        -czf ${RELDIR}/$Search-${VERSION}-source.tar.gz .
                 '''
                 archiveArtifacts artifacts: 'releases/*', fingerprint: true
             }
@@ -12991,7 +13263,7 @@ pipeline {
                 sh '''
                     echo "${VERSION}" > ${RELDIR}/version.txt
 
-                    for f in ${BINDIR}/$SEARCH-*; do
+                    for f in ${BINDIR}/$Search-*; do
                         [ -f "$f" ] || continue
                         cp "$f" ${RELDIR}/
                     done
@@ -13010,7 +13282,7 @@ pipeline {
                 sh '''
                     echo "${VERSION}" > ${RELDIR}/version.txt
 
-                    for f in ${BINDIR}/$SEARCH-*; do
+                    for f in ${BINDIR}/$Search-*; do
                         [ -f "$f" ] || continue
                         cp "$f" ${RELDIR}/
                     done
@@ -13049,7 +13321,7 @@ pipeline {
 
                     // Build multi-arch with OCI labels and manifest annotations
                     sh """
-                        docker buildx create --name $SEARCH-builder --use 2>/dev/null || docker buildx use $SEARCH-builder
+                        docker buildx create --name $Search-builder --use 2>/dev/null || docker buildx use $Search-builder
                         docker buildx build \
                             -f docker/Dockerfile \
                             --platform linux/amd64,linux/arm64 \
@@ -13058,27 +13330,27 @@ pipeline {
                             --build-arg BUILD_DATE="${BUILD_DATE}" \
                             --label "org.opencontainers.image.vendor=${PROJECTORG}" \
                             --label "org.opencontainers.image.authors=${PROJECTORG}" \
-                            --label "org.opencontainers.image.title=$SEARCH" \
-                            --label "org.opencontainers.image.base.name=$SEARCH" \
-                            --label "org.opencontainers.image.description=Containerized version of $SEARCH" \
+                            --label "org.opencontainers.image.title=$Search" \
+                            --label "org.opencontainers.image.base.name=$Search" \
+                            --label "org.opencontainers.image.description=Containerized version of $Search" \
                             --label "org.opencontainers.image.licenses=MIT" \
                             --label "org.opencontainers.image.version=${VERSION}" \
                             --label "org.opencontainers.image.created=${BUILD_DATE}" \
                             --label "org.opencontainers.image.revision=${COMMIT_ID}" \
-                            --label "org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECTORG}/$SEARCH" \
-                            --label "org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECTORG}/$SEARCH" \
-                            --label "org.opencontainers.image.documentation=https://${GIT_FQDN}/${PROJECTORG}/$SEARCH" \
+                            --label "org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECTORG}/$Search" \
+                            --label "org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECTORG}/$Search" \
+                            --label "org.opencontainers.image.documentation=https://${GIT_FQDN}/${PROJECTORG}/$Search" \
                             --annotation "manifest:org.opencontainers.image.vendor=${PROJECTORG}" \
                             --annotation "manifest:org.opencontainers.image.authors=${PROJECTORG}" \
-                            --annotation "manifest:org.opencontainers.image.title=$SEARCH" \
-                            --annotation "manifest:org.opencontainers.image.description=Containerized version of $SEARCH" \
+                            --annotation "manifest:org.opencontainers.image.title=$Search" \
+                            --annotation "manifest:org.opencontainers.image.description=Containerized version of $Search" \
                             --annotation "manifest:org.opencontainers.image.licenses=MIT" \
                             --annotation "manifest:org.opencontainers.image.version=${VERSION}" \
                             --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE}" \
                             --annotation "manifest:org.opencontainers.image.revision=${COMMIT_ID}" \
-                            --annotation "manifest:org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECTORG}/$SEARCH" \
-                            --annotation "manifest:org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECTORG}/$SEARCH" \
-                            --annotation "manifest:org.opencontainers.image.documentation=https://${GIT_FQDN}/${PROJECTORG}/$SEARCH" \
+                            --annotation "manifest:org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECTORG}/$Search" \
+                            --annotation "manifest:org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECTORG}/$Search" \
+                            --annotation "manifest:org.opencontainers.image.documentation=https://${GIT_FQDN}/${PROJECTORG}/$Search" \
                             ${tags} \
                             --push \
                             .
@@ -13136,17 +13408,17 @@ In the Jenkinsfile, uncomment the appropriate block:
 // ----- GITHUB (default) -----
 GIT_FQDN = 'github.com'
 GIT_TOKEN = credentials('github-token')
-REGISTRY = "ghcr.io/${PROJECTORG}/$SEARCH"
+REGISTRY = "ghcr.io/${PROJECTORG}/$Search"
 
 // ----- GITEA / FORGEJO (self-hosted) -----
 // GIT_FQDN = 'git.example.com'
 // GIT_TOKEN = credentials('gitea-token')
-// REGISTRY = "${GIT_FQDN}/${PROJECTORG}/$SEARCH"
+// REGISTRY = "${GIT_FQDN}/${PROJECTORG}/$Search"
 
 // ----- GITLAB (gitlab.com or self-hosted) -----
 // GIT_FQDN = 'gitlab.com'
 // GIT_TOKEN = credentials('gitlab-token')
-// REGISTRY = "registry.${GIT_FQDN}/${PROJECTORG}/$SEARCH"
+// REGISTRY = "registry.${GIT_FQDN}/${PROJECTORG}/$Search"
 ```
 
 ### Triggers Comparison
@@ -16205,6 +16477,180 @@ GET /api/v1/users?status=active&role=admin ✓ Multiple filters
 | **No redundancy** | Don't duplicate path params as query params |
 | **Clean URLs** | Prefer `/jokes/random` over `/jokes?type=random` |
 
+## Response Formatting (NON-NEGOTIABLE)
+
+**ALL responses and ALL code MUST be properly formatted.**
+
+### Universal Formatting Rules
+
+**These rules apply to EVERYTHING: responses, code files, templates, configs.**
+
+| Rule | Applies To | Requirement |
+|------|-----------|-------------|
+| **Single trailing newline** | JSON, TXT, HTML, XML, YAML, Go, all files | End with exactly one `\n` |
+| **2-space indentation** | HTML, JSON, YAML, JavaScript, CSS | Use 2 spaces per level |
+| **Tab indentation** | Go code, Makefiles | Use tabs where required by language |
+| **Proper nesting** | All structured formats | Each level indented correctly |
+| **No trailing whitespace** | All files | No spaces/tabs at end of lines |
+
+### JSON Formatting (API Responses)
+
+```go
+// ALL JSON responses MUST be indented and end with newline
+data, _ := json.MarshalIndent(response, "", "  ")  // 2-space indent
+w.Header().Set("Content-Type", "application/json")
+w.Write(data)
+w.Write([]byte("\n"))  // Single trailing newline
+```
+
+**Output:**
+```json
+{
+  "id": "123",
+  "name": "Test User",
+  "items": [
+    {
+      "id": "1"
+    }
+  ]
+}
+⏎
+```
+
+### Text Formatting (TXT Responses)
+
+```go
+// ALL text responses MUST end with single newline
+w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+fmt.Fprintf(w, "%s\n", text)  // Single trailing newline
+```
+
+**Output:**
+```
+This is the response text.
+⏎
+```
+
+### HTML Formatting (Frontend Responses)
+
+```go
+// ALL HTML MUST be indented with 2 spaces and end with newline
+```
+
+**Output:**
+```html
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Page Title</title>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Heading</h1>
+      <p>Paragraph text here.</p>
+      <ul>
+        <li>Item 1</li>
+        <li>Item 2</li>
+      </ul>
+    </div>
+  </body>
+</html>
+⏎
+```
+
+### YAML Formatting (Config Files)
+
+```yaml
+# 2-space indentation, single trailing newline
+server:
+  address: 0.0.0.0
+  port: 80
+
+  users:
+    enabled: false
+    registration:
+      mode: disabled
+⏎
+```
+
+### Go Code Formatting
+
+```go
+// Use tabs for indentation (gofmt standard)
+func Handler(w http.ResponseWriter, r *http.Request) {
+	// Tab indent
+	if err := validate(r); err != nil {
+		// Tab indent
+		http.Error(w, "Invalid", 400)
+		return
+	}
+
+	// Response
+	fmt.Fprintf(w, "OK\n")
+}
+⏎
+```
+
+### CSS Formatting
+
+```css
+/* 2-space indentation */
+.container {
+  width: 90%;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+@media (min-width: 720px) {
+  .container {
+    width: 98%;
+  }
+}
+⏎
+```
+
+### JavaScript Formatting
+
+```javascript
+// 2-space indentation
+function handleClick(event) {
+  event.preventDefault();
+
+  const data = {
+    id: 123,
+    name: "test"
+  };
+
+  fetch('/api/v1/users', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
+}
+⏎
+```
+
+### Formatting Rules Summary
+
+**Indentation:**
+- **2 spaces**: HTML, JSON, YAML, CSS, JavaScript
+- **Tabs**: Go code, Makefiles
+- **NEVER mix**: Use consistent indentation throughout file
+
+**Newlines:**
+- **Every file**: Ends with exactly one newline
+- **Every response**: Ends with exactly one newline
+- **No extra blank lines**: At end of files/responses
+
+**Validation:**
+```bash
+# Check file ends with single newline
+tail -c 2 file.txt | od -An -tx1
+# Should show: '0a' (one newline) or 'XX 0a' (char + newline)
+# Should NOT show: '0a 0a' (two newlines) or no '0a' (no newline)
+```
+
 ## Content Negotiation (NON-NEGOTIABLE)
 
 **All endpoints respond based on how they are accessed.**
@@ -17458,7 +17904,7 @@ formatURL(host, 8443, true)   // https://host:8443
 **Example (Production with SSL + Tor on 443):**
 ```
 ╭─────────────────────────────────────────────────────────────╮
-│  🚀 SEARCH · 📦 v1.0.0                                │
+│  🚀 Search · 📦 v1.0.0                                │
 ├─────────────────────────────────────────────────────────────┤
 │  🔒 Running in mode: production                             │
 ├─────────────────────────────────────────────────────────────┤
@@ -17473,7 +17919,7 @@ formatURL(host, 8443, true)   // https://host:8443
 **Example (Production with Tor + I2P on 443):**
 ```
 ╭─────────────────────────────────────────────────────────────╮
-│  🚀 SEARCH · 📦 v1.0.0                                │
+│  🚀 Search · 📦 v1.0.0                                │
 ├─────────────────────────────────────────────────────────────┤
 │  🔒 Running in mode: production                             │
 ├─────────────────────────────────────────────────────────────┤
@@ -17489,7 +17935,7 @@ formatURL(host, 8443, true)   // https://host:8443
 **Example (Production on port 8080):**
 ```
 ╭─────────────────────────────────────────────────────────────╮
-│  🚀 SEARCH · 📦 v1.0.0                                │
+│  🚀 Search · 📦 v1.0.0                                │
 ├─────────────────────────────────────────────────────────────┤
 │  🔒 Running in mode: production                             │
 ├─────────────────────────────────────────────────────────────┤
@@ -17503,7 +17949,7 @@ formatURL(host, 8443, true)   // https://host:8443
 **Example (Development on port 8080):**
 ```
 ╭─────────────────────────────────────────────────────────────╮
-│  🚀 SEARCH · 📦 v1.0.0                                │
+│  🚀 Search · 📦 v1.0.0                                │
 ├─────────────────────────────────────────────────────────────┤
 │  🔧 Running in mode: development                            │
 ├─────────────────────────────────────────────────────────────┤
@@ -17517,7 +17963,7 @@ formatURL(host, 8443, true)   // https://host:8443
 **Example (Development IPv6 on port 8080):**
 ```
 ╭─────────────────────────────────────────────────────────────╮
-│  🚀 SEARCH · 📦 v1.0.0                                │
+│  🚀 Search · 📦 v1.0.0                                │
 ├─────────────────────────────────────────────────────────────┤
 │  🔧 Running in mode: development                            │
 ├─────────────────────────────────────────────────────────────┤
@@ -17531,7 +17977,7 @@ formatURL(host, 8443, true)   // https://host:8443
 **Example (Production on port 80):**
 ```
 ╭─────────────────────────────────────────────────────────────╮
-│  🚀 SEARCH · 📦 v1.0.0                                │
+│  🚀 Search · 📦 v1.0.0                                │
 ├─────────────────────────────────────────────────────────────┤
 │  🔒 Running in mode: production                             │
 ├─────────────────────────────────────────────────────────────┤
@@ -17545,7 +17991,7 @@ formatURL(host, 8443, true)   // https://host:8443
 **Example (Production with debugging enabled):**
 ```
 ╭─────────────────────────────────────────────────────────────╮
-│  🚀 SEARCH · 📦 v1.0.0                                │
+│  🚀 Search · 📦 v1.0.0                                │
 ├─────────────────────────────────────────────────────────────┤
 │  🔒 Running in mode: production [debugging]                 │
 ├─────────────────────────────────────────────────────────────┤
@@ -17559,7 +18005,7 @@ formatURL(host, 8443, true)   // https://host:8443
 **Example (First Run - Setup Required):**
 ```
 ╭─────────────────────────────────────────────────────────────╮
-│  🚀 SEARCH · 📦 v1.0.0                                │
+│  🚀 Search · 📦 v1.0.0                                │
 ├─────────────────────────────────────────────────────────────┤
 │  🔧 Running in mode: development                            │
 ├─────────────────────────────────────────────────────────────┤
@@ -19204,6 +19650,84 @@ const (
 | `/auth/logout` | Logout |
 | Public routes (`/`, `/server/*`, etc.) | Guest view (no user-specific content) |
 
+## Registration Modes (Multi-User Apps Only)
+
+**Multi-user apps use a SINGLE setting to control registration behavior.**
+
+**Config setting:**
+```yaml
+users:
+  # Enable multi-user mode
+  enabled: true
+
+  registration:
+    # Registration mode: disabled, public, private, approval
+    mode: disabled
+```
+
+### Registration Mode Definitions
+
+| Mode | Who Can Register | Use Case | Admin Action Required |
+|------|------------------|----------|----------------------|
+| **disabled** | No one | Admin-created accounts only | Admin creates all users |
+| **public** | Anyone | Open community, public service | None (auto-active after email verify) |
+| **private** | Invite code holders only | Controlled growth, beta testing | Users generate invite codes |
+| **approval** | Anyone (pending approval) | Moderated community | Admin approves each registration |
+
+### Mode: disabled
+
+**No registration allowed. Admin creates all user accounts.**
+
+- `/auth/register` → 404 or redirect to `/auth/login`
+- Registration form not shown anywhere
+- Only admins can create users via `/admin/server/users/create`
+- Use for: Internal tools, admin-only services
+
+### Mode: public
+
+**Anyone can register with valid email. Immediate access after email verification.**
+
+- `/auth/register` → Registration form
+- User submits username, email, password
+- Email verification sent (if `require_email_verification: true`)
+- After verification → account immediately active
+- No admin approval needed
+- Use for: Public services, open communities
+
+### Mode: private
+
+**Invite-only registration. Users need an invite code.**
+
+- Existing users generate invite codes at `/user/invites/create`
+- Invite code has expiration (`invite_expiration_days` config)
+- New user visits `/auth/register?invite={code}`
+- Invite code validated, user submits registration form
+- Email verification sent (if `require_email_verification: true`)
+- After verification → account active
+- Invite code consumed (one-time use)
+- Use for: Controlled growth, beta testing, exclusive communities
+
+**Invite code management:**
+- Users can create up to `max_invites_per_user` codes
+- Invite codes expire after `invite_expiration_days`
+- Track who invited whom (referral tracking)
+- Admin can see all invites at `/admin/server/users/invites`
+
+### Mode: approval
+
+**Anyone can register, but admin must approve before account is active.**
+
+- `/auth/register` → Registration form
+- User submits registration form
+- Email verification sent (if `require_email_verification: true`)
+- After verification → account created as **pending**
+- Admin notified of pending user
+- Admin reviews at `/admin/server/users/pending`
+- Admin approves/rejects
+- If approved → account active, user notified
+- If rejected → account deleted, user notified
+- Use for: Moderated communities, quality control
+
 **Server Admin Setup (Setup Wizard Flow):**
 
 **IMPORTANT: App works perfectly with sane defaults before setup.** Setup wizard is optional and allows customization. Server is fully functional immediately on first run.
@@ -19225,7 +19749,7 @@ const (
 ```
 ╔══════════════════════════════════════════════════════════════════════╗
 ║                                                                      ║
-║   SEARCH v1.0.0                                               ║
+║   Search v1.0.0                                               ║
 ║                                                                      ║
 ║   Status: Running (first run - setup available)                      ║
 ║                                                                      ║
@@ -20420,16 +20944,23 @@ server:
     enabled: false
 
     registration:
-      # Allow public registration
-      enabled: false
-      # Require email verification before account is active
+      # Registration mode: disabled, public, private, approval
+      # - disabled: No registration allowed (admin creates users only)
+      # - public: Anyone can register (open registration)
+      # - private: Invite-only (requires invite code)
+      # - approval: Anyone can register, admin must approve
+      mode: disabled
+
+      # Email verification (applies to all modes except disabled)
       require_email_verification: true
-      # Admin must approve new users
-      require_approval: false
-      # Allowed email domains (empty = all allowed)
-      allowed_domains: []
-      # Blocked email domains
-      blocked_domains: []
+
+      # Email domain restrictions (applies to public/approval modes)
+      allowed_domains: []      # Empty = all domains allowed
+      blocked_domains: []      # Block specific domains
+
+      # Invite settings (for private mode)
+      invite_expiration_days: 7     # How long invite codes are valid
+      max_invites_per_user: 10      # How many invites each user can create
 
     roles:
       # Available roles
@@ -20506,17 +21037,53 @@ server:
 
 ## User Features
 
-### Registration Flow
+### Registration Modes (NON-NEGOTIABLE)
 
+**Single setting controls all registration behavior:**
+
+| Mode | Description | Who Can Register | Workflow |
+|------|-------------|------------------|----------|
+| **disabled** | No registration | No one (admin creates users only) | Registration form hidden |
+| **public** | Open registration | Anyone with valid email | Submit form → verify email → active |
+| **private** | Invite-only | Users with invite code only | Enter code → submit form → verify email → active |
+| **approval** | Admin approval required | Anyone, but admin must approve | Submit form → verify email → admin approves → active |
+
+### Registration Flow by Mode
+
+**Mode: disabled**
 ```
-1. User submits registration form
-   ├─ If require_email_verification: Send verification email
-   │   └─ User clicks link → account verified
-   ├─ If require_approval: Admin notified
-   │   └─ Admin approves → account active
-   └─ If neither: Account immediately active
+/auth/register → 404 or redirect to login
+No registration allowed, admin creates users manually
+```
 
-2. User can now log in
+**Mode: public**
+```
+1. User visits /auth/register
+2. Submits registration form (username, email, password)
+3. Email verification sent (if require_email_verification: true)
+4. User clicks verification link
+5. Account active → user can log in
+```
+
+**Mode: private**
+```
+1. Existing user generates invite code (/user/invites/create)
+2. New user visits /auth/register?invite={code}
+3. Submits registration form
+4. Email verification sent (if require_email_verification: true)
+5. User clicks verification link
+6. Account active → user can log in
+```
+
+**Mode: approval**
+```
+1. User visits /auth/register
+2. Submits registration form
+3. Email verification sent (if require_email_verification: true)
+4. User clicks verification link
+5. Admin notified of pending user
+6. Admin approves user at /admin/server/users/pending
+7. Account active → user can log in
 ```
 
 ### Authentication Methods
@@ -25293,7 +25860,7 @@ groups:
 
 ```json
 {
-  "title": "SEARCH Metrics",
+  "title": "Search Metrics",
   "panels": [
     {
       "title": "Request Rate",
@@ -26107,7 +26674,7 @@ Documentation uses MkDocs Material theme with built-in light/dark/auto switching
 ## mkdocs.yml Template (NON-NEGOTIABLE)
 
 ```yaml
-site_name: SEARCH
+site_name: Search
 site_url: https://apimgr-search.readthedocs.io
 site_description: "{Project description}"
 site_author: apimgr
@@ -26535,7 +27102,7 @@ pymdown-extensions>=10.0
 ### docs/index.md
 
 ```markdown
-# SEARCH
+# Search
 
 {Brief project description}
 
@@ -26640,8 +27207,8 @@ database:
 All settings can be overridden via environment:
 
 ```bash
-SEARCH_SERVER_PORT=8080
-SEARCH_DATABASE_TYPE=postgres
+Search_SERVER_PORT=8080
+Search_DATABASE_TYPE=postgres
 ```
 
 ## Admin Panel
@@ -27021,11 +27588,11 @@ jokes-cli config get server.address
 **Token Storage:**
 - Stored in `cli.yml` under `server.token`
 - Can be overridden with `--token` flag
-- Environment variable: `SEARCH_CLI_TOKEN`
+- Environment variable: `Search_CLI_TOKEN`
 
 **Priority (highest to lowest):**
 1. `--token` flag
-2. `SEARCH_CLI_TOKEN` environment variable
+2. `Search_CLI_TOKEN` environment variable
 3. `server.token` in config file
 
 ## HTTP Client Identity (NON-NEGOTIABLE)
@@ -27372,15 +27939,32 @@ Build Info:
 server:
   features:
     custom_domains:
-      enabled: false                    # Enable custom domain support
-      max_domains_per_user: 5           # Limit per user (0 = unlimited)
-      max_domains_per_org: 20           # Limit per org (0 = unlimited)
-      require_ssl: true                 # Require SSL for all custom domains
-      allow_apex: true                  # Allow apex domains (example.com)
-      allow_subdomain: true             # Allow subdomains (sub.example.com)
-      allow_wildcard: false             # Allow wildcard domains (*.example.com)
-      verification_ttl: 86400           # Verification token TTL (24 hours)
-      ssl_renewal_days: 7               # Renew SSL certs N days before expiry
+      # Enable custom domain support
+      enabled: false
+
+      # Limit per user (0 = unlimited)
+      max_domains_per_user: 5
+
+      # Limit per org (0 = unlimited)
+      max_domains_per_org: 20
+
+      # Require SSL for all custom domains
+      require_ssl: true
+
+      # Allow apex domains (example.com)
+      allow_apex: true
+
+      # Allow subdomains (sub.example.com)
+      allow_subdomain: true
+
+      # Allow wildcard domains (*.example.com)
+      allow_wildcard: false
+
+      # Verification token TTL (24 hours)
+      verification_ttl: 86400
+
+      # Renew SSL certs N days before expiry
+      ssl_renewal_days: 7
 
       # Reserved domains that cannot be used
       reserved:
@@ -27391,8 +27975,9 @@ server:
         - "*.invalid"
 
       # Blocked patterns (regex)
+      # Government/military/education TLDs
       blocked_patterns:
-        - ".*\\.(gov|mil|edu)$"         # Government/military/education TLDs
+        - ".*\\.(gov|mil|edu)$"
 ```
 
 **Environment variable override:**
@@ -28251,255 +28836,289 @@ When implementing custom domains for a project:
 
 # PART 36: PROJECT-SPECIFIC SECTIONS
 
-## Project Description
+**This section defines WHAT your project does (business logic, intent, unique features), NOT HOW to implement it.**
 
-**Search** is a privacy-respecting metasearch engine that aggregates results from multiple search engines without tracking users. Built in Go for enhanced performance, security, and ease of deployment.
+## ⚠️ CRITICAL: Business Logic Only
 
-**Official Site**: https://search.apimgr.us
+**PARTS 1-35 define HOW to build (standards, patterns, structure).**
+**PART 36 defines WHAT this project does (business logic, unique features).**
 
-## Key Features
+**PART 36 should contain:**
+- ✓ Business purpose and intent
+- ✓ Unique data structures and models
+- ✓ Business rules and validation logic
+- ✓ Data sources and content
+- ✓ Special algorithms or logic
+- ✓ Project-specific features
 
-- **Privacy First**: No tracking, no logging, no data collection
-- **Tor Support**: Full Tor integration with SOCKS5, circuit rotation, and .onion hidden service
-- **Local Storage**: User preferences stored in browser only (no server-side tracking)
-- **Multiple Engines**: Aggregate results from Google, Bing, DuckDuckGo, Brave, Qwant, and more
-- **Bangs Support**: DuckDuckGo-style !bangs (!g for Google, !bing for Bing, etc.)
-- **OpenSearch**: Browser integration as default search engine
-- **Widgets**: Weather, news, stocks, crypto, sports, RSS feeds
-- **Multi-Category**: Web, images, videos, maps, news search
-- **Image Proxy**: Privacy-preserving image loading
-- **Instant Answers**: Direct results for calculations, conversions, time zones
-- **Autocomplete**: Privacy-friendly search suggestions
+**PART 36 should NOT contain:**
+- ✗ Route implementation details (follow PART 20: API Structure)
+- ✗ HTML/CSS/frontend patterns (follow PART 17: Web Frontend)
+- ✗ Config file format/structure (follow PART 5: Configuration)
+- ✗ Database table schemas (follow PART 24: Database)
+- ✗ Authentication patterns (follow PART 23: User Management)
+- ✗ Testing approaches (follow PART 13: Testing)
 
-## Project-Specific API Endpoints
+**Rule: AI reads PART 36 for business logic, then implements using standards from PARTS 1-35.**
 
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/` | GET | None | Main search interface |
-| `/search` | GET | None | Perform search query |
-| `/autocomplete` | GET | None | Autocomplete suggestions |
-| `/opensearch.xml` | GET | None | OpenSearch description document |
-| `/api/v1/search` | GET | None | Search API (JSON response) |
-| `/api/v1/engines` | GET | None | List available search engines |
-| `/api/v1/categories` | GET | None | List search categories |
-| `/api/v1/widgets/{type}` | GET | None | Get widget data (weather, news, etc.) |
-| `/api/v1/instant` | GET | None | Instant answer results |
-| `/api/v1/admin/engines` | GET/POST | Admin | Manage search engine configuration |
-| `/api/v1/admin/bangs` | GET/POST | Admin | Manage custom bangs |
+---
 
-## Project-Specific Data Files
+## Project Business Purpose
 
-**No static data files - all configuration is dynamic.**
+```
+Purpose: Privacy-respecting metasearch engine that aggregates results from multiple
+search engines while protecting user privacy.
 
-Search engines, bangs, and widgets are configured via `server.yml` and managed through the admin panel.
+Target Users:
+- Privacy-conscious individuals wanting anonymous search
+- Self-hosters wanting their own search engine
+- Organizations requiring private search infrastructure
+- Users wanting to avoid tracking and profiling
 
-## Project-Specific Configuration
+Unique Value:
+- Multiple engine aggregation (Bing, Brave, Qwant, Startpage, Yahoo, etc.)
+- Result deduplication and intelligent ranking
+- Instant answers (calculator, definitions, conversions)
+- Widget system (weather, stocks, crypto, sports, news)
+- Bang shortcuts for 200+ sites (!g, !w, !yt, etc.)
+- No user tracking or query logging
+- Category-specific search (web, images, videos, news, maps)
+- Configurable safe search levels
+```
 
-```yaml
-# Search-specific configuration
-search:
-  # Safe search level: 0=off, 1=moderate, 2=strict
-  safe_search: 0
+## Business Logic & Rules
 
-  # Autocomplete provider: "google", "duckduckgo", "qwant", "disabled"
-  autocomplete: "duckduckgo"
+```
+Business Rules:
+- Query all enabled search engines concurrently
+- Timeout: 30 seconds per engine (configurable)
+- Deduplicate results by URL
+- Score based on position and engine consensus (results in multiple engines rank higher)
+- Safe search levels: 0=off, 1=moderate (default), 2=strict
+- Bang shortcuts (!g, !w, etc.) redirect immediately to target site
+- Instant answers processed before search (math, definitions, conversions)
+- Results cached for 5 minutes (configurable)
+- Strip tracking parameters from result URLs
 
-  # Default language code (ISO 639-1)
-  default_lang: "en"
+Privacy Rules:
+- No query logging (unless explicitly enabled for admin)
+- No user tracking or profiling
+- Anonymous engine queries where possible
+- Session data minimal and user-controlled
 
-  # Default search categories
-  default_categories:
-    - web
-    - images
-    - videos
-    - news
-    - maps
+Validation:
+- Query text cannot be empty
+- Category must be valid: general, images, videos, news, maps, files, it, science, social
+- Page must be >= 1
+- Per-page must be 1-100 (default: 20)
+- Sort order: relevance (default), date, date_asc, popularity, random
+- Time range: any (default), day, week, month, year
 
-  # Results per page
-  results_per_page: 10
+Rate Limiting:
+- Public: 10 requests/second
+- Authenticated: 50 requests/second
+- Admin: 100 requests/second
+```
 
-  # Engine request timeout (seconds)
-  timeout: 5
+## Data Models
 
-  # Maximum concurrent engine requests
-  max_concurrent: 10
+```go
+// Query represents a search query
+type Query struct {
+    Text       string   `json:"text"`        // Search query text
+    Category   Category `json:"category"`    // general, images, videos, news, maps
+    Language   string   `json:"language"`    // Language code (en, de, fr, etc.)
+    Region     string   `json:"region"`      // Region code (us, uk, de, etc.)
+    SafeSearch int      `json:"safe_search"` // 0: off, 1: moderate, 2: strict
+    Page       int      `json:"page"`        // Page number (default: 1)
+    PerPage    int      `json:"per_page"`    // Results per page (default: 20)
+    SortBy     string   `json:"sort_by"`     // relevance, date, popularity
+    TimeRange  string   `json:"time_range"`  // any, day, week, month, year
+    Engines    []string `json:"engines"`     // Specific engines to use
+}
 
-  # Bangs configuration
-  bangs:
-    enabled: true
-    proxy_requests: false  # Whether to proxy bang redirects
-    custom:
-      - shortcut: "!gh"
-        name: "GitHub"
-        url: "https://github.com/search?q=%s"
-        category: "code"
+// Result represents a single search result
+type Result struct {
+    Title       string    `json:"title"`        // Result title
+    URL         string    `json:"url"`          // Result URL
+    Content     string    `json:"content"`      // Snippet/description
+    Engine      string    `json:"engine"`       // Source engine name
+    Category    string    `json:"category"`     // Result category
+    Thumbnail   string    `json:"thumbnail"`    // Thumbnail URL (images/videos)
+    PublishedAt time.Time `json:"published_at"` // Publication date (news)
+    Score       float64   `json:"score"`        // Relevance score
+}
 
-  # OpenSearch configuration
-  opensearch:
-    enabled: true
-    short_name: "Search"
-    description: "Privacy-Respecting Metasearch Engine"
-    contact: "admin@search.apimgr.us"
-    tags: "privacy search metasearch"
-    long_name: "Search - Privacy-Respecting Metasearch Engine"
-    image: "/static/favicon.png"
+// Bang represents a bang shortcut
+type Bang struct {
+    Shortcut string   `json:"shortcut"` // e.g., "g", "w", "yt"
+    Name     string   `json:"name"`     // e.g., "Google", "Wikipedia"
+    URL      string   `json:"url"`      // URL template with {query}
+    Category string   `json:"category"` // general, images, video, etc.
+    Aliases  []string `json:"aliases"`  // Alternative shortcuts
+}
 
-  # Widgets configuration
-  widgets:
-    enabled: true
-    cache_ttl: 300  # 5 minutes
-    default_widgets:
-      - weather
-      - news
-    weather:
-      enabled: true
-      default_city: "New York"
-      units: "metric"
-    news:
-      enabled: true
-      sources:
-        - "https://news.ycombinator.com/rss"
-      max_items: 10
-    stocks:
-      enabled: true
-      default_symbols:
-        - "AAPL"
-        - "GOOGL"
-    crypto:
-      enabled: true
-      default_coins:
-        - "bitcoin"
-        - "ethereum"
-      currency: "usd"
-    sports:
-      enabled: true
-      default_leagues:
-        - "nfl"
-        - "nba"
-    rss:
-      enabled: true
-      max_feeds: 10
-      max_items: 20
+// InstantAnswer represents an instant answer result
+type InstantAnswer struct {
+    Type    string                 `json:"type"`    // definition, math, convert
+    Query   string                 `json:"query"`   // Original query
+    Title   string                 `json:"title"`   // Answer title
+    Content string                 `json:"content"` // Answer content
+    Data    map[string]interface{} `json:"data"`    // Additional data
+    Source  string                 `json:"source"`  // Data source
+}
 
-# Search engine configuration
-engines:
-  google:
-    enabled: true
-    priority: 10
-    categories:
-      - web
-      - images
-      - videos
-      - maps
-      - news
-    timeout: 5
-    weight: 1.0
-    api_key: ""  # Optional Google API key
+// Category types
+const (
+    CategoryGeneral  = "general"
+    CategoryImages   = "images"
+    CategoryVideos   = "videos"
+    CategoryNews     = "news"
+    CategoryMaps     = "maps"
+    CategoryFiles    = "files"
+    CategoryIT       = "it"
+    CategoryScience  = "science"
+    CategorySocial   = "social"
+)
+```
 
-  bing:
-    enabled: true
-    priority: 8
-    categories:
-      - web
-      - images
-      - videos
-      - maps
-      - news
-    timeout: 5
-    weight: 0.8
+## Data Sources
 
-  duckduckgo:
-    enabled: true
-    priority: 9
-    categories:
-      - web
-      - images
-      - videos
-      - news
-    timeout: 5
-    weight: 0.9
+```
+External Search Engines (queried at runtime):
+- Bing: Microsoft search engine (web, images, videos, news)
+- Brave: Privacy-focused search (web, images)
+- Qwant: European privacy search (web, images, news)
+- Startpage: Anonymous Google results (web)
+- Yahoo: Yahoo search (web, images, videos, news)
+- Wikipedia: Encyclopedia search (reference)
+- YouTube: Video search (via YouTube Data API or scraping)
+- GitHub: Code/repository search (it category)
+- Stack Overflow: Programming Q&A (it category)
+- Reddit: Social discussions (social category)
 
-  brave:
-    enabled: true
-    priority: 7
-    categories:
-      - web
-      - images
-      - videos
-      - news
-    timeout: 5
-    weight: 0.7
-    api_key: ""  # Optional Brave API key
+Embedded Data (in binary):
+- bangs.go: 200+ bang shortcuts (src/search/bangs/defaults.go)
+- categories.go: Valid search categories (src/models/category.go)
+- instant handlers: Math, definition, conversion logic (src/instant/)
 
-  qwant:
-    enabled: true
-    priority: 6
-    categories:
-      - web
-      - images
-      - videos
-      - maps
-      - news
-    timeout: 5
-    weight: 0.6
+Widget Data Sources (external APIs):
+- Weather: OpenWeatherMap API (configurable)
+- Crypto: CoinGecko API (free tier)
+- Stocks: Yahoo Finance API
+- Sports: API-Football
+- News: RSS feeds from major outlets
 
-  searx:
-    enabled: false  # Requires SearXNG instance
-    priority: 5
-    categories:
-      - web
-      - images
-      - videos
-      - maps
-      - news
-    timeout: 10
-    weight: 0.5
-    api_key: ""  # SearXNG instance URL
+GeoIP Data:
+- ip-location-db: Free GeoIP database (auto-updated weekly)
+- Location: {datadir}/geoip/
+
+Update Strategy:
+- Search engine integrations: No updates needed (queries at runtime)
+- Bang shortcuts: Updated in source code, requires new release
+- GeoIP database: Auto-updated weekly via scheduler
+- Widget APIs: Queried in real-time with caching
+```
+
+## Project-Specific Endpoints Summary
+
+**Implementation of these endpoints MUST follow PART 20 (API Structure) and PART 17 (Web Frontend) rules.**
+
+```
+Web Routes:
+- / : Homepage with search box
+- /search : Search results page (handles all categories)
+- /images : Image search results
+- /videos : Video search results
+- /news : News search results
+- /maps : Map search results
+- /about : About page
+- /privacy : Privacy policy
+- /help : Help/documentation
+- /preferences : User preferences (language, safe search, theme)
+
+API Endpoints (/api/v1/):
+- GET /search : Perform search query
+- GET /suggest : Search suggestions/autocomplete
+- GET /instant : Get instant answer for query
+- GET /bangs : List all bang shortcuts
+- GET /bangs/{shortcut} : Get bang by shortcut
+- GET /engines : List available search engines
+- GET /categories : List search categories
+- GET /preferences : Get user preferences
+- PUT /preferences : Update user preferences
+- GET /widgets/weather : Get weather widget data
+- GET /widgets/crypto : Get crypto prices
+- GET /widgets/stocks : Get stock prices
+- GET /widgets/sports : Get sports scores
+- GET /widgets/news : Get news headlines
+
+Admin Endpoints (/api/v1/admin/):
+- GET/PUT /admin/search/engines : Manage enabled engines
+- GET/POST/DELETE /admin/search/bangs : Manage custom bangs
+- GET/PUT /admin/search/widgets : Configure widget API keys
+- GET/DELETE /admin/search/cache : Cache management
+- GET /admin/search/stats : Search statistics
+
+Business Behavior:
+- Search queries all enabled engines concurrently
+- Results deduplicated by URL, ranked by consensus
+- Bang shortcuts redirect immediately (no search)
+- Instant answers return before search completes
+- Widget data cached per-widget TTL
+- Preferences stored in session/user profile
+- All endpoints support ?format=json for API responses
 ```
 
 ## Extended Node Functions (If Applicable)
 
-**Not applicable** - Search is a standard web application with clustering support for config sync only. No extended node management required.
+**Search engine uses standard clustering (config sync only). No extended node functions.**
 
 ## High Availability Requirements (If Applicable)
 
-**Not applicable** - Search does not require high availability. Standard clustering (config sync) is sufficient for load balancing and redundancy.
+**Search engine uses standard clustering. No special HA requirements.**
+
+Standard cluster behavior applies:
+- Nodes share configuration via database
+- Any node can handle search requests
+- No session affinity required (stateless search)
+- Cache is per-node (not shared)
 
 ## Notes
 
-### Design Decisions
+```
+Instant Answer Types:
+- Calculator: "2+2", "sqrt(16)", "10% of 200"
+- Unit conversion: "5 miles to km", "100 usd to eur"
+- Definition: "define:word", "what is AI"
+- Synonyms: "synonyms for happy"
+- Time/Date: "time in tokyo", "date today"
+- IP Address: "my ip", "what is my ip"
+- Hash: "md5 hello", "sha256 test"
+- Base64: "base64 encode hello"
+- Color: "#ff5500", "rgb(255,85,0)"
+- UUID: "uuid", "generate uuid"
+- Random: "random number", "roll dice"
+- Password: "password", "generate password"
 
-- **Privacy-first architecture**: All user preferences stored client-side (LocalStorage/SessionStorage)
-- **No logging**: Search queries are NEVER logged to disk or database
-- **Tor integration**: Built-in Tor controller for .onion service and outbound requests via Tor
-- **Result aggregation**: Concurrent requests to multiple engines, de-duplicated and ranked by engine weight
-- **Image proxy**: All external images proxied through server to prevent tracking
-- **Bangs**: DuckDuckGo-compatible bang syntax (!g, !bing, !gh, etc.)
-- **Instant answers**: Built-in instant result system for calculations, conversions, etc.
+Bang Shortcut Categories:
+- General: !g (Google), !b (Bing), !ddg (DuckDuckGo)
+- Images: !gi (Google Images), !fl (Flickr), !us (Unsplash)
+- Video: !yt (YouTube), !v (Vimeo), !twitch (Twitch)
+- Maps: !gm (Google Maps), !osm (OpenStreetMap)
+- News: !gn (Google News), !hn (Hacker News)
+- Shopping: !a (Amazon), !ebay (eBay)
+- Social: !tw (Twitter), !r (Reddit)
+- Reference: !w (Wikipedia), !wa (Wolfram Alpha)
+- Tech: !gh (GitHub), !so (Stack Overflow)
 
-### Security Considerations
-
-- **No PII collection**: Zero personally identifiable information collected or stored
-- **Rate limiting**: Per-IP rate limits to prevent abuse
-- **GeoIP blocking**: Optional country-level blocking for compliance/abuse prevention
-- **Tor hidden service**: Automatically enabled if Tor is available
-- **SSL/TLS**: Let's Encrypt integration for automatic HTTPS
-
-### Performance Optimizations
-
-- **Result caching**: Configurable cache TTL for search results (disabled by default for privacy)
-- **Concurrent engine queries**: Parallel requests to all enabled engines
-- **Connection pooling**: HTTP client connection reuse for better performance
-- **Gzip compression**: Response compression for bandwidth optimization
-
-### Future Enhancements
-
-- Additional search engines (Ecosia, Startpage, etc.)
-- Advanced filtering (date range, site:, filetype:)
-- Search history (opt-in, client-side only)
-- Custom themes and color schemes
-- API key rotation for engines
-- Distributed engine pool (multiple SearXNG instances)
+Widget Caching:
+- Weather: 30 minutes
+- Crypto: 5 minutes
+- Stocks: 15 minutes (market hours only)
+- Sports: 1 minute (during games), 1 hour (otherwise)
+- News: 15 minutes
+```
 
 ---
 
@@ -28514,9 +29133,9 @@ engines:
 ### Document Rules
 
 - [ ] **AI.md is the ONLY project specification** - nothing else
-- [ ] **TEMPLATE.md does NOT exist in projects** - it lives only in apimgr repo
-- [ ] **NEVER reference TEMPLATE.md** - projects don't have it, don't need it
-- [ ] If AI.md missing, ask human to create it (or create from TEMPLATE.md in apimgr)
+- [ ] **AI.md does NOT exist in projects** - it lives only in apimgr repo
+- [ ] **NEVER reference AI.md** - projects don't have it, don't need it
+- [ ] If AI.md missing, ask human to create it (or create from AI.md in apimgr)
 - [ ] Keep AI.md in sync with PROJECT STATE
 - [ ] Migrate old files: `CLAUDE.md`, `SPEC.md` → merge into `AI.md`, DELETE old files
 - [ ] Use TODO.AI.md for tasks when more than 2 items
@@ -28552,7 +29171,7 @@ engines:
 7. Verify consistency with related sections
 8. Update TODO.AI.md when tasks complete
 
-**Note:** TEMPLATE.md does NOT exist in projects. AI.md IS the spec.
+**Note:** AI.md does NOT exist in projects. AI.md IS the spec.
 
 ---
 
@@ -28569,7 +29188,7 @@ engines:
 - [ ] `go.mod` / `go.sum` - Go modules (required)
 - [ ] `.github/workflows/` or `.gitea/workflows/` - CI/CD (required)
 
-**Note:** No TEMPLATE.md, SPEC.md, or CLAUDE.md in projects. Only AI.md.
+**Note:** No AI.md, SPEC.md, or CLAUDE.md in projects. Only AI.md.
 
 ### Development
 
@@ -28582,7 +29201,7 @@ engines:
 ### Configuration
 
 - [ ] Config file: `server.yml` (not .yaml)
-- [ ] Environment variables: `SEARCH_xxx`
+- [ ] Environment variables: `Search_xxx`
 - [ ] CLI flags override env, env overrides file
 - [ ] Boolean accepts: true/false, yes/no, 1/0, on/off
 - [ ] Sane defaults for everything
@@ -28986,9 +29605,9 @@ When bootstrapping a new project from this specification:
    mkdir -p .github/workflows
    ```
 
-3. **Create AI.md from TEMPLATE.md:**
-   - Copy TEMPLATE.md from apimgr repo
-   - Replace all `SEARCH` with actual project name
+3. **Create AI.md from AI.md:**
+   - Copy AI.md from apimgr repo
+   - Replace all `Search` with actual project name
    - Replace all `search` with actual project name
    - Replace all `apimgr` with actual organization
    - Fill in PROJECT DESCRIPTION section

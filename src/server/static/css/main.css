@@ -2087,3 +2087,243 @@ a:hover {
         grid-template-columns: repeat(3, 1fr);
     }
 }
+
+/* Toast Notifications (per AI.md PART 17)
+ * Position: top-right, stacked vertically
+ * Types: success, error, warning, info
+ */
+#toast-container {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-width: 400px;
+    pointer-events: none;
+}
+
+.toast {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.875rem 1rem;
+    border-radius: 0.5rem;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 12px var(--shadow-color);
+    transform: translateX(100%);
+    opacity: 0;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+    pointer-events: auto;
+}
+
+.toast-visible {
+    transform: translateX(0);
+    opacity: 1;
+}
+
+.toast-hiding {
+    transform: translateX(100%);
+    opacity: 0;
+}
+
+.toast-icon {
+    flex-shrink: 0;
+    width: 1.5rem;
+    height: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    font-weight: bold;
+    border-radius: 50%;
+}
+
+.toast-success .toast-icon {
+    background-color: var(--accent-success);
+    color: #fff;
+}
+
+.toast-error .toast-icon {
+    background-color: var(--accent-error);
+    color: #fff;
+}
+
+.toast-warning .toast-icon {
+    background-color: var(--accent-warning);
+    color: #282a36;
+}
+
+.toast-info .toast-icon {
+    background-color: var(--accent-info);
+    color: #282a36;
+}
+
+.toast-message {
+    flex: 1;
+    font-size: 0.9rem;
+    line-height: 1.4;
+    color: var(--text-primary);
+}
+
+.toast-close {
+    flex-shrink: 0;
+    width: 1.5rem;
+    height: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 1.25rem;
+    line-height: 1;
+    padding: 0;
+    transition: color 0.2s ease;
+}
+
+.toast-close:hover {
+    color: var(--text-primary);
+}
+
+/* Confirmation Dialog (per AI.md PART 17)
+ * Uses native <dialog> with accessibility
+ */
+#confirm-dialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    max-width: 400px;
+    width: 90%;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    background-color: var(--bg-secondary);
+    box-shadow: 0 8px 32px var(--shadow-color);
+}
+
+#confirm-dialog::backdrop {
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+#confirm-dialog header {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+#confirm-dialog h2 {
+    margin: 0;
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+#confirm-dialog main {
+    padding: 1.25rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+#confirm-dialog footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    border-top: 1px solid var(--border-color);
+    background-color: var(--bg-tertiary);
+}
+
+/* Mobile adjustments for toasts */
+@media (max-width: 480px) {
+    #toast-container {
+        left: 0.5rem;
+        right: 0.5rem;
+        max-width: none;
+    }
+
+    .toast {
+        transform: translateY(-100%);
+    }
+
+    .toast-visible {
+        transform: translateY(0);
+    }
+
+    .toast-hiding {
+        transform: translateY(-100%);
+    }
+
+    #confirm-dialog {
+        width: 95%;
+    }
+}
+
+/* ==========================================================================
+   Utility Classes
+   ========================================================================== */
+
+/* Visibility */
+.hidden {
+    display: none !important;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Skip link for keyboard navigation - WCAG 2.1 AA */
+.skip-link {
+    position: absolute;
+    top: -40px;
+    left: 0;
+    background: var(--accent-primary);
+    color: var(--bg-primary);
+    padding: 8px 16px;
+    z-index: 10000;
+    text-decoration: none;
+    font-weight: 600;
+    border-radius: 0 0 4px 0;
+    transition: top 0.2s;
+}
+
+.skip-link:focus {
+    top: 0;
+    outline: 2px solid var(--text-primary);
+    outline-offset: 2px;
+}
+
+/* Spacing */
+.mt-1 {
+    margin-top: 1rem;
+}
+
+/* Bang Suggestion Styles */
+.bang-suggestion-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.bang-suggestion-item:hover {
+    background: var(--bg-tertiary, #313244);
+}
+
+.bang-shortcut {
+    font-family: monospace;
+    color: var(--accent-color, #bd93f9);
+    font-weight: bold;
+}

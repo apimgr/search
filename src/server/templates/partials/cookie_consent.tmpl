@@ -2,7 +2,7 @@
 {{ define "cookie_consent" }}
 {{ if .CookieConsent }}
 {{ if .CookieConsent.Enabled }}
-<div class="cookie-consent" id="cookie-consent" style="display: none;">
+<div class="cookie-consent hidden" id="cookie-consent">
     <div class="cookie-consent-content">
         <p class="cookie-consent-message">
             {{ if .CookieConsent.Message }}

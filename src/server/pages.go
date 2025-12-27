@@ -414,8 +414,7 @@ func (s *Server) handleAutocomplete(w http.ResponseWriter, r *http.Request) {
 	// This ensures consistent behavior between frontend and API endpoints
 	if s.apiHandler != nil {
 		// Forward to API autocomplete handler
-		r.URL.Path = "/api/v1/autocomplete"
-		s.apiHandler.ServeHTTP(w, r)
+		s.apiHandler.HandleAutocomplete(w, r)
 		return
 	}
 

@@ -3,7 +3,6 @@ package graphql
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 
 	"github.com/apimgr/search/src/config"
 	"github.com/graphql-go/graphql"
@@ -257,7 +256,7 @@ func serveGraphiQL(w http.ResponseWriter, r *http.Request) {
 	<style>` + getGraphiQLThemeCSS(theme) + `</style>
 </head>
 <body>
-	<div id="graphiql" style="height: 100vh;"></div>
+	<div id="graphiql"></div>
 	<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 	<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 	<script src="https://unpkg.com/graphiql@3/graphiql.min.js"></script>

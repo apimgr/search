@@ -21,8 +21,10 @@ type LogType string
 const (
 	LogTypeAccess   LogType = "access"
 	LogTypeServer   LogType = "server"
+	LogTypeError    LogType = "error"
 	LogTypeSecurity LogType = "security"
 	LogTypeAudit    LogType = "audit"
+	LogTypeDebug    LogType = "debug"
 )
 
 // Manager manages all log types
@@ -31,8 +33,10 @@ type Manager struct {
 	logDir   string
 	access   *AccessLogger
 	server   *ServerLogger
+	errorLog *ErrorLogger
 	security *SecurityLogger
 	audit    *AuditLogger
+	debug    *DebugLogger
 }
 
 // NewManager creates a new logging manager
@@ -50,8 +54,10 @@ func NewManager(logDir string) *Manager {
 
 	m.access = NewAccessLogger(filepath.Join(logDir, "access.log"))
 	m.server = NewServerLogger(filepath.Join(logDir, "server.log"))
+	m.errorLog = NewErrorLogger(filepath.Join(logDir, "error.log"))
 	m.security = NewSecurityLogger(filepath.Join(logDir, "security.log"))
 	m.audit = NewAuditLogger(filepath.Join(logDir, "audit.log"))
+	m.debug = NewDebugLogger(filepath.Join(logDir, "debug.log"))
 
 	return m
 }
@@ -66,6 +72,11 @@ func (m *Manager) Server() *ServerLogger {
 	return m.server
 }
 
+// Error returns the error logger
+func (m *Manager) Error() *ErrorLogger {
+	return m.errorLog
+}
+
 // Security returns the security logger
 func (m *Manager) Security() *SecurityLogger {
 	return m.security
@@ -74,6 +85,11 @@ func (m *Manager) Security() *SecurityLogger {
 // Audit returns the audit logger
 func (m *Manager) Audit() *AuditLogger {
 	return m.audit
+}
+
+// Debug returns the debug logger
+func (m *Manager) Debug() *DebugLogger {
+	return m.debug
 }
 
 // Close closes all loggers
@@ -85,10 +101,16 @@ func (m *Manager) Close() error {
 	if err := m.server.Close(); err != nil {
 		errs = append(errs, err)
 	}
+	if err := m.errorLog.Close(); err != nil {
+		errs = append(errs, err)
+	}
 	if err := m.security.Close(); err != nil {
 		errs = append(errs, err)
 	}
 	if err := m.audit.Close(); err != nil {
+		errs = append(errs, err)
+	}
+	if err := m.debug.Close(); err != nil {
 		errs = append(errs, err)
 	}
 	if len(errs) > 0 {
@@ -106,10 +128,16 @@ func (m *Manager) RotateAll() error {
 	if err := m.server.Rotate(); err != nil {
 		errs = append(errs, err)
 	}
+	if err := m.errorLog.Rotate(); err != nil {
+		errs = append(errs, err)
+	}
 	if err := m.security.Rotate(); err != nil {
 		errs = append(errs, err)
 	}
 	if err := m.audit.Rotate(); err != nil {
+		errs = append(errs, err)
+	}
+	if err := m.debug.Rotate(); err != nil {
 		errs = append(errs, err)
 	}
 	if len(errs) > 0 {
@@ -1389,6 +1417,419 @@ func (l *AuditLogger) Rotate() error {
 
 // Close closes the audit logger
 func (l *AuditLogger) Close() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.file != nil {
+		return l.file.Close()
+	}
+	return nil
+}
+
+// ============================================================
+// Error Logger - Error messages only per PART 21
+// ============================================================
+
+// ErrorLogger logs error messages to error.log
+type ErrorLogger struct {
+	mu     sync.Mutex
+	file   *os.File
+	path   string
+	format string // "text", "json"
+	stdout bool
+}
+
+// ErrorEntry represents an error log entry
+type ErrorEntry struct {
+	Timestamp time.Time              `json:"timestamp"`
+	Level     string                 `json:"level"`
+	Message   string                 `json:"message"`
+	Error     string                 `json:"error,omitempty"`
+	File      string                 `json:"file,omitempty"`
+	Line      int                    `json:"line,omitempty"`
+	Stack     string                 `json:"stack,omitempty"`
+	Fields    map[string]interface{} `json:"fields,omitempty"`
+}
+
+// NewErrorLogger creates a new error logger
+func NewErrorLogger(path string) *ErrorLogger {
+	l := &ErrorLogger{
+		path:   path,
+		format: "text",
+		stdout: true,
+	}
+	l.openFile()
+	return l
+}
+
+func (l *ErrorLogger) openFile() error {
+	if l.path == "" {
+		return nil
+	}
+
+	dir := filepath.Dir(l.path)
+	os.MkdirAll(dir, 0755)
+
+	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+	l.file = file
+	return nil
+}
+
+// SetFormat sets the log format
+func (l *ErrorLogger) SetFormat(format string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.format = format
+}
+
+// SetStdout enables/disables stdout output
+func (l *ErrorLogger) SetStdout(enabled bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.stdout = enabled
+}
+
+// Log logs an error entry
+func (l *ErrorLogger) Log(entry ErrorEntry) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if entry.Timestamp.IsZero() {
+		entry.Timestamp = time.Now()
+	}
+	if entry.Level == "" {
+		entry.Level = "ERROR"
+	}
+
+	var line string
+	if l.format == "json" {
+		data, _ := json.Marshal(entry)
+		line = string(data)
+	} else {
+		line = fmt.Sprintf("[%s] [%s] %s",
+			entry.Timestamp.Format("2006-01-02 15:04:05"),
+			entry.Level,
+			entry.Message,
+		)
+		if entry.Error != "" {
+			line += fmt.Sprintf(" error=%s", entry.Error)
+		}
+		if entry.File != "" {
+			line += fmt.Sprintf(" (%s:%d)", entry.File, entry.Line)
+		}
+		if len(entry.Fields) > 0 {
+			for k, v := range entry.Fields {
+				line += fmt.Sprintf(" %s=%v", k, v)
+			}
+		}
+	}
+
+	if l.file != nil {
+		l.file.WriteString(line + "\n")
+	}
+	if l.stdout {
+		fmt.Println("[ERROR] " + line)
+	}
+}
+
+// Error logs an error message
+func (l *ErrorLogger) Error(msg string, err error, fields ...map[string]interface{}) {
+	entry := ErrorEntry{
+		Timestamp: time.Now(),
+		Level:     "ERROR",
+		Message:   msg,
+	}
+	if err != nil {
+		entry.Error = err.Error()
+	}
+	if len(fields) > 0 {
+		entry.Fields = fields[0]
+	}
+	l.Log(entry)
+}
+
+// ErrorWithStack logs an error with stack trace
+func (l *ErrorLogger) ErrorWithStack(msg string, err error, stack string, fields ...map[string]interface{}) {
+	entry := ErrorEntry{
+		Timestamp: time.Now(),
+		Level:     "ERROR",
+		Message:   msg,
+		Stack:     stack,
+	}
+	if err != nil {
+		entry.Error = err.Error()
+	}
+	if len(fields) > 0 {
+		entry.Fields = fields[0]
+	}
+	l.Log(entry)
+}
+
+// Fatal logs a fatal error
+func (l *ErrorLogger) Fatal(msg string, err error, fields ...map[string]interface{}) {
+	entry := ErrorEntry{
+		Timestamp: time.Now(),
+		Level:     "FATAL",
+		Message:   msg,
+	}
+	if err != nil {
+		entry.Error = err.Error()
+	}
+	if len(fields) > 0 {
+		entry.Fields = fields[0]
+	}
+	l.Log(entry)
+}
+
+// Rotate rotates the error log file
+func (l *ErrorLogger) Rotate() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if l.file == nil {
+		return nil
+	}
+
+	l.file.Close()
+
+	timestamp := time.Now().Format("20060102")
+	rotatedPath := fmt.Sprintf("%s.%s", l.path, timestamp)
+
+	if _, err := os.Stat(rotatedPath); err == nil {
+		rotatedPath = fmt.Sprintf("%s.%s", l.path, time.Now().Format("20060102-150405"))
+	}
+
+	os.Rename(l.path, rotatedPath)
+	return l.openFile()
+}
+
+// Close closes the error logger
+func (l *ErrorLogger) Close() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.file != nil {
+		return l.file.Close()
+	}
+	return nil
+}
+
+// ============================================================
+// Debug Logger - Debug messages (dev mode only) per PART 21
+// ============================================================
+
+// DebugLogger logs debug messages to debug.log
+type DebugLogger struct {
+	mu      sync.Mutex
+	file    *os.File
+	path    string
+	format  string // "text", "json"
+	enabled bool
+	stdout  bool
+}
+
+// DebugEntry represents a debug log entry
+type DebugEntry struct {
+	Timestamp time.Time              `json:"timestamp"`
+	Level     string                 `json:"level"`
+	Message   string                 `json:"message"`
+	File      string                 `json:"file,omitempty"`
+	Line      int                    `json:"line,omitempty"`
+	Function  string                 `json:"function,omitempty"`
+	Fields    map[string]interface{} `json:"fields,omitempty"`
+}
+
+// NewDebugLogger creates a new debug logger
+func NewDebugLogger(path string) *DebugLogger {
+	l := &DebugLogger{
+		path:    path,
+		format:  "text",
+		enabled: false, // Disabled by default per PART 21
+		stdout:  true,
+	}
+	// Don't open file if disabled
+	return l
+}
+
+func (l *DebugLogger) openFile() error {
+	if l.path == "" || !l.enabled {
+		return nil
+	}
+
+	dir := filepath.Dir(l.path)
+	os.MkdirAll(dir, 0755)
+
+	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+	l.file = file
+	return nil
+}
+
+// Enable enables the debug logger and opens the file
+func (l *DebugLogger) Enable() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.enabled = true
+	l.openFile()
+}
+
+// Disable disables the debug logger and closes the file
+func (l *DebugLogger) Disable() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.enabled = false
+	if l.file != nil {
+		l.file.Close()
+		l.file = nil
+	}
+}
+
+// IsEnabled returns whether debug logging is enabled
+func (l *DebugLogger) IsEnabled() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.enabled
+}
+
+// SetFormat sets the log format
+func (l *DebugLogger) SetFormat(format string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.format = format
+}
+
+// SetStdout enables/disables stdout output
+func (l *DebugLogger) SetStdout(enabled bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.stdout = enabled
+}
+
+// Log logs a debug entry
+func (l *DebugLogger) Log(entry DebugEntry) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if !l.enabled {
+		return
+	}
+
+	if entry.Timestamp.IsZero() {
+		entry.Timestamp = time.Now()
+	}
+	if entry.Level == "" {
+		entry.Level = "DEBUG"
+	}
+
+	var line string
+	if l.format == "json" {
+		data, _ := json.Marshal(entry)
+		line = string(data)
+	} else {
+		line = fmt.Sprintf("[%s] [%s] %s",
+			entry.Timestamp.Format("2006-01-02 15:04:05"),
+			entry.Level,
+			entry.Message,
+		)
+		if entry.File != "" {
+			line += fmt.Sprintf(" (%s:%d)", entry.File, entry.Line)
+		}
+		if entry.Function != "" {
+			line += fmt.Sprintf(" func=%s", entry.Function)
+		}
+		if len(entry.Fields) > 0 {
+			for k, v := range entry.Fields {
+				line += fmt.Sprintf(" %s=%v", k, v)
+			}
+		}
+	}
+
+	if l.file != nil {
+		l.file.WriteString(line + "\n")
+	}
+	if l.stdout {
+		fmt.Println("[DEBUG] " + line)
+	}
+}
+
+// Debug logs a debug message
+func (l *DebugLogger) Debug(msg string, fields ...map[string]interface{}) {
+	if !l.enabled {
+		return
+	}
+	entry := DebugEntry{
+		Timestamp: time.Now(),
+		Level:     "DEBUG",
+		Message:   msg,
+	}
+	if len(fields) > 0 {
+		entry.Fields = fields[0]
+	}
+	l.Log(entry)
+}
+
+// DebugWithCaller logs a debug message with caller info
+func (l *DebugLogger) DebugWithCaller(msg string, file string, line int, function string, fields ...map[string]interface{}) {
+	if !l.enabled {
+		return
+	}
+	entry := DebugEntry{
+		Timestamp: time.Now(),
+		Level:     "DEBUG",
+		Message:   msg,
+		File:      file,
+		Line:      line,
+		Function:  function,
+	}
+	if len(fields) > 0 {
+		entry.Fields = fields[0]
+	}
+	l.Log(entry)
+}
+
+// Trace logs a trace-level debug message
+func (l *DebugLogger) Trace(msg string, fields ...map[string]interface{}) {
+	if !l.enabled {
+		return
+	}
+	entry := DebugEntry{
+		Timestamp: time.Now(),
+		Level:     "TRACE",
+		Message:   msg,
+	}
+	if len(fields) > 0 {
+		entry.Fields = fields[0]
+	}
+	l.Log(entry)
+}
+
+// Rotate rotates the debug log file
+func (l *DebugLogger) Rotate() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if l.file == nil {
+		return nil
+	}
+
+	l.file.Close()
+
+	timestamp := time.Now().Format("20060102")
+	rotatedPath := fmt.Sprintf("%s.%s", l.path, timestamp)
+
+	if _, err := os.Stat(rotatedPath); err == nil {
+		rotatedPath = fmt.Sprintf("%s.%s", l.path, time.Now().Format("20060102-150405"))
+	}
+
+	os.Rename(l.path, rotatedPath)
+	return l.openFile()
+}
+
+// Close closes the debug logger
+func (l *DebugLogger) Close() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.file != nil {

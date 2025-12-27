@@ -179,11 +179,22 @@ type SSLConfig struct {
 	CertFile    string `yaml:"cert_file"`
 	KeyFile     string `yaml:"key_file"`
 	LetsEncrypt struct {
-		Enabled bool   `yaml:"enabled"`
-		Email   string `yaml:"email"`
-		Domains []string `yaml:"domains"`
-		Staging bool   `yaml:"staging"`
+		Enabled   bool     `yaml:"enabled"`
+		Email     string   `yaml:"email"`
+		Domains   []string `yaml:"domains"`
+		Staging   bool     `yaml:"staging"`
+		Challenge string   `yaml:"challenge"` // http-01, tls-alpn-01, dns-01
 	} `yaml:"letsencrypt"`
+	// DNS-01 provider configuration per AI.md PART 17
+	DNS01 DNS01Config `yaml:"dns01"`
+}
+
+// DNS01Config represents DNS-01 ACME challenge configuration
+// Per AI.md: ALL DNS providers are supported via go-acme/lego
+type DNS01Config struct {
+	Provider             string `yaml:"provider"`              // Provider identifier (cloudflare, route53, etc.)
+	CredentialsEncrypted string `yaml:"credentials_encrypted"` // AES-256-GCM encrypted JSON
+	ValidatedAt          string `yaml:"validated_at"`          // Timestamp of last successful validation
 }
 
 // AdminConfig represents admin configuration

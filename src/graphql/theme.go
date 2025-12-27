@@ -16,6 +16,10 @@ const graphiqlDarkTheme = `
 /* GraphiQL - Dark Theme */
 /* Per TEMPLATE.md PART 19: Swagger & GraphQL Theming */
 
+#graphiql {
+	height: 100vh;
+}
+
 .graphiql-container {
 	background: #282a36;
 	color: #f8f8f2;
@@ -191,6 +195,10 @@ const graphiqlDarkTheme = `
 const graphiqlLightTheme = `
 /* GraphiQL - Light Theme */
 /* Per TEMPLATE.md PART 19: Swagger & GraphQL Theming */
+
+#graphiql {
+	height: 100vh;
+}
 
 .graphiql-container {
 	background: #ffffff;

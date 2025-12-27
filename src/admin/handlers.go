@@ -17,6 +17,7 @@ import (
 	"github.com/apimgr/search/src/backup"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/email"
+	tlspkg "github.com/apimgr/search/src/tls"
 	"gopkg.in/yaml.v3"
 )
 
@@ -943,12 +944,21 @@ func (h *Handler) handleServerSSL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get DNS providers list for template
+	dnsProviders := tlspkg.DNSProviders()
+
 	data := &AdminPageData{
 		Title:   "SSL/TLS",
 		Page:    "admin-server-ssl",
 		Config:  h.config,
 		Error:   r.URL.Query().Get("error"),
 		Success: r.URL.Query().Get("success"),
+		Extra: map[string]interface{}{
+			"DNSProviders":        dnsProviders,
+			"CurrentDNSProvider":  h.config.Server.SSL.DNS01.Provider,
+			"DNS01Configured":     h.config.Server.SSL.DNS01.CredentialsEncrypted != "",
+			"DNS01ValidatedAt":    h.config.Server.SSL.DNS01.ValidatedAt,
+		},
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -968,6 +978,35 @@ func (h *Handler) processServerSSLUpdate(w http.ResponseWriter, r *http.Request)
 	h.config.Server.SSL.KeyFile = r.FormValue("key_file")
 	h.config.Server.SSL.LetsEncrypt.Enabled = r.FormValue("letsencrypt_enabled") == "on"
 	h.config.Server.SSL.LetsEncrypt.Email = r.FormValue("letsencrypt_email")
+	h.config.Server.SSL.LetsEncrypt.Challenge = r.FormValue("letsencrypt_challenge")
+
+	// Handle DNS-01 provider configuration
+	dnsProvider := r.FormValue("dns_provider")
+	if dnsProvider != "" && h.config.Server.SSL.LetsEncrypt.Challenge == "dns-01" {
+		// Collect provider credentials from form
+		credentials := make(map[string]string)
+		providerInfo := tlspkg.GetProviderByID(dnsProvider)
+		if providerInfo != nil {
+			for _, field := range providerInfo.Fields {
+				val := r.FormValue("dns_" + field.Name)
+				if val != "" {
+					credentials[field.Name] = val
+				}
+			}
+		}
+
+		// Encrypt and store credentials if any were provided
+		if len(credentials) > 0 {
+			encrypted, err := tlspkg.EncryptCredentials(credentials, h.config.Server.SecretKey)
+			if err != nil {
+				http.Redirect(w, r, "/admin/server/ssl?error=Failed+to+encrypt+credentials", http.StatusSeeOther)
+				return
+			}
+			h.config.Server.SSL.DNS01.Provider = dnsProvider
+			h.config.Server.SSL.DNS01.CredentialsEncrypted = encrypted
+			h.config.Server.SSL.DNS01.ValidatedAt = tlspkg.ValidatedAtNow()
+		}
+	}
 
 	h.saveAndReload(w, r, "/admin/server/ssl")
 }

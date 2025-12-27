@@ -135,6 +135,66 @@ sudo mv search-freebsd-amd64 /usr/local/bin/search
 sudo search --service --install
 ```
 
+## 💻 CLI Client
+
+A companion CLI client is available for interacting with the Search API from the terminal.
+
+### Install CLI
+
+```bash
+# Linux/BSD
+curl -LO https://github.com/apimgr/search/releases/latest/download/search-linux-amd64-cli
+chmod +x search-linux-amd64-cli
+sudo mv search-linux-amd64-cli /usr/local/bin/search-cli
+
+# macOS
+curl -LO https://github.com/apimgr/search/releases/latest/download/search-darwin-amd64-cli
+chmod +x search-darwin-amd64-cli
+sudo mv search-darwin-amd64-cli /usr/local/bin/search-cli
+
+# Windows (PowerShell)
+Invoke-WebRequest -Uri "https://github.com/apimgr/search/releases/latest/download/search-windows-amd64-cli.exe" -OutFile "search-cli.exe"
+```
+
+### Configure CLI
+
+```bash
+# Connect to a server (creates ~/.config/apimgr/search/cli.yml)
+search-cli config --server https://search.example.com --token YOUR_API_TOKEN
+
+# Or set environment variables
+export SEARCH_SERVER="https://search.example.com"
+export SEARCH_TOKEN="your-api-token"
+```
+
+### CLI Usage
+
+```bash
+# Search from command line
+search-cli search "golang tutorials"
+
+# Search with category
+search-cli search --category images "cute cats"
+
+# Interactive TUI mode
+search-cli tui
+
+# Show help
+search-cli --help
+search-cli search --help
+```
+
+### CLI Configuration File
+
+Location: `~/.config/apimgr/search/cli.yml`
+
+```yaml
+server: https://search.example.com
+token: your-api-token
+default_category: general
+theme: dark
+```
+
 ## ⚙️ Configuration
 
 On first run, Search creates a configuration file with sane defaults:
@@ -692,21 +752,68 @@ Development mode enables:
 
 ## 📚 Documentation
 
-Build documentation locally:
+Full documentation is available at: https://search.apimgr.us/docs
+
+- [Installation Guide](https://search.apimgr.us/docs/installation)
+- [Configuration Reference](https://search.apimgr.us/docs/configuration)
+- [API Documentation](https://search.apimgr.us/docs/api)
+- [Admin Guide](https://search.apimgr.us/docs/admin)
+
+## 🛠️ Development
+
+**Development instructions are for contributors only.**
+
+### Prerequisites
+
+- Go 1.23+ (latest stable recommended)
+- Docker (for containerized builds)
+- Make
+
+### Build
 
 ```bash
-# Coming soon
+# Clone the repository
+git clone https://github.com/apimgr/search
+cd search
+
+# Quick dev build (outputs to OS temp dir)
+make dev
+
+# Full build (all platforms, outputs to binaries/)
+make build
+
+# Run tests
+make test
+
+# Clean build artifacts
+make clean
 ```
 
-## 🔄 CI/CD
+### Project Structure
 
-We use GitHub Actions and Jenkins for CI/CD:
+```
+src/           # Go source code
+  ├── admin/   # Admin panel
+  ├── api/     # REST API
+  ├── client/  # CLI client
+  ├── config/  # Configuration
+  ├── server/  # HTTP server
+  └── ...
+tests/         # Test files
+docker/        # Docker configuration
+docs/          # MkDocs documentation
+binaries/      # Built binaries (gitignored)
+```
+
+### CI/CD
 
 - **GitHub Actions**: Automated testing on pull requests
-- **Jenkins**: Multi-architecture builds (ARM64, AMD64)
+- **Jenkins**: Multi-architecture builds (AMD64, ARM64)
+
+## 📄 License
+
+This project is licensed under the MIT License - see [LICENSE.md](LICENSE.md) for details.
 
 ---
 
 Made with ❤️ by [apimgr](https://github.com/apimgr)
-
-**Last update**: 2025-12-03

@@ -90,24 +90,10 @@
             bangs.slice(0, 10).forEach((bang, index) => {
                 const item = document.createElement('div');
                 item.className = 'bang-suggestion-item';
-                item.style.cssText = `
-                    padding: 8px 12px;
-                    cursor: pointer;
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                `;
                 item.innerHTML = `
-                    <span style="font-family: monospace; color: var(--accent-color, #bd93f9); font-weight: bold;">!${escapeHtml(bang.shortcut)}</span>
+                    <span class="bang-shortcut">!${escapeHtml(bang.shortcut)}</span>
                     <span>${escapeHtml(bang.name)}</span>
                 `;
-
-                item.addEventListener('mouseenter', () => {
-                    item.style.background = 'var(--bg-tertiary, #313244)';
-                });
-                item.addEventListener('mouseleave', () => {
-                    item.style.background = 'transparent';
-                });
 
                 item.addEventListener('click', () => {
                     // Replace bang in input

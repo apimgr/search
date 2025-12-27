@@ -27,6 +27,7 @@ var (
 	noColor   bool
 	timeout   int
 	tuiMode   bool
+	debugMode bool
 
 	apiClient *api.Client
 )
@@ -87,6 +88,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&output, "output", "o", "table", "output format: json, table, plain")
 	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "disable colored output")
 	rootCmd.PersistentFlags().IntVar(&timeout, "timeout", 0, "request timeout in seconds")
+	rootCmd.PersistentFlags().BoolVar(&debugMode, "debug", false, "enable debug output")
 	rootCmd.PersistentFlags().BoolVar(&tuiMode, "tui", false, "launch TUI mode")
 
 	rootCmd.AddCommand(searchCmd)
@@ -103,7 +105,8 @@ func initConfig() {
 		if err != nil {
 			return
 		}
-		configDir := filepath.Join(home, ".config", "search")
+		// Per AI.md PART 34: Config at ~/.config/apimgr/search/cli.yml
+		configDir := filepath.Join(home, ".config", "apimgr", "search")
 		os.MkdirAll(configDir, 0755)
 		viper.AddConfigPath(configDir)
 		viper.SetConfigName("cli")

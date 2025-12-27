@@ -74,8 +74,8 @@
                 <img src="https://www.google.com/s2/favicons?domain={{.URL}}&sz=32"
                      alt=""
                      loading="lazy"
-                     onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
-                <span class="favicon-placeholder" style="display:none;">{{slice (printf "%s" .Title) 0 1}}</span>
+                     onerror="this.classList.add('hidden');this.nextElementSibling.classList.remove('hidden');">
+                <span class="favicon-placeholder hidden">{{slice (printf "%s" .Title) 0 1}}</span>
             </div>
             <div class="result-body">
                 <h3 class="result-title">
@@ -99,11 +99,11 @@
 
     {{/* Infinite Scroll Trigger */}}
     <div class="infinite-scroll-trigger" id="scroll-trigger"></div>
-    <div class="loading-more" id="loading-indicator" style="display: none;">
+    <div class="loading-more hidden" id="loading-indicator">
         <div class="loading-spinner"></div>
         <span>Loading more results...</span>
     </div>
-    <div class="end-of-results" id="end-indicator" style="display: none;">
+    <div class="end-of-results hidden" id="end-indicator">
         No more results
     </div>
 
@@ -163,8 +163,8 @@
                     <img src="https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=32"
                          alt=""
                          loading="lazy"
-                         onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
-                    <span class="favicon-placeholder" style="display:none;">${escapeHtml(firstLetter)}</span>
+                         onerror="this.classList.add('hidden');this.nextElementSibling.classList.remove('hidden');">
+                    <span class="favicon-placeholder hidden">${escapeHtml(firstLetter)}</span>
                 </div>
                 <div class="result-body">
                     <h3 class="result-title">
@@ -194,7 +194,7 @@
         if (isLoading || !hasMore) return;
 
         isLoading = true;
-        loadingIndicator.style.display = 'flex';
+        loadingIndicator.classList.remove('hidden');
 
         try {
             const nextPage = currentPage + 1;
@@ -212,14 +212,14 @@
             }
 
             if (!hasMore) {
-                endIndicator.style.display = 'block';
-                scrollTrigger.style.display = 'none';
+                endIndicator.classList.remove('hidden');
+                scrollTrigger.classList.add('hidden');
             }
         } catch (error) {
             console.error('Failed to load more results:', error);
         } finally {
             isLoading = false;
-            loadingIndicator.style.display = 'none';
+            loadingIndicator.classList.add('hidden');
         }
     }
 

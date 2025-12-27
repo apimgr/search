@@ -95,10 +95,12 @@ type APIResponse struct {
 }
 
 // APIError represents an API error
+// Per AI.md PART 31: Standard error codes with HTTP status mapping
 type APIError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-	Details string `json:"details,omitempty"`
+	Code    string `json:"code"`              // Standard error code (ERR_BAD_REQUEST, etc.)
+	Status  int    `json:"status"`            // HTTP status code
+	Message string `json:"message"`           // User-friendly error message
+	Details string `json:"details,omitempty"` // Additional details (not in production)
 }
 
 // APIMeta contains response metadata
@@ -403,6 +405,11 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// HandleAutocomplete is the public method for autocomplete suggestions
+func (h *Handler) HandleAutocomplete(w http.ResponseWriter, r *http.Request) {
+	h.handleAutocomplete(w, r)
+}
+
 func (h *Handler) handleAutocomplete(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("q")
 	if query == "" {
@@ -574,7 +581,8 @@ func (h *Handler) errorResponse(w http.ResponseWriter, status int, message, deta
 	h.jsonResponse(w, status, &APIResponse{
 		Success: false,
 		Error: &APIError{
-			Code:    status,
+			Code:    models.ErrorCodeFromHTTP(status),
+			Status:  status,
 			Message: message,
 			Details: details,
 		},
