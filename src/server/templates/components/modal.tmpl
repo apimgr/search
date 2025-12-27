@@ -1,0 +1,259 @@
+{{/* Modal Component - Custom modals to replace JavaScript alerts */}}
+{{/* Per TEMPLATE.md PART 16: NEVER use JavaScript alerts, use custom modals */}}
+
+{{/* Confirmation Modal */}}
+<dialog id="confirm-modal" class="modal" aria-labelledby="confirm-title">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h2 id="confirm-title" class="modal-title">Confirm Action</h2>
+      <button type="button" class="modal-close" onclick="this.closest('dialog').close()" aria-label="Close">✕</button>
+    </header>
+    <main class="modal-body">
+      <p id="confirm-message"></p>
+    </main>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" onclick="this.closest('dialog').close()">Cancel</button>
+      <button type="button" class="btn btn-primary" id="confirm-ok" autofocus>Confirm</button>
+    </footer>
+  </div>
+</dialog>
+
+{{/* Prompt Modal (for text input) */}}
+<dialog id="prompt-modal" class="modal" aria-labelledby="prompt-title">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h2 id="prompt-title" class="modal-title">Input Required</h2>
+      <button type="button" class="modal-close" onclick="this.closest('dialog').close()" aria-label="Close">✕</button>
+    </header>
+    <main class="modal-body">
+      <p id="prompt-message"></p>
+      <input type="text" id="prompt-input" class="form-control" autofocus />
+    </main>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-secondary" onclick="this.closest('dialog').close()">Cancel</button>
+      <button type="button" class="btn btn-primary" id="prompt-ok">OK</button>
+    </footer>
+  </div>
+</dialog>
+
+{{/* Alert Modal (for notifications) */}}
+<dialog id="alert-modal" class="modal" aria-labelledby="alert-title">
+  <div class="modal-content">
+    <header class="modal-header">
+      <h2 id="alert-title" class="modal-title">Notice</h2>
+      <button type="button" class="modal-close" onclick="this.closest('dialog').close()" aria-label="Close">✕</button>
+    </header>
+    <main class="modal-body">
+      <p id="alert-message"></p>
+    </main>
+    <footer class="modal-footer">
+      <button type="button" class="btn btn-primary" onclick="this.closest('dialog').close()" autofocus>OK</button>
+    </footer>
+  </div>
+</dialog>
+
+<style>
+/* Modal base styles */
+.modal {
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0;
+  max-width: 500px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.modal::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(3px);
+}
+
+.modal-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border-color, #ddd);
+}
+
+.modal-title {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.25rem;
+}
+
+.modal-close:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+.modal-body p {
+  margin: 0 0 1rem 0;
+}
+
+.modal-body input {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid var(--border-color, #ddd);
+  border-radius: 0.25rem;
+  font-size: 1rem;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border-color, #ddd);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .modal {
+    max-width: 95vw;
+    margin: 1rem;
+  }
+}
+</style>
+
+<script>
+// Custom modal functions to replace alert(), confirm(), prompt()
+// Per TEMPLATE.md PART 16: NO JavaScript alerts
+
+// Show custom confirm dialog
+// Usage: showConfirm('Are you sure?').then(confirmed => { if (confirmed) ... })
+function showConfirm(message, title = 'Confirm Action') {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('confirm-modal');
+    const messageEl = document.getElementById('confirm-message');
+    const titleEl = document.getElementById('confirm-title');
+    const okBtn = document.getElementById('confirm-ok');
+
+    messageEl.textContent = message;
+    titleEl.textContent = title;
+
+    // Handle OK click
+    const handleOk = () => {
+      modal.close();
+      cleanup();
+      resolve(true);
+    };
+
+    // Handle cancel (close)
+    const handleCancel = () => {
+      cleanup();
+      resolve(false);
+    };
+
+    // Cleanup event listeners
+    const cleanup = () => {
+      okBtn.removeEventListener('click', handleOk);
+      modal.removeEventListener('close', handleCancel);
+    };
+
+    okBtn.addEventListener('click', handleOk);
+    modal.addEventListener('close', handleCancel, { once: true });
+
+    modal.showModal();
+  });
+}
+
+// Show custom prompt dialog
+// Usage: showPrompt('Enter value:').then(value => { if (value !== null) ... })
+function showPrompt(message, defaultValue = '', title = 'Input Required') {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('prompt-modal');
+    const messageEl = document.getElementById('prompt-message');
+    const titleEl = document.getElementById('prompt-title');
+    const input = document.getElementById('prompt-input');
+    const okBtn = document.getElementById('prompt-ok');
+
+    messageEl.textContent = message;
+    titleEl.textContent = title;
+    input.value = defaultValue;
+
+    // Handle OK click
+    const handleOk = () => {
+      const value = input.value.trim();
+      modal.close();
+      cleanup();
+      resolve(value || null);
+    };
+
+    // Handle cancel (close)
+    const handleCancel = () => {
+      cleanup();
+      resolve(null);
+    };
+
+    // Handle Enter key in input
+    const handleEnter = (e) => {
+      if (e.key === 'Enter') {
+        handleOk();
+      }
+    };
+
+    // Cleanup event listeners
+    const cleanup = () => {
+      okBtn.removeEventListener('click', handleOk);
+      modal.removeEventListener('close', handleCancel);
+      input.removeEventListener('keypress', handleEnter);
+    };
+
+    okBtn.addEventListener('click', handleOk);
+    modal.addEventListener('close', handleCancel, { once: true });
+    input.addEventListener('keypress', handleEnter);
+
+    modal.showModal();
+    input.focus();
+    input.select();
+  });
+}
+
+// Show custom alert dialog
+// Usage: showAlert('Something happened!').then(() => { ... })
+function showAlert(message, title = 'Notice') {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('alert-modal');
+    const messageEl = document.getElementById('alert-message');
+    const titleEl = document.getElementById('alert-title');
+
+    messageEl.textContent = message;
+    titleEl.textContent = title;
+
+    // Handle close
+    const handleClose = () => {
+      resolve();
+    };
+
+    modal.addEventListener('close', handleClose, { once: true });
+    modal.showModal();
+  });
+}
+
+// Backwards compatibility - override native functions (optional)
+// Uncomment these to automatically replace all alert/confirm/prompt calls
+// window.alert = showAlert;
+// window.confirm = (msg) => { let result; showConfirm(msg).then(r => result = r); return result; };
+// window.prompt = (msg, def) => { let result; showPrompt(msg, def).then(r => result = r); return result; };
+</script>

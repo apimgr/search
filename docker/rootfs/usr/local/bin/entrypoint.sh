@@ -4,19 +4,28 @@ set -e
 # =============================================================================
 # Container Entrypoint Script
 # Handles service startup, signal handling, and graceful shutdown
-# Per TEMPLATE.md PART 13: Tor auto-detection (no ENABLE_TOR env var)
 # =============================================================================
 
 APP_NAME="search"
 APP_BIN="/usr/local/bin/${APP_NAME}"
-TOR_DATA_DIR="/data/tor"
 
-# Tor auto-detection: enabled if tor binary is installed
-# Per TEMPLATE.md: "Tor auto-enabled if tor binary installed"
-TOR_AVAILABLE=false
-if command -v tor >/dev/null 2>&1; then
-    TOR_AVAILABLE=true
-fi
+# Container defaults (exported for app to use)
+# Timezone - default to America/New_York
+export TZ="${TZ:-America/New_York}"
+
+# Configurable paths (via env vars or CLI flags)
+export CONFIG_DIR="/config"
+export DATA_DIR="/data"
+export LOG_DIR="/data/logs"
+export DATABASE_DIR="/data/db"
+export BACKUP_DIR="/data/backup"
+
+# Fixed subdirectories (always under DATA_DIR, not exported)
+TOR_DATA_DIR="${DATA_DIR}/tor"
+
+# Tor auto-detection: if tor binary is installed, Tor is enabled
+# Docker image always installs tor, so always enabled in containers
+TOR_INSTALLED=$(command -v tor >/dev/null 2>&1 && echo "true" || echo "false")
 
 # Array to track background PIDs
 declare -a PIDS=()
@@ -30,6 +39,14 @@ log() {
 
 log_error() {
     echo "[entrypoint] $(date '+%Y-%m-%d %H:%M:%S') ERROR: $*" >&2
+}
+
+# Check if value is truthy (case-insensitive)
+# Usage: if is_truthy "$DEBUG"; then ...
+is_truthy() {
+    local val="${1:-false}"
+    val="${val,,}"  # lowercase
+    [[ "$val" =~ ^(1|y|t|yes|true|on|ok|enable|enabled|sure|yep|yup|yeah|aye|si|oui|da|hai|affirmative|accept|allow|totally)$ ]]
 }
 
 # -----------------------------------------------------------------------------
@@ -83,41 +100,50 @@ trap cleanup SIGRTMIN+3 2>/dev/null || trap cleanup 37
 # -----------------------------------------------------------------------------
 # Directory setup
 # -----------------------------------------------------------------------------
+# Container directory structure:
+#   $CONFIG_DIR          - configuration files (mounted: ./rootfs/config)
+#   $CONFIG_DIR/security - TLS certs, keys
+#   $DATA_DIR            - all persistent data (mounted: ./rootfs/data)
+#   $DATABASE_DIR        - SQLite databases (changeable, defaults to $DATA_DIR/db)
+#   $LOG_DIR             - application and service logs
+#   $TOR_DATA_DIR        - Tor hidden service data (fixed: $DATA_DIR/tor)
+#   $BACKUP_DIR          - backup files (changeable, defaults to $DATA_DIR/backup)
+# -----------------------------------------------------------------------------
 setup_directories() {
     log "Setting up directories..."
-    mkdir -p /config /data/db /data/logs /data/tor /data/geoip /data/backup
+    mkdir -p "$CONFIG_DIR" "$CONFIG_DIR/security" \
+             "$DATABASE_DIR" "$LOG_DIR" "$TOR_DATA_DIR" "$BACKUP_DIR"
 
     # Fix permissions for Tor (runs as tor user)
-    if [ "$TOR_AVAILABLE" = "true" ]; then
+    if [ "$TOR_INSTALLED" = "true" ]; then
         chown -R tor:tor "$TOR_DATA_DIR"
         chmod 700 "$TOR_DATA_DIR"
     fi
 }
 
 # -----------------------------------------------------------------------------
-# Start Tor (if tor binary is available - auto-detection)
-# Per TEMPLATE.md PART 29: Tor auto-enabled if tor binary installed
+# Start Tor (auto-detected: if tor binary installed, it's enabled)
 # -----------------------------------------------------------------------------
 start_tor() {
-    if [ "$TOR_AVAILABLE" != "true" ]; then
-        log "Tor binary not found, skipping Tor hidden service"
+    if [ "$TOR_INSTALLED" != "true" ]; then
+        log "Tor not installed, skipping..."
         return 0
     fi
 
-    log "Starting Tor hidden service (auto-detected)..."
+    log "Starting Tor hidden service..."
 
     # Create torrc if not exists
-    if [ ! -f /config/torrc ]; then
-        cat > /config/torrc <<EOF
+    if [ ! -f "$CONFIG_DIR/torrc" ]; then
+        cat > "$CONFIG_DIR/torrc" <<EOF
 DataDirectory ${TOR_DATA_DIR}
 HiddenServiceDir ${TOR_DATA_DIR}/hidden_service
 HiddenServicePort 80 127.0.0.1:80
-Log notice file /data/logs/tor.log
+Log notice file ${LOG_DIR}/tor.log
 EOF
     fi
 
     # Start Tor in background
-    tor -f /config/torrc &
+    tor -f "$CONFIG_DIR/torrc" &
     PIDS+=($!)
     log "Tor started (PID: ${PIDS[-1]})"
 
@@ -141,11 +167,31 @@ EOF
 start_app() {
     log "Starting ${APP_NAME}..."
 
-    # Run the main application
-    # Pass through any arguments from CMD
-    "$APP_BIN" "$@" &
+    # Container defaults: 0.0.0.0:80 (override with ADDRESS/PORT env vars)
+    local listen_addr="${ADDRESS:-0.0.0.0}"
+    local listen_port="${PORT:-80}"
+    local debug_flag=""
+
+    # Enable debug mode if DEBUG is truthy (see Boolean Values table)
+    if is_truthy "$DEBUG"; then
+        debug_flag="--debug"
+        log "Debug mode enabled"
+    fi
+
+    # Run the main application with container directory paths
+    # Uses exported env vars that match volume mounts in docker-compose.yml
+    # App can also read DATABASE_DIR, BACKUP_DIR env vars directly
+    "$APP_BIN" \
+        --address "$listen_addr" \
+        --port "$listen_port" \
+        --config "$CONFIG_DIR" \
+        --data "$DATA_DIR" \
+        --log "$LOG_DIR" \
+        --pid "$DATA_DIR/${APP_NAME}.pid" \
+        $debug_flag \
+        "$@" &
     PIDS+=($!)
-    log "${APP_NAME} started (PID: ${PIDS[-1]})"
+    log "${APP_NAME} started on ${listen_addr}:${listen_port} (PID: ${PIDS[-1]})"
 }
 
 # -----------------------------------------------------------------------------
@@ -172,8 +218,11 @@ wait_for_services() {
 main() {
     log "Container starting..."
     log "MODE: ${MODE:-development}"
-    log "TZ: ${TZ:-UTC}"
-    log "Tor: ${TOR_AVAILABLE} (auto-detected)"
+    log "DEBUG: ${DEBUG:-false}"
+    log "TZ: ${TZ:-America/New_York}"
+    log "ADDRESS: ${ADDRESS:-0.0.0.0}"
+    log "PORT: ${PORT:-80}"
+    log "TOR_INSTALLED: ${TOR_INSTALLED}"
 
     setup_directories
     start_tor

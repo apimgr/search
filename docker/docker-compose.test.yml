@@ -1,0 +1,28 @@
+name: search-test
+
+services:
+  search:
+    image: ghcr.io/apimgr/search:latest
+    container_name: search-test
+    restart: unless-stopped
+    environment:
+      # Test: development mode with DEBUG enabled
+      # Enables pprof, expvar, detailed request logging
+      - MODE=development
+      - TZ=America/New_York
+      - DEBUG=true
+    ports:
+      # Test: accessible from all interfaces
+      - "64580:80"
+    volumes:
+      # TEMP DIR WORKFLOW: ./rootfs/ resolves to $TEMP_DIR/rootfs/
+      # NEVER run from project directory - always use temp dir workflow
+      - ./rootfs/config:/config
+      - ./rootfs/data:/data
+    networks:
+      - search-test
+
+networks:
+  search-test:
+    name: search-test
+    external: false

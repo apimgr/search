@@ -1,0 +1,30 @@
+{{/* Admin Panel Header */}}
+{{/* Per TEMPLATE.md PART 18: Admin Panel Layout */}}
+<header class="admin-header">
+  <div class="admin-header-left">
+    <a href="/admin/dashboard" class="admin-logo">
+      <span class="admin-logo-text">{{.Config.Server.Title}}</span>
+    </a>
+  </div>
+
+  <div class="admin-header-center">
+    <input type="search" class="admin-search" placeholder="Search settings, logs..." aria-label="Search">
+  </div>
+
+  <div class="admin-header-right">
+    {{/* Status indicator */}}
+    <div class="admin-status">
+      <span class="status-indicator status-{{if .ServerHealthy}}ok{{else}}error{{end}}" title="Server Status"></span>
+    </div>
+
+    {{/* Admin username */}}
+    <div class="admin-user">
+      <span class="admin-username">{{.Admin.Username}}</span>
+    </div>
+
+    {{/* Logout */}}
+    <a href="/auth/logout" class="admin-logout" title="Logout">
+      <span class="icon-logout">⏻</span>
+    </a>
+  </div>
+</header>

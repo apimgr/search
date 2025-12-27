@@ -19,12 +19,14 @@ import (
 // BackupMetadata contains information about a backup
 // Per TEMPLATE.md PART 26: manifest.json in backups with SHA256 checksums
 type BackupMetadata struct {
-	Version     string            `json:"version"`
-	CreatedAt   time.Time         `json:"created_at"`
-	ServerTitle string            `json:"server_title"`
-	Files       []string          `json:"files"`
-	Checksums   map[string]string `json:"checksums"` // SHA256 checksums per file
-	Size        int64             `json:"size"`
+	Version          string            `json:"version"`
+	CreatedAt        time.Time         `json:"created_at"`
+	ServerTitle      string            `json:"server_title"`
+	Files            []string          `json:"files"`
+	Checksums        map[string]string `json:"checksums"` // SHA256 checksums per file
+	Size             int64             `json:"size"`
+	Encrypted        bool              `json:"encrypted"`         // Per TEMPLATE.md PART 24
+	EncryptionMethod string            `json:"encryption_method"` // "AES-256-GCM"
 }
 
 // Manager handles backup and restore operations
@@ -32,6 +34,13 @@ type Manager struct {
 	backupDir string
 	configDir string
 	dataDir   string
+	password  string // Backup encryption password (never stored on disk)
+}
+
+// SetPassword sets the backup encryption password
+// Per TEMPLATE.md PART 24: Password is NEVER stored - derived on-demand
+func (m *Manager) SetPassword(password string) {
+	m.password = password
 }
 
 // NewManager creates a new backup manager

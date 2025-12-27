@@ -1,0 +1,76 @@
+{{/* Admin Panel Sidebar */}}
+{{/* Per TEMPLATE.md PART 18: Admin Panel Layout */}}
+<aside class="admin-sidebar" id="admin-sidebar">
+  <nav class="admin-nav">
+    <a href="/admin/dashboard" class="admin-nav-item{{if eq .CurrentPage "dashboard"}} active{{end}}">
+      <span class="icon">📊</span>
+      <span class="label">Dashboard</span>
+    </a>
+
+    <div class="admin-nav-section">
+      <div class="admin-nav-section-title">
+        <span class="icon">📦</span>
+        <span class="label">Server</span>
+        <span class="toggle">▼</span>
+      </div>
+      <div class="admin-nav-section-items">
+        <a href="/admin/server/settings" class="admin-nav-item{{if eq .CurrentPage "server-settings"}} active{{end}}">Settings</a>
+        <a href="/admin/server/branding" class="admin-nav-item{{if eq .CurrentPage "server-branding"}} active{{end}}">Branding</a>
+        <a href="/admin/server/ssl" class="admin-nav-item{{if eq .CurrentPage "server-ssl"}} active{{end}}">SSL/TLS</a>
+        <a href="/admin/server/scheduler" class="admin-nav-item{{if eq .CurrentPage "server-scheduler"}} active{{end}}">Scheduler</a>
+        <a href="/admin/server/email" class="admin-nav-item{{if eq .CurrentPage "server-email"}} active{{end}}">Email</a>
+        <a href="/admin/server/logs" class="admin-nav-item{{if eq .CurrentPage "server-logs"}} active{{end}}">Logs</a>
+        <a href="/admin/server/backup" class="admin-nav-item{{if eq .CurrentPage "server-backup"}} active{{end}}">Backup</a>
+      </div>
+    </div>
+
+    <div class="admin-nav-section">
+      <div class="admin-nav-section-title">
+        <span class="icon">🔒</span>
+        <span class="label">Security</span>
+        <span class="toggle">▼</span>
+      </div>
+      <div class="admin-nav-section-items">
+        <a href="/admin/server/security/auth" class="admin-nav-item{{if eq .CurrentPage "security-auth"}} active{{end}}">Authentication</a>
+        <a href="/admin/server/security/tokens" class="admin-nav-item{{if eq .CurrentPage "security-tokens"}} active{{end}}">API Tokens</a>
+        <a href="/admin/server/security/ratelimit" class="admin-nav-item{{if eq .CurrentPage "security-ratelimit"}} active{{end}}">Rate Limiting</a>
+        <a href="/admin/server/security/firewall" class="admin-nav-item{{if eq .CurrentPage "security-firewall"}} active{{end}}">Firewall</a>
+      </div>
+    </div>
+
+    <div class="admin-nav-section">
+      <div class="admin-nav-section-title">
+        <span class="icon">🌐</span>
+        <span class="label">Network</span>
+        <span class="toggle">▼</span>
+      </div>
+      <div class="admin-nav-section-items">
+        {{if .Config.Server.Tor.Enabled}}
+        <a href="/admin/server/network/tor" class="admin-nav-item{{if eq .CurrentPage "network-tor"}} active{{end}}">Tor</a>
+        {{end}}
+        <a href="/admin/server/network/geoip" class="admin-nav-item{{if eq .CurrentPage "network-geoip"}} active{{end}}">GeoIP</a>
+        <a href="/admin/server/network/blocklists" class="admin-nav-item{{if eq .CurrentPage "network-blocklists"}} active{{end}}">Blocklists</a>
+      </div>
+    </div>
+
+    {{if .Config.Server.Users.Enabled}}
+    <div class="admin-nav-section">
+      <div class="admin-nav-section-title">
+        <span class="icon">👥</span>
+        <span class="label">Users</span>
+        <span class="toggle">▼</span>
+      </div>
+      <div class="admin-nav-section-items">
+        <a href="/admin/server/moderation/users" class="admin-nav-item{{if eq .CurrentPage "users-list"}} active{{end}}">User List</a>
+        <a href="/admin/server/users/invites" class="admin-nav-item{{if eq .CurrentPage "users-invites"}} active{{end}}">Invites</a>
+        <a href="/admin/server/roles" class="admin-nav-item{{if eq .CurrentPage "users-roles"}} active{{end}}">Roles</a>
+      </div>
+    </div>
+    {{end}}
+
+    <a href="/admin/help" class="admin-nav-item{{if eq .CurrentPage "help"}} active{{end}}">
+      <span class="icon">❓</span>
+      <span class="label">Help</span>
+    </a>
+  </nav>
+</aside>

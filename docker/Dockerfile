@@ -59,7 +59,7 @@ RUN apk add --no-cache \
     tor
 
 # Create directories with proper structure
-RUN mkdir -p /config /data/db /data/logs /data/tor /data/geoip /data/backup
+RUN mkdir -p /config /config/security /data/db /data/logs /data/tor /data/geoip /data/backup
 
 # Copy binary from builder stage (multi-stage build)
 COPY --from=builder /app /usr/local/bin/search
@@ -76,10 +76,12 @@ RUN chmod 755 /usr/local/bin/*
 # Set environment
 # Note: Tor is auto-detected (enabled if tor binary installed) per TEMPLATE.md PART 29
 # No ENABLE_TOR env var needed - tor binary is always installed in this image
+# PORT=80 forces app to listen on port 80 inside container
 ENV MODE=development \
-    TZ=America/New_York
+    TZ=America/New_York \
+    PORT=80
 
-# Expose internal port (always 80)
+# Expose internal port (80 inside container, map to 64080 on host)
 EXPOSE 80
 
 # Stop signal for graceful shutdown

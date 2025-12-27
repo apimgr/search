@@ -265,7 +265,7 @@ func (sm *ServiceManager) installSystemd() error {
 		"Group":      "search",
 		"WorkDir":    config.GetDataDir(),
 		"Binary":     config.GetBinaryPath(),
-		"ConfigFile": filepath.Join(config.GetConfigDir(), "config.yaml"),
+		"ConfigFile": filepath.Join(config.GetConfigDir(), "server.yml"),
 		"DataDir":    config.GetDataDir(),
 	}
 
@@ -358,7 +358,7 @@ func (sm *ServiceManager) installRunit() error {
 		"User":       "search",
 		"Group":      "search",
 		"Binary":     config.GetBinaryPath(),
-		"ConfigFile": filepath.Join(config.GetConfigDir(), "config.yaml"),
+		"ConfigFile": filepath.Join(config.GetConfigDir(), "server.yml"),
 		"LogDir":     filepath.Join(config.GetDataDir(), "logs", "runit"),
 	}
 
@@ -472,7 +472,7 @@ func (sm *ServiceManager) getLaunchdPath() string {
 func (sm *ServiceManager) installLaunchd() error {
 	data := map[string]string{
 		"Binary":     config.GetBinaryPath(),
-		"ConfigFile": filepath.Join(config.GetConfigDir(), "config.yaml"),
+		"ConfigFile": filepath.Join(config.GetConfigDir(), "server.yml"),
 		"WorkDir":    config.GetDataDir(),
 		"LogDir":     filepath.Join(config.GetDataDir(), "logs"),
 	}
@@ -538,7 +538,7 @@ run_rc_command "$1"
 func (sm *ServiceManager) installRCd() error {
 	data := map[string]string{
 		"Binary":     config.GetBinaryPath(),
-		"ConfigFile": filepath.Join(config.GetConfigDir(), "config.yaml"),
+		"ConfigFile": filepath.Join(config.GetConfigDir(), "server.yml"),
 	}
 
 	// Generate rc script
@@ -577,7 +577,7 @@ func (sm *ServiceManager) statusRCd() (string, error) {
 
 func (sm *ServiceManager) installWindowsService() error {
 	binary := config.GetBinaryPath()
-	configFile := filepath.Join(config.GetConfigDir(), "config.yaml")
+	configFile := filepath.Join(config.GetConfigDir(), "server.yml")
 
 	// Create Windows service
 	return runCommand("sc", "create", "search",

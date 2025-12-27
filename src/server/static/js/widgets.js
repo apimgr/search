@@ -792,16 +792,19 @@
         },
 
         // Quick Links methods
-        addQuickLink: function() {
-            const name = prompt('Link name:');
+        addQuickLink: async function() {
+            // Use custom prompts instead of JavaScript prompt()
+            // Per TEMPLATE.md PART 16: NO JavaScript alerts
+            const name = await showPrompt('Link name:');
             if (!name) return;
-            const url = prompt('URL (include https://):');
+
+            const url = await showPrompt('URL (include https://):');
             if (!url) return;
 
             try {
-                new URL(url); // Validate URL
+                new URL(url);
             } catch {
-                alert('Invalid URL. Please include https://');
+                await showAlert('Invalid URL. Please include https://');
                 return;
             }
 

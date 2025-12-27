@@ -1,3 +1,5 @@
+// Package models defines core data structures and errors
+// Per TEMPLATE.md: Standard error definitions and data models
 package models
 
 import "errors"

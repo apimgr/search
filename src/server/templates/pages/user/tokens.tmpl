@@ -75,11 +75,10 @@
                             </div>
                             {{end}}
                         </div>
-                        <form method="POST" action="/user/tokens/revoke" class="token-action">
+                        <form method="POST" action="/user/tokens/revoke" class="token-action" onsubmit="return handleRevokeToken(event)">
                             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                             <input type="hidden" name="token_id" value="{{.ID}}">
-                            <button type="submit" class="btn btn-danger btn-sm"
-                                    onclick="return confirm('Are you sure you want to revoke this token?')">
+                            <button type="submit" class="btn btn-danger btn-sm">
                                 {{t "user.tokens.revoke"}}
                             </button>
                         </form>
@@ -536,3 +535,18 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {{end}}
+
+{{/* Add script for custom confirm dialog */}}
+<script>
+// Handle token revocation with custom confirm dialog
+// Per TEMPLATE.md PART 16: NO JavaScript alerts
+async function handleRevokeToken(event) {
+    event.preventDefault();
+    
+    const confirmed = await showConfirm('Are you sure you want to revoke this token?', 'Revoke API Token');
+    if (confirmed) {
+        event.target.submit();
+    }
+    return false;
+}
+</script>

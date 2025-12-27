@@ -1,26 +1,39 @@
 site_name: Search
 site_description: Privacy-respecting metasearch engine
 site_url: https://apimgr-search.readthedocs.io
+site_author: apimgr
 repo_url: https://github.com/apimgr/search
 repo_name: apimgr/search
+edit_uri: edit/main/docs/
 
 theme:
   name: material
-  custom_dir: docs/overrides
   palette:
-    - scheme: slate
+    # Light/Dark/Auto theme toggle - per TEMPLATE.md PART 33
+    # Auto mode follows system preference
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    # Light theme
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark theme (default)
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
       primary: deep purple
       accent: purple
       toggle:
         icon: material/brightness-4
-        name: Switch to light mode
-    - scheme: default
-      primary: deep purple
-      accent: purple
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
+        name: Switch to auto mode
   features:
+    - navigation.instant
+    - navigation.tracking
     - navigation.tabs
     - navigation.sections
     - navigation.expand
@@ -28,12 +41,16 @@ theme:
     - search.suggest
     - search.highlight
     - content.code.copy
-    - content.code.annotate
+    - content.action.edit
+  font:
+    text: Roboto
+    code: Roboto Mono
   icon:
     repo: fontawesome/brands/github
 
 extra_css:
-  - stylesheets/dracula.css
+  - stylesheets/dark.css
+  - stylesheets/light.css
 
 plugins:
   - search

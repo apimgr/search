@@ -1,3 +1,5 @@
+// Package cmd implements CLI commands for the search client
+// Per TEMPLATE.md PART 33: CLI Client implementation
 package cmd
 
 import (

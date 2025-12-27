@@ -22,6 +22,7 @@ import (
 
 	"github.com/apimgr/search/src/backup"
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/mode"
 	"github.com/apimgr/search/src/models"
 	"github.com/apimgr/search/src/search"
 	"github.com/apimgr/search/src/search/engines"
@@ -32,7 +33,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// CLI flags (per TEMPLATE.md PART 17)
+// CLI flags (per TEMPLATE.md PART 6)
 var (
 	flagVersion     bool
 	flagHelp        bool
@@ -40,13 +41,14 @@ var (
 	flagConfigInfo  bool
 	flagStatus      bool
 	flagDaemon      bool
+	flagDebug       bool
 	flagTest        string
 	flagService     string
 	flagMaintenance string
 	flagUpdate      string
 	flagBuild       string
 
-	// Required flags per TEMPLATE.md PART 6 (lines 2972-2986)
+	// Required flags per TEMPLATE.md PART 6 (NON-NEGOTIABLE)
 	flagMode    string
 	flagData    string
 	flagConfig  string
@@ -67,6 +69,7 @@ func init() {
 	flag.BoolVar(&flagStatus, "status", false, "Show server status")
 	flag.BoolVar(&flagDaemon, "daemon", false, "Daemonize (detach from terminal)")
 	flag.BoolVar(&flagDaemon, "d", false, "Daemonize (shorthand)")
+	flag.BoolVar(&flagDebug, "debug", false, "Enable debug mode (verbose logging, debug endpoints)")
 
 	// Commands with optional arguments
 	flag.StringVar(&flagTest, "test", "", "Test search engines with optional query")
@@ -83,7 +86,6 @@ func init() {
 	flag.StringVar(&flagPID, "pid", "", "Set PID file path")
 	flag.StringVar(&flagAddress, "address", "", "Set listen address")
 	flag.IntVar(&flagPort, "port", 0, "Set listen port")
-	flag.IntVar(&flagPort, "p", 0, "Set listen port (shorthand)")
 }
 
 func main() {
@@ -153,10 +155,24 @@ func main() {
 // applyCliOverrides applies CLI flag overrides to the config system
 // Per TEMPLATE.md PART 6: Directory flags MUST create directories if they don't exist
 func applyCliOverrides() {
+	// Set mode from CLI flag or environment
 	if flagMode != "" {
 		os.Setenv("SEARCH_MODE", flagMode)
 		os.Setenv("MODE", flagMode)
+		mode.Set(flagMode)
+	} else {
+		// Initialize mode from environment
+		mode.FromEnv()
 	}
+
+	// Set debug mode from CLI flag
+	// Per TEMPLATE.md PART 6: --debug enables debug mode (verbose logging, debug endpoints)
+	if flagDebug {
+		os.Setenv("DEBUG", "true")
+		os.Setenv("SEARCH_DEBUG", "true")
+		mode.SetDebug(true)
+	}
+
 	if flagData != "" {
 		os.Setenv("SEARCH_DATA_DIR", flagData)
 		config.SetDataDirOverride(flagData)
@@ -346,8 +362,9 @@ Runtime Flags:
   --log <dir>              Set log directory
   --pid <file>             Set PID file path
   --address <addr>         Set listen address
-  --port, -p <port>        Set listen port
+  --port <port>            Set listen port
   --daemon, -d             Daemonize (detach from terminal, Unix only)
+  --debug                  Enable debug mode (verbose logging, debug endpoints)
 
 Information:
   --help, -h               Show this help message
@@ -374,7 +391,9 @@ Service Management:
 Maintenance:
   --maintenance <action>   Maintenance commands:
     backup [file]          Create backup archive
+                           Use BACKUP_PASSWORD env var for encryption
     restore <file>         Restore from backup
+                           Use BACKUP_PASSWORD env var if encrypted
     setup                  Reset admin credentials (generates setup token)
     mode                   Toggle maintenance mode
 
@@ -407,10 +426,11 @@ Environment Variables:
   MODE, SEARCH_MODE        Application mode (production|development)
   INSTANCE_NAME            Instance display name
   DISABLE_TOR              Disable Tor (auto-enabled if tor binary installed)
+  BACKUP_PASSWORD          Password for backup encryption (AES-256-GCM)
 
 Examples:
   %s                                 Start server with defaults
-  %s -p 8080                         Start on port 8080
+  %s --port 8080                     Start on port 8080
   %s --mode development              Start in dev mode
   %s --config /etc/search --data /var/lib/search  Custom directories
   %s --init                          Create configuration files
@@ -845,6 +865,16 @@ func runMaintenance(action string) {
 			filename = os.Args[3]
 		}
 
+		// Check for backup encryption password
+		// Per TEMPLATE.md PART 24: Password from env var or prompt
+		password := os.Getenv("BACKUP_PASSWORD")
+		if password != "" {
+			fmt.Println("🔐 Backup encryption: ENABLED")
+			bm.SetPassword(password)
+		} else {
+			fmt.Println("🔓 Backup encryption: DISABLED (set BACKUP_PASSWORD to enable)")
+		}
+
 		fmt.Println("Creating backup...")
 		backupPath, err := bm.Create(filename)
 		if err != nil {
@@ -858,6 +888,11 @@ func runMaintenance(action string) {
 		if err == nil {
 			fmt.Printf("   Version: %s\n", metadata.Version)
 			fmt.Printf("   Files:   %d\n", len(metadata.Files))
+			if metadata.Encrypted {
+				fmt.Printf("   Encrypted: YES (%s)\n", metadata.EncryptionMethod)
+			} else {
+				fmt.Println("   Encrypted: NO")
+			}
 		}
 
 	case "restore":
@@ -879,6 +914,14 @@ func runMaintenance(action string) {
 		filename := os.Args[3]
 		fmt.Printf("Restoring from: %s\n", filename)
 
+		// Check if backup is encrypted
+		// Per TEMPLATE.md PART 24: Prompt for password if encrypted
+		password := os.Getenv("BACKUP_PASSWORD")
+		if password != "" {
+			fmt.Println("🔐 Using encryption password from BACKUP_PASSWORD env var")
+			bm.SetPassword(password)
+		}
+
 		// Confirm restore
 		fmt.Print("This will overwrite current configuration. Continue? (yes/no): ")
 		var confirm string
@@ -889,7 +932,13 @@ func runMaintenance(action string) {
 		}
 
 		if err := bm.Restore(filename); err != nil {
-			fmt.Printf("❌ Restore failed: %v\n", err)
+			if strings.Contains(err.Error(), "decryption failed") {
+				fmt.Printf("❌ Restore failed: %v\n", err)
+				fmt.Println("   This backup appears to be encrypted.")
+				fmt.Println("   Set BACKUP_PASSWORD environment variable and try again.")
+			} else {
+				fmt.Printf("❌ Restore failed: %v\n", err)
+			}
 			os.Exit(1)
 		}
 		fmt.Println("✅ Restore completed successfully")
@@ -1010,12 +1059,18 @@ func runMaintenance(action string) {
 		fmt.Println("Maintenance Commands:")
 		fmt.Println()
 		fmt.Println("  backup [file]     Create backup archive")
+		fmt.Println("                    Set BACKUP_PASSWORD env var for encryption")
 		fmt.Println("  restore <file>    Restore from backup")
+		fmt.Println("                    Set BACKUP_PASSWORD env var if encrypted")
 		fmt.Println("  list              List available backups")
 		fmt.Println("  update            Check and install updates")
 		fmt.Println("  mode              Toggle maintenance mode")
-		fmt.Println("  setup             Run initial setup wizard")
+		fmt.Println("  setup             Reset admin credentials (generates setup token)")
 		fmt.Println("  help              Show this help")
+		fmt.Println()
+		fmt.Println("Backup Encryption:")
+		fmt.Println("  BACKUP_PASSWORD=secret search --maintenance backup")
+		fmt.Println("  BACKUP_PASSWORD=secret search --maintenance restore backup.tar.gz")
 
 	default:
 		fmt.Printf("❌ Unknown action: %s\n", action)
