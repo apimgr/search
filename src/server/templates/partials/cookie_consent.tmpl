@@ -1,4 +1,5 @@
 {{/* Cookie consent popup partial */}}
+{{/* Per AI.md PART 17: No inline JS handlers - use event delegation */}}
 {{ define "cookie_consent" }}
 {{ if .CookieConsent }}
 {{ if .CookieConsent.Enabled }}
@@ -15,8 +16,8 @@
             {{ end }}
         </p>
         <div class="cookie-consent-actions">
-            <button class="cookie-consent-accept" onclick="acceptCookies()">Accept</button>
-            <button class="cookie-consent-decline" onclick="declineCookies()">Decline</button>
+            <button class="cookie-consent-accept">Accept</button>
+            <button class="cookie-consent-decline">Decline</button>
         </div>
     </div>
 </div>
@@ -27,16 +28,6 @@
         document.getElementById('cookie-consent').style.display = 'flex';
     }
 })();
-
-function acceptCookies() {
-    localStorage.setItem('cookie_consent', 'accepted');
-    document.getElementById('cookie-consent').style.display = 'none';
-}
-
-function declineCookies() {
-    localStorage.setItem('cookie_consent', 'declined');
-    document.getElementById('cookie-consent').style.display = 'none';
-}
 </script>
 {{ end }}
 {{ end }}

@@ -110,7 +110,7 @@ type APIMeta struct {
 	Version     string  `json:"version"`
 }
 
-// HealthResponse represents health check response per TEMPLATE.md spec
+// HealthResponse represents health check response per AI.md spec
 type HealthResponse struct {
 	Status         string            `json:"status"`
 	Version        string            `json:"version"`

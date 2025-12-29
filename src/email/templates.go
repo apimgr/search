@@ -21,7 +21,7 @@ const (
 	TemplateWeeklyReport      TemplateType = "weekly_report"
 	TemplateSecurityAlert     TemplateType = "security_alert"
 	TemplateAPITokenCreated   TemplateType = "api_token_created"
-	// Additional templates per TEMPLATE.md PART 16
+	// Additional templates per AI.md PART 16
 	TemplateAdminInvite       TemplateType = "admin_invite"
 	Template2FAEnabled        TemplateType = "two_factor_enabled"
 	Template2FADisabled       TemplateType = "two_factor_disabled"
@@ -692,7 +692,7 @@ var rawTemplates = map[TemplateType]string{
 }
 
 // TemplateInfo contains metadata about an email template
-// Per TEMPLATE.md PART 31: Account emails vs Notification emails
+// Per AI.md PART 31: Account emails vs Notification emails
 type TemplateInfo struct {
 	Type           TemplateType `json:"type"`
 	Name           string       `json:"name"`
@@ -701,8 +701,8 @@ type TemplateInfo struct {
 }
 
 // GetAllTemplateTypes returns a list of all available email template types
-// Per TEMPLATE.md PART 16: Admin should be able to preview email templates
-// Per TEMPLATE.md PART 31: Templates are marked as account (security) or notification
+// Per AI.md PART 16: Admin should be able to preview email templates
+// Per AI.md PART 31: Templates are marked as account (security) or notification
 func GetAllTemplateTypes() []TemplateInfo {
 	return []TemplateInfo{
 		// Account emails (security-sensitive) - always sent to account email
@@ -728,7 +728,7 @@ func GetAllTemplateTypes() []TemplateInfo {
 }
 
 // IsAccountEmail returns true if the template is for account/security emails
-// Per TEMPLATE.md PART 31: Account emails go to user's account email only
+// Per AI.md PART 31: Account emails go to user's account email only
 func IsAccountEmail(templateType TemplateType) bool {
 	switch templateType {
 	case TemplateWelcome,
@@ -747,7 +747,7 @@ func IsAccountEmail(templateType TemplateType) bool {
 }
 
 // PreviewTemplate renders a template with sample data for preview
-// Per TEMPLATE.md PART 16: Template preview in admin panel
+// Per AI.md PART 16: Template preview in admin panel
 func (et *EmailTemplate) PreviewTemplate(templateType TemplateType, siteName, siteURL string) (subject string, body string, err error) {
 	baseData := NewTemplateData(siteName, siteURL, "support@"+siteURL)
 	sampleTime := time.Now()

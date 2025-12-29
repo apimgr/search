@@ -21,7 +21,7 @@ type Migrator struct {
 	migrations []Migration
 }
 
-// DatabaseMigrator handles migrations for both databases per TEMPLATE.md PART 24
+// DatabaseMigrator handles migrations for both databases per AI.md PART 24
 type DatabaseMigrator struct {
 	dm              *DatabaseManager
 	serverMigrator  *Migrator
@@ -274,7 +274,7 @@ func (dbm *DatabaseMigrator) registerServerMigrations() {
 		Down: `DROP TABLE IF EXISTS custom_bangs`,
 	})
 
-	// Migration 12: Multi-admin support per TEMPLATE.md PART 31
+	// Migration 12: Multi-admin support per AI.md PART 31
 	// Recreate admin_credentials without CHECK constraint, add new columns
 	m.Register(Migration{
 		Version:     12,
@@ -345,7 +345,7 @@ func (dbm *DatabaseMigrator) registerServerMigrations() {
 		`,
 	})
 
-	// Migration 13: Admin invites table per TEMPLATE.md PART 31
+	// Migration 13: Admin invites table per AI.md PART 31
 	m.Register(Migration{
 		Version:     13,
 		Description: "Create admin_invites table",
@@ -384,7 +384,7 @@ func (dbm *DatabaseMigrator) registerServerMigrations() {
 		Down: `DROP TABLE IF EXISTS setup_token`,
 	})
 
-	// Migration 15: External admins table for OIDC/LDAP per TEMPLATE.md PART 31
+	// Migration 15: External admins table for OIDC/LDAP per AI.md PART 31
 	m.Register(Migration{
 		Version:     15,
 		Description: "Create external_admins table",
@@ -613,7 +613,7 @@ func (dbm *DatabaseMigrator) registerUsersMigrations() {
 		Down: `DROP TABLE IF EXISTS invites`,
 	})
 
-	// Migration 10: Passkeys table per TEMPLATE.md PART 31
+	// Migration 10: Passkeys table per AI.md PART 31
 	m.Register(Migration{
 		Version:     10,
 		Description: "Create passkeys table for WebAuthn/FIDO2",
@@ -657,7 +657,7 @@ func (dbm *DatabaseMigrator) registerUsersMigrations() {
 		Down: `DROP TABLE IF EXISTS passkey_challenges`,
 	})
 
-	// Migration 12: Dual email support per TEMPLATE.md PART 31
+	// Migration 12: Dual email support per AI.md PART 31
 	// Account email (security) vs Notification email (non-security)
 	m.Register(Migration{
 		Version:     12,

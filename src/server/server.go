@@ -59,12 +59,13 @@ type Server struct {
 	dbManager      *database.DatabaseManager
 
 	// User management
-	userAuthManager *users.AuthManager
-	totpManager     *users.TOTPManager
-	recoveryManager *users.RecoveryManager
-	tokenManager    *users.TokenManager
-	authAPIHandler  *api.AuthHandler
-	userAPIHandler  *api.UserHandler
+	userAuthManager     *users.AuthManager
+	totpManager         *users.TOTPManager
+	recoveryManager     *users.RecoveryManager
+	tokenManager        *users.TokenManager
+	verificationManager *users.VerificationManager
+	authAPIHandler      *api.AuthHandler
+	userAPIHandler      *api.UserHandler
 }
 
 // registryAdapter wraps engines.Registry to implement admin.EngineRegistry
@@ -253,7 +254,7 @@ func New(cfg *config.Config) *Server {
 	if cfg.Server.Scheduler.Enabled {
 		sched = scheduler.New()
 
-		// Register default scheduled tasks per TEMPLATE.md PART 20
+		// Register default scheduled tasks per AI.md PART 20
 		// Session cleanup: hourly
 		sched.Register(&scheduler.Task{
 			Name:     "session_cleanup",
@@ -333,6 +334,7 @@ func New(cfg *config.Config) *Server {
 	var totpMgr *users.TOTPManager
 	var recoveryMgr *users.RecoveryManager
 	var tokenMgr *users.TokenManager
+	var verificationMgr *users.VerificationManager
 
 	if cfg.Server.Users.Enabled {
 		// Initialize database manager
@@ -375,6 +377,10 @@ func New(cfg *config.Config) *Server {
 				// Create token manager
 				tokenMgr = users.NewTokenManager(usersDB)
 				log.Printf("[Users] Token manager initialized")
+
+				// Create verification manager for email verification and password reset tokens
+				verificationMgr = users.NewVerificationManager(usersDB)
+				log.Printf("[Users] Verification manager initialized")
 			}
 		}
 	}
@@ -402,10 +408,11 @@ func New(cfg *config.Config) *Server {
 		scheduler:       sched,
 		metrics:         metrics,
 		dbManager:       dbMgr,
-		userAuthManager: userAuthMgr,
-		totpManager:     totpMgr,
-		recoveryManager: recoveryMgr,
-		tokenManager:    tokenMgr,
+		userAuthManager:     userAuthMgr,
+		totpManager:         totpMgr,
+		recoveryManager:     recoveryMgr,
+		tokenManager:        tokenMgr,
+		verificationManager: verificationMgr,
 	}
 
 	// Create admin handler (needs renderer interface)
@@ -432,7 +439,7 @@ func New(cfg *config.Config) *Server {
 	if cfg.Server.Users.Enabled && userAuthMgr != nil && dbMgr != nil {
 		usersDB := dbMgr.UsersDB().SQL()
 		if usersDB != nil {
-			s.authAPIHandler = api.NewAuthHandler(cfg, usersDB, userAuthMgr, totpMgr, recoveryMgr)
+			s.authAPIHandler = api.NewAuthHandler(cfg, usersDB, userAuthMgr, totpMgr, recoveryMgr, verificationMgr)
 			s.userAPIHandler = api.NewUserHandler(cfg, usersDB, userAuthMgr, totpMgr, recoveryMgr, tokenMgr)
 			log.Printf("[Users] API handlers initialized")
 		}
@@ -662,16 +669,20 @@ func (s *Server) UpdateConfig(cfg *config.Config) {
 	log.Println("[Server] Configuration updated")
 }
 
-// createPIDFile creates a PID file
+// createPIDFile creates a PID file with stale PID detection
+// Per AI.md PART 8: Stale PID detection is REQUIRED
 func (s *Server) createPIDFile() error {
 	dataDir := config.GetDataDir()
 	s.pidFile = fmt.Sprintf("%s/search.pid", dataDir)
 
-	// Check if PID file already exists
-	if _, err := os.Stat(s.pidFile); err == nil {
-		// Read existing PID
-		data, _ := os.ReadFile(s.pidFile)
-		return fmt.Errorf("server already running (PID: %s)", string(data))
+	// Check for existing PID file and detect stale PIDs
+	running, existingPID, err := CheckPIDFile(s.pidFile)
+	if err != nil {
+		return fmt.Errorf("checking PID file: %w", err)
+	}
+
+	if running {
+		return fmt.Errorf("server already running (PID: %d)", existingPID)
 	}
 
 	// Write PID file
@@ -690,7 +701,7 @@ func (s *Server) removePIDFile() {
 func (s *Server) setupRoutes() http.Handler {
 	mux := http.NewServeMux()
 
-	// Health check - /healthz only per TEMPLATE.md spec (NO /health)
+	// Health check - /healthz only per AI.md spec (NO /health)
 	// Supports content negotiation: HTML (default), JSON (Accept: application/json), plain text (.txt)
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	mux.HandleFunc("/healthz.txt", s.handleHealthz)
@@ -704,7 +715,7 @@ func (s *Server) setupRoutes() http.Handler {
 	// Autocomplete (per AI.md PART 36 line 28280)
 	mux.HandleFunc("/autocomplete", s.handleAutocomplete)
 
-	// Standard server pages (per TEMPLATE.md spec)
+	// Standard server pages (per AI.md spec)
 	mux.HandleFunc("/server/about", s.handleAbout)
 	mux.HandleFunc("/server/privacy", s.handlePrivacy)
 	mux.HandleFunc("/server/contact", s.handleContact)
@@ -786,6 +797,10 @@ func (s *Server) setupRoutes() http.Handler {
 		mux.HandleFunc(metricsPath, s.metrics.AuthenticatedHandler())
 	}
 
+	// Debug endpoints (DEBUG=true only)
+	// Per AI.md PART 7: pprof, expvar, and custom debug endpoints
+	s.registerDebugRoutes(mux)
+
 	// Apply middleware chain
 	handler := Chain(
 		mux,
@@ -801,7 +816,7 @@ func (s *Server) setupRoutes() http.Handler {
 	return handler
 }
 
-// handleRobots serves robots.txt per TEMPLATE.md spec
+// handleRobots serves robots.txt per AI.md spec
 func (s *Server) handleRobots(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=86400") // Cache for 1 day
@@ -832,13 +847,13 @@ func (s *Server) handleRobots(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "Disallow:", path)
 	}
 
-	// Add sitemap URL per TEMPLATE.md spec
+	// Add sitemap URL per AI.md spec
 	fmt.Fprintln(w)
 	baseURL := s.getBaseURL(r)
 	fmt.Fprintln(w, "Sitemap:", baseURL+"/sitemap.xml")
 }
 
-// handleSecurityTxt serves security.txt per RFC 9116 and TEMPLATE.md spec
+// handleSecurityTxt serves security.txt per RFC 9116 and AI.md spec
 // Required fields: Contact, Expires
 func (s *Server) handleSecurityTxt(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -877,7 +892,7 @@ func (s *Server) handleSecurityTxt(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, "Expires:", expires)
 }
 
-// handleSitemap serves sitemap.xml per TEMPLATE.md spec
+// handleSitemap serves sitemap.xml per AI.md spec
 func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=86400") // Cache for 1 day

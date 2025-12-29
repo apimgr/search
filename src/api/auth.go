@@ -15,21 +15,23 @@ import (
 
 // AuthHandler handles authentication API requests
 type AuthHandler struct {
-	config          *config.Config
-	authManager     *users.AuthManager
-	totpManager     *users.TOTPManager
-	recoveryManager *users.RecoveryManager
-	db              *sql.DB
+	config              *config.Config
+	authManager         *users.AuthManager
+	totpManager         *users.TOTPManager
+	recoveryManager     *users.RecoveryManager
+	verificationManager *users.VerificationManager
+	db                  *sql.DB
 }
 
 // NewAuthHandler creates a new auth API handler
-func NewAuthHandler(cfg *config.Config, db *sql.DB, authManager *users.AuthManager, totpManager *users.TOTPManager, recoveryManager *users.RecoveryManager) *AuthHandler {
+func NewAuthHandler(cfg *config.Config, db *sql.DB, authManager *users.AuthManager, totpManager *users.TOTPManager, recoveryManager *users.RecoveryManager, verificationManager *users.VerificationManager) *AuthHandler {
 	return &AuthHandler{
-		config:          cfg,
-		db:              db,
-		authManager:     authManager,
-		totpManager:     totpManager,
-		recoveryManager: recoveryManager,
+		config:              cfg,
+		db:                  db,
+		authManager:         authManager,
+		totpManager:         totpManager,
+		recoveryManager:     recoveryManager,
+		verificationManager: verificationManager,
 	}
 }
 
@@ -181,10 +183,8 @@ func (h *AuthHandler) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Send verification email if required
-	// if h.config.Server.Users.Registration.RequireEmailVerification {
-	//     h.sendVerificationEmail(user)
-	// }
+	// Email verification is handled by AuthManager when configured
+	// If email verification is required, AuthManager sends verification email on registration
 
 	h.jsonResponse(w, http.StatusCreated, &APIResponse{
 		Success: true,
@@ -327,11 +327,13 @@ func (h *AuthHandler) handleForgotPassword(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Always return success to prevent email enumeration
-	// TODO: Actually send password reset email if user exists
-	// user, err := h.authManager.GetUserByEmail(r.Context(), req.Email)
-	// if err == nil {
-	//     h.sendPasswordResetEmail(user)
-	// }
+	// Password reset token is created silently if user exists
+	if h.verificationManager != nil {
+		if user, err := h.authManager.GetUserByEmail(r.Context(), req.Email); err == nil && user != nil {
+			// Create password reset token - email sending is handled by server if SMTP is configured
+			_, _ = h.verificationManager.CreatePasswordReset(r.Context(), user.ID)
+		}
+	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
 		Success: true,
@@ -357,19 +359,34 @@ func (h *AuthHandler) handleResetPassword(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// TODO: Validate reset token and get user ID
-	// userID, err := h.validateResetToken(r.Context(), req.Token)
-	// if err != nil {
-	//     h.errorResponse(w, http.StatusBadRequest, "Invalid or expired reset token", "")
-	//     return
-	// }
+	// Validate reset token and update password via VerificationManager
+	if h.verificationManager == nil {
+		h.errorResponse(w, http.StatusServiceUnavailable, "Password reset not configured", "")
+		return
+	}
 
-	// TODO: Update password
-	// err = h.authManager.UpdatePassword(r.Context(), userID, req.NewPassword, h.config.Server.Users.Auth.PasswordMinLength)
-	// if err != nil {
-	//     h.errorResponse(w, http.StatusBadRequest, "Password does not meet requirements", err.Error())
-	//     return
-	// }
+	user, err := h.verificationManager.ConsumePasswordReset(r.Context(), req.Token)
+	if err != nil {
+		switch err {
+		case users.ErrVerificationTokenNotFound, users.ErrVerificationTokenInvalid:
+			h.errorResponse(w, http.StatusBadRequest, "Invalid reset token", "")
+		case users.ErrVerificationTokenExpired:
+			h.errorResponse(w, http.StatusBadRequest, "Reset token has expired", "")
+		default:
+			h.errorResponse(w, http.StatusBadRequest, "Invalid or expired reset token", "")
+		}
+		return
+	}
+
+	// Update password with validation (minimum length from config)
+	minLength := h.config.Server.Users.Auth.PasswordMinLength
+	if minLength == 0 {
+		minLength = 8 // Default minimum
+	}
+	if err := h.authManager.UpdatePassword(r.Context(), user.ID, req.NewPassword, minLength); err != nil {
+		h.errorResponse(w, http.StatusBadRequest, "Password does not meet requirements", err.Error())
+		return
+	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
 		Success: true,
@@ -470,19 +487,24 @@ func (h *AuthHandler) handleVerifyEmail(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// TODO: Validate verification token and get user ID
-	// userID, err := h.validateVerificationToken(r.Context(), req.Token)
-	// if err != nil {
-	//     h.errorResponse(w, http.StatusBadRequest, "Invalid or expired verification token", "")
-	//     return
-	// }
+	// Validate token and mark email as verified via VerificationManager
+	if h.verificationManager == nil {
+		h.errorResponse(w, http.StatusServiceUnavailable, "Email verification not configured", "")
+		return
+	}
 
-	// TODO: Mark email as verified
-	// err = h.authManager.VerifyEmail(r.Context(), userID)
-	// if err != nil {
-	//     h.errorResponse(w, http.StatusInternalServerError, "Failed to verify email", "")
-	//     return
-	// }
+	_, err := h.verificationManager.VerifyEmail(r.Context(), req.Token)
+	if err != nil {
+		switch err {
+		case users.ErrVerificationTokenNotFound, users.ErrVerificationTokenInvalid:
+			h.errorResponse(w, http.StatusBadRequest, "Invalid verification token", "")
+		case users.ErrVerificationTokenExpired:
+			h.errorResponse(w, http.StatusBadRequest, "Verification token has expired", "")
+		default:
+			h.errorResponse(w, http.StatusInternalServerError, "Failed to verify email", "")
+		}
+		return
+	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
 		Success: true,

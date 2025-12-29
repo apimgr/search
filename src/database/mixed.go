@@ -12,7 +12,7 @@ import (
 )
 
 // MixedModeConfig holds configuration for mixed mode database operation
-// Per TEMPLATE.md PART 24: Mixed Mode (heterogeneous database backends)
+// Per AI.md PART 24: Mixed Mode (heterogeneous database backends)
 type MixedModeConfig struct {
 	// ServerDBConfig for server.db (admin credentials, scheduler, audit)
 	// Can be SQLite, PostgreSQL, or MySQL
@@ -55,7 +55,7 @@ func DefaultMixedModeConfig(dataDir string) *MixedModeConfig {
 }
 
 // MixedModeManager manages databases with potentially different backends
-// Per TEMPLATE.md PART 24: Mixed Mode (heterogeneous database backends)
+// Per AI.md PART 24: Mixed Mode (heterogeneous database backends)
 type MixedModeManager struct {
 	serverDB *MixedDB
 	usersDB  *MixedDB

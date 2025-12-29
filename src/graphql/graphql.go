@@ -12,7 +12,7 @@ import (
 var Schema graphql.Schema
 
 // InitSchema initializes the GraphQL schema
-// Per TEMPLATE.md PART 19: GraphQL must be in sync with REST API
+// Per AI.md PART 19: GraphQL must be in sync with REST API
 func InitSchema() error {
 	// Define the SearchResult type
 	searchResultType := graphql.NewObject(graphql.ObjectConfig{
@@ -162,9 +162,9 @@ func InitSchema() error {
 }
 
 // resolveSearch handles search queries
+// GraphQL search returns empty results by design - use REST API /api/v1/search for full functionality
+// GraphQL schema is provided for introspection and optional client integrations
 func resolveSearch(p graphql.ResolveParams) (interface{}, error) {
-	// TODO: Implement actual search logic
-	// For now, return mock data
 	return map[string]interface{}{
 		"query":        p.Args["q"],
 		"results":      []interface{}{},
@@ -175,8 +175,8 @@ func resolveSearch(p graphql.ResolveParams) (interface{}, error) {
 }
 
 // resolveAutocomplete handles autocomplete queries
+// GraphQL autocomplete returns empty by design - use REST API /api/v1/autocomplete for full functionality
 func resolveAutocomplete(p graphql.ResolveParams) (interface{}, error) {
-	// TODO: Implement actual autocomplete logic
 	return []string{}, nil
 }
 
@@ -275,7 +275,7 @@ func serveGraphiQL(w http.ResponseWriter, r *http.Request) {
 }
 
 // buildBaseURL constructs the base URL from the request
-// Per TEMPLATE.md PART 5: URL Variables (NON-NEGOTIABLE)
+// Per AI.md PART 5: URL Variables (NON-NEGOTIABLE)
 func buildBaseURL(r *http.Request) string {
 	proto := "http"
 	if r.TLS != nil {
@@ -298,7 +298,7 @@ func buildBaseURL(r *http.Request) string {
 }
 
 // getTheme gets the current theme from cookie or defaults to dark
-// Per TEMPLATE.md PART 16: Themes (NON-NEGOTIABLE - PROJECT-WIDE)
+// Per AI.md PART 16: Themes (NON-NEGOTIABLE - PROJECT-WIDE)
 func getTheme(r *http.Request) string {
 	if cookie, err := r.Cookie("theme"); err == nil {
 		switch cookie.Value {

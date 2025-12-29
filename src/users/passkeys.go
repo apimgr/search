@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// PasskeyManager handles WebAuthn/FIDO2 passkey operations per TEMPLATE.md PART 31
+// PasskeyManager handles WebAuthn/FIDO2 passkey operations per AI.md PART 31
 type PasskeyManager struct {
 	db       *sql.DB
 	rpID     string

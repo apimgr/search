@@ -215,7 +215,7 @@ func FormatRecoveryKey(key string) string {
 	return fmt.Sprintf("%s-%s-%s-%s", key[0:4], key[4:8], key[8:12], key[12:16])
 }
 
-// Argon2id parameters for recovery keys (per TEMPLATE.md line 932)
+// Argon2id parameters for recovery keys (per AI.md line 932)
 const (
 	recoveryArgon2Time    = 3         // iterations
 	recoveryArgon2Memory  = 64 * 1024 // 64 MB

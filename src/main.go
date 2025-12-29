@@ -33,7 +33,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// CLI flags (per TEMPLATE.md PART 6)
+// CLI flags (per AI.md PART 6)
 var (
 	flagVersion     bool
 	flagHelp        bool
@@ -48,7 +48,7 @@ var (
 	flagUpdate      string
 	flagBuild       string
 
-	// Required flags per TEMPLATE.md PART 6 (NON-NEGOTIABLE)
+	// Required flags per AI.md PART 6 (NON-NEGOTIABLE)
 	flagMode    string
 	flagData    string
 	flagConfig  string
@@ -77,7 +77,7 @@ func init() {
 	flag.StringVar(&flagUpdate, "update", "", "Update management: check|yes|branch")
 	flag.StringVar(&flagBuild, "build", "", "Build for platforms: all|linux|darwin|windows|freebsd")
 
-	// Configuration override flags (NON-NEGOTIABLE per TEMPLATE.md PART 6)
+	// Configuration override flags (NON-NEGOTIABLE per AI.md PART 6)
 	flag.StringVar(&flagMode, "mode", "", "Set application mode (production|development)")
 	flag.StringVar(&flagData, "data", "", "Set data directory")
 	flag.StringVar(&flagConfig, "config", "", "Set config directory")
@@ -152,7 +152,7 @@ func main() {
 }
 
 // applyCliOverrides applies CLI flag overrides to the config system
-// Per TEMPLATE.md PART 6: Directory flags MUST create directories if they don't exist
+// Per AI.md PART 6: Directory flags MUST create directories if they don't exist
 func applyCliOverrides() {
 	// Set mode from CLI flag or environment
 	if flagMode != "" {
@@ -165,7 +165,7 @@ func applyCliOverrides() {
 	}
 
 	// Set debug mode from CLI flag
-	// Per TEMPLATE.md PART 6: --debug enables debug mode (verbose logging, debug endpoints)
+	// Per AI.md PART 6: --debug enables debug mode (verbose logging, debug endpoints)
 	if flagDebug {
 		os.Setenv("DEBUG", "true")
 		os.Setenv("SEARCH_DEBUG", "true")
@@ -197,7 +197,7 @@ func applyCliOverrides() {
 	}
 
 	// Ensure directories exist after CLI overrides are applied
-	// Per TEMPLATE.md PART 6: All directory flags MUST create directories if they don't exist
+	// Per AI.md PART 6: All directory flags MUST create directories if they don't exist
 	if flagData != "" || flagConfig != "" || flagLog != "" || flagPID != "" {
 		if err := config.EnsureDirectories(); err != nil {
 			log.Printf("Warning: Failed to create directories: %v", err)
@@ -254,7 +254,7 @@ func handleLegacyArgs() {
 }
 
 func runServer() {
-	// Handle daemonization per TEMPLATE.md PART 6
+	// Handle daemonization per AI.md PART 6
 	// Check if we should daemonize (only for manual starts, not --service start)
 	if flagDaemon && os.Getenv("_DAEMON_CHILD") != "1" {
 		if err := daemonize(); err != nil {
@@ -273,7 +273,7 @@ func runServer() {
 	}
 
 	// Check for first run and display setup token if needed
-	// Per TEMPLATE.md PART 6: Setup token displayed ONCE on first run
+	// Per AI.md PART 6: Setup token displayed ONCE on first run
 	checkFirstRun(cfg)
 
 	// Create server
@@ -293,7 +293,7 @@ func runServer() {
 }
 
 func printVersion() {
-	// Per TEMPLATE.md PART 6: --version format
+	// Per AI.md PART 6: --version format
 	// Format: {binary} v1.2.3 (abc1234) built 2025-01-15
 	binaryName := filepath.Base(os.Args[0])
 
@@ -320,7 +320,7 @@ func printVersion() {
 }
 
 func printHelp() {
-	// Per TEMPLATE.md PART 6: Use actual binary name in help
+	// Per AI.md PART 6: Use actual binary name in help
 	binaryName := filepath.Base(os.Args[0])
 
 	fmt.Printf(`%s - Privacy-Respecting Metasearch Engine
@@ -527,7 +527,7 @@ func showConfigInfo() {
 }
 
 func showStatus() {
-	// Per TEMPLATE.md PART 31 - --status output format
+	// Per AI.md PART 31 - --status output format
 	binaryName := filepath.Base(os.Args[0])
 
 	// Check PID file and process status
@@ -590,7 +590,7 @@ func showStatus() {
 	fmt.Printf("  Uptime: %s\n", uptime)
 	fmt.Println()
 
-	// Node status (standalone for now, cluster support later)
+	// Node status
 	fmt.Println("Node: standalone")
 	fmt.Println("Cluster: disabled")
 	fmt.Println()
@@ -840,7 +840,7 @@ func runMaintenance(action string) {
 		}
 
 		// Check for backup encryption password
-		// Per TEMPLATE.md PART 24: Password from env var or prompt
+		// Per AI.md PART 24: Password from env var or prompt
 		password := os.Getenv("BACKUP_PASSWORD")
 		if password != "" {
 			fmt.Println("🔐 Backup encryption: ENABLED")
@@ -889,7 +889,7 @@ func runMaintenance(action string) {
 		fmt.Printf("Restoring from: %s\n", filename)
 
 		// Check if backup is encrypted
-		// Per TEMPLATE.md PART 24: Prompt for password if encrypted
+		// Per AI.md PART 24: Prompt for password if encrypted
 		password := os.Getenv("BACKUP_PASSWORD")
 		if password != "" {
 			fmt.Println("🔐 Using encryption password from BACKUP_PASSWORD env var")
@@ -963,7 +963,7 @@ func runMaintenance(action string) {
 		}
 
 	case "setup":
-		// Admin recovery per TEMPLATE.md PART 26
+		// Admin recovery per AI.md PART 26
 		// Clears admin password and generates a new setup token
 		fmt.Println("🔧 Admin Recovery Setup")
 		fmt.Println()
@@ -1265,11 +1265,11 @@ func runTest() {
 }
 
 // ============================================================
-// First Run Detection (per TEMPLATE.md PART 6)
+// First Run Detection (per AI.md PART 6)
 // ============================================================
 
 // checkFirstRun checks if this is the first run and displays setup token if needed
-// Per TEMPLATE.md PART 6: Setup token displayed ONCE on first run
+// Per AI.md PART 6: Setup token displayed ONCE on first run
 func checkFirstRun(cfg *config.Config) {
 	dataDir := config.GetDataDir()
 	dbPath := filepath.Join(dataDir, "db", "server.db")
@@ -1354,7 +1354,7 @@ func displayFirstRunSetupToken(cfg *config.Config, dbPath string) {
 		return
 	}
 
-	// Display the token ONCE - per TEMPLATE.md this is the only time it's shown
+	// Display the token ONCE - per AI.md this is the only time it's shown
 	fmt.Println()
 	fmt.Println("╔══════════════════════════════════════════════════════════════╗")
 	fmt.Println("║  FIRST RUN: Admin setup required                             ║")
@@ -1371,7 +1371,7 @@ func displayFirstRunSetupToken(cfg *config.Config, dbPath string) {
 }
 
 // ============================================================
-// Admin Recovery Helpers (per TEMPLATE.md PART 26)
+// Admin Recovery Helpers (per AI.md PART 26)
 // ============================================================
 
 // generateSetupToken creates a cryptographically secure setup token
@@ -1475,7 +1475,7 @@ func resetAdminCredentials(dbPath string) error {
 }
 
 // ============================================================
-// Build Command (per TEMPLATE.md PART 23)
+// Build Command (per AI.md PART 23)
 // ============================================================
 
 // BuildTarget represents a build target platform
@@ -1485,7 +1485,7 @@ type BuildTarget struct {
 }
 
 // runBuild builds the binary for specified platforms using Docker
-// Per TEMPLATE.md PART 23: Binary must be able to build itself
+// Per AI.md PART 23: Binary must be able to build itself
 func runBuild(platform string) {
 	fmt.Println("🔧 Build Command")
 	fmt.Printf("   Version: %s\n", config.Version)
@@ -1631,7 +1631,7 @@ func buildWithDocker(srcDir, outputPath, goos, goarch string) error {
 	outputName := filepath.Base(outputPath)
 
 	// Docker command to build
-	// Per TEMPLATE.md PART 23: Must use golang:alpine for builds
+	// Per AI.md PART 23: Must use golang:alpine for builds
 	cmd := exec.Command("docker", "run", "--rm",
 		"-v", srcDir+":/app",
 		"-w", "/app",
@@ -1669,7 +1669,7 @@ func formatBytes(bytes int64) string {
 }
 
 // daemonize forks the process and detaches from terminal
-// Per TEMPLATE.md PART 6 - Daemonization
+// Per AI.md PART 6 - Daemonization
 func daemonize() error {
 	// Windows doesn't support traditional Unix daemonization
 	if runtime.GOOS == "windows" {

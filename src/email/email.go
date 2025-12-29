@@ -342,7 +342,7 @@ type DetectedSMTP struct {
 }
 
 // DetectSMTP auto-detects SMTP servers on the local system
-// Per TEMPLATE.md PART 16: SMTP auto-detection on first run
+// Per AI.md PART 16: SMTP auto-detection on first run
 // Tries common SMTP ports and hostnames to find available servers
 func DetectSMTP() *DetectedSMTP {
 	// Common SMTP hosts to check
@@ -428,7 +428,7 @@ func tryDetectSMTP(host string, port int, useTLS bool) *DetectedSMTP {
 }
 
 // DetectAndConfigure detects SMTP and returns a configured Config
-// Per TEMPLATE.md PART 16: SMTP auto-detection on first run
+// Per AI.md PART 16: SMTP auto-detection on first run
 func DetectAndConfigure() *Config {
 	detected := DetectSMTP()
 	if detected == nil {

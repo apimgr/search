@@ -13,7 +13,7 @@ import (
 )
 
 // Argon2 parameters for password-based key derivation
-// Per TEMPLATE.md PART 2: Argon2id parameters (OWASP 2023)
+// Per AI.md PART 2: Argon2id parameters (OWASP 2023)
 const (
 	argon2Time    = 3
 	argon2Memory  = 64 * 1024
@@ -23,7 +23,7 @@ const (
 )
 
 // EncryptBackup encrypts backup data using AES-256-GCM with password-based key derivation
-// Per TEMPLATE.md PART 24: Backup Encryption (NON-NEGOTIABLE)
+// Per AI.md PART 24: Backup Encryption (NON-NEGOTIABLE)
 // Algorithm: AES-256-GCM
 // Key Derivation: Argon2id (password → encryption key)
 // Password Storage: NEVER stored - admin must remember
@@ -80,7 +80,7 @@ func EncryptBackup(data []byte, password string) ([]byte, error) {
 }
 
 // DecryptBackup decrypts backup data using AES-256-GCM
-// Per TEMPLATE.md PART 24: Backup Encryption
+// Per AI.md PART 24: Backup Encryption
 func DecryptBackup(encrypted []byte, password string) ([]byte, error) {
 	if password == "" {
 		return nil, fmt.Errorf("password required for decryption")

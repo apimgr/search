@@ -16,7 +16,7 @@
             </button>
         </form>
         {{end}}
-        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+        <button class="theme-toggle" aria-label="Toggle theme">
             <svg class="theme-icon-dark" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="12" cy="12" r="5"></circle>
                 <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
@@ -28,7 +28,7 @@
     </div>
 
     {{/* Mobile: hamburger menu toggle (far right of nav row) */}}
-    <button class="nav-toggle" aria-label="Toggle navigation" onclick="toggleNav()">
+    <button class="nav-toggle" aria-label="Toggle navigation">
         <span></span>
         <span></span>
         <span></span>
@@ -38,12 +38,12 @@
 {{/* Slide-in panel for mobile (hidden by default) */}}
 <div class="nav-panel" id="nav-panel">
     <a href="/" class="nav-panel-link{{if eq .Page "home"}} active{{end}}">Home</a>
-    <button class="theme-toggle nav-panel-theme" onclick="toggleTheme()" aria-label="Toggle theme">
+    <button class="theme-toggle nav-panel-theme" aria-label="Toggle theme">
         <span class="theme-icon-dark">☀️ Light Mode</span>
         <span class="theme-icon-light">🌙 Dark Mode</span>
     </button>
 </div>
 
 {{/* Overlay for mobile menu (click to close) */}}
-<div class="nav-overlay" id="nav-overlay" onclick="closeNav()"></div>
+<div class="nav-overlay" id="nav-overlay"></div>
 {{end}}

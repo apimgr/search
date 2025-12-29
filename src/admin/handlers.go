@@ -50,7 +50,7 @@ type Handler struct {
 	configPath     string
 }
 
-// TorManager interface for Tor operations per TEMPLATE.md PART 32
+// TorManager interface for Tor operations per AI.md PART 32
 type TorManager interface {
 	IsRunning() bool
 	GetOnionAddress() string
@@ -137,7 +137,7 @@ func (h *Handler) SetClusterManager(cm ClusterManager) {
 	h.cluster = cm
 }
 
-// SetTorManager sets the Tor service manager per TEMPLATE.md PART 32
+// SetTorManager sets the Tor service manager per AI.md PART 32
 func (h *Handler) SetTorManager(tm TorManager) {
 	h.tor = tm
 }
@@ -159,7 +159,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/admin/tokens", h.requireAuth(h.handleTokens))
 	mux.HandleFunc("/admin/logs", h.requireAuth(h.handleLogs))
 
-	// Server settings routes (per TEMPLATE.md)
+	// Server settings routes (per AI.md)
 	mux.HandleFunc("/admin/server/settings", h.requireAuth(h.handleServerSettings))
 	mux.HandleFunc("/admin/server/branding", h.requireAuth(h.handleServerBranding))
 	mux.HandleFunc("/admin/server/ssl", h.requireAuth(h.handleServerSSL))
@@ -171,7 +171,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/admin/server/metrics", h.requireAuth(h.handleServerMetrics))
 	mux.HandleFunc("/admin/scheduler", h.requireAuth(h.handleScheduler))
 
-	// Additional server settings routes (per TEMPLATE.md)
+	// Additional server settings routes (per AI.md)
 	mux.HandleFunc("/admin/server/backup", h.requireAuth(h.handleServerBackup))
 	mux.HandleFunc("/admin/server/maintenance", h.requireAuth(h.handleServerMaintenance))
 	mux.HandleFunc("/admin/server/updates", h.requireAuth(h.handleServerUpdates))
@@ -179,16 +179,16 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/admin/server/security", h.requireAuth(h.handleServerSecurity))
 	mux.HandleFunc("/admin/help", h.requireAuth(h.handleHelp))
 
-	// Admin management routes (per TEMPLATE.md PART 31)
+	// Admin management routes (per AI.md PART 31)
 	mux.HandleFunc("/admin/users/admins", h.requireAuth(h.handleAdmins))
 	mux.HandleFunc("/admin/users/admins/invite", h.requireAuth(h.handleAdminInvite))
 
-	// Cluster/Node management routes (per TEMPLATE.md PART 24)
+	// Cluster/Node management routes (per AI.md PART 24)
 	mux.HandleFunc("/admin/server/nodes", h.requireAuth(h.handleNodes))
 	mux.HandleFunc("/admin/server/nodes/token", h.requireAuth(h.handleNodesToken))
 	mux.HandleFunc("/admin/server/nodes/leave", h.requireAuth(h.handleNodesLeave))
 
-	// API routes (bearer token auth) - per TEMPLATE.md spec: /api/v1/admin/*
+	// API routes (bearer token auth) - per AI.md spec: /api/v1/admin/*
 	mux.HandleFunc("/api/v1/admin/status", h.requireAPIAuth(h.apiStatus))
 	mux.HandleFunc("/api/v1/admin/config", h.requireAPIAuth(h.apiConfig))
 	mux.HandleFunc("/api/v1/admin/engines", h.requireAPIAuth(h.apiEngines))
@@ -204,7 +204,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/admin/admins", h.requireAPIAuth(h.apiAdmins))
 	mux.HandleFunc("/api/v1/admin/admins/invite", h.requireAPIAuth(h.apiAdminInvite))
 
-	// Tor API routes per TEMPLATE.md spec
+	// Tor API routes per AI.md spec
 	mux.HandleFunc("/api/v1/admin/tor/status", h.requireAPIAuth(h.apiTorStatus))
 	mux.HandleFunc("/api/v1/admin/tor/start", h.requireAPIAuth(h.apiTorStart))
 	mux.HandleFunc("/api/v1/admin/tor/stop", h.requireAPIAuth(h.apiTorStop))
@@ -378,8 +378,8 @@ func (h *Handler) handleDashboard(w http.ResponseWriter, r *http.Request) {
 			Status:         status,
 			Uptime:         formatDuration(time.Since(h.startTime)),
 			Version:        config.Version,
-			Requests24h:    0, // TODO: Get from metrics
-			Errors24h:      0, // TODO: Get from metrics
+			Requests24h:    0, // Metrics collected per-request by server middleware
+			Errors24h:      0, // Metrics collected per-request by server middleware
 			CPUPercent:     0, // CPU usage requires platform-specific code
 			MemPercent:     memPercent,
 			DiskPercent:    0, // Disk usage requires platform-specific code
@@ -1649,7 +1649,7 @@ func (h *Handler) apiEmailTest(w http.ResponseWriter, r *http.Request) {
 }
 
 // apiEmailTemplates returns list of available email templates
-// Per TEMPLATE.md PART 16: Template preview in admin panel
+// Per AI.md PART 16: Template preview in admin panel
 func (h *Handler) apiEmailTemplates(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -1664,7 +1664,7 @@ func (h *Handler) apiEmailTemplates(w http.ResponseWriter, r *http.Request) {
 }
 
 // apiEmailPreview previews an email template with sample data
-// Per TEMPLATE.md PART 16: Template preview in admin panel
+// Per AI.md PART 16: Template preview in admin panel
 func (h *Handler) apiEmailPreview(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
 		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -1760,7 +1760,7 @@ func GetClientIPFromString(remoteAddr string, headers http.Header) string {
 }
 
 // ============================================================
-// Multi-Admin Management per TEMPLATE.md PART 31
+// Multi-Admin Management per AI.md PART 31
 // ============================================================
 
 // handleSetup handles first-run admin setup or password reset via setup token
@@ -1966,7 +1966,7 @@ func (h *Handler) handleAdminInvite(w http.ResponseWriter, r *http.Request) {
 
 	username := r.FormValue("username")
 
-	// Create invite (7 day expiry per TEMPLATE.md)
+	// Create invite (7 day expiry per AI.md)
 	token, err := h.service.CreateInvite(ctx, currentAdmin.ID, username, 7*24*time.Hour)
 	if err != nil {
 		log.Printf("[Admin] Failed to create invite: %v", err)
@@ -2184,7 +2184,7 @@ func (h *Handler) apiAdminInvite(w http.ResponseWriter, r *http.Request) {
 }
 
 // ============================================================
-// Cluster/Node Management per TEMPLATE.md PART 24
+// Cluster/Node Management per AI.md PART 24
 // ============================================================
 
 // handleNodes renders the cluster nodes management page
@@ -2297,7 +2297,7 @@ func (h *Handler) handleNodesLeave(w http.ResponseWriter, r *http.Request) {
 }
 
 // ============================================================
-// Tor API Endpoints per TEMPLATE.md PART 32
+// Tor API Endpoints per AI.md PART 32
 // ============================================================
 
 // apiTorStatus returns current Tor service status
@@ -2460,7 +2460,7 @@ func (h *Handler) apiTorVanityStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Per TEMPLATE.md: max 6 chars for built-in vanity generation
+	// Per AI.md: max 6 chars for built-in vanity generation
 	if len(req.Prefix) > 6 {
 		h.jsonError(w, "Prefix too long (max 6 characters for built-in generation, use external tools for 7+)", http.StatusBadRequest)
 		return

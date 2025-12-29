@@ -18,7 +18,7 @@ import (
 )
 
 // MaintenanceMode represents the current maintenance state
-// Per TEMPLATE.md PART 6: Maintenance Mode (NON-NEGOTIABLE)
+// Per AI.md PART 6: Maintenance Mode (NON-NEGOTIABLE)
 type MaintenanceMode int
 
 const (
@@ -63,7 +63,7 @@ type HealthStatus struct {
 }
 
 // MaintenanceService manages maintenance mode and self-healing
-// Per TEMPLATE.md PART 6: Maintenance Mode (NON-NEGOTIABLE)
+// Per AI.md PART 6: Maintenance Mode (NON-NEGOTIABLE)
 type MaintenanceService struct {
 	config       *config.Config
 	mode         int32
@@ -444,7 +444,7 @@ func (m *MaintenanceService) GetStatus() map[string]interface{} {
 }
 
 // CheckDatabaseIntegrity checks database integrity and attempts repair if needed
-// Per TEMPLATE.md PART 6: Database corruption handling
+// Per AI.md PART 6: Database corruption handling
 func (m *MaintenanceService) CheckDatabaseIntegrity(db *sql.DB) error {
 	ctx, cancel := context.WithTimeout(m.ctx, 120*time.Second)
 	defer cancel()
@@ -476,7 +476,7 @@ func (m *MaintenanceService) CheckDatabaseIntegrity(db *sql.DB) error {
 }
 
 // RepairDatabase attempts to repair a corrupted database
-// Per TEMPLATE.md PART 6: Database corruption handling
+// Per AI.md PART 6: Database corruption handling
 func (m *MaintenanceService) RepairDatabase(dbPath string) error {
 	log.Printf("[Maintenance] Attempting database repair: %s", dbPath)
 
@@ -625,7 +625,7 @@ func fileChecksum(path string) (string, error) {
 }
 
 // GracefulDegradation provides fallback behavior when services are unavailable
-// Per TEMPLATE.md PART 6: Graceful degradation
+// Per AI.md PART 6: Graceful degradation
 type GracefulDegradation struct {
 	mu              sync.RWMutex
 	degradedFeatures map[string]bool

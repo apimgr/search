@@ -71,7 +71,7 @@ func LoadFromEnv() *EnvConfig {
 	cfg.ConfigDir = getEnv("SEARCH_CONFIG_DIR", "CONFIG_DIR")
 	cfg.LogDir = getEnv("SEARCH_LOG_DIR", "LOG_DIR")
 	
-	// Tor - Auto-detection per TEMPLATE.md PART 29
+	// Tor - Auto-detection per AI.md PART 29
 	// Tor is auto-enabled if tor binary is installed
 	// Can be explicitly disabled via DISABLE_TOR=true
 	cfg.UseTor = isTorAvailable()
@@ -125,14 +125,14 @@ func getEnv(keys ...string) string {
 }
 
 // parseBool is a helper that calls ParseBool from bool.go with default false
-// Per TEMPLATE.md PART 4: Boolean Handling (NON-NEGOTIABLE)
+// Per AI.md PART 4: Boolean Handling (NON-NEGOTIABLE)
 func parseBool(val string) bool {
 	result, _ := ParseBool(val, false)
 	return result
 }
 
 // ParseFormBool parses boolean from HTML form values
-// Per TEMPLATE.md PART 4: Extended boolean handling
+// Per AI.md PART 4: Extended boolean handling
 // HTML checkboxes send "on" when checked, nothing when unchecked
 // HTML radio buttons send their value attribute
 func ParseFormBool(val string) bool {
@@ -229,14 +229,14 @@ func (e *EnvConfig) IsProduction() bool {
 }
 
 // isTorAvailable checks if the tor binary is installed and available
-// Per TEMPLATE.md PART 29: Tor auto-enabled if tor binary installed
+// Per AI.md PART 29: Tor auto-enabled if tor binary installed
 func isTorAvailable() bool {
 	_, err := exec.LookPath("tor")
 	return err == nil
 }
 
 // IsTorAvailable is an exported version of isTorAvailable
-// Per TEMPLATE.md PART 29: Tor auto-enabled if tor binary installed
+// Per AI.md PART 29: Tor auto-enabled if tor binary installed
 func IsTorAvailable() bool {
 	return isTorAvailable()
 }

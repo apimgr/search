@@ -50,7 +50,7 @@ func (m *Manager) SetCreatedBy(username string) {
 }
 
 // SetPassword sets the backup encryption password
-// Per TEMPLATE.md PART 24: Password is NEVER stored - derived on-demand
+// Per AI.md PART 24: Password is NEVER stored - derived on-demand
 func (m *Manager) SetPassword(password string) {
 	m.password = password
 }
@@ -172,7 +172,7 @@ func (m *Manager) Create(filename string) (string, error) {
 }
 
 // addDirectoryToTar adds a directory to the tar archive with SHA256 checksums
-// Per TEMPLATE.md PART 26: SHA256 checksums for all backup files
+// Per AI.md PART 26: SHA256 checksums for all backup files
 func (m *Manager) addDirectoryToTar(tw *tar.Writer, srcDir, prefix string) ([]string, int64, map[string]string, error) {
 	var files []string
 	var totalSize int64
@@ -388,7 +388,7 @@ func (m *Manager) List() ([]BackupInfo, error) {
 }
 
 // GetMetadata reads metadata from a backup archive
-// Looks for manifest.json (per TEMPLATE.md PART 26) or legacy backup.json
+// Looks for manifest.json (per AI.md PART 26) or legacy backup.json
 func (m *Manager) GetMetadata(backupPath string) (*BackupMetadata, error) {
 	file, err := os.Open(backupPath)
 	if err != nil {

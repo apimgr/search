@@ -511,12 +511,12 @@ func (m *Middleware) Recovery(next http.Handler) http.Handler {
 	})
 }
 
-// RequestID middleware adds a unique request ID (UUID v4 per TEMPLATE.md)
+// RequestID middleware adds a unique request ID (UUID v4 per AI.md)
 func (m *Middleware) RequestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var requestID string
 
-		// Check for incoming X-Request-ID header first (per TEMPLATE.md)
+		// Check for incoming X-Request-ID header first (per AI.md)
 		if incoming := r.Header.Get("X-Request-ID"); incoming != "" {
 			// Validate that it's a valid UUID v4
 			if _, err := uuid.Parse(incoming); err == nil {
@@ -653,7 +653,7 @@ type MaintenanceHandler interface {
 	GetMessage() string
 }
 
-// MaintenanceMode middleware handles maintenance mode per TEMPLATE.md PART 6
+// MaintenanceMode middleware handles maintenance mode per AI.md PART 6
 // - Allows admin routes even during maintenance
 // - Shows maintenance page to regular users
 // - Allows health checks for monitoring
@@ -749,7 +749,7 @@ func (m *Middleware) MaintenanceMode(handler MaintenanceHandler) func(http.Handl
 	}
 }
 
-// DegradedMode middleware handles degraded mode per TEMPLATE.md PART 6
+// DegradedMode middleware handles degraded mode per AI.md PART 6
 // Shows warnings to users when system is in degraded state
 func (m *Middleware) DegradedMode(handler MaintenanceHandler) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

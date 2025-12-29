@@ -25,7 +25,7 @@ var devOnlyTLDs = map[string]bool{
 }
 
 // IsValidHost validates that a hostname is a valid FQDN.
-// Per TEMPLATE.md specification:
+// Per AI.md specification:
 // - devMode: if true, allows dev-only TLDs (.local, .test, localhost, etc.)
 // - projectName: if non-empty, allows project-specific TLDs (e.g., .jokes) in dev mode
 // - IP addresses are ALWAYS rejected

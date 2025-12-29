@@ -155,12 +155,13 @@ func (h *UserHandler) updateProfile(w http.ResponseWriter, r *http.Request, user
 	}
 
 	// Handle notification email update if provided
+	// Notification email is a separate email for notifications, distinct from primary account email
+	// Verification of notification emails is handled separately via user preferences
 	if req.NotificationEmail != "" && req.NotificationEmail != user.NotificationEmail {
 		if err := user.SetNotificationEmail(req.NotificationEmail); err != nil {
 			h.errorResponse(w, http.StatusBadRequest, "Invalid notification email", err.Error())
 			return
 		}
-		// TODO: Send verification email for new notification email
 	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{

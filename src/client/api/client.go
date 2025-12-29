@@ -107,7 +107,7 @@ func (c *Client) get(path string) (*http.Response, error) {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Fixed User-Agent per TEMPLATE.md PART 33
+	// Fixed User-Agent per AI.md PART 33
 	req.Header.Set("User-Agent", fmt.Sprintf("%s-cli/%s", ProjectName, Version))
 	req.Header.Set("Accept", "application/json")
 

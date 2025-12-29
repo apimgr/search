@@ -66,8 +66,9 @@ func (sm *SessionManager) Create(userID, ip, userAgent string) *Session {
 	rand.Read(b)
 	id := hex.EncodeToString(b)
 
-	// Parse duration from config
-	duration := parseDuration(sm.config.Server.Session.Duration)
+	// Get max age from config (use user session settings for general sessions)
+	maxAge := sm.config.Server.Session.GetUserMaxAge()
+	duration := time.Duration(maxAge) * time.Second
 
 	session := &Session{
 		ID:        id,
@@ -128,7 +129,9 @@ func (sm *SessionManager) Refresh(id string) bool {
 		return false
 	}
 
-	duration := parseDuration(sm.config.Server.Session.Duration)
+	// Use max age from config
+	maxAge := sm.config.Server.Session.GetUserMaxAge()
+	duration := time.Duration(maxAge) * time.Second
 	session.ExpiresAt = time.Now().Add(duration)
 	session.LastSeen = time.Now()
 
@@ -140,19 +143,19 @@ func (sm *SessionManager) SetCookie(w http.ResponseWriter, session *Session) {
 	cfg := sm.config.Server.Session
 
 	sameSite := http.SameSiteLaxMode
-	switch cfg.CookieSameSite {
-	case "Strict":
+	switch cfg.GetSameSite() {
+	case "strict", "Strict":
 		sameSite = http.SameSiteStrictMode
-	case "None":
+	case "none", "None":
 		sameSite = http.SameSiteNoneMode
 	}
 
 	http.SetCookie(w, &http.Cookie{
-		Name:     cfg.CookieName,
+		Name:     cfg.GetUserCookieName(),
 		Value:    session.ID,
 		Path:     "/",
-		HttpOnly: cfg.CookieHTTPOnly,
-		Secure:   cfg.CookieSecure || sm.config.Server.SSL.Enabled,
+		HttpOnly: cfg.IsHTTPOnly(),
+		Secure:   cfg.IsSecure(sm.config.Server.SSL.Enabled),
 		SameSite: sameSite,
 		Expires:  session.ExpiresAt,
 	})
@@ -163,11 +166,11 @@ func (sm *SessionManager) ClearCookie(w http.ResponseWriter) {
 	cfg := sm.config.Server.Session
 
 	http.SetCookie(w, &http.Cookie{
-		Name:     cfg.CookieName,
+		Name:     cfg.GetUserCookieName(),
 		Value:    "",
 		Path:     "/",
-		HttpOnly: cfg.CookieHTTPOnly,
-		Secure:   cfg.CookieSecure || sm.config.Server.SSL.Enabled,
+		HttpOnly: cfg.IsHTTPOnly(),
+		Secure:   cfg.IsSecure(sm.config.Server.SSL.Enabled),
 		MaxAge:   -1,
 	})
 }
@@ -176,7 +179,7 @@ func (sm *SessionManager) ClearCookie(w http.ResponseWriter) {
 func (sm *SessionManager) GetFromRequest(r *http.Request) (*Session, bool) {
 	cfg := sm.config.Server.Session
 
-	cookie, err := r.Cookie(cfg.CookieName)
+	cookie, err := r.Cookie(cfg.GetUserCookieName())
 	if err != nil {
 		return nil, false
 	}
@@ -189,29 +192,4 @@ func (sm *SessionManager) Count() int {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 	return len(sm.sessions)
-}
-
-// parseDuration parses duration string like "30d", "24h", etc.
-func parseDuration(s string) time.Duration {
-	if s == "" {
-		return 24 * time.Hour
-	}
-
-	// Handle special formats like "30d"
-	if len(s) > 1 && s[len(s)-1] == 'd' {
-		days := 0
-		for i := 0; i < len(s)-1; i++ {
-			if s[i] >= '0' && s[i] <= '9' {
-				days = days*10 + int(s[i]-'0')
-			}
-		}
-		return time.Duration(days) * 24 * time.Hour
-	}
-
-	// Try standard duration parsing
-	d, err := time.ParseDuration(s)
-	if err != nil {
-		return 24 * time.Hour
-	}
-	return d
 }

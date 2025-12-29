@@ -21,7 +21,7 @@ type DB struct {
 	ready    bool
 }
 
-// DatabaseManager manages both server and users databases per TEMPLATE.md PART 24
+// DatabaseManager manages both server and users databases per AI.md PART 24
 // Two separate databases:
 // - server.db: Admin credentials, server state, scheduler
 // - users.db: User accounts, tokens, sessions

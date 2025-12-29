@@ -1,18 +1,18 @@
 {{/* Modal Component - Custom modals to replace JavaScript alerts */}}
-{{/* Per TEMPLATE.md PART 16: NEVER use JavaScript alerts, use custom modals */}}
+{{/* Per AI.md PART 16: NEVER use JavaScript alerts, use custom modals */}}
 
 {{/* Confirmation Modal */}}
 <dialog id="confirm-modal" class="modal" aria-labelledby="confirm-title">
   <div class="modal-content">
     <header class="modal-header">
       <h2 id="confirm-title" class="modal-title">Confirm Action</h2>
-      <button type="button" class="modal-close" onclick="this.closest('dialog').close()" aria-label="Close">✕</button>
+      <button type="button" class="modal-close" aria-label="Close">✕</button>
     </header>
     <main class="modal-body">
       <p id="confirm-message"></p>
     </main>
     <footer class="modal-footer">
-      <button type="button" class="btn btn-secondary" onclick="this.closest('dialog').close()">Cancel</button>
+      <button type="button" class="btn btn-secondary" data-action="modal-cancel">Cancel</button>
       <button type="button" class="btn btn-primary" id="confirm-ok" autofocus>Confirm</button>
     </footer>
   </div>
@@ -23,14 +23,14 @@
   <div class="modal-content">
     <header class="modal-header">
       <h2 id="prompt-title" class="modal-title">Input Required</h2>
-      <button type="button" class="modal-close" onclick="this.closest('dialog').close()" aria-label="Close">✕</button>
+      <button type="button" class="modal-close" aria-label="Close">✕</button>
     </header>
     <main class="modal-body">
       <p id="prompt-message"></p>
       <input type="text" id="prompt-input" class="form-control" autofocus />
     </main>
     <footer class="modal-footer">
-      <button type="button" class="btn btn-secondary" onclick="this.closest('dialog').close()">Cancel</button>
+      <button type="button" class="btn btn-secondary" data-action="modal-cancel">Cancel</button>
       <button type="button" class="btn btn-primary" id="prompt-ok">OK</button>
     </footer>
   </div>
@@ -41,13 +41,13 @@
   <div class="modal-content">
     <header class="modal-header">
       <h2 id="alert-title" class="modal-title">Notice</h2>
-      <button type="button" class="modal-close" onclick="this.closest('dialog').close()" aria-label="Close">✕</button>
+      <button type="button" class="modal-close" aria-label="Close">✕</button>
     </header>
     <main class="modal-body">
       <p id="alert-message"></p>
     </main>
     <footer class="modal-footer">
-      <button type="button" class="btn btn-primary" onclick="this.closest('dialog').close()" autofocus>OK</button>
+      <button type="button" class="btn btn-primary modal-close" autofocus>OK</button>
     </footer>
   </div>
 </dialog>
@@ -138,7 +138,7 @@
 
 <script>
 // Custom modal functions to replace alert(), confirm(), prompt()
-// Per TEMPLATE.md PART 16: NO JavaScript alerts
+// Per AI.md PART 16: NO JavaScript alerts
 
 // Show custom confirm dialog
 // Usage: showConfirm('Are you sure?').then(confirmed => { if (confirmed) ... })

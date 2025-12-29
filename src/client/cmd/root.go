@@ -1,5 +1,5 @@
 // Package cmd implements CLI commands for the search client
-// Per TEMPLATE.md PART 33: CLI Client implementation
+// Per AI.md PART 33: CLI Client implementation
 package cmd
 
 import (
@@ -82,10 +82,12 @@ func Execute() error {
 func init() {
 	cobra.OnInitialize(initConfig)
 
-	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file path")
-	rootCmd.PersistentFlags().StringVarP(&server, "server", "s", "", "server address")
-	rootCmd.PersistentFlags().StringVarP(&token, "token", "t", "", "API token")
-	rootCmd.PersistentFlags().StringVarP(&output, "output", "o", "table", "output format: json, table, plain")
+	// Per AI.md PART 34: Only -h (help) and -v (version) may have short flags
+	// All other flags use long form only
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file path")
+	rootCmd.PersistentFlags().StringVar(&server, "server", "", "server address")
+	rootCmd.PersistentFlags().StringVar(&token, "token", "", "API token")
+	rootCmd.PersistentFlags().StringVar(&output, "output", "table", "output format: json, table, plain")
 	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "disable colored output")
 	rootCmd.PersistentFlags().IntVar(&timeout, "timeout", 0, "request timeout in seconds")
 	rootCmd.PersistentFlags().BoolVar(&debugMode, "debug", false, "enable debug output")
@@ -105,8 +107,8 @@ func initConfig() {
 		if err != nil {
 			return
 		}
-		// Per AI.md PART 34: Config at ~/.config/apimgr/search/cli.yml
-		configDir := filepath.Join(home, ".config", "apimgr", "search")
+		// Per AI.md PART 34: Config at ~/.config/search/cli.yml
+		configDir := filepath.Join(home, ".config", "search")
 		os.MkdirAll(configDir, 0755)
 		viper.AddConfigPath(configDir)
 		viper.SetConfigName("cli")

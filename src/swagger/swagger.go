@@ -323,7 +323,7 @@ func serveSwaggerUI(w http.ResponseWriter, r *http.Request, baseURL string) {
 }
 
 // buildBaseURL constructs the base URL from the request
-// Per TEMPLATE.md PART 5: URL Variables (NON-NEGOTIABLE)
+// Per AI.md PART 5: URL Variables (NON-NEGOTIABLE)
 func buildBaseURL(r *http.Request) string {
 	proto := "http"
 	if r.TLS != nil {
@@ -357,7 +357,7 @@ func extractHost(url string) string {
 }
 
 // getTheme gets the current theme from cookie or defaults to dark
-// Per TEMPLATE.md PART 16: Themes (NON-NEGOTIABLE - PROJECT-WIDE)
+// Per AI.md PART 16: Themes (NON-NEGOTIABLE - PROJECT-WIDE)
 func getTheme(r *http.Request) string {
 	if cookie, err := r.Cookie("theme"); err == nil {
 		switch cookie.Value {

@@ -1072,7 +1072,7 @@ func (l *SecurityLogger) Close() error {
 
 // ============================================================
 // Audit Logger - Admin actions and configuration changes
-// Per TEMPLATE.md PART 25: ULID format IDs, Actor/Target, Categories, Severity
+// Per AI.md PART 25: ULID format IDs, Actor/Target, Categories, Severity
 // ============================================================
 
 // AuditAction represents an audit action type
@@ -1096,7 +1096,7 @@ const (
 	AuditAction2FADisable      AuditAction = "2FA_DISABLE"
 )
 
-// AuditCategory represents audit event categories per TEMPLATE.md PART 25
+// AuditCategory represents audit event categories per AI.md PART 25
 type AuditCategory string
 
 const (
@@ -1109,7 +1109,7 @@ const (
 	AuditCategorySystem   AuditCategory = "system"   // System operations
 )
 
-// AuditSeverity represents audit event severity per TEMPLATE.md PART 25
+// AuditSeverity represents audit event severity per AI.md PART 25
 type AuditSeverity string
 
 const (
@@ -1118,7 +1118,7 @@ const (
 	AuditSeverityCritical AuditSeverity = "critical" // Critical security events
 )
 
-// AuditActor represents who performed the action per TEMPLATE.md PART 25
+// AuditActor represents who performed the action per AI.md PART 25
 type AuditActor struct {
 	ID       string `json:"id,omitempty"`       // Actor's user ID
 	Username string `json:"username,omitempty"` // Actor's username
@@ -1126,7 +1126,7 @@ type AuditActor struct {
 	UserAgent string `json:"user_agent,omitempty"` // User agent
 }
 
-// AuditTarget represents what the action was performed on per TEMPLATE.md PART 25
+// AuditTarget represents what the action was performed on per AI.md PART 25
 type AuditTarget struct {
 	Type string `json:"type"`           // Target type (user, config, engine, token, etc.)
 	ID   string `json:"id,omitempty"`   // Target ID
@@ -1141,7 +1141,7 @@ type AuditLogger struct {
 	entropy io.Reader
 }
 
-// AuditEntry represents an audit log entry per TEMPLATE.md PART 25
+// AuditEntry represents an audit log entry per AI.md PART 25
 // Uses ULID format IDs: audit_01HQXYZ123ABC
 type AuditEntry struct {
 	ID        string        `json:"id"`                   // ULID format: audit_01HQXYZ...
@@ -1182,7 +1182,7 @@ func (l *AuditLogger) openFile() error {
 	return nil
 }
 
-// generateAuditID generates a ULID-based audit ID per TEMPLATE.md PART 25
+// generateAuditID generates a ULID-based audit ID per AI.md PART 25
 // Format: audit_01HQXYZ123ABC
 func (l *AuditLogger) generateAuditID() string {
 	id := ulid.MustNew(ulid.Timestamp(time.Now()), l.entropy)

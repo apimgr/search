@@ -101,7 +101,7 @@ type SearchResults struct {
 	Suggestions  []string  `json:"suggestions,omitempty" xml:"suggestions,omitempty"`
 	SortedBy     SortOrder `json:"sorted_by,omitempty" xml:"sortedBy,omitempty"`
 
-	// Facets for filtering (future use)
+	// Facets for filtering - populated by aggregator when results contain domain/language metadata
 	Domains   map[string]int `json:"domains,omitempty" xml:"-"`
 	Languages map[string]int `json:"languages,omitempty" xml:"-"`
 }

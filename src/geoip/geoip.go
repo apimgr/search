@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// Database URLs from sapics/ip-location-db (NON-NEGOTIABLE per TEMPLATE.md)
+// Database URLs from sapics/ip-location-db (NON-NEGOTIABLE per AI.md)
 const (
 	ASNURL     = "https://cdn.jsdelivr.net/npm/@ip-location-db/asn-mmdb/asn.mmdb"
 	CountryURL = "https://cdn.jsdelivr.net/npm/@ip-location-db/geo-whois-asn-country-mmdb/geo-whois-asn-country.mmdb"

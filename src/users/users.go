@@ -16,7 +16,7 @@ import (
 )
 
 // User represents a registered user
-// Per TEMPLATE.md PART 31: Account email vs Notification email
+// Per AI.md PART 31: Account email vs Notification email
 // - Email: Account email for security (password reset, 2FA, security alerts, login notifications)
 // - NotificationEmail: Non-security communications (newsletters, updates, general notifications)
 type User struct {
@@ -34,7 +34,7 @@ type User struct {
 	UpdatedAt     time.Time  `json:"updated_at" db:"updated_at"`
 	LastLogin     *time.Time `json:"last_login,omitempty" db:"last_login"`
 
-	// Notification email (per TEMPLATE.md PART 31)
+	// Notification email (per AI.md PART 31)
 	// Optional separate email for non-security communications
 	NotificationEmail         string `json:"notification_email,omitempty" db:"notification_email"`
 	NotificationEmailVerified bool   `json:"notification_email_verified" db:"notification_email_verified"`
@@ -90,7 +90,7 @@ var usernameRegex = regexp.MustCompile(`^[a-z0-9_-]+$`)
 var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
 
 // BlockedUsernames contains reserved usernames that cannot be registered
-// Per TEMPLATE.md specification - 100+ reserved words
+// Per AI.md specification - 100+ reserved words
 var BlockedUsernames = map[string]bool{
 	// System & Admin
 	"admin":         true,
@@ -324,16 +324,16 @@ func ValidatePassword(password string, minLength int) error {
 	return nil
 }
 
-// Argon2id parameters per TEMPLATE.md specification
+// Argon2id parameters per AI.md specification
 const (
-	argon2Time    = 3         // iterations (per TEMPLATE.md line 932)
+	argon2Time    = 3         // iterations (per AI.md line 932)
 	argon2Memory  = 64 * 1024 // 64 MB
 	argon2Threads = 4
 	argon2KeyLen  = 32
 	argon2SaltLen = 16
 )
 
-// HashPassword hashes a password using Argon2id (per TEMPLATE.md - NEVER bcrypt)
+// HashPassword hashes a password using Argon2id (per AI.md - NEVER bcrypt)
 func HashPassword(password string) (string, error) {
 	// Generate random salt
 	salt := make([]byte, argon2SaltLen)
@@ -498,7 +498,7 @@ func (u *User) ToPublicProfile() PublicProfile {
 	}
 }
 
-// Email type constants for dual email system (per TEMPLATE.md PART 31)
+// Email type constants for dual email system (per AI.md PART 31)
 const (
 	// EmailTypeAccount is for security-related communications
 	// Password reset, 2FA recovery, security alerts, login notifications
@@ -510,13 +510,13 @@ const (
 )
 
 // GetAccountEmail returns the user's account email (primary email for security)
-// Per TEMPLATE.md PART 31: Account email receives security-sensitive communications ONLY
+// Per AI.md PART 31: Account email receives security-sensitive communications ONLY
 func (u *User) GetAccountEmail() string {
 	return u.Email
 }
 
 // GetNotificationEmail returns the email to use for non-security notifications
-// Per TEMPLATE.md PART 31: If notification email is set and verified, use it
+// Per AI.md PART 31: If notification email is set and verified, use it
 // Otherwise fall back to the account email
 func (u *User) GetNotificationEmail() string {
 	if u.NotificationEmail != "" && u.NotificationEmailVerified {
@@ -526,7 +526,7 @@ func (u *User) GetNotificationEmail() string {
 }
 
 // GetEmailForType returns the appropriate email for the given email type
-// Per TEMPLATE.md PART 31: Account emails and notification emails have different purposes
+// Per AI.md PART 31: Account emails and notification emails have different purposes
 func (u *User) GetEmailForType(emailType string) string {
 	switch emailType {
 	case EmailTypeAccount:

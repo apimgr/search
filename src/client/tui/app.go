@@ -12,7 +12,7 @@ import (
 	"github.com/apimgr/search/src/client/api"
 )
 
-// Dracula colors per TEMPLATE.md PART 33
+// Dracula colors per AI.md PART 33
 var (
 	background = lipgloss.Color("#282a36")
 	foreground = lipgloss.Color("#f8f8f2")

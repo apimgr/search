@@ -1,7 +1,7 @@
 package graphql
 
 // getGraphiQLThemeCSS returns CSS for GraphiQL theming
-// Per TEMPLATE.md PART 19: Swagger & GraphQL Theming (NON-NEGOTIABLE)
+// Per AI.md PART 19: Swagger & GraphQL Theming (NON-NEGOTIABLE)
 // GraphQL must match project-wide theme system (light/dark/auto)
 func getGraphiQLThemeCSS(theme string) string {
 	if theme == "light" {
@@ -11,10 +11,10 @@ func getGraphiQLThemeCSS(theme string) string {
 }
 
 // graphiqlDarkTheme provides dark theme CSS for GraphiQL
-// Per TEMPLATE.md PART 19: Dark theme colors
+// Per AI.md PART 19: Dark theme colors
 const graphiqlDarkTheme = `
 /* GraphiQL - Dark Theme */
-/* Per TEMPLATE.md PART 19: Swagger & GraphQL Theming */
+/* Per AI.md PART 19: Swagger & GraphQL Theming */
 
 #graphiql {
 	height: 100vh;
@@ -191,10 +191,10 @@ const graphiqlDarkTheme = `
 `
 
 // graphiqlLightTheme provides light theme CSS for GraphiQL
-// Per TEMPLATE.md PART 19: Light theme colors
+// Per AI.md PART 19: Light theme colors
 const graphiqlLightTheme = `
 /* GraphiQL - Light Theme */
-/* Per TEMPLATE.md PART 19: Swagger & GraphQL Theming */
+/* Per AI.md PART 19: Swagger & GraphQL Theming */
 
 #graphiql {
 	height: 100vh;

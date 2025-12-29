@@ -17,7 +17,7 @@ import (
 	"github.com/apimgr/search/src/database"
 )
 
-// ExternalAuthService handles OIDC/LDAP authentication per TEMPLATE.md PART 31
+// ExternalAuthService handles OIDC/LDAP authentication per AI.md PART 31
 type ExternalAuthService struct {
 	db     *database.DB
 	config *config.Config

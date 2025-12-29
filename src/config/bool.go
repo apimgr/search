@@ -6,7 +6,7 @@ import (
 )
 
 // Truthy values (case-insensitive)
-// Per TEMPLATE.md PART 4: Boolean Handling
+// Per AI.md PART 4: Boolean Handling
 var truthyValues = map[string]bool{
 	"1": true, "y": true, "t": true,
 	"yes": true, "true": true, "on": true, "ok": true,
@@ -18,7 +18,7 @@ var truthyValues = map[string]bool{
 }
 
 // Falsy values (case-insensitive)
-// Per TEMPLATE.md PART 4: Boolean Handling
+// Per AI.md PART 4: Boolean Handling
 var falsyValues = map[string]bool{
 	"0": true, "n": true, "f": true,
 	"no": true, "false": true, "off": true,
@@ -33,7 +33,7 @@ var falsyValues = map[string]bool{
 // Returns the parsed value and nil on success.
 // Returns false and an error for invalid values.
 // Empty string returns the provided default value.
-// Per TEMPLATE.md PART 4: Boolean Handling (NON-NEGOTIABLE)
+// Per AI.md PART 4: Boolean Handling (NON-NEGOTIABLE)
 func ParseBool(s string, defaultVal bool) (bool, error) {
 	s = strings.TrimSpace(strings.ToLower(s))
 
@@ -54,7 +54,7 @@ func ParseBool(s string, defaultVal bool) (bool, error) {
 
 // MustParseBool parses a string into a boolean, panics on invalid value.
 // Use only during initialization where invalid config should halt startup.
-// Per TEMPLATE.md PART 4: Boolean Handling (NON-NEGOTIABLE)
+// Per AI.md PART 4: Boolean Handling (NON-NEGOTIABLE)
 func MustParseBool(s string, defaultVal bool) bool {
 	val, err := ParseBool(s, defaultVal)
 	if err != nil {
@@ -65,14 +65,14 @@ func MustParseBool(s string, defaultVal bool) bool {
 
 // IsTruthy returns true if the string is a truthy value.
 // Returns false for empty, invalid, or falsy values (no error).
-// Per TEMPLATE.md PART 4: Boolean Handling (NON-NEGOTIABLE)
+// Per AI.md PART 4: Boolean Handling (NON-NEGOTIABLE)
 func IsTruthy(s string) bool {
 	return truthyValues[strings.TrimSpace(strings.ToLower(s))]
 }
 
 // IsFalsy returns true if the string is a falsy value.
 // Returns false for empty, invalid, or truthy values (no error).
-// Per TEMPLATE.md PART 4: Boolean Handling (NON-NEGOTIABLE)
+// Per AI.md PART 4: Boolean Handling (NON-NEGOTIABLE)
 func IsFalsy(s string) bool {
 	return falsyValues[strings.TrimSpace(strings.ToLower(s))]
 }

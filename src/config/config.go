@@ -132,7 +132,7 @@ type ServerConfig struct {
 	// Security
 	Security SecurityConfig `yaml:"security"`
 
-	// External Auth (OIDC/LDAP) per TEMPLATE.md PART 31
+	// External Auth (OIDC/LDAP) per AI.md PART 31
 	Auth AuthConfig `yaml:"auth"`
 
 	// Users
@@ -230,14 +230,111 @@ type RateLimitConfig struct {
 	Blacklist         []string `yaml:"blacklist"`
 }
 
-// SessionConfig represents session configuration
+// SessionTypeConfig represents configuration for a specific session type (admin or user)
+type SessionTypeConfig struct {
+	CookieName  string `yaml:"cookie_name"`
+	MaxAge      int    `yaml:"max_age"`      // Absolute session lifetime in seconds
+	IdleTimeout int    `yaml:"idle_timeout"` // Expires after inactivity in seconds
+}
+
+// SessionConfig represents session configuration per AI.md PART 13
 type SessionConfig struct {
-	Duration       string `yaml:"duration"`
-	Timeout        int    `yaml:"timeout"`
-	CookieName     string `yaml:"cookie_name"`
-	CookieSecure   bool   `yaml:"cookie_secure"`
-	CookieHTTPOnly bool   `yaml:"cookie_http_only"`
-	CookieSameSite string `yaml:"cookie_same_site"`
+	// Admin sessions (server.db admin_sessions table)
+	Admin SessionTypeConfig `yaml:"admin"`
+	// User sessions (users.db user_sessions table)
+	User SessionTypeConfig `yaml:"user"`
+	// Common settings
+	ExtendOnActivity bool   `yaml:"extend_on_activity"` // Reset idle timeout on each request
+	Secure           string `yaml:"secure"`             // auto, true, false
+	HTTPOnly         bool   `yaml:"http_only"`
+	SameSite         string `yaml:"same_site"` // strict, lax, none
+
+	// Legacy fields for backward compatibility
+	Duration       string `yaml:"duration,omitempty"`
+	CookieName     string `yaml:"cookie_name,omitempty"`
+	CookieSecure   bool   `yaml:"cookie_secure,omitempty"`
+	CookieHTTPOnly bool   `yaml:"cookie_http_only,omitempty"`
+	CookieSameSite string `yaml:"cookie_same_site,omitempty"`
+}
+
+// GetAdminCookieName returns the admin session cookie name
+func (s *SessionConfig) GetAdminCookieName() string {
+	if s.Admin.CookieName != "" {
+		return s.Admin.CookieName
+	}
+	if s.CookieName != "" {
+		return s.CookieName
+	}
+	return "admin_session"
+}
+
+// GetUserCookieName returns the user session cookie name
+func (s *SessionConfig) GetUserCookieName() string {
+	if s.User.CookieName != "" {
+		return s.User.CookieName
+	}
+	if s.CookieName != "" {
+		return s.CookieName
+	}
+	return "user_session"
+}
+
+// GetAdminMaxAge returns admin session max age in seconds (default 30 days)
+func (s *SessionConfig) GetAdminMaxAge() int {
+	if s.Admin.MaxAge > 0 {
+		return s.Admin.MaxAge
+	}
+	return 2592000 // 30 days
+}
+
+// GetUserMaxAge returns user session max age in seconds (default 7 days)
+func (s *SessionConfig) GetUserMaxAge() int {
+	if s.User.MaxAge > 0 {
+		return s.User.MaxAge
+	}
+	return 604800 // 7 days
+}
+
+// GetIdleTimeout returns idle timeout in seconds (default 24 hours)
+func (s *SessionConfig) GetIdleTimeout() int {
+	if s.Admin.IdleTimeout > 0 {
+		return s.Admin.IdleTimeout
+	}
+	if s.User.IdleTimeout > 0 {
+		return s.User.IdleTimeout
+	}
+	return 86400 // 24 hours
+}
+
+// IsSecure returns whether cookies should be secure
+func (s *SessionConfig) IsSecure(sslEnabled bool) bool {
+	switch s.Secure {
+	case "true", "yes", "1":
+		return true
+	case "false", "no", "0":
+		return false
+	default: // "auto" or empty
+		return sslEnabled || s.CookieSecure
+	}
+}
+
+// IsHTTPOnly returns whether cookies should be HTTP only
+func (s *SessionConfig) IsHTTPOnly() bool {
+	if s.HTTPOnly {
+		return true
+	}
+	return s.CookieHTTPOnly
+}
+
+// GetSameSite returns the SameSite cookie attribute
+func (s *SessionConfig) GetSameSite() string {
+	if s.SameSite != "" {
+		return s.SameSite
+	}
+	if s.CookieSameSite != "" {
+		return s.CookieSameSite
+	}
+	return "lax"
 }
 
 // LogsConfig represents logging configuration
@@ -347,7 +444,7 @@ type SecurityConfig struct {
 	TrustedProxies []string `yaml:"trusted_proxies"`
 }
 
-// AuthConfig represents external authentication configuration per TEMPLATE.md PART 31
+// AuthConfig represents external authentication configuration per AI.md PART 31
 type AuthConfig struct {
 	OIDC []OIDCProviderConfig `yaml:"oidc"`
 	LDAP []LDAPConfig         `yaml:"ldap"`
@@ -363,7 +460,7 @@ type OIDCProviderConfig struct {
 	ClientSecret string   `yaml:"client_secret"`
 	RedirectURL  string   `yaml:"redirect_url"`
 	Scopes       []string `yaml:"scopes"`
-	// Admin group mapping per TEMPLATE.md PART 31
+	// Admin group mapping per AI.md PART 31
 	AdminGroups []string `yaml:"admin_groups"`
 	GroupsClaim string   `yaml:"groups_claim"`
 	AutoCreate  bool     `yaml:"auto_create"`
@@ -384,7 +481,7 @@ type LDAPConfig struct {
 	UserFilter     string   `yaml:"user_filter"`
 	UsernameAttr   string   `yaml:"username_attr"`
 	EmailAttr      string   `yaml:"email_attr"`
-	// Admin group mapping per TEMPLATE.md PART 31
+	// Admin group mapping per AI.md PART 31
 	AdminGroups     []string `yaml:"admin_groups"`
 	GroupFilter     string   `yaml:"group_filter"`
 	GroupMemberAttr string   `yaml:"group_member_attr"`
@@ -510,7 +607,7 @@ type WebConfig struct {
 	CORS          string              `yaml:"cors"` // "*", "origin1,origin2", or ""
 }
 
-// AnnouncementsConfig represents announcement settings (per TEMPLATE.md)
+// AnnouncementsConfig represents announcement settings (per AI.md)
 type AnnouncementsConfig struct {
 	Enabled  bool           `yaml:"enabled"`
 	Messages []Announcement `yaml:"messages"`
@@ -826,11 +923,20 @@ func DefaultConfig() *Config {
 				ByUser:            false,
 			},
 			Session: SessionConfig{
-				Duration:       "30d",
-				CookieName:     "search_session",
-				CookieSecure:   true,
-				CookieHTTPOnly: true,
-				CookieSameSite: "Lax",
+				Admin: SessionTypeConfig{
+					CookieName:  "admin_session",
+					MaxAge:      2592000, // 30 days
+					IdleTimeout: 86400,   // 24 hours
+				},
+				User: SessionTypeConfig{
+					CookieName:  "user_session",
+					MaxAge:      604800, // 7 days
+					IdleTimeout: 86400,  // 24 hours
+				},
+				ExtendOnActivity: true,
+				Secure:           "auto",
+				HTTPOnly:         true,
+				SameSite:         "lax",
 			},
 			Logs: LogsConfig{
 				Level: "warn",
@@ -1313,9 +1419,9 @@ func (c *Config) Save(path string) error {
 }
 
 // LoadOrCreate loads configuration from file or creates default if not exists
-// Per TEMPLATE.md: If server.yaml found, auto-migrate to server.yml on startup
+// Per AI.md: If server.yaml found, auto-migrate to server.yml on startup
 func LoadOrCreate(path string) (*Config, bool, error) {
-	// Check for .yaml → .yml migration per TEMPLATE.md PART 3
+	// Check for .yaml → .yml migration per AI.md PART 3
 	if strings.HasSuffix(path, ".yml") {
 		yamlPath := strings.TrimSuffix(path, ".yml") + ".yaml"
 		if _, err := os.Stat(yamlPath); err == nil {
@@ -1346,7 +1452,7 @@ func LoadOrCreate(path string) (*Config, bool, error) {
 }
 
 // migrateYamlToYml migrates a .yaml config file to .yml format
-// Per TEMPLATE.md PART 3: Auto-migrate .yaml to .yml on startup
+// Per AI.md PART 3: Auto-migrate .yaml to .yml on startup
 func migrateYamlToYml(yamlPath, ymlPath string) error {
 	// Read the .yaml file
 	data, err := os.ReadFile(yamlPath)
@@ -1501,7 +1607,7 @@ func GetConfigPath() string {
 }
 
 // Initialize initializes the configuration system
-// Per TEMPLATE.md PART 3: Environment variables only work on first run
+// Per AI.md PART 3: Environment variables only work on first run
 func Initialize() (*Config, error) {
 	// Ensure directories exist
 	if err := EnsureDirectories(); err != nil {
@@ -1520,7 +1626,7 @@ func Initialize() (*Config, error) {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Per TEMPLATE.md PART 3: Environment overrides only apply on first run
+	// Per AI.md PART 3: Environment overrides only apply on first run
 	// After config exists, environment variables are ignored
 	if created {
 		// Apply environment overrides only on first run
@@ -1539,7 +1645,7 @@ func Initialize() (*Config, error) {
 		fmt.Println("   Token:   ", cfg.Server.Admin.Token)
 		fmt.Println()
 		fmt.Println("ℹ️  Environment variables have been applied to the config file.")
-		fmt.Println("   Future runs will use config file values only.")
+		fmt.Println("   Subsequent runs will use config file values.")
 		fmt.Println()
 	}
 
@@ -1557,6 +1663,12 @@ func (c *Config) IsDevelopment() bool {
 // IsProduction returns true if in production mode
 func (c *Config) IsProduction() bool {
 	return !c.IsDevelopment()
+}
+
+// IsDebug returns true if debug mode is enabled via DEBUG=true environment variable
+func (c *Config) IsDebug() bool {
+	debug := os.Getenv("DEBUG")
+	return debug == "true" || debug == "1" || debug == "yes"
 }
 
 // GetAddress returns the full bind address

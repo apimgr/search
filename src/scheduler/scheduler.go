@@ -241,7 +241,7 @@ type TaskInfo struct {
 	Enabled  bool          `json:"enabled"`
 }
 
-// Built-in task factories (per TEMPLATE.md PART 26)
+// Built-in task factories (per AI.md PART 26)
 // 11 required tasks: ssl.renewal, geoip.update, blocklist.update, cve.update,
 // session.cleanup, token.cleanup, log.rotation, backup.auto, healthcheck.self,
 // tor.health, cluster.heartbeat

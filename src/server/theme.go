@@ -5,7 +5,7 @@ import (
 )
 
 // Theme constants
-// Per TEMPLATE.md PART 16: Themes (NON-NEGOTIABLE - PROJECT-WIDE)
+// Per AI.md PART 16: Themes (NON-NEGOTIABLE - PROJECT-WIDE)
 const (
 	ThemeDark  = "dark"
 	ThemeLight = "light"
@@ -13,11 +13,11 @@ const (
 )
 
 // DefaultTheme is the default theme when no preference is set
-// Per TEMPLATE.md PART 16: Dark theme is the default
+// Per AI.md PART 16: Dark theme is the default
 const DefaultTheme = ThemeDark
 
 // GetTheme gets the current theme from cookie or defaults to dark
-// Per TEMPLATE.md PART 16: Themes (NON-NEGOTIABLE - PROJECT-WIDE)
+// Per AI.md PART 16: Themes (NON-NEGOTIABLE - PROJECT-WIDE)
 // Theme system applies to:
 // - Web interface (HTML pages)
 // - Admin panel
@@ -46,7 +46,7 @@ func GetTheme(r *http.Request) string {
 }
 
 // SetTheme sets the theme cookie
-// Per TEMPLATE.md PART 16: User preference persisted in cookie
+// Per AI.md PART 16: User preference persisted in cookie
 func SetTheme(w http.ResponseWriter, theme string) {
 	// Validate theme value
 	switch theme {
@@ -71,7 +71,7 @@ func SetTheme(w http.ResponseWriter, theme string) {
 }
 
 // GetThemeClass returns the CSS class for the current theme
-// Per TEMPLATE.md PART 16: Apply theme class to <html> element
+// Per AI.md PART 16: Apply theme class to <html> element
 func GetThemeClass(theme string) string {
 	switch theme {
 	case ThemeLight:
@@ -128,7 +128,7 @@ func GetThemeInfo(r *http.Request) ThemeInfo {
 }
 
 // handleThemeSwitch handles theme switching requests
-// Per TEMPLATE.md PART 16: Theme switching without page reload
+// Per AI.md PART 16: Theme switching without page reload
 func (s *Server) handleThemeSwitch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

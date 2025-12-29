@@ -16,7 +16,7 @@ import (
 )
 
 // TorService manages Tor hidden service using github.com/cretz/bine
-// per TEMPLATE.md PART 32: TOR HIDDEN SERVICE (NON-NEGOTIABLE)
+// per AI.md PART 32: TOR HIDDEN SERVICE (NON-NEGOTIABLE)
 type TorService struct {
 	config    *config.Config
 	tor       *tor.Tor
@@ -308,7 +308,7 @@ func CheckTorConnection(socksAddr string) bool {
 }
 
 // VanityProgress represents the progress of vanity address generation
-// Per TEMPLATE.md PART 32: Vanity address generation (built-in, max 6 chars)
+// Per AI.md PART 32: Vanity address generation (built-in, max 6 chars)
 type VanityProgress struct {
 	Prefix    string
 	Attempts  int64
@@ -348,7 +348,7 @@ func (t *TorService) GetVanityProgress() *VanityProgress {
 }
 
 // GenerateVanity starts background vanity address generation
-// Per TEMPLATE.md PART 32: Built-in generation supports max 6 character prefixes
+// Per AI.md PART 32: Built-in generation supports max 6 character prefixes
 func (t *TorService) GenerateVanity(prefix string) error {
 	// Validate prefix length
 	if len(prefix) > 6 {
@@ -477,7 +477,7 @@ func (t *TorService) ApplyVanityAddress() (string, error) {
 }
 
 // ExportKeys exports the current Tor hidden service keys
-// Per TEMPLATE.md PART 32: Key import/export for external vanity addresses
+// Per AI.md PART 32: Key import/export for external vanity addresses
 func (t *TorService) ExportKeys() ([]byte, error) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
@@ -498,7 +498,7 @@ func (t *TorService) ExportKeys() ([]byte, error) {
 }
 
 // ImportKeys imports external Tor hidden service keys
-// Per TEMPLATE.md PART 32: Key import/export for external vanity addresses
+// Per AI.md PART 32: Key import/export for external vanity addresses
 // Used for importing externally generated vanity addresses (7+ chars)
 func (t *TorService) ImportKeys(privateKey []byte) (string, error) {
 	t.mu.Lock()

@@ -1561,7 +1561,7 @@ func taskStatusText(enabled bool) string {
 }
 
 // ============================================================
-// Multi-Admin Templates per TEMPLATE.md PART 31
+// Multi-Admin Templates per AI.md PART 31
 // ============================================================
 
 // renderSetupContent renders the initial setup page
@@ -1882,7 +1882,7 @@ func maskEmail(email string) string {
 }
 
 // ============================================================
-// Cluster/Node Management Templates per TEMPLATE.md PART 24
+// Cluster/Node Management Templates per AI.md PART 24
 // ============================================================
 
 // renderNodesContent renders the cluster nodes management page

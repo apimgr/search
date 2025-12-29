@@ -45,7 +45,7 @@ type ClusterNode struct {
 	Metadata    map[string]string
 }
 
-// ClusterManager manages cluster operations per TEMPLATE.md PART 24
+// ClusterManager manages cluster operations per AI.md PART 24
 type ClusterManager struct {
 	db         *DatabaseManager
 	nodeID     string

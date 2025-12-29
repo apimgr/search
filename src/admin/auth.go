@@ -58,7 +58,7 @@ func NewAuthManager(cfg *config.Config) *AuthManager {
 	return am
 }
 
-// Argon2id parameters per TEMPLATE.md specification (line 932)
+// Argon2id parameters per AI.md specification (line 932)
 const (
 	argon2Time    = 3         // iterations
 	argon2Memory  = 64 * 1024 // 64 MB
@@ -147,18 +147,8 @@ func (am *AuthManager) CreateSession(username, ip, userAgent string) *AdminSessi
 
 	// Parse session duration from config (e.g., "30d", "24h")
 	// Falls back to Timeout if Duration parsing fails, or 24h if both are 0
-	var sessionDuration time.Duration
-	if am.config.Server.Session.Duration != "" {
-		if seconds, err := config.ParseDuration(am.config.Server.Session.Duration); err == nil && seconds > 0 {
-			sessionDuration = time.Duration(seconds) * time.Second
-		}
-	}
-	if sessionDuration == 0 && am.config.Server.Session.Timeout > 0 {
-		sessionDuration = time.Duration(am.config.Server.Session.Timeout) * time.Second
-	}
-	if sessionDuration == 0 {
-		sessionDuration = 24 * time.Hour // Default to 24 hours
-	}
+	// Get admin session max age from config (per AI.md PART 13)
+	sessionDuration := time.Duration(am.config.Server.Session.GetAdminMaxAge()) * time.Second
 
 	session := &AdminSession{
 		ID:        sessionID,
@@ -211,18 +201,8 @@ func (am *AuthManager) RefreshSession(sessionID string) bool {
 
 	// Parse session duration from config (e.g., "30d", "24h")
 	// Falls back to Timeout if Duration parsing fails, or 24h if both are 0
-	var sessionDuration time.Duration
-	if am.config.Server.Session.Duration != "" {
-		if seconds, err := config.ParseDuration(am.config.Server.Session.Duration); err == nil && seconds > 0 {
-			sessionDuration = time.Duration(seconds) * time.Second
-		}
-	}
-	if sessionDuration == 0 && am.config.Server.Session.Timeout > 0 {
-		sessionDuration = time.Duration(am.config.Server.Session.Timeout) * time.Second
-	}
-	if sessionDuration == 0 {
-		sessionDuration = 24 * time.Hour // Default to 24 hours
-	}
+	// Get admin session max age from config (per AI.md PART 13)
+	sessionDuration := time.Duration(am.config.Server.Session.GetAdminMaxAge()) * time.Second
 
 	session.ExpiresAt = time.Now().Add(sessionDuration)
 	return true
@@ -350,31 +330,33 @@ func (am *AuthManager) cleanup() {
 
 // SetSessionCookie sets the admin session cookie
 func (am *AuthManager) SetSessionCookie(w http.ResponseWriter, session *AdminSession) {
+	cfg := am.config.Server.Session
 	http.SetCookie(w, &http.Cookie{
-		Name:     "admin_session",
+		Name:     cfg.GetAdminCookieName(),
 		Value:    session.ID,
 		Path:     "/admin",
-		HttpOnly: true,
-		Secure:   am.config.Server.SSL.Enabled,
+		HttpOnly: cfg.IsHTTPOnly(),
+		Secure:   cfg.IsSecure(am.config.Server.SSL.Enabled),
 		SameSite: http.SameSiteStrictMode,
-		MaxAge:   am.config.Server.Session.Timeout,
+		MaxAge:   cfg.GetAdminMaxAge(),
 	})
 }
 
 // ClearSessionCookie removes the admin session cookie
 func (am *AuthManager) ClearSessionCookie(w http.ResponseWriter) {
+	cfg := am.config.Server.Session
 	http.SetCookie(w, &http.Cookie{
-		Name:     "admin_session",
+		Name:     cfg.GetAdminCookieName(),
 		Value:    "",
 		Path:     "/admin",
-		HttpOnly: true,
+		HttpOnly: cfg.IsHTTPOnly(),
 		MaxAge:   -1,
 	})
 }
 
 // GetSessionFromRequest extracts session from request cookie
 func (am *AuthManager) GetSessionFromRequest(r *http.Request) (*AdminSession, bool) {
-	cookie, err := r.Cookie("admin_session")
+	cookie, err := r.Cookie(am.config.Server.Session.GetAdminCookieName())
 	if err != nil {
 		return nil, false
 	}
@@ -408,7 +390,7 @@ func generateSecureToken(length int) string {
 	return base64.URLEncoding.EncodeToString(bytes)[:length]
 }
 
-// hashPassword creates an Argon2id hash of the password (per TEMPLATE.md - NEVER bcrypt)
+// hashPassword creates an Argon2id hash of the password (per AI.md - NEVER bcrypt)
 func hashPassword(password string) string {
 	// Generate random salt
 	salt := make([]byte, argon2SaltLen)

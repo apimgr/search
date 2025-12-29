@@ -1,7 +1,7 @@
 package swagger
 
 // getSwaggerThemeCSS returns CSS for Swagger UI theming
-// Per TEMPLATE.md PART 19: Swagger & GraphQL Theming (NON-NEGOTIABLE)
+// Per AI.md PART 19: Swagger & GraphQL Theming (NON-NEGOTIABLE)
 // Swagger must match project-wide theme system (light/dark/auto)
 func getSwaggerThemeCSS(theme string) string {
 	if theme == "light" {
@@ -11,10 +11,10 @@ func getSwaggerThemeCSS(theme string) string {
 }
 
 // swaggerDarkTheme provides dark theme CSS for Swagger UI
-// Per TEMPLATE.md PART 19: Dark theme colors
+// Per AI.md PART 19: Dark theme colors
 const swaggerDarkTheme = `
 /* Swagger UI - Dark Theme */
-/* Per TEMPLATE.md PART 19: Swagger & GraphQL Theming */
+/* Per AI.md PART 19: Swagger & GraphQL Theming */
 
 .swagger-ui {
 	background: #282a36;
@@ -175,10 +175,10 @@ const swaggerDarkTheme = `
 `
 
 // swaggerLightTheme provides light theme CSS for Swagger UI
-// Per TEMPLATE.md PART 19: Light theme colors
+// Per AI.md PART 19: Light theme colors
 const swaggerLightTheme = `
 /* Swagger UI - Light Theme */
-/* Per TEMPLATE.md PART 19: Swagger & GraphQL Theming */
+/* Per AI.md PART 19: Swagger & GraphQL Theming */
 
 .swagger-ui {
 	background: #ffffff;

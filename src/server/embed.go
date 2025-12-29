@@ -256,7 +256,7 @@ type HealthPageData struct {
 	Health *HealthInfo
 }
 
-// HealthInfo represents health check information per TEMPLATE.md spec
+// HealthInfo represents health check information per AI.md spec
 type HealthInfo struct {
 	Status         string            `json:"status"`
 	Version        string            `json:"version"`

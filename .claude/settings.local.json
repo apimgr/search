@@ -67,7 +67,8 @@
       "Bash(/root/go/bin/go get:*)",
       "Bash(for dir in config server swagger graphql mode paths ssl scheduler service admin database users backup email client)",
       "Bash(do [ -d \"/root/Projects/github/apimgr/search/src/$dir\" ])",
-      "Bash(make:*)"
+      "Bash(make:*)",
+      "Bash(chmod:*)"
     ]
   }
 }

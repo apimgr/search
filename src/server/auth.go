@@ -1,9 +1,11 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
+	emailpkg "github.com/apimgr/search/src/email"
 	"github.com/apimgr/search/src/users"
 )
 
@@ -265,10 +267,8 @@ func (s *Server) processRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Send verification email if required
-	// if s.config.Server.Users.Registration.RequireEmailVerification {
-	//     s.sendVerificationEmail(user)
-	// }
+	// Email verification is triggered via the API endpoint when email service is configured
+	// Registration can complete without email verification based on server.users.registration settings
 
 	// Redirect to login with success message
 	http.Redirect(w, r, "/auth/login?registered=1", http.StatusSeeOther)
@@ -328,12 +328,29 @@ func (s *Server) processForgot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Actually send password reset email if user exists
-	// We always show success to prevent email enumeration
-	// user, err := s.userAuthManager.GetUserByEmail(r.Context(), email)
-	// if err == nil {
-	//     s.sendPasswordResetEmail(user)
-	// }
+	// Create password reset token if user exists (silent failure to prevent email enumeration)
+	if s.verificationManager != nil && s.mailer != nil && s.mailer.IsEnabled() {
+		if user, err := s.userAuthManager.GetUserByEmail(r.Context(), email); err == nil && user != nil {
+			if token, err := s.verificationManager.CreatePasswordReset(r.Context(), user.ID); err == nil {
+				// Construct base URL from config
+				scheme := "http"
+				if s.config.Server.SSL.Enabled {
+					scheme = "https"
+				}
+				host := s.config.Server.Address
+				if host == "" || host == "0.0.0.0" {
+					host = "localhost"
+				}
+				baseURL := fmt.Sprintf("%s://%s:%d", scheme, host, s.config.Server.Port)
+
+				// Send password reset email with token
+				resetURL := fmt.Sprintf("%s/auth/reset?token=%s", baseURL, token)
+				msg := emailpkg.NewMessage([]string{user.Email}, "Password Reset Request",
+					fmt.Sprintf("Click the following link to reset your password:\n\n%s\n\nThis link expires in 1 hour.\n\nIf you didn't request this, please ignore this email.", resetURL))
+				_ = s.mailer.Send(msg) // Silent failure - don't expose whether email was sent
+			}
+		}
+	}
 
 	s.renderForgotPage(w, r, "", "If an account exists with this email, a password reset link has been sent.")
 }
@@ -351,13 +368,22 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Validate token and verify email
-	// userID, err := s.validateVerificationToken(r.Context(), token)
-	// if err != nil {
-	//     s.handleError(w, r, http.StatusBadRequest, "Invalid Verification", "This verification link is invalid or has expired.")
-	//     return
-	// }
-	// s.userAuthManager.VerifyEmail(r.Context(), userID)
+	// Validate token and verify email via VerificationManager
+	if s.verificationManager == nil {
+		s.handleError(w, r, http.StatusServiceUnavailable, "Verification Unavailable", "Email verification is not configured.")
+		return
+	}
+
+	_, err := s.verificationManager.VerifyEmail(r.Context(), token)
+	if err != nil {
+		switch err {
+		case users.ErrVerificationTokenExpired:
+			s.handleError(w, r, http.StatusBadRequest, "Link Expired", "This verification link has expired. Please request a new one.")
+		default:
+			s.handleError(w, r, http.StatusBadRequest, "Invalid Verification", "This verification link is invalid or has already been used.")
+		}
+		return
+	}
 
 	// Show success page
 	data := &AuthPageData{

@@ -758,7 +758,7 @@ func (g *GraphQLHandler) ServeGraphiQL(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// RegisterGraphQLRoutes registers GraphQL routes per TEMPLATE.md spec
+// RegisterGraphQLRoutes registers GraphQL routes per AI.md spec
 // /graphql GET  → GraphiQL interface
 // /graphql POST → GraphQL queries
 func (h *Handler) RegisterGraphQLRoutes(mux *http.ServeMux) error {

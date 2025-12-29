@@ -14,7 +14,7 @@ const (
 	ProjectName = "search"
 )
 
-// CLI directory overrides (per TEMPLATE.md PART 17)
+// CLI directory overrides (per AI.md PART 17)
 var (
 	cliOverrides   = make(map[string]string)
 	cliOverrideMu  sync.RWMutex

@@ -11,7 +11,7 @@ import (
 )
 
 // ClusterScheduler extends Scheduler with cluster-safe distributed locking
-// Per TEMPLATE.md PART 9: Database-backed scheduler with cluster-safe locking
+// Per AI.md PART 9: Database-backed scheduler with cluster-safe locking
 type ClusterScheduler struct {
 	*Scheduler
 	db         *sql.DB
@@ -252,7 +252,7 @@ type TaskState struct {
 }
 
 // GetMissedJobs returns tasks that were missed while the cluster was down
-// Per TEMPLATE.md PART 9: Catchup for missed jobs
+// Per AI.md PART 9: Catchup for missed jobs
 func (cs *ClusterScheduler) GetMissedJobs(ctx context.Context) ([]*TaskState, error) {
 	rows, err := cs.db.QueryContext(ctx,
 		`SELECT task_name, last_run, next_run, last_node_id, last_hostname, updated_at

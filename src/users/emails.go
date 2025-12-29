@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// EmailManager handles user email operations per TEMPLATE.md PART 31
+// EmailManager handles user email operations per AI.md PART 31
 // Account email: Security & account recovery (password reset, 2FA recovery, security alerts)
 // Notification email: Non-security communications (newsletters, updates, general notifications)
 type EmailManager struct {

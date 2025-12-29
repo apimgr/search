@@ -793,7 +793,7 @@
     // Reset preferences
     async function resetPreferences() {
         // Use custom confirm instead of JavaScript confirm()
-        // Per TEMPLATE.md PART 16: NO JavaScript alerts
+        // Per AI.md PART 16: NO JavaScript alerts
         const confirmed = await showConfirm('Are you sure you want to reset all preferences?', 'Reset Preferences');
         if (!confirmed) return;
 

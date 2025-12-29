@@ -56,7 +56,7 @@
             {{if .TorAddress}}
             <div class="onion-address">
                 <code id="onion-addr">{{.TorAddress}}</code>
-                <button class="btn-copy" onclick="copyToClipboard('onion-addr')" aria-label="Copy address">Copy</button>
+                <button class="btn-copy" data-copy-target="onion-addr" aria-label="Copy address">Copy</button>
             </div>
             <p class="note">Requires Tor Browser or Tor-enabled browser.</p>
             {{else}}
@@ -75,17 +75,4 @@
 </div>
 {{end}}
 
-{{define "extra_scripts"}}
-<script>
-function copyToClipboard(elementId) {
-    const element = document.getElementById(elementId);
-    if (element) {
-        navigator.clipboard.writeText(element.textContent).then(() => {
-            showToast('Copied to clipboard!', 'success');
-        }).catch(() => {
-            showToast('Failed to copy', 'error');
-        });
-    }
-}
-</script>
-{{end}}
+{{/* Per AI.md PART 17: No inline JS - event delegation in app.js */}}

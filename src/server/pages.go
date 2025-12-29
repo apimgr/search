@@ -144,7 +144,7 @@ func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleHealthz handles the health check endpoint with content negotiation
-// Per TEMPLATE.md spec: supports HTML, JSON, and plain text responses
+// Per AI.md spec: supports HTML, JSON, and plain text responses
 func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	health := s.buildHealthInfo()
 
@@ -161,7 +161,7 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// buildHealthInfo constructs the health information per TEMPLATE.md spec
+// buildHealthInfo constructs the health information per AI.md spec
 func (s *Server) buildHealthInfo() *HealthInfo {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)

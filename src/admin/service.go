@@ -17,7 +17,7 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
-// AdminService handles server admin management per TEMPLATE.md PART 31
+// AdminService handles server admin management per AI.md PART 31
 type AdminService struct {
 	db *database.DB
 }
@@ -116,7 +116,7 @@ func (s *AdminService) scanAdmin(row *sql.Row) (*Admin, error) {
 }
 
 // GetAdminsForAdmin returns admins visible to the requesting admin
-// Per TEMPLATE.md PART 31: Non-primary admins can only see their own account
+// Per AI.md PART 31: Non-primary admins can only see their own account
 func (s *AdminService) GetAdminsForAdmin(ctx context.Context, requestingAdminID int64) ([]*Admin, error) {
 	// Check if requesting admin is primary
 	requestingAdmin, err := s.GetAdminByID(ctx, requestingAdminID)
@@ -192,7 +192,7 @@ func (s *AdminService) GetTotalAdminCount(ctx context.Context) (int, error) {
 }
 
 // GetOnlineAdmins returns usernames of currently logged-in admins
-// Per TEMPLATE.md: admins can see WHO is logged in (username only)
+// Per AI.md: admins can see WHO is logged in (username only)
 func (s *AdminService) GetOnlineAdmins(ctx context.Context) ([]string, error) {
 	rows, err := s.db.Query(ctx, `
 		SELECT DISTINCT ac.username
@@ -218,7 +218,7 @@ func (s *AdminService) GetOnlineAdmins(ctx context.Context) ([]string, error) {
 }
 
 // CanAdminViewAdmin checks if one admin can view another's details
-// Per TEMPLATE.md PART 31: admins cannot see other admin accounts
+// Per AI.md PART 31: admins cannot see other admin accounts
 func (s *AdminService) CanAdminViewAdmin(ctx context.Context, viewerID, targetID int64) (bool, error) {
 	// Admin can always view themselves
 	if viewerID == targetID {
@@ -236,7 +236,7 @@ func (s *AdminService) CanAdminViewAdmin(ctx context.Context, viewerID, targetID
 }
 
 // CanAdminModifyAdmin checks if one admin can modify another
-// Per TEMPLATE.md: Primary admin cannot be deleted except via --maintenance setup
+// Per AI.md: Primary admin cannot be deleted except via --maintenance setup
 func (s *AdminService) CanAdminModifyAdmin(ctx context.Context, modifierID, targetID int64) (bool, error) {
 	// Admin can always modify themselves (except deletion)
 	if modifierID == targetID {
@@ -365,7 +365,7 @@ func (s *AdminService) CreateAdmin(ctx context.Context, username, email, passwor
 	return s.GetAdminByID(ctx, id)
 }
 
-// hashPassword creates an Argon2id hash per TEMPLATE.md (Time=3)
+// hashPassword creates an Argon2id hash per AI.md (Time=3)
 func (s *AdminService) hashPassword(password string) string {
 	const (
 		argon2Time    = 3
@@ -415,7 +415,7 @@ func (s *AdminService) DeleteAdmin(ctx context.Context, adminID, requestingAdmin
 	return err
 }
 
-// CreateInvite creates an admin invite token per TEMPLATE.md PART 31
+// CreateInvite creates an admin invite token per AI.md PART 31
 func (s *AdminService) CreateInvite(ctx context.Context, createdBy int64, username string, expiresIn time.Duration) (string, error) {
 	// Generate secure token
 	tokenBytes := make([]byte, 32)

@@ -14,7 +14,7 @@ import (
 )
 
 // RemoteDBConfig holds configuration for remote database connections
-// Per TEMPLATE.md PART 24: Remote database support (PostgreSQL, MySQL/MariaDB)
+// Per AI.md PART 24: Remote database support (PostgreSQL, MySQL/MariaDB)
 type RemoteDBConfig struct {
 	Driver   string `yaml:"driver"`   // postgres, mysql
 	Host     string `yaml:"host"`     // database host
@@ -149,7 +149,7 @@ func (rdb *RemoteDB) DB() *sql.DB {
 }
 
 // MigrationManager handles migration from SQLite to remote database
-// Per TEMPLATE.md PART 24: Auto-migrate local → remote
+// Per AI.md PART 24: Auto-migrate local → remote
 type MigrationManager struct {
 	sourceDB *DB
 	targetDB *RemoteDB

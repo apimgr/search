@@ -24,7 +24,7 @@
                 <h3>{{t "user.tokens.created"}}</h3>
                 <div class="token-display">
                     <code id="new-token">{{.NewToken}}</code>
-                    <button type="button" class="btn btn-sm btn-secondary" onclick="copyToken()">
+                    <button type="button" class="btn btn-sm btn-secondary" data-action="copy-token">
                         {{t "common.copy"}}
                     </button>
                 </div>
@@ -75,7 +75,7 @@
                             </div>
                             {{end}}
                         </div>
-                        <form method="POST" action="/user/tokens/revoke" class="token-action" onsubmit="return handleRevokeToken(event)">
+                        <form method="POST" action="/user/tokens/revoke" class="token-action" data-confirm-revoke>
                             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                             <input type="hidden" name="token_id" value="{{.ID}}">
                             <button type="submit" class="btn btn-danger btn-sm">
@@ -96,11 +96,11 @@
     </div>
 
     <div class="modal" id="create-token-modal">
-        <div class="modal-backdrop" onclick="closeModal()"></div>
+        <div class="modal-backdrop" data-action="close-token-modal"></div>
         <div class="modal-content">
             <div class="modal-header">
                 <h3>{{t "user.tokens.create"}}</h3>
-                <button type="button" class="modal-close" onclick="closeModal()">&times;</button>
+                <button type="button" class="modal-close" data-action="close-token-modal">&times;</button>
             </div>
             <form method="POST" action="/user/tokens/create" class="modal-body">
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
@@ -141,7 +141,7 @@
                 </div>
 
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" onclick="closeModal()">
+                    <button type="button" class="btn btn-secondary" data-action="close-token-modal">
                         {{t "form.cancel"}}
                     </button>
                     <button type="submit" class="btn btn-primary">
@@ -502,51 +502,64 @@
 </style>
 
 <script>
-function copyToken() {
-    const tokenEl = document.getElementById('new-token');
-    if (tokenEl) {
-        navigator.clipboard.writeText(tokenEl.textContent).then(function() {
-            const btn = tokenEl.nextElementSibling;
-            const original = btn.textContent;
-            btn.textContent = 'Copied!';
-            setTimeout(function() {
-                btn.textContent = original;
-            }, 2000);
+// Per AI.md PART 17: Minimal page-specific JS, event delegation in app.js
+document.addEventListener('DOMContentLoaded', function() {
+    var createBtn = document.getElementById('create-token-btn');
+    var modal = document.getElementById('create-token-modal');
+
+    if (createBtn && modal) {
+        createBtn.addEventListener('click', function() {
+            modal.classList.add('active');
         });
     }
-}
 
-function openModal() {
-    document.getElementById('create-token-modal').classList.add('active');
-}
-
-function closeModal() {
-    document.getElementById('create-token-modal').classList.remove('active');
-}
-
-document.addEventListener('DOMContentLoaded', function() {
-    document.getElementById('create-token-btn').addEventListener('click', openModal);
-
+    // Close modal on Escape
     document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') {
-            closeModal();
+        if (e.key === 'Escape' && modal) {
+            modal.classList.remove('active');
+        }
+    });
+
+    // Handle close-token-modal action
+    document.addEventListener('click', function(e) {
+        if (e.target.matches('[data-action="close-token-modal"]')) {
+            modal.classList.remove('active');
+        }
+    });
+
+    // Handle copy-token action
+    document.addEventListener('click', function(e) {
+        if (e.target.matches('[data-action="copy-token"]')) {
+            var tokenEl = document.getElementById('new-token');
+            if (tokenEl) {
+                navigator.clipboard.writeText(tokenEl.textContent).then(function() {
+                    var btn = e.target;
+                    var original = btn.textContent;
+                    btn.textContent = 'Copied!';
+                    setTimeout(function() {
+                        btn.textContent = original;
+                    }, 2000);
+                });
+            }
+        }
+    });
+
+    // Handle token revoke confirmation
+    document.addEventListener('submit', function(e) {
+        if (e.target.matches('[data-confirm-revoke]')) {
+            e.preventDefault();
+            var form = e.target;
+            window.showConfirm('Are you sure you want to revoke this token?', {
+                title: 'Revoke API Token',
+                confirmText: 'Revoke',
+                danger: true
+            }).then(function(confirmed) {
+                if (confirmed) {
+                    form.submit();
+                }
+            });
         }
     });
 });
 </script>
 {{end}}
-
-{{/* Add script for custom confirm dialog */}}
-<script>
-// Handle token revocation with custom confirm dialog
-// Per TEMPLATE.md PART 16: NO JavaScript alerts
-async function handleRevokeToken(event) {
-    event.preventDefault();
-    
-    const confirmed = await showConfirm('Are you sure you want to revoke this token?', 'Revoke API Token');
-    if (confirmed) {
-        event.target.submit();
-    }
-    return false;
-}
-</script>

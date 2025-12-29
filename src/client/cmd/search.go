@@ -55,6 +55,7 @@ var searchCmd = &cobra.Command{
 }
 
 func init() {
-	searchCmd.Flags().IntVarP(&searchPage, "page", "p", 1, "page number")
-	searchCmd.Flags().IntVarP(&searchPerPage, "limit", "l", 10, "results per page")
+	// Per AI.md PART 34: Only -h (help) and -v (version) may have short flags
+	searchCmd.Flags().IntVar(&searchPage, "page", 1, "page number")
+	searchCmd.Flags().IntVar(&searchPerPage, "limit", 10, "results per page")
 }

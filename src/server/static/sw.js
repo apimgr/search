@@ -1,5 +1,5 @@
 // Service Worker for Search PWA
-// Per TEMPLATE.md PART 15-16: PWA Support
+// Per AI.md PART 15-16: PWA Support
 
 const CACHE_NAME = 'search-v1';
 const STATIC_ASSETS = [
