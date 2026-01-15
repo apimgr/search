@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apimgr/search/src/models"
+	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 )
 
@@ -21,7 +21,7 @@ type DuckDuckGo struct {
 
 // NewDuckDuckGo creates a new DuckDuckGo engine
 func NewDuckDuckGo() *DuckDuckGo {
-	config := models.NewEngineConfig("duckduckgo")
+	config := model.NewEngineConfig("duckduckgo")
 	config.DisplayName = "DuckDuckGo"
 	config.Priority = 100 // Highest priority (default engine)
 	config.Categories = []string{"general", "images", "videos", "news"}
@@ -36,13 +36,13 @@ func NewDuckDuckGo() *DuckDuckGo {
 }
 
 // Search performs a DuckDuckGo search
-func (e *DuckDuckGo) Search(ctx context.Context, query *models.Query) ([]models.Result, error) {
+func (e *DuckDuckGo) Search(ctx context.Context, query *model.Query) ([]model.Result, error) {
 	switch query.Category {
-	case models.CategoryImages:
+	case model.CategoryImages:
 		return e.searchImages(ctx, query)
-	case models.CategoryVideos:
+	case model.CategoryVideos:
 		return e.searchVideos(ctx, query)
-	case models.CategoryNews:
+	case model.CategoryNews:
 		return e.searchNews(ctx, query)
 	default:
 		return e.searchGeneral(ctx, query)
@@ -50,35 +50,35 @@ func (e *DuckDuckGo) Search(ctx context.Context, query *models.Query) ([]models.
 }
 
 // searchGeneral performs a general web search
-func (e *DuckDuckGo) searchGeneral(ctx context.Context, query *models.Query) ([]models.Result, error) {
+func (e *DuckDuckGo) searchGeneral(ctx context.Context, query *model.Query) ([]model.Result, error) {
 	// DuckDuckGo Instant Answer API
 	apiURL := "https://api.duckduckgo.com/"
-	
+
 	params := url.Values{}
 	params.Set("q", query.Text)
 	params.Set("format", "json")
 	params.Set("no_html", "1")
 	params.Set("skip_disambig", "1")
-	
+
 	reqURL := fmt.Sprintf("%s?%s", apiURL, params.Encode())
-	
+
 	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0")
-	
+
 	resp, err := e.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("DuckDuckGo API returned status %d", resp.StatusCode)
 	}
-	
+
 	var data struct {
 		AbstractText   string `json:"AbstractText"`
 		AbstractSource string `json:"AbstractSource"`
@@ -93,73 +93,73 @@ func (e *DuckDuckGo) searchGeneral(ctx context.Context, query *models.Query) ([]
 			Text     string `json:"Text"`
 		} `json:"Results"`
 	}
-	
+
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 		return nil, err
 	}
-	
-	results := make([]models.Result, 0)
+
+	results := make([]model.Result, 0)
 	position := 0
-	
+
 	// Add abstract as first result if available
 	if data.AbstractText != "" && data.AbstractURL != "" {
-		results = append(results, models.Result{
+		results = append(results, model.Result{
 			Title:    data.Heading,
 			URL:      data.AbstractURL,
 			Content:  data.AbstractText,
 			Engine:   e.Name(),
-			Category: models.CategoryGeneral,
+			Category: model.CategoryGeneral,
 			Score:    calculateScore(e.GetPriority(), position, 1),
 			Position: position,
 		})
 		position++
 	}
-	
+
 	// Add related topics
 	for _, topic := range data.RelatedTopics {
 		if topic.FirstURL != "" && topic.Text != "" {
-			results = append(results, models.Result{
+			results = append(results, model.Result{
 				Title:    extractTitle(topic.Text),
 				URL:      topic.FirstURL,
 				Content:  topic.Text,
 				Engine:   e.Name(),
-				Category: models.CategoryGeneral,
+				Category: model.CategoryGeneral,
 				Score:    calculateScore(e.GetPriority(), position, 1),
 				Position: position,
 			})
 			position++
-			
+
 			if position >= e.GetConfig().GetMaxResults() {
 				break
 			}
 		}
 	}
-	
+
 	// Add results
 	for _, result := range data.Results {
 		if result.FirstURL != "" && result.Text != "" {
-			results = append(results, models.Result{
+			results = append(results, model.Result{
 				Title:    extractTitle(result.Text),
 				URL:      result.FirstURL,
 				Content:  result.Text,
 				Engine:   e.Name(),
-				Category: models.CategoryGeneral,
+				Category: model.CategoryGeneral,
 				Score:    calculateScore(e.GetPriority(), position, 1),
 				Position: position,
 			})
 			position++
-			
+
 			if position >= e.GetConfig().GetMaxResults() {
 				break
 			}
 		}
 	}
-	
+
 	return results, nil
 }
 
 // searchImages performs an image search using DuckDuckGo images
-func (e *DuckDuckGo) searchImages(ctx context.Context, query *models.Query) ([]models.Result, error) {
+func (e *DuckDuckGo) searchImages(ctx context.Context, query *model.Query) ([]model.Result, error) {
 	// First, get a VQD token
 	vqd, err := e.getVQDToken(ctx, query.Text)
 	if err != nil {
@@ -248,20 +248,20 @@ func (e *DuckDuckGo) searchImages(ctx context.Context, query *models.Query) ([]m
 		return nil, err
 	}
 
-	results := make([]models.Result, 0, len(data.Results))
+	results := make([]model.Result, 0, len(data.Results))
 
 	for i, img := range data.Results {
 		if i >= e.GetConfig().GetMaxResults() {
 			break
 		}
 
-		results = append(results, models.Result{
+		results = append(results, model.Result{
 			Title:       img.Title,
 			URL:         img.URL,
 			Thumbnail:   img.Thumbnail,
 			Content:     fmt.Sprintf("%dx%d - %s", img.Width, img.Height, img.Source),
 			Engine:      e.Name(),
-			Category:    models.CategoryImages,
+			Category:    model.CategoryImages,
 			ImageWidth:  img.Width,
 			ImageHeight: img.Height,
 			Score:       calculateScore(e.GetPriority(), i, 1),
@@ -333,7 +333,7 @@ func findSubstring(s, substr string) int {
 }
 
 // searchVideos performs a video search using DuckDuckGo
-func (e *DuckDuckGo) searchVideos(ctx context.Context, query *models.Query) ([]models.Result, error) {
+func (e *DuckDuckGo) searchVideos(ctx context.Context, query *model.Query) ([]model.Result, error) {
 	// First, get a VQD token
 	vqd, err := e.getVQDToken(ctx, query.Text)
 	if err != nil {
@@ -413,7 +413,7 @@ func (e *DuckDuckGo) searchVideos(ctx context.Context, query *models.Query) ([]m
 		return nil, err
 	}
 
-	results := make([]models.Result, 0, len(data.Results))
+	results := make([]model.Result, 0, len(data.Results))
 
 	for i, vid := range data.Results {
 		if i >= e.GetConfig().GetMaxResults() {
@@ -423,14 +423,14 @@ func (e *DuckDuckGo) searchVideos(ctx context.Context, query *models.Query) ([]m
 		// Parse duration to seconds
 		duration := parseDuration(vid.Duration)
 
-		results = append(results, models.Result{
+		results = append(results, model.Result{
 			Title:     vid.Title,
 			URL:       vid.URL,
 			Content:   vid.Description,
 			Thumbnail: vid.Thumbnail,
 			Author:    vid.Publisher,
 			Engine:    e.Name(),
-			Category:  models.CategoryVideos,
+			Category:  model.CategoryVideos,
 			Duration:  duration,
 			ViewCount: vid.ViewCount,
 			Score:     calculateScore(e.GetPriority(), i, 1),
@@ -446,7 +446,7 @@ func (e *DuckDuckGo) searchVideos(ctx context.Context, query *models.Query) ([]m
 }
 
 // searchNews performs a news search using DuckDuckGo
-func (e *DuckDuckGo) searchNews(ctx context.Context, query *models.Query) ([]models.Result, error) {
+func (e *DuckDuckGo) searchNews(ctx context.Context, query *model.Query) ([]model.Result, error) {
 	// First, get a VQD token
 	vqd, err := e.getVQDToken(ctx, query.Text)
 	if err != nil {
@@ -507,7 +507,7 @@ func (e *DuckDuckGo) searchNews(ctx context.Context, query *models.Query) ([]mod
 		return nil, err
 	}
 
-	results := make([]models.Result, 0, len(data.Results))
+	results := make([]model.Result, 0, len(data.Results))
 
 	for i, news := range data.Results {
 		if i >= e.GetConfig().GetMaxResults() {
@@ -516,7 +516,7 @@ func (e *DuckDuckGo) searchNews(ctx context.Context, query *models.Query) ([]mod
 
 		publishedAt := time.Unix(news.Date, 0)
 
-		results = append(results, models.Result{
+		results = append(results, model.Result{
 			Title:       news.Title,
 			URL:         news.URL,
 			Content:     news.Excerpt,
@@ -524,7 +524,7 @@ func (e *DuckDuckGo) searchNews(ctx context.Context, query *models.Query) ([]mod
 			Author:      news.Source,
 			PublishedAt: publishedAt,
 			Engine:      e.Name(),
-			Category:    models.CategoryNews,
+			Category:    model.CategoryNews,
 			Score:       calculateScore(e.GetPriority(), i, 1),
 			Position:    i,
 		})

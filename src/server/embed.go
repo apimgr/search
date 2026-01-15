@@ -15,7 +15,7 @@ import (
 	"github.com/apimgr/search/src/config"
 )
 
-//go:embed templates/layouts/*.tmpl templates/partials/*.tmpl templates/pages/*.tmpl static/*
+//go:embed template/layouts/*.tmpl template/partials/*.tmpl template/pages/*.tmpl static/*
 var EmbeddedFS embed.FS
 
 // TemplateRenderer handles template rendering
@@ -107,18 +107,18 @@ func (tr *TemplateRenderer) loadTemplates() error {
 	defer tr.mu.Unlock()
 
 	// Load layout template
-	layoutContent, err := fs.ReadFile(EmbeddedFS, "templates/layouts/base.tmpl")
+	layoutContent, err := fs.ReadFile(EmbeddedFS, "template/layouts/base.tmpl")
 	if err != nil {
 		return err
 	}
 
 	// Load all partials
 	partials := make(map[string]string)
-	partialsDir, err := fs.ReadDir(EmbeddedFS, "templates/partials")
+	partialsDir, err := fs.ReadDir(EmbeddedFS, "template/partials")
 	if err == nil {
 		for _, entry := range partialsDir {
 			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".tmpl") {
-				content, err := fs.ReadFile(EmbeddedFS, "templates/partials/"+entry.Name())
+				content, err := fs.ReadFile(EmbeddedFS, "template/partials/"+entry.Name())
 				if err != nil {
 					continue
 				}
@@ -129,7 +129,7 @@ func (tr *TemplateRenderer) loadTemplates() error {
 	}
 
 	// Load all page templates
-	pagesDir, err := fs.ReadDir(EmbeddedFS, "templates/pages")
+	pagesDir, err := fs.ReadDir(EmbeddedFS, "template/pages")
 	if err != nil {
 		return err
 	}
@@ -139,7 +139,7 @@ func (tr *TemplateRenderer) loadTemplates() error {
 			continue
 		}
 
-		pageContent, err := fs.ReadFile(EmbeddedFS, "templates/pages/"+entry.Name())
+		pageContent, err := fs.ReadFile(EmbeddedFS, "template/pages/"+entry.Name())
 		if err != nil {
 			continue
 		}
@@ -256,20 +256,62 @@ type HealthPageData struct {
 	Health *HealthInfo
 }
 
-// HealthInfo represents health check information per AI.md spec
+// HealthInfo represents health check information per AI.md PART 13
 type HealthInfo struct {
+	Project        *ProjectInfo      `json:"project,omitempty"`
 	Status         string            `json:"status"`
 	Version        string            `json:"version"`
+	GoVersion      string            `json:"go_version"`
 	Mode           string            `json:"mode"`
 	Uptime         string            `json:"uptime"`
 	Timestamp      string            `json:"timestamp"`
+	Build          *BuildInfo        `json:"build,omitempty"`
 	Node           *NodeInfo         `json:"node,omitempty"`
 	Cluster        *ClusterInfo      `json:"cluster,omitempty"`
+	Features       *HealthFeatures   `json:"features,omitempty"`
 	Checks         map[string]string `json:"checks"`
+	Stats          *HealthStats      `json:"stats,omitempty"`
 	System         *SystemInfo       `json:"system,omitempty"`
 	PendingRestart bool              `json:"pending_restart,omitempty"`
 	RestartReason  []string          `json:"restart_reason,omitempty"`
 	Maintenance    *MaintenanceInfo  `json:"maintenance,omitempty"`
+}
+
+// ProjectInfo represents project information for healthz per AI.md PART 13
+type ProjectInfo struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+// BuildInfo represents build information per AI.md PART 13
+// Note: Fields are "commit" and "date" per spec, not "commit_id" and "build_date"
+type BuildInfo struct {
+	Commit string `json:"commit"`
+	Date   string `json:"date"`
+}
+
+// HealthFeatures represents feature status per AI.md PART 13
+type HealthFeatures struct {
+	MultiUser     bool        `json:"multi_user"`
+	Organizations bool        `json:"organizations"`
+	Tor           *TorFeature `json:"tor"`
+	GeoIP         bool        `json:"geoip"`
+	Metrics       bool        `json:"metrics"`
+}
+
+// TorFeature represents Tor status per AI.md PART 13
+type TorFeature struct {
+	Enabled  bool   `json:"enabled"`
+	Running  bool   `json:"running"`
+	Status   string `json:"status"`
+	Hostname string `json:"hostname"`
+}
+
+// HealthStats represents health statistics per AI.md PART 13
+type HealthStats struct {
+	RequestsTotal     int64 `json:"requests_total"`
+	Requests24h       int64 `json:"requests_24h"`
+	ActiveConnections int   `json:"active_connections"`
 }
 
 // NodeInfo represents node information for cluster mode
@@ -278,12 +320,13 @@ type NodeInfo struct {
 	Hostname string `json:"hostname"`
 }
 
-// ClusterInfo represents cluster status
+// ClusterInfo represents cluster status per AI.md PART 13
 type ClusterInfo struct {
-	Enabled bool   `json:"enabled"`
-	Status  string `json:"status"`
-	Nodes   int    `json:"nodes"`
-	Role    string `json:"role,omitempty"`
+	Enabled bool     `json:"enabled"`
+	Status  string   `json:"status,omitempty"`
+	Primary string   `json:"primary"`
+	Nodes   []string `json:"nodes"`
+	Role    string   `json:"role,omitempty"`
 }
 
 // MaintenanceInfo represents maintenance mode status

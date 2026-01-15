@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apimgr/search/src/models"
+	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 )
 
@@ -22,7 +22,7 @@ type Yahoo struct {
 
 // NewYahoo creates a new Yahoo search engine
 func NewYahoo() *Yahoo {
-	config := models.NewEngineConfig("yahoo")
+	config := model.NewEngineConfig("yahoo")
 	config.DisplayName = "Yahoo"
 	config.Priority = 65
 	config.Categories = []string{"general", "images", "news"}
@@ -37,16 +37,16 @@ func NewYahoo() *Yahoo {
 }
 
 // Search performs a Yahoo search
-func (e *Yahoo) Search(ctx context.Context, query *models.Query) ([]models.Result, error) {
+func (e *Yahoo) Search(ctx context.Context, query *model.Query) ([]model.Result, error) {
 	searchURL := "https://search.yahoo.com/search"
 
 	params := url.Values{}
 	params.Set("p", query.Text)
 	params.Set("ei", "UTF-8")
 
-	if query.Category == models.CategoryImages {
+	if query.Category == model.CategoryImages {
 		searchURL = "https://images.search.yahoo.com/search/images"
-	} else if query.Category == models.CategoryNews {
+	} else if query.Category == model.CategoryNews {
 		searchURL = "https://news.search.yahoo.com/search"
 	}
 
@@ -80,8 +80,8 @@ func (e *Yahoo) Search(ctx context.Context, query *models.Query) ([]models.Resul
 }
 
 // parseResults parses HTML results from Yahoo
-func (e *Yahoo) parseResults(html string, category models.Category) ([]models.Result, error) {
-	results := make([]models.Result, 0)
+func (e *Yahoo) parseResults(html string, category model.Category) ([]model.Result, error) {
+	results := make([]model.Result, 0)
 
 	// Pattern for Yahoo search results
 	// Yahoo results are in <li> elements with specific classes
@@ -123,7 +123,7 @@ func (e *Yahoo) parseResults(html string, category models.Category) ([]models.Re
 
 		title = unescapeHTML(title)
 
-		results = append(results, models.Result{
+		results = append(results, model.Result{
 			Title:    title,
 			URL:      resultURL,
 			Content:  "",
@@ -171,7 +171,7 @@ func (e *Yahoo) parseResults(html string, category models.Category) ([]models.Re
 			title = unescapeHTML(title)
 			content = unescapeHTML(content)
 
-			results = append(results, models.Result{
+			results = append(results, model.Result{
 				Title:    title,
 				URL:      resultURL,
 				Content:  content,

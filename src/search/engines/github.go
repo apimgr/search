@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/apimgr/search/src/models"
+	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 )
 
@@ -20,7 +20,7 @@ type GitHub struct {
 
 // NewGitHub creates a new GitHub search engine
 func NewGitHub() *GitHub {
-	config := models.NewEngineConfig("github")
+	config := model.NewEngineConfig("github")
 	config.DisplayName = "GitHub"
 	config.Priority = 50
 	config.Categories = []string{"general", "code"}
@@ -35,7 +35,7 @@ func NewGitHub() *GitHub {
 }
 
 // Search performs a GitHub search
-func (e *GitHub) Search(ctx context.Context, query *models.Query) ([]models.Result, error) {
+func (e *GitHub) Search(ctx context.Context, query *model.Query) ([]model.Result, error) {
 	// GitHub Search API
 	searchURL := "https://api.github.com/search/repositories"
 
@@ -81,7 +81,7 @@ func (e *GitHub) Search(ctx context.Context, query *models.Query) ([]models.Resu
 		return nil, err
 	}
 
-	results := make([]models.Result, 0)
+	results := make([]model.Result, 0)
 
 	for i, item := range data.Items {
 		if i >= e.GetConfig().GetMaxResults() {
@@ -96,12 +96,12 @@ func (e *GitHub) Search(ctx context.Context, query *models.Query) ([]models.Resu
 			content = fmt.Sprintf("%s (★ %d)", content, item.Stars)
 		}
 
-		results = append(results, models.Result{
+		results = append(results, model.Result{
 			Title:    item.FullName,
 			URL:      item.HTMLURL,
 			Content:  content,
 			Engine:   e.Name(),
-			Category: models.CategoryGeneral,
+			Category: model.CategoryGeneral,
 			Score:    calculateScore(e.GetPriority(), i, 1),
 			Position: i,
 		})

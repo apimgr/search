@@ -1,0 +1,40 @@
+{{define "admin"}}
+<!DOCTYPE html>
+<html lang="en" class="theme-{{default "dark" .Theme}}">
+<head>
+    {{template "head" .}}
+    {{block "extra_head" .}}{{end}}
+</head>
+<body class="admin-page {{.Page}}-page">
+    {{/* Skip link for keyboard navigation - WCAG 2.1 AA */}}
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
+    {{/* Admin-specific header */}}
+    {{template "admin/header" .}}
+
+    <div class="admin-container">
+        {{/* Admin sidebar navigation */}}
+        {{template "admin/sidebar" .}}
+
+        <main id="main-content" class="admin-main" role="main">
+            {{/* Flash messages */}}
+            {{if .Flash}}
+            <div class="flash flash-{{.Flash.Type}}" role="alert">
+                {{.Flash.Message}}
+                <button class="flash-close" aria-label="Close">&times;</button>
+            </div>
+            {{end}}
+
+            {{/* Main content area */}}
+            {{block "content" .}}{{end}}
+        </main>
+    </div>
+
+    {{/* Admin footer */}}
+    {{template "admin/footer" .}}
+
+    {{template "scripts" .}}
+    {{block "extra_scripts" .}}{{end}}
+</body>
+</html>
+{{end}}

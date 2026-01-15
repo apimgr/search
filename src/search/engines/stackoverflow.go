@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/apimgr/search/src/models"
+	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 )
 
@@ -20,7 +20,7 @@ type StackOverflow struct {
 
 // NewStackOverflow creates a new Stack Overflow search engine
 func NewStackOverflow() *StackOverflow {
-	config := models.NewEngineConfig("stackoverflow")
+	config := model.NewEngineConfig("stackoverflow")
 	config.DisplayName = "Stack Overflow"
 	config.Priority = 55
 	config.Categories = []string{"general", "code"}
@@ -35,7 +35,7 @@ func NewStackOverflow() *StackOverflow {
 }
 
 // Search performs a Stack Overflow search
-func (e *StackOverflow) Search(ctx context.Context, query *models.Query) ([]models.Result, error) {
+func (e *StackOverflow) Search(ctx context.Context, query *model.Query) ([]model.Result, error) {
 	// Stack Exchange API
 	searchURL := "https://api.stackexchange.com/2.3/search/advanced"
 
@@ -86,7 +86,7 @@ func (e *StackOverflow) Search(ctx context.Context, query *models.Query) ([]mode
 		return nil, err
 	}
 
-	results := make([]models.Result, 0)
+	results := make([]model.Result, 0)
 
 	for i, item := range data.Items {
 		if i >= e.GetConfig().GetMaxResults() {
@@ -117,12 +117,12 @@ func (e *StackOverflow) Search(ctx context.Context, query *models.Query) ([]mode
 			content += fmt.Sprintf(" | Score: %d", item.Score)
 		}
 
-		results = append(results, models.Result{
+		results = append(results, model.Result{
 			Title:    unescapeHTML(item.Title),
 			URL:      item.Link,
 			Content:  content,
 			Engine:   e.Name(),
-			Category: models.CategoryGeneral,
+			Category: model.CategoryGeneral,
 			Score:    calculateScore(e.GetPriority(), i, 1),
 			Position: i,
 		})

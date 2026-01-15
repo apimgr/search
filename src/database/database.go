@@ -24,7 +24,7 @@ type DB struct {
 // DatabaseManager manages both server and users databases per AI.md PART 24
 // Two separate databases:
 // - server.db: Admin credentials, server state, scheduler
-// - users.db: User accounts, tokens, sessions
+// - user.db: User accounts, tokens, sessions
 type DatabaseManager struct {
 	serverDB *DB
 	usersDB  *DB
@@ -76,7 +76,7 @@ func NewDatabaseManager(cfg *Config) (*DatabaseManager, error) {
 	dm.serverDB = serverDB
 
 	// Create users database
-	usersDB, err := dm.connectDatabase(cfg, "users.db")
+	usersDB, err := dm.connectDatabase(cfg, "user.db")
 	if err != nil {
 		serverDB.Close()
 		return nil, fmt.Errorf("failed to connect users database: %w", err)
@@ -188,6 +188,17 @@ func (dm *DatabaseManager) Ping(ctx context.Context) error {
 	return nil
 }
 
+// IsClusterMode returns true if running in cluster mode (remote database)
+// Per AI.md PART 5: Cluster mode uses remote database as source of truth
+func (dm *DatabaseManager) IsClusterMode() bool {
+	dm.mu.RLock()
+	defer dm.mu.RUnlock()
+	if dm.serverDB == nil {
+		return false
+	}
+	return dm.serverDB.IsRemote()
+}
+
 // New creates a new database connection (legacy single-database mode for migration)
 func New(cfg *Config) (*DB, error) {
 	if cfg == nil {
@@ -270,6 +281,14 @@ func (db *DB) IsReady() bool {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 	return db.ready
+}
+
+// IsRemote returns true if using a remote database (not SQLite)
+// Per AI.md PART 5: Cluster mode uses remote database
+func (db *DB) IsRemote() bool {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	return db.driver != "" && db.driver != "sqlite"
 }
 
 // Exec executes a query without returning rows

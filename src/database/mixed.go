@@ -18,7 +18,7 @@ type MixedModeConfig struct {
 	// Can be SQLite, PostgreSQL, or MySQL
 	ServerDB DatabaseBackendConfig `yaml:"server_db"`
 
-	// UsersDBConfig for users.db (user accounts, sessions)
+	// UsersDBConfig for user.db (user accounts, sessions)
 	// Can be SQLite, PostgreSQL, or MySQL
 	UsersDB DatabaseBackendConfig `yaml:"users_db"`
 }
@@ -46,7 +46,7 @@ func DefaultMixedModeConfig(dataDir string) *MixedModeConfig {
 		},
 		UsersDB: DatabaseBackendConfig{
 			Driver:   "sqlite",
-			Path:     filepath.Join(dataDir, "users.db"),
+			Path:     filepath.Join(dataDir, "user.db"),
 			MaxOpen:  10,
 			MaxIdle:  5,
 			Lifetime: 300,

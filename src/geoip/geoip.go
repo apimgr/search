@@ -17,6 +17,8 @@ const (
 	ASNURL     = "https://cdn.jsdelivr.net/npm/@ip-location-db/asn-mmdb/asn.mmdb"
 	CountryURL = "https://cdn.jsdelivr.net/npm/@ip-location-db/geo-whois-asn-country-mmdb/geo-whois-asn-country.mmdb"
 	CityURL    = "https://cdn.jsdelivr.net/npm/@ip-location-db/dbip-city-mmdb/dbip-city.mmdb"
+	// WHOIS database per AI.md PART 20
+	WhoisURL = "https://cdn.jsdelivr.net/npm/@ip-location-db/geo-whois-asn-country-mmdb/geo-whois-asn-country.mmdb"
 )
 
 // Lookup represents a GeoIP lookup service using MMDB format
@@ -25,6 +27,7 @@ type Lookup struct {
 	countryDB    *mmdbReader
 	asnDB        *mmdbReader
 	cityDB       *mmdbReader
+	whoisDB      *mmdbReader // WHOIS registrant database (per AI.md PART 20)
 	loaded       bool
 	dbDir        string
 	countries    map[string]*Country
@@ -53,7 +56,10 @@ type Result struct {
 	Timezone      string  `json:"timezone,omitempty"`
 	ASN           uint    `json:"asn,omitempty"`
 	ASNOrg        string  `json:"asn_org,omitempty"`
-	Found         bool    `json:"found"`
+	// WHOIS registrant data (per AI.md PART 20)
+	RegistrantOrg string `json:"registrant_org,omitempty"`
+	RegistrantNet string `json:"registrant_net,omitempty"`
+	Found         bool   `json:"found"`
 }
 
 // Config holds GeoIP configuration
@@ -67,19 +73,22 @@ type Config struct {
 	ASN     bool `yaml:"asn"`
 	Country bool `yaml:"country"`
 	City    bool `yaml:"city"`
+	WHOIS   bool `yaml:"whois"` // Enable WHOIS registrant data (per AI.md PART 20)
 }
 
 // DefaultConfig returns default GeoIP configuration
+// Per AI.md PART 20: GeoIP dir is {config_dir}/security/geoip
 func DefaultConfig() *Config {
 	return &Config{
 		Enabled:          false,
-		Dir:              "/data/geoip",
+		Dir:              "/config/security/geoip",
 		Update:           "weekly",
 		DenyCountries:    []string{},
 		AllowedCountries: []string{},
 		ASN:              true,
 		Country:          true,
 		City:             false, // Larger download, disabled by default
+		WHOIS:            false, // WHOIS registrant data, disabled by default
 	}
 }
 
@@ -159,6 +168,21 @@ func (l *Lookup) LoadDatabases() error {
 			l.cityDB = db
 		} else {
 			loadErrors = append(loadErrors, fmt.Sprintf("city load: %v", err))
+		}
+	}
+
+	// Load WHOIS database (per AI.md PART 20)
+	if l.config.WHOIS {
+		whoisPath := filepath.Join(l.dbDir, "whois.mmdb")
+		if _, err := os.Stat(whoisPath); os.IsNotExist(err) {
+			if err := l.downloadDatabase(WhoisURL, whoisPath); err != nil {
+				loadErrors = append(loadErrors, fmt.Sprintf("whois: %v", err))
+			}
+		}
+		if db, err := openMMDB(whoisPath); err == nil {
+			l.whoisDB = db
+		} else {
+			loadErrors = append(loadErrors, fmt.Sprintf("whois load: %v", err))
 		}
 	}
 
@@ -259,6 +283,19 @@ func (l *Lookup) UpdateDatabases() error {
 		}
 	}
 
+	// Update WHOIS database (per AI.md PART 20)
+	if l.config.WHOIS {
+		whoisPath := filepath.Join(l.dbDir, "whois.mmdb")
+		if err := l.downloadDatabase(WhoisURL, whoisPath); err != nil {
+			updateErrors = append(updateErrors, fmt.Sprintf("whois: %v", err))
+		} else if db, err := openMMDB(whoisPath); err == nil {
+			if l.whoisDB != nil {
+				l.whoisDB.Close()
+			}
+			l.whoisDB = db
+		}
+	}
+
 	l.lastUpdate = time.Now()
 
 	if len(updateErrors) > 0 {
@@ -315,6 +352,13 @@ func (l *Lookup) Lookup(ipStr string) *Result {
 		result.Latitude = lat
 		result.Longitude = lon
 		result.Timezone = tz
+	}
+
+	// WHOIS registrant lookup (per AI.md PART 20)
+	if l.whoisDB != nil {
+		registrantOrg, registrantNet := l.whoisDB.LookupWHOIS(ip)
+		result.RegistrantOrg = registrantOrg
+		result.RegistrantNet = registrantNet
 	}
 
 	return result
@@ -398,6 +442,11 @@ func (l *Lookup) Close() {
 	if l.cityDB != nil {
 		l.cityDB.Close()
 		l.cityDB = nil
+	}
+	// Close WHOIS database (per AI.md PART 20)
+	if l.whoisDB != nil {
+		l.whoisDB.Close()
+		l.whoisDB = nil
 	}
 	l.loaded = false
 }

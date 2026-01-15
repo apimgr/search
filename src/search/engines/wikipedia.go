@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/apimgr/search/src/models"
+	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 )
 
@@ -17,11 +17,11 @@ type WikipediaEngine struct {
 }
 
 func NewWikipediaEngine() *WikipediaEngine {
-	config := models.NewEngineConfig("wikipedia")
+	config := model.NewEngineConfig("wikipedia")
 	config.DisplayName = "Wikipedia"
 	config.Categories = []string{"general"}
 	config.Priority = 70
-	
+
 	return &WikipediaEngine{
 		BaseEngine: search.NewBaseEngine(config),
 	}
@@ -38,7 +38,7 @@ type wikipediaResponse struct {
 	} `json:"query"`
 }
 
-func (e *WikipediaEngine) Search(ctx context.Context, query *models.Query) ([]models.Result, error) {
+func (e *WikipediaEngine) Search(ctx context.Context, query *model.Query) ([]model.Result, error) {
 	offset := query.Page * 10
 	searchURL := fmt.Sprintf("https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=%s&format=json&sroffset=%d&srlimit=10",
 		url.QueryEscape(query.Text), offset)
@@ -66,9 +66,9 @@ func (e *WikipediaEngine) Search(ctx context.Context, query *models.Query) ([]mo
 		return nil, err
 	}
 
-	var results []models.Result
+	var results []model.Result
 	for _, item := range wikiResp.Query.Search {
-		results = append(results, models.Result{
+		results = append(results, model.Result{
 			Title:       item.Title,
 			URL:         fmt.Sprintf("https://en.wikipedia.org/?curid=%d", item.PageID),
 			Content:     item.Snippet,

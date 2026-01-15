@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/httputil"
 	"github.com/apimgr/search/src/config"
 )
 
@@ -161,28 +162,105 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// buildHealthInfo constructs the health information per AI.md spec
+// handleReadyz handles Kubernetes readiness probe
+// Per AI.md PART 11/13: /readyz endpoint for readiness
+func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
+	health := s.buildHealthInfo()
+
+	// Return 503 if not ready (unhealthy or maintenance)
+	if health.Status != "healthy" {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprintf(w, "NOT READY: %s\n", health.Status)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprint(w, "READY\n")
+}
+
+// handleLivez handles Kubernetes liveness probe
+// Per AI.md PART 11/13: /livez endpoint for liveness
+func (s *Server) handleLivez(w http.ResponseWriter, r *http.Request) {
+	// Liveness probe is simpler - just check if server can respond
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprint(w, "ALIVE\n")
+}
+
+// handleAPIHealthz handles /api/v1/healthz endpoint
+// Per AI.md PART 13: API health endpoint ALWAYS returns JSON regardless of Accept header
+func (s *Server) handleAPIHealthz(w http.ResponseWriter, r *http.Request) {
+	health := s.buildHealthInfo()
+	// Always JSON for API endpoint - per spec
+	s.respondHealthJSON(w, health)
+}
+
+// buildHealthInfo constructs the health information per AI.md PART 13
 func (s *Server) buildHealthInfo() *HealthInfo {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
 
 	hostname, _ := getHostname()
 
+	// Per AI.md PART 13: Build Tor feature status
+	torFeature := &TorFeature{
+		Enabled:  s.config.Server.Tor.Enabled,
+		Running:  s.torService != nil && s.torService.IsRunning(),
+		Status:   "",
+		Hostname: "",
+	}
+	if torFeature.Running {
+		torFeature.Status = "healthy"
+		if s.torService != nil {
+			torFeature.Hostname = s.torService.GetOnionAddress()
+		}
+	} else if torFeature.Enabled {
+		torFeature.Status = "unavailable"
+	}
+
 	health := &HealthInfo{
+		// Per AI.md PART 13: project.name and project.description from branding
+		Project: &ProjectInfo{
+			Name:        s.config.Server.Branding.AppName,
+			Description: s.config.Server.Description,
+		},
 		Status:    "healthy",
 		Version:   getVersion(),
+		GoVersion: runtime.Version(),
 		Mode:      s.config.Server.Mode,
 		Uptime:    formatDuration(time.Since(s.startTime)),
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
-		Checks:    make(map[string]string),
+		// Per AI.md PART 13: build.commit and build.date (not commit_id/build_date)
+		Build: &BuildInfo{
+			Commit: config.CommitID,
+			Date:   config.BuildDate,
+		},
 		Node: &NodeInfo{
 			ID:       "standalone",
 			Hostname: hostname,
 		},
+		// Per AI.md PART 13: cluster.primary (string) and cluster.nodes ([]string)
 		Cluster: &ClusterInfo{
 			Enabled: false,
-			Status:  "disabled",
-			Nodes:   1,
+			Primary: "",
+			Nodes:   []string{},
+		},
+		// Per AI.md PART 13: features with tor as object
+		Features: &HealthFeatures{
+			MultiUser:     s.config.Server.Users.Enabled,
+			Organizations: false, // Not implemented yet
+			Tor:           torFeature,
+			GeoIP:         s.config.Server.GeoIP.Enabled,
+			Metrics:       s.config.Server.Metrics.Enabled,
+		},
+		Checks: make(map[string]string),
+		// Per AI.md PART 13: stats (requests_total, requests_24h, active_connections)
+		Stats: &HealthStats{
+			RequestsTotal:     s.getRequestsTotal(),
+			Requests24h:       s.getRequests24h(),
+			ActiveConnections: s.getActiveConnections(),
 		},
 		System: &SystemInfo{
 			GoVersion:    runtime.Version(),
@@ -202,7 +280,7 @@ func (s *Server) buildHealthInfo() *HealthInfo {
 		}
 	}
 
-	// Add service checks
+	// Per AI.md PART 13: checks (database, cache, disk, scheduler, cluster)
 	health.Checks["search"] = "ok"
 
 	// Database check
@@ -217,7 +295,33 @@ func (s *Server) buildHealthInfo() *HealthInfo {
 		} else {
 			health.Checks["database"] = "ok"
 		}
+	} else {
+		health.Checks["database"] = "ok" // No separate DB = embedded SQLite always ok
 	}
+
+	// Cache check (Valkey/Redis not yet implemented)
+	health.Checks["cache"] = "disabled"
+
+	// Disk check - verify data directory is accessible
+	if dataDir := config.GetDataDir(); dataDir != "" {
+		if _, err := os.Stat(dataDir); err == nil {
+			health.Checks["disk"] = "ok"
+		} else {
+			health.Checks["disk"] = "error"
+		}
+	} else {
+		health.Checks["disk"] = "ok"
+	}
+
+	// Scheduler check
+	if s.scheduler != nil {
+		health.Checks["scheduler"] = "ok"
+	} else {
+		health.Checks["scheduler"] = "disabled"
+	}
+
+	// Cluster check (not implemented)
+	health.Checks["cluster"] = "disabled"
 
 	// Tor check
 	if s.config.Server.Tor.Enabled {
@@ -228,37 +332,41 @@ func (s *Server) buildHealthInfo() *HealthInfo {
 		}
 	}
 
-	// Scheduler check
-	if s.scheduler != nil {
-		health.Checks["scheduler"] = "ok"
-	}
-
 	return health
 }
 
-// detectResponseFormat determines the response format from the request
-func (s *Server) detectResponseFormat(r *http.Request) string {
-	// Check for .txt extension
-	if strings.HasSuffix(r.URL.Path, ".txt") {
-		return "text/plain"
+// getRequestsTotal returns total requests served
+// Returns 0 when metrics are disabled
+func (s *Server) getRequestsTotal() int64 {
+	if !s.config.Server.Metrics.Enabled {
+		return 0
 	}
-
-	// Check Accept header
-	accept := r.Header.Get("Accept")
-
-	switch {
-	case strings.Contains(accept, "application/json"):
-		return "application/json"
-	case strings.Contains(accept, "text/plain"):
-		return "text/plain"
-	case strings.Contains(accept, "text/html"):
-		return "text/html"
-	default:
-		return "text/html"
-	}
+	return 0
 }
 
-// respondHealthJSON responds with JSON health info
+// getRequests24h returns requests in last 24 hours
+// Returns 0 when metrics are disabled
+func (s *Server) getRequests24h() int64 {
+	if !s.config.Server.Metrics.Enabled {
+		return 0
+	}
+	return 0
+}
+
+// getActiveConnections returns current active connections
+// Returns 0 when metrics are disabled
+func (s *Server) getActiveConnections() int {
+	return 0
+}
+
+// detectResponseFormat determines the response format from the request
+// Per AI.md PART 14: Content Negotiation Priority
+// Uses smart client detection for automatic format selection
+func (s *Server) detectResponseFormat(r *http.Request) string {
+	return httputil.GetPreferredFormat(r)
+}
+
+// respondHealthJSON responds with JSON health info per AI.md PART 14
 func (s *Server) respondHealthJSON(w http.ResponseWriter, health *HealthInfo) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -270,9 +378,12 @@ func (s *Server) respondHealthJSON(w http.ResponseWriter, health *HealthInfo) {
 
 	data, _ := jsonMarshal(health)
 	w.Write(data)
+	// Per AI.md PART 14: Single trailing newline
+	w.Write([]byte("\n"))
 }
 
-// respondHealthText responds with plain text health info
+// respondHealthText responds with plain text health info per AI.md PART 13
+// Format: key: value pairs, one per line
 func (s *Server) respondHealthText(w http.ResponseWriter, health *HealthInfo) {
 	w.Header().Set("Content-Type", "text/plain")
 
@@ -282,11 +393,69 @@ func (s *Server) respondHealthText(w http.ResponseWriter, health *HealthInfo) {
 	}
 	w.WriteHeader(statusCode)
 
-	if health.Status == "healthy" {
-		fmt.Fprint(w, "OK")
-	} else {
-		fmt.Fprintf(w, "ERROR: %s", health.Status)
+	var b strings.Builder
+
+	// Core fields
+	b.WriteString(fmt.Sprintf("status: %s\n", health.Status))
+	b.WriteString(fmt.Sprintf("version: %s\n", health.Version))
+	b.WriteString(fmt.Sprintf("mode: %s\n", health.Mode))
+	b.WriteString(fmt.Sprintf("uptime: %s\n", health.Uptime))
+	b.WriteString(fmt.Sprintf("go_version: %s\n", health.GoVersion))
+
+	// Build info
+	if health.Build != nil {
+		b.WriteString(fmt.Sprintf("build.commit: %s\n", health.Build.Commit))
 	}
+
+	// Component checks
+	for name, status := range health.Checks {
+		b.WriteString(fmt.Sprintf("%s: %s\n", name, status))
+	}
+
+	// Cluster info
+	if health.Cluster != nil {
+		if health.Cluster.Enabled {
+			b.WriteString(fmt.Sprintf("cluster.primary: %s\n", health.Cluster.Primary))
+			if len(health.Cluster.Nodes) > 0 {
+				b.WriteString(fmt.Sprintf("cluster.nodes: %s\n", strings.Join(health.Cluster.Nodes, ", ")))
+			}
+		}
+	}
+
+	// Features
+	if health.Features != nil {
+		var features []string
+		if health.Features.MultiUser {
+			features = append(features, "multi_user")
+		}
+		if health.Features.Organizations {
+			features = append(features, "organizations")
+		}
+		if health.Features.Tor != nil && health.Features.Tor.Enabled {
+			features = append(features, "tor")
+		}
+		if health.Features.GeoIP {
+			features = append(features, "geoip")
+		}
+		if health.Features.Metrics {
+			features = append(features, "metrics")
+		}
+		if len(features) > 0 {
+			b.WriteString(fmt.Sprintf("features: %s\n", strings.Join(features, ", ")))
+		}
+
+		// Tor details
+		if health.Features.Tor != nil && health.Features.Tor.Enabled {
+			b.WriteString(fmt.Sprintf("features.tor.enabled: %t\n", health.Features.Tor.Enabled))
+			b.WriteString(fmt.Sprintf("features.tor.running: %t\n", health.Features.Tor.Running))
+			b.WriteString(fmt.Sprintf("features.tor.status: %s\n", health.Features.Tor.Status))
+			if health.Features.Tor.Hostname != "" {
+				b.WriteString(fmt.Sprintf("features.tor.hostname: %s\n", health.Features.Tor.Hostname))
+			}
+		}
+	}
+
+	fmt.Fprint(w, b.String())
 }
 
 // respondHealthHTML responds with HTML health page
@@ -393,15 +562,15 @@ func getVersion() string {
 	return config.Version
 }
 
-// jsonMarshal marshals data to JSON with indentation
+// jsonMarshal marshals data to JSON with 2-space indentation per AI.md PART 14
 func jsonMarshal(v interface{}) ([]byte, error) {
-	return json.Marshal(v)
+	return json.MarshalIndent(v, "", "  ")
 }
 
 // handleAutocomplete handles autocomplete requests
 // Per AI.md PART 36 line 28280: /autocomplete GET endpoint for autocomplete suggestions
 func (s *Server) handleAutocomplete(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query().Get("q")
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
 
 	// If no query, return empty suggestions
 	if query == "" {

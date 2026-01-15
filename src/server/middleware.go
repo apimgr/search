@@ -2,12 +2,17 @@ package server
 
 import (
 	"compress/gzip"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
+	"path"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -491,15 +496,55 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 }
 
 // Recovery middleware recovers from panics
+// Per AI.md PART 9: All panics must be safely recovered and logged with context
 func (m *Middleware) Recovery(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
-				log.Printf("PANIC: %v", err)
+				// Safely convert panic value to string (handles all types)
+				var errMsg string
+				switch v := err.(type) {
+				case string:
+					errMsg = v
+				case error:
+					errMsg = v.Error()
+				default:
+					errMsg = fmt.Sprintf("%v", v)
+				}
+
+				// Get RequestID if available
+				requestID := r.Header.Get("X-Request-ID")
+
+				// Per AI.md PART 7-9: Structured logging for recovery middleware
+				// Use slog for structured logging with all context
+				attrs := []slog.Attr{
+					slog.String("error", errMsg),
+					slog.String("method", r.Method),
+					slog.String("path", r.URL.Path),
+					slog.String("remote_addr", r.RemoteAddr),
+					slog.String("user_agent", r.UserAgent()),
+				}
+				if requestID != "" {
+					attrs = append(attrs, slog.String("request_id", requestID))
+				}
+
+				// Include stack trace in development mode
+				if m.config.Server.Mode == "development" || m.config.IsDebug() {
+					attrs = append(attrs, slog.String("stack", string(debug.Stack())))
+				}
+
+				slog.Error("PANIC recovered", slog.Any("attrs", attrs))
+
+				// Also log to standard log for backward compatibility
+				if requestID != "" {
+					log.Printf("PANIC (request_id=%s): %s", requestID, errMsg)
+				} else {
+					log.Printf("PANIC: %s", errMsg)
+				}
 
 				// In development mode, show detailed error
 				if m.config.Server.Mode == "development" {
-					http.Error(w, "Internal Server Error: "+string(err.(string)), http.StatusInternalServerError)
+					http.Error(w, "Internal Server Error: "+errMsg, http.StatusInternalServerError)
 					return
 				}
 
@@ -699,8 +744,11 @@ func (m *Middleware) MaintenanceMode(handler MaintenanceHandler) func(http.Handl
 			}
 
 			// Return maintenance page
+			// Per AI.md PART 5 line 5488-5492: Maintenance mode headers
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.Header().Set("Retry-After", "300")
+			w.Header().Set("Retry-After", "30")
+			w.Header().Set("X-Maintenance-Mode", "true")
+			w.Header().Set("X-Maintenance-Reason", "maintenance")
 			w.WriteHeader(http.StatusServiceUnavailable)
 
 			message := handler.GetMessage()
@@ -763,4 +811,420 @@ func (m *Middleware) DegradedMode(handler MaintenanceHandler) func(http.Handler)
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// URLNormalizeMiddleware normalizes URLs for consistent routing
+// Per AI.md PART 16: Removes trailing slashes (except for root "/"), redirects to canonical URL
+// This middleware MUST be FIRST in the chain - before PathSecurityMiddleware
+func URLNormalizeMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p := r.URL.Path
+
+		// Root path "/" stays as-is
+		if p == "/" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Remove trailing slash (canonical form: no trailing slash)
+		if strings.HasSuffix(p, "/") {
+			// Exception: explicit file requests (e.g., /dir/index.html)
+			lastSlash := strings.LastIndex(p, "/")
+			if lastSlash >= 0 && !strings.Contains(p[lastSlash:], ".") {
+				canonical := strings.TrimSuffix(p, "/")
+				// Preserve query string
+				if r.URL.RawQuery != "" {
+					canonical += "?" + r.URL.RawQuery
+				}
+				http.Redirect(w, r, canonical, http.StatusMovedPermanently)
+				return
+			}
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// TargetType represents the context type extracted from URL path
+// Per AI.md PART 11: Server-Side Context from URL (NON-NEGOTIABLE)
+type TargetType int
+
+const (
+	TargetUnknown     TargetType = iota // Unknown/invalid target
+	TargetPublic                        // Public routes (/, /api/v1/, project-specific like /search)
+	TargetServerPages                   // Server pages - about, help, contact, privacy (/server/*)
+	TargetAuth                          // Auth flows (/auth/*)
+	TargetCurrentUser                   // Current user from token (/users/*)
+	TargetUser                          // Specific user (/users/{username}/*)
+	TargetOrg                           // Organization (/orgs/{slug}/*)
+	TargetAdmin                         // Server admin panel (/admin/*)
+	TargetAdminServer                   // Server settings within admin (/admin/server/*)
+)
+
+// String returns the string representation of TargetType
+func (t TargetType) String() string {
+	switch t {
+	case TargetPublic:
+		return "public"
+	case TargetServerPages:
+		return "server"
+	case TargetAuth:
+		return "auth"
+	case TargetCurrentUser:
+		return "current_user"
+	case TargetUser:
+		return "user"
+	case TargetOrg:
+		return "org"
+	case TargetAdmin:
+		return "admin"
+	case TargetAdminServer:
+		return "admin_server"
+	default:
+		return "unknown"
+	}
+}
+
+// RequestContext holds context extracted from URL path
+// Per AI.md PART 11: Context is determined from URL path, NOT headers
+type RequestContext struct {
+	Type TargetType
+	Name string // Username or org slug when applicable
+}
+
+// ContextMiddleware extracts context from URL path and validates token access
+// Per AI.md PART 11: Routes are always URL-scoped. Context is determined from URL path.
+func (m *Middleware) ContextMiddleware(adminPath string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Extract context from URL path
+			ctx := extractContextFromPath(r.URL.Path, adminPath)
+
+			// Store in request context for downstream handlers
+			r = r.WithContext(context.WithValue(r.Context(), "target_context", ctx))
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// extractContextFromPath determines context from URL path
+// Per AI.md PART 11 line 11314-11365
+func extractContextFromPath(urlPath, adminPath string) *RequestContext {
+	// Normalize admin path
+	if adminPath == "" {
+		adminPath = "admin"
+	}
+	adminPath = strings.TrimPrefix(adminPath, "/")
+
+	// Remove leading slash for easier parsing
+	path := strings.TrimPrefix(urlPath, "/")
+	parts := strings.Split(path, "/")
+
+	if len(parts) == 0 || parts[0] == "" {
+		return &RequestContext{Type: TargetPublic}
+	}
+
+	// Check for API routes
+	if parts[0] == "api" {
+		if len(parts) < 2 {
+			return &RequestContext{Type: TargetPublic}
+		}
+		// Skip API version (v1, v2, etc.)
+		if len(parts) < 3 {
+			return &RequestContext{Type: TargetPublic}
+		}
+		parts = parts[2:] // Remove "api" and version
+		if len(parts) == 0 {
+			return &RequestContext{Type: TargetPublic}
+		}
+	}
+
+	switch parts[0] {
+	case "server":
+		// /server/* or /api/v1/server/* - public server pages (about, help, contact, privacy)
+		return &RequestContext{Type: TargetServerPages}
+	case "auth":
+		// /auth/* or /api/v1/auth/* - authentication flows (public)
+		return &RequestContext{Type: TargetAuth}
+	case "users":
+		if len(parts) > 1 && parts[1] != "" {
+			// /users/{username}/* - specific user
+			return &RequestContext{Type: TargetUser, Name: parts[1]}
+		}
+		// /users/* - current user (from token)
+		return &RequestContext{Type: TargetCurrentUser}
+	case "orgs":
+		if len(parts) < 2 || parts[1] == "" {
+			return &RequestContext{Type: TargetPublic} // Invalid org route
+		}
+		// /orgs/{slug}/*
+		return &RequestContext{Type: TargetOrg, Name: parts[1]}
+	case adminPath:
+		// Check for server settings within admin
+		if len(parts) > 1 && parts[1] == "server" {
+			// /admin/server/* - server settings
+			return &RequestContext{Type: TargetAdminServer}
+		}
+		// /admin/* - admin panel
+		return &RequestContext{Type: TargetAdmin}
+	default:
+		// Project-specific public routes (e.g., /search, /healthz)
+		return &RequestContext{Type: TargetPublic}
+	}
+}
+
+// GetRequestContext retrieves the request context from the request
+func GetRequestContext(r *http.Request) *RequestContext {
+	if ctx := r.Context().Value("target_context"); ctx != nil {
+		if rc, ok := ctx.(*RequestContext); ok {
+			return rc
+		}
+	}
+	return &RequestContext{Type: TargetUnknown}
+}
+
+// TokenType represents the type of API token
+// Per AI.md PART 11: Token prefixes (NON-NEGOTIABLE)
+type TokenType int
+
+const (
+	TokenTypeUnknown  TokenType = iota
+	TokenTypeAdmin              // adm_ prefix
+	TokenTypeUser               // usr_ prefix
+	TokenTypeOrg                // org_ prefix
+	TokenTypeAdminAgt           // adm_agt_ prefix (admin agent)
+	TokenTypeUserAgt            // usr_agt_ prefix (user agent)
+	TokenTypeOrgAgt             // org_agt_ prefix (org agent)
+)
+
+// TokenInfo holds validated token information
+// Per AI.md PART 11: Token validation
+type TokenInfo struct {
+	Type     TokenType
+	OwnerID  int64  // admin.id, user.id, or org.id
+	Prefix   string // First 8 chars for display
+	Scope    string // global, read-write, read
+	Username string // For user tokens, the associated username
+	OrgSlug  string // For org tokens, the specific org slug
+}
+
+// getTokenFromRequest extracts the token from Authorization header or cookie
+// Per AI.md PART 11: Token validation
+func getTokenFromRequest(r *http.Request) string {
+	// Check Authorization header first (Bearer token)
+	auth := r.Header.Get("Authorization")
+	if strings.HasPrefix(auth, "Bearer ") {
+		return strings.TrimPrefix(auth, "Bearer ")
+	}
+
+	// Check X-API-Key header
+	if apiKey := r.Header.Get("X-API-Key"); apiKey != "" {
+		return apiKey
+	}
+
+	// Check query parameter (for debugging/testing only)
+	if token := r.URL.Query().Get("token"); token != "" {
+		return token
+	}
+
+	return ""
+}
+
+// parseTokenType determines the token type from prefix
+// Per AI.md PART 11 lines 11078-11136
+func parseTokenType(token string) TokenType {
+	// Check compound agent prefixes first (adm_agt_, usr_agt_, org_agt_)
+	if strings.HasPrefix(token, "adm_agt_") {
+		return TokenTypeAdminAgt
+	}
+	if strings.HasPrefix(token, "usr_agt_") {
+		return TokenTypeUserAgt
+	}
+	if strings.HasPrefix(token, "org_agt_") {
+		return TokenTypeOrgAgt
+	}
+
+	// Standard single-prefix tokens
+	if strings.HasPrefix(token, "adm_") {
+		return TokenTypeAdmin
+	}
+	if strings.HasPrefix(token, "usr_") {
+		return TokenTypeUser
+	}
+	if strings.HasPrefix(token, "org_") {
+		return TokenTypeOrg
+	}
+
+	return TokenTypeUnknown
+}
+
+// ErrNoAccess is returned when token lacks access to requested context
+var ErrNoAccess = fmt.Errorf("no access to requested resource")
+
+// ErrInvalidToken is returned for malformed tokens
+var ErrInvalidToken = fmt.Errorf("invalid token format")
+
+// validateTokenAccess validates that a token has access to the given context
+// Per AI.md PART 11 lines 11251-11262: Token scope determines allowed access
+func validateTokenAccess(tokenType TokenType, ctx *RequestContext) error {
+	// Public routes are always accessible
+	if ctx.Type == TargetPublic || ctx.Type == TargetServerPages || ctx.Type == TargetAuth {
+		return nil
+	}
+
+	switch tokenType {
+	case TokenTypeAdmin:
+		// Admin tokens can access admin panel and server settings
+		if ctx.Type == TargetAdmin || ctx.Type == TargetAdminServer {
+			return nil
+		}
+		return ErrNoAccess
+
+	case TokenTypeUser:
+		// User tokens can access user routes and orgs they belong to
+		// Note: Actual org membership validation happens in the handler
+		if ctx.Type == TargetCurrentUser || ctx.Type == TargetUser || ctx.Type == TargetOrg {
+			return nil
+		}
+		return ErrNoAccess
+
+	case TokenTypeOrg:
+		// Org tokens can only access their specific org
+		// Note: Specific org validation happens in the handler
+		if ctx.Type == TargetOrg {
+			return nil
+		}
+		return ErrNoAccess
+
+	case TokenTypeAdminAgt:
+		// Admin agent tokens can access admin server agents routes
+		if ctx.Type == TargetAdminServer {
+			return nil
+		}
+		return ErrNoAccess
+
+	case TokenTypeUserAgt:
+		// User agent tokens can access user agent routes
+		if ctx.Type == TargetCurrentUser {
+			return nil
+		}
+		return ErrNoAccess
+
+	case TokenTypeOrgAgt:
+		// Org agent tokens can access their org's agent routes
+		if ctx.Type == TargetOrg {
+			return nil
+		}
+		return ErrNoAccess
+
+	case TokenTypeUnknown:
+		// Unknown token type - reject non-public routes
+		return ErrInvalidToken
+	}
+
+	return ErrNoAccess
+}
+
+// TokenValidationMiddleware validates API tokens and checks access per URL context
+// Per AI.md PART 11 lines 11282-11311: Server request handling
+func (m *Middleware) TokenValidationMiddleware(adminPath string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			token := getTokenFromRequest(r)
+			if token == "" {
+				// No token - anonymous access (if route allows)
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Parse token type from prefix
+			tokenType := parseTokenType(token)
+			if tokenType == TokenTypeUnknown {
+				http.Error(w, `{"error": "invalid token format"}`, http.StatusUnauthorized)
+				return
+			}
+
+			// Extract context from URL path
+			ctx := extractContextFromPath(r.URL.Path, adminPath)
+
+			// Validate token has access to this context
+			if err := validateTokenAccess(tokenType, ctx); err != nil {
+				if err == ErrNoAccess {
+					http.Error(w, `{"error": "no access to requested resource"}`, http.StatusForbidden)
+				} else {
+					http.Error(w, `{"error": "invalid token"}`, http.StatusUnauthorized)
+				}
+				return
+			}
+
+			// Store token type in context for downstream handlers
+			r = r.WithContext(context.WithValue(r.Context(), "token_type", tokenType))
+			r = r.WithContext(context.WithValue(r.Context(), "token", token))
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// GetTokenFromContext retrieves the token string from request context
+func GetTokenFromContext(r *http.Request) string {
+	if token := r.Context().Value("token"); token != nil {
+		if t, ok := token.(string); ok {
+			return t
+		}
+	}
+	return ""
+}
+
+// GetTokenTypeFromContext retrieves the token type from request context
+func GetTokenTypeFromContext(r *http.Request) TokenType {
+	if tt := r.Context().Value("token_type"); tt != nil {
+		if t, ok := tt.(TokenType); ok {
+			return t
+		}
+	}
+	return TokenTypeUnknown
+}
+
+// PathSecurityMiddleware normalizes paths and blocks traversal attempts
+// Per AI.md PART 5: This middleware MUST be after URLNormalizeMiddleware
+func PathSecurityMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		original := r.URL.Path
+
+		// Check both raw path and URL-decoded for traversal
+		// Note: r.URL.Path is already decoded by net/http, but check RawPath too
+		rawPath := r.URL.RawPath
+		if rawPath == "" {
+			rawPath = r.URL.Path
+		}
+
+		// Block path traversal attempts (encoded and decoded)
+		// %2e = . so %2e%2e = ..
+		if strings.Contains(original, "..") ||
+			strings.Contains(rawPath, "..") ||
+			strings.Contains(strings.ToLower(rawPath), "%2e") {
+			http.Error(w, "Bad Request", http.StatusBadRequest)
+			return
+		}
+
+		// Normalize the path
+		cleaned := path.Clean(original)
+
+		// Ensure leading slash
+		if !strings.HasPrefix(cleaned, "/") {
+			cleaned = "/" + cleaned
+		}
+
+		// Preserve trailing slash for directory paths
+		if original != "/" && strings.HasSuffix(original, "/") && !strings.HasSuffix(cleaned, "/") {
+			cleaned += "/"
+		}
+
+		// Update request
+		r.URL.Path = cleaned
+
+		next.ServeHTTP(w, r)
+	})
 }

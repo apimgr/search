@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/apimgr/search/src/models"
+	"github.com/apimgr/search/src/model"
 )
 
 // Aggregator aggregates results from multiple search engines
@@ -65,13 +65,13 @@ func NewAggregatorSimple(engines []Engine, timeout time.Duration) *Aggregator {
 }
 
 // Search performs concurrent searches across all engines
-func (a *Aggregator) Search(ctx context.Context, query *models.Query) (*models.SearchResults, error) {
+func (a *Aggregator) Search(ctx context.Context, query *model.Query) (*model.SearchResults, error) {
 	if err := query.Validate(); err != nil {
 		return nil, err
 	}
 
 	if len(a.engines) == 0 {
-		return nil, models.ErrNoEngines
+		return nil, model.ErrNoEngines
 	}
 
 	// Parse search operators from query text
@@ -101,14 +101,14 @@ func (a *Aggregator) Search(ctx context.Context, query *models.Query) (*models.S
 	// Channel for collecting results
 	type engineResult struct {
 		engine  string
-		results []models.Result
+		results []model.Result
 		err     error
 	}
 
 	// Filter engines
 	activeEngines := a.filterEngines(query)
 	if len(activeEngines) == 0 {
-		return nil, models.ErrNoEngines
+		return nil, model.ErrNoEngines
 	}
 
 	resultsChan := make(chan engineResult, len(activeEngines))
@@ -136,7 +136,7 @@ func (a *Aggregator) Search(ctx context.Context, query *models.Query) (*models.S
 	}()
 
 	// Collect all results
-	searchResults := models.NewSearchResults(query.Text, query.Category)
+	searchResults := model.NewSearchResults(query.Text, query.Category)
 	searchResults.Page = query.Page
 	searchResults.PerPage = query.PerPage
 	searchResults.SortedBy = query.SortBy
@@ -175,14 +175,14 @@ func (a *Aggregator) Search(ctx context.Context, query *models.Query) (*models.S
 	}
 
 	if len(searchResults.Results) == 0 {
-		return searchResults, models.ErrNoResults
+		return searchResults, model.ErrNoResults
 	}
 
 	return searchResults, nil
 }
 
 // applyOperators applies parsed operators to query fields
-func (a *Aggregator) applyOperators(query *models.Query, ops *SearchOperators) {
+func (a *Aggregator) applyOperators(query *model.Query, ops *SearchOperators) {
 	if ops.Site != "" && query.Site == "" {
 		query.Site = ops.Site
 	}
@@ -225,7 +225,7 @@ func (a *Aggregator) applyOperators(query *models.Query, ops *SearchOperators) {
 }
 
 // filterEngines returns engines that should be used for this query
-func (a *Aggregator) filterEngines(query *models.Query) []Engine {
+func (a *Aggregator) filterEngines(query *model.Query) []Engine {
 	var result []Engine
 
 	for _, engine := range a.engines {
@@ -269,12 +269,12 @@ func (a *Aggregator) filterEngines(query *models.Query) []Engine {
 }
 
 // applyFilters applies post-search filters to results
-func (a *Aggregator) applyFilters(results []models.Result, query *models.Query) []models.Result {
+func (a *Aggregator) applyFilters(results []model.Result, query *model.Query) []model.Result {
 	if len(results) == 0 {
 		return results
 	}
 
-	filtered := make([]models.Result, 0, len(results))
+	filtered := make([]model.Result, 0, len(results))
 
 	for _, r := range results {
 		// Site exclusion filter
@@ -323,7 +323,7 @@ func (a *Aggregator) applyFilters(results []models.Result, query *models.Query) 
 }
 
 // generateCacheKey creates a unique cache key for the query
-func (a *Aggregator) generateCacheKey(query *models.Query) string {
+func (a *Aggregator) generateCacheKey(query *model.Query) string {
 	// Include relevant query parameters
 	key := query.Text + "|" +
 		string(query.Category) + "|" +
@@ -337,9 +337,9 @@ func (a *Aggregator) generateCacheKey(query *models.Query) string {
 }
 
 // deduplicateResults removes duplicate results based on URL with improved merging
-func deduplicateResults(results []models.Result) []models.Result {
+func deduplicateResults(results []model.Result) []model.Result {
 	seen := make(map[string]int) // URL -> index in unique slice
-	unique := make([]models.Result, 0)
+	unique := make([]model.Result, 0)
 	duplicateCounts := make(map[string]int)
 	engineSources := make(map[string][]string) // URL -> list of engines
 
@@ -409,9 +409,9 @@ func deduplicateResults(results []models.Result) []models.Result {
 }
 
 // sortResults sorts results based on the specified sort order
-func sortResults(results []models.Result, sortBy models.SortOrder) {
+func sortResults(results []model.Result, sortBy model.SortOrder) {
 	switch sortBy {
-	case models.SortDate:
+	case model.SortDate:
 		// Newest first
 		sort.Slice(results, func(i, j int) bool {
 			// Results without dates go to the end
@@ -427,7 +427,7 @@ func sortResults(results []models.Result, sortBy models.SortOrder) {
 			return results[i].PublishedAt.After(results[j].PublishedAt)
 		})
 
-	case models.SortDateAsc:
+	case model.SortDateAsc:
 		// Oldest first
 		sort.Slice(results, func(i, j int) bool {
 			if results[i].PublishedAt.IsZero() && !results[j].PublishedAt.IsZero() {
@@ -442,7 +442,7 @@ func sortResults(results []models.Result, sortBy models.SortOrder) {
 			return results[i].PublishedAt.Before(results[j].PublishedAt)
 		})
 
-	case models.SortPopularity:
+	case model.SortPopularity:
 		// Most popular first (uses popularity score + view count)
 		sort.Slice(results, func(i, j int) bool {
 			popI := results[i].Popularity + float64(results[i].ViewCount)/1000
@@ -453,7 +453,7 @@ func sortResults(results []models.Result, sortBy models.SortOrder) {
 			return results[i].Score > results[j].Score // Fall back to relevance
 		})
 
-	case models.SortRandom:
+	case model.SortRandom:
 		// Shuffle results
 		rand.Shuffle(len(results), func(i, j int) {
 			results[i], results[j] = results[j], results[i]
@@ -468,6 +468,6 @@ func sortResults(results []models.Result, sortBy models.SortOrder) {
 }
 
 // rankResults sorts results by score (backwards compatible)
-func rankResults(results []models.Result) {
-	sortResults(results, models.SortRelevance)
+func rankResults(results []model.Result) {
+	sortResults(results, model.SortRelevance)
 }

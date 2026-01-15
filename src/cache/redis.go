@@ -1,366 +1,259 @@
 package cache
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"net"
-	"strconv"
-	"strings"
-	"sync"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
-// RedisCache implements Cache interface using Redis
+// RedisCache implements Cache interface using Valkey/Redis
+// Per AI.md PART 18: Uses github.com/redis/go-redis/v9
 type RedisCache struct {
-	config     *Config
-	conn       net.Conn
-	mu         sync.Mutex
-	reader     *bufio.Reader
-	connected  bool
-	stats      Stats
+	client  redis.UniversalClient
+	prefix  string
+	stats   Stats
 }
 
-// NewRedisCache creates a new Redis cache
-func NewRedisCache(cfg *Config) (*RedisCache, error) {
-	c := &RedisCache{
-		config: cfg,
-		stats:  Stats{Backend: "redis"},
-	}
+// RedisConfig holds Redis/Valkey connection configuration
+type RedisConfig struct {
+	// Type: "redis" or "valkey" (same library, just for clarity)
+	Type string
 
-	if err := c.connect(); err != nil {
-		return nil, err
-	}
+	// Connection URL (takes precedence over host/port)
+	// Format: redis://user:password@host:port/db or valkey://...
+	URL string
 
-	return c, nil
+	// Individual connection settings
+	Host     string
+	Port     int
+	Password string
+	DB       int
+
+	// Pool settings
+	PoolSize int
+	MinIdle  int
+	Timeout  time.Duration
+
+	// Key prefix
+	Prefix string
+
+	// Cluster mode
+	Cluster      bool
+	ClusterNodes []string
 }
 
-// connect establishes Redis connection
-func (c *RedisCache) connect() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	var err error
-	c.conn, err = net.DialTimeout("tcp", c.config.Address, 5*time.Second)
-	if err != nil {
-		return fmt.Errorf("failed to connect to Redis: %w", err)
-	}
-
-	c.reader = bufio.NewReader(c.conn)
-
-	// Authenticate if password is set
-	if c.config.Password != "" {
-		if err := c.sendCommand("AUTH", c.config.Password); err != nil {
-			c.conn.Close()
-			return fmt.Errorf("failed to authenticate: %w", err)
-		}
-		if _, err := c.readResponse(); err != nil {
-			c.conn.Close()
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-	}
-
-	// Select database
-	if c.config.DB > 0 {
-		if err := c.sendCommand("SELECT", strconv.Itoa(c.config.DB)); err != nil {
-			c.conn.Close()
-			return fmt.Errorf("failed to select database: %w", err)
-		}
-		if _, err := c.readResponse(); err != nil {
-			c.conn.Close()
-			return fmt.Errorf("database selection failed: %w", err)
+// NewRedisCache creates a new Redis/Valkey cache
+func NewRedisCache(cfg *RedisConfig) (*RedisCache, error) {
+	if cfg == nil {
+		cfg = &RedisConfig{
+			Host:     "localhost",
+			Port:     6379,
+			DB:       0,
+			PoolSize: 10,
+			MinIdle:  2,
+			Timeout:  5 * time.Second,
+			Prefix:   "apimgr:",
 		}
 	}
 
-	c.connected = true
-	c.stats.Connected = true
-	return nil
-}
+	var client redis.UniversalClient
 
-// sendCommand sends a Redis command
-func (c *RedisCache) sendCommand(args ...string) error {
-	cmd := fmt.Sprintf("*%d\r\n", len(args))
-	for _, arg := range args {
-		cmd += fmt.Sprintf("$%d\r\n%s\r\n", len(arg), arg)
-	}
-	_, err := c.conn.Write([]byte(cmd))
-	return err
-}
-
-// readResponse reads a Redis response
-func (c *RedisCache) readResponse() (interface{}, error) {
-	line, err := c.reader.ReadString('\n')
-	if err != nil {
-		return nil, err
-	}
-	line = strings.TrimSuffix(line, "\r\n")
-
-	if len(line) == 0 {
-		return nil, fmt.Errorf("empty response")
-	}
-
-	switch line[0] {
-	case '+': // Simple string
-		return line[1:], nil
-	case '-': // Error
-		return nil, fmt.Errorf("redis error: %s", line[1:])
-	case ':': // Integer
-		return strconv.ParseInt(line[1:], 10, 64)
-	case '$': // Bulk string
-		length, err := strconv.Atoi(line[1:])
+	if cfg.Cluster && len(cfg.ClusterNodes) > 0 {
+		// Cluster mode
+		client = redis.NewClusterClient(&redis.ClusterOptions{
+			Addrs:        cfg.ClusterNodes,
+			Password:     cfg.Password,
+			PoolSize:     cfg.PoolSize,
+			MinIdleConns: cfg.MinIdle,
+			DialTimeout:  cfg.Timeout,
+			ReadTimeout:  cfg.Timeout,
+			WriteTimeout: cfg.Timeout,
+		})
+	} else if cfg.URL != "" {
+		// URL-based connection
+		opts, err := redis.ParseURL(cfg.URL)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to parse Redis URL: %w", err)
 		}
-		// Nil value
-		if length == -1 {
-			return nil, nil
+		if cfg.PoolSize > 0 {
+			opts.PoolSize = cfg.PoolSize
 		}
-		data := make([]byte, length+2)
-		_, err = c.reader.Read(data)
-		if err != nil {
-			return nil, err
+		if cfg.MinIdle > 0 {
+			opts.MinIdleConns = cfg.MinIdle
 		}
-		return data[:length], nil
-	case '*': // Array
-		count, err := strconv.Atoi(line[1:])
-		if err != nil {
-			return nil, err
-		}
-		if count == -1 {
-			return nil, nil
-		}
-		result := make([]interface{}, count)
-		for i := 0; i < count; i++ {
-			result[i], err = c.readResponse()
-			if err != nil {
-				return nil, err
-			}
-		}
-		return result, nil
-	default:
-		return nil, fmt.Errorf("unknown response type: %c", line[0])
+		client = redis.NewClient(opts)
+	} else {
+		// Host/port based connection
+		addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+		client = redis.NewClient(&redis.Options{
+			Addr:         addr,
+			Password:     cfg.Password,
+			DB:           cfg.DB,
+			PoolSize:     cfg.PoolSize,
+			MinIdleConns: cfg.MinIdle,
+			DialTimeout:  cfg.Timeout,
+			ReadTimeout:  cfg.Timeout,
+			WriteTimeout: cfg.Timeout,
+		})
 	}
+
+	// Test connection
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
+	defer cancel()
+
+	if err := client.Ping(ctx).Err(); err != nil {
+		return nil, fmt.Errorf("failed to connect to Redis: %w", err)
+	}
+
+	return &RedisCache{
+		client: client,
+		prefix: cfg.Prefix,
+		stats:  Stats{Backend: cfg.Type, Connected: true},
+	}, nil
+}
+
+// prefixKey adds the configured prefix to a key
+func (c *RedisCache) prefixKey(key string) string {
+	return c.prefix + key
 }
 
 // Get retrieves a value from Redis
 func (c *RedisCache) Get(ctx context.Context, key string) ([]byte, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if !c.connected {
-		if err := c.connect(); err != nil {
-			c.stats.Misses++
-			return nil, err
-		}
-	}
-
-	if err := c.sendCommand("GET", key); err != nil {
-		c.stats.Misses++
-		return nil, err
-	}
-
-	resp, err := c.readResponse()
+	val, err := c.client.Get(ctx, c.prefixKey(key)).Bytes()
 	if err != nil {
+		if err == redis.Nil {
+			c.stats.Misses++
+			return nil, fmt.Errorf("key not found: %s", key)
+		}
 		c.stats.Misses++
 		return nil, err
 	}
-
-	if resp == nil {
-		c.stats.Misses++
-		return nil, fmt.Errorf("key not found: %s", key)
-	}
-
 	c.stats.Hits++
-	return resp.([]byte), nil
+	return val, nil
 }
 
 // Set stores a value in Redis with TTL
 func (c *RedisCache) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if !c.connected {
-		if err := c.connect(); err != nil {
-			return err
-		}
-	}
-
-	if ttl > 0 {
-		if err := c.sendCommand("SETEX", key, strconv.Itoa(int(ttl.Seconds())), string(value)); err != nil {
-			return err
-		}
-	} else {
-		if err := c.sendCommand("SET", key, string(value)); err != nil {
-			return err
-		}
-	}
-
-	_, err := c.readResponse()
-	return err
+	return c.client.Set(ctx, c.prefixKey(key), value, ttl).Err()
 }
 
 // Delete removes a value from Redis
 func (c *RedisCache) Delete(ctx context.Context, key string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if !c.connected {
-		if err := c.connect(); err != nil {
-			return err
-		}
-	}
-
-	if err := c.sendCommand("DEL", key); err != nil {
-		return err
-	}
-
-	_, err := c.readResponse()
-	return err
+	return c.client.Del(ctx, c.prefixKey(key)).Err()
 }
 
 // Exists checks if a key exists in Redis
 func (c *RedisCache) Exists(ctx context.Context, key string) (bool, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if !c.connected {
-		if err := c.connect(); err != nil {
-			return false, err
-		}
-	}
-
-	if err := c.sendCommand("EXISTS", key); err != nil {
-		return false, err
-	}
-
-	resp, err := c.readResponse()
+	count, err := c.client.Exists(ctx, c.prefixKey(key)).Result()
 	if err != nil {
 		return false, err
-	}
-
-	count, ok := resp.(int64)
-	if !ok {
-		return false, fmt.Errorf("unexpected response type")
 	}
 	return count > 0, nil
 }
 
 // Clear removes all keys matching a pattern
 func (c *RedisCache) Clear(ctx context.Context, pattern string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	// Use SCAN for production-safe key iteration
+	iter := c.client.Scan(ctx, 0, c.prefixKey(pattern), 100).Iterator()
+	var keys []string
 
-	if !c.connected {
-		if err := c.connect(); err != nil {
-			return err
+	for iter.Next(ctx) {
+		keys = append(keys, iter.Val())
+		// Delete in batches
+		if len(keys) >= 100 {
+			if err := c.client.Del(ctx, keys...).Err(); err != nil {
+				return err
+			}
+			keys = keys[:0]
 		}
 	}
 
-	// Use KEYS to find matching keys (for small datasets)
-	// For production with large datasets, consider SCAN
-	if err := c.sendCommand("KEYS", pattern); err != nil {
+	if err := iter.Err(); err != nil {
 		return err
 	}
 
-	resp, err := c.readResponse()
-	if err != nil {
-		return err
+	// Delete remaining keys
+	if len(keys) > 0 {
+		return c.client.Del(ctx, keys...).Err()
 	}
 
-	keys, ok := resp.([]interface{})
-	if !ok || len(keys) == 0 {
-		return nil
-	}
-
-	// Delete all matching keys
-	args := make([]string, len(keys)+1)
-	args[0] = "DEL"
-	for i, k := range keys {
-		args[i+1] = string(k.([]byte))
-	}
-
-	if err := c.sendCommand(args...); err != nil {
-		return err
-	}
-
-	_, err = c.readResponse()
-	return err
+	return nil
 }
 
 // Close closes the Redis connection
 func (c *RedisCache) Close() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.connected = false
 	c.stats.Connected = false
-	if c.conn != nil {
-		return c.conn.Close()
-	}
-	return nil
+	return c.client.Close()
 }
 
 // Ping checks Redis connectivity
 func (c *RedisCache) Ping(ctx context.Context) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if !c.connected {
-		if err := c.connect(); err != nil {
-			return err
-		}
-	}
-
-	if err := c.sendCommand("PING"); err != nil {
-		return err
-	}
-
-	resp, err := c.readResponse()
-	if err != nil {
-		return err
-	}
-
-	if resp != "PONG" {
-		return fmt.Errorf("unexpected ping response: %v", resp)
-	}
-	return nil
+	return c.client.Ping(ctx).Err()
 }
 
 // Stats returns cache statistics
 func (c *RedisCache) Stats(ctx context.Context) (*Stats, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	stats := c.stats // Copy base stats
 
-	if !c.connected {
-		return &stats, nil
+	// Get key count
+	dbSize, err := c.client.DBSize(ctx).Result()
+	if err == nil {
+		stats.Keys = dbSize
 	}
 
-	// Get DBSIZE for key count
-	if err := c.sendCommand("DBSIZE"); err == nil {
-		if resp, err := c.readResponse(); err == nil {
-			if count, ok := resp.(int64); ok {
-				stats.Keys = count
-			}
-		}
-	}
-
-	// Get INFO memory for memory usage
-	if err := c.sendCommand("INFO", "memory"); err == nil {
-		if resp, err := c.readResponse(); err == nil {
-			if info, ok := resp.([]byte); ok {
-				lines := strings.Split(string(info), "\r\n")
-				for _, line := range lines {
-					if strings.HasPrefix(line, "used_memory:") {
-						mem, _ := strconv.ParseInt(strings.TrimPrefix(line, "used_memory:"), 10, 64)
-						stats.MemoryUsed = mem
-						break
-					}
-				}
-			}
+	// Get memory usage from INFO
+	info, err := c.client.Info(ctx, "memory").Result()
+	if err == nil {
+		// Parse used_memory from INFO output
+		// Format: "used_memory:12345\r\n"
+		var memUsed int64
+		fmt.Sscanf(info, "# Memory\r\nused_memory:%d", &memUsed)
+		if memUsed > 0 {
+			stats.MemoryUsed = memUsed
 		}
 	}
 
 	return &stats, nil
+}
+
+// SetNX sets a key only if it doesn't exist (for distributed locking)
+func (c *RedisCache) SetNX(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
+	return c.client.SetNX(ctx, c.prefixKey(key), value, ttl).Result()
+}
+
+// Publish publishes a message to a channel (for pub/sub)
+func (c *RedisCache) Publish(ctx context.Context, channel string, message []byte) error {
+	return c.client.Publish(ctx, c.prefix+channel, message).Err()
+}
+
+// Subscribe subscribes to a channel
+func (c *RedisCache) Subscribe(ctx context.Context, channel string) *redis.PubSub {
+	return c.client.Subscribe(ctx, c.prefix+channel)
+}
+
+// Incr increments a key
+func (c *RedisCache) Incr(ctx context.Context, key string) (int64, error) {
+	return c.client.Incr(ctx, c.prefixKey(key)).Result()
+}
+
+// Expire sets TTL on an existing key
+func (c *RedisCache) Expire(ctx context.Context, key string, ttl time.Duration) error {
+	return c.client.Expire(ctx, c.prefixKey(key), ttl).Err()
+}
+
+// HSet sets a hash field
+func (c *RedisCache) HSet(ctx context.Context, key, field string, value []byte) error {
+	return c.client.HSet(ctx, c.prefixKey(key), field, value).Err()
+}
+
+// HGet gets a hash field
+func (c *RedisCache) HGet(ctx context.Context, key, field string) ([]byte, error) {
+	return c.client.HGet(ctx, c.prefixKey(key), field).Bytes()
+}
+
+// HGetAll gets all fields in a hash
+func (c *RedisCache) HGetAll(ctx context.Context, key string) (map[string]string, error) {
+	return c.client.HGetAll(ctx, c.prefixKey(key)).Result()
 }

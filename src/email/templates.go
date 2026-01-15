@@ -28,6 +28,15 @@ const (
 	TemplateBackupCompleted   TemplateType = "backup_completed"
 	TemplateUpdateAvailable   TemplateType = "update_available"
 	TemplateMaintenanceNotice TemplateType = "maintenance_notice"
+	// Additional templates per AI.md PART 18
+	TemplateMFAReminder       TemplateType = "mfa_reminder"
+	TemplateBackupFailed      TemplateType = "backup_failed"
+	TemplateSSLExpiring       TemplateType = "ssl_expiring"
+	TemplateSSLRenewed        TemplateType = "ssl_renewed"
+	TemplateSchedulerError    TemplateType = "scheduler_error"
+	TemplateBreachNotification TemplateType = "breach_notification"
+	TemplateBreachAdminAlert  TemplateType = "breach_admin_alert"
+	TemplateTest              TemplateType = "test"
 )
 
 // TemplateData holds common template data
@@ -201,6 +210,84 @@ type MaintenanceNoticeData struct {
 	Duration     string
 	Reason       string
 	AffectedServices []string
+}
+
+// MFAReminderData holds data for MFA reminder email
+// Per AI.md PART 18: Gentle prompt to enable MFA
+type MFAReminderData struct {
+	*TemplateData
+	Username   string
+	SetupLink  string
+	DismissLink string
+}
+
+// BackupFailedData holds data for backup failure notification
+// Per AI.md PART 18: backup_failed template
+type BackupFailedData struct {
+	*TemplateData
+	BackupName  string
+	Error       string
+	FailedAt    time.Time
+}
+
+// SSLExpiringData holds data for SSL expiration warning
+// Per AI.md PART 18: ssl_expiring template
+type SSLExpiringData struct {
+	*TemplateData
+	Domain      string
+	ExpiresAt   time.Time
+	DaysLeft    int
+	RenewLink   string
+}
+
+// SSLRenewedData holds data for SSL renewal confirmation
+// Per AI.md PART 18: ssl_renewed template
+type SSLRenewedData struct {
+	*TemplateData
+	Domain      string
+	RenewedAt   time.Time
+	ValidUntil  time.Time
+}
+
+// SchedulerErrorData holds data for scheduler error notification
+// Per AI.md PART 18: scheduler_error template
+type SchedulerErrorData struct {
+	*TemplateData
+	TaskName    string
+	Error       string
+	FailedAt    time.Time
+	TaskDetails map[string]string
+}
+
+// BreachNotificationData holds data for breach notification to users
+// Per AI.md PART 18: breach_notification template
+type BreachNotificationData struct {
+	*TemplateData
+	Username         string
+	BreachDate       time.Time
+	BreachDescription string
+	AffectedData     []string
+	RecommendedActions []string
+	SupportContact   string
+}
+
+// BreachAdminAlertData holds data for breach alert to admins
+// Per AI.md PART 18: breach_admin_alert template
+type BreachAdminAlertData struct {
+	*TemplateData
+	Severity         string
+	DetectedAt       time.Time
+	BreachDescription string
+	AffectedUsers    int
+	IPAddresses      []string
+	ActionRequired   string
+}
+
+// TestEmailData holds data for test email
+// Per AI.md PART 18: test template
+type TestEmailData struct {
+	*TemplateData
+	SentAt      time.Time
 }
 
 // EmailTemplate manages email template rendering
@@ -689,6 +776,224 @@ var rawTemplates = map[TemplateType]string{
     </div>
 </body>
 </html>`,
+
+	// Per AI.md PART 18: Additional required templates
+	TemplateMFAReminder: `Secure Your Account - {{.SiteName}}
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: #1a1a2e; color: #ffffff; padding: 30px; border-radius: 8px;">
+        <h1 style="color: #00d9ff; margin-top: 0;">Protect Your Account</h1>
+        <p>Hello {{.Username}},</p>
+        <p>Your account doesn't have two-factor authentication (2FA) enabled. Adding 2FA significantly improves your account security.</p>
+        <p style="background: #00d9ff22; border-left: 4px solid #00d9ff; padding: 15px; margin: 20px 0;">
+            Two-factor authentication adds an extra layer of security by requiring a code from your phone in addition to your password.
+        </p>
+        <p><a href="{{.SetupLink}}" style="display: inline-block; background: #00d9ff; color: #1a1a2e; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">Enable 2FA Now</a></p>
+        <p style="color: #888; font-size: 14px; margin-top: 20px;">
+            <a href="{{.DismissLink}}" style="color: #888;">Don't remind me again</a>
+        </p>
+        <hr style="border: 1px solid #333; margin: 20px 0;">
+        <p style="color: #888; font-size: 12px;">&copy; {{.Year}} {{.SiteName}}</p>
+    </div>
+</body>
+</html>`,
+
+	TemplateBackupFailed: `Backup Failed - {{.SiteName}}
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: #1a1a2e; color: #ffffff; padding: 30px; border-radius: 8px;">
+        <h1 style="color: #ff6b6b; margin-top: 0;">Backup Failed</h1>
+        <p>A backup of your {{.SiteName}} data has failed.</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            <tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">Backup Name</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{.BackupName}}</td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">Failed At</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{.FailedAt.Format "Jan 2, 2006 3:04 PM"}}</td></tr>
+        </table>
+        <p><strong>Error:</strong></p>
+        <pre style="background: #0f0f1a; padding: 15px; border-radius: 4px; overflow-x: auto; color: #ff6b6b;">{{.Error}}</pre>
+        <p style="background: #ff6b6b22; border-left: 4px solid #ff6b6b; padding: 15px; margin: 20px 0;">
+            Please check your backup configuration and ensure sufficient disk space is available.
+        </p>
+        <hr style="border: 1px solid #333; margin: 20px 0;">
+        <p style="color: #888; font-size: 12px;">&copy; {{.Year}} {{.SiteName}}</p>
+    </div>
+</body>
+</html>`,
+
+	TemplateSSLExpiring: `SSL Certificate Expiring - {{.SiteName}}
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: #1a1a2e; color: #ffffff; padding: 30px; border-radius: 8px;">
+        <h1 style="color: #ffd93d; margin-top: 0;">SSL Certificate Expiring</h1>
+        <p>Your SSL certificate is expiring soon and needs to be renewed.</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            <tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">Domain</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{.Domain}}</td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">Expires</td><td style="padding: 8px; border-bottom: 1px solid #333; color: {{if le .DaysLeft 7}}#ff6b6b{{else}}#ffd93d{{end}};">{{.ExpiresAt.Format "Jan 2, 2006"}} ({{.DaysLeft}} days)</td></tr>
+        </table>
+        <p style="background: #ffd93d22; border-left: 4px solid #ffd93d; padding: 15px; margin: 20px 0;">
+            {{if le .DaysLeft 3}}URGENT: Your certificate expires very soon. Renew immediately to avoid service disruption.{{else}}Please renew your certificate before it expires to ensure uninterrupted secure connections.{{end}}
+        </p>
+        {{if .RenewLink}}<p><a href="{{.RenewLink}}" style="display: inline-block; background: #00d9ff; color: #1a1a2e; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">Renew Certificate</a></p>{{end}}
+        <hr style="border: 1px solid #333; margin: 20px 0;">
+        <p style="color: #888; font-size: 12px;">&copy; {{.Year}} {{.SiteName}}</p>
+    </div>
+</body>
+</html>`,
+
+	TemplateSSLRenewed: `SSL Certificate Renewed - {{.SiteName}}
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: #1a1a2e; color: #ffffff; padding: 30px; border-radius: 8px;">
+        <h1 style="color: #00ff88; margin-top: 0;">SSL Certificate Renewed</h1>
+        <p>Your SSL certificate has been successfully renewed.</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            <tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">Domain</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{.Domain}}</td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">Renewed At</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{.RenewedAt.Format "Jan 2, 2006 3:04 PM"}}</td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">Valid Until</td><td style="padding: 8px; border-bottom: 1px solid #333; color: #00ff88;">{{.ValidUntil.Format "Jan 2, 2006"}}</td></tr>
+        </table>
+        <p style="background: #00ff8822; border-left: 4px solid #00ff88; padding: 15px; margin: 20px 0;">
+            Your secure connections will continue without interruption.
+        </p>
+        <hr style="border: 1px solid #333; margin: 20px 0;">
+        <p style="color: #888; font-size: 12px;">&copy; {{.Year}} {{.SiteName}}</p>
+    </div>
+</body>
+</html>`,
+
+	TemplateSchedulerError: `Scheduled Task Failed - {{.SiteName}}
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: #1a1a2e; color: #ffffff; padding: 30px; border-radius: 8px;">
+        <h1 style="color: #ff6b6b; margin-top: 0;">Scheduled Task Failed</h1>
+        <p>A scheduled task has failed to execute successfully.</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            <tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">Task Name</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{.TaskName}}</td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">Failed At</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{.FailedAt.Format "Jan 2, 2006 3:04 PM"}}</td></tr>
+        </table>
+        <p><strong>Error:</strong></p>
+        <pre style="background: #0f0f1a; padding: 15px; border-radius: 4px; overflow-x: auto; color: #ff6b6b;">{{.Error}}</pre>
+        {{if .TaskDetails}}
+        <p><strong>Task Details:</strong></p>
+        <ul>
+        {{range $key, $value := .TaskDetails}}
+            <li><strong>{{$key}}:</strong> {{$value}}</li>
+        {{end}}
+        </ul>
+        {{end}}
+        <p style="background: #ff6b6b22; border-left: 4px solid #ff6b6b; padding: 15px; margin: 20px 0;">
+            Please review the task configuration and check system logs for more details.
+        </p>
+        <hr style="border: 1px solid #333; margin: 20px 0;">
+        <p style="color: #888; font-size: 12px;">{{.SiteName}} Scheduler System</p>
+    </div>
+</body>
+</html>`,
+
+	TemplateBreachNotification: `Important Security Notice - {{.SiteName}}
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: #1a1a2e; color: #ffffff; padding: 30px; border-radius: 8px;">
+        <h1 style="color: #ff6b6b; margin-top: 0;">Important Security Notice</h1>
+        <p>Hello {{.Username}},</p>
+        <p>We are writing to inform you about a security incident that may have affected your account.</p>
+        <p><strong>What Happened:</strong></p>
+        <p>{{.BreachDescription}}</p>
+        <p><strong>Date of Incident:</strong> {{.BreachDate.Format "January 2, 2006"}}</p>
+        {{if .AffectedData}}
+        <p><strong>Information Potentially Affected:</strong></p>
+        <ul>
+        {{range .AffectedData}}
+            <li>{{.}}</li>
+        {{end}}
+        </ul>
+        {{end}}
+        <p style="background: #ff6b6b22; border-left: 4px solid #ff6b6b; padding: 15px; margin: 20px 0;">
+            <strong>Recommended Actions:</strong>
+            {{if .RecommendedActions}}
+            <ul>
+            {{range .RecommendedActions}}
+                <li>{{.}}</li>
+            {{end}}
+            </ul>
+            {{else}}
+            <ul>
+                <li>Change your password immediately</li>
+                <li>Enable two-factor authentication if not already enabled</li>
+                <li>Review your recent account activity</li>
+            </ul>
+            {{end}}
+        </p>
+        <p>We take the security of your information seriously and have taken steps to prevent similar incidents in the future.</p>
+        {{if .SupportContact}}<p>If you have questions, please contact us at {{.SupportContact}}.</p>{{end}}
+        <hr style="border: 1px solid #333; margin: 20px 0;">
+        <p style="color: #888; font-size: 12px;">&copy; {{.Year}} {{.SiteName}}</p>
+    </div>
+</body>
+</html>`,
+
+	TemplateBreachAdminAlert: `[{{.Severity}}] Security Breach Detected - {{.SiteName}}
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: #1a1a2e; color: #ffffff; padding: 30px; border-radius: 8px;">
+        <h1 style="color: #ff6b6b; margin-top: 0;">Security Breach Detected</h1>
+        <p><strong>Severity:</strong> <span style="color: {{if eq .Severity "CRITICAL"}}#ff6b6b{{else if eq .Severity "HIGH"}}#ffd93d{{else}}#00d9ff{{end}}; font-weight: bold;">{{.Severity}}</span></p>
+        <p><strong>Detected:</strong> {{.DetectedAt.Format "Jan 2, 2006 3:04:05 PM"}}</p>
+        <p><strong>Description:</strong></p>
+        <div style="background: #0f0f1a; padding: 15px; border-radius: 4px;">{{.BreachDescription}}</div>
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            <tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">Affected Users</td><td style="padding: 8px; border-bottom: 1px solid #333; color: #ff6b6b;"><strong>{{.AffectedUsers}}</strong></td></tr>
+        </table>
+        {{if .IPAddresses}}
+        <p><strong>Source IP Addresses:</strong></p>
+        <ul style="font-family: monospace;">
+        {{range .IPAddresses}}
+            <li>{{.}}</li>
+        {{end}}
+        </ul>
+        {{end}}
+        <p style="background: #ff6b6b; color: #ffffff; padding: 15px; margin: 20px 0; border-radius: 4px;">
+            <strong>ACTION REQUIRED:</strong> {{.ActionRequired}}
+        </p>
+        <hr style="border: 1px solid #333; margin: 20px 0;">
+        <p style="color: #888; font-size: 12px;">{{.SiteName}} Security Alert System</p>
+    </div>
+</body>
+</html>`,
+
+	TemplateTest: `Test Email - {{.SiteName}}
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: #1a1a2e; color: #ffffff; padding: 30px; border-radius: 8px;">
+        <h1 style="color: #00d9ff; margin-top: 0;">Test Email</h1>
+        <p>This is a test email from {{.SiteName}}.</p>
+        <p>If you received this email, your email configuration is working correctly.</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            <tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">Sent At</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{.SentAt.Format "Jan 2, 2006 3:04:05 PM"}}</td></tr>
+            <tr><td style="padding: 8px; border-bottom: 1px solid #333; color: #888;">Server URL</td><td style="padding: 8px; border-bottom: 1px solid #333;">{{.SiteURL}}</td></tr>
+        </table>
+        <p style="background: #00ff8822; border-left: 4px solid #00ff88; padding: 15px; margin: 20px 0;">
+            Email delivery is working properly.
+        </p>
+        <hr style="border: 1px solid #333; margin: 20px 0;">
+        <p style="color: #888; font-size: 12px;">&copy; {{.Year}} {{.SiteName}}</p>
+    </div>
+</body>
+</html>`,
 }
 
 // TemplateInfo contains metadata about an email template
@@ -716,6 +1021,10 @@ func GetAllTemplateTypes() []TemplateInfo {
 		{Template2FAEnabled, "2FA Enabled", "Confirmation of 2FA activation", true},
 		{Template2FADisabled, "2FA Disabled", "Notification of 2FA deactivation", true},
 
+		// Account emails (per AI.md PART 18)
+		{TemplateMFAReminder, "MFA Reminder", "Prompt to enable two-factor authentication", true},
+		{TemplateBreachNotification, "Breach Notification", "Security breach notification to users", true},
+
 		// Notification emails (non-security) - sent to notification email if set
 		{TemplateAdminAlert, "Admin Alert", "System alerts for administrators", false},
 		{TemplateWeeklyReport, "Weekly Report", "Weekly usage statistics summary", false},
@@ -724,6 +1033,13 @@ func GetAllTemplateTypes() []TemplateInfo {
 		{TemplateBackupCompleted, "Backup Completed", "Backup completion notification", false},
 		{TemplateUpdateAvailable, "Update Available", "New version available notification", false},
 		{TemplateMaintenanceNotice, "Maintenance Notice", "Scheduled maintenance alert", false},
+		// Additional notification templates per AI.md PART 18
+		{TemplateBackupFailed, "Backup Failed", "Backup failure notification", false},
+		{TemplateSSLExpiring, "SSL Expiring", "SSL certificate expiration warning", false},
+		{TemplateSSLRenewed, "SSL Renewed", "SSL certificate renewal confirmation", false},
+		{TemplateSchedulerError, "Scheduler Error", "Scheduled task failure notification", false},
+		{TemplateBreachAdminAlert, "Breach Admin Alert", "Security breach alert for admins", false},
+		{TemplateTest, "Test Email", "Test email to verify SMTP configuration", false},
 	}
 }
 
@@ -739,7 +1055,9 @@ func IsAccountEmail(templateType TemplateType) bool {
 		TemplateAccountLocked,
 		TemplateSecurityAlert,
 		Template2FAEnabled,
-		Template2FADisabled:
+		Template2FADisabled,
+		TemplateMFAReminder,
+		TemplateBreachNotification:
 		return true
 	default:
 		return false

@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/apimgr/search/src/models"
+	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 )
 
@@ -17,11 +17,11 @@ type QwantEngine struct {
 }
 
 func NewQwantEngine() *QwantEngine {
-	config := models.NewEngineConfig("qwant")
+	config := model.NewEngineConfig("qwant")
 	config.DisplayName = "Qwant"
 	config.Categories = []string{"general", "images", "videos", "news"}
 	config.Priority = 75
-	
+
 	return &QwantEngine{
 		BaseEngine: search.NewBaseEngine(config),
 	}
@@ -43,16 +43,16 @@ type qwantResponse struct {
 	} `json:"data"`
 }
 
-func (e *QwantEngine) Search(ctx context.Context, query *models.Query) ([]models.Result, error) {
+func (e *QwantEngine) Search(ctx context.Context, query *model.Query) ([]model.Result, error) {
 	offset := query.Page * 10
-	
+
 	var qwantCategory string
 	switch query.Category {
-	case models.CategoryImages:
+	case model.CategoryImages:
 		qwantCategory = "images"
-	case models.CategoryVideos:
+	case model.CategoryVideos:
 		qwantCategory = "videos"
-	case models.CategoryNews:
+	case model.CategoryNews:
 		qwantCategory = "news"
 	default:
 		qwantCategory = "web"
@@ -84,9 +84,9 @@ func (e *QwantEngine) Search(ctx context.Context, query *models.Query) ([]models
 		return nil, err
 	}
 
-	var results []models.Result
+	var results []model.Result
 	for _, item := range qwantResp.Data.Result.Items {
-		result := models.Result{
+		result := model.Result{
 			Title:       item.Title,
 			URL:         item.URL,
 			Content:     item.Desc,

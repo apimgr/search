@@ -1,0 +1,100 @@
+{
+  "engines": [
+    {
+      "id": "google",
+      "name": "Google",
+      "enabled": true,
+      "categories": ["web", "images", "videos", "news"],
+      "weight": 1.0,
+      "timeout_ms": 5000
+    },
+    {
+      "id": "bing",
+      "name": "Bing",
+      "enabled": true,
+      "categories": ["web", "images", "videos", "news"],
+      "weight": 0.9,
+      "timeout_ms": 5000
+    },
+    {
+      "id": "duckduckgo",
+      "name": "DuckDuckGo",
+      "enabled": true,
+      "categories": ["web", "images"],
+      "weight": 0.8,
+      "timeout_ms": 5000
+    },
+    {
+      "id": "brave",
+      "name": "Brave",
+      "enabled": true,
+      "categories": ["web", "images", "videos", "news"],
+      "weight": 0.8,
+      "timeout_ms": 5000
+    },
+    {
+      "id": "yahoo",
+      "name": "Yahoo",
+      "enabled": false,
+      "categories": ["web", "images", "news"],
+      "weight": 0.6,
+      "timeout_ms": 5000
+    },
+    {
+      "id": "qwant",
+      "name": "Qwant",
+      "enabled": true,
+      "categories": ["web", "images", "news"],
+      "weight": 0.7,
+      "timeout_ms": 5000
+    },
+    {
+      "id": "startpage",
+      "name": "Startpage",
+      "enabled": true,
+      "categories": ["web"],
+      "weight": 0.7,
+      "timeout_ms": 5000
+    },
+    {
+      "id": "wikipedia",
+      "name": "Wikipedia",
+      "enabled": true,
+      "categories": ["web"],
+      "weight": 0.5,
+      "timeout_ms": 3000
+    },
+    {
+      "id": "reddit",
+      "name": "Reddit",
+      "enabled": true,
+      "categories": ["web"],
+      "weight": 0.5,
+      "timeout_ms": 5000
+    },
+    {
+      "id": "stackoverflow",
+      "name": "Stack Overflow",
+      "enabled": true,
+      "categories": ["web"],
+      "weight": 0.6,
+      "timeout_ms": 5000
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "enabled": true,
+      "categories": ["web"],
+      "weight": 0.5,
+      "timeout_ms": 5000
+    },
+    {
+      "id": "youtube",
+      "name": "YouTube",
+      "enabled": true,
+      "categories": ["videos"],
+      "weight": 0.9,
+      "timeout_ms": 5000
+    }
+  ]
+}

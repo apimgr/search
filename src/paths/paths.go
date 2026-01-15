@@ -1,4 +1,4 @@
-package paths
+package path
 
 import (
 	"os"
@@ -63,12 +63,12 @@ func getLinuxPaths(org, name string, privileged bool) *Paths {
 	homeDir, _ := os.UserHomeDir()
 	baseConfig := filepath.Join(homeDir, ".config", org, name)
 	baseData := filepath.Join(homeDir, ".local/share", org, name)
-	baseBackup := filepath.Join(homeDir, ".local/backups", org, name)
+	baseBackup := filepath.Join(homeDir, ".local/share/Backups", org, name)
 
 	return &Paths{
 		ConfigDir:   baseConfig,
 		DataDir:     baseData,
-		LogDir:      filepath.Join(baseData, "logs"),
+		LogDir:      filepath.Join(homeDir, ".local/log", org, name),
 		BackupDir:   baseBackup,
 		PIDFile:     filepath.Join(baseData, name+".pid"),
 		SSLDir:      filepath.Join(baseConfig, "ssl"),
@@ -141,12 +141,12 @@ func getBSDPaths(org, name string, privileged bool) *Paths {
 	homeDir, _ := os.UserHomeDir()
 	baseConfig := filepath.Join(homeDir, ".config", org, name)
 	baseData := filepath.Join(homeDir, ".local/share", org, name)
-	baseBackup := filepath.Join(homeDir, ".local/backups", org, name)
+	baseBackup := filepath.Join(homeDir, ".local/share/Backups", org, name)
 
 	return &Paths{
 		ConfigDir:   baseConfig,
 		DataDir:     baseData,
-		LogDir:      filepath.Join(baseData, "logs"),
+		LogDir:      filepath.Join(homeDir, ".local/log", org, name),
 		BackupDir:   baseBackup,
 		PIDFile:     filepath.Join(baseData, name+".pid"),
 		SSLDir:      filepath.Join(baseConfig, "ssl"),

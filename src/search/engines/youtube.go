@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apimgr/search/src/models"
+	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 )
 
@@ -23,7 +23,7 @@ type YouTube struct {
 
 // NewYouTubeEngine creates a new YouTube search engine
 func NewYouTubeEngine() *YouTube {
-	config := models.NewEngineConfig("youtube")
+	config := model.NewEngineConfig("youtube")
 	config.DisplayName = "YouTube"
 	config.Priority = 65
 	config.Categories = []string{"videos"}
@@ -38,7 +38,7 @@ func NewYouTubeEngine() *YouTube {
 }
 
 // Search performs a YouTube search
-func (e *YouTube) Search(ctx context.Context, query *models.Query) ([]models.Result, error) {
+func (e *YouTube) Search(ctx context.Context, query *model.Query) ([]model.Result, error) {
 	searchURL := "https://www.youtube.com/results"
 
 	params := url.Values{}
@@ -73,7 +73,7 @@ func (e *YouTube) Search(ctx context.Context, query *models.Query) ([]models.Res
 	return e.parseResults(string(body), query)
 }
 
-func (e *YouTube) parseResults(html string, query *models.Query) ([]models.Result, error) {
+func (e *YouTube) parseResults(html string, query *model.Query) ([]model.Result, error) {
 	maxResults := 10
 
 	// YouTube embeds search results in a JSON object within the page
@@ -95,8 +95,8 @@ func (e *YouTube) parseResults(html string, query *models.Query) ([]models.Resul
 	return e.parseHTML(html, query, maxResults)
 }
 
-func (e *YouTube) parseJSON(jsonStr string, query *models.Query, maxResults int) ([]models.Result, error) {
-	var results []models.Result
+func (e *YouTube) parseJSON(jsonStr string, query *model.Query, maxResults int) ([]model.Result, error) {
+	var results []model.Result
 
 	var data map[string]interface{}
 	if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
@@ -170,7 +170,7 @@ func (e *YouTube) parseJSON(jsonStr string, query *models.Query, maxResults int)
 	return results, nil
 }
 
-func (e *YouTube) parseVideoRenderer(video map[string]interface{}, query *models.Query) *models.Result {
+func (e *YouTube) parseVideoRenderer(video map[string]interface{}, query *model.Query) *model.Result {
 	// Extract video ID
 	videoID, ok := video["videoId"].(string)
 	if !ok || videoID == "" {
@@ -255,7 +255,7 @@ func (e *YouTube) parseVideoRenderer(video map[string]interface{}, query *models
 		}
 	}
 
-	return &models.Result{
+	return &model.Result{
 		Title:     title,
 		URL:       videoURL,
 		Content:   description,
@@ -266,8 +266,8 @@ func (e *YouTube) parseVideoRenderer(video map[string]interface{}, query *models
 	}
 }
 
-func (e *YouTube) parseHTML(html string, query *models.Query, maxResults int) ([]models.Result, error) {
-	var results []models.Result
+func (e *YouTube) parseHTML(html string, query *model.Query, maxResults int) ([]model.Result, error) {
+	var results []model.Result
 
 	// Fallback HTML parsing for when JSON extraction fails
 	videoPattern := regexp.MustCompile(`/watch\?v=([a-zA-Z0-9_-]{11})`)
@@ -293,7 +293,7 @@ func (e *YouTube) parseHTML(html string, query *models.Query, maxResults int) ([
 		videoURL := fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID)
 		thumbnail := fmt.Sprintf("https://img.youtube.com/vi/%s/mqdefault.jpg", videoID)
 
-		results = append(results, models.Result{
+		results = append(results, model.Result{
 			Title:     fmt.Sprintf("YouTube Video %s", videoID),
 			URL:       videoURL,
 			Thumbnail: thumbnail,

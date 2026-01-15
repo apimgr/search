@@ -4,7 +4,9 @@
 
 Search is a privacy-respecting metasearch engine that aggregates results from multiple search engines without tracking you. Built in Go for enhanced performance, security, and ease of deployment.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE.md)
+[![Build](https://github.com/apimgr/search/actions/workflows/docker.yml/badge.svg)](https://github.com/apimgr/search/actions/workflows/docker.yml)
+[![Release](https://img.shields.io/github/v/release/apimgr/search)](https://github.com/apimgr/search/releases)
+[![License](https://img.shields.io/github/license/apimgr/search)](LICENSE.md)
 [![Go Version](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go)](https://go.dev)
 [![Docker](https://img.shields.io/badge/Docker-Available-2496ED?logo=docker)](https://github.com/apimgr/search/pkgs/container/search)
 
@@ -18,7 +20,7 @@ Search is a privacy-respecting metasearch engine that aggregates results from mu
 - **📱 Mobile Friendly**: Responsive design that works on all devices
 - **🎨 Beautiful UI**: Modern interface with dark (Dracula) and light themes
 - **⚙️ Easy Configuration**: Web-based admin panel and YAML config
-- **🌐 Multi-Category**: Web, images, videos, maps, news, and more
+- **🌐 Multi-Category**: Web, images, videos, news, and more
 - **🔐 Built-in SSL**: Let's Encrypt integration for automatic HTTPS
 - **📊 Monitoring**: Prometheus metrics and health endpoints
 - **🐳 Container Ready**: Docker and Docker Compose support
@@ -313,7 +315,7 @@ Access the search interface at: `http://localhost:PORT/`
 
 Features:
 - Clean, ad-free search results
-- Category tabs (Web, Images, Videos, Maps, News)
+- Category tabs (Web, Images, Videos, News)
 - Advanced search options
 - Dark/Light theme toggle
 - Mobile-responsive design

@@ -1,64 +1,4 @@
-# Binaries and releases
-binaries/
-releases/
-/search
-/search.exe
-
-# Runtime volume data (NEVER commit)
-rootfs/
-
-# Go build artifacts
-*.test
-*.out
-coverage.out
-coverage.html
-coverage.txt
-
-# Dependency directories
-vendor/
-
-# Go workspace file
-go.work
-go.work.sum
-
-# IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS files
-.DS_Store
-Thumbs.db
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-desktop.ini
-
-# Temporary files
-*.tmp
-*.temp
-*.log
-.*.swp
-
-# Environment files
-.env
-.env.local
-.env.*.local
-
-# Build cache
-.cache/
-
-# Test artifacts
-testdata/temp/
-
-# Documentation build artifacts
-docs/_build/
-docs/.doctrees/
-
+# gitignore default template
 # Disable reminder in prompt
 ignoredirmessage
 
@@ -67,6 +7,7 @@ ignoredirmessage
 
 # OS generated files
 ### Linux ###
+*~
 
 # temporary files which can be created if a process still has a handle open of a deleted file
 .fuse_hidden*
@@ -82,15 +23,19 @@ ignoredirmessage
 
 ### macOS ###
 # General
+.DS_Store?
 .AppleDouble
 .LSOverride
 
 # Thumbnails
+._*
 
 # Files that might appear in the root of a volume
 .DocumentRevisions-V100
 .fseventsd
+.Spotlight-V100
 .TemporaryItems
+.Trashes
 .VolumeIcon.icns
 .com.apple.timemachine.donotpresent
 
@@ -107,7 +52,9 @@ Temporary Items
 
 ### Windows ###
 # Windows thumbnail cache files
+Thumbs.db
 Thumbs.db:encryptable
+ehthumbs.db
 ehthumbs_vista.db
 
 # Dump file
@@ -136,9 +83,6 @@ $RECYCLE.BIN/
 # ignore commit message
 **/.gitcommit
 
-# ignore .build_failed files
-**/.build_failed*
-
 # ignore .bak files
 **/*.bak
 
@@ -155,3 +99,58 @@ $RECYCLE.BIN/
 **/*.rewrite.sh
 **/*.refactor.sh
 
+# ============================================
+# PROJECT-SPECIFIC (add below default section)
+# ============================================
+
+# Build output
+binaries/
+releases/
+
+# Runtime volume data (NEVER commit)
+rootfs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Core dump files
+core
+core.*
+
+# Go build artifacts
+*.test
+*.out
+coverage.out
+coverage.html
+coverage.txt
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# License verification output
+licenses.csv
+third_party_licenses/
+
+# AI config directories (regenerated from AI.md per spec)
+.claude/
+.cursor/
+.aider/
+.ai/
+.windsurf/

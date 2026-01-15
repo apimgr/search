@@ -518,6 +518,50 @@ func (r *mmdbReader) LookupCity(ip net.IP) (city, region, postal string, lat, lo
 	return
 }
 
+// LookupWHOIS returns WHOIS registrant information for an IP
+// Per AI.md PART 20: WHOIS database support
+func (r *mmdbReader) LookupWHOIS(ip net.IP) (registrantOrg, registrantNet string) {
+	offset, err := r.lookup(ip)
+	if err != nil || offset == 0 {
+		return
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	val, _, err := r.decodeValue(r.data, offset)
+	if err != nil {
+		return
+	}
+
+	if m, ok := val.(map[string]interface{}); ok {
+		// Extract registrant organization from various possible fields
+		// geo-whois-asn-country database includes ASN org which often represents the registrant
+		if v, ok := m["autonomous_system_organization"].(string); ok {
+			registrantOrg = v
+		} else if v, ok := m["as_org"].(string); ok {
+			registrantOrg = v
+		} else if v, ok := m["organization"].(string); ok {
+			registrantOrg = v
+		} else if v, ok := m["org"].(string); ok {
+			registrantOrg = v
+		} else if v, ok := m["name"].(string); ok {
+			registrantOrg = v
+		}
+
+		// Extract network/IP range if available
+		if v, ok := m["network"].(string); ok {
+			registrantNet = v
+		} else if v, ok := m["range"].(string); ok {
+			registrantNet = v
+		} else if v, ok := m["prefix"].(string); ok {
+			registrantNet = v
+		}
+	}
+
+	return
+}
+
 // Close closes the reader
 func (r *mmdbReader) Close() {
 	r.mu.Lock()

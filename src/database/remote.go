@@ -213,7 +213,7 @@ func (mm *MigrationManager) MigrateToRemote(ctx context.Context, progress chan<-
 			if progress != nil {
 				progress <- MigrationProgress{Phase: "error", Table: table, Error: errMsg}
 			}
-			return fmt.Errorf(errMsg)
+			return fmt.Errorf("failed to get schema for %s: %w", table, err)
 		}
 
 		// Create table in target database
@@ -222,7 +222,7 @@ func (mm *MigrationManager) MigrateToRemote(ctx context.Context, progress chan<-
 			if progress != nil {
 				progress <- MigrationProgress{Phase: "error", Table: table, Error: errMsg}
 			}
-			return fmt.Errorf(errMsg)
+			return fmt.Errorf("failed to create target table %s: %w", table, err)
 		}
 
 		// Count rows for progress
@@ -238,7 +238,7 @@ func (mm *MigrationManager) MigrateToRemote(ctx context.Context, progress chan<-
 			if progress != nil {
 				progress <- MigrationProgress{Phase: "error", Table: table, Error: errMsg}
 			}
-			return fmt.Errorf(errMsg)
+			return fmt.Errorf("failed to migrate data for %s: %w", table, err)
 		}
 
 		if progress != nil {

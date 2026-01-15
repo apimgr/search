@@ -1,0 +1,25 @@
+{{define "footer"}}
+<footer class="footer">
+    {{/* Standard page links (always first) */}}
+    <p class="footer-links">
+        <a href="/server/about">About</a>
+        <span class="footer-divider">•</span>
+        <a href="/server/privacy">Privacy</a>
+        <span class="footer-divider">•</span>
+        <a href="/server/contact">Contact</a>
+        <span class="footer-divider">•</span>
+        <a href="/server/help">Help</a>
+    </p>
+
+    {{/* Application branding */}}
+    <p class="footer-branding">
+        <a href="https://github.com/apimgr/search" target="_blank" rel="noopener">Search</a>
+        <span class="footer-divider">•</span>
+        <span>Made with ❤️</span>
+        <span class="footer-divider">•</span>
+        <span>v{{version}}</span>
+    </p>
+
+    <a href="/healthz" class="footer-version">Last update: {{.BuildDate}}</a>
+</footer>
+{{end}}

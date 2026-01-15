@@ -53,7 +53,7 @@ func NewClusterScheduler(db *sql.DB, nodeID string) (*ClusterScheduler, error) {
 	}
 
 	cs := &ClusterScheduler{
-		Scheduler:  New(),
+		Scheduler:  New(db, nodeID),
 		db:         db,
 		nodeID:     nodeID,
 		hostname:   hostname,
@@ -225,8 +225,8 @@ func (cs *ClusterScheduler) UpdateTaskState(ctx context.Context, taskName string
 }
 
 // GetTaskState gets the shared task state
-func (cs *ClusterScheduler) GetTaskState(ctx context.Context, taskName string) (*TaskState, error) {
-	var state TaskState
+func (cs *ClusterScheduler) GetTaskState(ctx context.Context, taskName string) (*ClusterTaskState, error) {
+	var state ClusterTaskState
 	err := cs.db.QueryRowContext(ctx,
 		`SELECT task_name, last_run, next_run, last_node_id, last_hostname, updated_at
 		 FROM scheduler_state WHERE task_name = ?`, taskName).Scan(
@@ -241,8 +241,8 @@ func (cs *ClusterScheduler) GetTaskState(ctx context.Context, taskName string) (
 	return &state, nil
 }
 
-// TaskState represents shared task state across the cluster
-type TaskState struct {
+// ClusterTaskState represents shared task state across the cluster
+type ClusterTaskState struct {
 	TaskName     string    `json:"task_name"`
 	LastRun      time.Time `json:"last_run"`
 	NextRun      time.Time `json:"next_run"`
@@ -253,7 +253,7 @@ type TaskState struct {
 
 // GetMissedJobs returns tasks that were missed while the cluster was down
 // Per AI.md PART 9: Catchup for missed jobs
-func (cs *ClusterScheduler) GetMissedJobs(ctx context.Context) ([]*TaskState, error) {
+func (cs *ClusterScheduler) GetMissedJobs(ctx context.Context) ([]*ClusterTaskState, error) {
 	rows, err := cs.db.QueryContext(ctx,
 		`SELECT task_name, last_run, next_run, last_node_id, last_hostname, updated_at
 		 FROM scheduler_state
@@ -263,9 +263,9 @@ func (cs *ClusterScheduler) GetMissedJobs(ctx context.Context) ([]*TaskState, er
 	}
 	defer rows.Close()
 
-	var missed []*TaskState
+	var missed []*ClusterTaskState
 	for rows.Next() {
-		var state TaskState
+		var state ClusterTaskState
 		if err := rows.Scan(
 			&state.TaskName, &state.LastRun, &state.NextRun,
 			&state.LastNodeID, &state.LastHostname, &state.UpdatedAt); err != nil {
@@ -278,26 +278,28 @@ func (cs *ClusterScheduler) GetMissedJobs(ctx context.Context) ([]*TaskState, er
 
 // RunWithLock runs a task with distributed locking
 func (cs *ClusterScheduler) RunWithLock(ctx context.Context, task *Task) error {
+	taskName := string(task.ID)
+
 	// Try to acquire lock
-	acquired, err := cs.AcquireLock(ctx, task.Name)
+	acquired, err := cs.AcquireLock(ctx, taskName)
 	if err != nil {
 		return fmt.Errorf("failed to acquire lock: %w", err)
 	}
 	if !acquired {
-		log.Printf("[ClusterScheduler] Task %s is running on another node, skipping", task.Name)
+		log.Printf("[ClusterScheduler] Task %s is running on another node, skipping", taskName)
 		return nil
 	}
 
 	// Ensure lock is released when done
 	defer func() {
-		if err := cs.ReleaseLock(context.Background(), task.Name); err != nil {
-			log.Printf("[ClusterScheduler] Warning: failed to release lock for %s: %v", task.Name, err)
+		if err := cs.ReleaseLock(context.Background(), taskName); err != nil {
+			log.Printf("[ClusterScheduler] Warning: failed to release lock for %s: %v", taskName, err)
 		}
 	}()
 
 	// Record execution start
 	scheduledAt := time.Now()
-	execID, err := cs.RecordExecution(ctx, task.Name, scheduledAt)
+	execID, err := cs.RecordExecution(ctx, taskName, scheduledAt)
 	if err != nil {
 		log.Printf("[ClusterScheduler] Warning: failed to record execution: %v", err)
 	}
@@ -312,9 +314,8 @@ func (cs *ClusterScheduler) RunWithLock(ctx context.Context, task *Task) error {
 		}
 	}
 
-	// Update shared state
-	nextRun := time.Now().Add(task.Interval)
-	if err := cs.UpdateTaskState(ctx, task.Name, time.Now(), nextRun); err != nil {
+	// Update shared state - use task's calculated NextRun
+	if err := cs.UpdateTaskState(ctx, taskName, time.Now(), task.NextRun); err != nil {
 		log.Printf("[ClusterScheduler] Warning: failed to update task state: %v", err)
 	}
 
@@ -350,7 +351,7 @@ func (cs *ClusterScheduler) catchupMissedJobs() {
 
 	for _, state := range missed {
 		cs.mu.RLock()
-		task, ok := cs.tasks[state.TaskName]
+		task, ok := cs.tasks[TaskID(state.TaskName)]
 		cs.mu.RUnlock()
 
 		if !ok || !task.Enabled {
@@ -396,11 +397,12 @@ func (cs *ClusterScheduler) checkAndRunClusterTasks(now time.Time) {
 
 	for _, task := range dueTasks {
 		go func(t *Task) {
-			ctx, cancel := context.WithTimeout(cs.Scheduler.ctx, t.Interval)
+			// Use 30 minute timeout for task execution
+			ctx, cancel := context.WithTimeout(cs.Scheduler.ctx, 30*time.Minute)
 			defer cancel()
 
 			if err := cs.RunWithLock(ctx, t); err != nil {
-				log.Printf("[ClusterScheduler] Task %s failed: %v", t.Name, err)
+				log.Printf("[ClusterScheduler] Task %s failed: %v", t.ID, err)
 			}
 		}(task)
 	}

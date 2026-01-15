@@ -8,8 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
-	
-	"github.com/apimgr/search/src/models"
+
+	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 )
 
@@ -21,12 +21,12 @@ type Google struct {
 
 // NewGoogle creates a new Google engine
 func NewGoogle() *Google {
-	config := models.NewEngineConfig("google")
+	config := model.NewEngineConfig("google")
 	config.DisplayName = "Google"
 	config.Priority = 90 // Second priority after DuckDuckGo
 	config.Categories = []string{"general", "images", "news", "videos"}
 	config.SupportsTor = false // Google often blocks Tor
-	
+
 	return &Google{
 		BaseEngine: search.NewBaseEngine(config),
 		client: &http.Client{
@@ -36,13 +36,13 @@ func NewGoogle() *Google {
 }
 
 // Search performs a Google search
-func (e *Google) Search(ctx context.Context, query *models.Query) ([]models.Result, error) {
+func (e *Google) Search(ctx context.Context, query *model.Query) ([]model.Result, error) {
 	switch query.Category {
-	case models.CategoryImages:
+	case model.CategoryImages:
 		return e.searchImages(ctx, query)
-	case models.CategoryNews:
+	case model.CategoryNews:
 		return e.searchNews(ctx, query)
-	case models.CategoryVideos:
+	case model.CategoryVideos:
 		return e.searchVideos(ctx, query)
 	default:
 		return e.searchGeneral(ctx, query)
@@ -50,29 +50,29 @@ func (e *Google) Search(ctx context.Context, query *models.Query) ([]models.Resu
 }
 
 // searchGeneral performs a general web search
-func (e *Google) searchGeneral(ctx context.Context, query *models.Query) ([]models.Result, error) {
+func (e *Google) searchGeneral(ctx context.Context, query *model.Query) ([]model.Result, error) {
 	// Google search URL
 	baseURL := "https://www.google.com/search"
-	
+
 	params := url.Values{}
 	params.Set("q", query.Text)
 	params.Set("num", "20") // Results per page
-	
+
 	if query.Page > 1 {
 		start := (query.Page - 1) * 20
 		params.Set("start", fmt.Sprintf("%d", start))
 	}
-	
+
 	// Safe search
 	if query.SafeSearch == 2 {
 		params.Set("safe", "active")
 	}
-	
+
 	// Language
 	if query.Language != "" {
 		params.Set("hl", query.Language)
 	}
-	
+
 	// Time range
 	switch query.TimeRange {
 	case "day":
@@ -84,62 +84,62 @@ func (e *Google) searchGeneral(ctx context.Context, query *models.Query) ([]mode
 	case "year":
 		params.Set("tbs", "qdr:y")
 	}
-	
+
 	reqURL := fmt.Sprintf("%s?%s", baseURL, params.Encode())
-	
+
 	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Set realistic user agent
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0")
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
-	
+
 	resp, err := e.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("Google returned status %d", resp.StatusCode)
 	}
-	
+
 	// Parse HTML response
 	results, err := e.parseGoogleHTML(resp, query)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return results, nil
 }
 
 // parseGoogleHTML parses Google search results from HTML
-func (e *Google) parseGoogleHTML(resp *http.Response, query *models.Query) ([]models.Result, error) {
+func (e *Google) parseGoogleHTML(resp *http.Response, query *model.Query) ([]model.Result, error) {
 	// Note: This is a simplified parser. Google's HTML structure changes frequently.
 	// In production, consider using a proper HTML parser like goquery
-	
-	results := make([]models.Result, 0)
-	
+
+	results := make([]model.Result, 0)
+
 	// Read response body
 	body := make([]byte, 1024*1024) // 1MB max
 	n, _ := resp.Body.Read(body)
 	html := string(body[:n])
-	
+
 	// Extract search results using regex (simplified)
 	// Google result structure: <div class="g">...</div>
-	
+
 	// Extract titles and URLs
 	titlePattern := regexp.MustCompile(`<h3[^>]*>([^<]+)</h3>`)
 	urlPattern := regexp.MustCompile(`<a href="(/url\?q=|https?://)[^"]*"`)
 	snippetPattern := regexp.MustCompile(`<div class="[^"]*VwiC3b[^"]*"[^>]*>([^<]+)</div>`)
-	
+
 	titles := titlePattern.FindAllStringSubmatch(html, -1)
 	urls := urlPattern.FindAllStringSubmatch(html, -1)
 	snippets := snippetPattern.FindAllStringSubmatch(html, -1)
-	
+
 	maxResults := len(titles)
 	if len(urls) < maxResults {
 		maxResults = len(urls)
@@ -147,41 +147,41 @@ func (e *Google) parseGoogleHTML(resp *http.Response, query *models.Query) ([]mo
 	if maxResults > e.GetConfig().GetMaxResults() {
 		maxResults = e.GetConfig().GetMaxResults()
 	}
-	
+
 	for i := 0; i < maxResults; i++ {
 		if i >= len(titles) || i >= len(urls) {
 			break
 		}
-		
+
 		title := cleanHTML(titles[i][1])
 		resultURL := extractGoogleURL(urls[i][0])
-		
+
 		// Skip if URL is empty or is Google itself
 		if resultURL == "" || strings.Contains(resultURL, "google.com") {
 			continue
 		}
-		
+
 		content := ""
 		if i < len(snippets) {
 			content = cleanHTML(snippets[i][1])
 		}
-		
-		results = append(results, models.Result{
+
+		results = append(results, model.Result{
 			Title:    title,
 			URL:      resultURL,
 			Content:  content,
 			Engine:   e.Name(),
-			Category: models.CategoryGeneral,
+			Category: model.CategoryGeneral,
 			Score:    calculateScore(e.GetPriority(), i, 1),
 			Position: i,
 		})
 	}
-	
+
 	return results, nil
 }
 
 // searchImages performs an image search
-func (e *Google) searchImages(ctx context.Context, query *models.Query) ([]models.Result, error) {
+func (e *Google) searchImages(ctx context.Context, query *model.Query) ([]model.Result, error) {
 	// Google Images search URL
 	baseURL := "https://www.google.com/search"
 
@@ -230,8 +230,8 @@ func (e *Google) searchImages(ctx context.Context, query *models.Query) ([]model
 }
 
 // parseImageResults parses Google Images search results
-func (e *Google) parseImageResults(resp *http.Response, query *models.Query) ([]models.Result, error) {
-	results := make([]models.Result, 0)
+func (e *Google) parseImageResults(resp *http.Response, query *model.Query) ([]model.Result, error) {
+	results := make([]model.Result, 0)
 
 	body := make([]byte, 2*1024*1024) // 2MB max for images page
 	n, _ := resp.Body.Read(body)
@@ -267,13 +267,13 @@ func (e *Google) parseImageResults(resp *http.Response, query *models.Query) ([]
 		width := imgMatches[i][3]
 		height := imgMatches[i][4]
 
-		results = append(results, models.Result{
+		results = append(results, model.Result{
 			Title:     title,
 			URL:       imgURL,
 			Thumbnail: imgURL,
 			Content:   fmt.Sprintf("%sx%s", width, height),
 			Engine:    e.Name(),
-			Category:  models.CategoryImages,
+			Category:  model.CategoryImages,
 			Score:     calculateScore(e.GetPriority(), i, 1),
 			Position:  i,
 		})
@@ -283,7 +283,7 @@ func (e *Google) parseImageResults(resp *http.Response, query *models.Query) ([]
 }
 
 // searchNews performs a news search
-func (e *Google) searchNews(ctx context.Context, query *models.Query) ([]models.Result, error) {
+func (e *Google) searchNews(ctx context.Context, query *model.Query) ([]model.Result, error) {
 	// Google News search URL
 	baseURL := "https://www.google.com/search"
 
@@ -344,8 +344,8 @@ func (e *Google) searchNews(ctx context.Context, query *models.Query) ([]models.
 }
 
 // parseNewsResults parses Google News search results
-func (e *Google) parseNewsResults(resp *http.Response, query *models.Query) ([]models.Result, error) {
-	results := make([]models.Result, 0)
+func (e *Google) parseNewsResults(resp *http.Response, query *model.Query) ([]model.Result, error) {
+	results := make([]model.Result, 0)
 
 	body := make([]byte, 1024*1024) // 1MB max
 	n, _ := resp.Body.Read(body)
@@ -405,12 +405,12 @@ func (e *Google) parseNewsResults(resp *http.Response, query *models.Query) ([]m
 			content = fmt.Sprintf("%s — %s | %s", source, publishedTime, content)
 		}
 
-		results = append(results, models.Result{
+		results = append(results, model.Result{
 			Title:    title,
 			URL:      resultURL,
 			Content:  content,
 			Engine:   e.Name(),
-			Category: models.CategoryNews,
+			Category: model.CategoryNews,
 			Score:    calculateScore(e.GetPriority(), i, 1),
 			Position: i,
 		})
@@ -420,7 +420,7 @@ func (e *Google) parseNewsResults(resp *http.Response, query *models.Query) ([]m
 }
 
 // searchVideos performs a video search
-func (e *Google) searchVideos(ctx context.Context, query *models.Query) ([]models.Result, error) {
+func (e *Google) searchVideos(ctx context.Context, query *model.Query) ([]model.Result, error) {
 	// Google Videos search URL
 	baseURL := "https://www.google.com/search"
 
@@ -481,8 +481,8 @@ func (e *Google) searchVideos(ctx context.Context, query *models.Query) ([]model
 }
 
 // parseVideoResults parses Google Videos search results
-func (e *Google) parseVideoResults(resp *http.Response, query *models.Query) ([]models.Result, error) {
-	results := make([]models.Result, 0)
+func (e *Google) parseVideoResults(resp *http.Response, query *model.Query) ([]model.Result, error) {
+	results := make([]model.Result, 0)
 
 	body := make([]byte, 1024*1024) // 1MB max
 	n, _ := resp.Body.Read(body)
@@ -537,13 +537,13 @@ func (e *Google) parseVideoResults(resp *http.Response, query *models.Query) ([]
 			thumbnailURL = thumbs[i][1]
 		}
 
-		results = append(results, models.Result{
+		results = append(results, model.Result{
 			Title:     title,
 			URL:       resultURL,
 			Thumbnail: thumbnailURL,
 			Content:   content,
 			Engine:    e.Name(),
-			Category:  models.CategoryVideos,
+			Category:  model.CategoryVideos,
 			Score:     calculateScore(e.GetPriority(), i, 1),
 			Position:  i,
 		})
@@ -565,12 +565,12 @@ func extractGoogleURL(googleURL string) string {
 			}
 		}
 	}
-	
+
 	// Direct URL
 	if strings.HasPrefix(googleURL, "http") {
 		return strings.Trim(googleURL, `"`)
 	}
-	
+
 	return ""
 }
 
@@ -579,7 +579,7 @@ func cleanHTML(text string) string {
 	// Remove HTML tags
 	re := regexp.MustCompile(`<[^>]*>`)
 	text = re.ReplaceAllString(text, "")
-	
+
 	// Decode common HTML entities
 	text = strings.ReplaceAll(text, "&amp;", "&")
 	text = strings.ReplaceAll(text, "&lt;", "<")
@@ -587,9 +587,9 @@ func cleanHTML(text string) string {
 	text = strings.ReplaceAll(text, "&quot;", `"`)
 	text = strings.ReplaceAll(text, "&#39;", "'")
 	text = strings.ReplaceAll(text, "&nbsp;", " ")
-	
+
 	// Trim whitespace
 	text = strings.TrimSpace(text)
-	
+
 	return text
 }

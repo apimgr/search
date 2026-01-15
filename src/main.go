@@ -20,9 +20,10 @@ import (
 	"time"
 
 	"github.com/apimgr/search/src/backup"
+	"github.com/apimgr/search/src/common/banner"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/mode"
-	"github.com/apimgr/search/src/models"
+	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 	"github.com/apimgr/search/src/search/engines"
 	"github.com/apimgr/search/src/server"
@@ -33,7 +34,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// CLI flags (per AI.md PART 6)
+// CLI flags (per AI.md PART 8: SERVER BINARY CLI)
 var (
 	flagVersion     bool
 	flagHelp        bool
@@ -47,12 +48,15 @@ var (
 	flagMaintenance string
 	flagUpdate      string
 	flagBuild       string
+	flagShell       string
 
 	// Required flags per AI.md PART 6 (NON-NEGOTIABLE)
 	flagMode    string
 	flagData    string
 	flagConfig  string
+	flagCache   string
 	flagLog     string
+	flagBackup  string
 	flagPID     string
 	flagAddress string
 	flagPort    int
@@ -72,16 +76,19 @@ func init() {
 
 	// Commands with optional arguments
 	flag.StringVar(&flagTest, "test", "", "Test search engines with optional query")
-	flag.StringVar(&flagService, "service", "", "Service management: install|uninstall|start|stop|status|restart|reload")
+	flag.StringVar(&flagService, "service", "", "Service management: start|stop|restart|reload|status|--install|--uninstall|--disable|--help")
 	flag.StringVar(&flagMaintenance, "maintenance", "", "Maintenance: backup|restore|update|mode")
 	flag.StringVar(&flagUpdate, "update", "", "Update management: check|yes|branch")
 	flag.StringVar(&flagBuild, "build", "", "Build for platforms: all|linux|darwin|windows|freebsd")
+	flag.StringVar(&flagShell, "shell", "", "Shell integration: completions|init|--help")
 
 	// Configuration override flags (NON-NEGOTIABLE per AI.md PART 6)
 	flag.StringVar(&flagMode, "mode", "", "Set application mode (production|development)")
 	flag.StringVar(&flagData, "data", "", "Set data directory")
 	flag.StringVar(&flagConfig, "config", "", "Set config directory")
+	flag.StringVar(&flagCache, "cache", "", "Set cache directory")
 	flag.StringVar(&flagLog, "log", "", "Set log directory")
+	flag.StringVar(&flagBackup, "backup", "", "Set backup directory")
 	flag.StringVar(&flagPID, "pid", "", "Set PID file path")
 	flag.StringVar(&flagAddress, "address", "", "Set listen address")
 	flag.IntVar(&flagPort, "port", 0, "Set listen port")
@@ -139,12 +146,32 @@ func main() {
 		}
 		runBuild(platform)
 		return
+	case flagShell != "" || (len(os.Args) > 1 && os.Args[1] == "--shell"):
+		subCmd := flagShell
+		if subCmd == "" && len(os.Args) > 2 {
+			subCmd = os.Args[2]
+		}
+		if subCmd == "" {
+			subCmd = "--help"
+		}
+		runShell(subCmd)
+		return
 	}
 
 	// Handle legacy argument style (for backwards compatibility)
+	// Skip if runtime flags are set (--port, --address, --mode, etc. are handled by flag.Parse())
 	if len(os.Args) > 1 && strings.HasPrefix(os.Args[1], "--") && !strings.Contains(os.Args[1], "=") {
-		handleLegacyArgs()
-		return
+		// Don't call handleLegacyArgs for runtime configuration flags
+		// These are already handled by flag.Parse() and applyCliOverrides()
+		runtimeFlags := map[string]bool{
+			"--port": true, "--address": true, "--mode": true, "--data": true,
+			"--config": true, "--cache": true, "--log": true, "--backup": true,
+			"--pid": true, "--debug": true, "--daemon": true,
+		}
+		if !runtimeFlags[os.Args[1]] {
+			handleLegacyArgs()
+			return
+		}
 	}
 
 	// Start server
@@ -155,10 +182,11 @@ func main() {
 // Per AI.md PART 6: Directory flags MUST create directories if they don't exist
 func applyCliOverrides() {
 	// Set mode from CLI flag or environment
+	// Per AI.md PART 6: Mode Detection Priority
 	if flagMode != "" {
 		os.Setenv("SEARCH_MODE", flagMode)
 		os.Setenv("MODE", flagMode)
-		mode.Set(flagMode)
+		mode.SetAppMode(flagMode)
 	} else {
 		// Initialize mode from environment
 		mode.FromEnv()
@@ -169,7 +197,7 @@ func applyCliOverrides() {
 	if flagDebug {
 		os.Setenv("DEBUG", "true")
 		os.Setenv("SEARCH_DEBUG", "true")
-		mode.SetDebug(true)
+		mode.SetDebugEnabled(true)
 	}
 
 	if flagData != "" {
@@ -180,9 +208,17 @@ func applyCliOverrides() {
 		os.Setenv("SEARCH_CONFIG_DIR", flagConfig)
 		config.SetConfigDirOverride(flagConfig)
 	}
+	if flagCache != "" {
+		os.Setenv("SEARCH_CACHE_DIR", flagCache)
+		config.SetCacheDirOverride(flagCache)
+	}
 	if flagLog != "" {
 		os.Setenv("SEARCH_LOG_DIR", flagLog)
 		config.SetLogDirOverride(flagLog)
+	}
+	if flagBackup != "" {
+		os.Setenv("SEARCH_BACKUP_DIR", flagBackup)
+		config.SetBackupDirOverride(flagBackup)
 	}
 	if flagPID != "" {
 		os.Setenv("SEARCH_PID_FILE", flagPID)
@@ -198,7 +234,7 @@ func applyCliOverrides() {
 
 	// Ensure directories exist after CLI overrides are applied
 	// Per AI.md PART 6: All directory flags MUST create directories if they don't exist
-	if flagData != "" || flagConfig != "" || flagLog != "" || flagPID != "" {
+	if flagData != "" || flagConfig != "" || flagCache != "" || flagLog != "" || flagBackup != "" || flagPID != "" {
 		if err := config.EnsureDirectories(); err != nil {
 			log.Printf("Warning: Failed to create directories: %v", err)
 		}
@@ -224,7 +260,7 @@ func handleLegacyArgs() {
 		if len(os.Args) > 2 {
 			runService(os.Args[2])
 		} else {
-			fmt.Println("Usage: search --service <install|uninstall|start|stop|status|restart|reload>")
+			fmt.Println("Usage: search --service {start,stop,restart,reload,status,--install,--uninstall,--disable,--help}")
 		}
 	case "--maintenance":
 		if len(os.Args) > 2 {
@@ -244,7 +280,14 @@ func handleLegacyArgs() {
 			platform = os.Args[2]
 		}
 		runBuild(platform)
-	case "--daemon", "-d":
+	case "--shell":
+		subCmd := "--help"
+		if len(os.Args) > 2 {
+			subCmd = os.Args[2]
+		}
+		runShell(subCmd)
+	case "--daemon":
+		// Per AI.md PART 8: Only -h and -v may have short flags
 		flagDaemon = true
 		runServer()
 	default:
@@ -263,8 +306,47 @@ func runServer() {
 		// Parent exits in daemonize(), only child continues
 	}
 
-	fmt.Println("🔍 Search - Privacy-Respecting Metasearch Engine")
-	fmt.Printf("Version: %s\n\n", config.Version)
+	// Per AI.md PART 8: If running as root, setup system resources then drop privileges
+	// Skip privilege dropping in container mode - container entrypoint handles this
+	if service.IsRunningAsRoot() && !config.IsRunningInContainer() {
+		log.Println("[Startup] Running as root - performing privileged setup")
+
+		// Step 8a: Create system user
+		svcUser, err := service.CreateSystemUser("search")
+		if err != nil {
+			log.Fatalf("❌ Failed to create system user: %v", err)
+		}
+		log.Printf("[Startup] System user ready: %s (uid=%d, gid=%d)", svcUser.Name, svcUser.UID, svcUser.GID)
+
+		// Step 8b-d: Create directories and set ownership (while still root)
+		if err := config.EnsureSystemDirectories("search"); err != nil {
+			log.Fatalf("❌ Failed to create system directories: %v", err)
+		}
+		log.Println("[Startup] System directories created")
+
+		// Set environment for the service user (HOME points to data dir)
+		// This ensures config.Initialize() uses the correct paths after privilege drop
+		os.Setenv("HOME", "/var/lib/apimgr/search")
+		os.Setenv("SEARCH_CONFIG_DIR", "/etc/apimgr/search")
+		os.Setenv("SEARCH_DATA_DIR", "/var/lib/apimgr/search")
+		os.Setenv("SEARCH_LOG_DIR", "/var/log/apimgr/search")
+		os.Setenv("SEARCH_CACHE_DIR", "/var/cache/apimgr/search")
+
+		// Step 8e-f: Port binding for privileged ports happens in server.Start()
+		// Pre-binding not implemented yet - using AmbientCapabilities as fallback
+
+		// Step 8g: Drop privileges to search user
+		log.Printf("[Startup] Dropping privileges to user: %s", svcUser.Name)
+		if err := service.DropPrivileges(svcUser.Name); err != nil {
+			log.Fatalf("❌ Failed to drop privileges: %v", err)
+		}
+
+		// Step 8h: Verify privilege drop succeeded
+		if err := service.VerifyPrivilegesDropped(); err != nil {
+			log.Fatalf("❌ %v", err)
+		}
+		log.Println("[Startup] Privileges dropped successfully")
+	}
 
 	// Initialize configuration
 	cfg, err := config.Initialize()
@@ -272,9 +354,35 @@ func runServer() {
 		log.Fatalf("❌ Configuration failed: %v", err)
 	}
 
-	// Check for first run and display setup token if needed
-	// Per AI.md PART 6: Setup token displayed ONCE on first run
-	checkFirstRun(cfg)
+	// Build listen URLs for banner
+	urls := buildListenURLs(cfg)
+
+	// Check for first run - generate setup token if needed
+	// Per AI.md PART 14: Setup token displayed ONCE on first run
+	var setupToken string
+	showSetup := cfg.IsFirstRun()
+	if showSetup {
+		setupToken = generateSetupToken()
+		// Store hashed token in database for verification
+		// The actual token is shown ONCE and never stored in plain text
+		dataDir := config.GetDataDir()
+		dbPath := filepath.Join(dataDir, "db", "server.db")
+		if err := storeSetupToken(dbPath, setupToken); err != nil {
+			log.Printf("Warning: Could not store setup token: %v", err)
+		}
+	}
+
+	// Print responsive startup banner per AI.md PART 7 and PART 14
+	banner.Print(banner.Config{
+		AppName:    "Search",
+		Version:    config.Version,
+		Mode:       cfg.Server.Mode,
+		Debug:      mode.IsDebugEnabled(),
+		URLs:       urls,
+		ShowSetup:  showSetup,
+		SetupToken: setupToken,
+		AdminPath:  "admin",
+	})
 
 	// Create server
 	srv := server.New(cfg)
@@ -293,30 +401,19 @@ func runServer() {
 }
 
 func printVersion() {
-	// Per AI.md PART 6: --version format
-	// Format: {binary} v1.2.3 (abc1234) built 2025-01-15
+	// Per AI.md PART 13: --version format
+	// Format:
+	//   {binary} {version}
+	//   Built: {BUILD_DATE}
+	//   Go: {GO_VERSION}
+	//   OS/Arch: {GOOS}/{GOARCH}
+	// Note: No v prefix in version string
 	binaryName := filepath.Base(os.Args[0])
 
-	// Build the version line
-	commitPart := ""
-	if config.CommitID != "" && config.CommitID != "unknown" {
-		// Truncate commit to 7 chars if longer
-		commit := config.CommitID
-		if len(commit) > 7 {
-			commit = commit[:7]
-		}
-		commitPart = fmt.Sprintf(" (%s)", commit)
-	}
-
-	// Format build date as YYYY-MM-DD
-	buildDate := config.BuildDate
-	if t, err := time.Parse("Mon Jan 02, 2006 at 15:04:05 MST", buildDate); err == nil {
-		buildDate = t.Format("2006-01-02")
-	} else if t, err := time.Parse(time.RFC3339, buildDate); err == nil {
-		buildDate = t.Format("2006-01-02")
-	}
-
-	fmt.Printf("%s v%s%s built %s\n", binaryName, config.Version, commitPart, buildDate)
+	fmt.Printf("%s %s\n", binaryName, config.Version)
+	fmt.Printf("Built: %s\n", config.BuildDate)
+	fmt.Printf("Go: %s\n", runtime.Version())
+	fmt.Printf("OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
 }
 
 func printHelp() {
@@ -333,7 +430,9 @@ Runtime Flags:
   --mode <mode>            Set application mode (production|development)
   --data <dir>             Set data directory
   --config <dir>           Set config directory
+  --cache <dir>            Set cache directory
   --log <dir>              Set log directory
+  --backup <dir>           Set backup directory
   --pid <file>             Set PID file path
   --address <addr>         Set listen address
   --port <port>            Set listen port
@@ -345,6 +444,11 @@ Information:
   --version, -v            Show version information
   --status                 Show server status and health
   --config-info            Show configuration paths and status
+
+Shell Integration:
+  --shell completions [SHELL]  Print shell completions script
+  --shell init [SHELL]         Print shell init command for eval
+  --shell --help               Show shell help
 
 Setup:
   --init                   Initialize configuration
@@ -409,7 +513,7 @@ Examples:
   %s --config /etc/search --data /var/lib/search  Custom directories
   %s --init                          Create configuration files
   %s --test "golang"                 Test search with "golang" query
-  %s --service install               Install as system service
+  %s --service --install             Install as system service
   %s --service reload                Reload configuration
   %s --update check                  Check for updates
   %s --maintenance setup             Reset admin credentials
@@ -420,7 +524,7 @@ For more information: https://github.com/apimgr/search
 `, binaryName, binaryName, binaryName,
 		binaryName, binaryName, binaryName, binaryName,
 		binaryName, binaryName, binaryName, binaryName,
-		binaryName, binaryName, binaryName)
+		binaryName, binaryName, binaryName, binaryName)
 }
 
 func runInit() {
@@ -556,7 +660,7 @@ func showStatus() {
 		fmt.Println("Server Status: Not Running")
 		fmt.Println()
 		fmt.Printf("Start the server with: %s\n", binaryName)
-		fmt.Printf("Or install as service: %s --service install\n", binaryName)
+		fmt.Printf("Or install as service: %s --service --install\n", binaryName)
 		return
 	}
 
@@ -705,7 +809,7 @@ func runService(action string) {
 	sm := service.NewServiceManager(cfg)
 
 	switch action {
-	case "install":
+	case "--install", "install":
 		if !config.IsPrivileged() {
 			fmt.Println("❌ This command requires elevated privileges")
 			fmt.Println("   Run with sudo/admin rights")
@@ -719,7 +823,7 @@ func runService(action string) {
 		fmt.Println("✅ Service installed successfully")
 		fmt.Println("   Run 'search --service start' to start the service")
 
-	case "uninstall":
+	case "--uninstall", "uninstall":
 		if !config.IsPrivileged() {
 			fmt.Println("❌ This command requires elevated privileges")
 			os.Exit(1)
@@ -783,7 +887,7 @@ func runService(action string) {
 		}
 		fmt.Println("✅ Service configuration reloaded")
 
-	case "disable":
+	case "--disable", "disable":
 		if !config.IsPrivileged() {
 			fmt.Println("❌ This command requires elevated privileges")
 			os.Exit(1)
@@ -795,7 +899,7 @@ func runService(action string) {
 		}
 		fmt.Println("✅ Service autostart disabled")
 
-	case "enable":
+	case "--enable", "enable":
 		if !config.IsPrivileged() {
 			fmt.Println("❌ This command requires elevated privileges")
 			os.Exit(1)
@@ -807,23 +911,23 @@ func runService(action string) {
 		}
 		fmt.Println("✅ Service autostart enabled")
 
-	case "help", "--help":
+	case "--help", "help":
 		fmt.Println("Service Management Commands:")
 		fmt.Println()
-		fmt.Println("  install     Install as system service")
-		fmt.Println("  uninstall   Remove system service")
-		fmt.Println("  start       Start the service")
-		fmt.Println("  stop        Stop the service")
-		fmt.Println("  restart     Restart the service")
-		fmt.Println("  reload      Reload configuration (SIGHUP)")
-		fmt.Println("  enable      Enable service autostart")
-		fmt.Println("  disable     Disable service autostart")
-		fmt.Println("  status      Show service status")
-		fmt.Println("  help        Show this help")
+		fmt.Println("  --install     Install as system service")
+		fmt.Println("  --uninstall   Remove system service")
+		fmt.Println("  start         Start the service")
+		fmt.Println("  stop          Stop the service")
+		fmt.Println("  restart       Restart the service")
+		fmt.Println("  reload        Reload configuration (SIGHUP)")
+		fmt.Println("  --enable      Enable service autostart")
+		fmt.Println("  --disable     Disable service autostart")
+		fmt.Println("  status        Show service status")
+		fmt.Println("  --help        Show this help")
 
 	default:
 		fmt.Printf("❌ Unknown action: %s\n", action)
-		fmt.Println("Valid actions: install, uninstall, start, stop, restart, reload, enable, disable, status, help")
+		fmt.Println("Valid actions: start, stop, restart, reload, status, --install, --uninstall, --enable, --disable, --help")
 	}
 }
 
@@ -1205,8 +1309,8 @@ func runTest() {
 
 	fmt.Printf("🔎 Searching for: \"%s\"\n\n", testQuery)
 
-	query := models.NewQuery(testQuery)
-	query.Category = models.CategoryGeneral
+	query := model.NewQuery(testQuery)
+	query.Category = model.CategoryGeneral
 
 	// Get engines for category
 	searchEngines := registry.GetForCategory(query.Category)
@@ -1220,7 +1324,7 @@ func runTest() {
 	results, err := aggregator.Search(ctx, query)
 
 	if err != nil {
-		if err == models.ErrNoResults {
+		if err == model.ErrNoResults {
 			fmt.Println("⚠️  No results found")
 			return
 		}
@@ -1268,8 +1372,124 @@ func runTest() {
 // First Run Detection (per AI.md PART 6)
 // ============================================================
 
+// getFirstRunToken returns setup token and whether to show first run setup
+// Per AI.md PART 6: Setup token displayed ONCE on first run
+func getFirstRunToken(cfg *config.Config) (token string, showSetup bool) {
+	dataDir := config.GetDataDir()
+	dbPath := filepath.Join(dataDir, "db", "server.db")
+
+	// Check if database exists
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		// Database doesn't exist yet, will be created on first use
+		return "", false
+	}
+
+	// Open database and check for admin
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return "", false
+	}
+	defer db.Close()
+
+	// Check if admin_credentials table exists
+	var tableName string
+	err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='admin_credentials'").Scan(&tableName)
+	if err != nil {
+		// Table doesn't exist, this is a fresh database - generate token
+		return generateAndStoreToken(dbPath)
+	}
+
+	// Check if any admin exists
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM admin_credentials").Scan(&count)
+	if err != nil {
+		return "", false
+	}
+
+	if count == 0 {
+		// No admin exists, generate setup token
+		return generateAndStoreToken(dbPath)
+	}
+
+	return "", false
+}
+
+// generateAndStoreToken generates a new setup token and stores it
+func generateAndStoreToken(dbPath string) (string, bool) {
+	// Check if a valid setup token already exists
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return "", false
+	}
+	defer db.Close()
+
+	// Check for unexpired setup token
+	var expiresAt string
+	err = db.QueryRow(`
+		SELECT expires_at FROM setup_token WHERE id = 1 AND used_at IS NULL
+	`).Scan(&expiresAt)
+
+	if err == nil {
+		// Token exists, check if still valid
+		expiry, err := time.Parse("2006-01-02 15:04:05", expiresAt)
+		if err == nil && expiry.After(time.Now()) {
+			// Valid token exists, don't regenerate (token only shown once)
+			return "", true // showSetup=true but no token (previously shown)
+		}
+	}
+
+	// Generate new setup token
+	setupToken := generateSetupToken()
+
+	// Store the hashed token
+	if err := storeSetupToken(dbPath, setupToken); err != nil {
+		log.Printf("Warning: Failed to store setup token: %v", err)
+		return "", false
+	}
+
+	return setupToken, true
+}
+
+// buildListenURLs builds the list of URLs the server is listening on
+func buildListenURLs(cfg *config.Config) []string {
+	var urls []string
+
+	// Get listen address
+	addr := cfg.Server.Address
+	if addr == "" {
+		addr = "0.0.0.0"
+	}
+
+	// Primary HTTP URL
+	port := cfg.Server.Port
+	if port == 0 {
+		port = 64580
+	}
+
+	// Use localhost for display if binding to all interfaces
+	displayAddr := addr
+	if addr == "0.0.0.0" || addr == "" || addr == "::" {
+		displayAddr = "localhost"
+	}
+
+	urls = append(urls, fmt.Sprintf("http://%s:%d", displayAddr, port))
+
+	// Add HTTPS if configured
+	if cfg.Server.SSL.Enabled && cfg.Server.HTTPSPort > 0 {
+		urls = append(urls, fmt.Sprintf("https://%s:%d", displayAddr, cfg.Server.HTTPSPort))
+	}
+
+	// Add Tor onion address if available
+	if cfg.Server.Tor.Enabled && cfg.Server.Tor.OnionAddress != "" {
+		urls = append(urls, fmt.Sprintf("http://%s", cfg.Server.Tor.OnionAddress))
+	}
+
+	return urls
+}
+
 // checkFirstRun checks if this is the first run and displays setup token if needed
 // Per AI.md PART 6: Setup token displayed ONCE on first run
+// DEPRECATED: Use getFirstRunToken instead - kept for backward compatibility
 func checkFirstRun(cfg *config.Config) {
 	dataDir := config.GetDataDir()
 	dbPath := filepath.Join(dataDir, "db", "server.db")
@@ -1674,7 +1894,7 @@ func daemonize() error {
 	// Windows doesn't support traditional Unix daemonization
 	if runtime.GOOS == "windows" {
 		fmt.Fprintln(os.Stderr, "Warning: --daemon is not supported on Windows")
-		fmt.Fprintln(os.Stderr, "Use --service install && --service start for Windows Service")
+		fmt.Fprintln(os.Stderr, "Use --service --install && --service start for Windows Service")
 		return nil // Continue in foreground
 	}
 
@@ -1716,13 +1936,297 @@ func daemonize() error {
 	return nil
 }
 
-// filterDaemonFlag removes --daemon and -d from args to prevent infinite loop
+// filterDaemonFlag removes --daemon from args to prevent infinite loop
+// Per AI.md PART 8: Only -h and -v may have short flags, so no -d
 func filterDaemonFlag(args []string) []string {
 	filtered := make([]string, 0, len(args))
 	for _, arg := range args {
-		if arg != "--daemon" && arg != "-d" {
+		if arg != "--daemon" {
 			filtered = append(filtered, arg)
 		}
 	}
 	return filtered
+}
+
+// ============================================================
+// Shell Integration (per AI.md PART 8)
+// ============================================================
+
+// runShell handles shell integration commands
+// Per AI.md PART 8: --shell completions [SHELL], --shell init [SHELL]
+func runShell(subCmd string) {
+	binaryName := filepath.Base(os.Args[0])
+
+	// Determine shell type
+	shell := detectShell()
+	if len(os.Args) > 3 {
+		shell = os.Args[3]
+	}
+
+	switch subCmd {
+	case "completions":
+		printCompletions(binaryName, shell)
+	case "init":
+		printShellInit(binaryName, shell)
+	case "help", "--help":
+		printShellHelp(binaryName)
+	default:
+		fmt.Printf("❌ Unknown shell subcommand: %s\n", subCmd)
+		fmt.Println("Valid subcommands: completions, init, --help")
+		os.Exit(1)
+	}
+}
+
+// detectShell detects the current shell from environment
+func detectShell() string {
+	// Check SHELL environment variable
+	shell := os.Getenv("SHELL")
+	if shell != "" {
+		shell = filepath.Base(shell)
+		switch shell {
+		case "bash", "zsh", "fish", "powershell", "pwsh":
+			return shell
+		}
+	}
+
+	// Check parent process on Unix
+	if runtime.GOOS != "windows" {
+		// Default to bash
+		return "bash"
+	}
+
+	// Windows default
+	return "powershell"
+}
+
+// printCompletions prints shell completions script
+func printCompletions(binaryName, shell string) {
+	switch shell {
+	case "bash":
+		fmt.Printf(`# Bash completions for %s
+# Add to ~/.bashrc: eval "$(%s --shell init bash)"
+
+_%s_completions() {
+    local cur prev opts
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+    opts="--help --version --status --init --config-info --test --daemon --debug"
+    opts="$opts --mode --config --data --cache --log --backup --pid --address --port"
+    opts="$opts --service --maintenance --update --build --shell"
+
+    case "${prev}" in
+        --service)
+            COMPREPLY=( $(compgen -W "install uninstall start stop restart reload enable disable status help" -- ${cur}) )
+            return 0
+            ;;
+        --maintenance)
+            COMPREPLY=( $(compgen -W "backup restore list update mode setup help" -- ${cur}) )
+            return 0
+            ;;
+        --update)
+            COMPREPLY=( $(compgen -W "check yes rollback list branch" -- ${cur}) )
+            return 0
+            ;;
+        --build)
+            COMPREPLY=( $(compgen -W "all linux darwin windows freebsd host" -- ${cur}) )
+            return 0
+            ;;
+        --shell)
+            COMPREPLY=( $(compgen -W "completions init --help" -- ${cur}) )
+            return 0
+            ;;
+        --mode)
+            COMPREPLY=( $(compgen -W "production development" -- ${cur}) )
+            return 0
+            ;;
+        --config|--data|--cache|--log|--backup)
+            COMPREPLY=( $(compgen -d -- ${cur}) )
+            return 0
+            ;;
+        --pid)
+            COMPREPLY=( $(compgen -f -- ${cur}) )
+            return 0
+            ;;
+    esac
+
+    COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
+}
+complete -F _%s_completions %s
+`, binaryName, binaryName, binaryName, binaryName, binaryName)
+
+	case "zsh":
+		fmt.Printf(`#compdef %s
+# Zsh completions for %s
+# Add to ~/.zshrc: eval "$(%s --shell init zsh)"
+
+_%s() {
+    local -a commands
+    local -a opts
+
+    opts=(
+        '--help[Show help message]'
+        '-h[Show help message]'
+        '--version[Show version]'
+        '-v[Show version]'
+        '--status[Show server status]'
+        '--init[Initialize configuration]'
+        '--config-info[Show configuration paths]'
+        '--test[Test search engines]:query:'
+        '--daemon[Run as daemon]'
+        '--debug[Enable debug mode]'
+        '--mode[Application mode]:mode:(production development)'
+        '--config[Config directory]:directory:_files -/'
+        '--data[Data directory]:directory:_files -/'
+        '--cache[Cache directory]:directory:_files -/'
+        '--log[Log directory]:directory:_files -/'
+        '--backup[Backup directory]:directory:_files -/'
+        '--pid[PID file]:file:_files'
+        '--address[Listen address]:address:'
+        '--port[Listen port]:port:'
+        '--service[Service management]:action:(install uninstall start stop restart reload enable disable status help)'
+        '--maintenance[Maintenance]:action:(backup restore list update mode setup help)'
+        '--update[Update management]:action:(check yes rollback list branch)'
+        '--build[Build binaries]:platform:(all linux darwin windows freebsd host)'
+        '--shell[Shell integration]:subcommand:(completions init --help)'
+    )
+
+    _arguments -s $opts
+}
+
+compdef _%s %s
+`, binaryName, binaryName, binaryName, binaryName, binaryName, binaryName)
+
+	case "fish":
+		fmt.Printf(`# Fish completions for %s
+# Add to ~/.config/fish/config.fish: %s --shell init fish | source
+
+complete -c %s -f
+complete -c %s -s h -l help -d 'Show help message'
+complete -c %s -s v -l version -d 'Show version'
+complete -c %s -l status -d 'Show server status'
+complete -c %s -l init -d 'Initialize configuration'
+complete -c %s -l config-info -d 'Show configuration paths'
+complete -c %s -l test -d 'Test search engines'
+complete -c %s -l daemon -d 'Run as daemon'
+complete -c %s -l debug -d 'Enable debug mode'
+complete -c %s -l mode -d 'Application mode' -xa 'production development'
+complete -c %s -l config -d 'Config directory' -xa '(__fish_complete_directories)'
+complete -c %s -l data -d 'Data directory' -xa '(__fish_complete_directories)'
+complete -c %s -l cache -d 'Cache directory' -xa '(__fish_complete_directories)'
+complete -c %s -l log -d 'Log directory' -xa '(__fish_complete_directories)'
+complete -c %s -l backup -d 'Backup directory' -xa '(__fish_complete_directories)'
+complete -c %s -l pid -d 'PID file'
+complete -c %s -l address -d 'Listen address'
+complete -c %s -l port -d 'Listen port'
+complete -c %s -l service -d 'Service management' -xa 'install uninstall start stop restart reload enable disable status help'
+complete -c %s -l maintenance -d 'Maintenance' -xa 'backup restore list update mode setup help'
+complete -c %s -l update -d 'Update management' -xa 'check yes rollback list branch'
+complete -c %s -l build -d 'Build binaries' -xa 'all linux darwin windows freebsd host'
+complete -c %s -l shell -d 'Shell integration' -xa 'completions init --help'
+`, binaryName, binaryName,
+			binaryName, binaryName, binaryName, binaryName, binaryName,
+			binaryName, binaryName, binaryName, binaryName, binaryName,
+			binaryName, binaryName, binaryName, binaryName, binaryName,
+			binaryName, binaryName, binaryName, binaryName, binaryName,
+			binaryName, binaryName, binaryName)
+
+	case "powershell", "pwsh":
+		fmt.Printf(`# PowerShell completions for %s
+# Add to $PROFILE: Invoke-Expression (&%s --shell init powershell)
+
+Register-ArgumentCompleter -CommandName %s -ScriptBlock {
+    param($commandName, $wordToComplete, $cursorPosition)
+
+    $commands = @(
+        @{Name='--help'; Description='Show help message'}
+        @{Name='-h'; Description='Show help message'}
+        @{Name='--version'; Description='Show version'}
+        @{Name='-v'; Description='Show version'}
+        @{Name='--status'; Description='Show server status'}
+        @{Name='--init'; Description='Initialize configuration'}
+        @{Name='--config-info'; Description='Show configuration paths'}
+        @{Name='--test'; Description='Test search engines'}
+        @{Name='--daemon'; Description='Run as daemon'}
+        @{Name='--debug'; Description='Enable debug mode'}
+        @{Name='--mode'; Description='Application mode'}
+        @{Name='--config'; Description='Config directory'}
+        @{Name='--data'; Description='Data directory'}
+        @{Name='--cache'; Description='Cache directory'}
+        @{Name='--log'; Description='Log directory'}
+        @{Name='--backup'; Description='Backup directory'}
+        @{Name='--pid'; Description='PID file'}
+        @{Name='--address'; Description='Listen address'}
+        @{Name='--port'; Description='Listen port'}
+        @{Name='--service'; Description='Service management'}
+        @{Name='--maintenance'; Description='Maintenance'}
+        @{Name='--update'; Description='Update management'}
+        @{Name='--build'; Description='Build binaries'}
+        @{Name='--shell'; Description='Shell integration'}
+    )
+
+    $commands | Where-Object { $_.Name -like "$wordToComplete*" } | ForEach-Object {
+        [System.Management.Automation.CompletionResult]::new($_.Name, $_.Name, 'ParameterValue', $_.Description)
+    }
+}
+`, binaryName, binaryName, binaryName)
+
+	default:
+		fmt.Printf("❌ Unsupported shell: %s\n", shell)
+		fmt.Println("Supported shells: bash, zsh, fish, powershell")
+		os.Exit(1)
+	}
+}
+
+// printShellInit prints the shell initialization command
+func printShellInit(binaryName, shell string) {
+	switch shell {
+	case "bash":
+		fmt.Printf("source <(%s --shell completions bash)\n", binaryName)
+	case "zsh":
+		fmt.Printf("source <(%s --shell completions zsh)\n", binaryName)
+	case "fish":
+		fmt.Printf("%s --shell completions fish | source\n", binaryName)
+	case "powershell", "pwsh":
+		fmt.Printf("Invoke-Expression (&%s --shell completions powershell)\n", binaryName)
+	default:
+		fmt.Printf("❌ Unsupported shell: %s\n", shell)
+		fmt.Println("Supported shells: bash, zsh, fish, powershell")
+		os.Exit(1)
+	}
+}
+
+// printShellHelp prints shell integration help
+func printShellHelp(binaryName string) {
+	fmt.Printf(`Shell Integration for %s
+
+Usage:
+  %s --shell completions [SHELL]   Print shell completions script
+  %s --shell init [SHELL]          Print shell init command for eval
+  %s --shell --help                Show this help
+
+Supported Shells:
+  bash        Bash shell (default on Linux)
+  zsh         Zsh shell (default on macOS)
+  fish        Fish shell
+  powershell  PowerShell (Windows)
+
+Setup Instructions:
+
+  Bash (~/.bashrc):
+    eval "$(%s --shell init bash)"
+
+  Zsh (~/.zshrc):
+    eval "$(%s --shell init zsh)"
+
+  Fish (~/.config/fish/config.fish):
+    %s --shell init fish | source
+
+  PowerShell ($PROFILE):
+    Invoke-Expression (&%s --shell init powershell)
+
+The shell will be auto-detected if not specified.
+`, binaryName, binaryName, binaryName, binaryName,
+		binaryName, binaryName, binaryName, binaryName)
 }

@@ -42,7 +42,7 @@ func TestHealthzEndpoint(t *testing.T) {
 		t.Fatalf("Failed to decode response: %v", err)
 	}
 
-	if !response.Success {
+	if !response.OK {
 		t.Error("Expected success to be true")
 	}
 
@@ -51,8 +51,8 @@ func TestHealthzEndpoint(t *testing.T) {
 		t.Fatal("Expected data to be a map")
 	}
 
-	if data["status"] != "ok" {
-		t.Errorf("Expected status 'ok', got %v", data["status"])
+	if data["status"] != "healthy" {
+		t.Errorf("Expected status 'healthy', got %v", data["status"])
 	}
 }
 
@@ -73,7 +73,7 @@ func TestInfoEndpoint(t *testing.T) {
 		t.Fatalf("Failed to decode response: %v", err)
 	}
 
-	if !response.Success {
+	if !response.OK {
 		t.Error("Expected success to be true")
 	}
 }
@@ -95,7 +95,7 @@ func TestCategoriesEndpoint(t *testing.T) {
 		t.Fatalf("Failed to decode response: %v", err)
 	}
 
-	if !response.Success {
+	if !response.OK {
 		t.Error("Expected success to be true")
 	}
 
@@ -127,11 +127,11 @@ func TestSearchEndpointMissingQuery(t *testing.T) {
 		t.Fatalf("Failed to decode response: %v", err)
 	}
 
-	if response.Success {
+	if response.OK {
 		t.Error("Expected success to be false for missing query")
 	}
 
-	if response.Error == nil {
+	if response.Error == "" {
 		t.Error("Expected error to be present")
 	}
 }
@@ -153,7 +153,7 @@ func TestAutocompleteEmptyQuery(t *testing.T) {
 		t.Fatalf("Failed to decode response: %v", err)
 	}
 
-	if !response.Success {
+	if !response.OK {
 		t.Error("Expected success to be true")
 	}
 
@@ -185,7 +185,7 @@ func TestBangsEndpoint(t *testing.T) {
 		t.Fatalf("Failed to decode response: %v", err)
 	}
 
-	if !response.Success {
+	if !response.OK {
 		t.Error("Expected success to be true")
 	}
 
@@ -222,7 +222,7 @@ func TestEnginesEndpoint(t *testing.T) {
 		t.Fatalf("Failed to decode response: %v", err)
 	}
 
-	if !response.Success {
+	if !response.OK {
 		t.Error("Expected success to be true")
 	}
 }
@@ -304,7 +304,7 @@ func TestExtractDomain(t *testing.T) {
 func TestAPIResponseStructure(t *testing.T) {
 	// Test that APIResponse serializes correctly
 	response := APIResponse{
-		Success: true,
+		OK: true,
 		Data:    map[string]string{"key": "value"},
 		Meta:    &APIMeta{Version: "v1"},
 	}
@@ -319,20 +319,17 @@ func TestAPIResponseStructure(t *testing.T) {
 		t.Fatalf("Failed to unmarshal APIResponse: %v", err)
 	}
 
-	if unmarshaled.Success != response.Success {
-		t.Errorf("Success mismatch: got %v, want %v", unmarshaled.Success, response.Success)
+	if unmarshaled.OK != response.OK {
+		t.Errorf("Success mismatch: got %v, want %v", unmarshaled.OK, response.OK)
 	}
 }
 
+// TestAPIErrorResponse tests the unified error response format per AI.md PART 16
 func TestAPIErrorResponse(t *testing.T) {
 	response := APIResponse{
-		Success: false,
-		Error: &APIError{
-			Code:    400,
-			Message: "Bad Request",
-			Details: "Missing required parameter",
-		},
-		Meta: &APIMeta{Version: "v1"},
+		OK:      false,
+		Error:   "BAD_REQUEST",
+		Message: "Invalid request format",
 	}
 
 	data, err := json.Marshal(response)
@@ -345,15 +342,15 @@ func TestAPIErrorResponse(t *testing.T) {
 		t.Fatalf("Failed to unmarshal error response: %v", err)
 	}
 
-	if unmarshaled.Error == nil {
-		t.Fatal("Expected error to be present")
+	if unmarshaled.Error == "" {
+		t.Fatal("Expected error code to be present")
 	}
 
-	if unmarshaled.Error.Code != 400 {
-		t.Errorf("Error code mismatch: got %d, want %d", unmarshaled.Error.Code, 400)
+	if unmarshaled.Error != "BAD_REQUEST" {
+		t.Errorf("Error code mismatch: got %q, want %q", unmarshaled.Error, "BAD_REQUEST")
 	}
 
-	if unmarshaled.Error.Message != "Bad Request" {
-		t.Errorf("Error message mismatch: got %q, want %q", unmarshaled.Error.Message, "Bad Request")
+	if unmarshaled.Message != "Invalid request format" {
+		t.Errorf("Error message mismatch: got %q, want %q", unmarshaled.Message, "Invalid request format")
 	}
 }

@@ -1,0 +1,60 @@
+# All-in-One Dockerfile - includes app + postgresql + valkey + tor
+# Per AI.md PART 28: All-in-One Dockerfile (NON-NEGOTIABLE)
+# Base: debian:latest (stable, broad compatibility)
+# PORTS: Only 80 exposed (db/cache are internal-only)
+
+FROM debian:latest
+
+LABEL org.opencontainers.image.source="https://github.com/apimgr/search"
+LABEL org.opencontainers.image.description="search - all-in-one container"
+LABEL org.opencontainers.image.licenses="MIT"
+
+# Install dependencies (PostgreSQL + Valkey + Tor + Supervisor)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    postgresql \
+    postgresql-contrib \
+    valkey \
+    supervisor \
+    tor \
+    tzdata \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create directories - organized by component
+# Per AI.md PART 28: AIO directory structure
+RUN mkdir -p /config/search /config/search/security /config/search/tor \
+             /config/valkey /config/postgres \
+             /data/search /data/search/tor \
+             /data/db/postgres /data/db/valkey /data/cache \
+             /data/log/search /data/log/postgres /data/backups/search \
+             /run/postgresql /run/valkey \
+    && chown -R postgres:postgres /data/db/postgres /run/postgresql /data/log/postgres
+
+# Copy configs and entrypoint
+COPY docker/rootfs/ /
+
+# Copy application binary from builder or pre-built
+COPY search /usr/local/bin/
+RUN chmod +x /usr/local/bin/search /usr/local/bin/entrypoint.sh
+
+# Default environment
+# Per AI.md PART 28: AIO environment variables
+ENV MODE=production \
+    PORT=80 \
+    DEBUG=false \
+    TZ=America/New_York \
+    PGDATA=/data/db/postgres \
+    DB_HOST=/run/postgresql \
+    DB_NAME=search \
+    DB_USER=search \
+    VALKEY_SOCKET=/run/valkey/valkey.sock
+
+# Only expose app port - db/cache are internal
+EXPOSE 80
+
+# Per AI.md PART 28: AIO healthcheck
+HEALTHCHECK --interval=10s --timeout=5s --start-period=90s --retries=3 \
+    CMD timeout 10s bash -c ':> /dev/tcp/127.0.0.1/80' || exit 1
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

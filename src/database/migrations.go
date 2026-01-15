@@ -93,20 +93,24 @@ func (dbm *DatabaseMigrator) registerServerMigrations() {
 	})
 
 	// Migration 3: Admin sessions
+	// Per AI.md PART 17: Admin sessions stored in admin_sessions table (server.db)
 	m.Register(Migration{
 		Version:     3,
 		Description: "Create admin_sessions table",
 		Up: `
 			CREATE TABLE IF NOT EXISTS admin_sessions (
-				id TEXT PRIMARY KEY,
-				token_hash TEXT UNIQUE NOT NULL,
-				ip_address TEXT,
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				token TEXT UNIQUE NOT NULL,
+				username TEXT NOT NULL,
+				ip_address TEXT NOT NULL,
 				user_agent TEXT,
-				location TEXT,
+				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 				expires_at DATETIME NOT NULL,
-				created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+				last_active DATETIME DEFAULT CURRENT_TIMESTAMP
 			);
+			CREATE INDEX idx_admin_sessions_token ON admin_sessions(token);
 			CREATE INDEX idx_admin_sessions_expires ON admin_sessions(expires_at);
+			CREATE INDEX idx_admin_sessions_username ON admin_sessions(username);
 		`,
 		Down: `DROP TABLE IF EXISTS admin_sessions`,
 	})
@@ -415,7 +419,7 @@ func (dbm *DatabaseMigrator) registerServerMigrations() {
 	})
 }
 
-// registerUsersMigrations registers migrations for users.db
+// registerUsersMigrations registers migrations for user.db
 // Tables: users, user_sessions, user_2fa, recovery_keys, user_tokens, etc.
 func (dbm *DatabaseMigrator) registerUsersMigrations() {
 	m := dbm.usersMigrator
@@ -695,6 +699,82 @@ func (dbm *DatabaseMigrator) registerUsersMigrations() {
 			CREATE INDEX idx_user_emails_token ON user_emails(verification_token);
 		`,
 		Down: `DROP TABLE IF EXISTS user_emails`,
+	})
+
+	// Migration 14: Notification tables per AI.md PART 18
+	// WebUI notifications stored in database for persistence
+	m.Register(Migration{
+		Version:     14,
+		Description: "Create notification tables for WebUI notifications",
+		Up: `
+			CREATE TABLE IF NOT EXISTS admin_notifications (
+				id TEXT PRIMARY KEY,
+				admin_id TEXT NOT NULL,
+				type TEXT NOT NULL,
+				title TEXT NOT NULL,
+				message TEXT,
+				link TEXT,
+				read INTEGER DEFAULT 0,
+				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY (admin_id) REFERENCES admin_credentials(id) ON DELETE CASCADE
+			);
+			CREATE INDEX idx_admin_notif_admin ON admin_notifications(admin_id);
+			CREATE INDEX idx_admin_notif_read ON admin_notifications(admin_id, read);
+			CREATE INDEX idx_admin_notif_created ON admin_notifications(created_at);
+
+			CREATE TABLE IF NOT EXISTS user_notifications (
+				id TEXT PRIMARY KEY,
+				user_id TEXT NOT NULL,
+				type TEXT NOT NULL,
+				title TEXT NOT NULL,
+				message TEXT,
+				link TEXT,
+				read INTEGER DEFAULT 0,
+				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+			);
+			CREATE INDEX idx_user_notif_user ON user_notifications(user_id);
+			CREATE INDEX idx_user_notif_read ON user_notifications(user_id, read);
+			CREATE INDEX idx_user_notif_created ON user_notifications(created_at);
+
+			CREATE TABLE IF NOT EXISTS admin_notification_prefs (
+				admin_id TEXT PRIMARY KEY,
+				security_login INTEGER DEFAULT 1,
+				security_password INTEGER DEFAULT 1,
+				security_2fa INTEGER DEFAULT 1,
+				server_ssl_webui INTEGER DEFAULT 1,
+				server_ssl_email INTEGER DEFAULT 1,
+				server_update_webui INTEGER DEFAULT 1,
+				server_disk_webui INTEGER DEFAULT 1,
+				server_disk_email INTEGER DEFAULT 1,
+				backup_complete_webui INTEGER DEFAULT 1,
+				backup_failed_webui INTEGER DEFAULT 1,
+				backup_failed_email INTEGER DEFAULT 1,
+				scheduler_failed_webui INTEGER DEFAULT 1,
+				scheduler_failed_email INTEGER DEFAULT 1,
+				updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY (admin_id) REFERENCES admin_credentials(id) ON DELETE CASCADE
+			);
+
+			CREATE TABLE IF NOT EXISTS user_notification_prefs (
+				user_id TEXT PRIMARY KEY,
+				security_login INTEGER DEFAULT 1,
+				security_password INTEGER DEFAULT 1,
+				security_2fa INTEGER DEFAULT 1,
+				account_email_webui INTEGER DEFAULT 1,
+				account_profile_webui INTEGER DEFAULT 1,
+				session_expired_webui INTEGER DEFAULT 1,
+				session_device_webui INTEGER DEFAULT 1,
+				updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+			);
+		`,
+		Down: `
+			DROP TABLE IF EXISTS admin_notifications;
+			DROP TABLE IF EXISTS user_notifications;
+			DROP TABLE IF EXISTS admin_notification_prefs;
+			DROP TABLE IF EXISTS user_notification_prefs;
+		`,
 	})
 
 	// Sort migrations by version

@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/apimgr/search/src/models"
+	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 )
 
@@ -20,7 +20,7 @@ type Reddit struct {
 
 // NewReddit creates a new Reddit search engine
 func NewReddit() *Reddit {
-	config := models.NewEngineConfig("reddit")
+	config := model.NewEngineConfig("reddit")
 	config.DisplayName = "Reddit"
 	config.Priority = 45
 	config.Categories = []string{"general", "social"}
@@ -35,7 +35,7 @@ func NewReddit() *Reddit {
 }
 
 // Search performs a Reddit search
-func (e *Reddit) Search(ctx context.Context, query *models.Query) ([]models.Result, error) {
+func (e *Reddit) Search(ctx context.Context, query *model.Query) ([]model.Result, error) {
 	// Reddit JSON API
 	searchURL := "https://www.reddit.com/search.json"
 
@@ -87,7 +87,7 @@ func (e *Reddit) Search(ctx context.Context, query *models.Query) ([]models.Resu
 		return nil, err
 	}
 
-	results := make([]models.Result, 0)
+	results := make([]model.Result, 0)
 
 	for i, child := range data.Data.Children {
 		if i >= e.GetConfig().GetMaxResults() {
@@ -112,12 +112,12 @@ func (e *Reddit) Search(ctx context.Context, query *models.Query) ([]models.Resu
 			content += " | " + snippet
 		}
 
-		results = append(results, models.Result{
+		results = append(results, model.Result{
 			Title:    item.Title,
 			URL:      postURL,
 			Content:  content,
 			Engine:   e.Name(),
-			Category: models.CategoryGeneral,
+			Category: model.CategoryGeneral,
 			Score:    calculateScore(e.GetPriority(), i, 1),
 			Position: i,
 		})

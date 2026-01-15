@@ -16,6 +16,7 @@ import (
 
 	"github.com/apimgr/search/src/backup"
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/database"
 	"github.com/apimgr/search/src/email"
 	tlspkg "github.com/apimgr/search/src/tls"
 	"gopkg.in/yaml.v3"
@@ -43,11 +44,13 @@ type Handler struct {
 	service        *AdminService
 	cluster        ClusterManager
 	tor            TorManager
+	scheduler      SchedulerManager // Per AI.md PART 19: Admin panel scheduler integration
 	renderer       Renderer
 	startTime      time.Time
 	registry       EngineRegistry
 	reloadCallback ReloadCallback
 	configPath     string
+	configSync     *config.ConfigSync // Per AI.md PART 5: Cluster config sync (NON-NEGOTIABLE)
 }
 
 // TorManager interface for Tor operations per AI.md PART 32
@@ -89,6 +92,40 @@ type ClusterManager interface {
 	LeaveCluster(ctx context.Context) error
 }
 
+// SchedulerManager interface for scheduler operations
+// Per AI.md PART 19: Admin panel must show actual scheduler runtime state
+type SchedulerManager interface {
+	IsRunning() bool
+	GetTasks() []*SchedulerTaskInfo
+	GetTask(id string) (*SchedulerTaskInfo, error)
+	Enable(id string) error
+	Disable(id string) error
+	RunNow(id string) error
+}
+
+// SchedulerTaskInfo represents task information for admin panel
+// Per AI.md PART 19: Task state shown in admin UI
+type SchedulerTaskInfo struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Schedule    string    `json:"schedule"`
+	TaskType    string    `json:"task_type"`
+	LastRun     time.Time `json:"last_run"`
+	LastStatus  string    `json:"last_status"`
+	LastError   string    `json:"last_error,omitempty"`
+	NextRun     time.Time `json:"next_run"`
+	RunCount    int64     `json:"run_count"`
+	FailCount   int64     `json:"fail_count"`
+	Enabled     bool      `json:"enabled"`
+	Skippable   bool      `json:"skippable"`
+
+	// Retry state per AI.md PART 19
+	RetryCount  int       `json:"retry_count"`
+	NextRetry   time.Time `json:"next_retry,omitempty"`
+	MaxRetries  int       `json:"max_retries"`
+}
+
 // ClusterNode represents a cluster node
 type ClusterNode struct {
 	ID        string
@@ -127,6 +164,12 @@ func (h *Handler) SetConfigPath(path string) {
 	h.configPath = path
 }
 
+// SetConfigSync sets the config sync manager for cluster mode
+// Per AI.md PART 5 lines 5212-5310: Configuration Source of Truth (NON-NEGOTIABLE)
+func (h *Handler) SetConfigSync(cs *config.ConfigSync) {
+	h.configSync = cs
+}
+
 // SetAdminService sets the admin service for multi-admin support
 func (h *Handler) SetAdminService(svc *AdminService) {
 	h.service = svc
@@ -142,61 +185,95 @@ func (h *Handler) SetTorManager(tm TorManager) {
 	h.tor = tm
 }
 
+// SetScheduler sets the scheduler manager per AI.md PART 19
+// Required for admin panel to show actual scheduler runtime state
+func (h *Handler) SetScheduler(sm SchedulerManager) {
+	h.scheduler = sm
+}
+
+// SetDatabase sets the database for session persistence per AI.md PART 17
+func (h *Handler) SetDatabase(db *database.DB) {
+	h.auth.SetDatabase(db)
+}
+
+// AuthManager returns the admin authentication manager
+// Per AI.md PART 11: Used by server auth.go for scoped login redirect
+func (h *Handler) AuthManager() *AuthManager {
+	return h.auth
+}
+
 // RegisterRoutes registers admin routes on the given mux
+// Per AI.md PART 17: Admin Route Hierarchy (NON-NEGOTIABLE)
+// - /{adminpath}/ = Dashboard ONLY
+// - /{adminpath}/profile = Admin's own profile
+// - /{adminpath}/preferences = Admin's own preferences
+// - /{adminpath}/server/* = ALL server management
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	// Public routes (no auth required)
 	mux.HandleFunc("/admin/login", h.handleLogin)
 	mux.HandleFunc("/admin/logout", h.handleLogout)
 	mux.HandleFunc("/admin/setup", h.handleSetup)
-	mux.HandleFunc("/admin/invite/", h.handleInviteAccept)
+	// Per AI.md PART 11 line 11403: Admin invite at /auth/invite/server/{code}
+	mux.HandleFunc("/auth/invite/server/", h.handleInviteAccept)
 
-	// Protected routes (auth required)
+	// Dashboard (only valid root-level route per AI.md PART 17)
 	mux.HandleFunc("/admin", h.requireAuth(h.handleDashboard))
 	mux.HandleFunc("/admin/", h.requireAuth(h.handleDashboard))
-	mux.HandleFunc("/admin/dashboard", h.requireAuth(h.handleDashboard))
-	mux.HandleFunc("/admin/config", h.requireAuth(h.handleConfig))
-	mux.HandleFunc("/admin/engines", h.requireAuth(h.handleEngines))
-	mux.HandleFunc("/admin/tokens", h.requireAuth(h.handleTokens))
-	mux.HandleFunc("/admin/logs", h.requireAuth(h.handleLogs))
 
-	// Server settings routes (per AI.md)
+	// Admin's own profile/preferences (valid root-level routes per AI.md PART 17)
+	mux.HandleFunc("/admin/profile", h.requireAuth(h.handleAdminProfile))
+	mux.HandleFunc("/admin/preferences", h.requireAuth(h.handleAdminPreferences))
+
+	// Server management - ALL under /admin/server/* per AI.md PART 17
 	mux.HandleFunc("/admin/server/settings", h.requireAuth(h.handleServerSettings))
 	mux.HandleFunc("/admin/server/branding", h.requireAuth(h.handleServerBranding))
-	mux.HandleFunc("/admin/server/ssl", h.requireAuth(h.handleServerSSL))
-	mux.HandleFunc("/admin/server/tor", h.requireAuth(h.handleServerTor))
+	mux.HandleFunc("/admin/server/engines", h.requireAuth(h.handleEngines))
 	mux.HandleFunc("/admin/server/web", h.requireAuth(h.handleServerWeb))
 	mux.HandleFunc("/admin/server/email", h.requireAuth(h.handleServerEmail))
 	mux.HandleFunc("/admin/server/announcements", h.requireAuth(h.handleServerAnnouncements))
-	mux.HandleFunc("/admin/server/geoip", h.requireAuth(h.handleServerGeoIP))
-	mux.HandleFunc("/admin/server/metrics", h.requireAuth(h.handleServerMetrics))
-	mux.HandleFunc("/admin/scheduler", h.requireAuth(h.handleScheduler))
-
-	// Additional server settings routes (per AI.md)
+	mux.HandleFunc("/admin/server/scheduler", h.requireAuth(h.handleScheduler))
+	mux.HandleFunc("/admin/server/logs", h.requireAuth(h.handleLogs))
+	mux.HandleFunc("/admin/server/logs/audit", h.requireAuth(h.handleAuditLogs))
 	mux.HandleFunc("/admin/server/backup", h.requireAuth(h.handleServerBackup))
 	mux.HandleFunc("/admin/server/maintenance", h.requireAuth(h.handleServerMaintenance))
 	mux.HandleFunc("/admin/server/updates", h.requireAuth(h.handleServerUpdates))
 	mux.HandleFunc("/admin/server/info", h.requireAuth(h.handleServerInfo))
+	mux.HandleFunc("/admin/server/metrics", h.requireAuth(h.handleServerMetrics))
+	mux.HandleFunc("/admin/server/help", h.requireAuth(h.handleHelp))
+
+	// SSL/TLS - direct under /admin/server/ per AI.md PART 17
+	mux.HandleFunc("/admin/server/ssl", h.requireAuth(h.handleServerSSL))
+
+	// Network settings - /admin/server/network/* per AI.md PART 17
+	mux.HandleFunc("/admin/server/network/tor", h.requireAuth(h.handleServerTor))
+	mux.HandleFunc("/admin/server/network/geoip", h.requireAuth(h.handleServerGeoIP))
+
+	// Security settings - /admin/server/security/* per AI.md PART 17
 	mux.HandleFunc("/admin/server/security", h.requireAuth(h.handleServerSecurity))
-	mux.HandleFunc("/admin/help", h.requireAuth(h.handleHelp))
+	mux.HandleFunc("/admin/server/security/auth", h.requireAuth(h.handleServerAuth))
+	mux.HandleFunc("/admin/server/security/tokens", h.requireAuth(h.handleTokens))
+	mux.HandleFunc("/admin/server/security/firewall", h.requireAuth(h.handleServerFirewall))
 
-	// Admin management routes (per AI.md PART 31)
-	mux.HandleFunc("/admin/users/admins", h.requireAuth(h.handleAdmins))
-	mux.HandleFunc("/admin/users/admins/invite", h.requireAuth(h.handleAdminInvite))
+	// User management - /admin/server/users/* per AI.md PART 17
+	mux.HandleFunc("/admin/server/users", h.requireAuth(h.handleUsers))
+	mux.HandleFunc("/admin/server/users/admins", h.requireAuth(h.handleAdmins))
+	mux.HandleFunc("/admin/server/users/admins/invite", h.requireAuth(h.handleAdminInvite))
 
-	// Cluster/Node management routes (per AI.md PART 24)
-	mux.HandleFunc("/admin/server/nodes", h.requireAuth(h.handleNodes))
-	mux.HandleFunc("/admin/server/nodes/token", h.requireAuth(h.handleNodesToken))
-	mux.HandleFunc("/admin/server/nodes/leave", h.requireAuth(h.handleNodesLeave))
+	// Cluster/Node management - /admin/server/cluster/* per AI.md PART 17
+	mux.HandleFunc("/admin/server/cluster", h.requireAuth(h.handleCluster))
+	mux.HandleFunc("/admin/server/cluster/nodes", h.requireAuth(h.handleNodes))
+	mux.HandleFunc("/admin/server/cluster/nodes/token", h.requireAuth(h.handleNodesToken))
+	mux.HandleFunc("/admin/server/cluster/nodes/leave", h.requireAuth(h.handleNodesLeave))
 
-	// API routes (bearer token auth) - per AI.md spec: /api/v1/admin/*
+	// API routes (bearer token auth) - per AI.md PART 17: /api/v1/admin/server/*
 	mux.HandleFunc("/api/v1/admin/status", h.requireAPIAuth(h.apiStatus))
-	mux.HandleFunc("/api/v1/admin/config", h.requireAPIAuth(h.apiConfig))
-	mux.HandleFunc("/api/v1/admin/engines", h.requireAPIAuth(h.apiEngines))
-	mux.HandleFunc("/api/v1/admin/tokens", h.requireAPIAuth(h.apiTokens))
-	mux.HandleFunc("/api/v1/admin/reload", h.requireAPIAuth(h.apiReload))
-	mux.HandleFunc("/api/v1/admin/backups", h.requireAPIAuth(h.apiBackups))
-	mux.HandleFunc("/api/v1/admin/logs", h.requireAPIAuth(h.apiLogs))
-	mux.HandleFunc("/api/v1/admin/scheduler", h.requireAPIAuth(h.apiScheduler))
+	mux.HandleFunc("/api/v1/admin/server/settings", h.requireAPIAuth(h.apiConfig))
+	mux.HandleFunc("/api/v1/admin/server/engines", h.requireAPIAuth(h.apiEngines))
+	mux.HandleFunc("/api/v1/admin/server/security/tokens", h.requireAPIAuth(h.apiTokens))
+	mux.HandleFunc("/api/v1/admin/server/reload", h.requireAPIAuth(h.apiReload))
+	mux.HandleFunc("/api/v1/admin/server/backup", h.requireAPIAuth(h.apiBackups))
+	mux.HandleFunc("/api/v1/admin/server/logs", h.requireAPIAuth(h.apiLogs))
+	mux.HandleFunc("/api/v1/admin/server/scheduler", h.requireAPIAuth(h.apiScheduler))
 	mux.HandleFunc("/api/v1/admin/email/test", h.requireAPIAuth(h.apiEmailTest))
 	mux.HandleFunc("/api/v1/admin/email/templates", h.requireAPIAuth(h.apiEmailTemplates))
 	mux.HandleFunc("/api/v1/admin/email/preview", h.requireAPIAuth(h.apiEmailPreview))
@@ -291,8 +368,8 @@ func (h *Handler) processLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	username := r.FormValue("username")
-	password := r.FormValue("password")
+	username := strings.TrimSpace(r.FormValue("username"))
+	password := r.FormValue("password") // Don't trim passwords
 
 	if !h.auth.Authenticate(username, password) {
 		log.Printf("[Admin] Failed login attempt for user: %s from %s", username, GetClientIP(r))
@@ -402,6 +479,90 @@ func (h *Handler) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	h.renderAdminPage(w, "dashboard", data)
 }
 
+// handleAdminProfile handles the admin's own profile settings
+// Per AI.md PART 17: /{adminpath}/profile = Admin's OWN profile
+func (h *Handler) handleAdminProfile(w http.ResponseWriter, r *http.Request) {
+	data := &AdminPageData{
+		Title:  "My Profile",
+		Page:   "admin-profile",
+		Config: h.config,
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	h.renderAdminPage(w, "profile", data)
+}
+
+// handleAdminPreferences handles the admin's own UI preferences
+// Per AI.md PART 17: /{adminpath}/preferences = Admin's OWN preferences
+func (h *Handler) handleAdminPreferences(w http.ResponseWriter, r *http.Request) {
+	data := &AdminPageData{
+		Title:  "My Preferences",
+		Page:   "admin-preferences",
+		Config: h.config,
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	h.renderAdminPage(w, "preferences", data)
+}
+
+// handleAuditLogs handles the audit log viewer
+// Per AI.md PART 17: /{adminpath}/server/logs/audit
+func (h *Handler) handleAuditLogs(w http.ResponseWriter, r *http.Request) {
+	data := &AdminPageData{
+		Title:  "Audit Logs",
+		Page:   "admin-audit-logs",
+		Config: h.config,
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	h.renderAdminPage(w, "audit-logs", data)
+}
+
+// handleServerAuth handles authentication configuration
+// Per AI.md PART 17: /{adminpath}/server/security/auth
+func (h *Handler) handleServerAuth(w http.ResponseWriter, r *http.Request) {
+	data := &AdminPageData{
+		Title:  "Authentication Settings",
+		Page:   "admin-auth",
+		Config: h.config,
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	h.renderAdminPage(w, "auth", data)
+}
+
+// handleServerFirewall handles firewall/blocklist configuration
+// Per AI.md PART 17: /{adminpath}/server/security/firewall
+func (h *Handler) handleServerFirewall(w http.ResponseWriter, r *http.Request) {
+	data := &AdminPageData{
+		Title:  "Firewall Settings",
+		Page:   "admin-firewall",
+		Config: h.config,
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	h.renderAdminPage(w, "firewall", data)
+}
+
+// handleUsers handles user management (if multi-user enabled)
+// Per AI.md PART 17: /{adminpath}/server/users
+func (h *Handler) handleUsers(w http.ResponseWriter, r *http.Request) {
+	data := &AdminPageData{
+		Title:  "User Management",
+		Page:   "admin-users",
+		Config: h.config,
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	h.renderAdminPage(w, "users", data)
+}
+
+// handleCluster handles cluster overview
+// Per AI.md PART 17: /{adminpath}/server/cluster
+func (h *Handler) handleCluster(w http.ResponseWriter, r *http.Request) {
+	data := &AdminPageData{
+		Title:  "Cluster Management",
+		Page:   "admin-cluster",
+		Config: h.config,
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	h.renderAdminPage(w, "cluster", data)
+}
+
 // handleConfig renders the configuration page
 func (h *Handler) handleConfig(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
@@ -469,20 +630,41 @@ func (h *Handler) processConfigUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update config values from form
-	if title := r.FormValue("server_title"); title != "" {
+	// Update config values from form (trim all text inputs)
+	if title := strings.TrimSpace(r.FormValue("server_title")); title != "" {
 		h.config.Server.Title = title
+		// Per AI.md PART 5: Use ConfigSync for cluster mode
+		if h.configSync != nil && h.configSync.IsClusterMode() {
+			if err := h.configSync.SaveSetting("server.title", title); err != nil {
+				log.Printf("[Admin] Failed to sync title to database: %v", err)
+			}
+		}
 	}
-	if desc := r.FormValue("server_description"); desc != "" {
+	if desc := strings.TrimSpace(r.FormValue("server_description")); desc != "" {
 		h.config.Server.Description = desc
+		// Per AI.md PART 5: Use ConfigSync for cluster mode
+		if h.configSync != nil && h.configSync.IsClusterMode() {
+			if err := h.configSync.SaveSetting("server.description", desc); err != nil {
+				log.Printf("[Admin] Failed to sync description to database: %v", err)
+			}
+		}
 	}
 
 	// Save config to file if path is set
+	// Per AI.md PART 5: In cluster mode, ConfigSync handles file writes as cache
 	if h.configPath != "" {
-		if err := h.saveConfig(); err != nil {
-			log.Printf("[Admin] Failed to save config: %v", err)
-			http.Redirect(w, r, "/admin/config?error=Failed+to+save+config", http.StatusSeeOther)
-			return
+		if h.configSync != nil && h.configSync.IsClusterMode() {
+			// Cluster mode: sync to local file (already done per-setting above)
+			if err := h.configSync.SyncToLocal(); err != nil {
+				log.Printf("[Admin] Failed to sync config to local: %v", err)
+			}
+		} else {
+			// Standalone mode: write directly to file
+			if err := h.saveConfig(); err != nil {
+				log.Printf("[Admin] Failed to save config: %v", err)
+				http.Redirect(w, r, "/admin/config?error=Failed+to+save+config", http.StatusSeeOther)
+				return
+			}
 		}
 	}
 
@@ -521,8 +703,8 @@ func (h *Handler) processTokenCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name := r.FormValue("name")
-	description := r.FormValue("description")
+	name := strings.TrimSpace(r.FormValue("name"))
+	description := strings.TrimSpace(r.FormValue("description"))
 	validDays := 365 // Default to 1 year
 
 	if name == "" {
@@ -730,26 +912,18 @@ func (h *Handler) jsonError(w http.ResponseWriter, message string, status int) {
 
 // AdminPageData holds data for admin templates
 type AdminPageData struct {
-	Title          string
-	Description    string
-	Page           string
-	Config         *config.Config
-	Stats          *DashboardStats
-	Tokens         []*APIToken
-	Error          string
-	Success        string
-	NewToken       string
-	SchedulerTasks map[string]*SchedulerTaskInfo
-	Extra          map[string]interface{}
-}
-
-// SchedulerTaskInfo holds information about a scheduled task
-type SchedulerTaskInfo struct {
-	Name     string
-	Schedule string
-	LastRun  time.Time
-	NextRun  time.Time
-	Enabled  bool
+	Title            string
+	Description      string
+	Page             string
+	Config           *config.Config
+	Stats            *DashboardStats
+	Tokens           []*APIToken
+	Error            string
+	Success          string
+	NewToken         string
+	SchedulerTasks   map[string]*SchedulerTaskInfo
+	SchedulerRunning bool // Per AI.md PART 19: Scheduler is ALWAYS RUNNING
+	Extra            map[string]interface{}
 }
 
 // DashboardStats holds dashboard statistics
@@ -875,14 +1049,14 @@ func (h *Handler) processServerSettingsUpdate(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Update server settings
-	if title := r.FormValue("title"); title != "" {
+	// Update server settings (trim all text inputs)
+	if title := strings.TrimSpace(r.FormValue("title")); title != "" {
 		h.config.Server.Title = title
 	}
-	if desc := r.FormValue("description"); desc != "" {
+	if desc := strings.TrimSpace(r.FormValue("description")); desc != "" {
 		h.config.Server.Description = desc
 	}
-	if baseURL := r.FormValue("base_url"); baseURL != "" {
+	if baseURL := strings.TrimSpace(r.FormValue("base_url")); baseURL != "" {
 		h.config.Server.BaseURL = baseURL
 	}
 
@@ -915,22 +1089,23 @@ func (h *Handler) processServerBrandingUpdate(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if appName := r.FormValue("app_name"); appName != "" {
+	// Trim all text inputs per AI.md
+	if appName := strings.TrimSpace(r.FormValue("app_name")); appName != "" {
 		h.config.Server.Branding.AppName = appName
 	}
-	if theme := r.FormValue("theme"); theme != "" {
+	if theme := strings.TrimSpace(r.FormValue("theme")); theme != "" {
 		h.config.Server.Branding.Theme = theme
 	}
-	if primaryColor := r.FormValue("primary_color"); primaryColor != "" {
+	if primaryColor := strings.TrimSpace(r.FormValue("primary_color")); primaryColor != "" {
 		h.config.Server.Branding.PrimaryColor = primaryColor
 	}
-	if logoURL := r.FormValue("logo_url"); logoURL != "" {
+	if logoURL := strings.TrimSpace(r.FormValue("logo_url")); logoURL != "" {
 		h.config.Server.Branding.LogoURL = logoURL
 	}
-	if faviconURL := r.FormValue("favicon_url"); faviconURL != "" {
+	if faviconURL := strings.TrimSpace(r.FormValue("favicon_url")); faviconURL != "" {
 		h.config.Server.Branding.FaviconURL = faviconURL
 	}
-	if footerText := r.FormValue("footer_text"); footerText != "" {
+	if footerText := strings.TrimSpace(r.FormValue("footer_text")); footerText != "" {
 		h.config.Server.Branding.FooterText = footerText
 	}
 
@@ -1096,24 +1271,31 @@ func (h *Handler) handleServerEmail(w http.ResponseWriter, r *http.Request) {
 }
 
 // processServerEmailUpdate handles email settings form submission
+// Per AI.md PART 18: Nested SMTP and From blocks
 func (h *Handler) processServerEmailUpdate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Redirect(w, r, "/admin/server/email?error=Invalid+form+data", http.StatusSeeOther)
 		return
 	}
 
-	h.config.Server.Email.Enabled = r.FormValue("enabled") == "on"
-	h.config.Server.Email.SMTPHost = r.FormValue("smtp_host")
+	// Per AI.md PART 18: SMTP settings
+	h.config.Server.Email.SMTP.Host = r.FormValue("smtp_host")
 	if port := r.FormValue("smtp_port"); port != "" {
-		fmt.Sscanf(port, "%d", &h.config.Server.Email.SMTPPort)
+		fmt.Sscanf(port, "%d", &h.config.Server.Email.SMTP.Port)
 	}
-	h.config.Server.Email.SMTPUser = r.FormValue("smtp_user")
-	if pass := r.FormValue("smtp_pass"); pass != "" && pass != "********" {
-		h.config.Server.Email.SMTPPass = pass
+	h.config.Server.Email.SMTP.Username = r.FormValue("smtp_username")
+	if pass := r.FormValue("smtp_password"); pass != "" && pass != "********" {
+		h.config.Server.Email.SMTP.Password = pass
 	}
-	h.config.Server.Email.FromAddress = r.FormValue("from_address")
-	h.config.Server.Email.FromName = r.FormValue("from_name")
-	h.config.Server.Email.TLS = r.FormValue("tls") == "on"
+	// Per AI.md PART 18: TLS mode (auto, starttls, tls, none)
+	h.config.Server.Email.SMTP.TLS = r.FormValue("smtp_tls")
+	if h.config.Server.Email.SMTP.TLS == "" {
+		h.config.Server.Email.SMTP.TLS = "auto"
+	}
+
+	// Per AI.md PART 18: From settings
+	h.config.Server.Email.From.Name = r.FormValue("from_name")
+	h.config.Server.Email.From.Email = r.FormValue("from_email")
 
 	h.saveAndReload(w, r, "/admin/server/email")
 }
@@ -1341,39 +1523,28 @@ func (h *Handler) handleHelp(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleScheduler renders the scheduler management page
+// Per AI.md PART 19: Admin panel shows actual scheduler runtime state
 func (h *Handler) handleScheduler(w http.ResponseWriter, r *http.Request) {
-	// Build scheduler task info
 	schedulerTasks := make(map[string]*SchedulerTaskInfo)
+	schedulerRunning := false
 
-	// Define default tasks with their schedules
-	tasks := []struct {
-		id       string
-		name     string
-		schedule string
-	}{
-		{"backup", "Backup", "0 3 * * *"},
-		{"cache_cleanup", "Cache Cleanup", "0 */6 * * *"},
-		{"log_rotation", "Log Rotation", "0 0 * * 0"},
-		{"geoip_update", "GeoIP Update", "0 4 * * 3"},
-		{"engine_health", "Engine Health Check", "*/15 * * * *"},
-	}
-
-	for _, task := range tasks {
-		schedulerTasks[task.id] = &SchedulerTaskInfo{
-			Name:     task.name,
-			Schedule: task.schedule,
-			Enabled:  true, // Default to enabled
-			// LastRun and NextRun will be zero values (displayed as "Never")
+	// Get actual scheduler state if scheduler is connected
+	if h.scheduler != nil {
+		schedulerRunning = h.scheduler.IsRunning()
+		tasks := h.scheduler.GetTasks()
+		for _, task := range tasks {
+			schedulerTasks[task.ID] = task
 		}
 	}
 
 	data := &AdminPageData{
-		Title:          "Scheduler",
-		Page:           "admin-scheduler",
-		Config:         h.config,
-		Error:          r.URL.Query().Get("error"),
-		Success:        r.URL.Query().Get("success"),
-		SchedulerTasks: schedulerTasks,
+		Title:            "Scheduler",
+		Page:             "admin-scheduler",
+		Config:           h.config,
+		Error:            r.URL.Query().Get("error"),
+		Success:          r.URL.Query().Get("success"),
+		SchedulerTasks:   schedulerTasks,
+		SchedulerRunning: schedulerRunning,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -1545,59 +1716,111 @@ func readLastLines(path string, n int) ([]string, error) {
 }
 
 // apiScheduler handles scheduler task management API
+// Per AI.md PART 19: Returns actual scheduler runtime state
 func (h *Handler) apiScheduler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		// List scheduled tasks
-		tasks := h.config.Server.Scheduler.Tasks
+		// Return actual scheduler runtime state
+		if h.scheduler == nil {
+			h.jsonError(w, "Scheduler not connected", http.StatusServiceUnavailable)
+			return
+		}
+
+		tasks := h.scheduler.GetTasks()
+		taskList := make([]map[string]interface{}, 0, len(tasks))
+		for _, task := range tasks {
+			taskList = append(taskList, map[string]interface{}{
+				"id":          task.ID,
+				"name":        task.Name,
+				"description": task.Description,
+				"schedule":    task.Schedule,
+				"task_type":   task.TaskType,
+				"last_run":    task.LastRun,
+				"last_status": task.LastStatus,
+				"last_error":  task.LastError,
+				"next_run":    task.NextRun,
+				"run_count":   task.RunCount,
+				"fail_count":  task.FailCount,
+				"enabled":     task.Enabled,
+				"skippable":   task.Skippable,
+			})
+		}
+
 		h.jsonResponse(w, map[string]interface{}{
-			"enabled": h.config.Server.Scheduler.Enabled,
-			"tasks":   tasks,
-			"total":   len(tasks),
+			"always_running":  true, // Per AI.md PART 19
+			"running":         h.scheduler.IsRunning(),
+			"timezone":        h.config.Server.Scheduler.Timezone,
+			"catch_up_window": h.config.Server.Scheduler.CatchUpWindow,
+			"tasks":           taskList,
 		}, http.StatusOK)
 
 	case http.MethodPost:
-		// Add/update task
-		var task config.ScheduledTask
-		if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
-			h.jsonError(w, "Invalid task data", http.StatusBadRequest)
+		// Enable/disable task via scheduler
+		if h.scheduler == nil {
+			h.jsonError(w, "Scheduler not connected", http.StatusServiceUnavailable)
 			return
 		}
 
-		// Find or append task
-		found := false
-		for i, t := range h.config.Server.Scheduler.Tasks {
-			if t.ID == task.ID {
-				h.config.Server.Scheduler.Tasks[i] = task
-				found = true
-				break
-			}
+		var req struct {
+			TaskID  string `json:"task_id"`
+			Action  string `json:"action"` // enable, disable, run_now
+			Enabled bool   `json:"enabled"`
 		}
-		if !found {
-			h.config.Server.Scheduler.Tasks = append(h.config.Server.Scheduler.Tasks, task)
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			h.jsonError(w, "Invalid request data", http.StatusBadRequest)
+			return
 		}
 
-		h.saveConfig()
+		// Handle action-based requests
+		switch req.Action {
+		case "run_now":
+			if err := h.scheduler.RunNow(req.TaskID); err != nil {
+				h.jsonError(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			h.jsonResponse(w, map[string]string{
+				"status":  "triggered",
+				"task_id": req.TaskID,
+			}, http.StatusOK)
+			return
+
+		case "enable":
+			if err := h.scheduler.Enable(req.TaskID); err != nil {
+				h.jsonError(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			h.jsonResponse(w, map[string]string{
+				"status":  "enabled",
+				"task_id": req.TaskID,
+			}, http.StatusOK)
+			return
+
+		case "disable":
+			if err := h.scheduler.Disable(req.TaskID); err != nil {
+				h.jsonError(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			h.jsonResponse(w, map[string]string{
+				"status":  "disabled",
+				"task_id": req.TaskID,
+			}, http.StatusOK)
+			return
+		}
+
+		// Legacy enable/disable via enabled field
+		if req.Enabled {
+			if err := h.scheduler.Enable(req.TaskID); err != nil {
+				h.jsonError(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+		} else {
+			if err := h.scheduler.Disable(req.TaskID); err != nil {
+				h.jsonError(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+		}
+
 		h.jsonResponse(w, map[string]string{"status": "saved"}, http.StatusOK)
-
-	case http.MethodDelete:
-		// Delete task
-		taskID := r.URL.Query().Get("id")
-		if taskID == "" {
-			h.jsonError(w, "Task ID required", http.StatusBadRequest)
-			return
-		}
-
-		tasks := make([]config.ScheduledTask, 0)
-		for _, t := range h.config.Server.Scheduler.Tasks {
-			if t.ID != taskID {
-				tasks = append(tasks, t)
-			}
-		}
-		h.config.Server.Scheduler.Tasks = tasks
-
-		h.saveConfig()
-		h.jsonResponse(w, map[string]string{"status": "deleted"}, http.StatusOK)
 
 	default:
 		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -1632,9 +1855,8 @@ func (h *Handler) apiEmailTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// For now, just validate the configuration is set
-	// Full email sending would require implementing SMTP client
-	if h.config.Server.Email.SMTPHost == "" {
+	// Per AI.md PART 18: Validate SMTP is configured
+	if h.config.Server.Email.SMTP.Host == "" {
 		h.jsonError(w, "SMTP host not configured", http.StatusBadRequest)
 		return
 	}
@@ -1836,9 +2058,9 @@ func (h *Handler) processSetup(w http.ResponseWriter, r *http.Request, requireTo
 		h.service.UseSetupToken(ctx, token)
 	}
 
-	username := r.FormValue("username")
-	email := r.FormValue("email")
-	password := r.FormValue("password")
+	username := strings.TrimSpace(r.FormValue("username"))
+	email := strings.TrimSpace(r.FormValue("email"))
+	password := r.FormValue("password") // Don't trim passwords
 	confirmPassword := r.FormValue("confirm_password")
 
 	// Validate input
@@ -1849,6 +2071,12 @@ func (h *Handler) processSetup(w http.ResponseWriter, r *http.Request, requireTo
 
 	if password != confirmPassword {
 		http.Redirect(w, r, "/admin/setup?error=Passwords+do+not+match", http.StatusSeeOther)
+		return
+	}
+
+	// Password cannot start or end with whitespace
+	if len(password) > 0 && (password[0] == ' ' || password[0] == '\t' || password[len(password)-1] == ' ' || password[len(password)-1] == '\t') {
+		http.Redirect(w, r, "/admin/setup?error=Password+cannot+start+or+end+with+whitespace", http.StatusSeeOther)
 		return
 	}
 
@@ -1977,7 +2205,8 @@ func (h *Handler) handleAdminInvite(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[Admin] Invite created by %s for username: %s", currentAdmin.Username, username)
 
 	// Redirect with the invite URL shown
-	inviteURL := fmt.Sprintf("/admin/invite/%s", token)
+	// Per AI.md PART 11 line 11403: Admin invite at /auth/invite/server/{code}
+	inviteURL := fmt.Sprintf("/auth/invite/server/%s", token)
 	http.Redirect(w, r, "/admin/users/admins?success=Invite+created&invite_url="+inviteURL, http.StatusSeeOther)
 }
 
@@ -1991,7 +2220,8 @@ func (h *Handler) handleInviteAccept(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Extract token from URL path
-	token := strings.TrimPrefix(r.URL.Path, "/admin/invite/")
+	// Per AI.md PART 11 line 11403: Admin invite at /auth/invite/server/{code}
+	token := strings.TrimPrefix(r.URL.Path, "/auth/invite/server/")
 	if token == "" {
 		h.renderInviteError(w, "Invalid invite link")
 		return
@@ -2038,9 +2268,9 @@ func (h *Handler) processInviteAccept(w http.ResponseWriter, r *http.Request, to
 		return
 	}
 
-	username := r.FormValue("username")
-	email := r.FormValue("email")
-	password := r.FormValue("password")
+	username := strings.TrimSpace(r.FormValue("username"))
+	email := strings.TrimSpace(r.FormValue("email"))
+	password := r.FormValue("password") // Don't trim passwords
 	confirmPassword := r.FormValue("confirm_password")
 
 	// Validate input
@@ -2051,6 +2281,12 @@ func (h *Handler) processInviteAccept(w http.ResponseWriter, r *http.Request, to
 
 	if password != confirmPassword {
 		http.Redirect(w, r, r.URL.Path+"?error=Passwords+do+not+match", http.StatusSeeOther)
+		return
+	}
+
+	// Password cannot start or end with whitespace
+	if len(password) > 0 && (password[0] == ' ' || password[0] == '\t' || password[len(password)-1] == ' ' || password[len(password)-1] == '\t') {
+		http.Redirect(w, r, r.URL.Path+"?error=Password+cannot+start+or+end+with+whitespace", http.StatusSeeOther)
 		return
 	}
 

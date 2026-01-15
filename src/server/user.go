@@ -6,21 +6,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apimgr/search/src/users"
+	userpkg "github.com/apimgr/search/src/user"
 )
 
 // UserPageData represents data for user pages
 type UserPageData struct {
 	PageData
-	User           *users.User
+	User           *userpkg.User
 	Error          string
 	Success        string
 	Sessions       []SessionDisplay
 	Tokens         []TokenDisplay
 	TwoFAEnabled   bool
-	TwoFASetup     *users.TOTPSetupResponse
+	TwoFASetup     *userpkg.TOTPSetupResponse
 	RecoveryKeys   []string
-	RecoveryStats  *users.RecoveryKeyStats
+	RecoveryStats  *userpkg.RecoveryKeyStats
 	CurrentSession int64
 }
 
@@ -49,7 +49,7 @@ type TokenDisplay struct {
 func (s *Server) handleUserProfile(w http.ResponseWriter, r *http.Request) {
 	user, err := s.requireUserAuth(r)
 	if err != nil {
-		http.Redirect(w, r, "/auth/login?redirect=/user/profile", http.StatusSeeOther)
+		http.Redirect(w, r, "/auth/login?redirect=/users/profile", http.StatusSeeOther)
 		return
 	}
 
@@ -63,7 +63,7 @@ func (s *Server) handleUserProfile(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) renderProfilePage(w http.ResponseWriter, r *http.Request, user *users.User, errorMsg, successMsg string) {
+func (s *Server) renderProfilePage(w http.ResponseWriter, r *http.Request, user *userpkg.User, errorMsg, successMsg string) {
 	data := &UserPageData{
 		PageData: PageData{
 			Title:       "Profile",
@@ -83,7 +83,7 @@ func (s *Server) renderProfilePage(w http.ResponseWriter, r *http.Request, user 
 	}
 }
 
-func (s *Server) processProfileUpdate(w http.ResponseWriter, r *http.Request, user *users.User) {
+func (s *Server) processProfileUpdate(w http.ResponseWriter, r *http.Request, user *userpkg.User) {
 	if err := r.ParseForm(); err != nil {
 		s.renderProfilePage(w, r, user, "Invalid form data", "")
 		return
@@ -115,7 +115,7 @@ func (s *Server) processProfileUpdate(w http.ResponseWriter, r *http.Request, us
 func (s *Server) handleUserSecurity(w http.ResponseWriter, r *http.Request) {
 	user, err := s.requireUserAuth(r)
 	if err != nil {
-		http.Redirect(w, r, "/auth/login?redirect=/user/security", http.StatusSeeOther)
+		http.Redirect(w, r, "/auth/login?redirect=/users/security", http.StatusSeeOther)
 		return
 	}
 
@@ -129,7 +129,7 @@ func (s *Server) handleUserSecurity(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) renderSecurityPage(w http.ResponseWriter, r *http.Request, user *users.User, errorMsg, successMsg string) {
+func (s *Server) renderSecurityPage(w http.ResponseWriter, r *http.Request, user *userpkg.User, errorMsg, successMsg string) {
 	// Get current session token
 	currentToken := s.userAuthManager.GetSessionToken(r)
 
@@ -159,7 +159,7 @@ func (s *Server) renderSecurityPage(w http.ResponseWriter, r *http.Request, user
 	}
 
 	// Get recovery key stats
-	var recoveryStats *users.RecoveryKeyStats
+	var recoveryStats *userpkg.RecoveryKeyStats
 	if s.recoveryManager != nil {
 		recoveryStats, _ = s.recoveryManager.GetUsageStats(r.Context(), user.ID)
 	}
@@ -187,7 +187,7 @@ func (s *Server) renderSecurityPage(w http.ResponseWriter, r *http.Request, user
 	}
 }
 
-func (s *Server) processSecurityUpdate(w http.ResponseWriter, r *http.Request, user *users.User) {
+func (s *Server) processSecurityUpdate(w http.ResponseWriter, r *http.Request, user *userpkg.User) {
 	if err := r.ParseForm(); err != nil {
 		s.renderSecurityPage(w, r, user, "Invalid form data", "")
 		return
@@ -213,7 +213,7 @@ func (s *Server) processSecurityUpdate(w http.ResponseWriter, r *http.Request, u
 	}
 }
 
-func (s *Server) processPasswordChange(w http.ResponseWriter, r *http.Request, user *users.User) {
+func (s *Server) processPasswordChange(w http.ResponseWriter, r *http.Request, user *userpkg.User) {
 	currentPassword := r.FormValue("current_password")
 	newPassword := r.FormValue("new_password")
 	confirmPassword := r.FormValue("confirm_password")
@@ -229,7 +229,7 @@ func (s *Server) processPasswordChange(w http.ResponseWriter, r *http.Request, u
 	}
 
 	// Verify current password
-	if !users.CheckPassword(currentPassword, user.PasswordHash) {
+	if !userpkg.CheckPassword(currentPassword, user.PasswordHash) {
 		s.renderSecurityPage(w, r, user, "Current password is incorrect", "")
 		return
 	}
@@ -238,10 +238,12 @@ func (s *Server) processPasswordChange(w http.ResponseWriter, r *http.Request, u
 	err := s.userAuthManager.UpdatePassword(r.Context(), user.ID, newPassword, s.config.Server.Users.Auth.PasswordMinLength)
 	if err != nil {
 		switch err {
-		case users.ErrPasswordTooShort:
+		case userpkg.ErrPasswordTooShort:
 			s.renderSecurityPage(w, r, user, "Password must be at least 8 characters", "")
-		case users.ErrPasswordTooWeak:
+		case userpkg.ErrPasswordTooWeak:
 			s.renderSecurityPage(w, r, user, "Password must contain at least one uppercase letter, one lowercase letter, and one number", "")
+		case userpkg.ErrPasswordWhitespace:
+			s.renderSecurityPage(w, r, user, "Password cannot start or end with whitespace", "")
 		default:
 			s.renderSecurityPage(w, r, user, "Failed to update password", "")
 		}
@@ -251,7 +253,7 @@ func (s *Server) processPasswordChange(w http.ResponseWriter, r *http.Request, u
 	s.renderSecurityPage(w, r, user, "", "Password updated successfully")
 }
 
-func (s *Server) processSessionRevoke(w http.ResponseWriter, r *http.Request, user *users.User) {
+func (s *Server) processSessionRevoke(w http.ResponseWriter, r *http.Request, user *userpkg.User) {
 	sessionIDStr := r.FormValue("session_id")
 	sessionID, err := strconv.ParseInt(sessionIDStr, 10, 64)
 	if err != nil {
@@ -268,7 +270,7 @@ func (s *Server) processSessionRevoke(w http.ResponseWriter, r *http.Request, us
 	s.renderSecurityPage(w, r, user, "", "Session revoked successfully")
 }
 
-func (s *Server) processRevokeAllSessions(w http.ResponseWriter, r *http.Request, user *users.User) {
+func (s *Server) processRevokeAllSessions(w http.ResponseWriter, r *http.Request, user *userpkg.User) {
 	currentToken := s.userAuthManager.GetSessionToken(r)
 	err := s.userAuthManager.LogoutAll(r.Context(), user.ID, currentToken)
 	if err != nil {
@@ -283,7 +285,7 @@ func (s *Server) processRevokeAllSessions(w http.ResponseWriter, r *http.Request
 func (s *Server) handleUserTokens(w http.ResponseWriter, r *http.Request) {
 	user, err := s.requireUserAuth(r)
 	if err != nil {
-		http.Redirect(w, r, "/auth/login?redirect=/user/tokens", http.StatusSeeOther)
+		http.Redirect(w, r, "/auth/login?redirect=/users/tokens", http.StatusSeeOther)
 		return
 	}
 
@@ -297,7 +299,7 @@ func (s *Server) handleUserTokens(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) renderTokensPage(w http.ResponseWriter, r *http.Request, user *users.User, errorMsg, successMsg string, newToken *users.CreateTokenResponse) {
+func (s *Server) renderTokensPage(w http.ResponseWriter, r *http.Request, user *userpkg.User, errorMsg, successMsg string, newToken *userpkg.CreateTokenResponse) {
 	// Get user tokens
 	var tokenDisplays []TokenDisplay
 	if s.tokenManager != nil {
@@ -351,7 +353,7 @@ func (s *Server) renderTokensPage(w http.ResponseWriter, r *http.Request, user *
 	}
 }
 
-func (s *Server) processTokenAction(w http.ResponseWriter, r *http.Request, user *users.User) {
+func (s *Server) processTokenAction(w http.ResponseWriter, r *http.Request, user *userpkg.User) {
 	if err := r.ParseForm(); err != nil {
 		s.renderTokensPage(w, r, user, "Invalid form data", "", nil)
 		return
@@ -375,7 +377,7 @@ func (s *Server) processTokenAction(w http.ResponseWriter, r *http.Request, user
 	}
 }
 
-func (s *Server) processTokenCreate(w http.ResponseWriter, r *http.Request, user *users.User) {
+func (s *Server) processTokenCreate(w http.ResponseWriter, r *http.Request, user *userpkg.User) {
 	if s.tokenManager == nil {
 		s.renderTokensPage(w, r, user, "Token management is not available", "", nil)
 		return
@@ -400,7 +402,7 @@ func (s *Server) processTokenCreate(w http.ResponseWriter, r *http.Request, user
 		}
 	}
 
-	req := users.CreateTokenRequest{
+	req := userpkg.CreateTokenRequest{
 		Name:        name,
 		Permissions: permissions,
 		ExpiresIn:   expiresIn,
@@ -415,7 +417,7 @@ func (s *Server) processTokenCreate(w http.ResponseWriter, r *http.Request, user
 	s.renderTokensPage(w, r, user, "", "Token created successfully. Copy it now - it won't be shown again.", result)
 }
 
-func (s *Server) processTokenRevoke(w http.ResponseWriter, r *http.Request, user *users.User) {
+func (s *Server) processTokenRevoke(w http.ResponseWriter, r *http.Request, user *userpkg.User) {
 	if s.tokenManager == nil {
 		s.renderTokensPage(w, r, user, "Token management is not available", "", nil)
 		return
@@ -441,7 +443,7 @@ func (s *Server) processTokenRevoke(w http.ResponseWriter, r *http.Request, user
 func (s *Server) handle2FASetup(w http.ResponseWriter, r *http.Request) {
 	user, err := s.requireUserAuth(r)
 	if err != nil {
-		http.Redirect(w, r, "/auth/login?redirect=/user/security", http.StatusSeeOther)
+		http.Redirect(w, r, "/auth/login?redirect=/users/security", http.StatusSeeOther)
 		return
 	}
 
@@ -460,10 +462,10 @@ func (s *Server) handle2FASetup(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) render2FASetupPage(w http.ResponseWriter, r *http.Request, user *users.User, errorMsg string) {
+func (s *Server) render2FASetupPage(w http.ResponseWriter, r *http.Request, user *userpkg.User, errorMsg string) {
 	// Check if already enabled
 	if s.totpManager.Is2FAEnabled(r.Context(), user.ID) {
-		http.Redirect(w, r, "/user/security", http.StatusSeeOther)
+		http.Redirect(w, r, "/users/security", http.StatusSeeOther)
 		return
 	}
 
@@ -485,7 +487,7 @@ func (s *Server) render2FASetupPage(w http.ResponseWriter, r *http.Request, user
 	}
 }
 
-func (s *Server) process2FASetup(w http.ResponseWriter, r *http.Request, user *users.User) {
+func (s *Server) process2FASetup(w http.ResponseWriter, r *http.Request, user *userpkg.User) {
 	if err := r.ParseForm(); err != nil {
 		s.render2FASetupPage(w, r, user, "Invalid form data")
 		return
@@ -503,7 +505,7 @@ func (s *Server) process2FASetup(w http.ResponseWriter, r *http.Request, user *u
 	case "init":
 		// Verify password and generate QR code
 		password := r.FormValue("password")
-		if !users.CheckPassword(password, user.PasswordHash) {
+		if !userpkg.CheckPassword(password, user.PasswordHash) {
 			s.render2FASetupPage(w, r, user, "Invalid password")
 			return
 		}
@@ -580,12 +582,12 @@ func (s *Server) process2FASetup(w http.ResponseWriter, r *http.Request, user *u
 func (s *Server) handle2FADisable(w http.ResponseWriter, r *http.Request) {
 	user, err := s.requireUserAuth(r)
 	if err != nil {
-		http.Redirect(w, r, "/auth/login?redirect=/user/security", http.StatusSeeOther)
+		http.Redirect(w, r, "/auth/login?redirect=/users/security", http.StatusSeeOther)
 		return
 	}
 
 	if r.Method != http.MethodPost {
-		http.Redirect(w, r, "/user/security", http.StatusSeeOther)
+		http.Redirect(w, r, "/users/security", http.StatusSeeOther)
 		return
 	}
 
@@ -604,7 +606,7 @@ func (s *Server) handle2FADisable(w http.ResponseWriter, r *http.Request) {
 	code := strings.TrimSpace(r.FormValue("code"))
 
 	// Verify password
-	if !users.CheckPassword(password, user.PasswordHash) {
+	if !userpkg.CheckPassword(password, user.PasswordHash) {
 		s.renderSecurityPage(w, r, user, "Invalid password", "")
 		return
 	}
@@ -632,14 +634,14 @@ func (s *Server) handle2FADisable(w http.ResponseWriter, r *http.Request) {
 }
 
 // requireUserAuth validates user session and returns the user
-func (s *Server) requireUserAuth(r *http.Request) (*users.User, error) {
+func (s *Server) requireUserAuth(r *http.Request) (*userpkg.User, error) {
 	if s.userAuthManager == nil {
-		return nil, users.ErrSessionNotFound
+		return nil, userpkg.ErrSessionNotFound
 	}
 
 	token := s.userAuthManager.GetSessionToken(r)
 	if token == "" {
-		return nil, users.ErrSessionNotFound
+		return nil, userpkg.ErrSessionNotFound
 	}
 
 	user, _, err := s.userAuthManager.ValidateSession(r.Context(), token)

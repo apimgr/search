@@ -417,8 +417,8 @@ func (h *Handler) renderConfigContent(w http.ResponseWriter, data *AdminPageData
 		h.config.Server.Title,
 		h.config.Server.Description,
 		h.config.Server.Port,
-		selected(h.config.Server.Mode, "production"),
-		selected(h.config.Server.Mode, "development"),
+		selectedValue(h.config.Server.Mode, "production"),
+		selectedValue(h.config.Server.Mode, "development"),
 	)
 }
 
@@ -557,11 +557,26 @@ func enabledText(enabled bool) string {
 	return "Disabled"
 }
 
-func selected(current, value string) string {
+func selected(isSelected bool) string {
+	if isSelected {
+		return "selected"
+	}
+	return ""
+}
+
+func selectedValue(current, value string) string {
 	if current == value {
 		return "selected"
 	}
 	return ""
+}
+
+// maskPassword returns asterisks if password is set, empty otherwise
+func maskPassword(pass string) string {
+	if pass == "" {
+		return ""
+	}
+	return "********"
 }
 
 func formatLastUsed(t time.Time) string {
@@ -652,8 +667,8 @@ func (h *Handler) renderServerSettingsContent(w http.ResponseWriter, data *Admin
 		h.config.Server.Port,
 		h.config.Server.HTTPSPort,
 		h.config.Server.Address,
-		selected(h.config.Server.Mode, "production"),
-		selected(h.config.Server.Mode, "development"),
+		selectedValue(h.config.Server.Mode, "production"),
+		selectedValue(h.config.Server.Mode, "development"),
 		checked(h.config.Server.RateLimit.Enabled),
 		h.config.Server.RateLimit.RequestsPerMinute,
 		h.config.Server.RateLimit.RequestsPerHour,
@@ -702,9 +717,9 @@ func (h *Handler) renderServerBrandingContent(w http.ResponseWriter, data *Admin
 		h.config.Server.Branding.LogoURL,
 		h.config.Server.Branding.FaviconURL,
 		h.config.Server.Branding.FooterText,
-		selected(h.config.Server.Branding.Theme, "dark"),
-		selected(h.config.Server.Branding.Theme, "light"),
-		selected(h.config.Server.Branding.Theme, "auto"),
+		selectedValue(h.config.Server.Branding.Theme, "dark"),
+		selectedValue(h.config.Server.Branding.Theme, "light"),
+		selectedValue(h.config.Server.Branding.Theme, "auto"),
 		h.config.Server.Branding.PrimaryColor,
 	)
 }
@@ -946,7 +961,7 @@ func (h *Handler) renderServerTorContent(w http.ResponseWriter, data *AdminPageD
                     </div>
                     <div class="form-row">
                         <label>Onion Address</label>
-                        <input type="text" name="onion_address" value="%s" readonly placeholder="Generated automatically">
+                        <input type="text" id="onion-address" name="onion_address" value="%s" readonly placeholder="Generated automatically">
                     </div>
                     <div class="form-row">
                         <label>Hidden Service Port</label>
@@ -954,7 +969,173 @@ func (h *Handler) renderServerTorContent(w http.ResponseWriter, data *AdminPageD
                     </div>
                     <button type="submit" class="btn">Save Tor Settings</button>
                 </form>
-            </div>`,
+            </div>
+
+            <!-- Service Control per AI.md PART 32 -->
+            <div class="admin-section">
+                <h2>Service Control</h2>
+                <div class="btn-group">
+                    <button type="button" class="btn btn-green" onclick="torStart()">Start Tor</button>
+                    <button type="button" class="btn btn-red" onclick="torStop()">Stop Tor</button>
+                    <button type="button" class="btn btn-cyan" onclick="torRestart()">Restart Tor</button>
+                </div>
+                <div id="tor-status" class="mt-10"></div>
+            </div>
+
+            <!-- Vanity Address Generation per AI.md PART 32 -->
+            <div class="admin-section">
+                <h2>Vanity Address Generation</h2>
+                <p class="help-text">Generate a custom .onion address with a memorable prefix (max 6 characters for built-in generation).</p>
+                <div class="form-row">
+                    <label>Prefix (a-z, 2-7 only)</label>
+                    <input type="text" id="vanity-prefix" maxlength="6" pattern="[a-z2-7]+" placeholder="search">
+                </div>
+                <div class="btn-group">
+                    <button type="button" class="btn btn-cyan" onclick="vanityStart()">Start Generation</button>
+                    <button type="button" class="btn btn-red" onclick="vanityCancel()">Cancel</button>
+                </div>
+                <div id="vanity-progress" class="mt-10" style="display:none;">
+                    <p>Prefix: <span id="vanity-prefix-display"></span></p>
+                    <p>Attempts: <span id="vanity-attempts">0</span></p>
+                    <p>Status: <span id="vanity-status">Starting...</span></p>
+                </div>
+            </div>
+
+            <!-- Key Management per AI.md PART 32 -->
+            <div class="admin-section">
+                <h2>Key Management</h2>
+                <p class="help-text">Export or import hidden service keys. Useful for backup or using externally-generated vanity addresses.</p>
+                <div class="btn-group">
+                    <button type="button" class="btn" onclick="exportKeys()">Export Keys</button>
+                    <button type="button" class="btn" onclick="document.getElementById('key-import-file').click()">Import Keys</button>
+                    <input type="file" id="key-import-file" style="display:none" onchange="importKeys(this.files[0])">
+                </div>
+                <button type="button" class="btn btn-red mt-10" onclick="regenerateAddress()">Regenerate Address</button>
+                <p class="help-text mt-10"><strong>Warning:</strong> Regenerating will create a new .onion address. The old address will no longer work.</p>
+            </div>
+
+            <script>
+            // Tor Service Control
+            function torStart() {
+                fetch('/api/v1/admin/tor/start', {method: 'POST'})
+                    .then(r => r.json())
+                    .then(d => {
+                        showToast(d.status === 'started' ? 'Tor started: ' + d.address : d.error, d.status === 'started' ? 'success' : 'error');
+                        if (d.address) document.getElementById('onion-address').value = d.address;
+                    })
+                    .catch(e => showToast('Failed: ' + e, 'error'));
+            }
+            function torStop() {
+                fetch('/api/v1/admin/tor/stop', {method: 'POST'})
+                    .then(r => r.json())
+                    .then(d => showToast(d.status === 'stopped' ? 'Tor stopped' : d.error, d.status === 'stopped' ? 'success' : 'error'))
+                    .catch(e => showToast('Failed: ' + e, 'error'));
+            }
+            function torRestart() {
+                fetch('/api/v1/admin/tor/restart', {method: 'POST'})
+                    .then(r => r.json())
+                    .then(d => {
+                        showToast(d.status === 'restarted' ? 'Tor restarted: ' + d.address : d.error, d.status === 'restarted' ? 'success' : 'error');
+                        if (d.address) document.getElementById('onion-address').value = d.address;
+                    })
+                    .catch(e => showToast('Failed: ' + e, 'error'));
+            }
+
+            // Vanity Generation
+            var vanityPoll = null;
+            function vanityStart() {
+                var prefix = document.getElementById('vanity-prefix').value.toLowerCase();
+                if (!prefix || !/^[a-z2-7]+$/.test(prefix)) {
+                    showToast('Invalid prefix: use a-z and 2-7 only', 'error');
+                    return;
+                }
+                fetch('/api/v1/admin/tor/vanity/start', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({prefix: prefix})
+                })
+                .then(r => r.json())
+                .then(d => {
+                    if (d.status === 'started') {
+                        showToast('Vanity generation started', 'success');
+                        document.getElementById('vanity-progress').style.display = 'block';
+                        document.getElementById('vanity-prefix-display').textContent = prefix;
+                        vanityPoll = setInterval(pollVanityStatus, 2000);
+                    } else {
+                        showToast(d.error || 'Failed to start', 'error');
+                    }
+                })
+                .catch(e => showToast('Failed: ' + e, 'error'));
+            }
+            function vanityCancel() {
+                if (vanityPoll) clearInterval(vanityPoll);
+                fetch('/api/v1/admin/tor/vanity/cancel', {method: 'POST'})
+                    .then(() => {
+                        showToast('Vanity generation cancelled', 'success');
+                        document.getElementById('vanity-progress').style.display = 'none';
+                    })
+                    .catch(e => showToast('Failed: ' + e, 'error'));
+            }
+            function pollVanityStatus() {
+                fetch('/api/v1/admin/tor/vanity/status')
+                    .then(r => r.json())
+                    .then(d => {
+                        document.getElementById('vanity-attempts').textContent = d.attempts || 0;
+                        if (d.found) {
+                            clearInterval(vanityPoll);
+                            document.getElementById('vanity-status').textContent = 'Found: ' + d.address + '.onion';
+                            showToast('Vanity address found: ' + d.address + '.onion', 'success');
+                        } else if (!d.running) {
+                            clearInterval(vanityPoll);
+                            document.getElementById('vanity-status').textContent = d.error || 'Stopped';
+                        } else {
+                            document.getElementById('vanity-status').textContent = 'Searching...';
+                        }
+                    });
+            }
+
+            // Key Management
+            function exportKeys() {
+                window.location.href = '/api/v1/admin/tor/keys/export';
+            }
+            function importKeys(file) {
+                if (!file) return;
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    var b64 = btoa(String.fromCharCode.apply(null, new Uint8Array(e.target.result)));
+                    fetch('/api/v1/admin/tor/keys/import', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({private_key: b64})
+                    })
+                    .then(r => r.json())
+                    .then(d => {
+                        if (d.status === 'imported') {
+                            showToast('Keys imported, new address: ' + d.address, 'success');
+                            document.getElementById('onion-address').value = d.address;
+                        } else {
+                            showToast(d.error || 'Import failed', 'error');
+                        }
+                    })
+                    .catch(e => showToast('Failed: ' + e, 'error'));
+                };
+                reader.readAsArrayBuffer(file);
+            }
+            function regenerateAddress() {
+                if (!confirm('Are you sure? This will create a new .onion address and the old one will stop working.')) return;
+                fetch('/api/v1/admin/tor/address/regenerate', {method: 'POST'})
+                    .then(r => r.json())
+                    .then(d => {
+                        if (d.status === 'regenerated') {
+                            showToast('New address: ' + d.new_address, 'success');
+                            document.getElementById('onion-address').value = d.new_address;
+                        } else {
+                            showToast(d.error || 'Failed', 'error');
+                        }
+                    })
+                    .catch(e => showToast('Failed: ' + e, 'error'));
+            }
+            </script>`,
 		checked(h.config.Server.Tor.Enabled),
 		h.config.Server.Tor.Binary,
 		h.config.Server.Tor.SocksProxy,
@@ -1038,17 +1219,25 @@ func (h *Handler) renderServerWebContent(w http.ResponseWriter, data *AdminPageD
 	)
 }
 
+// renderServerEmailContent renders the email/SMTP settings page
+// Per AI.md PART 18: Nested SMTP and From blocks with TLS mode dropdown
 func (h *Handler) renderServerEmailContent(w http.ResponseWriter, data *AdminPageData) {
+	// Per AI.md PART 18: TLS mode selection
+	tlsMode := h.config.Server.Email.SMTP.TLS
+	if tlsMode == "" {
+		tlsMode = "auto"
+	}
+
 	fmt.Fprintf(w, `
             <div class="admin-section">
                 <h2>Email / SMTP Configuration</h2>
+                <p class="help-text">Email is automatically enabled when SMTP host is configured.</p>
                 <form method="POST" action="/admin/server/email">
-                    <div class="form-row">
-                        <label><input type="checkbox" name="enabled" %s> Enable Email</label>
-                    </div>
+                    <h3>SMTP Server</h3>
                     <div class="form-row">
                         <label>SMTP Host</label>
                         <input type="text" name="smtp_host" value="%s" placeholder="smtp.example.com">
+                        <small>Leave empty to auto-detect local SMTP server</small>
                     </div>
                     <div class="form-row">
                         <label>SMTP Port</label>
@@ -1056,25 +1245,29 @@ func (h *Handler) renderServerEmailContent(w http.ResponseWriter, data *AdminPag
                     </div>
                     <div class="form-row">
                         <label>SMTP Username</label>
-                        <input type="text" name="smtp_user" value="%s" placeholder="user@example.com">
+                        <input type="text" name="smtp_username" value="%s" placeholder="user@example.com">
                     </div>
                     <div class="form-row">
                         <label>SMTP Password</label>
-                        <input type="password" name="smtp_pass" value="%s" placeholder="Leave empty to keep current">
+                        <input type="password" name="smtp_password" value="%s" placeholder="Leave empty to keep current">
                     </div>
                     <div class="form-row">
-                        <label>From Address</label>
-                        <input type="email" name="from_address" value="%s" placeholder="noreply@example.com">
+                        <label>TLS Mode</label>
+                        <select name="smtp_tls">
+                            <option value="auto" %s>Auto (try STARTTLS)</option>
+                            <option value="starttls" %s>STARTTLS</option>
+                            <option value="tls" %s>TLS (direct)</option>
+                            <option value="none" %s>None (insecure)</option>
+                        </select>
                     </div>
+                    <h3>From Address</h3>
                     <div class="form-row">
                         <label>From Name</label>
-                        <input type="text" name="from_name" value="%s" placeholder="Search">
+                        <input type="text" name="from_name" value="%s" placeholder="Search (defaults to app name)">
                     </div>
                     <div class="form-row">
-                        <label><input type="checkbox" name="tls" %s> Use TLS</label>
-                    </div>
-                    <div class="form-row">
-                        <label><input type="checkbox" name="starttls" %s> Use STARTTLS</label>
+                        <label>From Email</label>
+                        <input type="email" name="from_email" value="%s" placeholder="noreply@example.com (defaults to no-reply@fqdn)">
                     </div>
                     <button type="submit" class="btn">Save Email Settings</button>
                     <button type="button" class="btn ml-10 btn-cyan" onclick="testEmail()">Send Test Email</button>
@@ -1088,15 +1281,16 @@ func (h *Handler) renderServerEmailContent(w http.ResponseWriter, data *AdminPag
                     .catch(e => showToast('Failed to send test email: ' + e, 'error'));
             }
             </script>`,
-		checked(h.config.Server.Email.Enabled),
-		h.config.Server.Email.SMTPHost,
-		h.config.Server.Email.SMTPPort,
-		h.config.Server.Email.SMTPUser,
-		h.config.Server.Email.SMTPPass,
-		h.config.Server.Email.FromAddress,
-		h.config.Server.Email.FromName,
-		checked(h.config.Server.Email.TLS),
-		checked(h.config.Server.Email.StartTLS),
+		h.config.Server.Email.SMTP.Host,
+		h.config.Server.Email.SMTP.Port,
+		h.config.Server.Email.SMTP.Username,
+		maskPassword(h.config.Server.Email.SMTP.Password),
+		selected(tlsMode == "auto"),
+		selected(tlsMode == "starttls"),
+		selected(tlsMode == "tls"),
+		selected(tlsMode == "none"),
+		h.config.Server.Email.From.Name,
+		h.config.Server.Email.From.Email,
 	)
 }
 
@@ -1257,10 +1451,10 @@ func (h *Handler) renderServerGeoIPContent(w http.ResponseWriter, data *AdminPag
             </div>`,
 		checked(h.config.Server.GeoIP.Enabled),
 		h.config.Server.GeoIP.Dir,
-		selected(h.config.Server.GeoIP.Update, "never"),
-		selected(h.config.Server.GeoIP.Update, "daily"),
-		selected(h.config.Server.GeoIP.Update, "weekly"),
-		selected(h.config.Server.GeoIP.Update, "monthly"),
+		selectedValue(h.config.Server.GeoIP.Update, "never"),
+		selectedValue(h.config.Server.GeoIP.Update, "daily"),
+		selectedValue(h.config.Server.GeoIP.Update, "weekly"),
+		selectedValue(h.config.Server.GeoIP.Update, "monthly"),
 		checked(h.config.Server.GeoIP.ASN),
 		checked(h.config.Server.GeoIP.Country),
 		checked(h.config.Server.GeoIP.City),

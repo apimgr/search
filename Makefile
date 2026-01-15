@@ -1,7 +1,8 @@
-# Infer PROJECTNAME and PROJECTORG from git remote (per AI.md PART 12)
+# Infer PROJECTNAME, PROJECTORG, GITPROVIDER from git remote (per AI.md PART 26)
 # Note: Strip .git suffix from URL if present
-PROJECT := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)$$|\1|; s|\.git$$||' || basename "$$(pwd)")
-ORG := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+$$|\1|' || basename "$$(dirname "$$(pwd)")")
+PROJECTNAME := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)$$|\1|; s|\.git$$||' || basename "$$(pwd)")
+PROJECTORG := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+$$|\1|' || basename "$$(dirname "$$(pwd)")")
+GITPROVIDER := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*[:/]([^/]+)/.*|\1|; s|\.com$$||; s|\.org$$||' || echo "local")
 
 # Version: env var > release.txt > default
 VERSION ?= $(shell cat release.txt 2>/dev/null || echo "0.1.0")
@@ -14,41 +15,41 @@ COMMIT_ID := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
 # Linker flags to embed build info
 LDFLAGS := -s -w \
-	-X 'github.com/$(ORG)/$(PROJECT)/src/config.Version=$(VERSION)' \
-	-X 'github.com/$(ORG)/$(PROJECT)/src/config.CommitID=$(COMMIT_ID)' \
-	-X 'github.com/$(ORG)/$(PROJECT)/src/config.BuildDate=$(BUILD_DATE)'
+	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/config.Version=$(VERSION)' \
+	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/config.CommitID=$(COMMIT_ID)' \
+	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/config.BuildDate=$(BUILD_DATE)'
 
 # CLI linker flags
 CLI_LDFLAGS := -s -w \
-	-X 'github.com/$(ORG)/$(PROJECT)/src/client/cmd.ProjectName=$(PROJECT)' \
-	-X 'github.com/$(ORG)/$(PROJECT)/src/client/cmd.Version=$(VERSION)' \
-	-X 'github.com/$(ORG)/$(PROJECT)/src/client/cmd.CommitID=$(COMMIT_ID)' \
-	-X 'github.com/$(ORG)/$(PROJECT)/src/client/cmd.BuildDate=$(BUILD_DATE)' \
-	-X 'github.com/$(ORG)/$(PROJECT)/src/client/api.ProjectName=$(PROJECT)' \
-	-X 'github.com/$(ORG)/$(PROJECT)/src/client/api.Version=$(VERSION)'
+	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/cmd.ProjectName=$(PROJECTNAME)' \
+	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/cmd.Version=$(VERSION)' \
+	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/cmd.CommitID=$(COMMIT_ID)' \
+	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/cmd.BuildDate=$(BUILD_DATE)' \
+	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/api.ProjectName=$(PROJECTNAME)' \
+	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/api.Version=$(VERSION)'
 
 # Directories
 BINDIR := ./binaries
 RELDIR := ./releases
 
-# Go module cache (persistent across builds)
-GOCACHE := $(HOME)/.cache/go-build
-GOMODCACHE := $(HOME)/go/pkg/mod
+# Go environment (persistent across builds - per AI.md PART 26)
+GODIR := $(HOME)/.local/share/go
+GOCACHE := $(HOME)/.local/share/go/build
 
 # Build targets
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64 freebsd/amd64 freebsd/arm64
 
-# Docker
-REGISTRY := ghcr.io/$(ORG)/$(PROJECT)
+# Docker (per AI.md PART 26)
+REGISTRY ?= ghcr.io/$(PROJECTORG)/$(PROJECTNAME)
 GO_DOCKER := docker run --rm \
 	-v $(PWD):/build \
 	-v $(GOCACHE):/root/.cache/go-build \
-	-v $(GOMODCACHE):/go/pkg/mod \
+	-v $(GODIR):/go \
 	-w /build \
 	-e CGO_ENABLED=0 \
 	golang:alpine
 
-.PHONY: dev build release docker test clean
+.PHONY: dev local build release docker test clean
 
 # =============================================================================
 # DEV - Quick dev build to temp directory (per TEMPLATE.md PART 11)
@@ -57,27 +58,45 @@ GO_DOCKER := docker run --rm \
 # ALWAYS uses Docker for building - host has NO Go installed
 # Test using Docker (quick) or Incus (full systemd environment)
 dev:
-	@mkdir -p $(GOCACHE) $(GOMODCACHE) $(BINDIR)
-	@DEVDIR=$$(mktemp -d /tmp/$(ORG).XXXXXX); \
-	echo "Building dev binary to $$DEVDIR/$(PROJECT) (Docker)..."; \
-	$(GO_DOCKER) go build -ldflags "$(LDFLAGS)" -o $(BINDIR)/.dev-$(PROJECT) ./src; \
-	mv $(BINDIR)/.dev-$(PROJECT) "$$DEVDIR/$(PROJECT)"; \
+	@mkdir -p $(GOCACHE) $(GODIR) $(BINDIR)
+	@DEVDIR=$$(mktemp -d /tmp/$(PROJECTORG).XXXXXX); \
+	echo "Building dev binary to $$DEVDIR/$(PROJECTNAME) (Docker)..."; \
+	$(GO_DOCKER) go build -ldflags "$(LDFLAGS)" -o $(BINDIR)/.dev-$(PROJECTNAME) ./src; \
+	mv $(BINDIR)/.dev-$(PROJECTNAME) "$$DEVDIR/$(PROJECTNAME)"; \
 	if [ -d "src/client" ]; then \
-		echo "Building dev CLI to $$DEVDIR/$(PROJECT)-cli..."; \
-		$(GO_DOCKER) go build -ldflags "$(CLI_LDFLAGS)" -o $(BINDIR)/.dev-$(PROJECT)-cli ./src/client; \
-		mv $(BINDIR)/.dev-$(PROJECT)-cli "$$DEVDIR/$(PROJECT)-cli"; \
+		echo "Building dev CLI to $$DEVDIR/$(PROJECTNAME)-cli..."; \
+		$(GO_DOCKER) go build -ldflags "$(CLI_LDFLAGS)" -o $(BINDIR)/.dev-$(PROJECTNAME)-cli ./src/client; \
+		mv $(BINDIR)/.dev-$(PROJECTNAME)-cli "$$DEVDIR/$(PROJECTNAME)-cli"; \
 	fi; \
 	echo ""; \
-	echo "Built: $$DEVDIR/$(PROJECT)"; \
+	echo "Built: $$DEVDIR/$(PROJECTNAME)"; \
 	echo ""; \
 	echo "Test (Docker - quick):"; \
-	echo "  docker run --rm -v $$DEVDIR:/app alpine:latest /app/$(PROJECT) --help"; \
-	echo "  docker run --rm -v $$DEVDIR:/app alpine:latest /app/$(PROJECT) --version"; \
-	echo "  docker run --rm -p 8080:80 -v $$DEVDIR:/app alpine:latest /app/$(PROJECT)"; \
+	echo "  docker run --rm -v $$DEVDIR:/app alpine:latest /app/$(PROJECTNAME) --help"; \
+	echo "  docker run --rm -v $$DEVDIR:/app alpine:latest /app/$(PROJECTNAME) --version"; \
+	echo "  docker run --rm -p 8080:80 -v $$DEVDIR:/app alpine:latest /app/$(PROJECTNAME)"; \
 	echo ""; \
 	echo "Test (Incus - full systemd):"; \
-	echo "  incus file push $$DEVDIR/$(PROJECT) <container>/usr/local/bin/$(PROJECT)"; \
-	echo "  incus exec <container> -- $(PROJECT) --help"
+	echo "  incus file push $$DEVDIR/$(PROJECTNAME) <container>/usr/local/bin/$(PROJECTNAME)"; \
+	echo "  incus exec <container> -- $(PROJECTNAME) --help"
+
+# =============================================================================
+# LOCAL - Build for current OS/ARCH with version suffix (per AI.md PART 26)
+# =============================================================================
+# Outputs to binaries/search-VERSION for production testing
+local:
+	@mkdir -p $(GOCACHE) $(GODIR) $(BINDIR)
+	@echo "Building host binary $(VERSION)..."
+	@$(GO_DOCKER) sh -c "GOOS=\$$(go env GOOS) GOARCH=\$$(go env GOARCH) \
+		go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(PROJECTNAME)-$(VERSION) ./src"
+	@if [ -d "src/client" ]; then \
+		echo "Building host CLI $(VERSION)..."; \
+		$(GO_DOCKER) sh -c "GOOS=\$$(go env GOOS) GOARCH=\$$(go env GOARCH) \
+			go build -ldflags \"$(CLI_LDFLAGS)\" -o $(BINDIR)/$(PROJECTNAME)-cli-$(VERSION) ./src/client"; \
+	fi
+	@echo ""
+	@echo "Built: $(BINDIR)/$(PROJECTNAME)-$(VERSION)"
+	@if [ -d "src/client" ]; then echo "Built: $(BINDIR)/$(PROJECTNAME)-cli-$(VERSION)"; fi
 
 # =============================================================================
 # BUILD - Build all platforms + host binary (via Docker with cached modules)
@@ -85,7 +104,7 @@ dev:
 build: clean
 	@mkdir -p $(BINDIR)
 	@echo "Building version $(VERSION)..."
-	@mkdir -p $(GOCACHE) $(GOMODCACHE)
+	@mkdir -p $(GOCACHE) $(GODIR)
 
 	# Download modules first (cached)
 	@echo "Downloading Go modules..."
@@ -94,13 +113,13 @@ build: clean
 	# Build for host OS/ARCH
 	@echo "Building host binary..."
 	@$(GO_DOCKER) sh -c "GOOS=\$$(go env GOOS) GOARCH=\$$(go env GOARCH) \
-		go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(PROJECT) ./src"
+		go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(PROJECTNAME) ./src"
 
 	# Build all platforms (server)
 	@for platform in $(PLATFORMS); do \
 		OS=$${platform%/*}; \
 		ARCH=$${platform#*/}; \
-		OUTPUT=$(BINDIR)/$(PROJECT)-$$OS-$$ARCH; \
+		OUTPUT=$(BINDIR)/$(PROJECTNAME)-$$OS-$$ARCH; \
 		[ "$$OS" = "windows" ] && OUTPUT=$$OUTPUT.exe; \
 		echo "Building $$OS/$$ARCH..."; \
 		$(GO_DOCKER) sh -c "GOOS=$$OS GOARCH=$$ARCH \
@@ -108,16 +127,16 @@ build: clean
 			-o $$OUTPUT ./src" || exit 1; \
 	done
 
-	# Build CLI if src/client exists
+	# Build CLI if src/client exists (per AI.md PART 26: search-cli-{os}-{arch})
 	@if [ -d "src/client" ]; then \
 		echo "Building CLI..."; \
 		$(GO_DOCKER) sh -c "GOOS=\$$(go env GOOS) GOARCH=\$$(go env GOARCH) \
-			go build -ldflags \"$(CLI_LDFLAGS)\" -o $(BINDIR)/$(PROJECT)-cli ./src/client"; \
+			go build -ldflags \"$(CLI_LDFLAGS)\" -o $(BINDIR)/$(PROJECTNAME)-cli ./src/client"; \
 		for platform in $(PLATFORMS); do \
 			OS=$${platform%/*}; \
 			ARCH=$${platform#*/}; \
-			OUTPUT=$(BINDIR)/$(PROJECT)-$$OS-$$ARCH-cli; \
-			[ "$$OS" = "windows" ] && OUTPUT=$(BINDIR)/$(PROJECT)-$$OS-$$ARCH-cli.exe; \
+			OUTPUT=$(BINDIR)/$(PROJECTNAME)-cli-$$OS-$$ARCH; \
+			[ "$$OS" = "windows" ] && OUTPUT=$$OUTPUT.exe; \
 			echo "Building CLI $$OS/$$ARCH..."; \
 			$(GO_DOCKER) sh -c "GOOS=$$OS GOARCH=$$ARCH \
 				go build -ldflags \"$(CLI_LDFLAGS)\" \
@@ -138,7 +157,7 @@ release: build
 	@echo "$(VERSION)" > $(RELDIR)/version.txt
 
 	# Copy server binaries to releases
-	@for f in $(BINDIR)/$(PROJECT)-*; do \
+	@for f in $(BINDIR)/$(PROJECTNAME)-*; do \
 		[ -f "$$f" ] || continue; \
 		echo "$$f" | grep -q "\-cli" && continue; \
 		strip "$$f" 2>/dev/null || true; \
@@ -146,7 +165,7 @@ release: build
 	done
 
 	# Copy CLI binaries to releases (if they exist)
-	@for f in $(BINDIR)/$(PROJECT)-*-cli $(BINDIR)/$(PROJECT)-*-cli.exe; do \
+	@for f in $(BINDIR)/$(PROJECTNAME)-cli-*; do \
 		[ -f "$$f" ] || continue; \
 		strip "$$f" 2>/dev/null || true; \
 		cp "$$f" $(RELDIR)/; \
@@ -155,7 +174,7 @@ release: build
 	# Create source archive (exclude VCS and build artifacts)
 	@tar --exclude='.git' --exclude='.github' --exclude='.gitea' \
 		--exclude='binaries' --exclude='releases' --exclude='*.tar.gz' \
-		-czf $(RELDIR)/$(PROJECT)-$(VERSION)-source.tar.gz .
+		-czf $(RELDIR)/$(PROJECTNAME)-$(VERSION)-source.tar.gz .
 
 	# Delete existing release/tag if exists
 	@gh release delete $(VERSION) --yes 2>/dev/null || true
@@ -164,7 +183,7 @@ release: build
 
 	# Create new release (stable)
 	@gh release create $(VERSION) $(RELDIR)/* \
-		--title "$(PROJECT) $(VERSION)" \
+		--title "$(PROJECTNAME) $(VERSION)" \
 		--notes "Release $(VERSION)" \
 		--latest
 
@@ -182,8 +201,8 @@ docker:
 	@docker buildx version > /dev/null 2>&1 || (echo "docker buildx required" && exit 1)
 
 	# Create/use builder
-	@docker buildx create --name $(PROJECT)-builder --use 2>/dev/null || \
-		docker buildx use $(PROJECT)-builder
+	@docker buildx create --name $(PROJECTNAME)-builder --use 2>/dev/null || \
+		docker buildx use $(PROJECTNAME)-builder
 
 	# Build and push multi-arch (multi-stage Dockerfile handles Go compilation)
 	@docker buildx build \
@@ -204,7 +223,7 @@ docker:
 # =============================================================================
 test:
 	@echo "Running tests in Docker..."
-	@mkdir -p $(GOCACHE) $(GOMODCACHE)
+	@mkdir -p $(GOCACHE) $(GODIR)
 	@$(GO_DOCKER) go mod download
 	@$(GO_DOCKER) go test -v -cover ./...
 	@echo "Tests complete"

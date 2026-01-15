@@ -13,14 +13,16 @@ var (
 	debugEnabled = false
 )
 
-type Mode int
+// AppMode represents the application operational mode
+// Per AI.md PART 6: Application Modes
+type AppMode int
 
 const (
-	Production Mode = iota
+	Production AppMode = iota
 	Development
 )
 
-func (m Mode) String() string {
+func (m AppMode) String() string {
 	switch m {
 	case Development:
 		return "development"
@@ -29,25 +31,27 @@ func (m Mode) String() string {
 	}
 }
 
-// Set sets the application mode
-func Set(m string) {
+// SetAppMode sets the application mode
+// Per AI.md PART 6: Mode shortcuts (dev/development, prod/production)
+func SetAppMode(m string) {
 	switch strings.ToLower(m) {
 	case "dev", "development":
 		currentMode = Development
 	default:
 		currentMode = Production
 	}
-	updateProfilingSettings()
+	updateAppModeProfilingSettings()
 }
 
-// SetDebug enables or disables debug mode
-func SetDebug(enabled bool) {
+// SetDebugEnabled enables or disables debug mode
+// Per AI.md PART 6: Debug Flag
+func SetDebugEnabled(enabled bool) {
 	debugEnabled = enabled
-	updateProfilingSettings()
+	updateAppModeProfilingSettings()
 }
 
-// updateProfilingSettings enables/disables profiling based on debug flag
-func updateProfilingSettings() {
+// updateAppModeProfilingSettings enables/disables profiling based on debug flag
+func updateAppModeProfilingSettings() {
 	if debugEnabled {
 		// Enable profiling when debug is on
 		runtime.SetBlockProfileRate(1)
@@ -59,28 +63,31 @@ func updateProfilingSettings() {
 	}
 }
 
-// Current returns the current mode
-func Current() Mode {
+// GetCurrentAppMode returns the current application mode
+func GetCurrentAppMode() AppMode {
 	return currentMode
 }
 
-// IsDevelopment returns true if in development mode
-func IsDevelopment() bool {
+// IsAppModeDev returns true if in development mode
+// Per AI.md PART 1: Intent-revealing names required
+func IsAppModeDev() bool {
 	return currentMode == Development
 }
 
-// IsProduction returns true if in production mode
-func IsProduction() bool {
+// IsAppModeProd returns true if in production mode
+// Per AI.md PART 1: Intent-revealing names required
+func IsAppModeProd() bool {
 	return currentMode == Production
 }
 
-// IsDebug returns true if debug mode is enabled (--debug or DEBUG=true)
-func IsDebug() bool {
+// IsDebugEnabled returns true if debug mode is enabled (--debug or DEBUG=true)
+// Per AI.md PART 6: Debug Flag
+func IsDebugEnabled() bool {
 	return debugEnabled
 }
 
-// ModeString returns mode string with debug suffix if enabled
-func ModeString() string {
+// GetAppModeString returns mode string with debug suffix if enabled
+func GetAppModeString() string {
 	s := currentMode.String()
 	if debugEnabled {
 		s += " [debugging]"
@@ -89,11 +96,12 @@ func ModeString() string {
 }
 
 // FromEnv sets mode and debug from environment variables
+// Per AI.md PART 6: Mode and Debug Detection Priority
 func FromEnv() {
 	if m := os.Getenv("MODE"); m != "" {
-		Set(m)
+		SetAppMode(m)
 	}
 	if config.IsTruthy(os.Getenv("DEBUG")) {
-		SetDebug(true)
+		SetDebugEnabled(true)
 	}
 }

@@ -72,8 +72,9 @@ func (m *Manager) Create(filename string) (string, error) {
 	}
 
 	// Generate filename if not specified
+	// Per AI.md PART 22: Format is apimgr_backup_YYYY-MM-DD_HHMMSS.tar.gz
 	if filename == "" {
-		filename = fmt.Sprintf("search-backup-%s.tar.gz", time.Now().Format("20060102-150405"))
+		filename = fmt.Sprintf("apimgr_backup_%s.tar.gz", time.Now().Format("2006-01-02_150405"))
 	}
 
 	// Ensure .tar.gz extension
@@ -488,4 +489,181 @@ func (m *Manager) ScheduledBackup(keepCount int) error {
 	}
 
 	return nil
+}
+
+// RetentionPolicy defines backup retention rules per AI.md PART 22
+// Per AI.md PART 22: Retention policies (count, day, week, month, year)
+type RetentionPolicy struct {
+	Count int `json:"count" yaml:"count"` // Number of backups to keep
+	Day   int `json:"day" yaml:"day"`     // Days to keep daily backups
+	Week  int `json:"week" yaml:"week"`   // Weeks to keep weekly backups
+	Month int `json:"month" yaml:"month"` // Months to keep monthly backups
+	Year  int `json:"year" yaml:"year"`   // Years to keep yearly backups
+}
+
+// DefaultRetentionPolicy returns the default retention policy
+// Per AI.md PART 22: Reasonable defaults
+func DefaultRetentionPolicy() RetentionPolicy {
+	return RetentionPolicy{
+		Count: 10,  // Keep at least 10 backups
+		Day:   7,   // Keep 7 days of daily backups
+		Week:  4,   // Keep 4 weeks of weekly backups
+		Month: 12,  // Keep 12 months of monthly backups
+		Year:  3,   // Keep 3 years of yearly backups
+	}
+}
+
+// ApplyRetention applies retention policy to backups
+// Per AI.md PART 22: Smart retention with daily/weekly/monthly/yearly buckets
+func (m *Manager) ApplyRetention(policy RetentionPolicy) error {
+	backups, err := m.List()
+	if err != nil {
+		return err
+	}
+
+	if len(backups) <= policy.Count {
+		return nil // Nothing to delete
+	}
+
+	now := time.Now()
+	var toDelete []string
+
+	// Categorize backups by age
+	for _, b := range backups {
+		age := now.Sub(b.CreatedAt)
+
+		// Determine if backup should be kept based on retention rules
+		keep := false
+
+		// Keep all backups from today
+		if age < 24*time.Hour {
+			keep = true
+		}
+
+		// Keep daily backups for Day days
+		if age < time.Duration(policy.Day)*24*time.Hour {
+			keep = true
+		}
+
+		// Keep weekly backups (one per week) for Week weeks
+		if age < time.Duration(policy.Week)*7*24*time.Hour {
+			if b.CreatedAt.Weekday() == time.Sunday {
+				keep = true
+			}
+		}
+
+		// Keep monthly backups (first of month) for Month months
+		if age < time.Duration(policy.Month)*30*24*time.Hour {
+			if b.CreatedAt.Day() == 1 {
+				keep = true
+			}
+		}
+
+		// Keep yearly backups (first of year) for Year years
+		if age < time.Duration(policy.Year)*365*24*time.Hour {
+			if b.CreatedAt.Month() == time.January && b.CreatedAt.Day() == 1 {
+				keep = true
+			}
+		}
+
+		if !keep {
+			toDelete = append(toDelete, b.Filename)
+		}
+	}
+
+	// Delete old backups
+	for _, filename := range toDelete {
+		if err := m.Delete(filename); err != nil {
+			fmt.Printf("Warning: failed to delete old backup %s: %v\n", filename, err)
+		}
+	}
+
+	return nil
+}
+
+// CreateEncrypted creates an encrypted backup with .enc extension
+// Per AI.md PART 22: .enc extension for encrypted backups
+func (m *Manager) CreateEncrypted(filename string) (string, error) {
+	if m.password == "" {
+		return "", fmt.Errorf("encryption password not set - use SetPassword() or BACKUP_PASSWORD env var")
+	}
+
+	// Create unencrypted backup first
+	backupPath, err := m.Create(filename)
+	if err != nil {
+		return "", err
+	}
+
+	// Read backup data
+	data, err := os.ReadFile(backupPath)
+	if err != nil {
+		os.Remove(backupPath)
+		return "", fmt.Errorf("failed to read backup: %w", err)
+	}
+
+	// Encrypt the data
+	encrypted, err := EncryptBackup(data, m.password)
+	if err != nil {
+		os.Remove(backupPath)
+		return "", fmt.Errorf("failed to encrypt backup: %w", err)
+	}
+
+	// Create encrypted file with .enc extension per AI.md PART 22
+	encryptedPath := backupPath + ".enc"
+	if err := os.WriteFile(encryptedPath, encrypted, 0600); err != nil {
+		os.Remove(backupPath)
+		return "", fmt.Errorf("failed to write encrypted backup: %w", err)
+	}
+
+	// Remove unencrypted backup
+	os.Remove(backupPath)
+
+	return encryptedPath, nil
+}
+
+// RestoreEncrypted restores from an encrypted backup (.enc extension)
+// Per AI.md PART 22: .enc extension for encrypted backups
+func (m *Manager) RestoreEncrypted(backupPath string) error {
+	if m.password == "" {
+		return fmt.Errorf("decryption password not set - use SetPassword() or BACKUP_PASSWORD env var")
+	}
+
+	// Verify backup file exists
+	if _, err := os.Stat(backupPath); err != nil {
+		return fmt.Errorf("backup file not found: %w", err)
+	}
+
+	// Check if file has .enc extension
+	if !strings.HasSuffix(backupPath, ".enc") {
+		// Not encrypted, use regular restore
+		return m.Restore(backupPath)
+	}
+
+	// Read encrypted data
+	encrypted, err := os.ReadFile(backupPath)
+	if err != nil {
+		return fmt.Errorf("failed to read encrypted backup: %w", err)
+	}
+
+	// Decrypt the data
+	decrypted, err := DecryptBackup(encrypted, m.password)
+	if err != nil {
+		return fmt.Errorf("decryption failed: %w", err)
+	}
+
+	// Write to temporary file
+	tempPath := backupPath + ".temp"
+	if err := os.WriteFile(tempPath, decrypted, 0600); err != nil {
+		return fmt.Errorf("failed to write decrypted backup: %w", err)
+	}
+	defer os.Remove(tempPath)
+
+	// Restore from temporary file
+	return m.Restore(tempPath)
+}
+
+// IsEncrypted checks if a backup file is encrypted (has .enc extension)
+// Per AI.md PART 22: .enc extension for encrypted backups
+func IsEncrypted(backupPath string) bool {
+	return strings.HasSuffix(backupPath, ".enc")
 }

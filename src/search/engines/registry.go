@@ -1,7 +1,7 @@
 package engines
 
 import (
-	"github.com/apimgr/search/src/models"
+	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 )
 
@@ -26,7 +26,7 @@ func (r *Registry) Register(engine search.Engine) {
 func (r *Registry) Get(name string) (search.Engine, error) {
 	engine, ok := r.engines[name]
 	if !ok {
-		return nil, models.ErrEngineNotFound
+		return nil, model.ErrEngineNotFound
 	}
 	return engine, nil
 }
@@ -52,7 +52,7 @@ func (r *Registry) GetEnabled() []search.Engine {
 }
 
 // GetForCategory returns all engines that support a category
-func (r *Registry) GetForCategory(category models.Category) []search.Engine {
+func (r *Registry) GetForCategory(category model.Category) []search.Engine {
 	engines := make([]search.Engine, 0)
 	for _, engine := range r.engines {
 		if engine.IsEnabled() && engine.SupportsCategory(category) {
@@ -67,7 +67,7 @@ func (r *Registry) GetByNames(names []string) []search.Engine {
 	if len(names) == 0 {
 		return r.GetEnabled()
 	}
-	
+
 	engines := make([]search.Engine, 0, len(names))
 	for _, name := range names {
 		if engine, err := r.Get(name); err == nil && engine.IsEnabled() {
@@ -99,6 +99,10 @@ func DefaultRegistry() *Registry {
 	registry.Register(NewReddit())
 	registry.Register(NewStartpageEngine())
 	registry.Register(NewYouTubeEngine())
+	// Additional engines per IDEA.md
+	registry.Register(NewMojeek())
+	registry.Register(NewYandex())
+	registry.Register(NewBaidu())
 
 	return registry
 }

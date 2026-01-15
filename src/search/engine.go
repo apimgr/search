@@ -2,40 +2,40 @@ package search
 
 import (
 	"context"
-	"github.com/apimgr/search/src/models"
+	"github.com/apimgr/search/src/model"
 )
 
 // Engine represents a search engine interface
 type Engine interface {
 	// Name returns the unique engine name
 	Name() string
-	
+
 	// DisplayName returns the human-readable engine name
 	DisplayName() string
-	
+
 	// Search performs a search and returns results
-	Search(ctx context.Context, query *models.Query) ([]models.Result, error)
-	
+	Search(ctx context.Context, query *model.Query) ([]model.Result, error)
+
 	// IsEnabled returns whether the engine is enabled
 	IsEnabled() bool
-	
+
 	// GetPriority returns the engine priority (higher = more important)
 	GetPriority() int
-	
+
 	// SupportsCategory returns whether the engine supports a category
-	SupportsCategory(category models.Category) bool
-	
+	SupportsCategory(category model.Category) bool
+
 	// GetConfig returns the engine configuration
-	GetConfig() *models.EngineConfig
+	GetConfig() *model.EngineConfig
 }
 
 // BaseEngine provides common functionality for engines
 type BaseEngine struct {
-	config *models.EngineConfig
+	config *model.EngineConfig
 }
 
 // NewBaseEngine creates a new BaseEngine
-func NewBaseEngine(config *models.EngineConfig) *BaseEngine {
+func NewBaseEngine(config *model.EngineConfig) *BaseEngine {
 	return &BaseEngine{
 		config: config,
 	}
@@ -62,11 +62,11 @@ func (e *BaseEngine) GetPriority() int {
 }
 
 // SupportsCategory returns whether the engine supports a category
-func (e *BaseEngine) SupportsCategory(category models.Category) bool {
+func (e *BaseEngine) SupportsCategory(category model.Category) bool {
 	return e.config.SupportsCategory(category)
 }
 
 // GetConfig returns the engine configuration
-func (e *BaseEngine) GetConfig() *models.EngineConfig {
+func (e *BaseEngine) GetConfig() *model.EngineConfig {
 	return e.config
 }

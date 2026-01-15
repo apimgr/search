@@ -1,10 +1,17 @@
 name: search
 
+x-logging: &default-logging
+  options:
+    max-size: '5m'
+    max-file: '1'
+  driver: json-file
+
 services:
   search:
     image: ghcr.io/apimgr/search:latest
     container_name: search
     restart: unless-stopped
+    logging: *default-logging
     environment:
       # Hardcoded with sane defaults - NO .env files
       # Note: Tor is auto-detected (enabled if tor binary installed)
@@ -20,6 +27,12 @@ services:
       - ./rootfs/data:/data:z
     networks:
       - search
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/healthz"]
+      interval: 5m
+      timeout: 15s
+      retries: 3
+      start_period: 10m
 
 networks:
   search:

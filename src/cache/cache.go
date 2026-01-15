@@ -36,26 +36,52 @@ type Stats struct {
 	Backend    string `json:"backend"`
 }
 
-// Config holds cache configuration
+// Config holds cache configuration per AI.md PART 18
 type Config struct {
-	Enabled  bool   `yaml:"enabled"`
-	Backend  string `yaml:"backend"`  // redis, memory
-	Address  string `yaml:"address"`  // Redis address (host:port)
-	Password string `yaml:"password"` // Redis password
-	DB       int    `yaml:"db"`       // Redis database number
-	TTL      int    `yaml:"ttl"`      // Default TTL in seconds
-	MaxSize  int    `yaml:"max_size"` // Max items for memory cache
+	// Type: none (disabled), memory (default), valkey, redis
+	Type string `yaml:"type"`
+
+	// Connection URL (takes precedence over host/port)
+	URL string `yaml:"url"`
+
+	// Individual connection settings
+	Host     string `yaml:"host"`
+	Port     int    `yaml:"port"`
+	Password string `yaml:"password"`
+	DB       int    `yaml:"db"`
+
+	// Pool settings
+	PoolSize int           `yaml:"pool_size"`
+	MinIdle  int           `yaml:"min_idle"`
+	Timeout  time.Duration `yaml:"timeout"`
+
+	// Key prefix
+	Prefix string `yaml:"prefix"`
+
+	// Default TTL
+	TTL int `yaml:"ttl"` // seconds
+
+	// Cluster mode
+	Cluster      bool     `yaml:"cluster"`
+	ClusterNodes []string `yaml:"cluster_nodes"`
+
+	// Memory cache specific
+	MaxSize int `yaml:"max_size"` // Max items for memory cache
 }
 
 // DefaultConfig returns default cache configuration
 func DefaultConfig() *Config {
 	return &Config{
-		Enabled: false,
-		Backend: "memory",
-		Address: "localhost:6379",
-		DB:      0,
-		TTL:     300, // 5 minutes
-		MaxSize: 10000,
+		Type:     "memory",
+		Host:     "localhost",
+		Port:     6379,
+		DB:       0,
+		PoolSize: 10,
+		MinIdle:  2,
+		Timeout:  5 * time.Second,
+		Prefix:   "apimgr:",
+		TTL:      3600, // 1 hour
+		MaxSize:  10000,
 	}
 }
 
@@ -65,17 +91,34 @@ func New(cfg *Config) (Cache, error) {
 		cfg = DefaultConfig()
 	}
 
-	if !cfg.Enabled {
-		return NewMemoryCache(cfg.MaxSize, time.Duration(cfg.TTL)*time.Second), nil
+	ttl := time.Duration(cfg.TTL) * time.Second
+	if ttl == 0 {
+		ttl = time.Hour
 	}
 
-	switch cfg.Backend {
-	case "redis":
-		return NewRedisCache(cfg)
-	case "memory":
-		return NewMemoryCache(cfg.MaxSize, time.Duration(cfg.TTL)*time.Second), nil
+	switch cfg.Type {
+	case "redis", "valkey":
+		return NewRedisCache(&RedisConfig{
+			Type:         cfg.Type,
+			URL:          cfg.URL,
+			Host:         cfg.Host,
+			Port:         cfg.Port,
+			Password:     cfg.Password,
+			DB:           cfg.DB,
+			PoolSize:     cfg.PoolSize,
+			MinIdle:      cfg.MinIdle,
+			Timeout:      cfg.Timeout,
+			Prefix:       cfg.Prefix,
+			Cluster:      cfg.Cluster,
+			ClusterNodes: cfg.ClusterNodes,
+		})
+	case "none":
+		// No-op cache that discards everything
+		return NewMemoryCache(1, time.Millisecond), nil
+	case "memory", "":
+		return NewMemoryCache(cfg.MaxSize, ttl), nil
 	default:
-		return NewMemoryCache(cfg.MaxSize, time.Duration(cfg.TTL)*time.Second), nil
+		return NewMemoryCache(cfg.MaxSize, ttl), nil
 	}
 }
 

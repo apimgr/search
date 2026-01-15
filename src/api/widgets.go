@@ -4,14 +4,14 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/apimgr/search/src/widgets"
+	"github.com/apimgr/search/src/widget"
 )
 
 // handleWidgets returns list of available widgets
 func (h *Handler) handleWidgets(w http.ResponseWriter, r *http.Request) {
 	if h.widgetManager == nil {
 		h.jsonResponse(w, http.StatusOK, &APIResponse{
-			Success: true,
+			OK: true,
 			Data: map[string]interface{}{
 				"enabled":  false,
 				"widgets":  []interface{}{},
@@ -28,7 +28,7 @@ func (h *Handler) handleWidgets(w http.ResponseWriter, r *http.Request) {
 	// Filter by category if requested
 	category := r.URL.Query().Get("category")
 	if category != "" {
-		var filtered []*widgets.Widget
+		var filtered []*widget.Widget
 		for _, w := range allWidgets {
 			if string(w.Category) == category {
 				filtered = append(filtered, w)
@@ -38,7 +38,7 @@ func (h *Handler) handleWidgets(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		Success: true,
+		OK: true,
 		Data: map[string]interface{}{
 			"enabled":  h.widgetManager.IsEnabled(),
 			"widgets":  allWidgets,
@@ -57,7 +57,7 @@ func (h *Handler) handleWidgetData(w http.ResponseWriter, r *http.Request) {
 
 	// Extract widget type from path: /api/v1/widgets/{type}
 	path := strings.TrimPrefix(r.URL.Path, "/api/v1/widgets/")
-	widgetType := widgets.WidgetType(strings.Split(path, "/")[0])
+	widgetType := widget.WidgetType(strings.Split(path, "/")[0])
 
 	if widgetType == "" {
 		h.errorResponse(w, http.StatusBadRequest, "Widget type required", "")
@@ -86,7 +86,7 @@ func (h *Handler) handleWidgetData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		Success: true,
+		OK: true,
 		Data:    data,
 		Meta:    &APIMeta{Version: APIVersion},
 	})

@@ -20,7 +20,9 @@
     }
 
     function setTheme(theme) {
-        document.documentElement.setAttribute('data-theme', theme);
+        // Per AI.md PART 16: Apply theme class to <html> element: theme-light, theme-dark
+        document.documentElement.classList.remove('theme-dark', 'theme-light');
+        document.documentElement.classList.add('theme-' + theme);
         localStorage.setItem(THEME_KEY, theme);
         updateThemeIcon(theme);
     }
@@ -40,7 +42,8 @@
     }
 
     function toggleTheme() {
-        const current = document.documentElement.getAttribute('data-theme') || 'dark';
+        // Per AI.md PART 16: Read theme from class, not attribute
+        const current = document.documentElement.classList.contains('theme-light') ? 'light' : 'dark';
         const next = current === 'dark' ? 'light' : 'dark';
         setTheme(next);
     }
@@ -67,6 +70,73 @@
             navLinks.classList.remove('active');
         }
     }
+
+    // ========================================================================
+    // ACCESSIBILITY (A11Y) - Per AI.md PART 31
+    // ========================================================================
+
+    // Screen reader announcer - announces messages without moving focus
+    var srAnnouncer = null;
+    function initSRAnnouncr() {
+        if (!srAnnouncer) {
+            srAnnouncer = document.createElement('div');
+            srAnnouncer.setAttribute('role', 'status');
+            srAnnouncer.setAttribute('aria-live', 'polite');
+            srAnnouncer.setAttribute('aria-atomic', 'true');
+            srAnnouncer.className = 'sr-only';
+            srAnnouncer.id = 'sr-announcer';
+            document.body.appendChild(srAnnouncer);
+        }
+    }
+
+    function announce(message, priority) {
+        initSRAnnouncr();
+        // Set assertive for urgent messages, polite for informational
+        srAnnouncer.setAttribute('aria-live', priority === 'assertive' ? 'assertive' : 'polite');
+        // Clear and re-set to trigger screen reader announcement
+        srAnnouncer.textContent = '';
+        setTimeout(function() {
+            srAnnouncer.textContent = message;
+        }, 100);
+    }
+
+    // Focus trap for modals - keeps focus inside modal when open
+    function trapFocus(element) {
+        var focusableElements = element.querySelectorAll(
+            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), ' +
+            'textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        var firstFocusable = focusableElements[0];
+        var lastFocusable = focusableElements[focusableElements.length - 1];
+
+        function handleKeydown(e) {
+            if (e.key !== 'Tab') return;
+
+            if (e.shiftKey) {
+                // Shift+Tab
+                if (document.activeElement === firstFocusable) {
+                    e.preventDefault();
+                    lastFocusable.focus();
+                }
+            } else {
+                // Tab
+                if (document.activeElement === lastFocusable) {
+                    e.preventDefault();
+                    firstFocusable.focus();
+                }
+            }
+        }
+
+        element.addEventListener('keydown', handleKeydown);
+
+        // Return cleanup function
+        return function() {
+            element.removeEventListener('keydown', handleKeydown);
+        };
+    }
+
+    // Expose announce function globally for use by other scripts
+    window.srAnnounce = announce;
 
     // ========================================================================
     // FLASH MESSAGES
@@ -239,36 +309,251 @@
     }
 
     // ========================================================================
-    // KEYBOARD SHORTCUTS
+    // KEYBOARD SHORTCUTS (Full Navigation per IDEA.md)
     // ========================================================================
+    var currentResultIndex = -1;
+
     function initKeyboardShortcuts() {
         document.addEventListener('keydown', function(e) {
+            // Skip if modifier keys (except shift for O)
+            if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+            // Focus search with /
             if (e.key === '/' && !isInputFocused()) {
                 e.preventDefault();
-                const searchInput = document.querySelector('.search-input, .header-search-input');
+                var searchInput = document.querySelector('.search-input, .header-search-input, input[name="q"]');
                 if (searchInput) {
                     searchInput.focus();
                     searchInput.select();
                 }
+                return;
             }
 
+            // Toggle theme with t
             if (e.key === 't' && !isInputFocused()) {
                 toggleTheme();
+                return;
             }
 
+            // Escape to close nav/unfocus
             if (e.key === 'Escape') {
                 closeNav();
+                if (isInputFocused()) {
+                    document.activeElement.blur();
+                }
+                return;
+            }
+
+            // Show keyboard help with ?
+            if (e.key === '?' && !isInputFocused()) {
+                e.preventDefault();
+                showKeyboardHelp();
+                return;
+            }
+
+            // Result navigation with j/k
+            if (e.key === 'j' && !isInputFocused()) {
+                e.preventDefault();
+                navigateResults(1);
+                return;
+            }
+
+            if (e.key === 'k' && !isInputFocused()) {
+                e.preventDefault();
+                navigateResults(-1);
+                return;
+            }
+
+            // Open result with Enter, o, or O (new tab)
+            if ((e.key === 'Enter' || e.key === 'o' || e.key === 'O') && !isInputFocused()) {
+                var results = getSearchResults();
+                if (currentResultIndex >= 0 && currentResultIndex < results.length) {
+                    e.preventDefault();
+                    var link = results[currentResultIndex].querySelector('a');
+                    if (link) {
+                        if (e.key === 'O' || e.shiftKey) {
+                            window.open(link.href, '_blank', 'noopener,noreferrer');
+                        } else {
+                            link.click();
+                        }
+                    }
+                }
+                return;
+            }
+
+            // Pagination with h/l or left/right arrows
+            if ((e.key === 'h' || e.key === 'ArrowLeft') && !isInputFocused()) {
+                var prevLink = document.querySelector('.pagination-prev, [rel="prev"], .page-prev');
+                if (prevLink && !prevLink.classList.contains('disabled')) {
+                    e.preventDefault();
+                    prevLink.click();
+                }
+                return;
+            }
+
+            if ((e.key === 'l' || e.key === 'ArrowRight') && !isInputFocused()) {
+                var nextLink = document.querySelector('.pagination-next, [rel="next"], .page-next');
+                if (nextLink && !nextLink.classList.contains('disabled')) {
+                    e.preventDefault();
+                    nextLink.click();
+                }
+                return;
+            }
+
+            // Quick jump with 1-9
+            if (/^[1-9]$/.test(e.key) && !isInputFocused()) {
+                var index = parseInt(e.key, 10) - 1;
+                var results = getSearchResults();
+                if (index < results.length) {
+                    e.preventDefault();
+                    selectResult(index);
+                    var link = results[index].querySelector('a');
+                    if (link) {
+                        if (e.shiftKey) {
+                            window.open(link.href, '_blank', 'noopener,noreferrer');
+                        } else {
+                            link.click();
+                        }
+                    }
+                }
+                return;
+            }
+
+            // Go to first result with g then g
+            if (e.key === 'g' && !isInputFocused()) {
+                // Set up double-g detection
+                if (window._lastKeyG && Date.now() - window._lastKeyG < 500) {
+                    e.preventDefault();
+                    navigateToResult(0);
+                    window._lastKeyG = null;
+                } else {
+                    window._lastKeyG = Date.now();
+                }
+                return;
+            }
+
+            // Go to last result with G (shift+g)
+            if (e.key === 'G' && !isInputFocused()) {
+                e.preventDefault();
+                var results = getSearchResults();
+                if (results.length > 0) {
+                    navigateToResult(results.length - 1);
+                }
+                return;
             }
         });
     }
 
     function isInputFocused() {
-        const activeElement = document.activeElement;
+        var activeElement = document.activeElement;
         return activeElement && (
             activeElement.tagName === 'INPUT' ||
             activeElement.tagName === 'TEXTAREA' ||
             activeElement.isContentEditable
         );
+    }
+
+    function getSearchResults() {
+        return document.querySelectorAll('.search-result, .result-item, .result');
+    }
+
+    function navigateResults(direction) {
+        var results = getSearchResults();
+        if (results.length === 0) return;
+
+        var newIndex = currentResultIndex + direction;
+        if (newIndex < 0) newIndex = 0;
+        if (newIndex >= results.length) newIndex = results.length - 1;
+
+        selectResult(newIndex);
+    }
+
+    function navigateToResult(index) {
+        var results = getSearchResults();
+        if (index >= 0 && index < results.length) {
+            selectResult(index);
+        }
+    }
+
+    function selectResult(index) {
+        var results = getSearchResults();
+
+        // Remove highlight from previous
+        if (currentResultIndex >= 0 && currentResultIndex < results.length) {
+            results[currentResultIndex].classList.remove('keyboard-selected');
+        }
+
+        // Highlight new
+        currentResultIndex = index;
+        if (index >= 0 && index < results.length) {
+            results[index].classList.add('keyboard-selected');
+            results[index].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            // Announce for screen readers
+            var title = results[index].querySelector('h3, .result-title, a')?.textContent || 'Result ' + (index + 1);
+            announce('Selected: ' + title);
+        }
+    }
+
+    function showKeyboardHelp() {
+        var existingHelp = document.getElementById('keyboard-help-modal');
+        if (existingHelp) {
+            existingHelp.remove();
+            return;
+        }
+
+        var modal = document.createElement('dialog');
+        modal.id = 'keyboard-help-modal';
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-labelledby', 'keyboard-help-title');
+        modal.innerHTML =
+            '<header><h2 id="keyboard-help-title">Keyboard Shortcuts</h2></header>' +
+            '<main class="keyboard-help-content">' +
+                '<div class="shortcut-group">' +
+                    '<h3>Navigation</h3>' +
+                    '<div class="shortcut"><kbd>j</kbd> / <kbd>k</kbd> <span>Next / Previous result</span></div>' +
+                    '<div class="shortcut"><kbd>h</kbd> / <kbd>l</kbd> <span>Previous / Next page</span></div>' +
+                    '<div class="shortcut"><kbd>g</kbd><kbd>g</kbd> <span>Go to first result</span></div>' +
+                    '<div class="shortcut"><kbd>G</kbd> <span>Go to last result</span></div>' +
+                    '<div class="shortcut"><kbd>1</kbd>-<kbd>9</kbd> <span>Jump to result N</span></div>' +
+                '</div>' +
+                '<div class="shortcut-group">' +
+                    '<h3>Actions</h3>' +
+                    '<div class="shortcut"><kbd>/</kbd> <span>Focus search box</span></div>' +
+                    '<div class="shortcut"><kbd>Enter</kbd> / <kbd>o</kbd> <span>Open selected result</span></div>' +
+                    '<div class="shortcut"><kbd>O</kbd> <span>Open in new tab</span></div>' +
+                    '<div class="shortcut"><kbd>t</kbd> <span>Toggle theme</span></div>' +
+                    '<div class="shortcut"><kbd>Esc</kbd> <span>Clear / Close</span></div>' +
+                '</div>' +
+                '<div class="shortcut-group">' +
+                    '<h3>Help</h3>' +
+                    '<div class="shortcut"><kbd>?</kbd> <span>Show this help</span></div>' +
+                '</div>' +
+            '</main>' +
+            '<footer>' +
+                '<button type="button" class="btn btn-primary" data-action="close-help">Close</button>' +
+            '</footer>';
+
+        document.body.appendChild(modal);
+
+        modal.querySelector('[data-action="close-help"]').addEventListener('click', function() {
+            modal.close();
+            modal.remove();
+        });
+
+        modal.addEventListener('close', function() {
+            modal.remove();
+        });
+
+        modal.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' || e.key === '?') {
+                e.preventDefault();
+                modal.close();
+                modal.remove();
+            }
+        });
+
+        modal.showModal();
+        announce('Keyboard shortcuts help opened. Press Escape or ? to close.');
     }
 
     // ========================================================================
@@ -457,11 +742,20 @@
                 confirmBtn.className = 'btn btn-primary';
             }
 
+            // Store trigger element for focus return per AI.md PART 31
+            var triggerElement = document.activeElement;
+            var removeFocusTrap = null;
+
             function cleanup(result) {
+                if (removeFocusTrap) removeFocusTrap();
                 dialog.close();
                 confirmBtn.removeEventListener('click', handleConfirm);
                 cancelBtn.removeEventListener('click', handleCancel);
                 dialog.removeEventListener('close', handleClose);
+                // Return focus to trigger element per AI.md PART 31
+                if (triggerElement && triggerElement.focus) {
+                    triggerElement.focus();
+                }
                 resolve(result);
             }
 
@@ -474,7 +768,10 @@
             dialog.addEventListener('close', handleClose);
 
             dialog.showModal();
+            removeFocusTrap = trapFocus(dialog);
             confirmBtn.focus();
+            // Announce dialog for screen readers
+            announce(titleEl.textContent + ': ' + message);
         });
     }
 
@@ -489,10 +786,11 @@
                 dialog.id = 'prompt-dialog';
                 dialog.setAttribute('role', 'dialog');
                 dialog.setAttribute('aria-modal', 'true');
+                dialog.setAttribute('aria-labelledby', 'prompt-dialog-label');
                 dialog.innerHTML =
                     '<form method="dialog">' +
                         '<label id="prompt-dialog-label"></label>' +
-                        '<input type="text" id="prompt-dialog-input" class="form-control">' +
+                        '<input type="text" id="prompt-dialog-input" class="form-control" aria-describedby="prompt-dialog-label">' +
                         '<footer>' +
                             '<button type="button" class="btn btn-secondary" data-action="cancel">Cancel</button>' +
                             '<button type="submit" class="btn btn-primary">OK</button>' +
@@ -508,8 +806,17 @@
             label.textContent = message;
             input.value = defaultValue || '';
 
+            // Store trigger element for focus return per AI.md PART 31
+            var triggerElement = document.activeElement;
+            var removeFocusTrap = null;
+
             function cleanup(result) {
+                if (removeFocusTrap) removeFocusTrap();
                 dialog.close();
+                // Return focus to trigger element per AI.md PART 31
+                if (triggerElement && triggerElement.focus) {
+                    triggerElement.focus();
+                }
                 resolve(result);
             }
 
@@ -521,8 +828,11 @@
             dialog.onclose = function() { cleanup(null); };
 
             dialog.showModal();
+            removeFocusTrap = trapFocus(dialog);
             input.focus();
             input.select();
+            // Announce dialog for screen readers
+            announce(message);
         });
     }
 
@@ -537,6 +847,7 @@
                 dialog.id = 'alert-dialog';
                 dialog.setAttribute('role', 'alertdialog');
                 dialog.setAttribute('aria-modal', 'true');
+                dialog.setAttribute('aria-describedby', 'alert-dialog-message');
                 dialog.innerHTML =
                     '<main id="alert-dialog-message"></main>' +
                     '<footer>' +
@@ -550,8 +861,17 @@
 
             messageEl.textContent = message;
 
+            // Store trigger element for focus return per AI.md PART 31
+            var triggerElement = document.activeElement;
+            var removeFocusTrap = null;
+
             function cleanup() {
+                if (removeFocusTrap) removeFocusTrap();
                 dialog.close();
+                // Return focus to trigger element per AI.md PART 31
+                if (triggerElement && triggerElement.focus) {
+                    triggerElement.focus();
+                }
                 resolve();
             }
 
@@ -559,7 +879,10 @@
             dialog.onclose = cleanup;
 
             dialog.showModal();
+            removeFocusTrap = trapFocus(dialog);
             okBtn.focus();
+            // Announce alert for screen readers (assertive for alerts)
+            announce(message, 'assertive');
         });
     }
 
@@ -894,6 +1217,94 @@
             category: 'user',
             refreshInterval: 1800000,
             render: renderRSSWidget
+        },
+        // Additional instant answers per IDEA.md
+        currency: {
+            type: 'currency',
+            name: 'Currency',
+            icon: 'dollar-sign',
+            category: 'data',
+            refreshInterval: 1800000,
+            render: renderCurrencyWidget
+        },
+        timezone: {
+            type: 'timezone',
+            name: 'Timezone',
+            icon: 'globe',
+            category: 'tool',
+            refreshInterval: 60000,
+            render: renderTimezoneWidget
+        },
+        translate: {
+            type: 'translate',
+            name: 'Translate',
+            icon: 'language',
+            category: 'data',
+            render: renderTranslateWidget
+        },
+        wikipedia: {
+            type: 'wikipedia',
+            name: 'Wikipedia',
+            icon: 'book',
+            category: 'data',
+            refreshInterval: 3600000,
+            render: renderWikipediaWidget
+        },
+        tracking: {
+            type: 'tracking',
+            name: 'Package Tracking',
+            icon: 'truck',
+            category: 'data',
+            render: renderTrackingWidget
+        },
+        nutrition: {
+            type: 'nutrition',
+            name: 'Nutrition',
+            icon: 'apple-alt',
+            category: 'data',
+            render: renderNutritionWidget
+        },
+        qrcode: {
+            type: 'qrcode',
+            name: 'QR Code',
+            icon: 'qrcode',
+            category: 'tool',
+            render: renderQRCodeWidget
+        },
+        timer: {
+            type: 'timer',
+            name: 'Timer',
+            icon: 'stopwatch',
+            category: 'tool',
+            render: renderTimerWidget
+        },
+        lorem: {
+            type: 'lorem',
+            name: 'Lorem Ipsum',
+            icon: 'align-left',
+            category: 'tool',
+            render: renderLoremWidget
+        },
+        dictionary: {
+            type: 'dictionary',
+            name: 'Dictionary',
+            icon: 'spell-check',
+            category: 'data',
+            render: renderDictionaryWidget
+        },
+        ipaddress: {
+            type: 'ipaddress',
+            name: 'IP Address',
+            icon: 'network-wired',
+            category: 'tool',
+            render: renderIPAddressWidget
+        },
+        colorpicker: {
+            type: 'colorpicker',
+            name: 'Color Picker',
+            icon: 'palette',
+            category: 'tool',
+            render: renderColorPickerWidget
         }
     };
 
@@ -1231,6 +1642,331 @@
         });
         html += '</div>';
         container.innerHTML = html;
+    }
+
+    // Additional instant answer render functions per IDEA.md
+
+    function renderCurrencyWidget(container, data, settings) {
+        container.innerHTML =
+            '<div class="currency-widget">' +
+                '<div class="currency-row">' +
+                    '<input type="number" id="currency-amount" data-currency-amount value="1" min="0" step="any">' +
+                    '<select id="currency-from" data-currency-from>' +
+                        '<option value="USD">USD</option>' +
+                        '<option value="EUR">EUR</option>' +
+                        '<option value="GBP">GBP</option>' +
+                        '<option value="JPY">JPY</option>' +
+                        '<option value="CNY">CNY</option>' +
+                        '<option value="AUD">AUD</option>' +
+                        '<option value="CAD">CAD</option>' +
+                        '<option value="CHF">CHF</option>' +
+                        '<option value="INR">INR</option>' +
+                    '</select>' +
+                '</div>' +
+                '<div class="currency-equals">=</div>' +
+                '<div class="currency-row">' +
+                    '<input type="text" id="currency-result" readonly placeholder="...">' +
+                    '<select id="currency-to" data-currency-to>' +
+                        '<option value="EUR" selected>EUR</option>' +
+                        '<option value="USD">USD</option>' +
+                        '<option value="GBP">GBP</option>' +
+                        '<option value="JPY">JPY</option>' +
+                        '<option value="CNY">CNY</option>' +
+                        '<option value="AUD">AUD</option>' +
+                        '<option value="CAD">CAD</option>' +
+                        '<option value="CHF">CHF</option>' +
+                        '<option value="INR">INR</option>' +
+                    '</select>' +
+                '</div>' +
+                '<button class="currency-convert-btn" data-action="convert-currency">Convert</button>' +
+            '</div>';
+    }
+
+    function renderTimezoneWidget(container, data, settings) {
+        var timezones = settings.timezones || ['America/New_York', 'Europe/London', 'Asia/Tokyo'];
+
+        function update() {
+            var html = '<div class="timezone-widget">';
+            timezones.forEach(function(tz) {
+                var now = new Date();
+                var timeStr = now.toLocaleTimeString('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: true });
+                var cityName = tz.split('/')[1].replace(/_/g, ' ');
+                html += '<div class="timezone-item">' +
+                    '<span class="timezone-city">' + cityName + '</span>' +
+                    '<span class="timezone-time">' + timeStr + '</span>' +
+                '</div>';
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        update();
+        return setInterval(update, 60000);
+    }
+
+    function renderTranslateWidget(container, data, settings) {
+        container.innerHTML =
+            '<div class="translate-widget">' +
+                '<div class="translate-row">' +
+                    '<select id="translate-from" data-translate-from>' +
+                        '<option value="auto">Auto-detect</option>' +
+                        '<option value="en">English</option>' +
+                        '<option value="es">Spanish</option>' +
+                        '<option value="fr">French</option>' +
+                        '<option value="de">German</option>' +
+                        '<option value="it">Italian</option>' +
+                        '<option value="pt">Portuguese</option>' +
+                        '<option value="ru">Russian</option>' +
+                        '<option value="ja">Japanese</option>' +
+                        '<option value="ko">Korean</option>' +
+                        '<option value="zh">Chinese</option>' +
+                    '</select>' +
+                    '<span class="translate-arrow">&#8594;</span>' +
+                    '<select id="translate-to" data-translate-to>' +
+                        '<option value="en">English</option>' +
+                        '<option value="es">Spanish</option>' +
+                        '<option value="fr">French</option>' +
+                        '<option value="de">German</option>' +
+                        '<option value="it">Italian</option>' +
+                        '<option value="pt">Portuguese</option>' +
+                        '<option value="ru">Russian</option>' +
+                        '<option value="ja">Japanese</option>' +
+                        '<option value="ko">Korean</option>' +
+                        '<option value="zh">Chinese</option>' +
+                    '</select>' +
+                '</div>' +
+                '<textarea id="translate-input" data-translate-input placeholder="Enter text to translate..." rows="3"></textarea>' +
+                '<div id="translate-output" class="translate-output"></div>' +
+            '</div>';
+    }
+
+    function renderWikipediaWidget(container, data, settings) {
+        if (!data || data.error) {
+            container.innerHTML =
+                '<div class="wikipedia-widget">' +
+                    '<input type="text" id="wiki-search" data-wiki-search placeholder="Search Wikipedia...">' +
+                    '<div id="wiki-result" class="wiki-placeholder">Enter a topic to search</div>' +
+                '</div>';
+            return;
+        }
+
+        container.innerHTML =
+            '<div class="wikipedia-widget">' +
+                '<input type="text" id="wiki-search" data-wiki-search placeholder="Search Wikipedia...">' +
+                '<div class="wiki-result">' +
+                    (data.thumbnail ? '<img src="' + escapeHtml(data.thumbnail) + '" class="wiki-thumb" alt="">' : '') +
+                    '<div class="wiki-content">' +
+                        '<h4 class="wiki-title">' + escapeHtml(data.title) + '</h4>' +
+                        '<p class="wiki-extract">' + escapeHtml(data.extract ? data.extract.substring(0, 200) + '...' : '') + '</p>' +
+                        '<a href="' + escapeHtml(data.url) + '" target="_blank" rel="noopener" class="wiki-link">Read more</a>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+    }
+
+    function renderTrackingWidget(container, data, settings) {
+        container.innerHTML =
+            '<div class="tracking-widget">' +
+                '<div class="tracking-input-row">' +
+                    '<input type="text" id="tracking-number" data-tracking-number placeholder="Enter tracking number...">' +
+                    '<button data-action="track-package">Track</button>' +
+                '</div>' +
+                '<div id="tracking-result" class="tracking-placeholder">Enter a tracking number to check status</div>' +
+            '</div>';
+    }
+
+    function renderNutritionWidget(container, data, settings) {
+        if (!data || data.error) {
+            container.innerHTML =
+                '<div class="nutrition-widget">' +
+                    '<input type="text" id="nutrition-search" data-nutrition-search placeholder="Search food...">' +
+                    '<div class="nutrition-placeholder">Search for a food item</div>' +
+                '</div>';
+            return;
+        }
+
+        var html = '<div class="nutrition-widget">' +
+            '<input type="text" id="nutrition-search" data-nutrition-search placeholder="Search food...">' +
+            '<div class="nutrition-result">' +
+                '<h4 class="nutrition-name">' + escapeHtml(data.name) + '</h4>' +
+                (data.serving_size ? '<div class="nutrition-serving">Per 100g</div>' : '') +
+                '<div class="nutrition-facts">';
+
+        (data.nutrients || []).slice(0, 8).forEach(function(n) {
+            html += '<div class="nutrition-row">' +
+                '<span>' + escapeHtml(n.name) + '</span>' +
+                '<span>' + n.amount.toFixed(1) + ' ' + n.unit + '</span>' +
+            '</div>';
+        });
+
+        html += '</div></div></div>';
+        container.innerHTML = html;
+    }
+
+    function renderQRCodeWidget(container, data, settings) {
+        container.innerHTML =
+            '<div class="qrcode-widget">' +
+                '<input type="text" id="qr-text" data-qr-text placeholder="Enter text or URL...">' +
+                '<div id="qr-canvas" class="qr-canvas">' +
+                    '<div class="qr-placeholder">Enter text to generate QR code</div>' +
+                '</div>' +
+                '<button data-action="generate-qr">Generate QR Code</button>' +
+            '</div>';
+    }
+
+    function renderTimerWidget(container, data, settings) {
+        container.innerHTML =
+            '<div class="timer-widget">' +
+                '<div class="timer-display" id="timer-display">00:00:00</div>' +
+                '<div class="timer-buttons">' +
+                    '<button data-timer-action="start">Start</button>' +
+                    '<button data-timer-action="pause">Pause</button>' +
+                    '<button data-timer-action="reset">Reset</button>' +
+                '</div>' +
+                '<div class="timer-presets">' +
+                    '<button data-timer-preset="60">1 min</button>' +
+                    '<button data-timer-preset="300">5 min</button>' +
+                    '<button data-timer-preset="600">10 min</button>' +
+                    '<button data-timer-preset="1500">25 min</button>' +
+                '</div>' +
+            '</div>';
+    }
+
+    function renderLoremWidget(container, data, settings) {
+        var loremText = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.';
+
+        container.innerHTML =
+            '<div class="lorem-widget">' +
+                '<div class="lorem-options">' +
+                    '<select id="lorem-type" data-lorem-type>' +
+                        '<option value="paragraphs">Paragraphs</option>' +
+                        '<option value="sentences">Sentences</option>' +
+                        '<option value="words">Words</option>' +
+                    '</select>' +
+                    '<input type="number" id="lorem-count" data-lorem-count value="3" min="1" max="20">' +
+                    '<button data-action="generate-lorem">Generate</button>' +
+                '</div>' +
+                '<div id="lorem-output" class="lorem-output">' + loremText + '</div>' +
+                '<button class="lorem-copy" data-action="copy-lorem">Copy</button>' +
+            '</div>';
+    }
+
+    function renderDictionaryWidget(container, data, settings) {
+        if (!data || data.error) {
+            container.innerHTML =
+                '<div class="dictionary-widget">' +
+                    '<input type="text" id="dict-word" data-dict-word placeholder="Enter a word...">' +
+                    '<div class="dict-placeholder">Search for a word definition</div>' +
+                '</div>';
+            return;
+        }
+
+        var html = '<div class="dictionary-widget">' +
+            '<input type="text" id="dict-word" data-dict-word placeholder="Enter a word...">' +
+            '<div class="dict-result">' +
+                '<h4 class="dict-word">' + escapeHtml(data.word) + '</h4>' +
+                (data.phonetic ? '<span class="dict-phonetic">' + escapeHtml(data.phonetic) + '</span>' : '');
+
+        (data.meanings || []).slice(0, 2).forEach(function(m) {
+            html += '<div class="dict-meaning">' +
+                '<span class="dict-pos">' + escapeHtml(m.part_of_speech) + '</span>';
+            (m.definitions || []).slice(0, 2).forEach(function(d) {
+                html += '<p class="dict-def">' + escapeHtml(d.definition) + '</p>';
+                if (d.example) {
+                    html += '<p class="dict-example">"' + escapeHtml(d.example) + '"</p>';
+                }
+            });
+            html += '</div>';
+        });
+
+        html += '</div></div>';
+        container.innerHTML = html;
+    }
+
+    function renderIPAddressWidget(container, data, settings) {
+        // Get IP info - this is client-side detectable
+        fetch('https://api.ipify.org?format=json')
+            .then(function(r) { return r.json(); })
+            .then(function(ipData) {
+                container.innerHTML =
+                    '<div class="ip-widget">' +
+                        '<div class="ip-label">Your IP Address</div>' +
+                        '<div class="ip-value">' + escapeHtml(ipData.ip) + '</div>' +
+                        '<button class="ip-copy" data-action="copy-ip" data-ip="' + escapeHtml(ipData.ip) + '">Copy</button>' +
+                    '</div>';
+            })
+            .catch(function() {
+                container.innerHTML =
+                    '<div class="ip-widget">' +
+                        '<div class="ip-error">Unable to detect IP address</div>' +
+                    '</div>';
+            });
+    }
+
+    function renderColorPickerWidget(container, data, settings) {
+        var currentColor = settings.color || '#1e90ff';
+
+        container.innerHTML =
+            '<div class="colorpicker-widget">' +
+                '<input type="color" id="color-input" data-color-input value="' + currentColor + '">' +
+                '<div class="color-values">' +
+                    '<div class="color-row"><label>HEX</label><input type="text" id="color-hex" data-color-hex value="' + currentColor + '" readonly></div>' +
+                    '<div class="color-row"><label>RGB</label><input type="text" id="color-rgb" data-color-rgb readonly></div>' +
+                    '<div class="color-row"><label>HSL</label><input type="text" id="color-hsl" data-color-hsl readonly></div>' +
+                '</div>' +
+                '<button data-action="copy-color">Copy HEX</button>' +
+            '</div>';
+
+        // Update color values
+        updateColorValues(currentColor);
+    }
+
+    function updateColorValues(hex) {
+        var hexInput = document.getElementById('color-hex');
+        var rgbInput = document.getElementById('color-rgb');
+        var hslInput = document.getElementById('color-hsl');
+
+        if (hexInput) hexInput.value = hex;
+        if (rgbInput) {
+            var r = parseInt(hex.substr(1, 2), 16);
+            var g = parseInt(hex.substr(3, 2), 16);
+            var b = parseInt(hex.substr(5, 2), 16);
+            rgbInput.value = 'rgb(' + r + ', ' + g + ', ' + b + ')';
+        }
+        if (hslInput) {
+            var rgb = hexToRgb(hex);
+            var hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
+            hslInput.value = 'hsl(' + Math.round(hsl.h) + ', ' + Math.round(hsl.s) + '%, ' + Math.round(hsl.l) + '%)';
+        }
+    }
+
+    function hexToRgb(hex) {
+        var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? {
+            r: parseInt(result[1], 16),
+            g: parseInt(result[2], 16),
+            b: parseInt(result[3], 16)
+        } : { r: 0, g: 0, b: 0 };
+    }
+
+    function rgbToHsl(r, g, b) {
+        r /= 255; g /= 255; b /= 255;
+        var max = Math.max(r, g, b), min = Math.min(r, g, b);
+        var h, s, l = (max + min) / 2;
+
+        if (max === min) {
+            h = s = 0;
+        } else {
+            var d = max - min;
+            s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+            switch (max) {
+                case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+                case g: h = ((b - r) / d + 2) / 6; break;
+                case b: h = ((r - g) / d + 4) / 6; break;
+            }
+        }
+
+        return { h: h * 360, s: s * 100, l: l * 100 };
     }
 
     // Widget Manager object
@@ -1704,8 +2440,10 @@
     function applyPreferences() {
         var prefs = getPreferences();
 
+        // Per AI.md PART 16: Apply theme class to <html> element: theme-light, theme-dark
         if (prefs.theme && prefs.theme !== 'system') {
-            document.documentElement.setAttribute('data-theme', prefs.theme);
+            document.documentElement.classList.remove('theme-dark', 'theme-light');
+            document.documentElement.classList.add('theme-' + prefs.theme);
         }
 
         if (prefs.new_tab) {
@@ -1845,5 +2583,720 @@
     window.SearchBangs = {
         getCustomBangs: getCustomBangs,
         getPreferences: getPreferences
+    };
+})();
+
+
+// ============================================================================
+// VIDEO PREVIEWS (per IDEA.md - hover-to-play video thumbnails)
+// ============================================================================
+(function() {
+    'use strict';
+
+    var hoverTimeout = null;
+    var activePreview = null;
+    var previewContainer = null;
+    var isTouchDevice = 'ontouchstart' in window;
+
+    // Initialize video preview functionality
+    function initVideoPreview() {
+        // Create preview container
+        if (!previewContainer) {
+            previewContainer = document.createElement('div');
+            previewContainer.id = 'video-preview-container';
+            previewContainer.className = 'video-preview-container';
+            previewContainer.setAttribute('aria-hidden', 'true');
+            document.body.appendChild(previewContainer);
+        }
+
+        // Event delegation for video results
+        document.addEventListener('mouseenter', handleMouseEnter, true);
+        document.addEventListener('mouseleave', handleMouseLeave, true);
+
+        // Touch device: swipe scrubbing
+        if (isTouchDevice) {
+            document.addEventListener('touchstart', handleTouchStart, { passive: true });
+            document.addEventListener('touchmove', handleTouchMove, { passive: false });
+            document.addEventListener('touchend', handleTouchEnd, { passive: true });
+        }
+    }
+
+    function handleMouseEnter(e) {
+        var videoResult = e.target.closest('.video-result, .video-item, [data-video-id]');
+        if (!videoResult) return;
+
+        clearTimeout(hoverTimeout);
+
+        // Delay before showing preview to prevent accidental triggers
+        hoverTimeout = setTimeout(function() {
+            showVideoPreview(videoResult);
+        }, 500);
+    }
+
+    function handleMouseLeave(e) {
+        var videoResult = e.target.closest('.video-result, .video-item, [data-video-id]');
+        if (!videoResult) return;
+
+        clearTimeout(hoverTimeout);
+
+        // Only hide if we're actually leaving the result
+        var relatedTarget = e.relatedTarget;
+        if (relatedTarget && (videoResult.contains(relatedTarget) || previewContainer.contains(relatedTarget))) {
+            return;
+        }
+
+        hideVideoPreview();
+    }
+
+    function showVideoPreview(videoResult) {
+        var videoId = videoResult.dataset.videoId;
+        var previewUrl = videoResult.dataset.previewUrl;
+        var videoSource = videoResult.dataset.videoSource || 'youtube';
+
+        if (!videoId && !previewUrl) {
+            // Try to extract from YouTube thumbnail
+            var thumbnail = videoResult.querySelector('img[src*="ytimg"], img[src*="youtube"]');
+            if (thumbnail) {
+                var match = thumbnail.src.match(/vi\/([^\/]+)/);
+                if (match) {
+                    videoId = match[1];
+                    videoSource = 'youtube';
+                }
+            }
+        }
+
+        if (!videoId && !previewUrl) return;
+
+        activePreview = videoResult;
+
+        // Position the preview
+        var rect = videoResult.getBoundingClientRect();
+        previewContainer.style.top = rect.top + 'px';
+        previewContainer.style.left = (rect.right + 10) + 'px';
+        previewContainer.style.width = '320px';
+        previewContainer.style.height = '180px';
+
+        // Check if preview would go off screen
+        if (rect.right + 340 > window.innerWidth) {
+            previewContainer.style.left = (rect.left - 330) + 'px';
+        }
+        if (rect.top + 180 > window.innerHeight) {
+            previewContainer.style.top = (window.innerHeight - 190) + 'px';
+        }
+
+        // Show preview content
+        if (previewUrl) {
+            // Direct preview URL (animated GIF or video)
+            if (previewUrl.endsWith('.gif') || previewUrl.includes('giphy')) {
+                previewContainer.innerHTML = '<img src="' + previewUrl + '" alt="Video preview" class="video-preview-gif">';
+            } else {
+                previewContainer.innerHTML = '<video src="' + previewUrl + '" autoplay muted loop class="video-preview-video"></video>';
+            }
+        } else if (videoSource === 'youtube' && videoId) {
+            // Use YouTube animated thumbnail
+            // YouTube provides animated thumbnails at specific URLs
+            var animatedThumb = 'https://i.ytimg.com/vi/' + videoId + '/hqdefault.jpg';
+
+            // Create preview with storyboard simulation
+            previewContainer.innerHTML =
+                '<div class="video-preview-youtube">' +
+                    '<img src="' + animatedThumb + '" alt="Video preview" class="video-preview-thumb">' +
+                    '<div class="video-preview-progress"></div>' +
+                    '<div class="video-preview-play">&#9658;</div>' +
+                '</div>';
+
+            // Simulate video scrubbing with different thumbnail timestamps
+            simulateVideoScrub(videoId);
+        } else {
+            // Generic preview
+            var thumbUrl = videoResult.querySelector('img')?.src || '';
+            previewContainer.innerHTML =
+                '<div class="video-preview-generic">' +
+                    '<img src="' + thumbUrl + '" alt="Video preview">' +
+                    '<div class="video-preview-play">&#9658;</div>' +
+                '</div>';
+        }
+
+        previewContainer.classList.add('visible');
+        previewContainer.setAttribute('aria-hidden', 'false');
+    }
+
+    function hideVideoPreview() {
+        if (previewContainer) {
+            previewContainer.classList.remove('visible');
+            previewContainer.setAttribute('aria-hidden', 'true');
+            previewContainer.innerHTML = '';
+        }
+        activePreview = null;
+    }
+
+    // Simulate video scrubbing using YouTube thumbnail storyboards
+    function simulateVideoScrub(videoId) {
+        var storyboardIndex = 0;
+        var maxIndex = 3;
+        var thumb = previewContainer.querySelector('.video-preview-thumb');
+        var progress = previewContainer.querySelector('.video-preview-progress');
+
+        if (!thumb) return;
+
+        // YouTube storyboard thumbnails (different quality levels)
+        var qualities = ['mqdefault', 'hqdefault', 'sddefault', 'maxresdefault'];
+
+        var scrubInterval = setInterval(function() {
+            if (!previewContainer.classList.contains('visible')) {
+                clearInterval(scrubInterval);
+                return;
+            }
+
+            storyboardIndex = (storyboardIndex + 1) % qualities.length;
+            thumb.src = 'https://i.ytimg.com/vi/' + videoId + '/' + qualities[storyboardIndex] + '.jpg';
+
+            // Update progress bar
+            if (progress) {
+                progress.style.width = ((storyboardIndex + 1) / qualities.length * 100) + '%';
+            }
+        }, 800);
+    }
+
+    // Touch handling for mobile swipe scrubbing
+    var touchStartX = 0;
+    var touchVideoResult = null;
+
+    function handleTouchStart(e) {
+        var videoResult = e.target.closest('.video-result, .video-item, [data-video-id]');
+        if (!videoResult) return;
+
+        touchStartX = e.touches[0].clientX;
+        touchVideoResult = videoResult;
+    }
+
+    function handleTouchMove(e) {
+        if (!touchVideoResult) return;
+
+        var deltaX = e.touches[0].clientX - touchStartX;
+        var progress = Math.min(100, Math.max(0, (deltaX / touchVideoResult.offsetWidth) * 100 + 50));
+
+        // Show visual feedback for scrubbing
+        var progressIndicator = touchVideoResult.querySelector('.touch-scrub-indicator');
+        if (!progressIndicator) {
+            progressIndicator = document.createElement('div');
+            progressIndicator.className = 'touch-scrub-indicator';
+            touchVideoResult.appendChild(progressIndicator);
+        }
+        progressIndicator.style.width = progress + '%';
+    }
+
+    function handleTouchEnd(e) {
+        if (!touchVideoResult) return;
+
+        var indicator = touchVideoResult.querySelector('.touch-scrub-indicator');
+        if (indicator) {
+            indicator.remove();
+        }
+
+        touchVideoResult = null;
+        touchStartX = 0;
+    }
+
+    // Initialize on DOM ready
+    document.addEventListener('DOMContentLoaded', initVideoPreview);
+
+    // Expose for external use
+    window.VideoPreview = {
+        show: showVideoPreview,
+        hide: hideVideoPreview
+    };
+})();
+
+
+// ============================================================================
+// ADVANCED SEARCH FORM (per IDEA.md)
+// ============================================================================
+(function() {
+    'use strict';
+
+    var advancedSearchModal = null;
+
+    // Advanced search operators
+    var OPERATORS = {
+        exact: { label: 'Exact phrase', prefix: '"', suffix: '"', placeholder: 'exact words' },
+        exclude: { label: 'Exclude', prefix: '-', suffix: '', placeholder: 'unwanted term' },
+        site: { label: 'Site', prefix: 'site:', suffix: '', placeholder: 'example.com' },
+        filetype: { label: 'File type', prefix: 'filetype:', suffix: '', placeholder: 'pdf' },
+        intitle: { label: 'In title', prefix: 'intitle:', suffix: '', placeholder: 'title word' },
+        inurl: { label: 'In URL', prefix: 'inurl:', suffix: '', placeholder: 'url part' },
+        intext: { label: 'In text', prefix: 'intext:', suffix: '', placeholder: 'body text' },
+        before: { label: 'Before date', prefix: 'before:', suffix: '', placeholder: '2024-01-01' },
+        after: { label: 'After date', prefix: 'after:', suffix: '', placeholder: '2023-01-01' },
+        or: { label: 'OR search', prefix: '', suffix: '', placeholder: 'term1 OR term2' }
+    };
+
+    function createAdvancedSearchForm() {
+        if (advancedSearchModal) {
+            advancedSearchModal.remove();
+        }
+
+        advancedSearchModal = document.createElement('dialog');
+        advancedSearchModal.id = 'advanced-search-modal';
+        advancedSearchModal.className = 'advanced-search-modal';
+        advancedSearchModal.setAttribute('role', 'dialog');
+        advancedSearchModal.setAttribute('aria-labelledby', 'advanced-search-title');
+
+        var html = '<header>' +
+            '<h2 id="advanced-search-title">Advanced Search</h2>' +
+            '<button type="button" class="close-btn" data-action="close" aria-label="Close">&times;</button>' +
+        '</header>' +
+        '<main class="advanced-search-content">' +
+            '<form id="advanced-search-form">' +
+                '<div class="advanced-search-group">' +
+                    '<label for="adv-main">All these words</label>' +
+                    '<input type="text" id="adv-main" name="main" placeholder="search terms" autofocus>' +
+                '</div>' +
+                '<div class="advanced-search-group">' +
+                    '<label for="adv-exact">Exact phrase</label>' +
+                    '<input type="text" id="adv-exact" name="exact" placeholder="&quot;exact phrase&quot;">' +
+                '</div>' +
+                '<div class="advanced-search-group">' +
+                    '<label for="adv-any">Any of these words</label>' +
+                    '<input type="text" id="adv-any" name="any" placeholder="word1 OR word2">' +
+                '</div>' +
+                '<div class="advanced-search-group">' +
+                    '<label for="adv-exclude">None of these words</label>' +
+                    '<input type="text" id="adv-exclude" name="exclude" placeholder="-unwanted">' +
+                '</div>' +
+                '<div class="advanced-search-row">' +
+                    '<div class="advanced-search-group half">' +
+                        '<label for="adv-site">Site/domain</label>' +
+                        '<input type="text" id="adv-site" name="site" placeholder="example.com">' +
+                    '</div>' +
+                    '<div class="advanced-search-group half">' +
+                        '<label for="adv-filetype">File type</label>' +
+                        '<select id="adv-filetype" name="filetype">' +
+                            '<option value="">Any</option>' +
+                            '<option value="pdf">PDF</option>' +
+                            '<option value="doc">Word (doc)</option>' +
+                            '<option value="docx">Word (docx)</option>' +
+                            '<option value="xls">Excel (xls)</option>' +
+                            '<option value="xlsx">Excel (xlsx)</option>' +
+                            '<option value="ppt">PowerPoint</option>' +
+                            '<option value="txt">Text</option>' +
+                            '<option value="csv">CSV</option>' +
+                            '<option value="json">JSON</option>' +
+                            '<option value="xml">XML</option>' +
+                        '</select>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="advanced-search-row">' +
+                    '<div class="advanced-search-group half">' +
+                        '<label for="adv-intitle">Words in title</label>' +
+                        '<input type="text" id="adv-intitle" name="intitle" placeholder="title words">' +
+                    '</div>' +
+                    '<div class="advanced-search-group half">' +
+                        '<label for="adv-inurl">Words in URL</label>' +
+                        '<input type="text" id="adv-inurl" name="inurl" placeholder="url-segment">' +
+                    '</div>' +
+                '</div>' +
+                '<div class="advanced-search-row">' +
+                    '<div class="advanced-search-group half">' +
+                        '<label for="adv-after">After date</label>' +
+                        '<input type="date" id="adv-after" name="after">' +
+                    '</div>' +
+                    '<div class="advanced-search-group half">' +
+                        '<label for="adv-before">Before date</label>' +
+                        '<input type="date" id="adv-before" name="before">' +
+                    '</div>' +
+                '</div>' +
+                '<div class="advanced-search-group">' +
+                    '<label for="adv-region">Region</label>' +
+                    '<select id="adv-region" name="region">' +
+                        '<option value="">Any region</option>' +
+                        '<option value="us">United States</option>' +
+                        '<option value="uk">United Kingdom</option>' +
+                        '<option value="de">Germany</option>' +
+                        '<option value="fr">France</option>' +
+                        '<option value="es">Spain</option>' +
+                        '<option value="it">Italy</option>' +
+                        '<option value="jp">Japan</option>' +
+                        '<option value="cn">China</option>' +
+                        '<option value="br">Brazil</option>' +
+                        '<option value="au">Australia</option>' +
+                        '<option value="ca">Canada</option>' +
+                        '<option value="in">India</option>' +
+                    '</select>' +
+                '</div>' +
+                '<div class="advanced-search-preview">' +
+                    '<label>Query preview:</label>' +
+                    '<code id="adv-preview"></code>' +
+                '</div>' +
+            '</form>' +
+        '</main>' +
+        '<footer>' +
+            '<button type="button" class="btn btn-secondary" data-action="clear">Clear</button>' +
+            '<button type="button" class="btn btn-primary" data-action="search">Search</button>' +
+        '</footer>';
+
+        advancedSearchModal.innerHTML = html;
+        document.body.appendChild(advancedSearchModal);
+
+        // Event listeners
+        advancedSearchModal.querySelector('[data-action="close"]').addEventListener('click', function() {
+            advancedSearchModal.close();
+        });
+
+        advancedSearchModal.querySelector('[data-action="clear"]').addEventListener('click', function() {
+            advancedSearchModal.querySelector('form').reset();
+            updatePreview();
+        });
+
+        advancedSearchModal.querySelector('[data-action="search"]').addEventListener('click', function() {
+            performAdvancedSearch();
+        });
+
+        advancedSearchModal.querySelector('form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            performAdvancedSearch();
+        });
+
+        // Update preview on input changes
+        advancedSearchModal.querySelectorAll('input, select').forEach(function(input) {
+            input.addEventListener('input', updatePreview);
+            input.addEventListener('change', updatePreview);
+        });
+
+        // Keyboard handling
+        advancedSearchModal.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                advancedSearchModal.close();
+            }
+        });
+
+        return advancedSearchModal;
+    }
+
+    function updatePreview() {
+        var preview = document.getElementById('adv-preview');
+        if (!preview) return;
+
+        var query = buildQuery();
+        preview.textContent = query || '(enter search terms)';
+    }
+
+    function buildQuery() {
+        var parts = [];
+
+        // Main query
+        var main = document.getElementById('adv-main')?.value.trim();
+        if (main) parts.push(main);
+
+        // Exact phrase
+        var exact = document.getElementById('adv-exact')?.value.trim();
+        if (exact) parts.push('"' + exact + '"');
+
+        // Any of (OR)
+        var any = document.getElementById('adv-any')?.value.trim();
+        if (any) {
+            var anyTerms = any.split(/\s+/).filter(function(t) { return t; });
+            if (anyTerms.length > 1) {
+                parts.push('(' + anyTerms.join(' OR ') + ')');
+            } else if (anyTerms.length === 1) {
+                parts.push(anyTerms[0]);
+            }
+        }
+
+        // Exclude
+        var exclude = document.getElementById('adv-exclude')?.value.trim();
+        if (exclude) {
+            exclude.split(/\s+/).forEach(function(term) {
+                if (term && !term.startsWith('-')) {
+                    parts.push('-' + term);
+                } else if (term) {
+                    parts.push(term);
+                }
+            });
+        }
+
+        // Site
+        var site = document.getElementById('adv-site')?.value.trim();
+        if (site) parts.push('site:' + site);
+
+        // Filetype
+        var filetype = document.getElementById('adv-filetype')?.value;
+        if (filetype) parts.push('filetype:' + filetype);
+
+        // In title
+        var intitle = document.getElementById('adv-intitle')?.value.trim();
+        if (intitle) parts.push('intitle:' + intitle);
+
+        // In URL
+        var inurl = document.getElementById('adv-inurl')?.value.trim();
+        if (inurl) parts.push('inurl:' + inurl);
+
+        // Date range
+        var after = document.getElementById('adv-after')?.value;
+        if (after) parts.push('after:' + after);
+
+        var before = document.getElementById('adv-before')?.value;
+        if (before) parts.push('before:' + before);
+
+        return parts.join(' ');
+    }
+
+    function performAdvancedSearch() {
+        var query = buildQuery();
+        if (!query) return;
+
+        var region = document.getElementById('adv-region')?.value;
+        var searchUrl = '/search?q=' + encodeURIComponent(query);
+        if (region) {
+            searchUrl += '&region=' + encodeURIComponent(region);
+        }
+
+        advancedSearchModal.close();
+        window.location.href = searchUrl;
+    }
+
+    function showAdvancedSearch() {
+        var modal = createAdvancedSearchForm();
+
+        // Pre-populate with current search query if on search page
+        var urlParams = new URLSearchParams(window.location.search);
+        var currentQuery = urlParams.get('q');
+        if (currentQuery) {
+            var mainInput = modal.querySelector('#adv-main');
+            if (mainInput) mainInput.value = currentQuery;
+        }
+
+        updatePreview();
+        modal.showModal();
+
+        // Announce for screen readers
+        if (window.srAnnounce) {
+            window.srAnnounce('Advanced search dialog opened');
+        }
+    }
+
+    // Initialize
+    function init() {
+        // Add advanced search button to search forms
+        document.querySelectorAll('.search-form, form[action*="search"]').forEach(function(form) {
+            if (form.querySelector('.advanced-search-trigger')) return;
+
+            var trigger = document.createElement('button');
+            trigger.type = 'button';
+            trigger.className = 'advanced-search-trigger';
+            trigger.innerHTML = '&#8942;'; // Vertical ellipsis
+            trigger.setAttribute('aria-label', 'Advanced search');
+            trigger.setAttribute('title', 'Advanced search');
+            trigger.addEventListener('click', showAdvancedSearch);
+
+            var searchBtn = form.querySelector('button[type="submit"], .search-btn');
+            if (searchBtn) {
+                searchBtn.parentNode.insertBefore(trigger, searchBtn);
+            } else {
+                form.appendChild(trigger);
+            }
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+
+    // Expose for external use
+    window.AdvancedSearch = {
+        show: showAdvancedSearch,
+        buildQuery: buildQuery
+    };
+})();
+
+
+// ============================================================================
+// RELATED SEARCHES (per IDEA.md - query refinement suggestions)
+// ============================================================================
+(function() {
+    'use strict';
+
+    var relatedContainer = null;
+    var currentQuery = null;
+
+    function init() {
+        // Only on search results page
+        if (!window.location.pathname.includes('/search')) return;
+
+        var urlParams = new URLSearchParams(window.location.search);
+        currentQuery = urlParams.get('q');
+
+        if (!currentQuery) return;
+
+        // Create related searches container
+        relatedContainer = document.createElement('div');
+        relatedContainer.id = 'related-searches';
+        relatedContainer.className = 'related-searches';
+        relatedContainer.setAttribute('aria-labelledby', 'related-title');
+
+        // Find the best place to insert (after results, before pagination)
+        var resultsContainer = document.querySelector('.search-results, .results-container, #results');
+        var pagination = document.querySelector('.pagination, .pager, nav[aria-label*="pagination"]');
+
+        if (pagination && pagination.parentNode) {
+            pagination.parentNode.insertBefore(relatedContainer, pagination);
+        } else if (resultsContainer) {
+            resultsContainer.appendChild(relatedContainer);
+        } else {
+            // Add to main content area
+            var main = document.querySelector('main, .main-content, #content');
+            if (main) {
+                main.appendChild(relatedContainer);
+            }
+        }
+
+        // Fetch related searches
+        fetchRelatedSearches(currentQuery);
+    }
+
+    function fetchRelatedSearches(query) {
+        // Try API first
+        fetch('/api/v1/search/related?q=' + encodeURIComponent(query) + '&limit=8')
+            .then(function(response) {
+                if (!response.ok) throw new Error('API not available');
+                return response.json();
+            })
+            .then(function(data) {
+                if (data.success && data.data && data.data.length > 0) {
+                    renderRelatedSearches(data.data);
+                } else {
+                    // Fall back to client-side generation
+                    var suggestions = generateClientSideSuggestions(query);
+                    if (suggestions.length > 0) {
+                        renderRelatedSearches(suggestions);
+                    }
+                }
+            })
+            .catch(function() {
+                // Fall back to client-side generation
+                var suggestions = generateClientSideSuggestions(query);
+                if (suggestions.length > 0) {
+                    renderRelatedSearches(suggestions);
+                }
+            });
+    }
+
+    function generateClientSideSuggestions(query) {
+        var suggestions = [];
+        var words = query.split(/\s+/).filter(function(w) { return w; });
+
+        if (words.length === 0) return suggestions;
+
+        // Question variations
+        var questionPrefixes = ['what is', 'how to', 'why', 'best', 'top'];
+        questionPrefixes.forEach(function(prefix) {
+            if (!query.toLowerCase().startsWith(prefix)) {
+                suggestions.push(prefix + ' ' + query);
+            }
+        });
+
+        // Add common suffixes
+        var suffixes = ['examples', 'tutorial', 'guide', 'vs', 'alternatives', 'review', '2024', '2025'];
+        suffixes.forEach(function(suffix) {
+            if (!query.toLowerCase().includes(suffix)) {
+                suggestions.push(query + ' ' + suffix);
+            }
+        });
+
+        // If multiple words, try variations
+        if (words.length > 1) {
+            suggestions.push(words.slice(1).join(' '));
+            suggestions.push(words[0] + ' alternatives');
+        }
+
+        // Deduplicate and limit
+        var seen = {};
+        var unique = [];
+        suggestions.forEach(function(s) {
+            var lower = s.toLowerCase();
+            if (!seen[lower] && lower !== query.toLowerCase()) {
+                seen[lower] = true;
+                unique.push(s);
+            }
+        });
+
+        return unique.slice(0, 8);
+    }
+
+    function renderRelatedSearches(suggestions) {
+        if (!relatedContainer || suggestions.length === 0) return;
+
+        var html = '<h3 id="related-title" class="related-title">Related searches</h3>' +
+            '<div class="related-list">';
+
+        suggestions.forEach(function(suggestion) {
+            var searchUrl = '/search?q=' + encodeURIComponent(suggestion);
+            html += '<a href="' + searchUrl + '" class="related-item">' +
+                '<svg class="related-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">' +
+                    '<circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>' +
+                '</svg>' +
+                '<span>' + escapeHtml(suggestion) + '</span>' +
+            '</a>';
+        });
+
+        html += '</div>';
+        relatedContainer.innerHTML = html;
+        relatedContainer.style.display = 'block';
+
+        // Announce for screen readers
+        if (window.srAnnounce) {
+            window.srAnnounce(suggestions.length + ' related searches available');
+        }
+    }
+
+    function escapeHtml(text) {
+        var div = document.createElement('div');
+        div.textContent = text || '';
+        return div.innerHTML;
+    }
+
+    // Also provide "People also ask" style suggestions
+    function renderPeopleAlsoAsk(questions) {
+        if (!questions || questions.length === 0) return;
+
+        var container = document.createElement('div');
+        container.id = 'people-also-ask';
+        container.className = 'people-also-ask';
+
+        var html = '<h3 class="paa-title">People also ask</h3>' +
+            '<div class="paa-list">';
+
+        questions.forEach(function(q, index) {
+            html += '<details class="paa-item">' +
+                '<summary class="paa-question">' +
+                    '<span>' + escapeHtml(q.question) + '</span>' +
+                    '<svg class="paa-arrow" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">' +
+                        '<path d="M6 9l6 6 6-6"/>' +
+                    '</svg>' +
+                '</summary>' +
+                '<div class="paa-answer">' +
+                    (q.answer ? '<p>' + escapeHtml(q.answer) + '</p>' : '<p class="paa-loading">Loading...</p>') +
+                    '<a href="/search?q=' + encodeURIComponent(q.question) + '" class="paa-link">Search for this</a>' +
+                '</div>' +
+            '</details>';
+        });
+
+        html += '</div>';
+        container.innerHTML = html;
+
+        // Insert after first few results
+        var results = document.querySelectorAll('.search-result, .result-item');
+        if (results.length > 3) {
+            results[3].parentNode.insertBefore(container, results[3].nextSibling);
+        } else if (relatedContainer) {
+            relatedContainer.parentNode.insertBefore(container, relatedContainer);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+
+    // Expose for external use
+    window.RelatedSearches = {
+        fetch: fetchRelatedSearches,
+        render: renderRelatedSearches,
+        renderPAA: renderPeopleAlsoAsk
     };
 })();

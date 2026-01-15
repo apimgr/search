@@ -3,6 +3,9 @@
 # =============================================================================
 FROM golang:alpine AS builder
 
+# Install git and bash (git: required for go mod download; bash: for build scripts)
+RUN apk add --no-cache git bash
+
 ARG TARGETARCH
 ARG VERSION=dev
 ARG BUILD_DATE
@@ -51,15 +54,18 @@ LABEL org.opencontainers.image.licenses="${LICENSE}" \
       org.opencontainers.image.schema-version="${VERSION}" \
       org.opencontainers.image.revision="${COMMIT_ID}"
 
-# Install required packages including Tor
+# Install required packages (git, curl, bash, tini, tor - per AI.md PART 27)
 RUN apk add --no-cache \
+    git \
     curl \
     bash \
     tini \
     tor
 
-# Create directories with proper structure
-RUN mkdir -p /config /config/security /data/db /data/logs /data/tor /data/geoip /data/backup
+# NO directory creation - binary handles ALL setup based on env vars
+# This allows users to override CONFIG_DIR, DATA_DIR, etc.
+# Docker volume mounts auto-create mount points
+# Per AI.md PART 27: Binary handles directories, permissions, user/group, Tor, etc.
 
 # Copy binary from builder stage (multi-stage build)
 COPY --from=builder /app /usr/local/bin/search

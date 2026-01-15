@@ -1,10 +1,17 @@
 name: search-dev
 
+x-logging: &default-logging
+  options:
+    max-size: '5m'
+    max-file: '1'
+  driver: json-file
+
 services:
   search:
     image: ghcr.io/apimgr/search:latest
     container_name: search-dev
     restart: unless-stopped
+    logging: *default-logging
     environment:
       # Development: relaxed security, verbose logging, no caching
       # Does NOT enable debug endpoints - uncomment DEBUG=true for that
@@ -22,6 +29,12 @@ services:
       - ./rootfs/data:/data
     networks:
       - search-dev
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/healthz"]
+      interval: 5m
+      timeout: 15s
+      retries: 3
+      start_period: 10m
 
 networks:
   search-dev:

@@ -16,7 +16,7 @@ export TZ="${TZ:-America/New_York}"
 # Configurable paths (via env vars or CLI flags)
 export CONFIG_DIR="/config"
 export DATA_DIR="/data"
-export LOG_DIR="/data/logs"
+export LOG_DIR="/data/log"
 export DATABASE_DIR="/data/db"
 export BACKUP_DIR="/data/backup"
 
@@ -213,6 +213,63 @@ wait_for_services() {
 }
 
 # -----------------------------------------------------------------------------
+# AIO (All-in-One) Mode Support
+# Per AI.md PART 28: All-in-One Dockerfile (NON-NEGOTIABLE)
+# -----------------------------------------------------------------------------
+is_aio_mode() {
+    # AIO mode detected by presence of supervisor and postgres
+    command -v supervisord >/dev/null 2>&1 && command -v postgres >/dev/null 2>&1
+}
+
+setup_aio() {
+    log "Setting up AIO mode (PostgreSQL + Valkey + Tor + App)..."
+
+    # Setup directories for external services (PostgreSQL, Valkey)
+    mkdir -p /data/db/postgres /data/db/valkey /data/cache \
+             /run/postgresql /run/valkey \
+             /data/log/postgres /data/log/search
+    chown -R postgres:postgres /data/db/postgres /run/postgresql /data/log/postgres
+    chmod 700 /data/db/postgres
+    chmod 755 /run/valkey
+
+    # Initialize PostgreSQL if not already done
+    if [ ! -f /data/db/postgres/PG_VERSION ]; then
+        log "Initializing PostgreSQL database..."
+
+        # Detect PostgreSQL version
+        PG_VERSION=$(ls /usr/lib/postgresql/ 2>/dev/null | head -1 || echo "15")
+        PG_BIN="/usr/lib/postgresql/${PG_VERSION}/bin"
+
+        su - postgres -c "${PG_BIN}/initdb -D /data/db/postgres"
+
+        # Copy optimized config if exists
+        if [ -f /etc/postgresql/postgresql-aio.conf ]; then
+            cp /etc/postgresql/postgresql-aio.conf /data/db/postgres/postgresql.conf
+        fi
+
+        # Start PostgreSQL temporarily to create database and user
+        su - postgres -c "${PG_BIN}/pg_ctl -D /data/db/postgres -l /data/log/postgres/init.log start"
+        sleep 3
+
+        # Create application database and user
+        su - postgres -c "psql -c \"CREATE USER ${DB_USER:-search} WITH PASSWORD '${DB_PASSWORD:-search}';\""
+        su - postgres -c "psql -c \"CREATE DATABASE ${DB_NAME:-search} OWNER ${DB_USER:-search};\""
+        su - postgres -c "psql -c \"GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME:-search} TO ${DB_USER:-search};\""
+
+        # Stop PostgreSQL (supervisor will start it)
+        su - postgres -c "${PG_BIN}/pg_ctl -D /data/db/postgres stop"
+
+        log "PostgreSQL initialized successfully"
+    fi
+
+    # Set Tor enabled flag for supervisor
+    export TOR_ENABLED="${TOR_ENABLED:-false}"
+
+    log "AIO setup complete, starting supervisor..."
+    exec /usr/bin/supervisord -c /etc/supervisor/supervisord.conf
+}
+
+# -----------------------------------------------------------------------------
 # Main
 # -----------------------------------------------------------------------------
 main() {
@@ -224,6 +281,14 @@ main() {
     log "PORT: ${PORT:-80}"
     log "TOR_INSTALLED: ${TOR_INSTALLED}"
 
+    # Check for AIO mode (All-in-One with PostgreSQL + Valkey)
+    if is_aio_mode; then
+        log "AIO mode detected"
+        setup_aio
+        # setup_aio execs supervisord, so we never reach here
+    fi
+
+    # Standard mode (app only)
     setup_directories
     start_tor
     start_app "$@"

@@ -8,6 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -20,6 +23,7 @@ import (
 	"github.com/go-acme/lego/v4/providers/dns/route53"
 
 	"golang.org/x/crypto/argon2"
+	"golang.org/x/net/publicsuffix"
 )
 
 // DNSProviderInfo contains metadata about a DNS provider
@@ -321,4 +325,234 @@ func DecryptCredentials(encrypted string, password string) (map[string]string, e
 // ValidatedAtNow returns the current timestamp for validated_at field
 func ValidatedAtNow() string {
 	return time.Now().UTC().Format(time.RFC3339)
+}
+
+// devOnlyTLDs are TLDs that are only valid in development mode
+// Per AI.md PART 21: Dev TLD Handling (NON-NEGOTIABLE)
+var devOnlyTLDs = map[string]bool{
+	"localhost":   true,
+	"test":        true,
+	"example":     true,
+	"invalid":     true,
+	"local":       true,
+	"lan":         true,
+	"internal":    true,
+	"home":        true,
+	"localdomain": true,
+	"home.arpa":   true,
+	"intranet":    true,
+	"corp":        true,
+	"private":     true,
+}
+
+// GetHostFromRequest resolves the host from an HTTP request
+// Per AI.md PART 21: use this for request-time host resolution (preferred)
+func GetHostFromRequest(r *http.Request, projectName string) string {
+	// 1. Reverse proxy headers (highest priority - we prefer to be behind a proxy)
+	for _, header := range []string{"X-Forwarded-Host", "X-Real-Host", "X-Original-Host"} {
+		if host := r.Header.Get(header); host != "" {
+			// Strip port if present (we handle port separately)
+			if h, _, err := net.SplitHostPort(host); err == nil {
+				return h
+			}
+			return host
+		}
+	}
+
+	// 2. Fall back to static resolution
+	return GetFQDN(projectName)
+}
+
+// GetFQDN resolves the Fully Qualified Domain Name
+// Per AI.md PART 21: use this when no request context available (startup, background tasks)
+// Returns first domain from DOMAIN env var (comma-separated list supported)
+func GetFQDN(projectName string) string {
+	// 1. DOMAIN env var (explicit user override, comma-separated)
+	if domain := os.Getenv("DOMAIN"); domain != "" {
+		// Return first domain as primary
+		if idx := strings.Index(domain, ","); idx > 0 {
+			return strings.TrimSpace(domain[:idx])
+		}
+		return domain
+	}
+
+	// 2. os.Hostname() - cross-platform (Linux, macOS, Windows, BSD)
+	if hostname, err := os.Hostname(); err == nil && hostname != "" {
+		if !isLoopback(hostname) {
+			return hostname
+		}
+	}
+
+	// 3. $HOSTNAME env var (skip loopback)
+	if hostname := os.Getenv("HOSTNAME"); hostname != "" {
+		if !isLoopback(hostname) {
+			return hostname
+		}
+	}
+
+	// 4. Global IPv6 (preferred for modern networks)
+	if ipv6 := getGlobalIPv6(); ipv6 != "" {
+		return ipv6
+	}
+
+	// 5. Global IPv4
+	if ipv4 := getGlobalIPv4(); ipv4 != "" {
+		return ipv4
+	}
+
+	// Last resort (not recommended)
+	return "localhost"
+}
+
+// isLoopback checks if a hostname is loopback
+func isLoopback(host string) bool {
+	lower := strings.ToLower(host)
+	if lower == "localhost" {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
+}
+
+// IsDevTLD checks if the host is a development TLD
+// Per AI.md PART 21: Dev TLD Handling (NON-NEGOTIABLE)
+func IsDevTLD(host, projectName string) bool {
+	lower := strings.ToLower(host)
+
+	// Check dynamic project-specific TLD (e.g., app.jokes, dev.search)
+	if projectName != "" && strings.HasSuffix(lower, "."+strings.ToLower(projectName)) {
+		return true
+	}
+
+	// Check static dev TLDs
+	for tld := range devOnlyTLDs {
+		if strings.HasSuffix(lower, "."+tld) || lower == tld {
+			return true
+		}
+	}
+
+	return false
+}
+
+// getGlobalIPv6 returns first public IPv6 address
+// Excludes: loopback (::1), link-local (fe80::/10), unique local (fc00::/7)
+func getGlobalIPv6() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return ""
+	}
+	for _, addr := range addrs {
+		if ipnet, ok := addr.(*net.IPNet); ok {
+			ip := ipnet.IP
+			// Must be IPv6 (not IPv4), globally routable, and not private
+			if ip.To4() == nil && ip.IsGlobalUnicast() && !ip.IsPrivate() {
+				return ip.String()
+			}
+		}
+	}
+	return ""
+}
+
+// getGlobalIPv4 returns first public IPv4 address
+// Excludes: loopback (127.0.0.0/8), private (10/8, 172.16/12, 192.168/16), link-local (169.254/16)
+func getGlobalIPv4() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return ""
+	}
+	for _, addr := range addrs {
+		if ipnet, ok := addr.(*net.IPNet); ok {
+			ip := ipnet.IP
+			// Must be IPv4, globally routable, and not private
+			if ip4 := ip.To4(); ip4 != nil && ip.IsGlobalUnicast() && !ip.IsPrivate() {
+				return ip4.String()
+			}
+		}
+	}
+	return ""
+}
+
+// GetAllDomains returns all domains from DOMAIN env var
+// Used for CORS configuration and SSL certificates
+func GetAllDomains() []string {
+	domain := os.Getenv("DOMAIN")
+	if domain == "" {
+		return nil
+	}
+	parts := strings.Split(domain, ",")
+	domains := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if d := strings.TrimSpace(p); d != "" {
+			domains = append(domains, d)
+		}
+	}
+	return domains
+}
+
+// GetWildcardDomain infers wildcard from DOMAIN list or learned patterns
+// Returns "*.example.com" if multiple subdomains share same base, else ""
+func GetWildcardDomain() string {
+	domains := GetAllDomains()
+	if len(domains) < 2 {
+		return ""
+	}
+
+	// Extract base domain from first (primary)
+	base := extractBaseDomain(domains[0])
+
+	// Check if all share same base
+	for _, d := range domains[1:] {
+		if extractBaseDomain(d) != base {
+			return ""
+		}
+	}
+
+	return "*." + base
+}
+
+// extractBaseDomain gets eTLD+1 using publicsuffix
+func extractBaseDomain(domain string) string {
+	base, err := publicsuffix.EffectiveTLDPlusOne(domain)
+	if err != nil {
+		return domain
+	}
+	return base
+}
+
+// GetDisplayURL returns the best URL for display/access
+// Prefers valid FQDN, falls back to global IP if dev TLD
+func GetDisplayURL(projectName string, port int, isHTTPS bool) string {
+	fqdn := GetFQDN(projectName)
+
+	// If valid production FQDN, use it
+	if !IsDevTLD(fqdn, projectName) && fqdn != "localhost" {
+		return formatURL(fqdn, port, isHTTPS)
+	}
+
+	// Dev TLD or localhost - use global IP instead
+	if ipv6 := getGlobalIPv6(); ipv6 != "" {
+		return formatURL("["+ipv6+"]", port, isHTTPS)
+	}
+	if ipv4 := getGlobalIPv4(); ipv4 != "" {
+		return formatURL(ipv4, port, isHTTPS)
+	}
+
+	return formatURL(fqdn, port, isHTTPS)
+}
+
+// formatURL formats a URL with the appropriate protocol and port
+func formatURL(host string, port int, isHTTPS bool) string {
+	proto := "http"
+	if isHTTPS {
+		proto = "https"
+	}
+
+	// Standard ports don't need to be shown
+	if (isHTTPS && port == 443) || (!isHTTPS && port == 80) {
+		return fmt.Sprintf("%s://%s", proto, host)
+	}
+
+	return fmt.Sprintf("%s://%s:%d", proto, host, port)
 }

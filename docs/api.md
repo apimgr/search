@@ -89,32 +89,6 @@ curl "https://search.example.com/api/v1/autocomplete?q=priv"
 }
 ```
 
-### Images
-
-#### `GET /api/v1/images`
-
-Search for images.
-
-**Query Parameters:**
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `q` | string | Yes | Search query |
-| `page` | int | No | Page number |
-| `size` | string | No | Image size filter (small, medium, large) |
-
-### Image Proxy
-
-#### `GET /proxy/image`
-
-Proxy an image for privacy.
-
-**Query Parameters:**
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `url` | string | Yes | URL of the image to proxy |
-
 ## Admin API
 
 The admin API requires authentication via Bearer token.

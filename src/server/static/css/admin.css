@@ -54,7 +54,7 @@
     width: 100%;
     padding: 12px 16px;
     background: var(--bg-primary);
-    border: 2px solid var(--border-primary);
+    border: 2px solid var(--border-color);
     border-radius: 8px;
     color: var(--text-primary);
     font-size: 16px;
@@ -85,8 +85,8 @@
 
 .error-message {
     background: rgba(255, 85, 85, 0.1);
-    border: 1px solid var(--red);
-    color: var(--red);
+    border: 1px solid var(--accent-error);
+    color: var(--accent-error);
     padding: 12px;
     border-radius: 8px;
     margin-bottom: 20px;
@@ -116,14 +116,14 @@
 .admin-sidebar {
     width: 250px;
     background: var(--bg-secondary);
-    border-right: 1px solid var(--border-primary);
+    border-right: 1px solid var(--border-color);
     padding: 20px 0;
     flex-shrink: 0;
 }
 
 .admin-logo {
     padding: 0 20px 20px;
-    border-bottom: 1px solid var(--border-primary);
+    border-bottom: 1px solid var(--border-color);
     margin-bottom: 20px;
 }
 
@@ -181,7 +181,7 @@
     align-items: center;
     margin-bottom: 30px;
     padding-bottom: 20px;
-    border-bottom: 1px solid var(--border-primary);
+    border-bottom: 1px solid var(--border-color);
 }
 
 .admin-header h1 {
@@ -203,8 +203,8 @@
 .logout-btn {
     padding: 8px 16px;
     background: transparent;
-    border: 1px solid var(--red);
-    color: var(--red);
+    border: 1px solid var(--accent-error);
+    color: var(--accent-error);
     border-radius: 6px;
     cursor: pointer;
     text-decoration: none;
@@ -212,7 +212,7 @@
 }
 
 .logout-btn:hover {
-    background: var(--red);
+    background: var(--accent-error);
     color: var(--bg-primary);
 }
 
@@ -231,7 +231,7 @@
     background: var(--bg-secondary);
     padding: 20px;
     border-radius: 12px;
-    border: 1px solid var(--border-primary);
+    border: 1px solid var(--border-color);
 }
 
 .stat-card h3 {
@@ -260,7 +260,7 @@
     background: var(--bg-secondary);
     padding: 24px;
     border-radius: 12px;
-    border: 1px solid var(--border-primary);
+    border: 1px solid var(--border-color);
     margin-bottom: 24px;
 }
 
@@ -286,7 +286,7 @@
 
 .admin-table td {
     padding: 12px;
-    border-bottom: 1px solid var(--border-primary);
+    border-bottom: 1px solid var(--border-color);
     color: var(--text-primary);
 }
 
@@ -309,7 +309,7 @@
 
 .status-badge.disabled {
     background: rgba(255, 85, 85, 0.2);
-    color: var(--red);
+    color: var(--accent-error);
 }
 
 .status-badge.warning {
@@ -344,7 +344,7 @@
 }
 
 .btn-danger {
-    background: var(--red);
+    background: var(--accent-error);
 }
 
 .btn-danger:hover {
@@ -357,7 +357,7 @@
 }
 
 .btn-secondary:hover {
-    background: var(--border-primary);
+    background: var(--border-color);
 }
 
 /* ==========================================================================
@@ -381,7 +381,7 @@
     width: 100%;
     padding: 10px 14px;
     background: var(--bg-primary);
-    border: 1px solid var(--border-primary);
+    border: 1px solid var(--border-color);
     border-radius: 6px;
     color: var(--text-primary);
     font-size: 14px;
@@ -446,7 +446,7 @@
 .text-muted { color: var(--text-muted); }
 .text-success { color: var(--green); }
 .text-warning { color: var(--orange); }
-.text-danger { color: var(--red); }
+.text-danger { color: var(--accent-error); }
 .text-info { color: var(--cyan); }
 .text-uppercase { text-transform: uppercase; }
 .text-sm { font-size: 12px; }
@@ -480,8 +480,8 @@
 .w-60 { width: 60px; }
 
 /* Borders */
-.border-top { border-top: 1px solid var(--border-primary); }
-.border-bottom { border-bottom: 1px solid var(--border-primary); }
+.border-top { border-top: 1px solid var(--border-color); }
+.border-bottom { border-bottom: 1px solid var(--border-color); }
 .border-warning { border-color: var(--orange); }
 .rounded { border-radius: 4px; }
 .rounded-lg { border-radius: 8px; }
@@ -503,13 +503,13 @@
 .progress-bar-fill.cyan { background: var(--cyan); }
 .progress-bar-fill.green { background: var(--green); }
 .progress-bar-fill.warning { background: var(--orange); }
-.progress-bar-fill.danger { background: var(--red); }
+.progress-bar-fill.danger { background: var(--accent-error); }
 
 /* Sidebar Section Divider */
 .sidebar-section-header {
     padding: 10px 20px;
     margin-top: 10px;
-    border-top: 1px solid var(--border-primary);
+    border-top: 1px solid var(--border-color);
 }
 
 .sidebar-section-header span {
@@ -532,7 +532,7 @@
 /* Alert Box */
 .alert-box {
     padding: 8px 0;
-    border-bottom: 1px solid var(--border-primary);
+    border-bottom: 1px solid var(--border-color);
 }
 
 .alert-box:last-child {
@@ -668,7 +668,7 @@
     padding: 16px;
     background: var(--bg-tertiary);
     border-radius: 8px;
-    border: 1px solid var(--border-primary);
+    border: 1px solid var(--border-color);
 }
 
 .dns01-section h3 {
@@ -681,7 +681,7 @@
 .provider-fields {
     margin-top: 12px;
     padding-top: 12px;
-    border-top: 1px solid var(--border-primary);
+    border-top: 1px solid var(--border-color);
 }
 
 /* Inline form */
@@ -719,7 +719,7 @@
     .admin-sidebar {
         width: 100%;
         border-right: none;
-        border-bottom: 1px solid var(--border-primary);
+        border-bottom: 1px solid var(--border-color);
     }
 
     .admin-nav {

@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	emailpkg "github.com/apimgr/search/src/email"
-	"github.com/apimgr/search/src/users"
+	userpkg "github.com/apimgr/search/src/user"
 )
 
 // AuthPageData represents data for auth pages
@@ -104,13 +104,43 @@ func (s *Server) processLogin(w http.ResponseWriter, r *http.Request) {
 	ipAddress := getClientIPSimple(r)
 	userAgent := r.UserAgent()
 
-	// Attempt login
+	// Per AI.md PART 11: Scoped Login Redirect (NON-NEGOTIABLE)
+	// Single login form, scoped redirect based on account type
+	// 1. Check admin credentials first
+	// 2. If not admin, check user credentials (if multi-user enabled)
+	// 3. Redirect based on account type
+
+	// Try admin authentication first
+	if s.adminHandler != nil && s.adminHandler.AuthManager() != nil {
+		if s.adminHandler.AuthManager().Authenticate(username, password) {
+			// Admin login successful - create admin session
+			adminSession := s.adminHandler.AuthManager().CreateSession(username, ipAddress, userAgent)
+			s.adminHandler.AuthManager().SetSessionCookie(w, adminSession)
+
+			// Per AI.md PART 11: Admin login ALWAYS redirects to /{admin_path}
+			// Never to user routes, never to ?redirect= param
+			// Note: Admin path is currently hardcoded to /admin
+			http.Redirect(w, r, "/admin", http.StatusSeeOther)
+			return
+		}
+	}
+
+	// Try user authentication (if multi-user enabled)
+	if !s.config.Server.Users.Enabled {
+		// Multi-user not enabled and admin auth failed
+		s.renderLoginPage(w, r, "Invalid username or password", "")
+		return
+	}
+
+	// Attempt user login
 	user, session, err := s.userAuthManager.Login(r.Context(), username, password, ipAddress, userAgent)
 	if err != nil {
+		// Per AI.md PART 11: Failed login does NOT reveal if username exists
+		// Use generic error message for all failure cases
 		switch err {
-		case users.ErrInvalidCredentials:
+		case userpkg.ErrInvalidCredentials:
 			s.renderLoginPage(w, r, "Invalid username or password", "")
-		case users.ErrUserInactive:
+		case userpkg.ErrUserInactive:
 			s.renderLoginPage(w, r, "Your account has been deactivated", "")
 		default:
 			s.renderLoginPage(w, r, "Login failed. Please try again.", "")
@@ -133,10 +163,15 @@ func (s *Server) processLogin(w http.ResponseWriter, r *http.Request) {
 		// Extend cookie duration (handled by cookie settings)
 	}
 
-	// Redirect to originally requested page or home
+	// Per AI.md PART 11: User login redirects to /users or ?redirect= param
+	// User login NEVER redirects to admin routes
 	redirectURL := r.URL.Query().Get("redirect")
 	if redirectURL == "" || !strings.HasPrefix(redirectURL, "/") {
-		redirectURL = "/"
+		redirectURL = "/users"
+	}
+	// Security: Prevent user redirect to admin routes
+	if strings.HasPrefix(redirectURL, "/admin") {
+		redirectURL = "/users"
 	}
 	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 }
@@ -247,20 +282,22 @@ func (s *Server) processRegister(w http.ResponseWriter, r *http.Request) {
 	_, err := s.userAuthManager.Register(r.Context(), username, email, password, s.config.Server.Users.Auth.PasswordMinLength)
 	if err != nil {
 		switch err {
-		case users.ErrUsernameTaken:
+		case userpkg.ErrUsernameTaken:
 			s.renderRegisterPage(w, r, "This username is already taken", "")
-		case users.ErrEmailTaken:
+		case userpkg.ErrEmailTaken:
 			s.renderRegisterPage(w, r, "This email is already registered", username)
-		case users.ErrUsernameReserved:
+		case userpkg.ErrUsernameReserved:
 			s.renderRegisterPage(w, r, "This username is reserved", "")
-		case users.ErrUsernameInvalid, users.ErrUsernameTooShort, users.ErrUsernameTooLong:
+		case userpkg.ErrUsernameInvalid, userpkg.ErrUsernameTooShort, userpkg.ErrUsernameTooLong:
 			s.renderRegisterPage(w, r, "Invalid username. Use only lowercase letters, numbers, underscores, and hyphens (3-32 characters)", "")
-		case users.ErrEmailInvalid:
+		case userpkg.ErrEmailInvalid:
 			s.renderRegisterPage(w, r, "Invalid email address", username)
-		case users.ErrPasswordTooShort:
+		case userpkg.ErrPasswordTooShort:
 			s.renderRegisterPage(w, r, "Password must be at least 8 characters", username)
-		case users.ErrPasswordTooWeak:
+		case userpkg.ErrPasswordTooWeak:
 			s.renderRegisterPage(w, r, "Password must contain at least one uppercase letter, one lowercase letter, and one number", username)
+		case userpkg.ErrPasswordWhitespace:
+			s.renderRegisterPage(w, r, "Password cannot start or end with whitespace", username)
 		default:
 			s.renderRegisterPage(w, r, "Registration failed. Please try again.", username)
 		}
@@ -268,7 +305,7 @@ func (s *Server) processRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Email verification is triggered via the API endpoint when email service is configured
-	// Registration can complete without email verification based on server.users.registration settings
+	// Registration can complete without email verification based on server.user.registration settings
 
 	// Redirect to login with success message
 	http.Redirect(w, r, "/auth/login?registered=1", http.StatusSeeOther)
@@ -377,7 +414,7 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 	_, err := s.verificationManager.VerifyEmail(r.Context(), token)
 	if err != nil {
 		switch err {
-		case users.ErrVerificationTokenExpired:
+		case userpkg.ErrVerificationTokenExpired:
 			s.handleError(w, r, http.StatusBadRequest, "Link Expired", "This verification link has expired. Please request a new one.")
 		default:
 			s.handleError(w, r, http.StatusBadRequest, "Invalid Verification", "This verification link is invalid or has already been used.")

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net/http"
 	"os"
 	"os/exec"
 	"strconv"
@@ -17,24 +18,40 @@ type EnvConfig struct {
 	InstanceName string
 	Autocomplete string
 	BaseURL      string
-	
+
+	// Per AI.md PART 5: DOMAIN env var for FQDN override
+	Domain string
+
+	// Per AI.md PART 5: DATABASE_DRIVER env var
+	DatabaseDriver string
+	DatabaseURL    string
+
 	// Image proxy
 	ImageProxyURL string
 	ImageProxyKey string
-	
+
 	// Search-specific
-	Port    string
-	Mode    string
-	DataDir string
+	Port      string
+	Mode      string
+	DataDir   string
 	ConfigDir string
-	LogDir  string
-	
+	LogDir    string
+
 	// Tor
 	UseTor          bool
 	TorProxy        string
 	TorControlPort  string
 	TorControlPass  string
-	
+
+	// SMTP - Per AI.md PART 18: SMTP_* env vars override config file
+	SMTPHost      string
+	SMTPPort      int
+	SMTPUsername  string
+	SMTPPassword  string
+	SMTPTLS       string
+	SMTPFromName  string
+	SMTPFromEmail string
+
 	// Engines
 	EnableGoogle      bool
 	EnableDuckDuckGo  bool
@@ -50,7 +67,7 @@ func LoadFromEnv() *EnvConfig {
 		EnableGoogle:     true,
 		EnableBing:       true,
 	}
-	
+
 	// Core configuration
 	cfg.SettingsPath = getEnv("SEARCH_SETTINGS_PATH", "SETTINGS_PATH")
 	cfg.Debug = parseBool(getEnv("DEBUG", "SEARCH_DEBUG"))
@@ -59,18 +76,25 @@ func LoadFromEnv() *EnvConfig {
 	cfg.InstanceName = getEnv("INSTANCE_NAME", "APPLICATION_NAME", cfg.InstanceName)
 	cfg.Autocomplete = getEnv("AUTOCOMPLETE", "")
 	cfg.BaseURL = getEnv("BASE_URL", "")
-	
+
+	// Per AI.md PART 5: DOMAIN env var (highest priority for FQDN)
+	cfg.Domain = getEnv("DOMAIN")
+
+	// Per AI.md PART 5: Database configuration
+	cfg.DatabaseDriver = getEnv("DATABASE_DRIVER")
+	cfg.DatabaseURL = getEnv("DATABASE_URL")
+
 	// Image proxy
 	cfg.ImageProxyURL = getEnv("IMAGE_PROXY_URL", "MORTY_URL")
 	cfg.ImageProxyKey = getEnv("IMAGE_PROXY_KEY", "MORTY_KEY")
-	
+
 	// Search-specific
 	cfg.Port = getEnv("SEARCH_PORT", "PORT")
 	cfg.Mode = getEnv("SEARCH_MODE", "MODE", "production")
 	cfg.DataDir = getEnv("SEARCH_DATA_DIR", "DATA_DIR")
 	cfg.ConfigDir = getEnv("SEARCH_CONFIG_DIR", "CONFIG_DIR")
 	cfg.LogDir = getEnv("SEARCH_LOG_DIR", "LOG_DIR")
-	
+
 	// Tor - Auto-detection per AI.md PART 29
 	// Tor is auto-enabled if tor binary is installed
 	// Can be explicitly disabled via DISABLE_TOR=true
@@ -81,17 +105,26 @@ func LoadFromEnv() *EnvConfig {
 	cfg.TorProxy = getEnv("TOR_PROXY", "SEARCH_TOR_PROXY", "127.0.0.1:9050")
 	cfg.TorControlPort = getEnv("TOR_CONTROL_PORT", "SEARCH_TOR_CONTROL", "127.0.0.1:9051")
 	cfg.TorControlPass = getEnv("TOR_CONTROL_PASSWORD", "TOR_PASSWORD")
-	
+
+	// SMTP - Per AI.md PART 18: SMTP_* env vars override config file settings
+	cfg.SMTPHost = getEnv("SMTP_HOST")
+	cfg.SMTPPort = ParseInt(getEnv("SMTP_PORT"), 0)
+	cfg.SMTPUsername = getEnv("SMTP_USERNAME")
+	cfg.SMTPPassword = getEnv("SMTP_PASSWORD")
+	cfg.SMTPTLS = getEnv("SMTP_TLS")
+	cfg.SMTPFromName = getEnv("SMTP_FROM_NAME")
+	cfg.SMTPFromEmail = getEnv("SMTP_FROM_EMAIL")
+
 	// Engines
 	cfg.EnableGoogle = parseBool(getEnv("ENABLE_GOOGLE", "SEARCH_ENGINES_GOOGLE", "true"))
 	cfg.EnableDuckDuckGo = parseBool(getEnv("ENABLE_DUCKDUCKGO", "SEARCH_ENGINES_DUCKDUCKGO", "true"))
 	cfg.EnableBing = parseBool(getEnv("ENABLE_BING", "SEARCH_ENGINES_BING", "true"))
-	
+
 	// Map DEBUG to MODE
 	if cfg.Debug {
 		cfg.Mode = "development"
 	}
-	
+
 	// Parse BIND_ADDRESS into port if needed
 	if cfg.BindAddress != "" && cfg.Port == "" {
 		parts := strings.Split(cfg.BindAddress, ":")
@@ -99,7 +132,7 @@ func LoadFromEnv() *EnvConfig {
 			cfg.Port = parts[1]
 		}
 	}
-	
+
 	// Use directory functions if not overridden
 	if cfg.ConfigDir == "" {
 		cfg.ConfigDir = GetConfigDir()
@@ -110,7 +143,7 @@ func LoadFromEnv() *EnvConfig {
 	if cfg.LogDir == "" {
 		cfg.LogDir = GetLogDir()
 	}
-	
+
 	return cfg
 }
 
@@ -129,6 +162,17 @@ func getEnv(keys ...string) string {
 func parseBool(val string) bool {
 	result, _ := ParseBool(val, false)
 	return result
+}
+
+// TrimmedFormValue returns a form value with leading and trailing whitespace stripped
+// Per AI.md: ALL input fields must have whitespace trimmed
+func TrimmedFormValue(r *http.Request, key string) string {
+	return strings.TrimSpace(r.FormValue(key))
+}
+
+// TrimmedPostFormValue returns a POST form value with whitespace stripped
+func TrimmedPostFormValue(r *http.Request, key string) string {
+	return strings.TrimSpace(r.PostFormValue(key))
 }
 
 // ParseFormBool parses boolean from HTML form values
@@ -239,4 +283,50 @@ func isTorAvailable() bool {
 // Per AI.md PART 29: Tor auto-enabled if tor binary installed
 func IsTorAvailable() bool {
 	return isTorAvailable()
+}
+
+// GetDomain returns the DOMAIN environment variable
+// Per AI.md PART 5: DOMAIN env var for FQDN override (highest priority)
+// Returns first domain if comma-separated list
+func GetDomain() string {
+	domain := os.Getenv("DOMAIN")
+	if domain == "" {
+		return ""
+	}
+	// Return first domain as primary if comma-separated
+	if idx := strings.Index(domain, ","); idx > 0 {
+		return strings.TrimSpace(domain[:idx])
+	}
+	return strings.TrimSpace(domain)
+}
+
+// GetAllDomains returns all domains from DOMAIN env var
+// Per AI.md PART 5: Used for CORS configuration and SSL certificates
+func GetAllDomains() []string {
+	domain := os.Getenv("DOMAIN")
+	if domain == "" {
+		return nil
+	}
+
+	parts := strings.Split(domain, ",")
+	domains := make([]string, 0, len(parts))
+	for _, d := range parts {
+		d = strings.TrimSpace(d)
+		if d != "" {
+			domains = append(domains, d)
+		}
+	}
+	return domains
+}
+
+// GetDatabaseDriver returns the DATABASE_DRIVER environment variable
+// Per AI.md PART 5: Database driver override
+func GetDatabaseDriver() string {
+	return os.Getenv("DATABASE_DRIVER")
+}
+
+// GetDatabaseURL returns the DATABASE_URL environment variable
+// Per AI.md PART 5: Database connection string
+func GetDatabaseURL() string {
+	return os.Getenv("DATABASE_URL")
 }

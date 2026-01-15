@@ -1,36 +1,32 @@
-site_name: Search
-site_description: Privacy-respecting metasearch engine
+site_name: SEARCH
 site_url: https://apimgr-search.readthedocs.io
+site_description: Privacy-respecting metasearch engine
 site_author: apimgr
-repo_url: https://github.com/apimgr/search
+
 repo_name: apimgr/search
+repo_url: https://github.com/apimgr/search
 edit_uri: edit/main/docs/
 
 theme:
   name: material
   palette:
-    # Light/Dark/Auto theme toggle - per TEMPLATE.md PART 33
-    # Auto mode follows system preference
-    - media: "(prefers-color-scheme)"
+    # Dark/Light/Auto theme toggle - Dark is default
+    - scheme: slate
+      primary: deep purple
+      accent: pink
       toggle:
-        icon: material/brightness-auto
+        icon: material/brightness-4
         name: Switch to light mode
-    # Light theme
-    - media: "(prefers-color-scheme: light)"
-      scheme: default
+    - scheme: default
       primary: indigo
       accent: indigo
       toggle:
         icon: material/brightness-7
-        name: Switch to dark mode
-    # Dark theme (default)
-    - media: "(prefers-color-scheme: dark)"
-      scheme: slate
-      primary: deep purple
-      accent: purple
-      toggle:
-        icon: material/brightness-4
         name: Switch to auto mode
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to dark mode
   features:
     - navigation.instant
     - navigation.tracking
@@ -63,11 +59,16 @@ markdown_extensions:
   - attr_list
   - def_list
   - footnotes
+  - meta
   - md_in_html
   - tables
   - toc:
       permalink: true
-  - pymdownx.betterem
+      toc_depth: 3
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
   - pymdownx.caret
   - pymdownx.details
   - pymdownx.emoji:
@@ -79,6 +80,10 @@ markdown_extensions:
       pygments_lang_class: true
   - pymdownx.inlinehilite
   - pymdownx.keys
+  - pymdownx.magiclink:
+      repo_url_shorthand: true
+      user: apimgr
+      repo: search
   - pymdownx.mark
   - pymdownx.smartsymbols
   - pymdownx.superfences:
@@ -98,15 +103,11 @@ nav:
     - Installation: installation.md
     - Configuration: configuration.md
   - Usage:
-    - Web Interface: usage.md
-    - API: api.md
-    - CLI: cli.md
-  - Administration:
+    - API Reference: api.md
+    - CLI Reference: cli.md
     - Admin Panel: admin.md
-    - Security: security.md
   - Development:
     - Contributing: development.md
-    - Architecture: architecture.md
 
 extra:
   social:

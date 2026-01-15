@@ -1,10 +1,17 @@
 name: search-test
 
+x-logging: &default-logging
+  options:
+    max-size: '5m'
+    max-file: '1'
+  driver: json-file
+
 services:
   search:
     image: ghcr.io/apimgr/search:latest
     container_name: search-test
-    restart: unless-stopped
+    restart: "no"
+    logging: *default-logging
     environment:
       # Test: development mode with DEBUG enabled
       # Enables pprof, expvar, detailed request logging
@@ -12,8 +19,8 @@ services:
       - TZ=America/New_York
       - DEBUG=true
     ports:
-      # Test: accessible from all interfaces
-      - "64580:80"
+      # Test: different port to avoid conflicts
+      - "64581:80"
     volumes:
       # TEMP DIR WORKFLOW: ./rootfs/ resolves to $TEMP_DIR/rootfs/
       # NEVER run from project directory - always use temp dir workflow
@@ -21,6 +28,12 @@ services:
       - ./rootfs/data:/data
     networks:
       - search-test
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/healthz"]
+      interval: 5m
+      timeout: 15s
+      retries: 3
+      start_period: 10m
 
 networks:
   search-test:

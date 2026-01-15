@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -228,52 +229,50 @@ func (sm *ServiceManager) Disable() error {
 
 // Linux systemd
 
+// systemdTemplate per AI.md PART 25 - EXACT MATCH to spec
 const systemdTemplate = `[Unit]
-Description=Search - Privacy-Respecting Metasearch Engine
-After=network.target
+Description=search service
+Documentation=https://apimgr.github.io/search
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
-User={{.User}}
-Group={{.Group}}
-WorkingDirectory={{.WorkDir}}
-ExecStart={{.Binary}} --config {{.ConfigFile}}
-ExecReload=/bin/kill -HUP $MAINPID
+User=search
+Group=search
+ExecStart=/usr/local/bin/search
 Restart=on-failure
 RestartSec=5
-TimeoutStartSec=0
-LimitNOFILE=65536
+StandardOutput=journal
+StandardError=journal
 
 # Security hardening
-NoNewPrivileges=true
+NoNewPrivileges=yes
 ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths={{.DataDir}}
-PrivateTmp=true
-PrivateDevices=true
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectControlGroups=true
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/etc/apimgr/search
+ReadWritePaths=/var/lib/apimgr/search
+ReadWritePaths=/var/cache/apimgr/search
+ReadWritePaths=/var/log/apimgr/search
 
 [Install]
 WantedBy=multi-user.target
 `
 
 func (sm *ServiceManager) installSystemd() error {
-	data := map[string]string{
-		"User":       "search",
-		"Group":      "search",
-		"WorkDir":    config.GetDataDir(),
-		"Binary":     config.GetBinaryPath(),
-		"ConfigFile": filepath.Join(config.GetConfigDir(), "server.yml"),
-		"DataDir":    config.GetDataDir(),
+	// Per AI.md PART 25: Template uses User=search, so user must exist
+	// Create system user and directories before installing service
+	if err := sm.ensureSystemUser(); err != nil {
+		return fmt.Errorf("failed to create system user: %w", err)
 	}
 
-	// Generate service file
-	content, err := sm.renderTemplate(systemdTemplate, data)
-	if err != nil {
-		return err
+	if err := sm.createServiceDirectories(); err != nil {
+		return fmt.Errorf("failed to create directories: %w", err)
 	}
+
+	// Generate service file (no template vars needed - hardcoded per spec)
+	content := systemdTemplate
 
 	// Write service file
 	servicePath := "/etc/systemd/system/search.service"
@@ -289,6 +288,57 @@ func (sm *ServiceManager) installSystemd() error {
 	// Enable service
 	if err := runCommand("systemctl", "enable", "search"); err != nil {
 		return fmt.Errorf("failed to enable service: %w", err)
+	}
+
+	return nil
+}
+
+// ensureSystemUser creates the system user and group if they don't exist
+// Per AI.md PART 25: System user with home in /var/lib/apimgr/search
+func (sm *ServiceManager) ensureSystemUser() error {
+	userName := "search"
+	homeDir := "/var/lib/apimgr/search"
+
+	// Check if user already exists
+	if _, err := user.Lookup(userName); err == nil {
+		return nil // User exists
+	}
+
+	// Create system group first
+	if err := runCommand("groupadd", "--system", userName); err != nil {
+		// Ignore error if group already exists
+	}
+
+	// Create system user with home in data directory (not /home)
+	// This works with ProtectHome=yes in systemd
+	return runCommand("useradd",
+		"--system",
+		"--no-create-home",
+		"--home-dir", homeDir,
+		"--shell", "/bin/false",
+		"--gid", userName,
+		userName,
+	)
+}
+
+// createServiceDirectories creates directories needed by the service
+// Per AI.md: config, data, cache, log directories
+func (sm *ServiceManager) createServiceDirectories() error {
+	dirs := []string{
+		config.GetConfigDir(),
+		config.GetDataDir(),
+		config.GetCacheDir(),
+		config.GetLogDir(),
+	}
+
+	for _, dir := range dirs {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("failed to create %s: %w", dir, err)
+		}
+		// Set ownership to service user
+		if err := runCommand("chown", "-R", "search:search", dir); err != nil {
+			// Non-fatal: chown might fail if running as non-root
+		}
 	}
 
 	return nil
@@ -318,15 +368,14 @@ func (sm *ServiceManager) statusSystemd() (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// Linux runit
+// Linux runit - per AI.md PART 25 EXACT MATCH
 
 const runitRunTemplate = `#!/bin/sh
-exec 2>&1
-exec chpst -u {{.User}}:{{.Group}} {{.Binary}} --config {{.ConfigFile}}
+exec chpst -u search:search /usr/local/bin/search 2>&1
 `
 
 const runitLogRunTemplate = `#!/bin/sh
-exec svlogd -tt {{.LogDir}}
+exec svlogd -tt /var/log/apimgr/search
 `
 
 func (sm *ServiceManager) getRunitServiceDir() string {
@@ -355,11 +404,11 @@ func (sm *ServiceManager) installRunit() error {
 	logDir := filepath.Join(serviceDir, "log")
 
 	data := map[string]string{
-		"User":       "search",
-		"Group":      "search",
-		"Binary":     config.GetBinaryPath(),
-		"ConfigFile": filepath.Join(config.GetConfigDir(), "server.yml"),
-		"LogDir":     filepath.Join(config.GetDataDir(), "logs", "runit"),
+		"User":      "search",
+		"Group":     "search",
+		"Binary":    config.GetBinaryPath(),
+		"ConfigDir": config.GetConfigDir(),
+		"LogDir":    filepath.Join(config.GetDataDir(), "logs", "runit"),
 	}
 
 	// Create service directory structure
@@ -439,17 +488,23 @@ func (sm *ServiceManager) statusRunit() (string, error) {
 
 // macOS launchd
 
+// launchdTemplate is the macOS launchd plist template
+// Per AI.md PART 25: launchd plist MUST include UserName/GroupName
 const launchdTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>Label</key>
     <string>com.apimgr.search</string>
+    <key>UserName</key>
+    <string>{{.User}}</string>
+    <key>GroupName</key>
+    <string>{{.Group}}</string>
     <key>ProgramArguments</key>
     <array>
         <string>{{.Binary}}</string>
         <string>--config</string>
-        <string>{{.ConfigFile}}</string>
+        <string>{{.ConfigDir}}</string>
     </array>
     <key>WorkingDirectory</key>
     <string>{{.WorkDir}}</string>
@@ -470,11 +525,14 @@ func (sm *ServiceManager) getLaunchdPath() string {
 }
 
 func (sm *ServiceManager) installLaunchd() error {
+	// Per AI.md PART 25: launchd plist must include UserName/GroupName
 	data := map[string]string{
-		"Binary":     config.GetBinaryPath(),
-		"ConfigFile": filepath.Join(config.GetConfigDir(), "server.yml"),
-		"WorkDir":    config.GetDataDir(),
-		"LogDir":     filepath.Join(config.GetDataDir(), "logs"),
+		"User":      "_search",
+		"Group":     "_search",
+		"Binary":    config.GetBinaryPath(),
+		"ConfigDir": config.GetConfigDir(),
+		"WorkDir":   config.GetDataDir(),
+		"LogDir":    filepath.Join(config.GetDataDir(), "logs"),
 	}
 
 	// Generate plist
@@ -515,41 +573,37 @@ func (sm *ServiceManager) statusLaunchd() (string, error) {
 	return "inactive", nil
 }
 
-// BSD rc.d
+// BSD rc.d - per AI.md PART 25 EXACT MATCH
 
 const rcdTemplate = `#!/bin/sh
-#
+
 # PROVIDE: search
-# REQUIRE: DAEMON
+# REQUIRE: NETWORKING
 # KEYWORD: shutdown
 
 . /etc/rc.subr
 
 name="search"
 rcvar="search_enable"
-pidfile="/var/run/${name}.pid"
-command="{{.Binary}}"
-command_args="--config {{.ConfigFile}}"
+command="/usr/local/bin/search"
+search_user="search"
 
 load_rc_config $name
 run_rc_command "$1"
 `
 
 func (sm *ServiceManager) installRCd() error {
-	data := map[string]string{
-		"Binary":     config.GetBinaryPath(),
-		"ConfigFile": filepath.Join(config.GetConfigDir(), "server.yml"),
+	// Per AI.md PART 25: Create user and directories first
+	if err := sm.ensureSystemUser(); err != nil {
+		return fmt.Errorf("failed to create system user: %w", err)
+	}
+	if err := sm.createServiceDirectories(); err != nil {
+		return fmt.Errorf("failed to create directories: %w", err)
 	}
 
-	// Generate rc script
-	content, err := sm.renderTemplate(rcdTemplate, data)
-	if err != nil {
-		return err
-	}
-
-	// Write rc script
-	rcPath := "/etc/rc.d/search"
-	if err := os.WriteFile(rcPath, []byte(content), 0755); err != nil {
+	// Write rc script - per AI.md PART 25: /usr/local/etc/rc.d/search
+	rcPath := "/usr/local/etc/rc.d/search"
+	if err := os.WriteFile(rcPath, []byte(rcdTemplate), 0755); err != nil {
 		return fmt.Errorf("failed to write rc script: %w", err)
 	}
 
@@ -558,7 +612,7 @@ func (sm *ServiceManager) installRCd() error {
 
 func (sm *ServiceManager) uninstallRCd() error {
 	runCommand("service", "search", "stop")
-	os.Remove("/etc/rc.d/search")
+	os.Remove("/usr/local/etc/rc.d/search")
 	return nil
 }
 
@@ -577,11 +631,11 @@ func (sm *ServiceManager) statusRCd() (string, error) {
 
 func (sm *ServiceManager) installWindowsService() error {
 	binary := config.GetBinaryPath()
-	configFile := filepath.Join(config.GetConfigDir(), "server.yml")
+	configDir := config.GetConfigDir()
 
 	// Create Windows service
 	return runCommand("sc", "create", "search",
-		"binPath=", fmt.Sprintf("\"%s\" --config \"%s\"", binary, configFile),
+		"binPath=", fmt.Sprintf("\"%s\" --config \"%s\"", binary, configDir),
 		"DisplayName=", "Search - Privacy-Respecting Metasearch Engine",
 		"start=", "auto")
 }

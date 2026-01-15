@@ -26,10 +26,17 @@ var (
 type Config struct {
 	mu         sync.RWMutex
 	configPath string // Path to config file for reload
+	firstRun   bool   // True if this is first run (no config existed)
 
 	Server  ServerConfig           `yaml:"server"`
 	Search  SearchConfig           `yaml:"search"`
 	Engines map[string]EngineConfig `yaml:"engines"`
+}
+
+// IsFirstRun returns true if this is the first run (config was just created)
+// Per AI.md PART 14: First run shows setup token for admin creation
+func (c *Config) IsFirstRun() bool {
+	return c.firstRun
 }
 
 // SetPath sets the config file path for reload
@@ -147,6 +154,9 @@ type ServerConfig struct {
 	// Scheduler
 	Scheduler SchedulerConfig `yaml:"scheduler"`
 
+	// Cache - per AI.md PART 18
+	Cache CacheConfig `yaml:"cache"`
+
 	// GeoIP
 	GeoIP GeoIPConfig `yaml:"geoip"`
 
@@ -241,7 +251,7 @@ type SessionTypeConfig struct {
 type SessionConfig struct {
 	// Admin sessions (server.db admin_sessions table)
 	Admin SessionTypeConfig `yaml:"admin"`
-	// User sessions (users.db user_sessions table)
+	// User sessions (user.db user_sessions table)
 	User SessionTypeConfig `yaml:"user"`
 	// Common settings
 	ExtendOnActivity bool   `yaml:"extend_on_activity"` // Reset idle timeout on each request
@@ -401,16 +411,34 @@ type TorConfig struct {
 }
 
 // EmailConfig represents email/SMTP configuration
+// Per AI.md PART 18: Nested SMTP and From blocks
 type EmailConfig struct {
-	Enabled     bool   `yaml:"enabled"`
-	SMTPHost    string `yaml:"smtp_host"`
-	SMTPPort    int    `yaml:"smtp_port"`
-	SMTPUser    string `yaml:"smtp_user"`
-	SMTPPass    string `yaml:"smtp_pass"`
-	FromAddress string `yaml:"from_address"`
-	FromName    string `yaml:"from_name"`
-	TLS         bool   `yaml:"tls"`
-	StartTLS    bool   `yaml:"starttls"`
+	// Enabled is auto-set based on SMTP availability (no manual toggle)
+	Enabled bool `yaml:"-"` // Computed, not stored
+	SMTP    SMTPConfig `yaml:"smtp"`
+	From    EmailFromConfig `yaml:"from"`
+}
+
+// SMTPConfig represents SMTP server configuration
+// Per AI.md PART 18: SMTP configuration with env var overrides
+type SMTPConfig struct {
+	// If empty: autodetect local SMTP on startup
+	// If set: test connection on startup
+	Host     string `yaml:"host"`
+	Port     int    `yaml:"port"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+	// TLS mode: auto, starttls, tls, none
+	TLS      string `yaml:"tls"`
+}
+
+// EmailFromConfig represents the from address configuration
+// Per AI.md PART 18: From name and email defaults
+type EmailFromConfig struct {
+	// Default: app title
+	Name  string `yaml:"name"`
+	// Default: no-reply@{fqdn}
+	Email string `yaml:"email"`
 }
 
 // SecurityConfig represents security configuration
@@ -677,19 +705,69 @@ func (c *AnnouncementsConfig) ActiveAnnouncements() []Announcement {
 	return active
 }
 
-// SchedulerConfig represents scheduler configuration
+// SchedulerConfig represents scheduler configuration per AI.md PART 19
+// Note: Scheduler is ALWAYS RUNNING - no enable/disable option for the scheduler itself
 type SchedulerConfig struct {
-	Enabled bool `yaml:"enabled"`
-	Tasks []ScheduledTask `yaml:"tasks"`
+	// Timezone for scheduled tasks (default: America/New_York)
+	Timezone string `yaml:"timezone"`
+	// CatchUpWindow: run missed tasks if within this duration (default: 1h)
+	CatchUpWindow string `yaml:"catch_up_window"`
+	// Task-specific configuration (only skippable tasks can be disabled)
+	Tasks SchedulerTasksConfig `yaml:"tasks"`
 }
 
-// ScheduledTask represents a scheduled task
-type ScheduledTask struct {
-	ID       string `yaml:"id"`
-	Name     string `yaml:"name"`
-	Schedule string `yaml:"schedule"`
+// SchedulerTasksConfig represents per-task configuration
+type SchedulerTasksConfig struct {
+	// Daily backup at 02:00 (skippable)
+	BackupDaily TaskConfig `yaml:"backup_daily"`
+	// Hourly incremental backup (skippable, disabled by default)
+	BackupHourly TaskConfig `yaml:"backup_hourly"`
+	// GeoIP database update (skippable)
+	GeoIPUpdate TaskConfig `yaml:"geoip_update"`
+	// Blocklist update (skippable)
+	BlocklistUpdate TaskConfig `yaml:"blocklist_update"`
+	// CVE database update (skippable)
+	CVEUpdate TaskConfig `yaml:"cve_update"`
+}
+
+// TaskConfig represents configuration for a scheduled task
+type TaskConfig struct {
+	Schedule string `yaml:"schedule"` // Cron expression or @every interval
 	Enabled  bool   `yaml:"enabled"`
-	Command  string `yaml:"command"`
+}
+
+// CacheConfig represents cache configuration per AI.md PART 18
+// EVERY application MUST support Valkey/Redis for clustering
+type CacheConfig struct {
+	// Type: none (disabled), memory (default), valkey, redis
+	// IMPORTANT: Use valkey/redis for cluster or mixed mode deployments
+	Type string `yaml:"type"`
+
+	// Connection: Use EITHER url OR host/port/password (not both)
+	// url takes precedence if both are specified
+	// Format: redis://user:password@host:port/db or valkey://...
+	URL string `yaml:"url"`
+
+	// Individual connection settings (alternative to url)
+	Host     string `yaml:"host"`
+	Port     int    `yaml:"port"`
+	Password string `yaml:"password"`
+	DB       int    `yaml:"db"`
+
+	// Connection pool settings
+	PoolSize int    `yaml:"pool_size"`
+	MinIdle  int    `yaml:"min_idle"`
+	Timeout  string `yaml:"timeout"` // Connection timeout (e.g., "5s")
+
+	// Key prefix to avoid collisions (use unique prefix per app)
+	Prefix string `yaml:"prefix"`
+
+	// Default TTL in seconds
+	TTL int `yaml:"ttl"`
+
+	// Cluster settings (when using Valkey/Redis Cluster)
+	Cluster      bool     `yaml:"cluster"`
+	ClusterNodes []string `yaml:"cluster_nodes"` // e.g., ["node1:6379", "node2:6379"]
 }
 
 // GeoIPConfig represents GeoIP configuration (uses MMDB from sapics/ip-location-db)
@@ -893,7 +971,7 @@ func DefaultConfig() *Config {
 		Server: ServerConfig{
 			Title:       "Scour",
 			Description: "Privacy-Respecting Metasearch Engine",
-			Port:        64080,
+			Port:        64580,
 			Address:     "[::]",
 			Mode:        "production",
 			SecretKey:   generateSecret(),
@@ -921,6 +999,7 @@ func DefaultConfig() *Config {
 				BurstSize:         10,
 				ByIP:              true,
 				ByUser:            false,
+				Whitelist:         []string{"127.0.0.1", "::1"},
 			},
 			Session: SessionConfig{
 				Admin: SessionTypeConfig{
@@ -1024,9 +1103,12 @@ func DefaultConfig() *Config {
 				HiddenServicePort: 80,
 			},
 			Email: EmailConfig{
-				Enabled:  false,
-				SMTPPort: 587,
-				TLS:      true,
+				// Per AI.md PART 18: Enabled is auto-set based on SMTP availability
+				SMTP: SMTPConfig{
+					Port: 587,
+					TLS:  "auto",
+				},
+				// From defaults applied at runtime based on config
 			},
 			Security: SecurityConfig{
 				CORS: struct {
@@ -1180,8 +1262,28 @@ func DefaultConfig() *Config {
 				},
 				CORS: "*",
 			},
+			// Scheduler is ALWAYS RUNNING per AI.md PART 19
 			Scheduler: SchedulerConfig{
-				Enabled: true,
+				Timezone:      "America/New_York",
+				CatchUpWindow: "1h",
+				Tasks: SchedulerTasksConfig{
+					BackupDaily:     TaskConfig{Schedule: "0 2 * * *", Enabled: true},
+					BackupHourly:    TaskConfig{Schedule: "@hourly", Enabled: false},
+					GeoIPUpdate:     TaskConfig{Schedule: "0 3 * * 0", Enabled: true},
+					BlocklistUpdate: TaskConfig{Schedule: "0 4 * * *", Enabled: true},
+					CVEUpdate:       TaskConfig{Schedule: "0 5 * * *", Enabled: true},
+				},
+			},
+			Cache: CacheConfig{
+				Type:     "memory",
+				Host:     "localhost",
+				Port:     6379,
+				DB:       0,
+				PoolSize: 10,
+				MinIdle:  2,
+				Timeout:  "5s",
+				Prefix:   "apimgr:",
+				TTL:      3600,
 			},
 			GeoIP: GeoIPConfig{
 				Enabled: false,
@@ -1634,19 +1736,14 @@ func Initialize() (*Config, error) {
 
 		// Save config with env overrides applied
 		if err := cfg.Save(configPath); err != nil {
-			fmt.Printf("⚠️  Warning: Could not save config with env overrides: %v\n", err)
+			// Log but don't print to console - banner handles output
+			_ = err
 		}
 
-		fmt.Println("✅ Configuration created:", configPath)
-		fmt.Println()
-		fmt.Println("🔐 Admin Credentials (save these now - shown only once):")
-		fmt.Println("   Username:", cfg.Server.Admin.Username)
-		fmt.Println("   Password:", cfg.Server.Admin.Password)
-		fmt.Println("   Token:   ", cfg.Server.Admin.Token)
-		fmt.Println()
-		fmt.Println("ℹ️  Environment variables have been applied to the config file.")
-		fmt.Println("   Subsequent runs will use config file values.")
-		fmt.Println()
+		// Mark as first run - banner will show setup token
+		// Per AI.md PART 14: Admin credentials NOT auto-generated
+		// User creates admin via setup wizard with setup token
+		cfg.firstRun = true
 	}
 
 	return cfg, nil
@@ -1706,4 +1803,169 @@ func (c *Config) GetEncryptionKey() []byte {
 	// Use SHA256 to derive a consistent 32-byte key
 	h := sha256.Sum256([]byte(secret))
 	return h[:]
+}
+
+// ValidationWarning represents a configuration validation warning
+// Per AI.md PART 12: Config validation should warn and use defaults, not error
+type ValidationWarning struct {
+	Field   string
+	Message string
+	Default interface{}
+}
+
+// ValidateAndApplyDefaults validates configuration and applies defaults
+// Per AI.md PART 12: Config validation should warn and use defaults, NOT error
+// Returns list of warnings (errors are logged but defaults are applied)
+func (c *Config) ValidateAndApplyDefaults() []ValidationWarning {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	var warnings []ValidationWarning
+
+	// Server title
+	if c.Server.Title == "" {
+		warnings = append(warnings, ValidationWarning{
+			Field:   "server.title",
+			Message: "Title is empty, using default",
+			Default: "Search",
+		})
+		c.Server.Title = "Search"
+	}
+
+	// Port validation
+	if c.Server.Port < 0 || c.Server.Port > 65535 {
+		warnings = append(warnings, ValidationWarning{
+			Field:   "server.port",
+			Message: fmt.Sprintf("Invalid port %d, using default", c.Server.Port),
+			Default: 64580,
+		})
+		c.Server.Port = 64580
+	}
+
+	// HTTPS port validation (if set)
+	if c.Server.HTTPSPort != 0 && (c.Server.HTTPSPort < 0 || c.Server.HTTPSPort > 65535) {
+		warnings = append(warnings, ValidationWarning{
+			Field:   "server.https_port",
+			Message: fmt.Sprintf("Invalid HTTPS port %d, disabling", c.Server.HTTPSPort),
+			Default: 0,
+		})
+		c.Server.HTTPSPort = 0
+	}
+
+	// Mode validation
+	mode := strings.ToLower(c.Server.Mode)
+	if mode != "production" && mode != "development" && mode != "dev" && mode != "" {
+		warnings = append(warnings, ValidationWarning{
+			Field:   "server.mode",
+			Message: fmt.Sprintf("Unknown mode '%s', using production", c.Server.Mode),
+			Default: "production",
+		})
+		c.Server.Mode = "production"
+	}
+	if c.Server.Mode == "" {
+		c.Server.Mode = "production"
+	}
+
+	// Secret key
+	if c.Server.SecretKey == "" {
+		warnings = append(warnings, ValidationWarning{
+			Field:   "server.secret_key",
+			Message: "Secret key is empty, generating random key",
+			Default: "<generated>",
+		})
+		c.Server.SecretKey = generateSecret()
+	}
+
+	// Rate limit validation
+	if c.Server.RateLimit.Enabled {
+		if c.Server.RateLimit.RequestsPerMinute <= 0 {
+			warnings = append(warnings, ValidationWarning{
+				Field:   "server.rate_limit.requests_per_minute",
+				Message: "Invalid rate limit, using default",
+				Default: 30,
+			})
+			c.Server.RateLimit.RequestsPerMinute = 30
+		}
+		if c.Server.RateLimit.BurstSize <= 0 {
+			c.Server.RateLimit.BurstSize = 10
+		}
+	}
+
+	// Session configuration
+	if c.Server.Session.Admin.MaxAge <= 0 {
+		c.Server.Session.Admin.MaxAge = 2592000 // 30 days
+	}
+	if c.Server.Session.User.MaxAge <= 0 {
+		c.Server.Session.User.MaxAge = 604800 // 7 days
+	}
+
+	// GeoIP configuration - just ensure dir is set
+	if c.Server.GeoIP.Enabled && c.Server.GeoIP.Dir == "" {
+		c.Server.GeoIP.Dir = GetGeoIPDir()
+	}
+
+	// Tor configuration
+	if c.Server.Tor.Enabled {
+		if c.Server.Tor.SocksPort == 0 {
+			c.Server.Tor.SocksPort = 9050
+		}
+		if c.Server.Tor.ControlPort == 0 {
+			c.Server.Tor.ControlPort = 9051
+		}
+	}
+
+	// Metrics configuration
+	if c.Server.Metrics.Enabled && c.Server.Metrics.Path == "" {
+		c.Server.Metrics.Path = "/metrics"
+	}
+
+	// Compression configuration
+	if c.Server.Compression.Level < 1 || c.Server.Compression.Level > 9 {
+		if c.Server.Compression.Level != 0 {
+			warnings = append(warnings, ValidationWarning{
+				Field:   "server.compression.level",
+				Message: fmt.Sprintf("Invalid compression level %d, using default", c.Server.Compression.Level),
+				Default: 6,
+			})
+		}
+		c.Server.Compression.Level = 6
+	}
+
+	// Engines validation
+	if len(c.Engines) == 0 {
+		warnings = append(warnings, ValidationWarning{
+			Field:   "engines",
+			Message: "No search engines configured, using defaults",
+			Default: "duckduckgo, google, bing",
+		})
+		c.Engines = DefaultConfig().Engines
+	}
+
+	// Validate each engine
+	for name, engine := range c.Engines {
+		if engine.Timeout <= 0 {
+			engine.Timeout = 10
+			c.Engines[name] = engine
+		}
+		if engine.Priority <= 0 && engine.Enabled {
+			engine.Priority = 50
+			c.Engines[name] = engine
+		}
+	}
+
+	return warnings
+}
+
+// LogValidationWarnings prints validation warnings to stdout
+// Per AI.md PART 12: Warn and use defaults, not error
+func LogValidationWarnings(warnings []ValidationWarning) {
+	if len(warnings) == 0 {
+		return
+	}
+
+	fmt.Printf("⚠️  Configuration warnings (%d):\n", len(warnings))
+	for _, w := range warnings {
+		fmt.Printf("   • %s: %s (default: %v)\n", w.Field, w.Message, w.Default)
+	}
+	fmt.Println()
 }

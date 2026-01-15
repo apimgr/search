@@ -1,0 +1,565 @@
+{{define "content"}}
+<div class="user-page tokens-page">
+    <div class="page-header">
+        <h1>{{t "user.tokens.title"}}</h1>
+        <p class="page-subtitle">Manage your API tokens for programmatic access</p>
+    </div>
+
+    <div class="user-container">
+        <nav class="user-nav">
+            <a href="/users/profile" class="nav-item">{{t "user.profile"}}</a>
+            <a href="/users/security" class="nav-item">{{t "user.security"}}</a>
+            <a href="/users/tokens" class="nav-item active">{{t "user.tokens"}}</a>
+        </nav>
+
+        <div class="user-content">
+            {{if .Flash}}
+            <div class="alert alert-{{.Flash.Type}}" role="alert">
+                {{.Flash.Message}}
+            </div>
+            {{end}}
+
+            {{if .NewToken}}
+            <div class="alert alert-success token-created">
+                <h3>{{t "user.tokens.created"}}</h3>
+                <div class="token-display">
+                    <code id="new-token">{{.NewToken}}</code>
+                    <button type="button" class="btn btn-sm btn-secondary" data-action="copy-token">
+                        {{t "common.copy"}}
+                    </button>
+                </div>
+                <p class="token-warning">
+                    Make sure to copy this token now. You won't be able to see it again!
+                </p>
+            </div>
+            {{end}}
+
+            <div class="tokens-section">
+                <div class="section-header">
+                    <h2>Your Tokens</h2>
+                    <button type="button" class="btn btn-primary btn-sm" id="create-token-btn">
+                        {{t "user.tokens.create"}}
+                    </button>
+                </div>
+
+                {{if .Tokens}}
+                <div class="tokens-list">
+                    {{range .Tokens}}
+                    <div class="token-item">
+                        <div class="token-info">
+                            <div class="token-name">{{.Name}}</div>
+                            <div class="token-prefix">
+                                <code>{{.TokenPrefix}}...</code>
+                            </div>
+                            <div class="token-meta">
+                                <span>Created: {{.CreatedAt | formatDate}}</span>
+                                {{if .ExpiresAt}}
+                                <span>Expires: {{.ExpiresAt | formatDate}}</span>
+                                {{else}}
+                                <span>{{t "user.tokens.never"}}</span>
+                                {{end}}
+                                <span>
+                                    {{t "user.tokens.last_used"}}:
+                                    {{if .LastUsed}}
+                                    {{.LastUsed | formatTime}}
+                                    {{else}}
+                                    {{t "user.tokens.not_used"}}
+                                    {{end}}
+                                </span>
+                            </div>
+                            {{if .Permissions}}
+                            <div class="token-permissions">
+                                {{range .Permissions}}
+                                <span class="permission-badge">{{.}}</span>
+                                {{end}}
+                            </div>
+                            {{end}}
+                        </div>
+                        <form method="POST" action="/users/tokens/revoke" class="token-action" data-confirm-revoke>
+                            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                            <input type="hidden" name="token_id" value="{{.ID}}">
+                            <button type="submit" class="btn btn-danger btn-sm">
+                                {{t "user.tokens.revoke"}}
+                            </button>
+                        </form>
+                    </div>
+                    {{end}}
+                </div>
+                {{else}}
+                <div class="empty-state">
+                    <p>You don't have any API tokens yet.</p>
+                    <p>API tokens allow you to authenticate with the API programmatically.</p>
+                </div>
+                {{end}}
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="create-token-modal">
+        <div class="modal-backdrop" data-action="close-token-modal"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>{{t "user.tokens.create"}}</h3>
+                <button type="button" class="modal-close" data-action="close-token-modal">&times;</button>
+            </div>
+            <form method="POST" action="/users/tokens/create" class="modal-body">
+                <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+                <div class="form-group">
+                    <label for="token_name">{{t "user.tokens.name"}}</label>
+                    <input type="text" id="token_name" name="name" required
+                           placeholder="e.g., My API Client" maxlength="64">
+                </div>
+
+                <div class="form-group">
+                    <label>{{t "user.tokens.permissions"}}</label>
+                    <div class="permissions-grid">
+                        <label class="permission-toggle">
+                            <input type="checkbox" name="permissions" value="read" checked>
+                            <span>Read</span>
+                        </label>
+                        <label class="permission-toggle">
+                            <input type="checkbox" name="permissions" value="write">
+                            <span>Write</span>
+                        </label>
+                        <label class="permission-toggle">
+                            <input type="checkbox" name="permissions" value="search">
+                            <span>Search</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="token_expires">{{t "user.tokens.expires"}}</label>
+                    <select id="token_expires" name="expires">
+                        <option value="">{{t "user.tokens.never"}}</option>
+                        <option value="7">7 days</option>
+                        <option value="30" selected>30 days</option>
+                        <option value="90">90 days</option>
+                        <option value="365">1 year</option>
+                    </select>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-action="close-token-modal">
+                        {{t "form.cancel"}}
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        {{t "user.tokens.create"}}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+.user-page {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+}
+
+.page-header h1 {
+    margin: 0 0 0.5rem 0;
+}
+
+.page-subtitle {
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.user-container {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 2rem;
+}
+
+.user-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.user-nav .nav-item {
+    padding: 0.75rem 1rem;
+    color: var(--text-primary);
+    text-decoration: none;
+    border-radius: 6px;
+    transition: background 0.2s;
+}
+
+.user-nav .nav-item:hover {
+    background: var(--bg-secondary);
+}
+
+.user-nav .nav-item.active {
+    background: var(--accent-color);
+    color: var(--bg-primary);
+}
+
+.user-content {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 2rem;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.section-header h2 {
+    margin: 0;
+    font-size: 1.1rem;
+}
+
+.tokens-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.token-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 1rem;
+    background: var(--bg-primary);
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+}
+
+.token-info {
+    flex: 1;
+}
+
+.token-name {
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.token-prefix code {
+    font-size: 0.85rem;
+    padding: 0.125rem 0.375rem;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+}
+
+.token-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.token-permissions {
+    display: flex;
+    gap: 0.375rem;
+    margin-top: 0.5rem;
+}
+
+.permission-badge {
+    padding: 0.125rem 0.5rem;
+    background: rgba(var(--accent-rgb), 0.15);
+    color: var(--accent-color);
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-muted);
+}
+
+.token-created {
+    border: 2px solid var(--success-color);
+}
+
+.token-created h3 {
+    margin: 0 0 1rem 0;
+    font-size: 1rem;
+}
+
+.token-display {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: var(--bg-primary);
+    padding: 0.75rem;
+    border-radius: 6px;
+    margin-bottom: 0.75rem;
+}
+
+.token-display code {
+    flex: 1;
+    font-size: 0.9rem;
+    word-break: break-all;
+}
+
+.token-warning {
+    color: var(--warning-color);
+    font-size: 0.85rem;
+    margin: 0;
+}
+
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal.active {
+    display: flex;
+}
+
+.modal-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+    position: relative;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    width: 100%;
+    max-width: 450px;
+    margin: 1rem;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header h3 {
+    margin: 0;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+
+.modal-close:hover {
+    color: var(--text-primary);
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+}
+
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.375rem;
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.form-group input,
+.form-group select {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 1rem;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.15);
+}
+
+.permissions-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.permission-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+
+.permission-toggle input {
+    width: auto;
+}
+
+.btn {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.btn:hover {
+    opacity: 0.9;
+}
+
+.btn-primary {
+    background: var(--accent-color);
+    color: var(--bg-primary);
+}
+
+.btn-secondary {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.btn-danger {
+    background: var(--danger-color);
+    color: white;
+}
+
+.btn-sm {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+}
+
+.alert {
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    margin-bottom: 1.5rem;
+    font-size: 0.9rem;
+}
+
+.alert-success {
+    background: rgba(var(--success-rgb), 0.1);
+    color: var(--success-color);
+    border: 1px solid rgba(var(--success-rgb), 0.2);
+}
+
+@media (max-width: 768px) {
+    .user-container {
+        grid-template-columns: 1fr;
+    }
+
+    .user-nav {
+        flex-direction: row;
+        overflow-x: auto;
+    }
+
+    .token-item {
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .token-meta {
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+}
+</style>
+
+<script>
+// Per AI.md PART 17: Minimal page-specific JS, event delegation in app.js
+document.addEventListener('DOMContentLoaded', function() {
+    var createBtn = document.getElementById('create-token-btn');
+    var modal = document.getElementById('create-token-modal');
+
+    if (createBtn && modal) {
+        createBtn.addEventListener('click', function() {
+            modal.classList.add('active');
+        });
+    }
+
+    // Close modal on Escape
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && modal) {
+            modal.classList.remove('active');
+        }
+    });
+
+    // Handle close-token-modal action
+    document.addEventListener('click', function(e) {
+        if (e.target.matches('[data-action="close-token-modal"]')) {
+            modal.classList.remove('active');
+        }
+    });
+
+    // Handle copy-token action
+    document.addEventListener('click', function(e) {
+        if (e.target.matches('[data-action="copy-token"]')) {
+            var tokenEl = document.getElementById('new-token');
+            if (tokenEl) {
+                navigator.clipboard.writeText(tokenEl.textContent).then(function() {
+                    var btn = e.target;
+                    var original = btn.textContent;
+                    btn.textContent = 'Copied!';
+                    setTimeout(function() {
+                        btn.textContent = original;
+                    }, 2000);
+                });
+            }
+        }
+    });
+
+    // Handle token revoke confirmation
+    document.addEventListener('submit', function(e) {
+        if (e.target.matches('[data-confirm-revoke]')) {
+            e.preventDefault();
+            var form = e.target;
+            window.showConfirm('Are you sure you want to revoke this token?', {
+                title: 'Revoke API Token',
+                confirmText: 'Revoke',
+                danger: true
+            }).then(function(confirmed) {
+                if (confirmed) {
+                    form.submit();
+                }
+            });
+        }
+    });
+});
+</script>
+{{end}}

@@ -2,10 +2,12 @@ package server
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"html"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,17 +19,18 @@ import (
 	"github.com/apimgr/search/src/database"
 	"github.com/apimgr/search/src/email"
 	"github.com/apimgr/search/src/geoip"
+	"github.com/apimgr/search/src/i18n"
 	"github.com/apimgr/search/src/instant"
 	"github.com/apimgr/search/src/logging"
-	"github.com/apimgr/search/src/models"
+	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/scheduler"
 	"github.com/apimgr/search/src/search"
 	"github.com/apimgr/search/src/search/bangs"
 	"github.com/apimgr/search/src/search/engines"
 	"github.com/apimgr/search/src/service"
 	searchtls "github.com/apimgr/search/src/tls"
-	"github.com/apimgr/search/src/users"
-	"github.com/apimgr/search/src/widgets"
+	"github.com/apimgr/search/src/user"
+	"github.com/apimgr/search/src/widget"
 )
 
 // Server represents the HTTP server
@@ -48,7 +51,7 @@ type Server struct {
 	apiHandler     *api.Handler
 	torService     *service.TorService
 	bangManager    *bangs.Manager
-	widgetManager  *widgets.Manager
+	widgetManager  *widget.Manager
 	logManager     *logging.Manager
 	tlsManager     *searchtls.Manager
 	instantManager *instant.Manager
@@ -57,15 +60,19 @@ type Server struct {
 	scheduler      *scheduler.Scheduler
 	metrics        *Metrics
 	dbManager      *database.DatabaseManager
+	configSync     *config.ConfigSync // Per AI.md PART 5: Cluster config sync (NON-NEGOTIABLE)
 
 	// User management
-	userAuthManager     *users.AuthManager
-	totpManager         *users.TOTPManager
-	recoveryManager     *users.RecoveryManager
-	tokenManager        *users.TokenManager
-	verificationManager *users.VerificationManager
+	userAuthManager     *user.AuthManager
+	totpManager         *user.TOTPManager
+	recoveryManager     *user.RecoveryManager
+	tokenManager        *user.TokenManager
+	verificationManager *user.VerificationManager
 	authAPIHandler      *api.AuthHandler
 	userAPIHandler      *api.UserHandler
+
+	// Internationalization per AI.md PART 32
+	i18nManager *i18n.Manager
 }
 
 // registryAdapter wraps engines.Registry to implement admin.EngineRegistry
@@ -206,135 +213,96 @@ func New(cfg *config.Config) *Server {
 	}
 
 	// Create widget manager and register fetchers
-	widgetMgr := widgets.NewManager(&cfg.Search.Widgets)
+	widgetMgr := widget.NewManager(&cfg.Search.Widgets)
 
 	// Register data widget fetchers
 	if cfg.Search.Widgets.Weather.Enabled {
-		widgetMgr.RegisterFetcher(widgets.NewWeatherFetcher(&cfg.Search.Widgets.Weather))
+		widgetMgr.RegisterFetcher(widget.NewWeatherFetcher(&cfg.Search.Widgets.Weather))
 	}
 	if cfg.Search.Widgets.News.Enabled {
-		widgetMgr.RegisterFetcher(widgets.NewNewsFetcher(&cfg.Search.Widgets.News))
+		widgetMgr.RegisterFetcher(widget.NewNewsFetcher(&cfg.Search.Widgets.News))
 	}
 	if cfg.Search.Widgets.Stocks.Enabled {
-		widgetMgr.RegisterFetcher(widgets.NewStocksFetcher(&cfg.Search.Widgets.Stocks))
+		widgetMgr.RegisterFetcher(widget.NewStocksFetcher(&cfg.Search.Widgets.Stocks))
 	}
 	if cfg.Search.Widgets.Crypto.Enabled {
-		widgetMgr.RegisterFetcher(widgets.NewCryptoFetcher(&cfg.Search.Widgets.Crypto))
+		widgetMgr.RegisterFetcher(widget.NewCryptoFetcher(&cfg.Search.Widgets.Crypto))
 	}
 	if cfg.Search.Widgets.Sports.Enabled {
-		widgetMgr.RegisterFetcher(widgets.NewSportsFetcher(&cfg.Search.Widgets.Sports))
+		widgetMgr.RegisterFetcher(widget.NewSportsFetcher(&cfg.Search.Widgets.Sports))
 	}
 	if cfg.Search.Widgets.RSS.Enabled {
-		widgetMgr.RegisterFetcher(widgets.NewRSSFetcher(&cfg.Search.Widgets.RSS))
+		widgetMgr.RegisterFetcher(widget.NewRSSFetcher(&cfg.Search.Widgets.RSS))
+	}
+
+	// Register additional widget fetchers (use free APIs, no API keys needed)
+	// These widgets are always available when widgets are enabled
+	if cfg.Search.Widgets.Enabled {
+		widgetMgr.RegisterFetcher(widget.NewCurrencyFetcher(""))
+		widgetMgr.RegisterFetcher(widget.NewDictionaryFetcher())
+		widgetMgr.RegisterFetcher(widget.NewNutritionFetcher(""))
+		widgetMgr.RegisterFetcher(widget.NewTrackingFetcher())
+		widgetMgr.RegisterFetcher(widget.NewTranslateFetcher())
+		widgetMgr.RegisterFetcher(widget.NewWikipediaFetcher())
 	}
 
 	// Create instant answer manager
 	instantMgr := instant.NewManager()
 
-	// Create email mailer if enabled
+	// Create email mailer
+	// Per AI.md PART 18: Email is auto-enabled if SMTP is configured
 	var mailer *email.Mailer
-	if cfg.Server.Email.Enabled {
+	if cfg.Server.Email.SMTP.Host != "" {
+		// Apply default from address if not set
+		fromEmail := cfg.Server.Email.From.Email
+		if fromEmail == "" {
+			// Per AI.md PART 18: Default from email is no-reply@{fqdn}
+			fqdn := "localhost"
+			if cfg.Server.BaseURL != "" {
+				// Extract hostname from BaseURL
+				if u, err := url.Parse(cfg.Server.BaseURL); err == nil && u.Host != "" {
+					fqdn = u.Host
+				}
+			}
+			fromEmail = "no-reply@" + fqdn
+		}
+		fromName := cfg.Server.Email.From.Name
+		if fromName == "" {
+			// Per AI.md PART 18: Default from name is app title
+			fromName = cfg.Server.Branding.AppName
+			if fromName == "" {
+				fromName = "Search"
+			}
+		}
+
 		emailCfg := &email.Config{
-			Enabled:     true,
-			SMTPHost:    cfg.Server.Email.SMTPHost,
-			SMTPPort:    cfg.Server.Email.SMTPPort,
-			Username:    cfg.Server.Email.SMTPUser,
-			Password:    cfg.Server.Email.SMTPPass,
-			FromAddress: cfg.Server.Email.FromAddress,
-			FromName:    cfg.Server.Email.FromName,
-			UseTLS:      cfg.Server.Email.TLS,
-			UseSTARTTLS: cfg.Server.Email.StartTLS,
+			Enabled: true,
+			SMTP: email.SMTPConfig{
+				Host:     cfg.Server.Email.SMTP.Host,
+				Port:     cfg.Server.Email.SMTP.Port,
+				Username: cfg.Server.Email.SMTP.Username,
+				Password: cfg.Server.Email.SMTP.Password,
+				TLS:      cfg.Server.Email.SMTP.TLS,
+			},
+			From: email.FromConfig{
+				Name:  fromName,
+				Email: fromEmail,
+			},
 		}
 		mailer = email.NewMailer(emailCfg)
-		log.Printf("[Email] Mailer configured (SMTP: %s:%d)", cfg.Server.Email.SMTPHost, cfg.Server.Email.SMTPPort)
+		log.Printf("[Email] Mailer configured (SMTP: %s:%d)", cfg.Server.Email.SMTP.Host, cfg.Server.Email.SMTP.Port)
 	}
 
-	// Create scheduler if enabled
-	var sched *scheduler.Scheduler
-	if cfg.Server.Scheduler.Enabled {
-		sched = scheduler.New()
-
-		// Register default scheduled tasks per AI.md PART 20
-		// Session cleanup: hourly
-		sched.Register(&scheduler.Task{
-			Name:     "session_cleanup",
-			Interval: 1 * time.Hour,
-			Run: func(ctx context.Context) error {
-				log.Println("[Scheduler] Running session cleanup")
-				// Session cleanup logic would go here
-				return nil
-			},
-		})
-
-		// Cache cleanup: every 6 hours
-		sched.Register(&scheduler.Task{
-			Name:     "cache_cleanup",
-			Interval: 6 * time.Hour,
-			Run: func(ctx context.Context) error {
-				log.Println("[Scheduler] Running cache cleanup")
-				// Cache cleanup logic would go here
-				return nil
-			},
-		})
-
-		// Engine health check: every 15 minutes
-		sched.Register(&scheduler.Task{
-			Name:     "engine_health",
-			Interval: 15 * time.Minute,
-			Run: func(ctx context.Context) error {
-				log.Println("[Scheduler] Running engine health check")
-				// Engine health check logic would go here
-				return nil
-			},
-		})
-
-		// Daily backup at 02:00 (check every hour, actual backup logic checks time)
-		sched.Register(&scheduler.Task{
-			Name:     "backup",
-			Interval: 24 * time.Hour,
-			Run: func(ctx context.Context) error {
-				log.Println("[Scheduler] Running automatic backup")
-				// Backup logic would go here
-				return nil
-			},
-		})
-
-		// SSL renewal check: daily
-		if cfg.Server.SSL.Enabled && cfg.Server.SSL.LetsEncrypt.Enabled {
-			sched.Register(&scheduler.Task{
-				Name:     "ssl_renewal",
-				Interval: 24 * time.Hour,
-				Run: func(ctx context.Context) error {
-					log.Println("[Scheduler] Running SSL renewal check")
-					// SSL renewal check logic would go here
-					return nil
-				},
-			})
-		}
-
-		// GeoIP update: weekly (every 7 days)
-		if cfg.Server.GeoIP.Enabled && cfg.Server.GeoIP.Update != "" && cfg.Server.GeoIP.Update != "never" {
-			sched.Register(&scheduler.Task{
-				Name:     "geoip_update",
-				Interval: 7 * 24 * time.Hour,
-				Run: func(ctx context.Context) error {
-					log.Println("[Scheduler] Running GeoIP database update")
-					// GeoIP update logic would go here
-					return nil
-				},
-			})
-		}
-
-		log.Printf("[Scheduler] Initialized with default tasks")
-	}
+	// Scheduler is initialized after Server struct creation per AI.md PART 19
+	// The scheduler is ALWAYS RUNNING - no enable/disable option
 
 	// Create database manager for user management
 	var dbMgr *database.DatabaseManager
-	var userAuthMgr *users.AuthManager
-	var totpMgr *users.TOTPManager
-	var recoveryMgr *users.RecoveryManager
-	var tokenMgr *users.TokenManager
-	var verificationMgr *users.VerificationManager
+	var userAuthMgr *user.AuthManager
+	var totpMgr *user.TOTPManager
+	var recoveryMgr *user.RecoveryManager
+	var tokenMgr *user.TokenManager
+	var verificationMgr *user.VerificationManager
 
 	if cfg.Server.Users.Enabled {
 		// Initialize database manager
@@ -354,32 +322,32 @@ func New(cfg *config.Config) *Server {
 			usersDB := dbMgr.UsersDB().SQL()
 			if usersDB != nil {
 				// Create auth manager
-				authCfg := users.AuthConfig{
+				authCfg := user.AuthConfig{
 					SessionDurationDays: cfg.Server.Users.GetSessionDurationDays(),
 					CookieName:          "user_session",
 					CookieSecure:        cfg.Server.SSL.Enabled,
 				}
-				userAuthMgr = users.NewAuthManager(usersDB, authCfg)
+				userAuthMgr = user.NewAuthManager(usersDB, authCfg)
 				log.Printf("[Users] Auth manager initialized")
 
 				// Create TOTP manager if 2FA is allowed
 				if cfg.Server.Users.Auth.Allow2FA {
 					encKey := cfg.GetEncryptionKey()
 					if len(encKey) == 32 {
-						totpMgr, _ = users.NewTOTPManager(usersDB, cfg.Server.Title, encKey)
+						totpMgr, _ = user.NewTOTPManager(usersDB, cfg.Server.Title, encKey)
 						log.Printf("[Users] 2FA manager initialized")
 					}
 				}
 
 				// Create recovery manager
-				recoveryMgr = users.NewRecoveryManager(usersDB, 10)
+				recoveryMgr = user.NewRecoveryManager(usersDB, 10)
 
 				// Create token manager
-				tokenMgr = users.NewTokenManager(usersDB)
+				tokenMgr = user.NewTokenManager(usersDB)
 				log.Printf("[Users] Token manager initialized")
 
 				// Create verification manager for email verification and password reset tokens
-				verificationMgr = users.NewVerificationManager(usersDB)
+				verificationMgr = user.NewVerificationManager(usersDB)
 				log.Printf("[Users] Verification manager initialized")
 			}
 		}
@@ -387,6 +355,15 @@ func New(cfg *config.Config) *Server {
 
 	// Create metrics collector
 	metrics := NewMetrics(cfg)
+
+	// Initialize i18n manager per AI.md PART 32
+	i18nMgr, err := i18n.DefaultManager()
+	if err != nil {
+		log.Printf("[I18N] Warning: Failed to initialize i18n manager: %v", err)
+		// Continue without translations - will use keys as fallback
+	} else {
+		log.Printf("[I18N] Translations loaded for %d languages", len(i18n.DefaultSupportedLanguages()))
+	}
 
 	s := &Server{
 		config:          cfg,
@@ -405,7 +382,7 @@ func New(cfg *config.Config) *Server {
 		instantManager:  instantMgr,
 		geoipLookup:     geoLookup,
 		mailer:          mailer,
-		scheduler:       sched,
+		// scheduler is initialized below after Server creation
 		metrics:         metrics,
 		dbManager:       dbMgr,
 		userAuthManager:     userAuthMgr,
@@ -413,10 +390,16 @@ func New(cfg *config.Config) *Server {
 		recoveryManager:     recoveryMgr,
 		tokenManager:        tokenMgr,
 		verificationManager: verificationMgr,
+		i18nManager:         i18nMgr,
 	}
 
 	// Create admin handler (needs renderer interface)
 	s.adminHandler = admin.NewHandler(cfg, s.renderer)
+
+	// Set database for admin session persistence per AI.md PART 17
+	if dbMgr != nil {
+		s.adminHandler.SetDatabase(dbMgr.ServerDB())
+	}
 
 	// Configure admin handler with registry and reload callback
 	s.adminHandler.SetRegistry(&registryAdapter{r: s.registry})
@@ -429,11 +412,36 @@ func New(cfg *config.Config) *Server {
 		return nil
 	})
 
+	// Per AI.md PART 5 lines 5212-5310: Configuration Source of Truth (NON-NEGOTIABLE)
+	// Initialize config sync for cluster mode
+	if dbMgr != nil {
+		isCluster := dbMgr.IsClusterMode()
+		configPath := cfg.GetPath()
+		if configPath == "" {
+			configPath = "/etc/search/server.yml"
+		}
+		s.configSync = config.NewConfigSync(dbMgr.ServerDB().SQL(), cfg, configPath, isCluster)
+		s.adminHandler.SetConfigSync(s.configSync)
+		if isCluster {
+			log.Printf("[Server] Cluster mode: database is source of truth")
+			// Load config from database on startup
+			if err := s.configSync.LoadFromSource(); err != nil {
+				log.Printf("[Server] Failed to load config from database: %v", err)
+			}
+			// Start periodic sync (every 5 minutes per AI.md)
+			s.configSync.StartPeriodicSync(5 * time.Minute)
+		}
+	}
+
 	// Set widget manager on API handler
 	s.apiHandler.SetWidgetManager(widgetMgr)
 
 	// Set instant answer manager on API handler
 	s.apiHandler.SetInstantManager(instantMgr)
+
+	// Set related searches provider on API handler
+	relatedSearches := search.NewRelatedSearches()
+	s.apiHandler.SetRelatedSearches(relatedSearches)
 
 	// Create auth and user API handlers if user management is enabled
 	if cfg.Server.Users.Enabled && userAuthMgr != nil && dbMgr != nil {
@@ -444,6 +452,14 @@ func New(cfg *config.Config) *Server {
 			log.Printf("[Users] API handlers initialized")
 		}
 	}
+
+	// Initialize scheduler - ALWAYS RUNNING per AI.md PART 19
+	// Use server.db for persistent task state if available
+	var schedulerDB *sql.DB
+	if dbMgr != nil {
+		schedulerDB = dbMgr.ServerDB().SQL()
+	}
+	s.initScheduler(schedulerDB)
 
 	return s
 }
@@ -462,11 +478,8 @@ func (s *Server) Start() error {
 		}
 	}
 
-	// Start scheduler if enabled
-	if s.scheduler != nil {
-		s.scheduler.Start()
-		log.Printf("[Scheduler] Started")
-	}
+	// Scheduler is already started by initScheduler() per AI.md PART 19
+	// The scheduler is ALWAYS RUNNING - no enable/disable check needed
 
 	// Setup routes
 	mux := s.setupRoutes()
@@ -480,24 +493,17 @@ func (s *Server) Start() error {
 
 	s.startTime = time.Now()
 
-	// Display startup message based on mode
-	if s.config.Server.Mode == "development" {
-		log.Printf("[Server] Search v%s [DEVELOPMENT MODE]", config.Version)
-		log.Printf("[Server] Debug endpoints enabled")
-		log.Printf("[Server] Verbose error messages enabled")
-		log.Printf("[Server] Template caching disabled")
-		log.Printf("[Server] Mode: development")
-	} else {
-		log.Printf("[Server] Search v%s", config.Version)
-		log.Printf("[Server] Mode: production")
+	// Get Tor address if available
+	var torAddr string
+	if s.torService != nil && s.torService.IsRunning() {
+		torAddr = s.torService.GetOnionAddress()
+		// Log Tor address
+		log.Printf("[Server] Tor hidden service: %s", torAddr)
 	}
 
-	// Log Tor status
-	if s.torService != nil && s.torService.IsRunning() {
-		if addr := s.torService.GetOnionAddress(); addr != "" {
-			log.Printf("[Tor] Hidden service: %s", addr)
-		}
-	}
+	// Banner is printed by main.go per AI.md PART 7/14
+	// Server only logs startup info
+	_ = torAddr // Used for Tor logging above
 
 	// Check for dual port mode
 	if s.config.Server.IsDualPortMode() && s.tlsManager != nil && s.tlsManager.IsEnabled() {
@@ -701,10 +707,13 @@ func (s *Server) removePIDFile() {
 func (s *Server) setupRoutes() http.Handler {
 	mux := http.NewServeMux()
 
-	// Health check - /healthz only per AI.md spec (NO /health)
+	// Health check endpoints per AI.md PART 11/13
 	// Supports content negotiation: HTML (default), JSON (Accept: application/json), plain text (.txt)
+	// Note: /api/v1/healthz is registered by apiHandler.RegisterRoutes()
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	mux.HandleFunc("/healthz.txt", s.handleHealthz)
+	mux.HandleFunc("/readyz", s.handleReadyz)
+	mux.HandleFunc("/livez", s.handleLivez)
 
 	// Home page
 	mux.HandleFunc("/", s.handleHome)
@@ -731,6 +740,10 @@ func (s *Server) setupRoutes() http.Handler {
 	if s.config.Search.OpenSearch.Enabled {
 		mux.HandleFunc("/opensearch.xml", s.handleOpenSearch)
 	}
+
+	// Swagger/OpenAPI endpoints are registered by apiHandler.RegisterOpenAPIRoutes() below
+	// GraphQL endpoint is registered by apiHandler.RegisterGraphQLRoutes() below
+	// This provides both GraphQL API (POST) and GraphiQL interface (GET)
 
 	// Bang proxy (for privacy-preserving redirects)
 	if s.config.Search.Bangs.Enabled {
@@ -759,12 +772,12 @@ func (s *Server) setupRoutes() http.Handler {
 		mux.HandleFunc("/auth/2fa", s.handle2FA)
 		mux.HandleFunc("/auth/recovery", s.handleRecoveryLogin)
 
-		// User profile routes
-		mux.HandleFunc("/user/profile", s.handleUserProfile)
-		mux.HandleFunc("/user/security", s.handleUserSecurity)
-		mux.HandleFunc("/user/tokens", s.handleUserTokens)
-		mux.HandleFunc("/user/2fa/setup", s.handle2FASetup)
-		mux.HandleFunc("/user/2fa/disable", s.handle2FADisable)
+		// User profile routes per AI.md PART 14: plural /users/ not singular /user/
+		mux.HandleFunc("/users/profile", s.handleUserProfile)
+		mux.HandleFunc("/users/security", s.handleUserSecurity)
+		mux.HandleFunc("/users/tokens", s.handleUserTokens)
+		mux.HandleFunc("/users/2fa/setup", s.handle2FASetup)
+		mux.HandleFunc("/users/2fa/disable", s.handle2FADisable)
 
 		// Auth API routes
 		if s.authAPIHandler != nil {
@@ -802,6 +815,8 @@ func (s *Server) setupRoutes() http.Handler {
 	s.registerDebugRoutes(mux)
 
 	// Apply middleware chain
+	// Per AI.md PART 16: URLNormalizeMiddleware MUST be first (last in chain list)
+	// Per AI.md PART 5: PathSecurityMiddleware MUST be second
 	handler := Chain(
 		mux,
 		s.middleware.Recovery,
@@ -811,6 +826,8 @@ func (s *Server) setupRoutes() http.Handler {
 		s.middleware.CORS,
 		s.middleware.GeoBlock(s.geoipLookup),
 		s.middleware.RateLimit(s.rateLimiter),
+		PathSecurityMiddleware,   // SECOND - normalizes paths, blocks traversal
+		URLNormalizeMiddleware,   // FIRST - removes trailing slashes, redirects to canonical
 	)
 
 	return handler
@@ -984,23 +1001,23 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Map category string to models.Category
-	var searchCategory models.Category
+	// Map category string to model.Category
+	var searchCategory model.Category
 	switch category {
 	case "images":
-		searchCategory = models.CategoryImages
+		searchCategory = model.CategoryImages
 	case "videos":
-		searchCategory = models.CategoryVideos
+		searchCategory = model.CategoryVideos
 	case "news":
-		searchCategory = models.CategoryNews
+		searchCategory = model.CategoryNews
 	case "maps":
-		searchCategory = models.CategoryMaps
+		searchCategory = model.CategoryMaps
 	default:
-		searchCategory = models.CategoryGeneral
+		searchCategory = model.CategoryGeneral
 	}
 
 	// Perform search
-	query := models.NewQuery(queryStr)
+	query := model.NewQuery(queryStr)
 	query.Category = searchCategory
 
 	results, err := s.aggregator.Search(ctx, query)
@@ -1039,12 +1056,12 @@ func (s *Server) renderSearchError(w http.ResponseWriter, query string, err erro
 }
 
 // renderSearchResults renders the search results page
-func (s *Server) renderSearchResults(w http.ResponseWriter, query string, results *models.SearchResults, category string) {
+func (s *Server) renderSearchResults(w http.ResponseWriter, query string, results *model.SearchResults, category string) {
 	s.renderSearchResultsWithInstant(w, query, results, category, nil)
 }
 
 // renderSearchResultsWithInstant renders search results with optional instant answer
-func (s *Server) renderSearchResultsWithInstant(w http.ResponseWriter, query string, results *models.SearchResults, category string, instantAnswer *instant.Answer) {
+func (s *Server) renderSearchResultsWithInstant(w http.ResponseWriter, query string, results *model.SearchResults, category string, instantAnswer *instant.Answer) {
 	data := &SearchPageData{
 		PageData: PageData{
 			Title:       query,
@@ -1080,16 +1097,16 @@ func (s *Server) renderSearchResultsWithInstant(w http.ResponseWriter, query str
 }
 
 // renderSearchResultsInline is a fallback for when templates fail
-func (s *Server) renderSearchResultsInline(w http.ResponseWriter, query string, results *models.SearchResults, category string) {
+func (s *Server) renderSearchResultsInline(w http.ResponseWriter, query string, results *model.SearchResults, category string) {
 	fmt.Fprintf(w, `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="theme-dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>%s - %s</title>
     <link rel="stylesheet" href="/static/css/main.css">
 </head>
-<body data-theme="dark">
+<body>
     <main class="search-results">
         <h1>Results for: %s</h1>
         <p>%d results (%.3fs)</p>`,

@@ -1,0 +1,41 @@
+{
+  "categories": [
+    {
+      "id": "web",
+      "name": "Web",
+      "icon": "globe",
+      "description": "General web search results",
+      "default": true
+    },
+    {
+      "id": "images",
+      "name": "Images",
+      "icon": "image",
+      "description": "Image search results"
+    },
+    {
+      "id": "videos",
+      "name": "Videos",
+      "icon": "video",
+      "description": "Video search results"
+    },
+    {
+      "id": "news",
+      "name": "News",
+      "icon": "newspaper",
+      "description": "News articles and current events"
+    },
+    {
+      "id": "maps",
+      "name": "Maps",
+      "icon": "map",
+      "description": "Location and map search"
+    },
+    {
+      "id": "files",
+      "name": "Files",
+      "icon": "file",
+      "description": "File and document search"
+    }
+  ]
+}

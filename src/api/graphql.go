@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/apimgr/search/src/config"
-	"github.com/apimgr/search/src/models"
+	"github.com/apimgr/search/src/model"
 	"github.com/graphql-go/graphql"
 )
 
@@ -360,22 +360,22 @@ func (g *GraphQLHandler) resolveSearch(p graphql.ResolveParams) (interface{}, er
 	}
 
 	// Map category
-	var cat models.Category
+	var cat model.Category
 	switch category {
 	case "images":
-		cat = models.CategoryImages
+		cat = model.CategoryImages
 	case "videos":
-		cat = models.CategoryVideos
+		cat = model.CategoryVideos
 	case "news":
-		cat = models.CategoryNews
+		cat = model.CategoryNews
 	case "maps":
-		cat = models.CategoryMaps
+		cat = model.CategoryMaps
 	default:
-		cat = models.CategoryGeneral
+		cat = model.CategoryGeneral
 	}
 
 	// Perform search
-	q := models.NewQuery(query)
+	q := model.NewQuery(query)
 	q.Category = cat
 
 	ctx := p.Context

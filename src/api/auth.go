@@ -9,22 +9,22 @@ import (
 	"time"
 
 	"github.com/apimgr/search/src/config"
-	"github.com/apimgr/search/src/models"
-	"github.com/apimgr/search/src/users"
+	"github.com/apimgr/search/src/model"
+	userpkg "github.com/apimgr/search/src/user"
 )
 
 // AuthHandler handles authentication API requests
 type AuthHandler struct {
 	config              *config.Config
-	authManager         *users.AuthManager
-	totpManager         *users.TOTPManager
-	recoveryManager     *users.RecoveryManager
-	verificationManager *users.VerificationManager
+	authManager         *userpkg.AuthManager
+	totpManager         *userpkg.TOTPManager
+	recoveryManager     *userpkg.RecoveryManager
+	verificationManager *userpkg.VerificationManager
 	db                  *sql.DB
 }
 
 // NewAuthHandler creates a new auth API handler
-func NewAuthHandler(cfg *config.Config, db *sql.DB, authManager *users.AuthManager, totpManager *users.TOTPManager, recoveryManager *users.RecoveryManager, verificationManager *users.VerificationManager) *AuthHandler {
+func NewAuthHandler(cfg *config.Config, db *sql.DB, authManager *userpkg.AuthManager, totpManager *userpkg.TOTPManager, recoveryManager *userpkg.RecoveryManager, verificationManager *userpkg.VerificationManager) *AuthHandler {
 	return &AuthHandler{
 		config:              cfg,
 		db:                  db,
@@ -165,18 +165,18 @@ func (h *AuthHandler) handleRegister(w http.ResponseWriter, r *http.Request) {
 	user, err := h.authManager.Register(r.Context(), req.Username, req.Email, req.Password, h.config.Server.Users.Auth.PasswordMinLength)
 	if err != nil {
 		switch err {
-		case users.ErrUsernameTaken:
+		case userpkg.ErrUsernameTaken:
 			h.errorResponse(w, http.StatusConflict, "Username already taken", "")
-		case users.ErrEmailTaken:
+		case userpkg.ErrEmailTaken:
 			h.errorResponse(w, http.StatusConflict, "Email already registered", "")
-		case users.ErrUsernameReserved:
+		case userpkg.ErrUsernameReserved:
 			h.errorResponse(w, http.StatusBadRequest, "Username is reserved", "")
-		case users.ErrUsernameInvalid, users.ErrUsernameTooShort, users.ErrUsernameTooLong:
+		case userpkg.ErrUsernameInvalid, userpkg.ErrUsernameTooShort, userpkg.ErrUsernameTooLong:
 			h.errorResponse(w, http.StatusBadRequest, "Invalid username", err.Error())
-		case users.ErrEmailInvalid:
+		case userpkg.ErrEmailInvalid:
 			h.errorResponse(w, http.StatusBadRequest, "Invalid email address", "")
-		case users.ErrPasswordTooShort, users.ErrPasswordTooWeak:
-			h.errorResponse(w, http.StatusBadRequest, "Password does not meet requirements", err.Error())
+		case userpkg.ErrPasswordTooShort, userpkg.ErrPasswordTooWeak, userpkg.ErrPasswordWhitespace:
+			h.errorResponse(w, http.StatusBadRequest, err.Error(), "")
 		default:
 			h.errorResponse(w, http.StatusInternalServerError, "Registration failed", "")
 		}
@@ -187,7 +187,7 @@ func (h *AuthHandler) handleRegister(w http.ResponseWriter, r *http.Request) {
 	// If email verification is required, AuthManager sends verification email on registration
 
 	h.jsonResponse(w, http.StatusCreated, &APIResponse{
-		Success: true,
+		OK: true,
 		Data: map[string]interface{}{
 			"user": UserResponse{
 				ID:            user.ID,
@@ -229,9 +229,9 @@ func (h *AuthHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	user, session, err := h.authManager.Login(r.Context(), req.Username, req.Password, ipAddress, userAgent)
 	if err != nil {
 		switch err {
-		case users.ErrInvalidCredentials:
+		case userpkg.ErrInvalidCredentials:
 			h.errorResponse(w, http.StatusUnauthorized, "Invalid username or password", "")
-		case users.ErrUserInactive:
+		case userpkg.ErrUserInactive:
 			h.errorResponse(w, http.StatusForbidden, "Account is inactive", "")
 		default:
 			h.errorResponse(w, http.StatusInternalServerError, "Login failed", "")
@@ -244,7 +244,7 @@ func (h *AuthHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		if req.TOTPCode == "" {
 			// Return partial session indicating 2FA is needed
 			h.jsonResponse(w, http.StatusOK, &APIResponse{
-				Success: true,
+				OK: true,
 				Data: LoginResponse{
 					Requires2FA: true,
 					SessionID:   session.Token,
@@ -265,7 +265,7 @@ func (h *AuthHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	h.authManager.SetSessionCookie(w, session.Token)
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		Success: true,
+		OK: true,
 		Data: LoginResponse{
 			User: UserResponse{
 				ID:            user.ID,
@@ -303,7 +303,7 @@ func (h *AuthHandler) handleLogout(w http.ResponseWriter, r *http.Request) {
 	h.authManager.ClearSessionCookie(w)
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		Success: true,
+		OK: true,
 		Data:    map[string]string{"message": "Logged out successfully"},
 		Meta:    &APIMeta{Version: APIVersion},
 	})
@@ -336,7 +336,7 @@ func (h *AuthHandler) handleForgotPassword(w http.ResponseWriter, r *http.Reques
 	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		Success: true,
+		OK: true,
 		Data:    map[string]string{"message": "If an account exists with this email, a password reset link has been sent."},
 		Meta:    &APIMeta{Version: APIVersion},
 	})
@@ -368,9 +368,9 @@ func (h *AuthHandler) handleResetPassword(w http.ResponseWriter, r *http.Request
 	user, err := h.verificationManager.ConsumePasswordReset(r.Context(), req.Token)
 	if err != nil {
 		switch err {
-		case users.ErrVerificationTokenNotFound, users.ErrVerificationTokenInvalid:
+		case userpkg.ErrVerificationTokenNotFound, userpkg.ErrVerificationTokenInvalid:
 			h.errorResponse(w, http.StatusBadRequest, "Invalid reset token", "")
-		case users.ErrVerificationTokenExpired:
+		case userpkg.ErrVerificationTokenExpired:
 			h.errorResponse(w, http.StatusBadRequest, "Reset token has expired", "")
 		default:
 			h.errorResponse(w, http.StatusBadRequest, "Invalid or expired reset token", "")
@@ -389,7 +389,7 @@ func (h *AuthHandler) handleResetPassword(w http.ResponseWriter, r *http.Request
 	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		Success: true,
+		OK: true,
 		Data:    map[string]string{"message": "Password has been reset successfully."},
 		Meta:    &APIMeta{Version: APIVersion},
 	})
@@ -452,7 +452,7 @@ func (h *AuthHandler) handleRecoveryKey(w http.ResponseWriter, r *http.Request) 
 	h.authManager.SetSessionCookie(w, session.Token)
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		Success: true,
+		OK: true,
 		Data: map[string]interface{}{
 			"message":                 "Recovery key accepted. 2FA has been disabled.",
 			"remaining_recovery_keys": remaining,
@@ -496,9 +496,9 @@ func (h *AuthHandler) handleVerifyEmail(w http.ResponseWriter, r *http.Request) 
 	_, err := h.verificationManager.VerifyEmail(r.Context(), req.Token)
 	if err != nil {
 		switch err {
-		case users.ErrVerificationTokenNotFound, users.ErrVerificationTokenInvalid:
+		case userpkg.ErrVerificationTokenNotFound, userpkg.ErrVerificationTokenInvalid:
 			h.errorResponse(w, http.StatusBadRequest, "Invalid verification token", "")
-		case users.ErrVerificationTokenExpired:
+		case userpkg.ErrVerificationTokenExpired:
 			h.errorResponse(w, http.StatusBadRequest, "Verification token has expired", "")
 		default:
 			h.errorResponse(w, http.StatusInternalServerError, "Failed to verify email", "")
@@ -507,7 +507,7 @@ func (h *AuthHandler) handleVerifyEmail(w http.ResponseWriter, r *http.Request) 
 	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		Success: true,
+		OK: true,
 		Data:    map[string]string{"message": "Email verified successfully."},
 		Meta:    &APIMeta{Version: APIVersion},
 	})
@@ -552,7 +552,7 @@ func (h *AuthHandler) handle2FAVerify(w http.ResponseWriter, r *http.Request) {
 	h.authManager.SetSessionCookie(w, session.Token)
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		Success: true,
+		OK: true,
 		Data: LoginResponse{
 			User: UserResponse{
 				ID:            user.ID,
@@ -591,7 +591,7 @@ func (h *AuthHandler) handleSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		Success: true,
+		OK: true,
 		Data: map[string]interface{}{
 			"user": UserResponse{
 				ID:            user.ID,
@@ -622,20 +622,16 @@ func (h *AuthHandler) jsonResponse(w http.ResponseWriter, status int, data inter
 	json.NewEncoder(w).Encode(data)
 }
 
-func (h *AuthHandler) errorResponse(w http.ResponseWriter, status int, message, details string) {
+// errorResponse sends a unified error response per AI.md PART 16
+func (h *AuthHandler) errorResponse(w http.ResponseWriter, status int, message, _ string) {
 	h.jsonResponse(w, status, &APIResponse{
-		Success: false,
-		Error: &APIError{
-			Code:    models.ErrorCodeFromHTTP(status),
-			Status:  status,
-			Message: message,
-			Details: details,
-		},
-		Meta: &APIMeta{Version: APIVersion},
+		OK:      false,
+		Error:   model.ErrorCodeFromHTTP(status),
+		Message: message,
 	})
 }
 
-func (h *AuthHandler) createSessionForUser(ctx context.Context, user *users.User, ipAddress, userAgent string) (*users.UserSession, error) {
+func (h *AuthHandler) createSessionForUser(ctx context.Context, user *userpkg.User, ipAddress, userAgent string) (*userpkg.UserSession, error) {
 	// This is a workaround since AuthManager.createSession is private
 	// In production, you'd expose this or use Login with a flag
 	_, session, err := h.authManager.Login(ctx, user.Username, "", ipAddress, userAgent)

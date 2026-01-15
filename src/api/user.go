@@ -9,22 +9,22 @@ import (
 	"time"
 
 	"github.com/apimgr/search/src/config"
-	"github.com/apimgr/search/src/models"
-	"github.com/apimgr/search/src/users"
+	"github.com/apimgr/search/src/model"
+	userpkg "github.com/apimgr/search/src/user"
 )
 
 // UserHandler handles user API requests
 type UserHandler struct {
 	config          *config.Config
-	authManager     *users.AuthManager
-	totpManager     *users.TOTPManager
-	recoveryManager *users.RecoveryManager
-	tokenManager    *users.TokenManager
+	authManager     *userpkg.AuthManager
+	totpManager     *userpkg.TOTPManager
+	recoveryManager *userpkg.RecoveryManager
+	tokenManager    *userpkg.TokenManager
 	db              *sql.DB
 }
 
 // NewUserHandler creates a new user API handler
-func NewUserHandler(cfg *config.Config, db *sql.DB, authManager *users.AuthManager, totpManager *users.TOTPManager, recoveryManager *users.RecoveryManager, tokenManager *users.TokenManager) *UserHandler {
+func NewUserHandler(cfg *config.Config, db *sql.DB, authManager *userpkg.AuthManager, totpManager *userpkg.TOTPManager, recoveryManager *userpkg.RecoveryManager, tokenManager *userpkg.TokenManager) *UserHandler {
 	return &UserHandler{
 		config:          cfg,
 		db:              db,
@@ -36,18 +36,19 @@ func NewUserHandler(cfg *config.Config, db *sql.DB, authManager *users.AuthManag
 }
 
 // RegisterRoutes registers user API routes
+// Per AI.md PART 14: All resource names MUST be plural
 func (h *UserHandler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/api/v1/user/profile", h.handleProfile)
-	mux.HandleFunc("/api/v1/user/password", h.handlePassword)
-	mux.HandleFunc("/api/v1/user/sessions", h.handleSessions)
-	mux.HandleFunc("/api/v1/user/sessions/", h.handleSessionByID)
-	mux.HandleFunc("/api/v1/user/tokens", h.handleTokens)
-	mux.HandleFunc("/api/v1/user/tokens/", h.handleTokenByID)
-	mux.HandleFunc("/api/v1/user/2fa/status", h.handle2FAStatus)
-	mux.HandleFunc("/api/v1/user/2fa/setup", h.handle2FASetup)
-	mux.HandleFunc("/api/v1/user/2fa/enable", h.handle2FAEnable)
-	mux.HandleFunc("/api/v1/user/2fa/disable", h.handle2FADisable)
-	mux.HandleFunc("/api/v1/user/recovery-keys", h.handleRecoveryKeys)
+	mux.HandleFunc("/api/v1/users/profile", h.handleProfile)
+	mux.HandleFunc("/api/v1/users/password", h.handlePassword)
+	mux.HandleFunc("/api/v1/users/sessions", h.handleSessions)
+	mux.HandleFunc("/api/v1/users/sessions/", h.handleSessionByID)
+	mux.HandleFunc("/api/v1/users/tokens", h.handleTokens)
+	mux.HandleFunc("/api/v1/users/tokens/", h.handleTokenByID)
+	mux.HandleFunc("/api/v1/users/2fa/status", h.handle2FAStatus)
+	mux.HandleFunc("/api/v1/users/2fa/setup", h.handle2FASetup)
+	mux.HandleFunc("/api/v1/users/2fa/enable", h.handle2FAEnable)
+	mux.HandleFunc("/api/v1/users/2fa/disable", h.handle2FADisable)
+	mux.HandleFunc("/api/v1/users/recovery-keys", h.handleRecoveryKeys)
 }
 
 // Request/Response types
@@ -119,9 +120,9 @@ func (h *UserHandler) handleProfile(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *UserHandler) getProfile(w http.ResponseWriter, r *http.Request, user *users.User) {
+func (h *UserHandler) getProfile(w http.ResponseWriter, r *http.Request, user *userpkg.User) {
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		Success: true,
+		OK: true,
 		Data: map[string]interface{}{
 			"user": UserResponse{
 				ID:            user.ID,
@@ -140,7 +141,7 @@ func (h *UserHandler) getProfile(w http.ResponseWriter, r *http.Request, user *u
 	})
 }
 
-func (h *UserHandler) updateProfile(w http.ResponseWriter, r *http.Request, user *users.User) {
+func (h *UserHandler) updateProfile(w http.ResponseWriter, r *http.Request, user *userpkg.User) {
 	var req UpdateProfileRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.errorResponse(w, http.StatusBadRequest, "Invalid request body", err.Error())
@@ -165,7 +166,7 @@ func (h *UserHandler) updateProfile(w http.ResponseWriter, r *http.Request, user
 	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		Success: true,
+		OK: true,
 		Data:    map[string]string{"message": "Profile updated successfully"},
 		Meta:    &APIMeta{Version: APIVersion},
 	})
@@ -195,7 +196,7 @@ func (h *UserHandler) handlePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify current password
-	if !users.CheckPassword(req.CurrentPassword, user.PasswordHash) {
+	if !userpkg.CheckPassword(req.CurrentPassword, user.PasswordHash) {
 		h.errorResponse(w, http.StatusUnauthorized, "Current password is incorrect", "")
 		return
 	}
@@ -204,8 +205,8 @@ func (h *UserHandler) handlePassword(w http.ResponseWriter, r *http.Request) {
 	err = h.authManager.UpdatePassword(r.Context(), user.ID, req.NewPassword, h.config.Server.Users.Auth.PasswordMinLength)
 	if err != nil {
 		switch err {
-		case users.ErrPasswordTooShort, users.ErrPasswordTooWeak:
-			h.errorResponse(w, http.StatusBadRequest, "Password does not meet requirements", err.Error())
+		case userpkg.ErrPasswordTooShort, userpkg.ErrPasswordTooWeak, userpkg.ErrPasswordWhitespace:
+			h.errorResponse(w, http.StatusBadRequest, err.Error(), "")
 		default:
 			h.errorResponse(w, http.StatusInternalServerError, "Failed to update password", "")
 		}
@@ -213,7 +214,7 @@ func (h *UserHandler) handlePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		Success: true,
+		OK: true,
 		Data:    map[string]string{"message": "Password updated successfully"},
 		Meta:    &APIMeta{Version: APIVersion},
 	})
@@ -251,7 +252,7 @@ func (h *UserHandler) handleSessions(w http.ResponseWriter, r *http.Request) {
 		}
 
 		h.jsonResponse(w, http.StatusOK, &APIResponse{
-			Success: true,
+			OK: true,
 			Data:    map[string]interface{}{"sessions": sessionInfos},
 			Meta:    &APIMeta{Version: APIVersion},
 		})
@@ -265,7 +266,7 @@ func (h *UserHandler) handleSessions(w http.ResponseWriter, r *http.Request) {
 		}
 
 		h.jsonResponse(w, http.StatusOK, &APIResponse{
-			Success: true,
+			OK: true,
 			Data:    map[string]string{"message": "All other sessions have been revoked"},
 			Meta:    &APIMeta{Version: APIVersion},
 		})
@@ -289,7 +290,7 @@ func (h *UserHandler) handleSessionByID(w http.ResponseWriter, r *http.Request) 
 
 	// Extract session ID from path
 	path := r.URL.Path
-	idStr := strings.TrimPrefix(path, "/api/v1/user/sessions/")
+	idStr := strings.TrimPrefix(path, "/api/v1/users/sessions/")
 	idStr = strings.TrimSuffix(idStr, "/")
 	sessionID, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -300,7 +301,7 @@ func (h *UserHandler) handleSessionByID(w http.ResponseWriter, r *http.Request) 
 	// Revoke the session
 	err = h.authManager.RevokeSession(r.Context(), user.ID, sessionID)
 	if err != nil {
-		if err == users.ErrSessionNotFound {
+		if err == userpkg.ErrSessionNotFound {
 			h.errorResponse(w, http.StatusNotFound, "Session not found", "")
 		} else {
 			h.errorResponse(w, http.StatusInternalServerError, "Failed to revoke session", "")
@@ -309,7 +310,7 @@ func (h *UserHandler) handleSessionByID(w http.ResponseWriter, r *http.Request) 
 	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		Success: true,
+		OK: true,
 		Data:    map[string]string{"message": "Session revoked successfully"},
 		Meta:    &APIMeta{Version: APIVersion},
 	})
@@ -336,13 +337,13 @@ func (h *UserHandler) handleTokens(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		tokenInfos := make([]users.TokenInfo, len(tokens))
+		tokenInfos := make([]userpkg.TokenInfo, len(tokens))
 		for i, t := range tokens {
 			tokenInfos[i] = t.ToInfo()
 		}
 
 		h.jsonResponse(w, http.StatusOK, &APIResponse{
-			Success: true,
+			OK: true,
 			Data:    map[string]interface{}{"tokens": tokenInfos},
 			Meta:    &APIMeta{Version: APIVersion},
 		})
@@ -365,7 +366,7 @@ func (h *UserHandler) handleTokens(w http.ResponseWriter, r *http.Request) {
 			expiresIn = time.Duration(req.ExpiresIn) * 24 * time.Hour
 		}
 
-		createReq := users.CreateTokenRequest{
+		createReq := userpkg.CreateTokenRequest{
 			Name:        req.Name,
 			Permissions: req.Permissions,
 			ExpiresIn:   expiresIn,
@@ -378,7 +379,7 @@ func (h *UserHandler) handleTokens(w http.ResponseWriter, r *http.Request) {
 		}
 
 		h.jsonResponse(w, http.StatusCreated, &APIResponse{
-			Success: true,
+			OK: true,
 			Data: map[string]interface{}{
 				"token":   result.Token,
 				"id":      result.ID,
@@ -414,7 +415,7 @@ func (h *UserHandler) handleTokenByID(w http.ResponseWriter, r *http.Request) {
 
 	// Extract token ID from path
 	path := r.URL.Path
-	idStr := strings.TrimPrefix(path, "/api/v1/user/tokens/")
+	idStr := strings.TrimPrefix(path, "/api/v1/users/tokens/")
 	idStr = strings.TrimSuffix(idStr, "/")
 	tokenID, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -425,7 +426,7 @@ func (h *UserHandler) handleTokenByID(w http.ResponseWriter, r *http.Request) {
 	// Revoke the token
 	err = h.tokenManager.Revoke(r.Context(), user.ID, tokenID)
 	if err != nil {
-		if err == users.ErrTokenNotFound {
+		if err == userpkg.ErrTokenNotFound {
 			h.errorResponse(w, http.StatusNotFound, "Token not found", "")
 		} else {
 			h.errorResponse(w, http.StatusInternalServerError, "Failed to revoke token", "")
@@ -434,7 +435,7 @@ func (h *UserHandler) handleTokenByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		Success: true,
+		OK: true,
 		Data:    map[string]string{"message": "Token revoked successfully"},
 		Meta:    &APIMeta{Version: APIVersion},
 	})
@@ -454,7 +455,7 @@ func (h *UserHandler) handle2FAStatus(w http.ResponseWriter, r *http.Request) {
 
 	if h.totpManager == nil {
 		h.jsonResponse(w, http.StatusOK, &APIResponse{
-			Success: true,
+			OK: true,
 			Data:    map[string]interface{}{"enabled": false, "available": false},
 			Meta:    &APIMeta{Version: APIVersion},
 		})
@@ -464,7 +465,7 @@ func (h *UserHandler) handle2FAStatus(w http.ResponseWriter, r *http.Request) {
 	status := h.totpManager.GetStatus(r.Context(), user.ID)
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		Success: true,
+		OK: true,
 		Data: map[string]interface{}{
 			"enabled":    status.Enabled,
 			"verified":   status.Verified,
@@ -499,7 +500,7 @@ func (h *UserHandler) handle2FASetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify password before allowing 2FA setup
-	if !users.CheckPassword(req.Password, user.PasswordHash) {
+	if !userpkg.CheckPassword(req.Password, user.PasswordHash) {
 		h.errorResponse(w, http.StatusUnauthorized, "Invalid password", "")
 		return
 	}
@@ -507,7 +508,7 @@ func (h *UserHandler) handle2FASetup(w http.ResponseWriter, r *http.Request) {
 	// Setup 2FA
 	result, err := h.totpManager.Setup(r.Context(), user)
 	if err != nil {
-		if err == users.ErrTOTPAlreadySetup {
+		if err == userpkg.ErrTOTPAlreadySetup {
 			h.errorResponse(w, http.StatusConflict, "2FA is already set up", "")
 		} else {
 			h.errorResponse(w, http.StatusInternalServerError, "Failed to setup 2FA", "")
@@ -516,7 +517,7 @@ func (h *UserHandler) handle2FASetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		Success: true,
+		OK: true,
 		Data: map[string]interface{}{
 			"secret":      result.Secret,
 			"qr_code_url": result.QRCodeURL,
@@ -558,9 +559,9 @@ func (h *UserHandler) handle2FAEnable(w http.ResponseWriter, r *http.Request) {
 	// Verify and enable 2FA
 	err = h.totpManager.VerifySetup(r.Context(), user.ID, req.Code)
 	if err != nil {
-		if err == users.ErrTOTPInvalidCode {
+		if err == userpkg.ErrTOTPInvalidCode {
 			h.errorResponse(w, http.StatusBadRequest, "Invalid verification code", "")
-		} else if err == users.ErrTOTPAlreadySetup {
+		} else if err == userpkg.ErrTOTPAlreadySetup {
 			h.errorResponse(w, http.StatusConflict, "2FA is already enabled", "")
 		} else {
 			h.errorResponse(w, http.StatusInternalServerError, "Failed to enable 2FA", "")
@@ -579,7 +580,7 @@ func (h *UserHandler) handle2FAEnable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		Success: true,
+		OK: true,
 		Data: map[string]interface{}{
 			"message":       "2FA has been enabled",
 			"recovery_keys": recoveryKeys,
@@ -612,7 +613,7 @@ func (h *UserHandler) handle2FADisable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify password
-	if !users.CheckPassword(req.Password, user.PasswordHash) {
+	if !userpkg.CheckPassword(req.Password, user.PasswordHash) {
 		h.errorResponse(w, http.StatusUnauthorized, "Invalid password", "")
 		return
 	}
@@ -636,7 +637,7 @@ func (h *UserHandler) handle2FADisable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		Success: true,
+		OK: true,
 		Data:    map[string]string{"message": "2FA has been disabled"},
 		Meta:    &APIMeta{Version: APIVersion},
 	})
@@ -664,7 +665,7 @@ func (h *UserHandler) handleRecoveryKeys(w http.ResponseWriter, r *http.Request)
 		}
 
 		h.jsonResponse(w, http.StatusOK, &APIResponse{
-			Success: true,
+			OK: true,
 			Data: map[string]interface{}{
 				"total":     stats.Total,
 				"used":      stats.Used,
@@ -684,7 +685,7 @@ func (h *UserHandler) handleRecoveryKeys(w http.ResponseWriter, r *http.Request)
 		}
 
 		// Verify password
-		if !users.CheckPassword(req.Password, user.PasswordHash) {
+		if !userpkg.CheckPassword(req.Password, user.PasswordHash) {
 			h.errorResponse(w, http.StatusUnauthorized, "Invalid password", "")
 			return
 		}
@@ -697,7 +698,7 @@ func (h *UserHandler) handleRecoveryKeys(w http.ResponseWriter, r *http.Request)
 		}
 
 		h.jsonResponse(w, http.StatusOK, &APIResponse{
-			Success: true,
+			OK: true,
 			Data: map[string]interface{}{
 				"recovery_keys": keys,
 				"message":       "New recovery keys generated. Save these keys - they won't be shown again.",
@@ -712,10 +713,10 @@ func (h *UserHandler) handleRecoveryKeys(w http.ResponseWriter, r *http.Request)
 
 // Helper methods
 
-func (h *UserHandler) requireAuth(r *http.Request) (*users.User, error) {
+func (h *UserHandler) requireAuth(r *http.Request) (*userpkg.User, error) {
 	token := h.authManager.GetSessionToken(r)
 	if token == "" {
-		return nil, users.ErrSessionNotFound
+		return nil, userpkg.ErrSessionNotFound
 	}
 
 	user, _, err := h.authManager.ValidateSession(r.Context(), token)
@@ -733,15 +734,11 @@ func (h *UserHandler) jsonResponse(w http.ResponseWriter, status int, data inter
 	json.NewEncoder(w).Encode(data)
 }
 
-func (h *UserHandler) errorResponse(w http.ResponseWriter, status int, message, details string) {
+// errorResponse sends a unified error response per AI.md PART 16
+func (h *UserHandler) errorResponse(w http.ResponseWriter, status int, message, _ string) {
 	h.jsonResponse(w, status, &APIResponse{
-		Success: false,
-		Error: &APIError{
-			Code:    models.ErrorCodeFromHTTP(status),
-			Status:  status,
-			Message: message,
-			Details: details,
-		},
-		Meta: &APIMeta{Version: APIVersion},
+		OK:      false,
+		Error:   model.ErrorCodeFromHTTP(status),
+		Message: message,
 	})
 }

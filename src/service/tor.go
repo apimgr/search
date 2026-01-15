@@ -60,16 +60,35 @@ func (t *TorService) Start() error {
 	}
 
 	// Prepare start configuration
+	// Per AI.md PART 32: ExtraArgs format without -- prefix, include SocksPort 0
+	// All torrc optimizations for hidden-service-only mode per PART 32
 	startConf := &tor.StartConf{
 		// Our own data directory - isolated from system Tor
 		DataDir: dataDir,
 		// Let bine pick available ports (avoids conflict with system Tor 9050/9051)
 		NoAutoSocksPort: false,
-		// Extra args for hidden-service-only optimizations
+		// Extra args for hidden-service-only optimizations (per AI.md PART 32)
 		ExtraArgs: []string{
-			"--ExitRelay", "0",
-			"--ORPort", "0",
-			"--DirPort", "0",
+			// Hidden service only - not a relay or exit
+			"SocksPort", "0",
+			// Disable unused features
+			"ExitRelay", "0",
+			"ExitPolicy", "reject *:*",
+			// Don't relay traffic for others
+			"ORPort", "0",
+			"DirPort", "0",
+			// Reduce circuit building (we only need service circuits)
+			"MaxCircuitDirtiness", "600",
+			// Reduce bandwidth for Tor overhead
+			"BandwidthRate", "1 MB",
+			"BandwidthBurst", "2 MB",
+			// Hidden service optimizations - keep full anonymity (3 hops)
+			"HiddenServiceSingleHopMode", "0",
+			// Faster startup
+			"FetchDirInfoEarly", "1",
+			"FetchDirInfoExtraEarly", "1",
+			// Reduce memory usage
+			"DisableDebuggerAttachment", "1",
 		},
 	}
 

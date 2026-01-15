@@ -38,6 +38,8 @@ func NewManager(defaultLang string, supported []string) *Manager {
 }
 
 // LoadFromFS loads translations from an embedded filesystem
+// Supports both flat and nested JSON structures
+// Nested keys are flattened with dot notation: {"auth": {"login": "Log In"}} -> "auth.login" = "Log In"
 func (m *Manager) LoadFromFS(fs embed.FS, dir string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -50,10 +52,15 @@ func (m *Manager) LoadFromFS(fs embed.FS, dir string) error {
 			continue
 		}
 
-		var translations map[string]string
-		if err := json.Unmarshal(data, &translations); err != nil {
+		// Parse as generic interface to handle nested structures
+		var raw interface{}
+		if err := json.Unmarshal(data, &raw); err != nil {
 			return fmt.Errorf("failed to parse %s: %w", path, err)
 		}
+
+		// Flatten nested structure
+		translations := make(map[string]string)
+		flattenTranslations("", raw, translations)
 
 		m.translations[lang] = translations
 	}
@@ -64,6 +71,24 @@ func (m *Manager) LoadFromFS(fs embed.FS, dir string) error {
 	}
 
 	return nil
+}
+
+// flattenTranslations recursively flattens nested JSON into dot-notation keys
+func flattenTranslations(prefix string, value interface{}, result map[string]string) {
+	switch v := value.(type) {
+	case map[string]interface{}:
+		for key, val := range v {
+			newPrefix := key
+			if prefix != "" {
+				newPrefix = prefix + "." + key
+			}
+			flattenTranslations(newPrefix, val, result)
+		}
+	case string:
+		if prefix != "" {
+			result[prefix] = v
+		}
+	}
 }
 
 // LoadFromMap loads translations from a map (useful for testing)

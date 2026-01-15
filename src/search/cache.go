@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/apimgr/search/src/models"
+	"github.com/apimgr/search/src/model"
 )
 
 // ResultCache provides an in-memory cache for search results
@@ -18,7 +18,7 @@ type ResultCache struct {
 }
 
 type cacheItem struct {
-	results   *models.SearchResults
+	results   *model.SearchResults
 	expiresAt time.Time
 }
 
@@ -44,7 +44,7 @@ func NewResultCache(maxSize int, ttl time.Duration) *ResultCache {
 }
 
 // Get retrieves cached results for a key
-func (c *ResultCache) Get(key string) *models.SearchResults {
+func (c *ResultCache) Get(key string) *model.SearchResults {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -63,7 +63,7 @@ func (c *ResultCache) Get(key string) *models.SearchResults {
 
 	// Return a copy to prevent modification
 	result := *item.results
-	resultsCopy := make([]models.Result, len(item.results.Results))
+	resultsCopy := make([]model.Result, len(item.results.Results))
 	copy(resultsCopy, item.results.Results)
 	result.Results = resultsCopy
 
@@ -71,7 +71,7 @@ func (c *ResultCache) Get(key string) *models.SearchResults {
 }
 
 // Set stores results in the cache
-func (c *ResultCache) Set(key string, results *models.SearchResults) {
+func (c *ResultCache) Set(key string, results *model.SearchResults) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -82,7 +82,7 @@ func (c *ResultCache) Set(key string, results *models.SearchResults) {
 
 	// Make a copy of results
 	resultsCopy := *results
-	itemsCopy := make([]models.Result, len(results.Results))
+	itemsCopy := make([]model.Result, len(results.Results))
 	copy(itemsCopy, results.Results)
 	resultsCopy.Results = itemsCopy
 

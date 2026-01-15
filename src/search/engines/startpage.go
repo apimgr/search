@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apimgr/search/src/models"
+	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 )
 
@@ -22,7 +22,7 @@ type Startpage struct {
 
 // NewStartpageEngine creates a new Startpage search engine
 func NewStartpageEngine() *Startpage {
-	config := models.NewEngineConfig("startpage")
+	config := model.NewEngineConfig("startpage")
 	config.DisplayName = "Startpage"
 	config.Priority = 70
 	config.Categories = []string{"general", "images"}
@@ -40,7 +40,7 @@ func NewStartpageEngine() *Startpage {
 }
 
 // Search performs a Startpage search
-func (e *Startpage) Search(ctx context.Context, query *models.Query) ([]models.Result, error) {
+func (e *Startpage) Search(ctx context.Context, query *model.Query) ([]model.Result, error) {
 	searchURL := "https://www.startpage.com/sp/search"
 
 	params := url.Values{}
@@ -80,8 +80,8 @@ func (e *Startpage) Search(ctx context.Context, query *models.Query) ([]models.R
 	return e.parseResults(string(body), query)
 }
 
-func (e *Startpage) parseResults(html string, query *models.Query) ([]models.Result, error) {
-	var results []models.Result
+func (e *Startpage) parseResults(html string, query *model.Query) ([]model.Result, error) {
+	var results []model.Result
 	maxResults := 10
 
 	// Startpage uses specific class names for results
@@ -97,7 +97,8 @@ func (e *Startpage) parseResults(html string, query *models.Query) ([]models.Res
 	// If standard patterns don't work, try generic extraction
 	if len(urlMatches) == 0 {
 		// Look for any external result-like links
-		genericPattern := regexp.MustCompile(`<a[^>]+href="(https?://(?!www\.startpage\.com)[^"]+)"[^>]*>([^<]+)</a>`)
+		// Note: Go regexp doesn't support (?!) lookahead, so filter in code
+		genericPattern := regexp.MustCompile(`<a[^>]+href="(https?://[^"]+)"[^>]*>([^<]+)</a>`)
 		matches := genericPattern.FindAllStringSubmatch(html, 30)
 
 		seen := make(map[string]bool)
@@ -109,7 +110,7 @@ func (e *Startpage) parseResults(html string, query *models.Query) ([]models.Res
 				urlStr := strings.TrimSpace(match[1])
 				title := strings.TrimSpace(match[2])
 
-				// Skip navigation and internal links
+				// Skip navigation and internal links (replaces regex negative lookahead)
 				if strings.Contains(urlStr, "startpage.com") ||
 					strings.Contains(urlStr, "javascript:") ||
 					strings.Contains(urlStr, "google.com/s2/favicons") ||
@@ -122,7 +123,7 @@ func (e *Startpage) parseResults(html string, query *models.Query) ([]models.Res
 				}
 				seen[urlStr] = true
 
-				results = append(results, models.Result{
+				results = append(results, model.Result{
 					Title:    cleanHTML(title),
 					URL:      urlStr,
 					Content:  "",
@@ -155,7 +156,7 @@ func (e *Startpage) parseResults(html string, query *models.Query) ([]models.Res
 			continue
 		}
 
-		results = append(results, models.Result{
+		results = append(results, model.Result{
 			Title:    cleanHTML(title),
 			URL:      urlStr,
 			Content:  cleanHTML(desc),

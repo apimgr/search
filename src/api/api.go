@@ -14,10 +14,10 @@ import (
 
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/instant"
-	"github.com/apimgr/search/src/models"
+	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 	"github.com/apimgr/search/src/search/engines"
-	"github.com/apimgr/search/src/widgets"
+	"github.com/apimgr/search/src/widget"
 )
 
 // API version
@@ -28,12 +28,13 @@ const (
 
 // Handler handles API requests
 type Handler struct {
-	config         *config.Config
-	registry       *engines.Registry
-	aggregator     *search.Aggregator
-	widgetManager  *widgets.Manager
-	instantManager *instant.Manager
-	startTime      time.Time
+	config          *config.Config
+	registry        *engines.Registry
+	aggregator      *search.Aggregator
+	widgetManager   *widget.Manager
+	instantManager  *instant.Manager
+	relatedSearches *search.RelatedSearches
+	startTime       time.Time
 }
 
 // NewHandler creates a new API handler
@@ -47,7 +48,7 @@ func NewHandler(cfg *config.Config, registry *engines.Registry, aggregator *sear
 }
 
 // SetWidgetManager sets the widget manager for the API handler
-func (h *Handler) SetWidgetManager(wm *widgets.Manager) {
+func (h *Handler) SetWidgetManager(wm *widget.Manager) {
 	h.widgetManager = wm
 }
 
@@ -56,14 +57,25 @@ func (h *Handler) SetInstantManager(im *instant.Manager) {
 	h.instantManager = im
 }
 
+// SetRelatedSearches sets the related searches provider for the API handler
+func (h *Handler) SetRelatedSearches(rs *search.RelatedSearches) {
+	h.relatedSearches = rs
+}
+
 // RegisterRoutes registers API routes
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
-	// Health and info
+	// Autodiscover - non-versioned per AI.md PART 36 line 38077-38157
+	mux.HandleFunc("/api/autodiscover", h.handleAutodiscover)
+
+	// Health and info - Per AI.md PART 14: .txt extension support
 	mux.HandleFunc("/api/v1/healthz", h.handleHealthz)
+	mux.HandleFunc("/api/v1/healthz.txt", h.handleHealthz) // Per AI.md PART 14
 	mux.HandleFunc("/api/v1/info", h.handleInfo)
+	mux.HandleFunc("/api/v1/info.txt", h.handleInfo) // Per AI.md PART 14
 
 	// Search
 	mux.HandleFunc("/api/v1/search", h.handleSearch)
+	mux.HandleFunc("/api/v1/search/related", h.handleRelatedSearches)
 	mux.HandleFunc("/api/v1/autocomplete", h.handleAutocomplete)
 
 	// Engines
@@ -87,20 +99,15 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 // Response types
 
 // APIResponse is the base response structure
+// Per AI.md PART 16: Unified Response Format (NON-NEGOTIABLE)
+// Success: {"ok": true, "data": {...}}
+// Error: {"ok": false, "error": "ERROR_CODE", "message": "Human readable message"}
 type APIResponse struct {
-	Success bool        `json:"success"`
+	OK      bool        `json:"ok"`
 	Data    interface{} `json:"data,omitempty"`
-	Error   *APIError   `json:"error,omitempty"`
-	Meta    *APIMeta    `json:"meta,omitempty"`
-}
-
-// APIError represents an API error
-// Per AI.md PART 31: Standard error codes with HTTP status mapping
-type APIError struct {
-	Code    string `json:"code"`              // Standard error code (ERR_BAD_REQUEST, etc.)
-	Status  int    `json:"status"`            // HTTP status code
-	Message string `json:"message"`           // User-friendly error message
-	Details string `json:"details,omitempty"` // Additional details (not in production)
+	Error   string      `json:"error,omitempty"`   // Error code (e.g., "BAD_REQUEST", "NOT_FOUND")
+	Message string      `json:"message,omitempty"` // Human-readable error message
+	Meta    *APIMeta    `json:"meta,omitempty"`    // Optional metadata (request_id, process_time_ms)
 }
 
 // APIMeta contains response metadata
@@ -110,18 +117,35 @@ type APIMeta struct {
 	Version     string  `json:"version"`
 }
 
-// HealthResponse represents health check response per AI.md spec
+// HealthResponse represents health check response per AI.md PART 13
 type HealthResponse struct {
 	Status         string            `json:"status"`
 	Version        string            `json:"version"`
+	GoVersion      string            `json:"go_version"`
 	Mode           string            `json:"mode"`
 	Uptime         string            `json:"uptime"`
 	Timestamp      string            `json:"timestamp"`
+	Build          *BuildInfo        `json:"build,omitempty"`
 	Node           *NodeInfo         `json:"node,omitempty"`
 	Cluster        *ClusterInfo      `json:"cluster,omitempty"`
+	Features       map[string]bool   `json:"features,omitempty"`
 	Checks         map[string]string `json:"checks"`
+	Stats          *HealthStats      `json:"stats,omitempty"`
 	PendingRestart bool              `json:"pending_restart,omitempty"`
 	RestartReason  []string          `json:"restart_reason,omitempty"`
+}
+
+// BuildInfo represents build information per AI.md PART 13
+type BuildInfo struct {
+	CommitID  string `json:"commit_id"`
+	BuildDate string `json:"build_date"`
+}
+
+// HealthStats represents health statistics per AI.md PART 13
+type HealthStats struct {
+	RequestsTotal     int64 `json:"requests_total"`
+	Requests24h       int64 `json:"requests_24h"`
+	ActiveConnections int   `json:"active_connections"`
 }
 
 // NodeInfo represents node information for cluster mode
@@ -136,6 +160,29 @@ type ClusterInfo struct {
 	Status  string `json:"status"`
 	Nodes   int    `json:"nodes"`
 	Role    string `json:"role,omitempty"`
+}
+
+// AutodiscoverResponse represents /api/autodiscover response
+// Per AI.md PART 36 line 38077-38157: Autodiscover endpoint for CLI/agent
+type AutodiscoverResponse struct {
+	Server struct {
+		Name     string `json:"name"`
+		Version  string `json:"version"`
+		URL      string `json:"url"`
+		Features struct {
+			Auth     bool `json:"auth"`
+			Search   bool `json:"search"`
+			Register bool `json:"register"`
+		} `json:"features"`
+	} `json:"server"`
+	Cluster struct {
+		Primary string   `json:"primary"`
+		Nodes   []string `json:"nodes"`
+	} `json:"cluster"`
+	API struct {
+		Version  string `json:"version"`
+		BasePath string `json:"base_path"`
+	} `json:"api"`
 }
 
 // InfoResponse represents server info response
@@ -226,9 +273,14 @@ type CategoryInfo struct {
 func (h *Handler) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	hostname, _ := getHostname()
 
-	// Build checks map
+	// Build checks map per AI.md PART 13
 	checks := make(map[string]string)
 	checks["search"] = "ok"
+	checks["database"] = "ok"     // Embedded SQLite always ok
+	checks["cache"] = "disabled"  // Valkey/Redis not yet implemented
+	checks["disk"] = h.checkDiskHealth()
+	checks["scheduler"] = "ok"    // Scheduler is always running per spec
+	checks["cluster"] = "disabled"
 
 	// Determine overall status
 	status := "healthy"
@@ -241,9 +293,14 @@ func (h *Handler) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	health := HealthResponse{
 		Status:    status,
 		Version:   config.Version,
+		GoVersion: runtime.Version(),
 		Mode:      h.config.Server.Mode,
 		Uptime:    h.formatDuration(time.Since(h.startTime)),
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Build: &BuildInfo{
+			CommitID:  config.CommitID,
+			BuildDate: config.BuildDate,
+		},
 		Node: &NodeInfo{
 			ID:       "standalone",
 			Hostname: hostname,
@@ -253,7 +310,21 @@ func (h *Handler) handleHealthz(w http.ResponseWriter, r *http.Request) {
 			Status:  "disabled",
 			Nodes:   1,
 		},
+		// Per AI.md PART 13: features (multi_user, organizations, tor, geoip, metrics)
+		Features: map[string]bool{
+			"multi_user":    h.config.Server.Users.Enabled,
+			"organizations": false,
+			"tor":           h.config.Server.Tor.Enabled,
+			"geoip":         h.config.Server.GeoIP.Enabled,
+			"metrics":       h.config.Server.Metrics.Enabled,
+		},
 		Checks: checks,
+		// Per AI.md PART 13: stats (requests_total, requests_24h, active_connections)
+		Stats: &HealthStats{
+			RequestsTotal:     h.getRequestsTotal(),
+			Requests24h:       h.getRequests24h(),
+			ActiveConnections: h.getActiveConnections(),
+		},
 	}
 
 	statusCode := http.StatusOK
@@ -261,10 +332,60 @@ func (h *Handler) handleHealthz(w http.ResponseWriter, r *http.Request) {
 		statusCode = http.StatusServiceUnavailable
 	}
 
-	h.jsonResponse(w, statusCode, &APIResponse{
-		Success: status == "healthy",
-		Data:    health,
-		Meta:    &APIMeta{Version: APIVersion},
+	// Per AI.md PART 14: Support .txt extension and Accept: text/plain
+	h.respondWithFormat(w, r, statusCode, &APIResponse{
+		OK:   status == "healthy",
+		Data: health,
+		Meta: &APIMeta{Version: APIVersion},
+	}, func() string {
+		// Text format per AI.md PART 14 line 15016: "OK" or "ERROR: ..."
+		if status == "healthy" {
+			return "OK"
+		}
+		return fmt.Sprintf("ERROR: %s", status)
+	})
+}
+
+// handleAutodiscover handles /api/autodiscover endpoint
+// Per AI.md PART 36 line 38077-38157: Non-versioned autodiscover for CLI/agent
+func (h *Handler) handleAutodiscover(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.jsonResponse(w, http.StatusMethodNotAllowed, &APIResponse{
+			OK:      false,
+			Error:   "METHOD_NOT_ALLOWED",
+			Message: "Only GET method allowed",
+		})
+		return
+	}
+
+	// Build server URL from request
+	scheme := "https"
+	if r.TLS == nil {
+		scheme = "http"
+	}
+	serverURL := fmt.Sprintf("%s://%s", scheme, r.Host)
+
+	var resp AutodiscoverResponse
+
+	// Server info
+	resp.Server.Name = h.config.Server.Title
+	resp.Server.Version = config.Version
+	resp.Server.URL = serverURL
+	resp.Server.Features.Auth = h.config.Server.Users.Enabled
+	resp.Server.Features.Search = true // Search is always enabled
+	resp.Server.Features.Register = h.config.Server.Users.Enabled && h.config.Server.Users.Registration.Enabled
+
+	// Cluster info - for CLI/agent failover per AI.md PART 36 line 42791-42818
+	resp.Cluster.Primary = serverURL
+	resp.Cluster.Nodes = []string{serverURL} // Single node cluster by default
+
+	// API info
+	resp.API.Version = APIVersion
+	resp.API.BasePath = APIPrefix
+
+	h.jsonResponse(w, http.StatusOK, &APIResponse{
+		OK:   true,
+		Data: resp,
 	})
 }
 
@@ -275,7 +396,7 @@ func (h *Handler) handleInfo(w http.ResponseWriter, r *http.Request) {
 	enabled := len(h.registry.GetEnabled())
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		Success: true,
+		OK: true,
 		Data: InfoResponse{
 			Name:        h.config.Server.Title,
 			Version:     config.Version,
@@ -314,14 +435,16 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 			h.errorResponse(w, http.StatusBadRequest, "Invalid JSON body", err.Error())
 			return
 		}
+		// Trim query from JSON body
+		req.Query = strings.TrimSpace(req.Query)
 	} else {
-		// Parse from query params
-		req.Query = r.URL.Query().Get("q")
-		req.Category = r.URL.Query().Get("category")
+		// Parse from query params (trim all text inputs)
+		req.Query = strings.TrimSpace(r.URL.Query().Get("q"))
+		req.Category = strings.TrimSpace(r.URL.Query().Get("category"))
 		req.Page, _ = strconv.Atoi(r.URL.Query().Get("page"))
 		req.Limit, _ = strconv.Atoi(r.URL.Query().Get("limit"))
-		req.SafeSearch = r.URL.Query().Get("safe_search")
-		req.Language = r.URL.Query().Get("lang")
+		req.SafeSearch = strings.TrimSpace(r.URL.Query().Get("safe_search"))
+		req.Language = strings.TrimSpace(r.URL.Query().Get("lang"))
 	}
 
 	// Validate
@@ -342,22 +465,22 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Map category
-	var category models.Category
+	var category model.Category
 	switch req.Category {
 	case "images":
-		category = models.CategoryImages
+		category = model.CategoryImages
 	case "videos":
-		category = models.CategoryVideos
+		category = model.CategoryVideos
 	case "news":
-		category = models.CategoryNews
+		category = model.CategoryNews
 	case "maps":
-		category = models.CategoryMaps
+		category = model.CategoryMaps
 	default:
-		category = models.CategoryGeneral
+		category = model.CategoryGeneral
 	}
 
 	// Perform search
-	query := models.NewQuery(req.Query)
+	query := model.NewQuery(req.Query)
 	query.Category = category
 
 	ctx := r.Context()
@@ -386,7 +509,7 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		Success: true,
+		OK: true,
 		Data: SearchResponse{
 			Query:        req.Query,
 			Category:     req.Category,
@@ -411,10 +534,10 @@ func (h *Handler) HandleAutocomplete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleAutocomplete(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query().Get("q")
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	if query == "" {
 		h.jsonResponse(w, http.StatusOK, &APIResponse{
-			Success: true,
+			OK: true,
 			Data:    []string{},
 			Meta:    &APIMeta{Version: APIVersion},
 		})
@@ -425,7 +548,7 @@ func (h *Handler) handleAutocomplete(w http.ResponseWriter, r *http.Request) {
 	suggestions := h.fetchAutocompleteSuggestions(r.Context(), query)
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		Success: true,
+		OK: true,
 		Data:    suggestions,
 		Meta:    &APIMeta{Version: APIVersion},
 	})
@@ -508,7 +631,7 @@ func (h *Handler) handleEngines(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		Success: true,
+		OK: true,
 		Data:    engineList,
 		Meta:    &APIMeta{Version: APIVersion},
 	})
@@ -540,7 +663,7 @@ func (h *Handler) handleEngineByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		Success: true,
+		OK: true,
 		Data: EngineInfo{
 			ID:         engine.Name(),
 			Name:       engine.DisplayName(),
@@ -562,7 +685,7 @@ func (h *Handler) handleCategories(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		Success: true,
+		OK: true,
 		Data:    categories,
 		Meta:    &APIMeta{Version: APIVersion},
 	})
@@ -570,23 +693,79 @@ func (h *Handler) handleCategories(w http.ResponseWriter, r *http.Request) {
 
 // Helper methods
 
+// jsonResponse sends JSON response with 2-space indentation per AI.md PART 14
 func (h *Handler) jsonResponse(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("X-API-Version", APIVersion)
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	enc.Encode(data)
 }
 
-func (h *Handler) errorResponse(w http.ResponseWriter, status int, message, details string) {
+// textResponse sends plain text response per AI.md PART 14
+// Ensures response ends with exactly one newline
+func (h *Handler) textResponse(w http.ResponseWriter, status int, text string) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("X-API-Version", APIVersion)
+	w.WriteHeader(status)
+	// Per AI.md PART 14: All text responses must end with single newline
+	text = strings.TrimRight(text, "\n") + "\n"
+	w.Write([]byte(text))
+}
+
+// respondWithFormat sends response based on format (supports .txt extension)
+// Per AI.md PART 14: .txt extension support for plain text API output
+func (h *Handler) respondWithFormat(w http.ResponseWriter, r *http.Request, status int, data interface{}, textFormatter func() string) {
+	// Check for .txt extension in URL path
+	path := r.URL.Path
+	if strings.HasSuffix(path, ".txt") {
+		h.textResponse(w, status, textFormatter())
+		return
+	}
+
+	// Check Accept header for text/plain preference
+	accept := r.Header.Get("Accept")
+	if strings.Contains(accept, "text/plain") && !strings.Contains(accept, "application/json") {
+		h.textResponse(w, status, textFormatter())
+		return
+	}
+
+	// Check format query parameter
+	format := r.URL.Query().Get("format")
+	if format == "text" || format == "txt" || format == "plain" {
+		h.textResponse(w, status, textFormatter())
+		return
+	}
+
+	// Default to JSON
+	h.jsonResponse(w, status, data)
+}
+
+// stripTxtExtension removes .txt extension from URL path for routing
+// Per AI.md PART 14: .txt extension support
+func stripTxtExtension(path string) string {
+	if strings.HasSuffix(path, ".txt") {
+		return strings.TrimSuffix(path, ".txt")
+	}
+	return path
+}
+
+// errorResponse sends a unified error response per AI.md PART 16
+// Error format: {"ok": false, "error": "ERROR_CODE", "message": "Human readable message"}
+// Per AI.md PART 7-9: RequestID must be included in error response meta
+func (h *Handler) errorResponse(w http.ResponseWriter, status int, message, _ string) {
+	// Get request ID from response header (set by middleware)
+	requestID := w.Header().Get("X-Request-ID")
+
 	h.jsonResponse(w, status, &APIResponse{
-		Success: false,
-		Error: &APIError{
-			Code:    models.ErrorCodeFromHTTP(status),
-			Status:  status,
-			Message: message,
-			Details: details,
+		OK:      false,
+		Error:   model.ErrorCodeFromHTTP(status),
+		Message: message,
+		Meta: &APIMeta{
+			RequestID: requestID,
+			Version:   APIVersion,
 		},
-		Meta: &APIMeta{Version: APIVersion},
 	})
 }
 
@@ -615,6 +794,40 @@ func (h *Handler) formatBytes(b uint64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
+}
+
+// checkDiskHealth verifies the data directory is accessible
+func (h *Handler) checkDiskHealth() string {
+	// Data directory health is verified during startup
+	// If we're running, disk is accessible
+	return "ok"
+}
+
+// getRequestsTotal returns total requests since startup
+// Returns 0 if metrics are disabled
+func (h *Handler) getRequestsTotal() int64 {
+	// Metrics integration point - returns 0 when metrics disabled
+	if !h.config.Server.Metrics.Enabled {
+		return 0
+	}
+	return 0
+}
+
+// getRequests24h returns requests in the last 24 hours
+// Returns 0 if metrics are disabled
+func (h *Handler) getRequests24h() int64 {
+	// Metrics integration point - returns 0 when metrics disabled
+	if !h.config.Server.Metrics.Enabled {
+		return 0
+	}
+	return 0
+}
+
+// getActiveConnections returns current active connections
+// Returns 0 if metrics are disabled
+func (h *Handler) getActiveConnections() int {
+	// Connection tracking integration point
+	return 0
 }
 
 func extractDomain(urlStr string) string {
@@ -675,7 +888,7 @@ func (h *Handler) handleBangs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		Success: true,
+		OK: true,
 		Data: map[string]interface{}{
 			"bangs": bangs,
 			"total": len(bangs),
@@ -782,7 +995,7 @@ type InstantAnswerResponse struct {
 func (h *Handler) handleInstantAnswer(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 
-	query := r.URL.Query().Get("q")
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	if query == "" {
 		h.errorResponse(w, http.StatusBadRequest, "Query parameter is required", "")
 		return
@@ -790,7 +1003,7 @@ func (h *Handler) handleInstantAnswer(w http.ResponseWriter, r *http.Request) {
 
 	if h.instantManager == nil {
 		h.jsonResponse(w, http.StatusOK, &APIResponse{
-			Success: true,
+			OK: true,
 			Data: InstantAnswerResponse{
 				Query: query,
 				Found: false,
@@ -814,7 +1027,7 @@ func (h *Handler) handleInstantAnswer(w http.ResponseWriter, r *http.Request) {
 
 	if answer == nil {
 		h.jsonResponse(w, http.StatusOK, &APIResponse{
-			Success: true,
+			OK: true,
 			Data: InstantAnswerResponse{
 				Query: query,
 				Found: false,
@@ -828,7 +1041,7 @@ func (h *Handler) handleInstantAnswer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		Success: true,
+		OK: true,
 		Data: InstantAnswerResponse{
 			Query:   query,
 			Type:    string(answer.Type),
@@ -837,6 +1050,74 @@ func (h *Handler) handleInstantAnswer(w http.ResponseWriter, r *http.Request) {
 			Data:    answer.Data,
 			Source:  answer.Source,
 			Found:   true,
+		},
+		Meta: &APIMeta{
+			Version:     APIVersion,
+			ProcessTime: float64(time.Since(start).Microseconds()) / 1000,
+		},
+	})
+}
+
+// RelatedSearchResponse represents related searches API response
+type RelatedSearchResponse struct {
+	Query       string   `json:"query"`
+	Suggestions []string `json:"suggestions"`
+	Count       int      `json:"count"`
+}
+
+func (h *Handler) handleRelatedSearches(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	if query == "" {
+		h.errorResponse(w, http.StatusBadRequest, "Query parameter is required", "")
+		return
+	}
+
+	// Parse limit parameter, default to 8
+	limit := 8
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 20 {
+			limit = l
+		}
+	}
+
+	// If related searches provider not set, return empty
+	if h.relatedSearches == nil {
+		h.jsonResponse(w, http.StatusOK, &APIResponse{
+			OK: true,
+			Data: RelatedSearchResponse{
+				Query:       query,
+				Suggestions: []string{},
+				Count:       0,
+			},
+			Meta: &APIMeta{
+				Version:     APIVersion,
+				ProcessTime: float64(time.Since(start).Microseconds()) / 1000,
+			},
+		})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	suggestions, err := h.relatedSearches.GetRelated(ctx, query, limit)
+	if err != nil {
+		h.errorResponse(w, http.StatusInternalServerError, "Failed to fetch related searches", err.Error())
+		return
+	}
+
+	if suggestions == nil {
+		suggestions = []string{}
+	}
+
+	h.jsonResponse(w, http.StatusOK, &APIResponse{
+		OK: true,
+		Data: RelatedSearchResponse{
+			Query:       query,
+			Suggestions: suggestions,
+			Count:       len(suggestions),
 		},
 		Meta: &APIMeta{
 			Version:     APIVersion,

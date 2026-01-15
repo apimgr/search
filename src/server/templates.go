@@ -244,11 +244,11 @@ func (s *Server) renderHeader(w http.ResponseWriter, title string, activePage st
 		}
 		contactLink = fmt.Sprintf("<a href=\"/contact\"%s>Contact</a>", activeContact)
 	}
-	
+
 	activeHome := ""
 	activeAbout := ""
 	activePrivacy := ""
-	
+
 	switch activePage {
 	case "home":
 		activeHome = " class=\"active\""
@@ -257,7 +257,7 @@ func (s *Server) renderHeader(w http.ResponseWriter, title string, activePage st
 	case "privacy":
 		activePrivacy = " class=\"active\""
 	}
-	
+
 	fmt.Fprintf(w, htmlHead, title, s.config.Server.Title)
 	fmt.Fprintf(w, `
     <header>
@@ -285,6 +285,6 @@ func (s *Server) renderFooter(w http.ResponseWriter) {
 	if s.isContactEnabled() {
 		contactLink = "<a href=\"/contact\">Contact</a>"
 	}
-	
+
 	fmt.Fprintf(w, htmlFooter, s.config.Server.Title, contactLink)
 }

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apimgr/search/src/models"
+	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 )
 
@@ -22,7 +22,7 @@ type Brave struct {
 
 // NewBrave creates a new Brave search engine
 func NewBrave() *Brave {
-	config := models.NewEngineConfig("brave")
+	config := model.NewEngineConfig("brave")
 	config.DisplayName = "Brave Search"
 	config.Priority = 75
 	config.Categories = []string{"general", "images", "news"}
@@ -37,16 +37,16 @@ func NewBrave() *Brave {
 }
 
 // Search performs a Brave search
-func (e *Brave) Search(ctx context.Context, query *models.Query) ([]models.Result, error) {
+func (e *Brave) Search(ctx context.Context, query *model.Query) ([]model.Result, error) {
 	searchURL := "https://search.brave.com/search"
 
 	params := url.Values{}
 	params.Set("q", query.Text)
 	params.Set("source", "web")
 
-	if query.Category == models.CategoryImages {
+	if query.Category == model.CategoryImages {
 		searchURL = "https://search.brave.com/images"
-	} else if query.Category == models.CategoryNews {
+	} else if query.Category == model.CategoryNews {
 		searchURL = "https://search.brave.com/news"
 	}
 
@@ -80,8 +80,8 @@ func (e *Brave) Search(ctx context.Context, query *models.Query) ([]models.Resul
 }
 
 // parseResults parses HTML results from Brave
-func (e *Brave) parseResults(html string, category models.Category) ([]models.Result, error) {
-	results := make([]models.Result, 0)
+func (e *Brave) parseResults(html string, category model.Category) ([]model.Result, error) {
+	results := make([]model.Result, 0)
 
 	// Pattern for result blocks
 	resultPattern := regexp.MustCompile(`<div[^>]*class="[^"]*snippet[^"]*"[^>]*>.*?</div>`)
@@ -118,7 +118,7 @@ func (e *Brave) parseResults(html string, category models.Category) ([]models.Re
 		title = unescapeHTML(title)
 		content = unescapeHTML(content)
 
-		results = append(results, models.Result{
+		results = append(results, model.Result{
 			Title:    title,
 			URL:      resultURL,
 			Content:  content,
