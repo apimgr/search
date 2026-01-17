@@ -1,6 +1,7 @@
 {{define "base"}}
 <!DOCTYPE html>
-<html lang="en" class="theme-{{default "dark" .Theme}}">
+{{/* Per AI.md PART 31: Dynamic lang and dir for RTL support */}}
+<html lang="{{default "en" .Lang}}" dir="{{default "ltr" .Dir}}" class="theme-{{default "dark" .Theme}}">
 <head>
     {{template "head" .}}
     {{block "extra_head" .}}{{end}}

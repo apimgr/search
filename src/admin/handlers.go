@@ -3,6 +3,8 @@ package admin
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -162,6 +164,66 @@ func (h *Handler) SetReloadCallback(cb ReloadCallback) {
 // SetConfigPath sets the path to the config file
 func (h *Handler) SetConfigPath(path string) {
 	h.configPath = path
+}
+
+// generateCSRFToken generates a new CSRF token per AI.md PART 20
+func (h *Handler) generateCSRFToken() string {
+	b := make([]byte, 32)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+// setCSRFCookie sets the CSRF token as a cookie
+func (h *Handler) setCSRFCookie(w http.ResponseWriter, token string) {
+	csrf := h.config.Server.Security.CSRF
+	http.SetCookie(w, &http.Cookie{
+		Name:     csrf.CookieName,
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   h.config.Server.SSL.Enabled,
+		SameSite: http.SameSiteStrictMode,
+	})
+}
+
+// getOrCreateCSRFToken gets existing CSRF token from cookie or creates new one
+func (h *Handler) getOrCreateCSRFToken(w http.ResponseWriter, r *http.Request) string {
+	csrf := h.config.Server.Security.CSRF
+	if cookie, err := r.Cookie(csrf.CookieName); err == nil {
+		return cookie.Value
+	}
+	// Generate new token
+	token := h.generateCSRFToken()
+	h.setCSRFCookie(w, token)
+	return token
+}
+
+// validateCSRFToken validates the CSRF token from the request
+func (h *Handler) validateCSRFToken(r *http.Request) bool {
+	csrf := h.config.Server.Security.CSRF
+	if !csrf.Enabled {
+		return true
+	}
+	cookie, err := r.Cookie(csrf.CookieName)
+	if err != nil {
+		return false
+	}
+	token := r.FormValue(csrf.FieldName)
+	if token == "" {
+		token = r.Header.Get(csrf.HeaderName)
+	}
+	return token == cookie.Value
+}
+
+// newAdminPageData creates AdminPageData with CSRF token and common fields
+// Per AI.md PART 20: All admin forms MUST have CSRF protection
+func (h *Handler) newAdminPageData(w http.ResponseWriter, r *http.Request, title, page string) *AdminPageData {
+	return &AdminPageData{
+		Title:     title,
+		Page:      page,
+		Config:    h.config,
+		CSRFToken: h.getOrCreateCSRFToken(w, r),
+	}
 }
 
 // SetConfigSync sets the config sync manager for cluster mode
@@ -924,6 +986,7 @@ type AdminPageData struct {
 	SchedulerTasks   map[string]*SchedulerTaskInfo
 	SchedulerRunning bool // Per AI.md PART 19: Scheduler is ALWAYS RUNNING
 	Extra            map[string]interface{}
+	CSRFToken        string // Per AI.md PART 20: CSRF protection on all forms
 }
 
 // DashboardStats holds dashboard statistics
@@ -1206,14 +1269,15 @@ func (h *Handler) handleServerTor(w http.ResponseWriter, r *http.Request) {
 }
 
 // processServerTorUpdate handles Tor settings form submission
+// Per AI.md PART 32: Tor is auto-enabled if binary found - not configurable
 func (h *Handler) processServerTorUpdate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Redirect(w, r, "/admin/server/tor?error=Invalid+form+data", http.StatusSeeOther)
 		return
 	}
 
-	h.config.Server.Tor.Enabled = r.FormValue("enabled") == "on"
-	h.config.Server.Tor.StreamIsolation = r.FormValue("stream_isolation") == "on"
+	// Per AI.md PART 32: Only binary path is configurable, enabled is auto-detected
+	h.config.Server.Tor.Binary = r.FormValue("binary")
 
 	h.saveAndReload(w, r, "/admin/server/tor")
 }

@@ -230,6 +230,7 @@ func (sm *ServiceManager) Disable() error {
 // Linux systemd
 
 // systemdTemplate per AI.md PART 25 - EXACT MATCH to spec
+// Service starts as root, binary drops to search user after port binding
 const systemdTemplate = `[Unit]
 Description=search service
 Documentation=https://apimgr.github.io/search
@@ -238,16 +239,13 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=search
-Group=search
 ExecStart=/usr/local/bin/search
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
 
-# Security hardening
-NoNewPrivileges=yes
+# Security hardening (binary drops privileges after port binding)
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
@@ -261,7 +259,7 @@ WantedBy=multi-user.target
 `
 
 func (sm *ServiceManager) installSystemd() error {
-	// Per AI.md PART 25: Template uses User=search, so user must exist
+	// Per AI.md PART 25: Service starts as root, binary drops privileges
 	// Create system user and directories before installing service
 	if err := sm.ensureSystemUser(); err != nil {
 		return fmt.Errorf("failed to create system user: %w", err)
@@ -489,61 +487,54 @@ func (sm *ServiceManager) statusRunit() (string, error) {
 // macOS launchd
 
 // launchdTemplate is the macOS launchd plist template
-// Per AI.md PART 25: launchd plist MUST include UserName/GroupName
+// Per AI.md PART 25: Service starts as root, binary drops to search user after port binding
+// No UserName/GroupName - binary handles privilege dropping
 const launchdTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.apimgr.search</string>
-    <key>UserName</key>
-    <string>{{.User}}</string>
-    <key>GroupName</key>
-    <string>{{.Group}}</string>
+    <string>apimgr.search</string>
     <key>ProgramArguments</key>
     <array>
-        <string>{{.Binary}}</string>
-        <string>--config</string>
-        <string>{{.ConfigDir}}</string>
+        <string>/usr/local/bin/search</string>
     </array>
-    <key>WorkingDirectory</key>
-    <string>{{.WorkDir}}</string>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>{{.LogDir}}/search.log</string>
+    <string>/var/log/apimgr/search/stdout.log</string>
     <key>StandardErrorPath</key>
-    <string>{{.LogDir}}/search-error.log</string>
+    <string>/var/log/apimgr/search/stderr.log</string>
 </dict>
 </plist>
 `
 
 func (sm *ServiceManager) getLaunchdPath() string {
-	return "/Library/LaunchDaemons/com.apimgr.search.plist"
+	return "/Library/LaunchDaemons/apimgr.search.plist"
 }
 
 func (sm *ServiceManager) installLaunchd() error {
-	// Per AI.md PART 25: launchd plist must include UserName/GroupName
-	data := map[string]string{
-		"User":      "_search",
-		"Group":     "_search",
-		"Binary":    config.GetBinaryPath(),
-		"ConfigDir": config.GetConfigDir(),
-		"WorkDir":   config.GetDataDir(),
-		"LogDir":    filepath.Join(config.GetDataDir(), "logs"),
+	// Per AI.md PART 25: Service starts as root, binary drops privileges
+	// Create system user and directories before installing service
+	if err := sm.ensureSystemUser(); err != nil {
+		return fmt.Errorf("failed to create system user: %w", err)
 	}
 
-	// Generate plist
-	content, err := sm.renderTemplate(launchdTemplate, data)
-	if err != nil {
-		return err
+	if err := sm.createServiceDirectories(); err != nil {
+		return fmt.Errorf("failed to create directories: %w", err)
 	}
 
-	// Write plist file
+	// Ensure log directory exists
+	logDir := "/var/log/apimgr/search"
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return fmt.Errorf("failed to create log directory: %w", err)
+	}
+
+	// Write plist file (no template vars - hardcoded per spec)
 	plistPath := sm.getLaunchdPath()
-	if err := os.WriteFile(plistPath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(plistPath, []byte(launchdTemplate), 0644); err != nil {
 		return fmt.Errorf("failed to write plist file: %w", err)
 	}
 
@@ -563,17 +554,18 @@ func (sm *ServiceManager) uninstallLaunchd() error {
 }
 
 func (sm *ServiceManager) statusLaunchd() (string, error) {
-	out, err := exec.Command("launchctl", "list", "com.apimgr.search").Output()
+	out, err := exec.Command("launchctl", "list", "apimgr.search").Output()
 	if err != nil {
 		return "inactive", nil
 	}
-	if strings.Contains(string(out), "com.apimgr.search") {
+	if strings.Contains(string(out), "apimgr.search") {
 		return "active", nil
 	}
 	return "inactive", nil
 }
 
 // BSD rc.d - per AI.md PART 25 EXACT MATCH
+// Service starts as root, binary drops to search user after port binding
 
 const rcdTemplate = `#!/bin/sh
 
@@ -586,7 +578,6 @@ const rcdTemplate = `#!/bin/sh
 name="search"
 rcvar="search_enable"
 command="/usr/local/bin/search"
-search_user="search"
 
 load_rc_config $name
 run_rc_command "$1"

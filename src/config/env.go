@@ -37,11 +37,7 @@ type EnvConfig struct {
 	ConfigDir string
 	LogDir    string
 
-	// Tor
-	UseTor          bool
-	TorProxy        string
-	TorControlPort  string
-	TorControlPass  string
+	// Tor: Per AI.md PART 32, auto-enabled if binary found - no env vars needed
 
 	// SMTP - Per AI.md PART 18: SMTP_* env vars override config file
 	SMTPHost      string
@@ -96,15 +92,8 @@ func LoadFromEnv() *EnvConfig {
 	cfg.LogDir = getEnv("SEARCH_LOG_DIR", "LOG_DIR")
 
 	// Tor - Auto-detection per AI.md PART 29
-	// Tor is auto-enabled if tor binary is installed
-	// Can be explicitly disabled via DISABLE_TOR=true
-	cfg.UseTor = isTorAvailable()
-	if parseBool(getEnv("DISABLE_TOR", "")) {
-		cfg.UseTor = false
-	}
-	cfg.TorProxy = getEnv("TOR_PROXY", "SEARCH_TOR_PROXY", "127.0.0.1:9050")
-	cfg.TorControlPort = getEnv("TOR_CONTROL_PORT", "SEARCH_TOR_CONTROL", "127.0.0.1:9051")
-	cfg.TorControlPass = getEnv("TOR_CONTROL_PASSWORD", "TOR_PASSWORD")
+	// Tor: Per AI.md PART 32, auto-enabled if binary found at runtime
+	// Detection happens in TorService.Start(), not via env vars
 
 	// SMTP - Per AI.md PART 18: SMTP_* env vars override config file settings
 	cfg.SMTPHost = getEnv("SMTP_HOST")

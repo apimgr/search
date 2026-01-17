@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -14,6 +15,51 @@ import (
 	"github.com/apimgr/search/src/config"
 	"github.com/cretz/bine/tor"
 )
+
+// findTorBinary finds the Tor binary using config, PATH, or common locations
+// Per AI.md PART 32: Tor binary discovery priority:
+// 1) Config setting (explicit path)
+// 2) PATH search (exec.LookPath)
+// 3) Common locations (/usr/bin/tor, /usr/local/bin/tor, etc.)
+func findTorBinary(configPath string) string {
+	// 1) Config setting takes priority
+	if configPath != "" {
+		if _, err := os.Stat(configPath); err == nil {
+			return configPath
+		}
+		log.Printf("[Tor] Configured binary not found: %s", configPath)
+	}
+
+	// 2) Search PATH
+	if path, err := lookPath("tor"); err == nil {
+		return path
+	}
+
+	// 3) Common locations per AI.md PART 32
+	commonLocations := []string{
+		"/usr/bin/tor",
+		"/usr/local/bin/tor",
+		"/opt/local/bin/tor",       // macOS MacPorts
+		"/opt/homebrew/bin/tor",    // macOS Homebrew (Apple Silicon)
+		"/usr/local/opt/tor/bin/tor", // macOS Homebrew (Intel)
+		"/snap/bin/tor",            // Ubuntu Snap
+	}
+
+	for _, loc := range commonLocations {
+		if _, err := os.Stat(loc); err == nil {
+			return loc
+		}
+	}
+
+	// Not found - let bine try to find it
+	return ""
+}
+
+// lookPath searches for an executable in PATH
+// Wrapper for exec.LookPath to enable testing
+var lookPath = func(file string) (string, error) {
+	return exec.LookPath(file)
+}
 
 // TorService manages Tor hidden service using github.com/cretz/bine
 // per AI.md PART 32: TOR HIDDEN SERVICE (NON-NEGOTIABLE)
@@ -40,6 +86,7 @@ func NewTorService(cfg *config.Config) *TorService {
 
 // Start starts the Tor hidden service using bine
 // This starts a DEDICATED Tor process, separate from system Tor
+// Per AI.md PART 32: "Auto-enabled if tor binary is installed - no enable flag needed"
 func (t *TorService) Start() error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -48,10 +95,21 @@ func (t *TorService) Start() error {
 		return nil
 	}
 
-	torConfig := t.config.Server.Tor
-	if !torConfig.Enabled {
-		return fmt.Errorf("tor service is not enabled in configuration")
+	torConfig := &t.config.Server.Tor
+
+	// Per AI.md PART 32: Find Tor binary first - auto-enable if found
+	// Priority: 1) Config setting 2) PATH search 3) Common locations
+	torBinary := findTorBinary(torConfig.Binary)
+	if torBinary == "" {
+		// Per AI.md PART 32: "NOT FOUND: Log INFO, disable Tor features, continue without Tor"
+		log.Println("[Tor] Tor binary not found, hidden service disabled")
+		torConfig.Enabled = false // Auto-disable when binary not found
+		return nil // Not an error - Tor is optional
 	}
+
+	// Auto-enable when binary is found per AI.md PART 32
+	torConfig.Enabled = true
+	log.Printf("[Tor] Found Tor binary: %s (auto-enabled)", torBinary)
 
 	// Get Tor data directory - isolated from system Tor
 	dataDir := filepath.Join(config.GetDataDir(), "tor")
@@ -92,10 +150,8 @@ func (t *TorService) Start() error {
 		},
 	}
 
-	// Check if binary path is configured
-	if torConfig.Binary != "" {
-		startConf.ExePath = torConfig.Binary
-	}
+	// Use the tor binary we found earlier
+	startConf.ExePath = torBinary
 
 	// Enable debug output in development mode
 	if t.config.Server.Mode == "development" {

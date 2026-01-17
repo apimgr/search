@@ -1365,18 +1365,74 @@ html.theme-light .theme-icon-dark {
     outline-offset: 2px;
 }
 
-/* Print styles */
+/* Print styles - Per AI.md PART 14: Print-friendly styles */
 @media print {
+    /* Hide non-essential elements */
     .site-header,
     .site-footer,
     .nav-toggle,
-    .theme-toggle {
-        display: none;
+    .nav-panel,
+    .nav-overlay,
+    .theme-toggle,
+    .cookie-consent,
+    .announcement,
+    .btn,
+    button:not([type="submit"]),
+    .search-form,
+    .pagination,
+    .modal,
+    .toast-container {
+        display: none !important;
     }
 
+    /* Reset colors for print */
     body {
-        background: white;
-        color: black;
+        background: white !important;
+        color: black !important;
+        font-size: 12pt;
+        line-height: 1.5;
+    }
+
+    /* Ensure links are visible */
+    a {
+        color: black !important;
+        text-decoration: underline;
+    }
+
+    /* Show URL after links */
+    a[href^="http"]:after {
+        content: " (" attr(href) ")";
+        font-size: 0.8em;
+        color: #666;
+    }
+
+    /* Don't break inside important elements */
+    .result-item,
+    .widget,
+    table tr {
+        page-break-inside: avoid;
+    }
+
+    /* Ensure tables print properly */
+    table {
+        border-collapse: collapse;
+    }
+
+    table th,
+    table td {
+        border: 1px solid #ccc;
+        padding: 0.5em;
+    }
+
+    /* Print headings clearly */
+    h1, h2, h3, h4, h5, h6 {
+        color: black !important;
+        page-break-after: avoid;
+    }
+
+    /* Ensure images don't overflow */
+    img {
+        max-width: 100% !important;
     }
 }
 
@@ -3317,5 +3373,234 @@ html.theme-light .theme-icon-dark {
 
     .keyboard-help-content {
         max-height: 50vh;
+    }
+}
+
+/* ============================================================================
+   RTL (Right-to-Left) SUPPORT
+   Per AI.md PART 31: CSS logical properties for RTL languages
+   Supports: Arabic (ar), Hebrew (he), Persian (fa), Urdu (ur)
+   ============================================================================ */
+
+/* Use CSS logical properties for RTL-aware layouts */
+[dir="rtl"] {
+    /* Text alignment - use logical values */
+    text-align: start;
+}
+
+/* Search input RTL adjustments */
+[dir="rtl"] .search-input {
+    text-align: start;
+}
+
+[dir="rtl"] .header-search-input {
+    border-radius: 0 20px 20px 0;
+    border-right: 1px solid var(--input-border);
+    border-left: none;
+}
+
+[dir="rtl"] .header-search-btn {
+    border-radius: 20px 0 0 20px;
+}
+
+/* Navigation RTL */
+[dir="rtl"] .nav-toggle {
+    margin-left: 0;
+    margin-right: auto;
+    margin-inline-start: auto;
+    margin-inline-end: 0;
+}
+
+/* Result items RTL */
+[dir="rtl"] .result-item {
+    flex-direction: row-reverse;
+}
+
+[dir="rtl"] .result-meta {
+    flex-direction: row-reverse;
+}
+
+/* Skip link RTL */
+[dir="rtl"] .skip-link {
+    left: auto;
+    right: 0;
+    border-radius: 0 0 0 4px;
+}
+
+/* Toast container RTL */
+[dir="rtl"] #toast-container {
+    left: 1rem;
+    right: auto;
+}
+
+[dir="rtl"] .toast {
+    flex-direction: row-reverse;
+    transform: translateX(-100%);
+}
+
+[dir="rtl"] .toast-visible {
+    transform: translateX(0);
+}
+
+[dir="rtl"] .toast-hiding {
+    transform: translateX(-100%);
+}
+
+/* Footer and form alignment */
+[dir="rtl"] .footer-container {
+    text-align: start;
+}
+
+[dir="rtl"] .form-label {
+    text-align: start;
+}
+
+/* Widget adjustments for RTL */
+[dir="rtl"] .widget-header {
+    flex-direction: row-reverse;
+}
+
+[dir="rtl"] .widget-dropdown-menu {
+    left: 0;
+    right: auto;
+}
+
+[dir="rtl"] .widget-dropdown-menu button {
+    text-align: start;
+}
+
+/* Search info RTL */
+[dir="rtl"] .search-info {
+    padding-left: 0;
+    padding-right: 0.25rem;
+    padding-inline-start: 0.25rem;
+    padding-inline-end: 0;
+}
+
+/* Flash message RTL */
+[dir="rtl"] .flash {
+    flex-direction: row-reverse;
+}
+
+/* Instant answer RTL */
+[dir="rtl"] .instant-answer-header {
+    flex-direction: row-reverse;
+}
+
+/* Category tabs RTL - maintain LTR for horizontal scroll */
+[dir="rtl"] .category-tabs {
+    direction: ltr;
+}
+
+[dir="rtl"] .category-tabs .category-tab {
+    direction: rtl;
+}
+
+/* Search categories horizontal scroll */
+[dir="rtl"] .search-categories {
+    direction: ltr;
+}
+
+[dir="rtl"] .search-categories .category-link {
+    direction: rtl;
+}
+
+/* Admin sidebar RTL */
+[dir="rtl"] .admin-container {
+    flex-direction: row-reverse;
+}
+
+/* Pagination RTL */
+[dir="rtl"] .pagination {
+    flex-direction: row-reverse;
+}
+
+/* Cookie consent RTL */
+[dir="rtl"] .cookie-consent-content {
+    flex-direction: row-reverse;
+}
+
+/* Announcement RTL */
+[dir="rtl"] .announcement {
+    flex-direction: row-reverse;
+}
+
+[dir="rtl"] .announcement-content {
+    flex-direction: row-reverse;
+}
+
+/* Image results grid - maintain LTR for grid layout */
+[dir="rtl"] .image-results {
+    direction: ltr;
+}
+
+[dir="rtl"] .image-result {
+    direction: rtl;
+}
+
+/* Result URL RTL */
+[dir="rtl"] .result-url {
+    flex-direction: row-reverse;
+}
+
+/* Related searches RTL */
+[dir="rtl"] .related-item {
+    flex-direction: row-reverse;
+}
+
+/* People Also Ask RTL */
+[dir="rtl"] .paa-question {
+    flex-direction: row-reverse;
+}
+
+/* Modal footer RTL */
+[dir="rtl"] .widget-settings-actions {
+    flex-direction: row-reverse;
+}
+
+[dir="rtl"] #confirm-dialog footer {
+    flex-direction: row-reverse;
+}
+
+/* Advanced search modal RTL */
+[dir="rtl"] .advanced-search-modal header {
+    flex-direction: row-reverse;
+}
+
+[dir="rtl"] .advanced-search-modal footer {
+    flex-direction: row-reverse;
+}
+
+/* Color preview margin RTL */
+[dir="rtl"] .instant-answer-content .color-preview {
+    margin-right: 0;
+    margin-left: 0.5rem;
+    margin-inline-start: 0;
+    margin-inline-end: 0.5rem;
+}
+
+/* Mobile RTL adjustments */
+@media (max-width: 768px) {
+    [dir="rtl"] .nav-links {
+        text-align: start;
+    }
+}
+
+@media (max-width: 480px) {
+    [dir="rtl"] #toast-container {
+        left: 0.5rem;
+        right: 0.5rem;
+    }
+
+    [dir="rtl"] .toast {
+        transform: translateY(-100%);
+    }
+
+    [dir="rtl"] .toast-visible {
+        transform: translateY(0);
+    }
+
+    [dir="rtl"] .toast-hiding {
+        transform: translateY(-100%);
     }
 }

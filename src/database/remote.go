@@ -37,9 +37,10 @@ func DefaultRemoteDBConfig() *RemoteDBConfig {
 }
 
 // BuildDSN builds the connection string for the remote database
+// Per AI.md PART 6-10: Multi-database driver support
 func (r *RemoteDBConfig) BuildDSN() string {
 	switch r.Driver {
-	case "postgres":
+	case "postgres", "pgx":
 		return fmt.Sprintf(
 			"postgres://%s:%s@%s:%d/%s?sslmode=%s",
 			r.Username, r.Password, r.Host, r.Port, r.Database, r.SSLMode,
@@ -47,6 +48,12 @@ func (r *RemoteDBConfig) BuildDSN() string {
 	case "mysql", "mariadb":
 		return fmt.Sprintf(
 			"%s:%s@tcp(%s:%d)/%s?parseTime=true&charset=utf8mb4",
+			r.Username, r.Password, r.Host, r.Port, r.Database,
+		)
+	case "mssql", "sqlserver":
+		// MSSQL DSN format per AI.md PART 6-10
+		return fmt.Sprintf(
+			"sqlserver://%s:%s@%s:%d?database=%s",
 			r.Username, r.Password, r.Host, r.Port, r.Database,
 		)
 	default:
@@ -82,6 +89,7 @@ func NewRemoteDB(cfg *RemoteDBConfig) (*RemoteDB, error) {
 }
 
 // connect establishes connection to the remote database
+// Per AI.md PART 6-10: Multi-database driver support
 func (rdb *RemoteDB) connect() error {
 	rdb.mu.Lock()
 	defer rdb.mu.Unlock()
@@ -93,11 +101,17 @@ func (rdb *RemoteDB) connect() error {
 
 	var err error
 
-	// Note: In production, you would import the drivers:
-	// _ "github.com/lib/pq" for PostgreSQL
-	// _ "github.com/go-sql-driver/mysql" for MySQL
-	// For now, we return an error since the drivers aren't imported
-	rdb.db, err = sql.Open(rdb.driver, dsn)
+	// Map driver names to database/sql driver names
+	// Drivers are imported in database.go
+	driverName := rdb.driver
+	switch rdb.driver {
+	case "postgres":
+		driverName = "pgx"
+	case "mssql":
+		driverName = "sqlserver"
+	}
+
+	rdb.db, err = sql.Open(driverName, dsn)
 	if err != nil {
 		return fmt.Errorf("failed to open remote database: %w", err)
 	}
@@ -321,6 +335,7 @@ func (mm *MigrationManager) createTargetTable(ctx context.Context, table, schema
 }
 
 // convertSchema converts SQLite schema to target database schema
+// Per AI.md PART 6-10: Multi-database driver support
 func (mm *MigrationManager) convertSchema(sqliteSchema string) string {
 	schema := sqliteSchema
 
@@ -342,6 +357,15 @@ func (mm *MigrationManager) convertSchema(sqliteSchema string) string {
 			schema += ";"
 		}
 		schema = strings.TrimSuffix(schema, ";") + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;"
+
+	case "mssql", "sqlserver":
+		// Convert SQLite types to MSSQL
+		schema = strings.ReplaceAll(schema, "INTEGER PRIMARY KEY AUTOINCREMENT", "INT IDENTITY(1,1) PRIMARY KEY")
+		schema = strings.ReplaceAll(schema, "AUTOINCREMENT", "")
+		schema = strings.ReplaceAll(schema, "DATETIME", "DATETIME2")
+		schema = strings.ReplaceAll(schema, "datetime", "DATETIME2")
+		schema = strings.ReplaceAll(schema, "TEXT", "NVARCHAR(MAX)")
+		schema = strings.ReplaceAll(schema, "BLOB", "VARBINARY(MAX)")
 	}
 
 	return schema
@@ -369,11 +393,14 @@ func (mm *MigrationManager) migrateTableData(ctx context.Context, table string, 
 	defer rows.Close()
 
 	// Build INSERT query
+	// Per AI.md PART 6-10: Multi-database driver support
 	placeholders := make([]string, len(columns))
 	for i := range placeholders {
 		switch mm.targetDB.driver {
 		case "postgres":
 			placeholders[i] = fmt.Sprintf("$%d", i+1)
+		case "mssql", "sqlserver":
+			placeholders[i] = fmt.Sprintf("@p%d", i+1)
 		default:
 			placeholders[i] = "?"
 		}
@@ -496,8 +523,9 @@ func ValidateRemoteConnection(cfg *RemoteDBConfig) error {
 }
 
 // GetSupportedDrivers returns the list of supported remote database drivers
+// Per AI.md PART 6-10: Multi-database driver support
 func GetSupportedDrivers() []string {
-	return []string{"postgres", "mysql", "mariadb"}
+	return []string{"postgres", "mysql", "mariadb", "mssql", "sqlserver"}
 }
 
 // IsRemoteDriver returns true if the driver is a remote database driver

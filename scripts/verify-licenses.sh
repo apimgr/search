@@ -1,5 +1,6 @@
 #!/bin/bash
 # scripts/verify-licenses.sh
+# Per AI.md PART 2: License Verification Script (NON-NEGOTIABLE)
 
 set -e
 

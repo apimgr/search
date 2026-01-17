@@ -45,8 +45,8 @@ func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
 	data := NewPageData(s.config, "About", "about")
 	data.CSRFToken = s.getCSRFToken(r)
 
-	// Get Tor address if enabled
-	if s.config.Server.Tor.Enabled && s.torService != nil {
+	// Get Tor address if running (auto-enabled per AI.md PART 32)
+	if s.torService != nil && s.torService.IsRunning() {
 		data.TorAddress = s.torService.GetOnionAddress()
 	}
 

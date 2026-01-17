@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"path"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -120,7 +121,7 @@ func (m *Middleware) CORS(next http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Methods", strings.Join(cors.AllowedMethods, ", "))
 			w.Header().Set("Access-Control-Allow-Headers", strings.Join(cors.AllowedHeaders, ", "))
 			if cors.MaxAge > 0 {
-				w.Header().Set("Access-Control-Max-Age", string(rune(cors.MaxAge)))
+				w.Header().Set("Access-Control-Max-Age", strconv.Itoa(cors.MaxAge))
 			}
 			w.WriteHeader(http.StatusNoContent)
 			return

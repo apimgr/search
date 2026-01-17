@@ -219,14 +219,20 @@ docker:
 	@echo "Docker push complete: $(REGISTRY):$(VERSION)"
 
 # =============================================================================
-# TEST - Run all tests (via Docker with cached modules)
+# TEST - Run all tests with coverage enforcement (via Docker)
+# Per AI.md PART 26: Tests MUST enforce 100% coverage
 # =============================================================================
 test:
-	@echo "Running tests in Docker..."
+	@echo "Running tests with coverage..."
 	@mkdir -p $(GOCACHE) $(GODIR)
 	@$(GO_DOCKER) go mod download
-	@$(GO_DOCKER) go test -v -cover ./...
-	@echo "Tests complete"
+	@$(GO_DOCKER) go test -v -cover -coverprofile=coverage.out ./...
+	@COVERAGE=$$($(GO_DOCKER) go tool cover -func=coverage.out | grep total | awk '{print $$3}' | sed 's/%//'); \
+	if [ $$(echo "$$COVERAGE < 100" | bc -l) -eq 1 ]; then \
+		echo "ERROR: Coverage is $$COVERAGE%, must be 100%"; \
+		exit 1; \
+	fi
+	@echo "Tests complete - Coverage: 100%"
 
 # =============================================================================
 # CLEAN - Remove build artifacts

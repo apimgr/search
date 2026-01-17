@@ -54,20 +54,31 @@
     function toggleNav() {
         const header = document.querySelector('.site-header');
         const navLinks = document.querySelector('.nav-links');
+        const navToggle = document.querySelector('.nav-toggle');
         if (header && navLinks) {
             header.classList.toggle('nav-open');
             navLinks.classList.toggle('active');
+            // Update ARIA state for accessibility
+            if (navToggle) {
+                const isOpen = header.classList.contains('nav-open');
+                navToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            }
         }
     }
 
     function closeNav() {
         const header = document.querySelector('.site-header');
         const navLinks = document.querySelector('.nav-links');
+        const navToggle = document.querySelector('.nav-toggle');
         if (header) {
             header.classList.remove('nav-open');
         }
         if (navLinks) {
             navLinks.classList.remove('active');
+        }
+        // Update ARIA state for accessibility
+        if (navToggle) {
+            navToggle.setAttribute('aria-expanded', 'false');
         }
     }
 
@@ -137,6 +148,62 @@
 
     // Expose announce function globally for use by other scripts
     window.srAnnounce = announce;
+
+    // Keyboard navigation for tabs (WCAG 2.1 Level AA)
+    // Arrow keys navigate between tabs, Enter/Space activates
+    function initTabKeyboardNav() {
+        const tablists = document.querySelectorAll('[role="tablist"]');
+        tablists.forEach(function(tablist) {
+            const tabs = tablist.querySelectorAll('[role="tab"]');
+            if (tabs.length === 0) return;
+
+            tablist.addEventListener('keydown', function(e) {
+                const currentTab = document.activeElement;
+                if (!currentTab.matches('[role="tab"]')) return;
+
+                let index = Array.from(tabs).indexOf(currentTab);
+                let newIndex = index;
+
+                switch (e.key) {
+                    case 'ArrowLeft':
+                    case 'ArrowUp':
+                        e.preventDefault();
+                        newIndex = index - 1;
+                        if (newIndex < 0) newIndex = tabs.length - 1;
+                        break;
+                    case 'ArrowRight':
+                    case 'ArrowDown':
+                        e.preventDefault();
+                        newIndex = index + 1;
+                        if (newIndex >= tabs.length) newIndex = 0;
+                        break;
+                    case 'Home':
+                        e.preventDefault();
+                        newIndex = 0;
+                        break;
+                    case 'End':
+                        e.preventDefault();
+                        newIndex = tabs.length - 1;
+                        break;
+                    default:
+                        return;
+                }
+
+                if (newIndex !== index) {
+                    tabs[newIndex].focus();
+                    // Activate tab on focus for category tabs
+                    if (tabs[newIndex].classList.contains('category-tab')) {
+                        tabs[newIndex].click();
+                    }
+                }
+            });
+
+            // Set tabindex properly (only active tab should be tabbable)
+            tabs.forEach(function(tab, i) {
+                tab.setAttribute('tabindex', tab.getAttribute('aria-selected') === 'true' ? '0' : '-1');
+            });
+        });
+    }
 
     // ========================================================================
     // FLASH MESSAGES
@@ -1084,6 +1151,7 @@
         initFormProtection();
         initServiceWorker();
         initEventDelegation();
+        initTabKeyboardNav();
     }
 
     // Listen for system theme changes

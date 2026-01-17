@@ -175,6 +175,9 @@ type ServerConfig struct {
 	// Compression
 	Compression CompressionConfig `yaml:"compression"`
 
+	// Request Limits per AI.md PART 18
+	Limits LimitsConfig `yaml:"limits"`
+
 	// I18n (Internationalization)
 	I18n I18nConfig `yaml:"i18n"`
 
@@ -398,15 +401,12 @@ type LogsConfig struct {
 }
 
 // TorConfig represents Tor configuration
+// Per AI.md PART 32: "Auto-enabled if tor binary is installed - no enable flag needed"
 type TorConfig struct {
-	Enabled           bool   `yaml:"enabled"`
+	Enabled           bool   `yaml:"-"` // Computed at runtime, NOT configurable
 	Binary            string `yaml:"binary"`
-	SocksProxy        string `yaml:"socks_proxy"`
-	SocksPort         int    `yaml:"socks_port"`
-	ControlPort       int    `yaml:"control_port"`
-	ControlPassword   string `yaml:"control_password"`
-	StreamIsolation   bool   `yaml:"stream_isolation"`
-	OnionAddress      string `yaml:"onion_address"`
+	DataDir           string `yaml:"data_dir"`
+	OnionAddress      string `yaml:"-"` // Set at runtime when Tor starts
 	HiddenServicePort int    `yaml:"hidden_service_port"`
 }
 
@@ -771,24 +771,30 @@ type CacheConfig struct {
 }
 
 // GeoIPConfig represents GeoIP configuration (uses MMDB from sapics/ip-location-db)
+// Per AI.md PART 20: GeoIP configuration
 type GeoIPConfig struct {
 	Enabled          bool     `yaml:"enabled"`
-	Dir              string   `yaml:"dir"`             // Directory for MMDB files
-	Update           string   `yaml:"update"`          // never, daily, weekly, monthly
-	DenyCountries    []string `yaml:"deny_countries"`  // Countries to block (ISO 3166-1 alpha-2)
+	Dir              string   `yaml:"dir"`              // Directory for MMDB files
+	Update           string   `yaml:"update"`           // never, daily, weekly, monthly
+	DenyCountries    []string `yaml:"deny_countries"`   // Countries to block (ISO 3166-1 alpha-2)
 	AllowedCountries []string `yaml:"allowed_countries"` // If set, only these countries allowed
-	// Database toggles
+	// Database toggles per AI.md PART 20
 	ASN     bool `yaml:"asn"`     // Enable ASN lookups
 	Country bool `yaml:"country"` // Enable country lookups
 	City    bool `yaml:"city"`    // Enable city lookups (larger download)
+	WHOIS   bool `yaml:"whois"`   // Enable WHOIS lookups
 }
 
 // MetricsConfig represents Prometheus-compatible metrics configuration
+// Per AI.md PART 21: Metrics configuration
 type MetricsConfig struct {
-	Enabled       bool   `yaml:"enabled"`
-	Path          string `yaml:"path"`           // Endpoint path (default: /metrics)
-	IncludeSystem bool   `yaml:"include_system"` // Include system metrics (CPU, memory, disk)
-	Token         string `yaml:"token"`          // Bearer token for authentication (empty = no auth)
+	Enabled         bool      `yaml:"enabled"`
+	Endpoint        string    `yaml:"endpoint"`         // Endpoint path (default: /metrics)
+	IncludeSystem   bool      `yaml:"include_system"`   // Include system metrics (CPU, memory, disk)
+	IncludeRuntime  bool      `yaml:"include_runtime"`  // Include Go runtime metrics
+	Token           string    `yaml:"token"`            // Bearer token for authentication (empty = no auth)
+	DurationBuckets []float64 `yaml:"duration_buckets"` // Histogram buckets for request duration (seconds)
+	SizeBuckets     []float64 `yaml:"size_buckets"`     // Histogram buckets for request size (bytes)
 }
 
 // ImageProxyConfig represents image proxy configuration
@@ -845,6 +851,41 @@ type CompressionConfig struct {
 	Gzip         bool     `yaml:"gzip"`          // Enable gzip compression
 	Brotli       bool     `yaml:"brotli"`        // Enable Brotli compression
 	DisableProxy bool     `yaml:"disable_proxy"` // Disable compression for proxied requests
+}
+
+// LimitsConfig represents request limits configuration per AI.md PART 18
+// Protects against DoS attacks (Slowloris, large uploads)
+type LimitsConfig struct {
+	MaxBodySize  string `yaml:"max_body_size"`  // Maximum request body size (e.g., "10MB")
+	ReadTimeout  string `yaml:"read_timeout"`   // HTTP read timeout (e.g., "30s")
+	WriteTimeout string `yaml:"write_timeout"`  // HTTP write timeout (e.g., "30s")
+	IdleTimeout  string `yaml:"idle_timeout"`   // HTTP idle connection timeout (e.g., "120s")
+}
+
+// GetMaxBodySizeBytes parses MaxBodySize and returns bytes
+func (l *LimitsConfig) GetMaxBodySizeBytes() int64 {
+	if l.MaxBodySize == "" {
+		return 10 * 1024 * 1024 // Default 10MB
+	}
+	size := l.MaxBodySize
+	multiplier := int64(1)
+	if len(size) > 2 {
+		suffix := size[len(size)-2:]
+		switch suffix {
+		case "KB", "kb":
+			multiplier = 1024
+			size = size[:len(size)-2]
+		case "MB", "mb":
+			multiplier = 1024 * 1024
+			size = size[:len(size)-2]
+		case "GB", "gb":
+			multiplier = 1024 * 1024 * 1024
+			size = size[:len(size)-2]
+		}
+	}
+	var n int64
+	fmt.Sscanf(size, "%d", &n)
+	return n * multiplier
 }
 
 // I18nConfig represents internationalization configuration
@@ -1095,11 +1136,8 @@ func DefaultConfig() *Config {
 				},
 			},
 			Tor: TorConfig{
-				Enabled:           false,
-				SocksProxy:        "127.0.0.1:9050",
-				SocksPort:         9050,
-				ControlPort:       9051,
-				StreamIsolation:   true,
+				// Per AI.md PART 32: Enabled is auto-detected at runtime
+				// Binary path auto-detected if empty
 				HiddenServicePort: 80,
 			},
 			Email: EmailConfig{
@@ -1295,7 +1333,7 @@ func DefaultConfig() *Config {
 			},
 			Metrics: MetricsConfig{
 				Enabled:       false,
-				Path:          "/metrics",
+				Endpoint:      "/metrics",
 				IncludeSystem: true,
 				Token:         "",
 			},
@@ -1341,6 +1379,13 @@ func DefaultConfig() *Config {
 				Gzip:         true,
 				Brotli:       false, // Brotli requires additional CPU
 				DisableProxy: false,
+			},
+			// Request limits per AI.md PART 18
+			Limits: LimitsConfig{
+				MaxBodySize:  "10MB",
+				ReadTimeout:  "30s",
+				WriteTimeout: "30s",
+				IdleTimeout:  "120s",
 			},
 			I18n: I18nConfig{
 				Enabled:            true,
@@ -1615,21 +1660,8 @@ func (c *Config) ApplyEnv(env *EnvConfig) {
 		c.Server.ImageProxy.Key = env.ImageProxyKey
 	}
 
-	// Tor
-	if env.UseTor {
-		c.Server.Tor.Enabled = true
-	}
-	if env.TorProxy != "" {
-		c.Server.Tor.SocksProxy = env.TorProxy
-	}
-	if env.TorControlPort != "" {
-		if port := ParseInt(env.TorControlPort, 0); port > 0 {
-			c.Server.Tor.ControlPort = port
-		}
-	}
-	if env.TorControlPass != "" {
-		c.Server.Tor.ControlPassword = env.TorControlPass
-	}
+	// Tor: Per AI.md PART 32, Tor is auto-enabled if binary found
+	// No env vars needed - detection happens at runtime in TorService.Start()
 
 	// Engines
 	if c.Engines != nil {
@@ -1904,19 +1936,12 @@ func (c *Config) ValidateAndApplyDefaults() []ValidationWarning {
 		c.Server.GeoIP.Dir = GetGeoIPDir()
 	}
 
-	// Tor configuration
-	if c.Server.Tor.Enabled {
-		if c.Server.Tor.SocksPort == 0 {
-			c.Server.Tor.SocksPort = 9050
-		}
-		if c.Server.Tor.ControlPort == 0 {
-			c.Server.Tor.ControlPort = 9051
-		}
-	}
+	// Tor: Per AI.md PART 32, auto-enabled at runtime if binary found
+	// No validation needed - TorService handles everything
 
 	// Metrics configuration
-	if c.Server.Metrics.Enabled && c.Server.Metrics.Path == "" {
-		c.Server.Metrics.Path = "/metrics"
+	if c.Server.Metrics.Enabled && c.Server.Metrics.Endpoint == "" {
+		c.Server.Metrics.Endpoint = "/metrics"
 	}
 
 	// Compression configuration

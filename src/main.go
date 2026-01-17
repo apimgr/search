@@ -551,7 +551,7 @@ func runInit() {
 	fmt.Println("   Title:  ", cfg.Server.Title)
 	fmt.Printf("   Port:   %d\n", cfg.Server.Port)
 	fmt.Println("   Mode:   ", cfg.Server.Mode)
-	fmt.Println("   Tor:    ", cfg.Server.Tor.Enabled)
+	fmt.Println("   Tor:     (auto-detect at startup)")
 	fmt.Println()
 	fmt.Println("🔍 Search Engines:")
 	for name, engine := range cfg.Engines {
@@ -619,8 +619,9 @@ func showConfigInfo() {
 	if env.Debug {
 		fmt.Println("  DEBUG: enabled")
 	}
-	if env.UseTor {
-		fmt.Println("  TOR: enabled (auto-detected)")
+	// Per AI.md PART 32: Tor is auto-enabled at runtime if binary found, not via env var
+	if config.IsTorAvailable() {
+		fmt.Println("  TOR: available (auto-enabled)")
 	}
 	if env.ConfigDir != "" {
 		fmt.Println("  CONFIG_DIR:", env.ConfigDir)

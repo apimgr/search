@@ -114,10 +114,48 @@ func FindAvailableSystemID() (int, error) {
 	}
 }
 
-// findAvailableUnixSystemID finds available ID in range 100-999
-// Per AI.md PART 24: System range 100-999
+// reservedSystemIDs contains IDs to avoid per AI.md PART 24
+// These are commonly used by system services
+var reservedSystemIDs = map[int]bool{
+	65534: true, // nobody/nogroup
+	999:   true, // docker (common)
+	998:   true, // systemd-coredump
+	997:   true, // systemd-oom
+	996:   true, // systemd-timesync
+	995:   true, // systemd-resolve
+	994:   true, // systemd-network
+	993:   true, // systemd-journal
+	101:   true, // systemd-journal
+	102:   true, // systemd-network
+	103:   true, // systemd-resolve
+	104:   true, // systemd-timesync
+	105:   true, // messagebus
+	106:   true, // sshd
+	107:   true, // tss
+	108:   true, // uuidd
+	109:   true, // tcpdump
+	110:   true, // landscape
+	170:   true, // postgres common
+	171:   true, // redis common
+	172:   true, // mysql common
+	173:   true, // mongodb common
+	174:   true, // elasticsearch
+	175:   true, // kibana
+	176:   true, // logstash
+	177:   true, // nginx
+	178:   true, // www-data
+	179:   true, // apache
+}
+
+// findAvailableUnixSystemID finds available ID in range 200-899
+// Per AI.md PART 24: Safe system range 200-899 (avoids well-known service IDs)
 func findAvailableUnixSystemID() (int, error) {
 	usedIDs := make(map[int]bool)
+
+	// Copy reserved IDs
+	for id := range reservedSystemIDs {
+		usedIDs[id] = true
+	}
 
 	// Read /etc/passwd to get used UIDs
 	if data, err := os.ReadFile("/etc/passwd"); err == nil {
@@ -143,21 +181,27 @@ func findAvailableUnixSystemID() (int, error) {
 		}
 	}
 
-	// Find first available ID in system range (100-999)
-	for id := 100; id < 1000; id++ {
+	// Find first available ID in safe system range (200-899)
+	// Per AI.md PART 24: Avoids 100-199 (well-known) and 900-999 (docker, etc.)
+	for id := 200; id < 900; id++ {
 		if !usedIDs[id] {
 			return id, nil
 		}
 	}
 
-	return 0, fmt.Errorf("no available system ID in range 100-999")
+	return 0, fmt.Errorf("no available system ID in range 200-899")
 }
 
 // findAvailableMacOSSystemID finds available ID for macOS (uses _underscored users)
-// Per AI.md PART 24: macOS service account creation
+// Per AI.md PART 24: macOS safe range is 200-399
 func findAvailableMacOSSystemID() (int, error) {
-	// macOS uses dscl for user management, IDs 200-400 are typically system
+	// macOS uses dscl for user management
 	usedIDs := make(map[int]bool)
+
+	// Copy reserved IDs
+	for id := range reservedSystemIDs {
+		usedIDs[id] = true
+	}
 
 	// Use dscl to list users and their UIDs
 	cmd := exec.Command("dscl", ".", "-list", "/Users", "UniqueID")
@@ -173,21 +217,15 @@ func findAvailableMacOSSystemID() (int, error) {
 		}
 	}
 
-	// Find first available ID (200-400 is typical macOS system range)
+	// Find first available ID in macOS safe range (200-399)
+	// Per AI.md PART 24: macOS safe range is 200-399
 	for id := 200; id < 400; id++ {
 		if !usedIDs[id] {
 			return id, nil
 		}
 	}
 
-	// Try expanded range
-	for id := 400; id < 500; id++ {
-		if !usedIDs[id] {
-			return id, nil
-		}
-	}
-
-	return 0, fmt.Errorf("no available system ID in range 200-500")
+	return 0, fmt.Errorf("no available system ID in range 200-399")
 }
 
 // CreateSystemUser creates a system user for the service
@@ -307,6 +345,7 @@ func createMacOSServiceAccount(name string) (*SystemUser, error) {
 	}
 
 	// Create user
+	// Per AI.md PART 24: macOS service accounts must be hidden from login screen
 	cmds = [][]string{
 		{"dscl", ".", "-create", "/Users/" + svcName},
 		{"dscl", ".", "-create", "/Users/" + svcName, "UniqueID", strconv.Itoa(id)},
@@ -314,6 +353,7 @@ func createMacOSServiceAccount(name string) (*SystemUser, error) {
 		{"dscl", ".", "-create", "/Users/" + svcName, "UserShell", "/usr/bin/false"},
 		{"dscl", ".", "-create", "/Users/" + svcName, "NFSHomeDirectory", "/var/empty"},
 		{"dscl", ".", "-create", "/Users/" + svcName, "RealName", name + " service account"},
+		{"dscl", ".", "-create", "/Users/" + svcName, "IsHidden", "1"},
 	}
 	for _, args := range cmds {
 		cmd := exec.Command(args[0], args[1:]...)

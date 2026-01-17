@@ -2,11 +2,11 @@
 {{/* Per AI.md PART 16: NEVER use JavaScript alerts, use custom modals */}}
 
 {{/* Confirmation Modal */}}
-<dialog id="confirm-modal" class="modal" aria-labelledby="confirm-title">
+<dialog id="confirm-modal" class="modal" role="alertdialog" aria-labelledby="confirm-title" aria-describedby="confirm-message" aria-modal="true">
   <div class="modal-content">
     <header class="modal-header">
       <h2 id="confirm-title" class="modal-title">Confirm Action</h2>
-      <button type="button" class="modal-close" aria-label="Close">✕</button>
+      <button type="button" class="modal-close" aria-label="Close dialog">✕</button>
     </header>
     <main class="modal-body">
       <p id="confirm-message"></p>
@@ -19,15 +19,15 @@
 </dialog>
 
 {{/* Prompt Modal (for text input) */}}
-<dialog id="prompt-modal" class="modal" aria-labelledby="prompt-title">
+<dialog id="prompt-modal" class="modal" role="dialog" aria-labelledby="prompt-title" aria-describedby="prompt-message" aria-modal="true">
   <div class="modal-content">
     <header class="modal-header">
       <h2 id="prompt-title" class="modal-title">Input Required</h2>
-      <button type="button" class="modal-close" aria-label="Close">✕</button>
+      <button type="button" class="modal-close" aria-label="Close dialog">✕</button>
     </header>
     <main class="modal-body">
       <p id="prompt-message"></p>
-      <input type="text" id="prompt-input" class="form-control" autofocus />
+      <input type="text" id="prompt-input" class="form-control" aria-label="Input value" autofocus />
     </main>
     <footer class="modal-footer">
       <button type="button" class="btn btn-secondary" data-action="modal-cancel">Cancel</button>
@@ -37,11 +37,11 @@
 </dialog>
 
 {{/* Alert Modal (for notifications) */}}
-<dialog id="alert-modal" class="modal" aria-labelledby="alert-title">
+<dialog id="alert-modal" class="modal" role="alertdialog" aria-labelledby="alert-title" aria-describedby="alert-message" aria-modal="true">
   <div class="modal-content">
     <header class="modal-header">
       <h2 id="alert-title" class="modal-title">Notice</h2>
-      <button type="button" class="modal-close" aria-label="Close">✕</button>
+      <button type="button" class="modal-close" aria-label="Close dialog">✕</button>
     </header>
     <main class="modal-body">
       <p id="alert-message"></p>

@@ -32,6 +32,7 @@ func (h *Handler) renderAdminLogin(w http.ResponseWriter, data *AdminPageData) {
             </div>
             %s
             <form method="POST" action="/admin/login">
+                <input type="hidden" name="csrf_token" value="%s">
                 <input type="hidden" name="redirect" value="">
                 <div class="form-group">
                     <label for="username">Username</label>
@@ -57,6 +58,7 @@ func (h *Handler) renderAdminLogin(w http.ResponseWriter, data *AdminPageData) {
 			}
 			return ""
 		}(),
+		data.CSRFToken,
 	)
 }
 
@@ -392,6 +394,7 @@ func (h *Handler) renderConfigContent(w http.ResponseWriter, data *AdminPageData
             <div class="admin-section">
                 <h2>Server Configuration</h2>
                 <form method="POST" action="/admin/config">
+                    <input type="hidden" name="csrf_token" value="%s">
                     <div class="form-row">
                         <label>Site Title</label>
                         <input type="text" name="title" value="%s">
@@ -414,6 +417,7 @@ func (h *Handler) renderConfigContent(w http.ResponseWriter, data *AdminPageData
                     <button type="submit" class="btn">Save Changes</button>
                 </form>
             </div>`,
+		data.CSRFToken,
 		h.config.Server.Title,
 		h.config.Server.Description,
 		h.config.Server.Port,
@@ -473,6 +477,7 @@ func (h *Handler) renderTokensContent(w http.ResponseWriter, data *AdminPageData
             <div class="admin-section">
                 <h2>Create New Token</h2>
                 <form method="POST" action="/admin/tokens">
+                    <input type="hidden" name="csrf_token" value="%s">
                     <div class="form-row">
                         <label>Name *</label>
                         <input type="text" name="name" required placeholder="My API Token">
@@ -500,6 +505,7 @@ func (h *Handler) renderTokensContent(w http.ResponseWriter, data *AdminPageData
                     </thead>
                     <tbody>`,
 		newTokenHTML,
+		data.CSRFToken,
 	)
 
 	if len(data.Tokens) == 0 {
@@ -600,6 +606,7 @@ func (h *Handler) renderServerSettingsContent(w http.ResponseWriter, data *Admin
             <div class="admin-section">
                 <h2>General Server Settings</h2>
                 <form method="POST" action="/admin/server/settings">
+                    <input type="hidden" name="csrf_token" value="%s">
                     <div class="form-row">
                         <label>Instance Title</label>
                         <input type="text" name="title" value="%s">
@@ -639,6 +646,7 @@ func (h *Handler) renderServerSettingsContent(w http.ResponseWriter, data *Admin
             <div class="admin-section">
                 <h2>Rate Limiting</h2>
                 <form method="POST" action="/admin/server/settings/rate-limit">
+                    <input type="hidden" name="csrf_token" value="%s">
                     <div class="form-row">
                         <label><input type="checkbox" name="enabled" %s> Enable Rate Limiting</label>
                     </div>
@@ -661,6 +669,7 @@ func (h *Handler) renderServerSettingsContent(w http.ResponseWriter, data *Admin
                     <button type="submit" class="btn">Save Rate Limits</button>
                 </form>
             </div>`,
+		data.CSRFToken,
 		h.config.Server.Title,
 		h.config.Server.Description,
 		h.config.Server.BaseURL,
@@ -669,6 +678,7 @@ func (h *Handler) renderServerSettingsContent(w http.ResponseWriter, data *Admin
 		h.config.Server.Address,
 		selectedValue(h.config.Server.Mode, "production"),
 		selectedValue(h.config.Server.Mode, "development"),
+		data.CSRFToken,
 		checked(h.config.Server.RateLimit.Enabled),
 		h.config.Server.RateLimit.RequestsPerMinute,
 		h.config.Server.RateLimit.RequestsPerHour,
@@ -682,6 +692,7 @@ func (h *Handler) renderServerBrandingContent(w http.ResponseWriter, data *Admin
             <div class="admin-section">
                 <h2>Branding Settings</h2>
                 <form method="POST" action="/admin/server/branding">
+                    <input type="hidden" name="csrf_token" value="%s">
                     <div class="form-row">
                         <label>Application Name</label>
                         <input type="text" name="app_name" value="%s">
@@ -713,6 +724,7 @@ func (h *Handler) renderServerBrandingContent(w http.ResponseWriter, data *Admin
                     <button type="submit" class="btn">Save Branding</button>
                 </form>
             </div>`,
+		data.CSRFToken,
 		h.config.Server.Branding.AppName,
 		h.config.Server.Branding.LogoURL,
 		h.config.Server.Branding.FaviconURL,
@@ -741,6 +753,7 @@ func (h *Handler) renderServerSSLContent(w http.ResponseWriter, data *AdminPageD
             <div class="admin-section">
                 <h2>SSL/TLS Configuration</h2>
                 <form method="POST" action="/admin/server/ssl" id="ssl-form">
+                    <input type="hidden" name="csrf_token" value="%s">
                     <div class="form-row">
                         <label class="toggle">
                             <input type="checkbox" name="enabled" %s>
@@ -801,6 +814,7 @@ func (h *Handler) renderServerSSLContent(w http.ResponseWriter, data *AdminPageD
                         </select>
                         <span class="help-text">Select how Let's Encrypt verifies domain ownership</span>
                     </div>`,
+		data.CSRFToken,
 		checked(h.config.Server.SSL.Enabled),
 		checked(h.config.Server.SSL.AutoTLS),
 		h.config.Server.SSL.CertFile,
@@ -929,48 +943,50 @@ func selectedBool(b bool) string {
 }
 
 func (h *Handler) renderServerTorContent(w http.ResponseWriter, data *AdminPageData) {
+	// Per AI.md PART 32: Tor is auto-enabled if binary found
+	torStatus := "Disabled (tor binary not found)"
+	torStatusClass := "disabled"
+	if h.config.Server.Tor.Enabled {
+		torStatus = "Enabled"
+		torStatusClass = "enabled"
+		if h.config.Server.Tor.OnionAddress != "" {
+			torStatus = "Running: " + h.config.Server.Tor.OnionAddress
+		}
+	}
+
 	fmt.Fprintf(w, `
             <div class="admin-section">
                 <h2>Tor Hidden Service</h2>
-                <form method="POST" action="/admin/server/tor">
-                    <div class="form-row">
-                        <label><input type="checkbox" name="enabled" %s> Enable Tor</label>
-                    </div>
-                    <div class="form-row">
-                        <label>Tor Binary Path</label>
-                        <input type="text" name="binary" value="%s" placeholder="/usr/bin/tor">
-                    </div>
-                    <div class="form-row">
-                        <label>SOCKS Proxy</label>
-                        <input type="text" name="socks_proxy" value="%s" placeholder="127.0.0.1:9050">
-                    </div>
-                    <div class="form-row">
-                        <label>SOCKS Port</label>
-                        <input type="number" name="socks_port" value="%d">
-                    </div>
-                    <div class="form-row">
-                        <label>Control Port</label>
-                        <input type="number" name="control_port" value="%d">
-                    </div>
-                    <div class="form-row">
-                        <label>Control Password</label>
-                        <input type="password" name="control_password" value="%s" placeholder="Leave empty if not set">
-                    </div>
-                    <div class="form-row">
-                        <label><input type="checkbox" name="stream_isolation" %s> Enable Stream Isolation</label>
-                    </div>
-                    <div class="form-row">
-                        <label>Onion Address</label>
-                        <input type="text" id="onion-address" name="onion_address" value="%s" readonly placeholder="Generated automatically">
-                    </div>
-                    <div class="form-row">
-                        <label>Hidden Service Port</label>
-                        <input type="number" name="hidden_service_port" value="%d">
-                    </div>
-                    <button type="submit" class="btn">Save Tor Settings</button>
-                </form>
-            </div>
+                <p class="desc-text">Per AI.md PART 32: Tor is automatically enabled when the tor binary is found.</p>
+                <table class="admin-table max-w-400">
+                    <tr>
+                        <td class="text-secondary">Status</td>
+                        <td><span class="status-badge %s">%s</span></td>
+                    </tr>
+                    <tr>
+                        <td class="text-secondary">Onion Address</td>
+                        <td><input type="text" id="onion-address" value="%s" readonly class="form-control"></td>
+                    </tr>
+                </table>
 
+                <form method="POST" action="/admin/server/tor" class="mt-20">
+                    <input type="hidden" name="csrf_token" value="%s">
+                    <div class="form-row">
+                        <label>Tor Binary Path (optional)</label>
+                        <input type="text" name="binary" value="%s" placeholder="Auto-detect from PATH">
+                        <p class="help-text">Leave empty to auto-detect. Common locations: /usr/bin/tor, /usr/local/bin/tor</p>
+                    </div>
+                    <button type="submit" class="btn">Update Path</button>
+                </form>
+            </div>`,
+		torStatusClass, torStatus,
+		h.config.Server.Tor.OnionAddress,
+		data.CSRFToken,
+		h.config.Server.Tor.Binary,
+	)
+
+	// Service Control, Vanity Address, and Key Management sections
+	fmt.Fprintf(w, `
             <!-- Service Control per AI.md PART 32 -->
             <div class="admin-section">
                 <h2>Service Control</h2>
@@ -1135,17 +1151,7 @@ func (h *Handler) renderServerTorContent(w http.ResponseWriter, data *AdminPageD
                     })
                     .catch(e => showToast('Failed: ' + e, 'error'));
             }
-            </script>`,
-		checked(h.config.Server.Tor.Enabled),
-		h.config.Server.Tor.Binary,
-		h.config.Server.Tor.SocksProxy,
-		h.config.Server.Tor.SocksPort,
-		h.config.Server.Tor.ControlPort,
-		h.config.Server.Tor.ControlPassword,
-		checked(h.config.Server.Tor.StreamIsolation),
-		h.config.Server.Tor.OnionAddress,
-		h.config.Server.Tor.HiddenServicePort,
-	)
+            </script>`)
 }
 
 func (h *Handler) renderServerWebContent(w http.ResponseWriter, data *AdminPageData) {
@@ -1153,6 +1159,7 @@ func (h *Handler) renderServerWebContent(w http.ResponseWriter, data *AdminPageD
             <div class="admin-section">
                 <h2>robots.txt Configuration</h2>
                 <form method="POST" action="/admin/server/web/robots">
+                    <input type="hidden" name="csrf_token" value="%s">
                     <div class="form-row">
                         <label>Allow Paths (one per line)</label>
                         <textarea name="allow" rows="4" placeholder="/&#10;/api">%s</textarea>
@@ -1168,6 +1175,7 @@ func (h *Handler) renderServerWebContent(w http.ResponseWriter, data *AdminPageD
             <div class="admin-section">
                 <h2>security.txt Configuration</h2>
                 <form method="POST" action="/admin/server/web/security">
+                    <input type="hidden" name="csrf_token" value="%s">
                     <div class="form-row">
                         <label>Contact</label>
                         <input type="text" name="contact" value="%s" placeholder="mailto:security@example.com">
@@ -1183,6 +1191,7 @@ func (h *Handler) renderServerWebContent(w http.ResponseWriter, data *AdminPageD
             <div class="admin-section">
                 <h2>Cookie Consent</h2>
                 <form method="POST" action="/admin/server/web/cookies">
+                    <input type="hidden" name="csrf_token" value="%s">
                     <div class="form-row">
                         <label><input type="checkbox" name="enabled" %s> Enable Cookie Consent Popup</label>
                     </div>
@@ -1201,6 +1210,7 @@ func (h *Handler) renderServerWebContent(w http.ResponseWriter, data *AdminPageD
             <div class="admin-section">
                 <h2>CORS Settings</h2>
                 <form method="POST" action="/admin/server/web/cors">
+                    <input type="hidden" name="csrf_token" value="%s">
                     <div class="form-row">
                         <label>Allowed Origins</label>
                         <input type="text" name="cors" value="%s" placeholder="* or comma-separated origins">
@@ -1208,13 +1218,17 @@ func (h *Handler) renderServerWebContent(w http.ResponseWriter, data *AdminPageD
                     <button type="submit" class="btn">Save CORS Settings</button>
                 </form>
             </div>`,
+		data.CSRFToken,
 		joinStrings(h.config.Server.Web.Robots.Allow),
 		joinStrings(h.config.Server.Web.Robots.Deny),
+		data.CSRFToken,
 		h.config.Server.Web.Security.Contact,
 		formatDateForInput(h.config.Server.Web.Security.Expires),
+		data.CSRFToken,
 		checked(h.config.Server.Web.CookieConsent.Enabled),
 		h.config.Server.Web.CookieConsent.Message,
 		h.config.Server.Web.CookieConsent.PolicyURL,
+		data.CSRFToken,
 		h.config.Server.Web.CORS,
 	)
 }
@@ -1233,6 +1247,7 @@ func (h *Handler) renderServerEmailContent(w http.ResponseWriter, data *AdminPag
                 <h2>Email / SMTP Configuration</h2>
                 <p class="help-text">Email is automatically enabled when SMTP host is configured.</p>
                 <form method="POST" action="/admin/server/email">
+                    <input type="hidden" name="csrf_token" value="%s">
                     <h3>SMTP Server</h3>
                     <div class="form-row">
                         <label>SMTP Host</label>
@@ -1281,6 +1296,7 @@ func (h *Handler) renderServerEmailContent(w http.ResponseWriter, data *AdminPag
                     .catch(e => showToast('Failed to send test email: ' + e, 'error'));
             }
             </script>`,
+		data.CSRFToken,
 		h.config.Server.Email.SMTP.Host,
 		h.config.Server.Email.SMTP.Port,
 		h.config.Server.Email.SMTP.Username,
@@ -1299,6 +1315,7 @@ func (h *Handler) renderServerAnnouncementsContent(w http.ResponseWriter, data *
             <div class="admin-section">
                 <h2>Announcements</h2>
                 <form method="POST" action="/admin/server/announcements">
+                    <input type="hidden" name="csrf_token" value="%s">
                     <div class="form-row">
                         <label><input type="checkbox" name="enabled" %s> Enable Announcements</label>
                     </div>
@@ -1309,6 +1326,7 @@ func (h *Handler) renderServerAnnouncementsContent(w http.ResponseWriter, data *
             <div class="admin-section">
                 <h2>Add New Announcement</h2>
                 <form method="POST" action="/admin/server/announcements/add">
+                    <input type="hidden" name="csrf_token" value="%s">
                     <div class="form-row">
                         <label>ID (unique identifier)</label>
                         <input type="text" name="id" required placeholder="announcement-1">
@@ -1359,7 +1377,9 @@ func (h *Handler) renderServerAnnouncementsContent(w http.ResponseWriter, data *
                         </tr>
                     </thead>
                     <tbody>`,
+		data.CSRFToken,
 		checked(h.config.Server.Web.Announcements.Enabled),
+		data.CSRFToken,
 	)
 
 	if len(h.config.Server.Web.Announcements.Messages) == 0 {
@@ -1378,6 +1398,7 @@ func (h *Handler) renderServerAnnouncementsContent(w http.ResponseWriter, data *
                             <td>%s</td>
                             <td>
                                 <form method="POST" action="/admin/server/announcements/delete" class="form-inline">
+                                    <input type="hidden" name="csrf_token" value="%s">
                                     <input type="hidden" name="id" value="%s">
                                     <button type="submit" class="btn btn-danger btn-sm">Delete</button>
                                 </form>
@@ -1389,6 +1410,7 @@ func (h *Handler) renderServerAnnouncementsContent(w http.ResponseWriter, data *
 				a.Title,
 				formatAnnouncementDate(a.Start),
 				formatAnnouncementDate(a.End),
+				data.CSRFToken,
 				a.ID,
 			)
 		}
@@ -1406,6 +1428,7 @@ func (h *Handler) renderServerGeoIPContent(w http.ResponseWriter, data *AdminPag
                 <h2>GeoIP Configuration</h2>
                 <p class="desc-text">Uses MMDB format databases from sapics/ip-location-db (free, no API key required).</p>
                 <form method="POST" action="/admin/server/geoip">
+                    <input type="hidden" name="csrf_token" value="%s">
                     <div class="form-row">
                         <label><input type="checkbox" name="enabled" %s> Enable GeoIP</label>
                     </div>
@@ -1438,6 +1461,7 @@ func (h *Handler) renderServerGeoIPContent(w http.ResponseWriter, data *AdminPag
             <div class="admin-section">
                 <h2>Country Restrictions</h2>
                 <form method="POST" action="/admin/server/geoip/restrictions">
+                    <input type="hidden" name="csrf_token" value="%s">
                     <div class="form-row">
                         <label>Deny Countries (ISO 3166-1 alpha-2, comma-separated)</label>
                         <input type="text" name="deny_countries" value="%s" placeholder="CN, RU, KP">
@@ -1449,6 +1473,7 @@ func (h *Handler) renderServerGeoIPContent(w http.ResponseWriter, data *AdminPag
                     <button type="submit" class="btn">Save Restrictions</button>
                 </form>
             </div>`,
+		data.CSRFToken,
 		checked(h.config.Server.GeoIP.Enabled),
 		h.config.Server.GeoIP.Dir,
 		selectedValue(h.config.Server.GeoIP.Update, "never"),
@@ -1458,6 +1483,7 @@ func (h *Handler) renderServerGeoIPContent(w http.ResponseWriter, data *AdminPag
 		checked(h.config.Server.GeoIP.ASN),
 		checked(h.config.Server.GeoIP.Country),
 		checked(h.config.Server.GeoIP.City),
+		data.CSRFToken,
 		joinStrings(h.config.Server.GeoIP.DenyCountries),
 		joinStrings(h.config.Server.GeoIP.AllowedCountries),
 	)
@@ -1469,6 +1495,7 @@ func (h *Handler) renderServerMetricsContent(w http.ResponseWriter, data *AdminP
                 <h2>Prometheus Metrics</h2>
                 <p class="desc-text">Expose Prometheus-compatible metrics endpoint for monitoring.</p>
                 <form method="POST" action="/admin/server/metrics">
+                    <input type="hidden" name="csrf_token" value="%s">
                     <div class="form-row">
                         <label><input type="checkbox" name="enabled" %s> Enable Metrics Endpoint</label>
                     </div>
@@ -1513,8 +1540,9 @@ func (h *Handler) renderServerMetricsContent(w http.ResponseWriter, data *AdminP
                     </tbody>
                 </table>
             </div>`,
+		data.CSRFToken,
 		checked(h.config.Server.Metrics.Enabled),
-		h.config.Server.Metrics.Path,
+		h.config.Server.Metrics.Endpoint,
 		checked(h.config.Server.Metrics.IncludeSystem),
 		h.config.Server.Metrics.Token,
 	)
@@ -1786,6 +1814,7 @@ func (h *Handler) renderSetupContent(w http.ResponseWriter, data *AdminPageData)
                     Welcome! Create the primary administrator account to get started.
                 </p>
                 <form method="POST" action="/admin/setup">
+                    <input type="hidden" name="csrf_token" value="%s">
                     %s
                     <div class="form-row">
                         <label>Username</label>
@@ -1812,6 +1841,7 @@ func (h *Handler) renderSetupContent(w http.ResponseWriter, data *AdminPageData)
                     <button type="submit" class="btn">Create Admin Account</button>
                 </form>
             </div>`,
+		data.CSRFToken,
 		tokenField,
 	)
 }
@@ -1857,17 +1887,18 @@ func (h *Handler) renderAdminsContent(w http.ResponseWriter, data *AdminPageData
 	// Create invite form (primary admin only)
 	createInviteForm := ""
 	if isPrimary {
-		createInviteForm = `
+		createInviteForm = fmt.Sprintf(`
             <div class="admin-section">
                 <h2>Invite New Admin</h2>
                 <form method="POST" action="/admin/users/admins/invite">
+                    <input type="hidden" name="csrf_token" value="%s">
                     <div class="form-row">
                         <label>Suggested Username (optional)</label>
                         <input type="text" name="username" placeholder="Leave empty for invite to choose">
                     </div>
                     <button type="submit" class="btn">Create Invite Link</button>
                 </form>
-            </div>`
+            </div>`, data.CSRFToken)
 	}
 
 	fmt.Fprintf(w, `
@@ -1920,10 +1951,11 @@ func (h *Handler) renderAdminsContent(w http.ResponseWriter, data *AdminPageData
 			if isPrimary && !admin.IsPrimary {
 				actionButtons = fmt.Sprintf(`
                                 <form id="delete-admin-%d" method="POST" action="/admin/users/admins/%d/delete" class="form-inline">
+                                    <input type="hidden" name="csrf_token" value="%s">
                                     <button type="button" class="btn btn-danger btn-sm"
                                             onclick="confirmDeleteAdmin(%d)">Delete</button>
                                 </form>`,
-					admin.ID, admin.ID, admin.ID,
+					admin.ID, admin.ID, data.CSRFToken, admin.ID,
 				)
 			}
 
@@ -2000,6 +2032,7 @@ func (h *Handler) renderInviteAcceptContent(w http.ResponseWriter, data *AdminPa
                     You've been invited to become a server administrator. Create your account below.
                 </p>
                 <form method="POST">
+                    <input type="hidden" name="csrf_token" value="%s">
                     <div class="form-row">
                         <label>Username</label>
                         <input type="text" name="username" required value="%s" pattern="[a-z][a-z0-9_-]{2,31}"
@@ -2025,6 +2058,7 @@ func (h *Handler) renderInviteAcceptContent(w http.ResponseWriter, data *AdminPa
                     <button type="submit" class="btn">Create Admin Account</button>
                 </form>
             </div>`,
+		data.CSRFToken,
 		suggestedUsername,
 	)
 }
@@ -2181,18 +2215,20 @@ func (h *Handler) renderNodesContent(w http.ResponseWriter, data *AdminPageData)
 	if isCluster {
 		actionsSection := ""
 		if isPrimary {
-			actionsSection = `
+			actionsSection = fmt.Sprintf(`
             <div class="admin-section">
                 <h2>Cluster Actions</h2>
                 <form method="POST" action="/admin/server/nodes/token" class="d-inline-block mr-10">
+                    <input type="hidden" name="csrf_token" value="%s">
                     <button type="submit" class="btn">Generate Join Token</button>
                 </form>
-            </div>`
+            </div>`, data.CSRFToken)
 		} else {
-			actionsSection = `
+			actionsSection = fmt.Sprintf(`
             <div class="admin-section">
                 <h2>Node Actions</h2>
                 <form id="leave-cluster-form" method="POST" action="/admin/server/nodes/leave">
+                    <input type="hidden" name="csrf_token" value="%s">
                     <button type="button" class="btn btn-danger" onclick="confirmLeaveCluster()">Leave Cluster</button>
                 </form>
             </div>
@@ -2208,7 +2244,7 @@ func (h *Handler) renderNodesContent(w http.ResponseWriter, data *AdminPageData)
                     document.getElementById('leave-cluster-form').submit();
                 }
             }
-            </script>`
+            </script>`, data.CSRFToken)
 		}
 		fmt.Fprintf(w, "%s", actionsSection)
 	}
@@ -2300,6 +2336,7 @@ func (h *Handler) renderServerBackupContent(w http.ResponseWriter, data *AdminPa
                     Create a backup of your database, configuration, and data files.
                 </p>
                 <form method="POST" action="/admin/server/backup">
+                    <input type="hidden" name="csrf_token" value="%s">
                     <input type="hidden" name="action" value="create">
                     <button type="submit" class="btn">Create Backup Now</button>
                 </form>
@@ -2327,6 +2364,7 @@ func (h *Handler) renderServerBackupContent(w http.ResponseWriter, data *AdminPa
             <div class="admin-section">
                 <h2>Backup Settings</h2>
                 <form method="POST" action="/admin/server/backup">
+                    <input type="hidden" name="csrf_token" value="%s">
                     <input type="hidden" name="action" value="settings">
                     <div class="form-row">
                         <label>Automatic Backups</label>
@@ -2342,7 +2380,10 @@ func (h *Handler) renderServerBackupContent(w http.ResponseWriter, data *AdminPa
                     </div>
                     <button type="submit" class="btn">Save Settings</button>
                 </form>
-            </div>`)
+            </div>`,
+		data.CSRFToken,
+		data.CSRFToken,
+	)
 }
 
 // renderServerMaintenanceContent renders the maintenance mode page content
@@ -2359,6 +2400,7 @@ func (h *Handler) renderServerMaintenanceContent(w http.ResponseWriter, data *Ad
                     When enabled, all users will see a maintenance page. Admins can still access the admin panel.
                 </p>
                 <form method="POST" action="/admin/server/maintenance">
+                    <input type="hidden" name="csrf_token" value="%s">
                     <div class="form-row">
                         <label>
                             <input type="checkbox" name="enabled" %s class="mr-8">
@@ -2375,7 +2417,7 @@ func (h *Handler) renderServerMaintenanceContent(w http.ResponseWriter, data *Ad
                     <a href="/api/v1/admin/reload" class="btn">Reload Configuration</a>
                     <a href="/admin/server/backup" class="btn">Create Backup</a>
                 </div>
-            </div>`, maintenanceEnabled)
+            </div>`, data.CSRFToken, maintenanceEnabled)
 }
 
 // renderServerUpdatesContent renders the updates page content
@@ -2487,6 +2529,7 @@ func (h *Handler) renderServerSecurityContent(w http.ResponseWriter, data *Admin
             <div class="admin-section">
                 <h2>Rate Limiting</h2>
                 <form method="POST" action="/admin/server/security">
+                    <input type="hidden" name="csrf_token" value="%s">
                     <div class="form-row">
                         <label>
                             <input type="checkbox" name="rate_limit_enabled" %s class="mr-8">
@@ -2523,6 +2566,7 @@ func (h *Handler) renderServerSecurityContent(w http.ResponseWriter, data *Admin
                     <li><a href="/admin/tokens">API Tokens</a></li>
                 </ul>
             </div>`,
+		data.CSRFToken,
 		rateLimitEnabled,
 		data.Config.Server.RateLimit.RequestsPerMinute,
 		data.Config.Server.RateLimit.BurstSize,

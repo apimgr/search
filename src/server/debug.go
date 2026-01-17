@@ -37,6 +37,7 @@ func (s *Server) registerDebugRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/debug/memory", s.handleDebugMemory)
 	mux.HandleFunc("/debug/goroutines", s.handleDebugGoroutines)
 	mux.HandleFunc("/debug/cache", s.handleDebugCache)
+	mux.HandleFunc("/debug/db", s.handleDebugDB)
 	mux.HandleFunc("/debug/scheduler", s.handleDebugScheduler)
 }
 
@@ -146,6 +147,33 @@ func (s *Server) handleDebugCache(w http.ResponseWriter, r *http.Request) {
 
 	if s.aggregator != nil {
 		stats["cache_enabled"] = true
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(stats)
+}
+
+// handleDebugDB returns database statistics
+// Per AI.md PART 6: Debug endpoint for database stats
+func (s *Server) handleDebugDB(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	stats := map[string]interface{}{
+		"enabled": s.dbManager != nil,
+	}
+
+	if s.dbManager != nil && s.dbManager.ServerDB() != nil {
+		dbStats := s.dbManager.ServerDB().SQL().Stats()
+		stats["open_connections"] = dbStats.OpenConnections
+		stats["in_use"] = dbStats.InUse
+		stats["idle"] = dbStats.Idle
+		stats["wait_count"] = dbStats.WaitCount
+		stats["wait_duration_ms"] = dbStats.WaitDuration.Milliseconds()
+		stats["max_idle_closed"] = dbStats.MaxIdleClosed
+		stats["max_lifetime_closed"] = dbStats.MaxLifetimeClosed
 	}
 
 	w.Header().Set("Content-Type", "application/json")

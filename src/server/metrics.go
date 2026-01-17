@@ -101,14 +101,14 @@ func NewMetrics(cfg *config.Config) *Metrics {
 		// HTTP metrics per AI.md PART 29
 		httpRequestsTotal: promauto.With(reg).NewCounterVec(
 			prometheus.CounterOpts{
-				Name: "apimgr_http_requests_total",
+				Name: "search_http_requests_total",
 				Help: "Total number of HTTP requests",
 			},
 			[]string{"method", "path", "status"},
 		),
 		httpRequestDuration: promauto.With(reg).NewHistogramVec(
 			prometheus.HistogramOpts{
-				Name:    "apimgr_http_request_duration_seconds",
+				Name:    "search_http_request_duration_seconds",
 				Help:    "HTTP request duration in seconds",
 				Buckets: durationBuckets,
 			},
@@ -116,7 +116,7 @@ func NewMetrics(cfg *config.Config) *Metrics {
 		),
 		httpRequestSize: promauto.With(reg).NewHistogramVec(
 			prometheus.HistogramOpts{
-				Name:    "apimgr_http_request_size_bytes",
+				Name:    "search_http_request_size_bytes",
 				Help:    "HTTP request size in bytes",
 				Buckets: sizeBuckets,
 			},
@@ -124,7 +124,7 @@ func NewMetrics(cfg *config.Config) *Metrics {
 		),
 		httpResponseSize: promauto.With(reg).NewHistogramVec(
 			prometheus.HistogramOpts{
-				Name:    "apimgr_http_response_size_bytes",
+				Name:    "search_http_response_size_bytes",
 				Help:    "HTTP response size in bytes",
 				Buckets: sizeBuckets,
 			},
@@ -132,7 +132,7 @@ func NewMetrics(cfg *config.Config) *Metrics {
 		),
 		httpActiveRequests: promauto.With(reg).NewGauge(
 			prometheus.GaugeOpts{
-				Name: "apimgr_http_active_requests",
+				Name: "search_http_active_requests",
 				Help: "Number of active HTTP requests",
 			},
 		),
@@ -140,14 +140,14 @@ func NewMetrics(cfg *config.Config) *Metrics {
 		// Database metrics per AI.md PART 29
 		dbQueriesTotal: promauto.With(reg).NewCounterVec(
 			prometheus.CounterOpts{
-				Name: "apimgr_db_queries_total",
+				Name: "search_db_queries_total",
 				Help: "Total number of database queries",
 			},
 			[]string{"operation", "table"},
 		),
 		dbQueryDuration: promauto.With(reg).NewHistogramVec(
 			prometheus.HistogramOpts{
-				Name:    "apimgr_db_query_duration_seconds",
+				Name:    "search_db_query_duration_seconds",
 				Help:    "Database query duration in seconds",
 				Buckets: queryBuckets,
 			},
@@ -155,19 +155,19 @@ func NewMetrics(cfg *config.Config) *Metrics {
 		),
 		dbConnectionsOpen: promauto.With(reg).NewGauge(
 			prometheus.GaugeOpts{
-				Name: "apimgr_db_connections_open",
+				Name: "search_db_connections_open",
 				Help: "Number of open database connections",
 			},
 		),
 		dbConnectionsInUse: promauto.With(reg).NewGauge(
 			prometheus.GaugeOpts{
-				Name: "apimgr_db_connections_in_use",
+				Name: "search_db_connections_in_use",
 				Help: "Number of database connections in use",
 			},
 		),
 		dbErrors: promauto.With(reg).NewCounterVec(
 			prometheus.CounterOpts{
-				Name: "apimgr_db_errors_total",
+				Name: "search_db_errors_total",
 				Help: "Total number of database errors",
 			},
 			[]string{"operation", "error_type"},
@@ -176,35 +176,35 @@ func NewMetrics(cfg *config.Config) *Metrics {
 		// Cache metrics per AI.md PART 29
 		cacheHits: promauto.With(reg).NewCounterVec(
 			prometheus.CounterOpts{
-				Name: "apimgr_cache_hits_total",
+				Name: "search_cache_hits_total",
 				Help: "Total number of cache hits",
 			},
 			[]string{"cache"},
 		),
 		cacheMisses: promauto.With(reg).NewCounterVec(
 			prometheus.CounterOpts{
-				Name: "apimgr_cache_misses_total",
+				Name: "search_cache_misses_total",
 				Help: "Total number of cache misses",
 			},
 			[]string{"cache"},
 		),
 		cacheEvictions: promauto.With(reg).NewCounterVec(
 			prometheus.CounterOpts{
-				Name: "apimgr_cache_evictions_total",
+				Name: "search_cache_evictions_total",
 				Help: "Total number of cache evictions",
 			},
 			[]string{"cache"},
 		),
 		cacheSize: promauto.With(reg).NewGaugeVec(
 			prometheus.GaugeOpts{
-				Name: "apimgr_cache_size",
+				Name: "search_cache_size",
 				Help: "Current cache size (items)",
 			},
 			[]string{"cache"},
 		),
 		cacheBytes: promauto.With(reg).NewGaugeVec(
 			prometheus.GaugeOpts{
-				Name: "apimgr_cache_bytes",
+				Name: "search_cache_bytes",
 				Help: "Current cache size (bytes)",
 			},
 			[]string{"cache"},
@@ -213,14 +213,14 @@ func NewMetrics(cfg *config.Config) *Metrics {
 		// Scheduler metrics per AI.md PART 29
 		schedulerTasksTotal: promauto.With(reg).NewCounterVec(
 			prometheus.CounterOpts{
-				Name: "apimgr_scheduler_tasks_total",
+				Name: "search_scheduler_tasks_total",
 				Help: "Total number of scheduled tasks executed",
 			},
 			[]string{"task", "status"},
 		),
 		schedulerTaskDuration: promauto.With(reg).NewHistogramVec(
 			prometheus.HistogramOpts{
-				Name:    "apimgr_scheduler_task_duration_seconds",
+				Name:    "search_scheduler_task_duration_seconds",
 				Help:    "Scheduled task duration in seconds",
 				Buckets: taskBuckets,
 			},
@@ -228,14 +228,14 @@ func NewMetrics(cfg *config.Config) *Metrics {
 		),
 		schedulerTasksRunning: promauto.With(reg).NewGaugeVec(
 			prometheus.GaugeOpts{
-				Name: "apimgr_scheduler_tasks_running",
+				Name: "search_scheduler_tasks_running",
 				Help: "Number of currently running scheduled tasks",
 			},
 			[]string{"task"},
 		),
 		schedulerLastRun: promauto.With(reg).NewGaugeVec(
 			prometheus.GaugeOpts{
-				Name: "apimgr_scheduler_last_run_timestamp",
+				Name: "search_scheduler_last_run_timestamp",
 				Help: "Timestamp of last task run",
 			},
 			[]string{"task"},
@@ -244,14 +244,14 @@ func NewMetrics(cfg *config.Config) *Metrics {
 		// Authentication metrics per AI.md PART 29
 		authAttempts: promauto.With(reg).NewCounterVec(
 			prometheus.CounterOpts{
-				Name: "apimgr_auth_attempts_total",
+				Name: "search_auth_attempts_total",
 				Help: "Total authentication attempts",
 			},
 			[]string{"method", "status"},
 		),
 		authSessionsActive: promauto.With(reg).NewGauge(
 			prometheus.GaugeOpts{
-				Name: "apimgr_auth_sessions_active",
+				Name: "search_auth_sessions_active",
 				Help: "Number of active sessions",
 			},
 		),
@@ -259,13 +259,13 @@ func NewMetrics(cfg *config.Config) *Metrics {
 		// Business metrics per AI.md PART 29
 		usersTotal: promauto.With(reg).NewGauge(
 			prometheus.GaugeOpts{
-				Name: "apimgr_users_total",
+				Name: "search_users_total",
 				Help: "Total number of registered users",
 			},
 		),
 		usersActive: promauto.With(reg).NewGauge(
 			prometheus.GaugeOpts{
-				Name: "apimgr_users_active",
+				Name: "search_users_active",
 				Help: "Number of users active in last 24 hours",
 			},
 		),
@@ -273,13 +273,13 @@ func NewMetrics(cfg *config.Config) *Metrics {
 		// Search metrics
 		searchesTotal: promauto.With(reg).NewCounter(
 			prometheus.CounterOpts{
-				Name: "apimgr_searches_total",
+				Name: "search_searches_total",
 				Help: "Total number of search queries",
 			},
 		),
 		searchDuration: promauto.With(reg).NewHistogramVec(
 			prometheus.HistogramOpts{
-				Name:    "apimgr_search_duration_seconds",
+				Name:    "search_search_duration_seconds",
 				Help:    "Search query duration in seconds",
 				Buckets: durationBuckets,
 			},
@@ -287,14 +287,14 @@ func NewMetrics(cfg *config.Config) *Metrics {
 		),
 		engineRequests: promauto.With(reg).NewCounterVec(
 			prometheus.CounterOpts{
-				Name: "apimgr_engine_requests_total",
+				Name: "search_engine_requests_total",
 				Help: "Total requests per search engine",
 			},
 			[]string{"engine"},
 		),
 		engineErrors: promauto.With(reg).NewCounterVec(
 			prometheus.CounterOpts{
-				Name: "apimgr_engine_errors_total",
+				Name: "search_engine_errors_total",
 				Help: "Total errors per search engine",
 			},
 			[]string{"engine"},
@@ -303,55 +303,55 @@ func NewMetrics(cfg *config.Config) *Metrics {
 		// System metrics
 		uptimeSeconds: promauto.With(reg).NewGauge(
 			prometheus.GaugeOpts{
-				Name: "apimgr_uptime_seconds",
+				Name: "search_uptime_seconds",
 				Help: "Server uptime in seconds",
 			},
 		),
 		goroutines: promauto.With(reg).NewGauge(
 			prometheus.GaugeOpts{
-				Name: "apimgr_goroutines",
+				Name: "search_goroutines",
 				Help: "Number of active goroutines",
 			},
 		),
 		memAlloc: promauto.With(reg).NewGauge(
 			prometheus.GaugeOpts{
-				Name: "apimgr_memory_alloc_bytes",
+				Name: "search_memory_alloc_bytes",
 				Help: "Currently allocated memory in bytes",
 			},
 		),
 		memSys: promauto.With(reg).NewGauge(
 			prometheus.GaugeOpts{
-				Name: "apimgr_memory_sys_bytes",
+				Name: "search_memory_sys_bytes",
 				Help: "Total memory obtained from system",
 			},
 		),
 		cpuUsage: promauto.With(reg).NewGauge(
 			prometheus.GaugeOpts{
-				Name: "apimgr_cpu_usage_percent",
+				Name: "search_cpu_usage_percent",
 				Help: "CPU usage percentage",
 			},
 		),
 		memUsedPercent: promauto.With(reg).NewGauge(
 			prometheus.GaugeOpts{
-				Name: "apimgr_memory_used_percent",
+				Name: "search_memory_used_percent",
 				Help: "System memory usage percentage",
 			},
 		),
 		diskUsedBytes: promauto.With(reg).NewGauge(
 			prometheus.GaugeOpts{
-				Name: "apimgr_disk_used_bytes",
+				Name: "search_disk_used_bytes",
 				Help: "Disk space used in bytes",
 			},
 		),
 		diskTotalBytes: promauto.With(reg).NewGauge(
 			prometheus.GaugeOpts{
-				Name: "apimgr_disk_total_bytes",
+				Name: "search_disk_total_bytes",
 				Help: "Total disk space in bytes",
 			},
 		),
 		diskUsedPercent: promauto.With(reg).NewGauge(
 			prometheus.GaugeOpts{
-				Name: "apimgr_disk_used_percent",
+				Name: "search_disk_used_percent",
 				Help: "Disk space usage percentage",
 			},
 		),

@@ -154,11 +154,9 @@ func New(cfg *config.Config) *Server {
 	// Create API handler
 	apiHandler := api.NewHandler(cfg, registry, aggregator)
 
-	// Create Tor service if enabled
-	var torSvc *service.TorService
-	if cfg.Server.Tor.Enabled {
-		torSvc = service.NewTorService(cfg)
-	}
+	// Create Tor service - auto-enabled if tor binary found per AI.md PART 32
+	// "Auto-enabled if tor binary is installed - no enable flag needed"
+	torSvc := service.NewTorService(cfg)
 
 	// Create bang manager
 	bangMgr := bangs.NewManager()
@@ -803,7 +801,7 @@ func (s *Server) setupRoutes() http.Handler {
 
 	// Metrics endpoint (Prometheus-compatible)
 	if s.config.Server.Metrics.Enabled {
-		metricsPath := s.config.Server.Metrics.Path
+		metricsPath := s.config.Server.Metrics.Endpoint
 		if metricsPath == "" {
 			metricsPath = "/metrics"
 		}

@@ -9,7 +9,11 @@ import (
 	"sync"
 	"time"
 
-	_ "modernc.org/sqlite"
+	// Database drivers per AI.md PART 6-10
+	_ "github.com/go-sql-driver/mysql"           // MySQL/MariaDB
+	_ "github.com/jackc/pgx/v5/stdlib"           // PostgreSQL
+	_ "github.com/microsoft/go-mssqldb"          // MSSQL
+	_ "modernc.org/sqlite"                       // SQLite
 )
 
 // DB represents a single database connection
@@ -87,22 +91,60 @@ func NewDatabaseManager(cfg *Config) (*DatabaseManager, error) {
 }
 
 // connectDatabase creates a connection to a specific database
+// Per AI.md PART 6-10: Multi-database driver support
 func (dm *DatabaseManager) connectDatabase(cfg *Config, dbName string) (*DB, error) {
 	db := &DB{
 		driver: cfg.Driver,
 	}
 
+	var err error
 	switch cfg.Driver {
 	case "sqlite", "sqlite3":
 		// Build DSN for SQLite
 		db.dsn = filepath.Join(cfg.DataDir, dbName)
-		var err error
 		db.db, err = sql.Open("sqlite", db.dsn)
 		if err != nil {
-			return nil, fmt.Errorf("failed to open database: %w", err)
+			return nil, fmt.Errorf("failed to open sqlite database: %w", err)
 		}
+
+	case "postgres", "pgx":
+		// PostgreSQL - uses DSN from config
+		// DSN format: postgres://user:password@host:port/database?sslmode=require
+		if cfg.DSN == "" {
+			return nil, fmt.Errorf("postgres requires DSN in config")
+		}
+		db.dsn = cfg.DSN
+		db.db, err = sql.Open("pgx", db.dsn)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open postgres database: %w", err)
+		}
+
+	case "mysql", "mariadb":
+		// MySQL/MariaDB - uses DSN from config
+		// DSN format: user:password@tcp(host:port)/database?parseTime=true&charset=utf8mb4
+		if cfg.DSN == "" {
+			return nil, fmt.Errorf("mysql requires DSN in config")
+		}
+		db.dsn = cfg.DSN
+		db.db, err = sql.Open("mysql", db.dsn)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open mysql database: %w", err)
+		}
+
+	case "mssql", "sqlserver":
+		// MSSQL - uses DSN from config
+		// DSN format: sqlserver://user:password@host:port?database=dbname
+		if cfg.DSN == "" {
+			return nil, fmt.Errorf("mssql requires DSN in config")
+		}
+		db.dsn = cfg.DSN
+		db.db, err = sql.Open("sqlserver", db.dsn)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open mssql database: %w", err)
+		}
+
 	default:
-		return nil, fmt.Errorf("unsupported database driver: %s", cfg.Driver)
+		return nil, fmt.Errorf("unsupported database driver: %s (supported: sqlite, postgres, mysql, mssql)", cfg.Driver)
 	}
 
 	// Configure connection pool

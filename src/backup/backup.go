@@ -2,6 +2,7 @@ package backup
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
@@ -72,9 +73,9 @@ func (m *Manager) Create(filename string) (string, error) {
 	}
 
 	// Generate filename if not specified
-	// Per AI.md PART 22: Format is apimgr_backup_YYYY-MM-DD_HHMMSS.tar.gz
+	// Per AI.md PART 22: Format is search_backup_YYYY-MM-DD_HHMMSS.tar.gz
 	if filename == "" {
-		filename = fmt.Sprintf("apimgr_backup_%s.tar.gz", time.Now().Format("2006-01-02_150405"))
+		filename = fmt.Sprintf("search_backup_%s.tar.gz", time.Now().Format("2006-01-02_150405"))
 	}
 
 	// Ensure .tar.gz extension
@@ -666,4 +667,222 @@ func (m *Manager) RestoreEncrypted(backupPath string) error {
 // Per AI.md PART 22: .enc extension for encrypted backups
 func IsEncrypted(backupPath string) bool {
 	return strings.HasSuffix(backupPath, ".enc")
+}
+
+// VerificationResult contains the results of backup verification
+// Per AI.md PART 22: Backup verification is NON-NEGOTIABLE
+type VerificationResult struct {
+	FileExists      bool   `json:"file_exists"`
+	SizeValid       bool   `json:"size_valid"`
+	ChecksumValid   bool   `json:"checksum_valid"`
+	ManifestValid   bool   `json:"manifest_valid"`
+	DecryptValid    bool   `json:"decrypt_valid"` // Only for encrypted backups
+	AllPassed       bool   `json:"all_passed"`
+	Errors          []string `json:"errors,omitempty"`
+}
+
+// VerifyBackup verifies backup integrity immediately after creation
+// Per AI.md PART 22 (NON-NEGOTIABLE):
+// - File exists
+// - Size > 0
+// - Checksum valid
+// - Manifest readable
+// - Decrypt test (if encrypted)
+func (m *Manager) VerifyBackup(backupPath string) (*VerificationResult, error) {
+	result := &VerificationResult{
+		DecryptValid: true, // Default true for non-encrypted
+	}
+
+	// Check 1: File exists
+	info, err := os.Stat(backupPath)
+	if err != nil {
+		result.Errors = append(result.Errors, fmt.Sprintf("file not found: %v", err))
+		return result, nil
+	}
+	result.FileExists = true
+
+	// Check 2: Size > 0
+	if info.Size() == 0 {
+		result.Errors = append(result.Errors, "backup file is empty (size = 0)")
+	} else {
+		result.SizeValid = true
+	}
+
+	// Check 3 & 4: For encrypted backups, decrypt first
+	isEncrypted := IsEncrypted(backupPath)
+	var dataToVerify []byte
+
+	if isEncrypted {
+		if m.password == "" {
+			result.DecryptValid = false
+			result.Errors = append(result.Errors, "cannot verify encrypted backup: password not set")
+			return result, nil
+		}
+
+		encrypted, err := os.ReadFile(backupPath)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("failed to read encrypted backup: %v", err))
+			return result, nil
+		}
+
+		decrypted, err := DecryptBackup(encrypted, m.password)
+		if err != nil {
+			result.DecryptValid = false
+			result.Errors = append(result.Errors, fmt.Sprintf("decryption failed: %v", err))
+			return result, nil
+		}
+		result.DecryptValid = true
+		dataToVerify = decrypted
+	} else {
+		var err error
+		dataToVerify, err = os.ReadFile(backupPath)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("failed to read backup: %v", err))
+			return result, nil
+		}
+	}
+
+	// Check 3: Manifest readable
+	metadata, err := m.verifyManifestFromData(dataToVerify)
+	if err != nil {
+		result.Errors = append(result.Errors, fmt.Sprintf("manifest verification failed: %v", err))
+	} else {
+		result.ManifestValid = true
+
+		// Check 4: Checksum valid (verify stored checksum)
+		if metadata.Checksum != "" && metadata.Checksums != nil {
+			expectedChecksum := computeOverallChecksum(metadata.Checksums)
+			storedChecksum := strings.TrimPrefix(metadata.Checksum, "sha256:")
+			if expectedChecksum == storedChecksum {
+				result.ChecksumValid = true
+			} else {
+				result.Errors = append(result.Errors, "checksum mismatch: backup may be corrupted")
+			}
+		} else {
+			// Legacy backups without checksums - pass with warning
+			result.ChecksumValid = true
+		}
+	}
+
+	// Determine overall result
+	result.AllPassed = result.FileExists && result.SizeValid && result.ChecksumValid && result.ManifestValid && result.DecryptValid
+
+	return result, nil
+}
+
+// verifyManifestFromData extracts and parses manifest from backup data
+func (m *Manager) verifyManifestFromData(data []byte) (*BackupMetadata, error) {
+	reader := bytes.NewReader(data)
+	gzReader, err := gzip.NewReader(reader)
+	if err != nil {
+		return nil, fmt.Errorf("invalid gzip format: %w", err)
+	}
+	defer gzReader.Close()
+
+	tarReader := tar.NewReader(gzReader)
+
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			return nil, fmt.Errorf("manifest.json not found in backup")
+		}
+		if err != nil {
+			return nil, fmt.Errorf("error reading tar: %w", err)
+		}
+
+		if header.Name == "manifest.json" || header.Name == "backup.json" {
+			var metadata BackupMetadata
+			if err := json.NewDecoder(tarReader).Decode(&metadata); err != nil {
+				return nil, fmt.Errorf("invalid manifest JSON: %w", err)
+			}
+			return &metadata, nil
+		}
+	}
+}
+
+// CreateAndVerify creates a backup and verifies it immediately
+// Per AI.md PART 22: Only delete old backups if new backup passes ALL verification checks
+func (m *Manager) CreateAndVerify(filename string) (string, *VerificationResult, error) {
+	// Create the backup
+	backupPath, err := m.Create(filename)
+	if err != nil {
+		return "", nil, fmt.Errorf("backup creation failed: %w", err)
+	}
+
+	// Verify immediately
+	result, err := m.VerifyBackup(backupPath)
+	if err != nil {
+		// Verification process failed - delete the backup
+		os.Remove(backupPath)
+		return "", nil, fmt.Errorf("backup verification process failed: %w", err)
+	}
+
+	if !result.AllPassed {
+		// Verification failed - delete the failed backup per AI.md PART 22
+		os.Remove(backupPath)
+		return "", result, fmt.Errorf("backup verification failed: %v", result.Errors)
+	}
+
+	return backupPath, result, nil
+}
+
+// CreateEncryptedAndVerify creates an encrypted backup and verifies it
+// Per AI.md PART 22: All encrypted backups must pass decrypt test
+func (m *Manager) CreateEncryptedAndVerify(filename string) (string, *VerificationResult, error) {
+	// Create encrypted backup
+	backupPath, err := m.CreateEncrypted(filename)
+	if err != nil {
+		return "", nil, fmt.Errorf("encrypted backup creation failed: %w", err)
+	}
+
+	// Verify immediately (includes decrypt test)
+	result, err := m.VerifyBackup(backupPath)
+	if err != nil {
+		os.Remove(backupPath)
+		return "", nil, fmt.Errorf("backup verification process failed: %w", err)
+	}
+
+	if !result.AllPassed {
+		os.Remove(backupPath)
+		return "", result, fmt.Errorf("backup verification failed: %v", result.Errors)
+	}
+
+	return backupPath, result, nil
+}
+
+// ScheduledBackupWithVerification performs a scheduled backup with verification
+// Per AI.md PART 22: Only delete old backups if new backup passes ALL verification checks
+func (m *Manager) ScheduledBackupWithVerification(keepCount int) error {
+	// Create and verify new backup
+	backupPath, result, err := m.CreateAndVerify("")
+	if err != nil {
+		// Backup or verification failed - DO NOT delete any existing backups
+		return fmt.Errorf("scheduled backup failed (existing backups preserved): %w", err)
+	}
+
+	if !result.AllPassed {
+		// Verification failed - DO NOT delete any existing backups
+		return fmt.Errorf("backup verification failed (existing backups preserved): %v", result.Errors)
+	}
+
+	// Only now that verification passed, apply retention
+	backups, err := m.List()
+	if err != nil {
+		return fmt.Errorf("failed to list backups: %w", err)
+	}
+
+	// Delete old backups if we have more than keepCount
+	if len(backups) > keepCount {
+		for i := keepCount; i < len(backups); i++ {
+			// Never delete the backup we just created
+			if backups[i].Path == backupPath {
+				continue
+			}
+			if err := m.Delete(backups[i].Filename); err != nil {
+				fmt.Printf("Warning: failed to delete old backup %s: %v\n", backups[i].Filename, err)
+			}
+		}
+	}
+
+	return nil
 }
