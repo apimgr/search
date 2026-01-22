@@ -410,7 +410,7 @@ func MaskEmail(email string) string {
 	// Mask domain (before TLD)
 	domainParts := strings.Split(domain, ".")
 	if len(domainParts) >= 2 {
-		maskedDomain := maskString(domainParts[0])
+		maskedDomain := maskDomainPart(domainParts[0])
 		tld := strings.Join(domainParts[1:], ".")
 		return maskedLocal + "@" + maskedDomain + "." + tld
 	}
@@ -422,6 +422,17 @@ func MaskEmail(email string) string {
 func maskString(s string) string {
 	if len(s) <= 2 {
 		return "***"
+	}
+	return string(s[0]) + "***" + string(s[len(s)-1])
+}
+
+// maskDomainPart masks domain part, showing first char even for short domains
+func maskDomainPart(s string) string {
+	if len(s) <= 1 {
+		return "***"
+	}
+	if len(s) == 2 {
+		return string(s[0]) + "***"
 	}
 	return string(s[0]) + "***" + string(s[len(s)-1])
 }

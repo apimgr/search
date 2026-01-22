@@ -586,15 +586,20 @@ func (u *UsersConfig) GetSessionDurationDays() int {
 		return 30 // default 30 days
 	}
 
-	var days int
-	if n, _ := fmt.Sscanf(dur, "%dd", &days); n == 1 && days > 0 {
-		return days
+	// Check suffix to determine unit
+	if strings.HasSuffix(dur, "d") {
+		var days int
+		if n, _ := fmt.Sscanf(dur, "%dd", &days); n == 1 && days > 0 {
+			return days
+		}
 	}
 
 	// Try parsing as hours (e.g., "720h")
-	var hours int
-	if n, _ := fmt.Sscanf(dur, "%dh", &hours); n == 1 && hours > 0 {
-		return hours / 24
+	if strings.HasSuffix(dur, "h") {
+		var hours int
+		if n, _ := fmt.Sscanf(dur, "%dh", &hours); n == 1 && hours > 0 {
+			return hours / 24
+		}
 	}
 
 	return 30 // default
@@ -1022,6 +1027,7 @@ func DefaultConfig() *Config {
 				AutoTLS: false,
 			},
 			Admin: AdminConfig{
+				Enabled:  true,
 				Username: "administrator",
 				Password: generateSecret(),
 				Token:    generateSecret(),
@@ -1191,7 +1197,7 @@ func DefaultConfig() *Config {
 				},
 			},
 			Users: UsersConfig{
-				Enabled: false,
+				Enabled: true,
 				Registration: struct {
 					Enabled                bool     `yaml:"enabled"`
 					RequireEmailVerification bool    `yaml:"require_email_verification"`
@@ -1486,6 +1492,13 @@ func DefaultConfig() *Config {
 				Enabled:    true,
 				Priority:   70,
 				Categories: []string{"general", "images", "news"},
+				Timeout:    10,
+				Weight:     1.0,
+			},
+			"startpage": {
+				Enabled:    true,
+				Priority:   68,
+				Categories: []string{"general", "images"},
 				Timeout:    10,
 				Weight:     1.0,
 			},
@@ -1795,9 +1808,15 @@ func (c *Config) IsProduction() bool {
 }
 
 // IsDebug returns true if debug mode is enabled via DEBUG=true environment variable
+// or if server mode is set to "debug"
 func (c *Config) IsDebug() bool {
+	// Check environment variable
 	debug := os.Getenv("DEBUG")
-	return debug == "true" || debug == "1" || debug == "yes"
+	if debug == "true" || debug == "1" || debug == "yes" {
+		return true
+	}
+	// Check server mode
+	return c.Server.Mode == "debug"
 }
 
 // GetAddress returns the full bind address

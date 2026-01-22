@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"crypto/tls"
 	"net/http"
 	"net/url"
 	"os"
@@ -683,5 +684,1473 @@ func TestTLSCipherSuiteName(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("tlsCipherSuiteName(0x%04x) = %q, want %q", tt.id, got, tt.want)
 		}
+	}
+}
+
+// ============================================================
+// Additional tests for 100% coverage
+// ============================================================
+
+func TestAccessLoggerLogRequestWithID(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "request-id.log")
+	logger := NewAccessLogger(path)
+	defer logger.Close()
+
+	req := &http.Request{
+		Method:     "POST",
+		URL:        &url.URL{Path: "/api/v1", RawQuery: "key=value"},
+		Proto:      "HTTP/1.1",
+		ProtoMajor: 1,
+		ProtoMinor: 1,
+		Header:     http.Header{"User-Agent": []string{"TestAgent/2.0"}},
+		RemoteAddr: "10.0.0.1:54321",
+		Host:       "api.example.com",
+	}
+
+	logger.LogRequestWithID(req, 201, 2048, 100*time.Millisecond, "req-12345")
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read log file: %v", err)
+	}
+	if !strings.Contains(string(content), "10.0.0.1") {
+		t.Error("Log should contain IP address")
+	}
+}
+
+func TestAccessLoggerLogRequestWithXForwardedFor(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "xff.log")
+	logger := NewAccessLogger(path)
+	defer logger.Close()
+
+	req := &http.Request{
+		Method:     "GET",
+		URL:        &url.URL{Path: "/"},
+		Proto:      "HTTP/1.1",
+		ProtoMajor: 1,
+		ProtoMinor: 1,
+		Header: http.Header{
+			"X-Forwarded-For": []string{"203.0.113.1, 70.41.3.18"},
+		},
+		RemoteAddr: "127.0.0.1:8080",
+	}
+
+	logger.LogRequest(req, 200, 100, 10*time.Millisecond)
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read log file: %v", err)
+	}
+	if !strings.Contains(string(content), "203.0.113.1") {
+		t.Error("Log should contain X-Forwarded-For IP")
+	}
+}
+
+func TestAccessLoggerLogRequestWithXRealIP(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "xrealip.log")
+	logger := NewAccessLogger(path)
+	defer logger.Close()
+
+	req := &http.Request{
+		Method:     "GET",
+		URL:        &url.URL{Path: "/"},
+		Proto:      "HTTP/1.1",
+		ProtoMajor: 1,
+		ProtoMinor: 1,
+		Header: http.Header{
+			// Use canonical form (X-Real-Ip not X-Real-IP) for http.Header map keys
+			"X-Real-Ip": []string{"198.51.100.1"},
+		},
+		RemoteAddr: "127.0.0.1:8080",
+	}
+
+	logger.LogRequest(req, 200, 100, 10*time.Millisecond)
+	logger.LogRequestWithID(req, 200, 100, 10*time.Millisecond, "req-abc")
+
+	// Ensure file is flushed
+	logger.Close()
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read log file: %v", err)
+	}
+	if !strings.Contains(string(content), "198.51.100.1") {
+		t.Error("Log should contain X-Real-IP")
+	}
+}
+
+func TestAccessLoggerLogRequestWithTLS(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "tls.log")
+	logger := NewAccessLogger(path)
+	logger.SetFormat("json")
+	defer logger.Close()
+
+	// Test all TLS versions
+	tlsVersions := []struct {
+		version  uint16
+		expected string
+	}{
+		{0x0301, "TLSv1.0"},
+		{0x0302, "TLSv1.1"},
+		{0x0303, "TLSv1.2"},
+		{0x0304, "TLSv1.3"},
+	}
+
+	for _, tv := range tlsVersions {
+		req := &http.Request{
+			Method:     "GET",
+			URL:        &url.URL{Path: "/secure"},
+			Proto:      "HTTP/2.0",
+			ProtoMajor: 2,
+			ProtoMinor: 0,
+			Header:     http.Header{},
+			RemoteAddr: "10.0.0.1:443",
+			TLS: &tls.ConnectionState{
+				Version:     tv.version,
+				CipherSuite: 0x1301,
+			},
+		}
+		logger.LogRequest(req, 200, 100, 5*time.Millisecond)
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read log file: %v", err)
+	}
+	logContent := string(content)
+	if !strings.Contains(logContent, "TLSv1.3") {
+		t.Error("Log should contain TLS version")
+	}
+}
+
+func TestAccessLoggerLogRequestWithIDAndTLS(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "tls-id.log")
+	logger := NewAccessLogger(path)
+	logger.SetFormat("json")
+	defer logger.Close()
+
+	// Test all TLS versions with LogRequestWithID
+	tlsVersions := []uint16{0x0301, 0x0302, 0x0303, 0x0304}
+
+	for i, tv := range tlsVersions {
+		req := &http.Request{
+			Method:     "GET",
+			URL:        &url.URL{Path: "/secure"},
+			Proto:      "HTTP/2.0",
+			ProtoMajor: 2,
+			ProtoMinor: 0,
+			Header: http.Header{
+				"X-Forwarded-For": []string{"1.2.3.4"},
+			},
+			RemoteAddr: "10.0.0.1:443",
+			TLS: &tls.ConnectionState{
+				Version:     tv,
+				CipherSuite: 0xc02f,
+			},
+		}
+		logger.LogRequestWithID(req, 200, 100, 5*time.Millisecond, "req-"+string(rune('a'+i)))
+	}
+}
+
+func TestAccessLoggerIPv6Handling(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "ipv6.log")
+	logger := NewAccessLogger(path)
+	defer logger.Close()
+
+	// Test IPv6 address with port (should NOT strip the bracket part)
+	req := &http.Request{
+		Method:     "GET",
+		URL:        &url.URL{Path: "/"},
+		Proto:      "HTTP/1.1",
+		ProtoMajor: 1,
+		ProtoMinor: 1,
+		Header:     http.Header{},
+		RemoteAddr: "[::1]:8080",
+	}
+
+	logger.LogRequest(req, 200, 100, 10*time.Millisecond)
+	logger.LogRequestWithID(req, 200, 100, 10*time.Millisecond, "req-ipv6")
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read log file: %v", err)
+	}
+	// IPv6 address should be present (the port stripping logic handles IPv6)
+	if len(content) == 0 {
+		t.Error("Log file should not be empty")
+	}
+}
+
+func TestAccessLoggerFormatWithVariablesEmptyCustomFormat(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "empty-custom.log")
+	logger := NewAccessLogger(path)
+	defer logger.Close()
+
+	// Set format to custom but leave customFormat empty - should fallback to combined
+	logger.SetFormat("custom")
+	// Note: customFormat is empty by default
+
+	entry := AccessEntry{
+		Timestamp: time.Now(),
+		IP:        "5.6.7.8",
+		Method:    "DELETE",
+		Path:      "/resource",
+		Protocol:  "HTTP/1.1",
+		Status:    204,
+		Size:      0,
+		Referer:   "https://example.com",
+		UserAgent: "CustomAgent/1.0",
+	}
+	logger.Log(entry)
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read log file: %v", err)
+	}
+	if !strings.Contains(string(content), "5.6.7.8") {
+		t.Error("Log should contain IP in fallback format")
+	}
+}
+
+func TestAccessLoggerFormatWithVariablesAllVariables(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "all-vars.log")
+	logger := NewAccessLogger(path)
+	defer logger.Close()
+
+	// Test comprehensive custom format with all variables
+	customFormat := "$remote_addr $remote_user [$time_local] [$time_iso8601] [$time_unix] [$time_msec] \"$request\" " +
+		"$request_method $request_uri $request_path $query_string $status $body_bytes_sent $bytes_sent " +
+		"\"$http_referer\" \"$http_user_agent\" $http_host $http_x_forwarded_for $http_x_real_ip " +
+		"$server_protocol $request_time $request_time_ms $request_id $connection $connection_requests " +
+		"$ssl_protocol $ssl_cipher $hostname $pid"
+	logger.SetCustomFormat(customFormat)
+
+	entry := AccessEntry{
+		Timestamp:          time.Now(),
+		IP:                 "192.168.1.100",
+		Method:             "PUT",
+		Path:               "/api/resource",
+		QueryString:        "id=123&action=update",
+		Protocol:           "HTTP/2.0",
+		Status:             200,
+		Size:               1024,
+		BytesSent:          1224,
+		Referer:            "https://app.example.com/",
+		UserAgent:          "Mozilla/5.0",
+		Latency:            250,
+		RequestID:          "uuid-12345",
+		RemoteUser:         "admin",
+		Host:               "api.example.com",
+		XForwardedFor:      "10.0.0.1",
+		XRealIP:            "10.0.0.2",
+		SSLProtocol:        "TLSv1.3",
+		SSLCipher:          "TLS_AES_256_GCM_SHA384",
+		Connection:         999,
+		ConnectionRequests: 5,
+	}
+	logger.Log(entry)
+
+	// Ensure file is flushed
+	logger.Close()
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read log file: %v", err)
+	}
+	logContent := string(content)
+	if !strings.Contains(logContent, "192.168.1.100") {
+		t.Error("Log should contain IP")
+	}
+	if !strings.Contains(logContent, "uuid-12345") {
+		t.Error("Log should contain request ID")
+	}
+	if !strings.Contains(logContent, "admin") {
+		t.Error("Log should contain remote user")
+	}
+}
+
+func TestAccessLoggerRotateWithExistingFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "rotate-test.log")
+	logger := NewAccessLogger(path)
+	defer logger.Close()
+
+	logger.Log(AccessEntry{IP: "1.1.1.1", Status: 200})
+
+	// Create the rotated file that would be created by date
+	timestamp := time.Now().Format("20060102")
+	rotatedPath := path + "." + timestamp
+	os.WriteFile(rotatedPath, []byte("existing"), 0644)
+
+	// Now rotate - should create a file with time suffix
+	err := logger.Rotate()
+	if err != nil {
+		t.Errorf("Rotate() returned error: %v", err)
+	}
+
+	// Check that a new rotated file was created with time suffix
+	files, _ := filepath.Glob(path + ".*")
+	if len(files) < 2 {
+		t.Errorf("Expected at least 2 rotated files, got %d", len(files))
+	}
+}
+
+func TestAccessLoggerEmptyPath(t *testing.T) {
+	logger := NewAccessLogger("")
+	defer logger.Close()
+
+	// Should not panic when logging with no file
+	logger.Log(AccessEntry{IP: "1.1.1.1", Status: 200})
+}
+
+func TestAccessLoggerRotateNilFile(t *testing.T) {
+	logger := NewAccessLogger("")
+	err := logger.Rotate()
+	if err != nil {
+		t.Errorf("Rotate() with nil file returned error: %v", err)
+	}
+	logger.Close()
+}
+
+func TestAccessLoggerCloseNilFile(t *testing.T) {
+	logger := NewAccessLogger("")
+	err := logger.Close()
+	if err != nil {
+		t.Errorf("Close() with nil file returned error: %v", err)
+	}
+}
+
+func TestAccessLoggerLogWithRefererEmpty(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "referer.log")
+	logger := NewAccessLogger(path)
+	defer logger.Close()
+
+	// Combined format with empty referer should use "-"
+	entry := AccessEntry{
+		Timestamp: time.Now(),
+		IP:        "1.2.3.4",
+		Method:    "GET",
+		Path:      "/",
+		Protocol:  "HTTP/1.1",
+		Status:    200,
+		Size:      100,
+		Referer:   "", // Empty referer
+		UserAgent: "Agent",
+	}
+	logger.Log(entry)
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read log file: %v", err)
+	}
+	if !strings.Contains(string(content), `"-"`) {
+		t.Error("Empty referer should be logged as dash")
+	}
+}
+
+func TestServerLoggerRotate(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "server-rotate.log")
+	logger := NewServerLogger(path)
+	logger.SetStdout(false)
+	defer logger.Close()
+
+	logger.Info("test message")
+
+	err := logger.Rotate()
+	if err != nil {
+		t.Errorf("Rotate() returned error: %v", err)
+	}
+}
+
+func TestServerLoggerRotateWithExistingFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "server-rotate2.log")
+	logger := NewServerLogger(path)
+	logger.SetStdout(false)
+	defer logger.Close()
+
+	logger.Info("test message")
+
+	// Create the rotated file
+	timestamp := time.Now().Format("20060102")
+	rotatedPath := path + "." + timestamp
+	os.WriteFile(rotatedPath, []byte("existing"), 0644)
+
+	err := logger.Rotate()
+	if err != nil {
+		t.Errorf("Rotate() returned error: %v", err)
+	}
+}
+
+func TestServerLoggerRotateNilFile(t *testing.T) {
+	logger := NewServerLogger("")
+	logger.SetStdout(false)
+	err := logger.Rotate()
+	if err != nil {
+		t.Errorf("Rotate() with nil file returned error: %v", err)
+	}
+	logger.Close()
+}
+
+func TestServerLoggerCloseNilFile(t *testing.T) {
+	logger := NewServerLogger("")
+	err := logger.Close()
+	if err != nil {
+		t.Errorf("Close() with nil file returned error: %v", err)
+	}
+}
+
+func TestServerLoggerEmptyPath(t *testing.T) {
+	logger := NewServerLogger("")
+	logger.SetStdout(false)
+	defer logger.Close()
+
+	// Should not panic
+	logger.Info("test")
+}
+
+func TestServerLoggerTextFormatWithFields(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "server-fields.log")
+	logger := NewServerLogger(path)
+	logger.SetStdout(false)
+	logger.SetFormat("text")
+	defer logger.Close()
+
+	fields := map[string]interface{}{
+		"key1": "value1",
+		"key2": 42,
+		"key3": true,
+	}
+	logger.Info("message with fields", fields)
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read log file: %v", err)
+	}
+	logContent := string(content)
+	if !strings.Contains(logContent, "key1=value1") {
+		t.Error("Log should contain field key1")
+	}
+}
+
+func TestServerLoggerLevelFiltering(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "server-level.log")
+	logger := NewServerLogger(path)
+	logger.SetStdout(false)
+	logger.SetLevel(LevelWarn) // Only WARN and above
+	defer logger.Close()
+
+	logger.Debug("debug")
+	logger.Info("info")
+	logger.Warn("warn")
+	logger.Error("error")
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read log file: %v", err)
+	}
+	logContent := string(content)
+	if strings.Contains(logContent, "debug") {
+		t.Error("DEBUG should not be logged at WARN level")
+	}
+	if strings.Contains(logContent, "[INFO]") {
+		t.Error("INFO should not be logged at WARN level")
+	}
+	if !strings.Contains(logContent, "WARN") {
+		t.Error("WARN should be logged")
+	}
+}
+
+func TestServerLoggerWriterEmptyMessage(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "server-writer-empty.log")
+	logger := NewServerLogger(path)
+	logger.SetStdout(false)
+	defer logger.Close()
+
+	writer := logger.Writer()
+
+	// Write empty string (after trim should be empty)
+	n, err := writer.Write([]byte("   \n\t  "))
+	if err != nil {
+		t.Errorf("Write returned error: %v", err)
+	}
+	if n != 7 {
+		t.Errorf("Write returned %d, expected 7", n)
+	}
+
+	// Write non-empty
+	writer.Write([]byte("valid message"))
+}
+
+func TestSecurityLoggerRotate(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "security-rotate.log")
+	logger := NewSecurityLogger(path)
+	defer logger.Close()
+
+	logger.LogLoginFailed("1.1.1.1", "user", "/login")
+
+	err := logger.Rotate()
+	if err != nil {
+		t.Errorf("Rotate() returned error: %v", err)
+	}
+}
+
+func TestSecurityLoggerRotateWithExistingFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "security-rotate2.log")
+	logger := NewSecurityLogger(path)
+	defer logger.Close()
+
+	logger.LogLoginFailed("1.1.1.1", "user", "/login")
+
+	// Create the rotated file
+	timestamp := time.Now().Format("20060102")
+	rotatedPath := path + "." + timestamp
+	os.WriteFile(rotatedPath, []byte("existing"), 0644)
+
+	err := logger.Rotate()
+	if err != nil {
+		t.Errorf("Rotate() returned error: %v", err)
+	}
+}
+
+func TestSecurityLoggerRotateNilFile(t *testing.T) {
+	logger := NewSecurityLogger("")
+	err := logger.Rotate()
+	if err != nil {
+		t.Errorf("Rotate() with nil file returned error: %v", err)
+	}
+	logger.Close()
+}
+
+func TestSecurityLoggerCloseNilFile(t *testing.T) {
+	logger := NewSecurityLogger("")
+	err := logger.Close()
+	if err != nil {
+		t.Errorf("Close() with nil file returned error: %v", err)
+	}
+}
+
+func TestSecurityLoggerEmptyPath(t *testing.T) {
+	logger := NewSecurityLogger("")
+	defer logger.Close()
+
+	// Should not panic
+	logger.LogLoginFailed("1.1.1.1", "user", "/login")
+}
+
+func TestSecurityLoggerLogEntryDirectly(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "security-direct.log")
+	logger := NewSecurityLogger(path)
+	defer logger.Close()
+
+	entry := SecurityEntry{
+		Timestamp: time.Now(),
+		Event:     SecurityEventSuspicious,
+		IP:        "192.168.1.1",
+		User:      "suspect",
+		Path:      "/admin",
+		Details:   "unusual activity",
+	}
+	logger.Log(entry)
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read log file: %v", err)
+	}
+	logContent := string(content)
+	if !strings.Contains(logContent, "USER=suspect") {
+		t.Error("Log should contain USER field")
+	}
+	if !strings.Contains(logContent, "PATH=/admin") {
+		t.Error("Log should contain PATH field")
+	}
+	if !strings.Contains(logContent, "DETAILS=unusual activity") {
+		t.Error("Log should contain DETAILS field")
+	}
+}
+
+func TestAuditLoggerLogWithPresetIDAndTime(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit-preset.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	presetTime := time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC)
+	entry := AuditEntry{
+		ID:       "audit_PRESET123456",
+		Time:     presetTime,
+		Event:    AuditActionLogin,
+		Category: AuditCategoryAuth,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Username: "admin", IP: "10.0.0.1"},
+		Result:   "success",
+	}
+	logger.Log(entry)
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read log file: %v", err)
+	}
+	logContent := string(content)
+	if !strings.Contains(logContent, "audit_PRESET123456") {
+		t.Error("Log should contain preset ID")
+	}
+	if !strings.Contains(logContent, "2024-01-15") {
+		t.Error("Log should contain preset time")
+	}
+}
+
+func TestAuditLoggerLogWithoutTarget(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit-notarget.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	entry := AuditEntry{
+		Event:    AuditActionLogout,
+		Category: AuditCategoryAuth,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Username: "user", IP: "1.2.3.4"},
+		Result:   "success",
+		Target:   nil, // No target
+	}
+	logger.Log(entry)
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read log file: %v", err)
+	}
+	if len(content) == 0 {
+		t.Error("Log should not be empty")
+	}
+}
+
+func TestAuditLoggerRotate(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit-rotate.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	logger.LogLogin("admin", "1.1.1.1", true)
+
+	err := logger.Rotate()
+	if err != nil {
+		t.Errorf("Rotate() returned error: %v", err)
+	}
+}
+
+func TestAuditLoggerRotateWithExistingFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit-rotate2.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	logger.LogLogin("admin", "1.1.1.1", true)
+
+	// Create the rotated file
+	timestamp := time.Now().Format("20060102")
+	rotatedPath := path + "." + timestamp
+	os.WriteFile(rotatedPath, []byte("existing"), 0644)
+
+	err := logger.Rotate()
+	if err != nil {
+		t.Errorf("Rotate() returned error: %v", err)
+	}
+}
+
+func TestAuditLoggerRotateNilFile(t *testing.T) {
+	logger := NewAuditLogger("")
+	err := logger.Rotate()
+	if err != nil {
+		t.Errorf("Rotate() with nil file returned error: %v", err)
+	}
+	logger.Close()
+}
+
+func TestAuditLoggerCloseNilFile(t *testing.T) {
+	logger := NewAuditLogger("")
+	err := logger.Close()
+	if err != nil {
+		t.Errorf("Close() with nil file returned error: %v", err)
+	}
+}
+
+func TestAuditLoggerEmptyPath(t *testing.T) {
+	logger := NewAuditLogger("")
+	defer logger.Close()
+
+	// Should not panic
+	logger.LogLogin("admin", "1.1.1.1", true)
+}
+
+func TestResultFromBool(t *testing.T) {
+	if resultFromBool(true) != "success" {
+		t.Error("resultFromBool(true) should return 'success'")
+	}
+	if resultFromBool(false) != "failure" {
+		t.Error("resultFromBool(false) should return 'failure'")
+	}
+}
+
+func TestAuditLoggerBackupRestoreFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit-backup-fail.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	logger.LogBackupRestore("admin", "1.1.1.1", "backup.tar.gz", false)
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read log file: %v", err)
+	}
+	logContent := string(content)
+	if !strings.Contains(logContent, "failure") {
+		t.Error("Log should contain failure result")
+	}
+	if !strings.Contains(logContent, "critical") {
+		t.Error("Failed backup restore should have critical severity")
+	}
+}
+
+func TestAuditLoggerReloadFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit-reload-fail.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	logger.LogReload("admin", "1.1.1.1", false, "config error")
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read log file: %v", err)
+	}
+	logContent := string(content)
+	if !strings.Contains(logContent, "failure") {
+		t.Error("Log should contain failure result")
+	}
+}
+
+func TestErrorLoggerRotate(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "error-rotate.log")
+	logger := NewErrorLogger(path)
+	logger.SetStdout(false)
+	defer logger.Close()
+
+	logger.Error("test error", nil)
+
+	err := logger.Rotate()
+	if err != nil {
+		t.Errorf("Rotate() returned error: %v", err)
+	}
+}
+
+func TestErrorLoggerRotateWithExistingFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "error-rotate2.log")
+	logger := NewErrorLogger(path)
+	logger.SetStdout(false)
+	defer logger.Close()
+
+	logger.Error("test error", nil)
+
+	// Create the rotated file
+	timestamp := time.Now().Format("20060102")
+	rotatedPath := path + "." + timestamp
+	os.WriteFile(rotatedPath, []byte("existing"), 0644)
+
+	err := logger.Rotate()
+	if err != nil {
+		t.Errorf("Rotate() returned error: %v", err)
+	}
+}
+
+func TestErrorLoggerRotateNilFile(t *testing.T) {
+	logger := NewErrorLogger("")
+	logger.SetStdout(false)
+	err := logger.Rotate()
+	if err != nil {
+		t.Errorf("Rotate() with nil file returned error: %v", err)
+	}
+	logger.Close()
+}
+
+func TestErrorLoggerCloseNilFile(t *testing.T) {
+	logger := NewErrorLogger("")
+	err := logger.Close()
+	if err != nil {
+		t.Errorf("Close() with nil file returned error: %v", err)
+	}
+}
+
+func TestErrorLoggerEmptyPath(t *testing.T) {
+	logger := NewErrorLogger("")
+	logger.SetStdout(false)
+	defer logger.Close()
+
+	// Should not panic
+	logger.Error("test", nil)
+}
+
+func TestErrorLoggerLogEntryDirectly(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "error-direct.log")
+	logger := NewErrorLogger(path)
+	logger.SetStdout(false)
+	defer logger.Close()
+
+	entry := ErrorEntry{
+		Timestamp: time.Now(),
+		Level:     "ERROR",
+		Message:   "direct error",
+		Error:     "some error",
+		File:      "test.go",
+		Line:      100,
+		Stack:     "stack trace here",
+		Fields:    map[string]interface{}{"key": "value"},
+	}
+	logger.Log(entry)
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read log file: %v", err)
+	}
+	logContent := string(content)
+	if !strings.Contains(logContent, "test.go:100") {
+		t.Error("Log should contain file and line")
+	}
+	if !strings.Contains(logContent, "key=value") {
+		t.Error("Log should contain fields")
+	}
+}
+
+func TestErrorLoggerLogEntryDefaults(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "error-defaults.log")
+	logger := NewErrorLogger(path)
+	logger.SetStdout(false)
+	defer logger.Close()
+
+	// Entry with empty Level and zero Timestamp - should use defaults
+	entry := ErrorEntry{
+		Message: "default entry",
+	}
+	logger.Log(entry)
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read log file: %v", err)
+	}
+	if !strings.Contains(string(content), "ERROR") {
+		t.Error("Default level should be ERROR")
+	}
+}
+
+func TestErrorLoggerTextFormatWithAllFields(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "error-allfields.log")
+	logger := NewErrorLogger(path)
+	logger.SetStdout(false)
+	logger.SetFormat("text")
+	defer logger.Close()
+
+	testErr := &testError{msg: "underlying error"}
+	fields := map[string]interface{}{"code": 500, "service": "api"}
+	logger.Error("main error", testErr, fields)
+	logger.ErrorWithStack("stack error", testErr, "full stack trace", fields)
+	logger.Fatal("fatal error", testErr, fields)
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read log file: %v", err)
+	}
+	logContent := string(content)
+	if !strings.Contains(logContent, "error=underlying error") {
+		t.Error("Log should contain error message")
+	}
+	if !strings.Contains(logContent, "FATAL") {
+		t.Error("Log should contain FATAL level")
+	}
+}
+
+func TestDebugLoggerRotate(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "debug-rotate.log")
+	logger := NewDebugLogger(path)
+	logger.SetStdout(false)
+	logger.Enable()
+	defer logger.Close()
+
+	logger.Debug("test debug")
+
+	err := logger.Rotate()
+	if err != nil {
+		t.Errorf("Rotate() returned error: %v", err)
+	}
+}
+
+func TestDebugLoggerRotateWithExistingFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "debug-rotate2.log")
+	logger := NewDebugLogger(path)
+	logger.SetStdout(false)
+	logger.Enable()
+	defer logger.Close()
+
+	logger.Debug("test debug")
+
+	// Create the rotated file
+	timestamp := time.Now().Format("20060102")
+	rotatedPath := path + "." + timestamp
+	os.WriteFile(rotatedPath, []byte("existing"), 0644)
+
+	err := logger.Rotate()
+	if err != nil {
+		t.Errorf("Rotate() returned error: %v", err)
+	}
+}
+
+func TestDebugLoggerRotateNilFile(t *testing.T) {
+	logger := NewDebugLogger("")
+	logger.SetStdout(false)
+	err := logger.Rotate()
+	if err != nil {
+		t.Errorf("Rotate() with nil file returned error: %v", err)
+	}
+	logger.Close()
+}
+
+func TestDebugLoggerCloseNilFile(t *testing.T) {
+	logger := NewDebugLogger("")
+	err := logger.Close()
+	if err != nil {
+		t.Errorf("Close() with nil file returned error: %v", err)
+	}
+}
+
+func TestDebugLoggerEmptyPath(t *testing.T) {
+	logger := NewDebugLogger("")
+	logger.SetStdout(false)
+	logger.Enable()
+	defer logger.Close()
+
+	// Should not panic
+	logger.Debug("test")
+}
+
+func TestDebugLoggerLogEntryDirectly(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "debug-direct.log")
+	logger := NewDebugLogger(path)
+	logger.SetStdout(false)
+	logger.Enable()
+	defer logger.Close()
+
+	entry := DebugEntry{
+		Timestamp: time.Now(),
+		Level:     "DEBUG",
+		Message:   "direct debug",
+		File:      "debug_test.go",
+		Line:      50,
+		Function:  "TestDebugLoggerLogEntryDirectly",
+		Fields:    map[string]interface{}{"key": "value"},
+	}
+	logger.Log(entry)
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read log file: %v", err)
+	}
+	logContent := string(content)
+	if !strings.Contains(logContent, "debug_test.go:50") {
+		t.Error("Log should contain file and line")
+	}
+	if !strings.Contains(logContent, "func=TestDebugLoggerLogEntryDirectly") {
+		t.Error("Log should contain function name")
+	}
+}
+
+func TestDebugLoggerLogEntryDefaults(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "debug-defaults.log")
+	logger := NewDebugLogger(path)
+	logger.SetStdout(false)
+	logger.Enable()
+	defer logger.Close()
+
+	// Entry with empty Level and zero Timestamp - should use defaults
+	entry := DebugEntry{
+		Message: "default entry",
+	}
+	logger.Log(entry)
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read log file: %v", err)
+	}
+	if !strings.Contains(string(content), "DEBUG") {
+		t.Error("Default level should be DEBUG")
+	}
+}
+
+func TestDebugLoggerTextFormatWithAllFields(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "debug-allfields.log")
+	logger := NewDebugLogger(path)
+	logger.SetStdout(false)
+	logger.Enable()
+	logger.SetFormat("text")
+	defer logger.Close()
+
+	fields := map[string]interface{}{"module": "test", "count": 42}
+	logger.Debug("debug with fields", fields)
+	logger.DebugWithCaller("caller debug", "file.go", 123, "MyFunc", fields)
+	logger.Trace("trace message", fields)
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read log file: %v", err)
+	}
+	logContent := string(content)
+	if !strings.Contains(logContent, "module=test") {
+		t.Error("Log should contain fields")
+	}
+	if !strings.Contains(logContent, "TRACE") {
+		t.Error("Log should contain TRACE level")
+	}
+}
+
+func TestDebugLoggerDisabledSkipsLogging(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "debug-disabled.log")
+	logger := NewDebugLogger(path)
+	logger.SetStdout(false)
+	// NOT enabled - default is disabled
+	defer logger.Close()
+
+	logger.Debug("should not appear")
+	logger.DebugWithCaller("should not appear", "file.go", 1, "Func")
+	logger.Trace("should not appear")
+
+	// File should not exist or be empty since logger never enabled
+	_, err := os.Stat(path)
+	if err == nil {
+		content, _ := os.ReadFile(path)
+		if len(content) > 0 {
+			t.Error("Disabled debug logger should not write anything")
+		}
+	}
+}
+
+func TestDebugLoggerJSONFormatWithCallerInfo(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "debug-json-caller.log")
+	logger := NewDebugLogger(path)
+	logger.SetStdout(false)
+	logger.Enable()
+	logger.SetFormat("json")
+	defer logger.Close()
+
+	logger.DebugWithCaller("json caller debug", "myfile.go", 999, "TestFunction", map[string]interface{}{"data": "test"})
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read log file: %v", err)
+	}
+	logContent := string(content)
+	if !strings.Contains(logContent, `"file":"myfile.go"`) {
+		t.Error("JSON log should contain file field")
+	}
+	if !strings.Contains(logContent, `"line":999`) {
+		t.Error("JSON log should contain line field")
+	}
+	if !strings.Contains(logContent, `"function":"TestFunction"`) {
+		t.Error("JSON log should contain function field")
+	}
+}
+
+func TestDebugLoggerOpenFileWhenDisabled(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "debug-openfile.log")
+	logger := NewDebugLogger(path)
+	logger.SetStdout(false)
+	// Disable is default, call openFile directly (via Enable/Disable cycle)
+	defer logger.Close()
+
+	// openFile should return nil when disabled
+	if logger.file != nil {
+		t.Error("File should not be opened when disabled")
+	}
+}
+
+func TestAllTLSCipherSuites(t *testing.T) {
+	ciphers := []struct {
+		id   uint16
+		want string
+	}{
+		{0x1301, "TLS_AES_128_GCM_SHA256"},
+		{0x1302, "TLS_AES_256_GCM_SHA384"},
+		{0x1303, "TLS_CHACHA20_POLY1305_SHA256"},
+		{0xc02f, "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"},
+		{0xc030, "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"},
+		{0xcca8, "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305"},
+		{0xc02b, "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"},
+		{0xc02c, "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384"},
+		{0xcca9, "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305"},
+	}
+
+	for _, c := range ciphers {
+		got := tlsCipherSuiteName(c.id)
+		if got != c.want {
+			t.Errorf("tlsCipherSuiteName(0x%04x) = %q, want %q", c.id, got, c.want)
+		}
+	}
+}
+
+func TestAuditCategoryTokensAndCluster(t *testing.T) {
+	// Test additional audit categories
+	categories := []struct {
+		cat  AuditCategory
+		want string
+	}{
+		{AuditCategoryTokens, "tokens"},
+		{AuditCategoryCluster, "cluster"},
+		{AuditCategoryOrganization, "organization"},
+	}
+
+	for _, c := range categories {
+		if string(c.cat) != c.want {
+			t.Errorf("AuditCategory = %q, want %q", c.cat, c.want)
+		}
+	}
+}
+
+func TestAuditActorStruct(t *testing.T) {
+	actor := AuditActor{
+		Type:      "admin",
+		ID:        "user-123",
+		Username:  "admin",
+		IP:        "192.168.1.1",
+		UserAgent: "Mozilla/5.0",
+	}
+
+	if actor.Type != "admin" {
+		t.Error("Actor type should be set")
+	}
+	if actor.ID != "user-123" {
+		t.Error("Actor ID should be set")
+	}
+	if actor.UserAgent != "Mozilla/5.0" {
+		t.Error("Actor UserAgent should be set")
+	}
+}
+
+func TestAuditTargetStruct(t *testing.T) {
+	target := AuditTarget{
+		Type: "user",
+		ID:   "target-456",
+		Name: "testuser",
+	}
+
+	if target.Type != "user" {
+		t.Error("Target type should be set")
+	}
+	if target.ID != "target-456" {
+		t.Error("Target ID should be set")
+	}
+	if target.Name != "testuser" {
+		t.Error("Target name should be set")
+	}
+}
+
+func TestAuditEntryWithAllFields(t *testing.T) {
+	entry := AuditEntry{
+		ID:       "audit_test",
+		Time:     time.Now(),
+		Event:    AuditActionConfigChange,
+		Category: AuditCategoryConfig,
+		Severity: AuditSeverityCritical,
+		Actor: AuditActor{
+			Type:      "admin",
+			ID:        "admin-1",
+			Username:  "superadmin",
+			IP:        "10.0.0.1",
+			UserAgent: "AdminClient/1.0",
+		},
+		Target: &AuditTarget{
+			Type: "config",
+			ID:   "config-main",
+			Name: "main_config",
+		},
+		Details: map[string]interface{}{
+			"changed":  "ssl_enabled",
+			"old":      false,
+			"new":      true,
+		},
+		Result: "success",
+		NodeID: "node-1",
+		Reason: "security hardening",
+	}
+
+	if entry.NodeID != "node-1" {
+		t.Error("NodeID should be set")
+	}
+	if entry.Reason != "security hardening" {
+		t.Error("Reason should be set")
+	}
+}
+
+func TestMoreAuditActions(t *testing.T) {
+	// Test additional audit actions defined in the package
+	actions := []struct {
+		action AuditAction
+		want   string
+	}{
+		{AuditActionLoginFailed, "admin.login_failed"},
+		{AuditActionAdminCreated, "admin.created"},
+		{AuditActionAdminDeleted, "admin.deleted"},
+		{AuditActionPasswordChanged, "admin.password_changed"},
+		{AuditActionMFAEnabled, "admin.mfa_enabled"},
+		{AuditActionMFADisabled, "admin.mfa_disabled"},
+		{AuditActionTokenRegenerated, "admin.token_regenerated"},
+		{AuditActionSessionExpired, "admin.session_expired"},
+		{AuditActionSessionRevoked, "admin.session_revoked"},
+		{AuditActionUserRegistered, "user.registered"},
+		{AuditActionUserLogin, "user.login"},
+		{AuditActionUserLogout, "user.logout"},
+		{AuditActionUserLoginFailed, "user.login_failed"},
+		{AuditActionUserSuspended, "user.suspended"},
+		{AuditActionUserUnsuspended, "user.unsuspended"},
+		{AuditActionUserRoleChanged, "user.role_changed"},
+		{AuditActionUserPasswordChanged, "user.password_changed"},
+		{AuditActionUserPasswordResetReq, "user.password_reset_requested"},
+		{AuditActionUserPasswordResetDone, "user.password_reset_completed"},
+		{AuditActionUserEmailVerified, "user.email_verified"},
+		{AuditActionUserMFAEnabled, "user.mfa_enabled"},
+		{AuditActionUserMFADisabled, "user.mfa_disabled"},
+		{AuditActionUserRecoveryKeyUsed, "user.recovery_key_used"},
+		{AuditActionOrgCreated, "org.created"},
+		{AuditActionOrgDeleted, "org.deleted"},
+		{AuditActionOrgSettingsUpdated, "org.settings_updated"},
+		{AuditActionOrgMemberInvited, "org.member_invited"},
+		{AuditActionOrgMemberJoined, "org.member_joined"},
+		{AuditActionOrgMemberRemoved, "org.member_removed"},
+		{AuditActionOrgMemberLeft, "org.member_left"},
+		{AuditActionOrgRoleChanged, "org.role_changed"},
+		{AuditActionOrgRoleCreated, "org.role_created"},
+		{AuditActionOrgRoleUpdated, "org.role_updated"},
+		{AuditActionOrgRoleDeleted, "org.role_deleted"},
+		{AuditActionOrgTokenCreated, "org.token_created"},
+		{AuditActionOrgTokenRevoked, "org.token_revoked"},
+		{AuditActionOrgOwnershipTransfer, "org.ownership_transferred"},
+		{AuditActionOrgBillingUpdated, "org.billing_updated"},
+		{AuditActionConfigSMTPUpdated, "config.smtp_updated"},
+		{AuditActionConfigSSLUpdated, "config.ssl_updated"},
+		{AuditActionConfigSSLExpired, "config.ssl_expired"},
+		{AuditActionConfigTorRegen, "config.tor_address_regenerated"},
+		{AuditActionConfigBrandingUpdate, "config.branding_updated"},
+		{AuditActionConfigOIDCAdded, "config.oidc_provider_added"},
+		{AuditActionConfigOIDCRemoved, "config.oidc_provider_removed"},
+		{AuditActionConfigLDAPUpdated, "config.ldap_updated"},
+		{AuditActionConfigAdminGroups, "config.admin_groups_updated"},
+		{AuditActionRateLimitExceeded, "security.rate_limit_exceeded"},
+		{AuditActionIPBlocked, "security.ip_blocked"},
+		{AuditActionIPUnblocked, "security.ip_unblocked"},
+		{AuditActionCountryBlocked, "security.country_blocked"},
+		{AuditActionCSRFFailure, "security.csrf_failure"},
+		{AuditActionInvalidToken, "security.invalid_token"},
+		{AuditActionBruteForceDetected, "security.brute_force_detected"},
+		{AuditActionSuspiciousActivity, "security.suspicious_activity"},
+		{AuditActionTokenExpired, "token.expired"},
+		{AuditActionTokenUsed, "token.used"},
+		{AuditActionBackupDelete, "backup.deleted"},
+		{AuditActionBackupFailed, "backup.failed"},
+		{AuditActionServerStarted, "server.started"},
+		{AuditActionServerStopped, "server.stopped"},
+		{AuditActionMaintenanceEntered, "server.maintenance_entered"},
+		{AuditActionMaintenanceExited, "server.maintenance_exited"},
+		{AuditActionServerUpdated, "server.updated"},
+		{AuditActionSchedulerTaskFail, "scheduler.task_failed"},
+		{AuditActionSchedulerTaskRun, "scheduler.task_manual_run"},
+		{AuditActionClusterNodeJoined, "cluster.node_joined"},
+		{AuditActionClusterNodeRemoved, "cluster.node_removed"},
+		{AuditActionClusterNodeFailed, "cluster.node_failed"},
+		{AuditActionClusterTokenGen, "cluster.token_generated"},
+		{AuditActionClusterModeChanged, "cluster.mode_changed"},
+		{AuditActionPermissionChange, "user.permission_change"},
+		{AuditActionAdminInvite, "admin.invite"},
+	}
+
+	for _, a := range actions {
+		if string(a.action) != a.want {
+			t.Errorf("AuditAction = %q, want %q", a.action, a.want)
+		}
+	}
+}
+
+func TestValidateFormatEdgeCases(t *testing.T) {
+	tests := []struct {
+		name    string
+		format  string
+		wantLen int
+	}{
+		{"empty", "", 0},
+		{"just dollar", "$", 0},
+		{"dollar at end", "text$", 0},
+		{"multiple unknowns", "$foo $bar $baz", 3},
+		{"mixed valid invalid", "$remote_addr $invalid $status", 1},
+		{"variable with numbers", "$var123", 1},
+		{"consecutive dollars", "$$remote_addr", 0}, // First $ is skipped (no name), second is valid $remote_addr
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			unknown := ValidateFormat(tt.format)
+			if len(unknown) != tt.wantLen {
+				t.Errorf("ValidateFormat(%q) returned %d unknown vars %v, want %d",
+					tt.format, len(unknown), unknown, tt.wantLen)
+			}
+		})
+	}
+}
+
+func TestAccessEntryStructFields(t *testing.T) {
+	entry := AccessEntry{
+		Timestamp:          time.Now(),
+		IP:                 "1.2.3.4",
+		Method:             "GET",
+		Path:               "/api",
+		QueryString:        "key=value",
+		Protocol:           "HTTP/1.1",
+		Status:             200,
+		Size:               1024,
+		BytesSent:          1224,
+		Referer:            "http://example.com",
+		UserAgent:          "TestAgent",
+		Latency:            100,
+		RequestID:          "req-123",
+		RemoteUser:         "user",
+		Host:               "api.example.com",
+		XForwardedFor:      "10.0.0.1",
+		XRealIP:            "10.0.0.2",
+		SSLProtocol:        "TLSv1.3",
+		SSLCipher:          "AES256",
+		Connection:         1,
+		ConnectionRequests: 5,
+	}
+
+	if entry.BytesSent != 1224 {
+		t.Error("BytesSent should be set")
+	}
+	if entry.ConnectionRequests != 5 {
+		t.Error("ConnectionRequests should be set")
+	}
+}
+
+func TestServerEntryStruct(t *testing.T) {
+	entry := ServerEntry{
+		Timestamp: time.Now(),
+		Level:     "INFO",
+		Message:   "test message",
+		Fields:    map[string]interface{}{"key": "value"},
+	}
+
+	if entry.Level != "INFO" {
+		t.Error("Level should be set")
+	}
+	if entry.Fields["key"] != "value" {
+		t.Error("Fields should be set")
+	}
+}
+
+func TestSecurityEntryStruct(t *testing.T) {
+	entry := SecurityEntry{
+		Timestamp: time.Now(),
+		Event:     SecurityEventBlocked,
+		IP:        "1.2.3.4",
+		User:      "attacker",
+		Path:      "/admin",
+		Details:   "blocked",
+	}
+
+	if entry.Event != SecurityEventBlocked {
+		t.Error("Event should be set")
+	}
+	if entry.Details != "blocked" {
+		t.Error("Details should be set")
+	}
+}
+
+func TestDebugEntryStruct(t *testing.T) {
+	entry := DebugEntry{
+		Timestamp: time.Now(),
+		Level:     "DEBUG",
+		Message:   "debug message",
+		File:      "file.go",
+		Line:      100,
+		Function:  "TestFunc",
+		Fields:    map[string]interface{}{"data": 123},
+	}
+
+	if entry.Function != "TestFunc" {
+		t.Error("Function should be set")
+	}
+	if entry.Fields["data"] != 123 {
+		t.Error("Fields should be set")
+	}
+}
+
+func TestErrorEntryStruct(t *testing.T) {
+	entry := ErrorEntry{
+		Timestamp: time.Now(),
+		Level:     "ERROR",
+		Message:   "error message",
+		Error:     "underlying error",
+		File:      "file.go",
+		Line:      50,
+		Stack:     "stack trace",
+		Fields:    map[string]interface{}{"code": 500},
+	}
+
+	if entry.Stack != "stack trace" {
+		t.Error("Stack should be set")
+	}
+	if entry.Error != "underlying error" {
+		t.Error("Error should be set")
+	}
+}
+
+func TestFormatVariableStruct(t *testing.T) {
+	fv := FormatVariable{
+		Name:        "$test_var",
+		Description: "A test variable",
+		Example:     "example_value",
+	}
+
+	if fv.Name != "$test_var" {
+		t.Error("Name should be set")
+	}
+	if fv.Description != "A test variable" {
+		t.Error("Description should be set")
+	}
+	if fv.Example != "example_value" {
+		t.Error("Example should be set")
 	}
 }

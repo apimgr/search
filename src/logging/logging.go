@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -361,10 +362,17 @@ func (l *AccessLogger) formatWithVariables(entry AccessEntry) string {
 	}
 
 	// Apply replacements (order by length descending to avoid partial matches)
-	for _, v := range AvailableFormatVariables {
-		if val, ok := replacements[v.Name]; ok {
-			result = strings.ReplaceAll(result, v.Name, val)
-		}
+	// Sort keys by length descending
+	keys := make([]string, 0, len(replacements))
+	for k := range replacements {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return len(keys[i]) > len(keys[j])
+	})
+
+	for _, k := range keys {
+		result = strings.ReplaceAll(result, k, replacements[k])
 	}
 
 	return result

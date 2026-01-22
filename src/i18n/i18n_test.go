@@ -1,10 +1,15 @@
 package i18n
 
 import (
+	"embed"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
+
+//go:embed testdata/*.json
+var testdataFS embed.FS
 
 func TestNewManager(t *testing.T) {
 	supported := []string{"en", "de", "fr"}
@@ -458,5 +463,467 @@ func TestFlattenTranslations(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestFlattenTranslationsEdgeCases tests edge cases for flattenTranslations
+func TestFlattenTranslationsEdgeCases(t *testing.T) {
+	t.Run("non-string non-map values are ignored", func(t *testing.T) {
+		result := make(map[string]string)
+		input := map[string]interface{}{
+			"number":  42,
+			"boolean": true,
+			"array":   []string{"a", "b"},
+			"nil":     nil,
+			"float":   3.14,
+			"valid":   "valid value",
+		}
+		flattenTranslations("", input, result)
+
+		// Only the string value should be in result
+		if len(result) != 1 {
+			t.Errorf("result should have 1 entry, got %d", len(result))
+		}
+		if result["valid"] != "valid value" {
+			t.Errorf("result[valid] = %q, want %q", result["valid"], "valid value")
+		}
+	})
+
+	t.Run("string at root level with empty prefix is ignored", func(t *testing.T) {
+		result := make(map[string]string)
+		flattenTranslations("", "root string", result)
+		if len(result) != 0 {
+			t.Errorf("root string with empty prefix should be ignored, got %d entries", len(result))
+		}
+	})
+
+	t.Run("string with prefix is included", func(t *testing.T) {
+		result := make(map[string]string)
+		flattenTranslations("key", "value", result)
+		if result["key"] != "value" {
+			t.Errorf("result[key] = %q, want %q", result["key"], "value")
+		}
+	})
+
+	t.Run("mixed nested with non-string values", func(t *testing.T) {
+		result := make(map[string]string)
+		input := map[string]interface{}{
+			"section": map[string]interface{}{
+				"text":   "hello",
+				"number": 123,
+				"nested": map[string]interface{}{
+					"deep": "value",
+					"num":  456,
+				},
+			},
+		}
+		flattenTranslations("", input, result)
+
+		if result["section.text"] != "hello" {
+			t.Errorf("result[section.text] = %q, want %q", result["section.text"], "hello")
+		}
+		if result["section.nested.deep"] != "value" {
+			t.Errorf("result[section.nested.deep] = %q, want %q", result["section.nested.deep"], "value")
+		}
+		if len(result) != 2 {
+			t.Errorf("result should have 2 entries, got %d", len(result))
+		}
+	})
+}
+
+// TestLoadFromFSMissingLanguageFileIsSkipped tests that missing language files are skipped
+func TestLoadFromFSMissingLanguageFileIsSkipped(t *testing.T) {
+	fs := LocalesFS()
+	// Include a language that doesn't have a file
+	m := NewManager("en", []string{"en", "nonexistent_lang"})
+
+	err := m.LoadFromFS(fs, "locales")
+	if err != nil {
+		t.Errorf("LoadFromFS should not fail for missing non-default languages: %v", err)
+	}
+
+	// English should still work
+	if m.T("en", "common.save") != "Save" {
+		t.Error("English should still be loaded")
+	}
+
+	// Nonexistent language should fall back to default
+	if m.T("nonexistent_lang", "common.save") != "Save" {
+		t.Error("Nonexistent language should fall back to default")
+	}
+}
+
+// TestLoadFromFSInvalidJSON tests LoadFromFS with invalid JSON
+func TestLoadFromFSInvalidJSON(t *testing.T) {
+	// testdataFS contains an invalid en.json file
+	m := NewManager("en", []string{"en"})
+
+	err := m.LoadFromFS(testdataFS, "testdata")
+	if err == nil {
+		t.Error("LoadFromFS should return error for invalid JSON")
+	}
+
+	if !strings.Contains(err.Error(), "failed to parse") {
+		t.Errorf("error should mention 'failed to parse', got: %v", err)
+	}
+}
+
+// TestParseAcceptLanguageEdgeCases tests edge cases in parseAcceptLanguage
+func TestParseAcceptLanguageEdgeCases(t *testing.T) {
+	m := NewManager("en", []string{"en", "de", "fr"})
+
+	tests := []struct {
+		name   string
+		header string
+		want   string
+	}{
+		{"empty parts in header", "en,,de", "en"},
+		{"spaces around parts", "  de  ,  en  ", "de"},
+		{"quality without q= prefix", "en;0.5,de;q=0.9", "de"},
+		{"multiple semicolons", "en;q=0.5;extra,de;q=0.9", "de"},
+		{"uppercase language", "DE,EN", "de"},
+		{"mixed case with region", "De-DE,En-US;q=0.8", "de"},
+		{"only whitespace", "   ", ""},
+		{"quality value 0", "en;q=0,de;q=0.5", "de"},
+		{"same quality different order", "de;q=0.9,fr;q=0.9", "de"}, // First one wins in stable sort
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := m.parseAcceptLanguage(tt.header)
+			if got != tt.want {
+				t.Errorf("parseAcceptLanguage(%q) = %q, want %q", tt.header, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestDetectLanguageWithUppercaseCookie tests cookie value normalization
+func TestDetectLanguageWithUppercaseCookie(t *testing.T) {
+	m := NewManager("en", []string{"en", "de", "fr"})
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.AddCookie(&http.Cookie{Name: "lang", Value: "DE"})
+
+	got := m.DetectLanguage(req)
+	if got != "de" {
+		t.Errorf("DetectLanguage() = %q, want %q", got, "de")
+	}
+}
+
+// TestDetectLanguageInvalidCookieFallbackToHeader tests fallback from invalid cookie to header
+func TestDetectLanguageInvalidCookieFallbackToHeader(t *testing.T) {
+	m := NewManager("en", []string{"en", "de", "fr"})
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.AddCookie(&http.Cookie{Name: "lang", Value: "invalid"})
+	req.Header.Set("Accept-Language", "fr")
+
+	got := m.DetectLanguage(req)
+	if got != "fr" {
+		t.Errorf("DetectLanguage() = %q, want %q", got, "fr")
+	}
+}
+
+// TestDetectLanguageNoCookieNoHeaderFallbackToDefault tests fallback to default
+func TestDetectLanguageNoCookieNoHeaderFallbackToDefault(t *testing.T) {
+	m := NewManager("en", []string{"en", "de", "fr"})
+
+	req := httptest.NewRequest("GET", "/", nil)
+
+	got := m.DetectLanguage(req)
+	if got != "en" {
+		t.Errorf("DetectLanguage() = %q, want %q", got, "en")
+	}
+}
+
+// TestDetectLanguageEmptyHeader tests empty Accept-Language header
+func TestDetectLanguageEmptyHeader(t *testing.T) {
+	m := NewManager("en", []string{"en", "de", "fr"})
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Accept-Language", "")
+
+	got := m.DetectLanguage(req)
+	if got != "en" {
+		t.Errorf("DetectLanguage() with empty header = %q, want %q", got, "en")
+	}
+}
+
+// TestTemplateFuncsLanguages tests the languages function in TemplateFuncs
+func TestTemplateFuncsLanguages(t *testing.T) {
+	m := NewManager("en", []string{"en", "de"})
+
+	funcs := m.TemplateFuncs("en")
+
+	// Test languages function
+	languagesFunc := funcs["languages"].(func() []Language)
+	langs := languagesFunc()
+	if len(langs) != 2 {
+		t.Errorf("languages() returned %d, want 2", len(langs))
+	}
+
+	// Verify the returned languages have correct data
+	found := make(map[string]bool)
+	for _, lang := range langs {
+		found[lang.Code] = true
+	}
+	if !found["en"] || !found["de"] {
+		t.Error("languages() should return en and de")
+	}
+}
+
+// TestTemplateFuncsWithRTL tests template functions with RTL language
+func TestTemplateFuncsWithRTL(t *testing.T) {
+	m := NewManager("en", []string{"en", "ar"})
+	m.LoadFromMap("ar", map[string]string{"hello": "مرحبا"})
+
+	funcs := m.TemplateFuncs("ar")
+
+	// Test t function
+	tFunc := funcs["t"].(func(string, ...interface{}) string)
+	if tFunc("hello") != "مرحبا" {
+		t.Error("t function should translate for Arabic")
+	}
+
+	// Test lang function
+	langFunc := funcs["lang"].(func() string)
+	if langFunc() != "ar" {
+		t.Error("lang function should return 'ar'")
+	}
+
+	// Test isRTL function
+	isRTLFunc := funcs["isRTL"].(func() bool)
+	if !isRTLFunc() {
+		t.Error("isRTL should be true for Arabic")
+	}
+
+	// Test dir function
+	dirFunc := funcs["dir"].(func() string)
+	if dirFunc() != "rtl" {
+		t.Error("dir should be 'rtl' for Arabic")
+	}
+}
+
+// TestTemplateFuncsTWithArgs tests the t template function with format arguments
+func TestTemplateFuncsTWithArgs(t *testing.T) {
+	m := NewManager("en", []string{"en"})
+	m.LoadFromMap("en", map[string]string{
+		"welcome": "Welcome, %s!",
+		"count":   "You have %d items",
+	})
+
+	funcs := m.TemplateFuncs("en")
+	tFunc := funcs["t"].(func(string, ...interface{}) string)
+
+	// Test with string argument
+	result := tFunc("welcome", "John")
+	if result != "Welcome, John!" {
+		t.Errorf("t(welcome, John) = %q, want %q", result, "Welcome, John!")
+	}
+
+	// Test with int argument
+	result = tFunc("count", 5)
+	if result != "You have 5 items" {
+		t.Errorf("t(count, 5) = %q, want %q", result, "You have 5 items")
+	}
+}
+
+// TestSupportedLanguagesWithUnknownCode tests SupportedLanguages when a code is not in Languages map
+func TestSupportedLanguagesWithUnknownCode(t *testing.T) {
+	// Create manager with a code that doesn't exist in Languages map
+	m := NewManager("en", []string{"en", "xx", "de"})
+
+	langs := m.SupportedLanguages()
+	// Should only return en and de since xx doesn't exist in Languages map
+	if len(langs) != 2 {
+		t.Errorf("SupportedLanguages() returned %d languages, want 2", len(langs))
+	}
+
+	for _, lang := range langs {
+		if lang.Code != "en" && lang.Code != "de" {
+			t.Errorf("Unexpected language code: %q", lang.Code)
+		}
+	}
+}
+
+// TestTWithFormatArgsInFallback tests T with format args falling back to default
+func TestTWithFormatArgsInFallback(t *testing.T) {
+	m := NewManager("en", []string{"en", "de"})
+	m.LoadFromMap("en", map[string]string{
+		"welcome": "Welcome, %s!",
+	})
+	// de translations don't have "welcome" key
+
+	// Should fall back to English and use format args
+	got := m.T("de", "welcome", "User")
+	if got != "Welcome, User!" {
+		t.Errorf("T with fallback = %q, want %q", got, "Welcome, User!")
+	}
+}
+
+// TestTWithNoTranslationsLoaded tests T when no translations are loaded
+func TestTWithNoTranslationsLoaded(t *testing.T) {
+	m := NewManager("en", []string{"en", "de"})
+	// Don't load any translations
+
+	got := m.T("en", "hello")
+	if got != "hello" {
+		t.Errorf("T with no translations = %q, want %q", got, "hello")
+	}
+
+	got = m.T("de", "hello")
+	if got != "hello" {
+		t.Errorf("T with no translations = %q, want %q", got, "hello")
+	}
+}
+
+// TestTFallbackWithoutArgs tests T fallback to default language without args
+func TestTFallbackWithoutArgs(t *testing.T) {
+	m := NewManager("en", []string{"en", "de"})
+	m.LoadFromMap("en", map[string]string{
+		"hello": "Hello",
+	})
+	// de translations are empty
+
+	// Should fall back to English without args
+	got := m.T("de", "hello")
+	if got != "Hello" {
+		t.Errorf("T fallback without args = %q, want %q", got, "Hello")
+	}
+}
+
+// TestTKeyNotInRequestedButInDefault tests key exists in default but not requested language
+func TestTKeyNotInRequestedButInDefault(t *testing.T) {
+	m := NewManager("en", []string{"en", "de"})
+	m.LoadFromMap("en", map[string]string{
+		"hello":   "Hello",
+		"goodbye": "Goodbye",
+	})
+	m.LoadFromMap("de", map[string]string{
+		"hello": "Hallo",
+		// "goodbye" is missing in German
+	})
+
+	// "goodbye" should fall back to English
+	got := m.T("de", "goodbye")
+	if got != "Goodbye" {
+		t.Errorf("T for missing key in requested lang = %q, want %q", got, "Goodbye")
+	}
+}
+
+// TestConcurrentAccess tests thread safety of the Manager
+func TestConcurrentAccess(t *testing.T) {
+	m := NewManager("en", []string{"en", "de"})
+	m.LoadFromMap("en", map[string]string{"hello": "Hello"})
+	m.LoadFromMap("de", map[string]string{"hello": "Hallo"})
+
+	done := make(chan bool)
+
+	// Concurrent reads
+	for range 10 {
+		go func() {
+			for range 100 {
+				_ = m.T("en", "hello")
+				_ = m.T("de", "hello")
+				_ = m.IsSupported("en")
+				_ = m.IsRTL("ar")
+				_ = m.SupportedLanguages()
+			}
+			done <- true
+		}()
+	}
+
+	// Concurrent writes
+	for range 5 {
+		go func() {
+			for range 50 {
+				m.LoadFromMap("en", map[string]string{"hello": "Hello", "test": "Test"})
+			}
+			done <- true
+		}()
+	}
+
+	// Wait for all goroutines
+	for range 15 {
+		<-done
+	}
+}
+
+// TestDefaultManager tests the DefaultManager function from embed.go
+func TestDefaultManager(t *testing.T) {
+	manager, err := DefaultManager()
+	if err != nil {
+		t.Fatalf("DefaultManager() error = %v", err)
+	}
+
+	if manager == nil {
+		t.Fatal("DefaultManager() returned nil")
+	}
+
+	// Verify it loaded English translations
+	result := manager.T("en", "common.save")
+	if result != "Save" {
+		t.Errorf("T(en, common.save) = %q, want %q", result, "Save")
+	}
+
+	// Verify nested translations work
+	result = manager.T("en", "auth.login")
+	if result != "Log In" {
+		t.Errorf("T(en, auth.login) = %q, want %q", result, "Log In")
+	}
+}
+
+// TestLocalesFS tests the LocalesFS function from embed.go
+func TestLocalesFS(t *testing.T) {
+	fs := LocalesFS()
+
+	// Verify we can read a file from the embedded FS
+	data, err := fs.ReadFile("locales/en.json")
+	if err != nil {
+		t.Fatalf("Failed to read locales/en.json: %v", err)
+	}
+
+	if len(data) == 0 {
+		t.Error("locales/en.json should not be empty")
+	}
+}
+
+// TestLoadFromFSWithRealEmbedFS tests LoadFromFS with the actual embedded filesystem
+func TestLoadFromFSWithRealEmbedFS(t *testing.T) {
+	fs := LocalesFS()
+	m := NewManager("en", []string{"en", "de", "fr"})
+
+	err := m.LoadFromFS(fs, "locales")
+	if err != nil {
+		t.Fatalf("LoadFromFS() error = %v", err)
+	}
+
+	// Verify English loaded
+	if m.T("en", "common.save") != "Save" {
+		t.Error("English translations not loaded correctly")
+	}
+
+	// Verify German loaded
+	result := m.T("de", "common.save")
+	if result == "common.save" {
+		t.Error("German translations not loaded")
+	}
+}
+
+// TestLoadFromFSMissingDefaultLanguage tests LoadFromFS when default language file is missing
+func TestLoadFromFSMissingDefaultLanguage(t *testing.T) {
+	fs := LocalesFS()
+	// Use a default language that doesn't exist
+	m := NewManager("xx", []string{"xx", "yy"})
+
+	err := m.LoadFromFS(fs, "locales")
+	if err == nil {
+		t.Error("LoadFromFS should return error when default language is missing")
+	}
+
+	expectedErr := "default language xx not found"
+	if err.Error() != expectedErr {
+		t.Errorf("error = %q, want %q", err.Error(), expectedErr)
 	}
 }

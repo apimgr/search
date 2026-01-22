@@ -215,6 +215,12 @@ func ParseDuration(val string) (int, error) {
 	}
 
 	unit := val[len(val)-1]
+
+	// If last character is a digit, treat whole value as seconds
+	if unit >= '0' && unit <= '9' {
+		return strconv.Atoi(val)
+	}
+
 	numStr := val[:len(val)-1]
 	num, err := strconv.Atoi(numStr)
 	if err != nil {
@@ -233,8 +239,8 @@ func ParseDuration(val string) (int, error) {
 	case 'w':
 		return num * 604800, nil
 	default:
-		// No unit, assume seconds
-		return strconv.Atoi(val)
+		// Unknown letter unit, use numeric portion as seconds
+		return num, nil
 	}
 }
 

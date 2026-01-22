@@ -554,6 +554,9 @@ func (e *Google) parseVideoResults(resp *http.Response, query *model.Query) ([]m
 
 // extractGoogleURL extracts the actual URL from Google's redirect URL
 func extractGoogleURL(googleURL string) string {
+	// Strip surrounding quotes if present
+	googleURL = strings.Trim(googleURL, `"`)
+
 	// Google wraps URLs like: /url?q=https://example.com&sa=...
 	if strings.Contains(googleURL, "/url?q=") {
 		parts := strings.Split(googleURL, "q=")
@@ -568,7 +571,7 @@ func extractGoogleURL(googleURL string) string {
 
 	// Direct URL
 	if strings.HasPrefix(googleURL, "http") {
-		return strings.Trim(googleURL, `"`)
+		return googleURL
 	}
 
 	return ""

@@ -714,6 +714,10 @@ func (h *UserHandler) handleRecoveryKeys(w http.ResponseWriter, r *http.Request)
 // Helper methods
 
 func (h *UserHandler) requireAuth(r *http.Request) (*userpkg.User, error) {
+	if h.authManager == nil {
+		return nil, userpkg.ErrSessionNotFound
+	}
+
 	token := h.authManager.GetSessionToken(r)
 	if token == "" {
 		return nil, userpkg.ErrSessionNotFound

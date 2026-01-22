@@ -2451,13 +2451,13 @@ func (h *Handler) apiAdmins(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) apiAdminInvite(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	if h.service == nil {
-		h.jsonError(w, "Admin service not configured", http.StatusInternalServerError)
+	if r.Method != http.MethodPost {
+		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	if r.Method != http.MethodPost {
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+	if h.service == nil {
+		h.jsonError(w, "Admin service not configured", http.StatusInternalServerError)
 		return
 	}
 

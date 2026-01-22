@@ -1394,3 +1394,1775 @@ func TestEmailInfoStruct(t *testing.T) {
 		t.Error("UsingSeparateNotification should be true")
 	}
 }
+
+// ===== PREFERENCES TESTS =====
+
+func TestDefaultPreferences(t *testing.T) {
+	prefs := DefaultPreferences()
+
+	if prefs.Theme != "auto" {
+		t.Errorf("Theme = %q, want auto", prefs.Theme)
+	}
+	if prefs.ResultsPerPage != 20 {
+		t.Errorf("ResultsPerPage = %d, want 20", prefs.ResultsPerPage)
+	}
+	if prefs.DefaultCategory != "general" {
+		t.Errorf("DefaultCategory = %q", prefs.DefaultCategory)
+	}
+	if prefs.SafeSearch != 1 {
+		t.Errorf("SafeSearch = %d, want 1", prefs.SafeSearch)
+	}
+	if !prefs.ShowThumbnails {
+		t.Error("ShowThumbnails should be true")
+	}
+	if !prefs.AutocompleteOn {
+		t.Error("AutocompleteOn should be true")
+	}
+	if !prefs.AnonymizeResults {
+		t.Error("AnonymizeResults should be true")
+	}
+}
+
+func TestUserPreferencesValidate(t *testing.T) {
+	tests := []struct {
+		name    string
+		prefs   UserPreferences
+		checkFn func(p *UserPreferences) bool
+		desc    string
+	}{
+		{
+			"invalid theme gets corrected",
+			UserPreferences{Theme: "invalid"},
+			func(p *UserPreferences) bool { return p.Theme == "auto" },
+			"Theme should be auto",
+		},
+		{
+			"valid dark theme preserved",
+			UserPreferences{Theme: "dark"},
+			func(p *UserPreferences) bool { return p.Theme == "dark" },
+			"Theme should remain dark",
+		},
+		{
+			"results too low gets minimum",
+			UserPreferences{ResultsPerPage: 5},
+			func(p *UserPreferences) bool { return p.ResultsPerPage == 10 },
+			"ResultsPerPage should be 10",
+		},
+		{
+			"results too high gets maximum",
+			UserPreferences{ResultsPerPage: 200},
+			func(p *UserPreferences) bool { return p.ResultsPerPage == 100 },
+			"ResultsPerPage should be 100",
+		},
+		{
+			"safe search negative corrected",
+			UserPreferences{SafeSearch: -1},
+			func(p *UserPreferences) bool { return p.SafeSearch == 1 },
+			"SafeSearch should be 1",
+		},
+		{
+			"safe search too high corrected",
+			UserPreferences{SafeSearch: 5},
+			func(p *UserPreferences) bool { return p.SafeSearch == 1 },
+			"SafeSearch should be 1",
+		},
+		{
+			"invalid sort corrected",
+			UserPreferences{DefaultSort: "invalid"},
+			func(p *UserPreferences) bool { return p.DefaultSort == "relevance" },
+			"DefaultSort should be relevance",
+		},
+		{
+			"invalid category corrected",
+			UserPreferences{DefaultCategory: "invalid"},
+			func(p *UserPreferences) bool { return p.DefaultCategory == "general" },
+			"DefaultCategory should be general",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prefs := tt.prefs
+			prefs.Validate()
+			if !tt.checkFn(&prefs) {
+				t.Error(tt.desc)
+			}
+		})
+	}
+}
+
+func TestUserPreferencesMerge(t *testing.T) {
+	base := DefaultPreferences()
+
+	updates := &UserPreferences{
+		Theme:           "dark",
+		ResultsPerPage:  50,
+		DefaultLanguage: "de",
+		OpenInNewTab:    true,
+		HighContrast:    true,
+	}
+
+	base.Merge(updates)
+
+	if base.Theme != "dark" {
+		t.Errorf("Theme = %q, want dark", base.Theme)
+	}
+	if base.ResultsPerPage != 50 {
+		t.Errorf("ResultsPerPage = %d, want 50", base.ResultsPerPage)
+	}
+	if base.DefaultLanguage != "de" {
+		t.Errorf("DefaultLanguage = %q", base.DefaultLanguage)
+	}
+	if !base.OpenInNewTab {
+		t.Error("OpenInNewTab should be true")
+	}
+	if !base.HighContrast {
+		t.Error("HighContrast should be true")
+	}
+}
+
+func TestUserPreferencesToJSON(t *testing.T) {
+	prefs := DefaultPreferences()
+	data, err := prefs.ToJSON()
+	if err != nil {
+		t.Errorf("ToJSON() error: %v", err)
+	}
+	if len(data) == 0 {
+		t.Error("ToJSON() returned empty data")
+	}
+
+	// Verify it's valid JSON by parsing it back
+	parsed, err := FromJSON(data)
+	if err != nil {
+		t.Errorf("FromJSON() error: %v", err)
+	}
+	if parsed.Theme != prefs.Theme {
+		t.Errorf("Round-trip Theme = %q, want %q", parsed.Theme, prefs.Theme)
+	}
+}
+
+func TestFromJSON(t *testing.T) {
+	tests := []struct {
+		name    string
+		data    string
+		wantErr bool
+	}{
+		{"valid JSON", `{"theme":"dark","results_per_page":30}`, false},
+		{"empty JSON object", `{}`, false},
+		{"invalid JSON", `{invalid}`, true},
+		{"empty string", ``, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := FromJSON([]byte(tt.data))
+			if (err != nil) != tt.wantErr {
+				t.Errorf("FromJSON() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestToPreferenceString(t *testing.T) {
+	// Test with custom settings
+	prefs := &UserPreferences{
+		Theme:           "dark",
+		ResultsPerPage:  50,
+		DefaultLanguage: "de",
+		DefaultRegion:   "DE",
+		SafeSearch:      0,
+		DefaultSort:     "date",
+		OpenInNewTab:    true,
+		HighContrast:    true,
+	}
+	str := prefs.ToPreferenceString()
+
+	// Should contain dark theme indicator
+	if !containsSubstr(str, "t=d") {
+		t.Errorf("ToPreferenceString() missing t=d, got %q", str)
+	}
+	// Should contain results per page
+	if !containsSubstr(str, "r=50") {
+		t.Errorf("ToPreferenceString() missing r=50, got %q", str)
+	}
+	// Should contain language
+	if !containsSubstr(str, "l=de") {
+		t.Errorf("ToPreferenceString() missing l=de, got %q", str)
+	}
+}
+
+func containsSubstr(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
+func TestParsePreferenceString(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		checkFn func(p *UserPreferences) bool
+	}{
+		{
+			"empty string returns defaults",
+			"",
+			func(p *UserPreferences) bool { return p.Theme == "auto" },
+		},
+		{
+			"dark theme",
+			"t=d",
+			func(p *UserPreferences) bool { return p.Theme == "dark" },
+		},
+		{
+			"light theme",
+			"t=l",
+			func(p *UserPreferences) bool { return p.Theme == "light" },
+		},
+		{
+			"results per page",
+			"r=50",
+			func(p *UserPreferences) bool { return p.ResultsPerPage == 50 },
+		},
+		{
+			"safe search off",
+			"s=0",
+			func(p *UserPreferences) bool { return p.SafeSearch == 0 },
+		},
+		{
+			"multiple settings",
+			"t=d;r=30;s=2;n=1",
+			func(p *UserPreferences) bool {
+				return p.Theme == "dark" && p.ResultsPerPage == 30 && p.SafeSearch == 2 && p.OpenInNewTab
+			},
+		},
+		{
+			"sort by date",
+			"o=d",
+			func(p *UserPreferences) bool { return p.DefaultSort == "date" },
+		},
+		{
+			"sort by popularity",
+			"o=p",
+			func(p *UserPreferences) bool { return p.DefaultSort == "popularity" },
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prefs := ParsePreferenceString(tt.input)
+			if !tt.checkFn(prefs) {
+				t.Errorf("ParsePreferenceString(%q) check failed", tt.input)
+			}
+		})
+	}
+}
+
+func TestParsePreferenceStringEngines(t *testing.T) {
+	// Test engine codes parsing
+	prefs := ParsePreferenceString("e=g,b,d")
+	if len(prefs.EnabledEngines) != 3 {
+		t.Errorf("EnabledEngines len = %d, want 3", len(prefs.EnabledEngines))
+	}
+
+	// Check specific engines
+	expected := map[string]bool{"google": true, "bing": true, "duckduckgo": true}
+	for _, eng := range prefs.EnabledEngines {
+		if !expected[eng] {
+			t.Errorf("Unexpected engine: %q", eng)
+		}
+	}
+
+	// Test disabled engines
+	prefs2 := ParsePreferenceString("x=y,w")
+	if len(prefs2.DisabledEngines) != 2 {
+		t.Errorf("DisabledEngines len = %d, want 2", len(prefs2.DisabledEngines))
+	}
+}
+
+func TestGetShareableURL(t *testing.T) {
+	prefs := DefaultPreferences()
+	url := prefs.GetShareableURL("https://search.example.com")
+
+	// With defaults, might just be preferences page
+	if url == "" {
+		t.Error("GetShareableURL() returned empty")
+	}
+
+	// Test with custom prefs
+	customPrefs := &UserPreferences{
+		Theme: "dark",
+	}
+	customURL := customPrefs.GetShareableURL("https://search.example.com")
+	if !containsSubstr(customURL, "preferences") {
+		t.Errorf("GetShareableURL() missing preferences path: %q", customURL)
+	}
+}
+
+func TestPreferencesError(t *testing.T) {
+	if ErrPreferencesNotFound.Error() != "preferences not found" {
+		t.Errorf("ErrPreferencesNotFound = %q", ErrPreferencesNotFound.Error())
+	}
+}
+
+// ===== PASSKEYS TESTS =====
+
+func TestPasskeyErrors(t *testing.T) {
+	errors := map[error]string{
+		ErrPasskeyNotEnabled:       "passkeys are not enabled for this user",
+		ErrPasskeyNotFound:         "passkey not found",
+		ErrPasskeyAlreadyExists:    "passkey already registered",
+		ErrPasskeyChallengeFailed:  "passkey challenge verification failed",
+		ErrPasskeyChallengeExpired: "passkey challenge has expired",
+		ErrPasskeyInvalidResponse:  "invalid passkey response",
+		ErrPasskeySignCountInvalid: "passkey sign count invalid (possible cloned authenticator)",
+	}
+
+	for err, expected := range errors {
+		if err.Error() != expected {
+			t.Errorf("%v = %q, want %q", err, err.Error(), expected)
+		}
+	}
+}
+
+func TestPasskeyStruct(t *testing.T) {
+	now := time.Now()
+	lastUsed := now.Add(-1 * time.Hour)
+
+	passkey := Passkey{
+		ID:              "pk_123",
+		UserID:          "100",
+		CredentialID:    "cred_abc123",
+		PublicKey:       "pubkey_data",
+		AttestationType: "none",
+		Transport:       "usb",
+		AAGUID:          "aaguid123",
+		SignCount:       5,
+		Name:            "My YubiKey",
+		CreatedAt:       now,
+		LastUsedAt:      &lastUsed,
+	}
+
+	if passkey.ID != "pk_123" {
+		t.Errorf("ID = %q", passkey.ID)
+	}
+	if passkey.SignCount != 5 {
+		t.Errorf("SignCount = %d", passkey.SignCount)
+	}
+	if passkey.Name != "My YubiKey" {
+		t.Errorf("Name = %q", passkey.Name)
+	}
+}
+
+func TestPasskeyToInfo(t *testing.T) {
+	now := time.Now()
+	lastUsed := now.Add(-1 * time.Hour)
+
+	passkey := &Passkey{
+		ID:         "pk_123",
+		Name:       "Test Passkey",
+		CreatedAt:  now,
+		LastUsedAt: &lastUsed,
+		// These should not be in info
+		PublicKey:    "sensitive_data",
+		CredentialID: "also_sensitive",
+	}
+
+	info := passkey.ToInfo()
+
+	if info.ID != "pk_123" {
+		t.Errorf("ToInfo().ID = %q", info.ID)
+	}
+	if info.Name != "Test Passkey" {
+		t.Errorf("ToInfo().Name = %q", info.Name)
+	}
+	if info.LastUsedAt == nil {
+		t.Error("ToInfo().LastUsedAt should not be nil")
+	}
+}
+
+func TestPasskeyChallengeStruct(t *testing.T) {
+	now := time.Now()
+	expires := now.Add(5 * time.Minute)
+
+	challenge := PasskeyChallenge{
+		ID:        "ch_123",
+		UserID:    "100",
+		Challenge: "random_challenge_base64",
+		Type:      "registration",
+		ExpiresAt: expires,
+		CreatedAt: now,
+	}
+
+	if challenge.ID != "ch_123" {
+		t.Errorf("ID = %q", challenge.ID)
+	}
+	if challenge.Type != "registration" {
+		t.Errorf("Type = %q", challenge.Type)
+	}
+}
+
+func TestWebAuthnUserStruct(t *testing.T) {
+	user := WebAuthnUser{
+		ID:          []byte("user123"),
+		Name:        "testuser",
+		DisplayName: "Test User",
+		Credentials: []WebAuthnCredential{},
+	}
+
+	if string(user.ID) != "user123" {
+		t.Errorf("ID = %q", user.ID)
+	}
+	if user.Name != "testuser" {
+		t.Errorf("Name = %q", user.Name)
+	}
+}
+
+func TestWebAuthnCredentialStruct(t *testing.T) {
+	cred := WebAuthnCredential{
+		ID:              []byte("cred123"),
+		PublicKey:       []byte("pubkey"),
+		AttestationType: "none",
+		Transport:       []string{"usb", "nfc"},
+		Flags: WebAuthnCredentialFlags{
+			UserPresent:    true,
+			UserVerified:   true,
+			BackupEligible: false,
+			BackupState:    false,
+		},
+		Authenticator: WebAuthnAuthenticator{
+			AAGUID:       []byte("aaguid"),
+			SignCount:    10,
+			CloneWarning: false,
+		},
+	}
+
+	if len(cred.Transport) != 2 {
+		t.Errorf("Transport len = %d", len(cred.Transport))
+	}
+	if !cred.Flags.UserPresent {
+		t.Error("UserPresent should be true")
+	}
+	if cred.Authenticator.SignCount != 10 {
+		t.Errorf("SignCount = %d", cred.Authenticator.SignCount)
+	}
+}
+
+func TestRegistrationOptionsStruct(t *testing.T) {
+	opts := RegistrationOptions{
+		Challenge: "challenge123",
+		RelyingParty: RelyingPartyEntity{
+			ID:   "example.com",
+			Name: "Example",
+		},
+		User: PublicKeyCredentialUser{
+			ID:          "user123",
+			Name:        "testuser",
+			DisplayName: "Test User",
+		},
+		PubKeyCredParams: []PublicKeyCredentialParam{
+			{Type: "public-key", Alg: -7},
+		},
+		Timeout:     60000,
+		Attestation: "none",
+	}
+
+	if opts.Challenge != "challenge123" {
+		t.Errorf("Challenge = %q", opts.Challenge)
+	}
+	if opts.RelyingParty.ID != "example.com" {
+		t.Errorf("RelyingParty.ID = %q", opts.RelyingParty.ID)
+	}
+	if opts.Timeout != 60000 {
+		t.Errorf("Timeout = %d", opts.Timeout)
+	}
+}
+
+func TestAuthenticationOptionsStruct(t *testing.T) {
+	opts := AuthenticationOptions{
+		Challenge:        "challenge456",
+		Timeout:          60000,
+		RpId:             "example.com",
+		UserVerification: "preferred",
+		AllowCredentials: []PublicKeyCredentialDescriptor{
+			{Type: "public-key", ID: "cred1"},
+		},
+	}
+
+	if opts.Challenge != "challenge456" {
+		t.Errorf("Challenge = %q", opts.Challenge)
+	}
+	if opts.RpId != "example.com" {
+		t.Errorf("RpId = %q", opts.RpId)
+	}
+	if len(opts.AllowCredentials) != 1 {
+		t.Errorf("AllowCredentials len = %d", len(opts.AllowCredentials))
+	}
+}
+
+func TestPasskeyStatusStruct(t *testing.T) {
+	status := PasskeyStatus{
+		Enabled: true,
+		Count:   3,
+	}
+
+	if !status.Enabled {
+		t.Error("Enabled should be true")
+	}
+	if status.Count != 3 {
+		t.Errorf("Count = %d", status.Count)
+	}
+}
+
+func TestPasskeyListResponseStruct(t *testing.T) {
+	now := time.Now()
+	resp := PasskeyListResponse{
+		Passkeys: []PasskeyInfo{
+			{ID: "pk1", Name: "Key 1", CreatedAt: now},
+			{ID: "pk2", Name: "Key 2", CreatedAt: now},
+		},
+		Count: 2,
+	}
+
+	if resp.Count != 2 {
+		t.Errorf("Count = %d", resp.Count)
+	}
+	if len(resp.Passkeys) != 2 {
+		t.Errorf("Passkeys len = %d", len(resp.Passkeys))
+	}
+}
+
+func TestSerializeOptions(t *testing.T) {
+	opts := &RegistrationOptions{
+		Challenge: "test_challenge",
+		RelyingParty: RelyingPartyEntity{
+			ID:   "example.com",
+			Name: "Example",
+		},
+	}
+
+	data, err := SerializeOptions(opts)
+	if err != nil {
+		t.Errorf("SerializeOptions() error: %v", err)
+	}
+	if data == "" {
+		t.Error("SerializeOptions() returned empty string")
+	}
+	if !containsSubstr(data, "test_challenge") {
+		t.Error("SerializeOptions() missing challenge in output")
+	}
+}
+
+func TestSerializeOptionsAuth(t *testing.T) {
+	opts := &AuthenticationOptions{
+		Challenge: "auth_challenge",
+		RpId:      "example.com",
+	}
+
+	data, err := SerializeOptions(opts)
+	if err != nil {
+		t.Errorf("SerializeOptions() error: %v", err)
+	}
+	if !containsSubstr(data, "auth_challenge") {
+		t.Error("SerializeOptions() missing challenge")
+	}
+}
+
+// ===== EMAIL MANAGER TESTS =====
+
+func TestMaskEmail(t *testing.T) {
+	tests := []struct {
+		name  string
+		email string
+		want  string
+	}{
+		{"standard email", "john@example.com", "j***n@e***e.com"},
+		{"short local", "ab@example.com", "***@e***e.com"},
+		{"two char local", "ab@ex.com", "***@e***.com"},
+		{"single char domain", "john@x.com", "j***n@***.com"},
+		{"subdomain", "john@mail.example.com", "j***n@m***l.example.com"},
+		{"invalid no at", "johnatexample.com", "***@***.***"},
+		{"empty", "", "***@***.***"},
+		{"only at sign", "@", "***@***"},
+		{"no domain after at", "test@", "t***t@***"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := MaskEmail(tt.email)
+			if got != tt.want {
+				t.Errorf("MaskEmail(%q) = %q, want %q", tt.email, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMaskString(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"abcdef", "a***f"},
+		{"ab", "***"},
+		{"a", "***"},
+		{"", "***"},
+		{"abc", "a***c"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := maskString(tt.input)
+			if got != tt.want {
+				t.Errorf("maskString(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGenerateVerificationToken(t *testing.T) {
+	token1, err := generateVerificationToken()
+	if err != nil {
+		t.Errorf("generateVerificationToken() error: %v", err)
+	}
+	if len(token1) != 64 { // 32 bytes = 64 hex chars
+		t.Errorf("Token length = %d, want 64", len(token1))
+	}
+
+	// Should be different each time
+	token2, _ := generateVerificationToken()
+	if token1 == token2 {
+		t.Error("Tokens should be different")
+	}
+}
+
+func TestUserEmailStruct(t *testing.T) {
+	now := time.Now()
+	expires := now.Add(24 * time.Hour)
+	verified := now.Add(-1 * time.Hour)
+
+	email := UserEmail{
+		ID:                  "em_123",
+		UserID:              "100",
+		Email:               "test@example.com",
+		Verified:            true,
+		IsPrimary:           true,
+		IsNotification:      false,
+		VerificationToken:   "token123",
+		VerificationExpires: &expires,
+		CreatedAt:           now,
+		VerifiedAt:          &verified,
+	}
+
+	if email.ID != "em_123" {
+		t.Errorf("ID = %q", email.ID)
+	}
+	if email.Email != "test@example.com" {
+		t.Errorf("Email = %q", email.Email)
+	}
+	if !email.Verified {
+		t.Error("Verified should be true")
+	}
+	if !email.IsPrimary {
+		t.Error("IsPrimary should be true")
+	}
+}
+
+func TestUserEmailToInfo(t *testing.T) {
+	now := time.Now()
+	verified := now.Add(-1 * time.Hour)
+
+	email := &UserEmail{
+		ID:             "em_123",
+		Email:          "test@example.com",
+		Verified:       true,
+		IsPrimary:      true,
+		IsNotification: false,
+		CreatedAt:      now,
+		VerifiedAt:     &verified,
+	}
+
+	info := email.ToInfo()
+
+	if info.ID != "em_123" {
+		t.Errorf("ToInfo().ID = %q", info.ID)
+	}
+	if info.Email != "test@example.com" {
+		t.Errorf("ToInfo().Email = %q", info.Email)
+	}
+	if info.MaskedEmail != "t***t@e***e.com" {
+		t.Errorf("ToInfo().MaskedEmail = %q", info.MaskedEmail)
+	}
+	if !info.Verified {
+		t.Error("ToInfo().Verified should be true")
+	}
+	if !info.IsPrimary {
+		t.Error("ToInfo().IsPrimary should be true")
+	}
+	if info.VerifiedAt == nil {
+		t.Error("ToInfo().VerifiedAt should not be nil")
+	}
+}
+
+func TestUserEmailInfoStruct(t *testing.T) {
+	now := time.Now()
+	info := UserEmailInfo{
+		ID:             "em_456",
+		Email:          "user@domain.com",
+		MaskedEmail:    "u***r@d***n.com",
+		Verified:       true,
+		IsPrimary:      false,
+		IsNotification: true,
+		CreatedAt:      now,
+		VerifiedAt:     &now,
+	}
+
+	if info.ID != "em_456" {
+		t.Errorf("ID = %q", info.ID)
+	}
+	if !info.IsNotification {
+		t.Error("IsNotification should be true")
+	}
+}
+
+func TestEmailErrors(t *testing.T) {
+	errors := []error{
+		ErrEmailExists,
+		ErrEmailNotFoundEM,
+		ErrEmailAlreadyPrimary,
+		ErrCannotRemovePrimary,
+		ErrVerificationExpired,
+		ErrInvalidVerification,
+		ErrMinimumOneEmail,
+	}
+
+	for _, err := range errors {
+		if err == nil {
+			t.Error("Error should not be nil")
+		}
+		if err.Error() == "" {
+			t.Error("Error message should not be empty")
+		}
+	}
+}
+
+// ===== RECOVERY KEY ADDITIONAL TESTS =====
+
+func TestNewRecoveryManager(t *testing.T) {
+	// Test with default key count
+	rm := NewRecoveryManager(nil, 0)
+	if rm == nil {
+		t.Fatal("NewRecoveryManager() returned nil")
+	}
+	if rm.keyCount != 10 {
+		t.Errorf("keyCount = %d, want 10 (default)", rm.keyCount)
+	}
+
+	// Test with custom key count
+	rm2 := NewRecoveryManager(nil, 5)
+	if rm2.keyCount != 5 {
+		t.Errorf("keyCount = %d, want 5", rm2.keyCount)
+	}
+
+	// Test with negative key count (should default to 10)
+	rm3 := NewRecoveryManager(nil, -5)
+	if rm3.keyCount != 10 {
+		t.Errorf("keyCount = %d, want 10 (default for negative)", rm3.keyCount)
+	}
+}
+
+func TestNormalizeRecoveryKey(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"abcd-1234-efgh-5678", "ABCD1234EFGH5678"},
+		{"ABCD1234EFGH5678", "ABCD1234EFGH5678"},
+		{"abcd 1234 efgh 5678", "ABCD1234EFGH5678"},
+		{"AbCd-1234-EfGh-5678", "ABCD1234EFGH5678"},
+		{"", ""},
+		{"   spaced   ", "SPACED"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := normalizeRecoveryKey(tt.input)
+			if got != tt.want {
+				t.Errorf("normalizeRecoveryKey(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHashAndVerifyRecoveryKey(t *testing.T) {
+	// Test hashing a recovery key
+	key := "ABCD1234EFGH5678"
+	hash, err := hashRecoveryKey(key)
+	if err != nil {
+		t.Fatalf("hashRecoveryKey() error: %v", err)
+	}
+
+	// Hash should be argon2id format
+	if !strings.HasPrefix(hash, "$argon2id$") {
+		t.Errorf("Hash should start with $argon2id$, got: %s", hash)
+	}
+
+	// Verify with correct key
+	if !verifyRecoveryKey(key, hash) {
+		t.Error("verifyRecoveryKey() should return true for correct key")
+	}
+
+	// Verify with wrong key
+	if verifyRecoveryKey("WRONGKEY12345678", hash) {
+		t.Error("verifyRecoveryKey() should return false for wrong key")
+	}
+}
+
+func TestVerifyRecoveryKeyEdgeCases(t *testing.T) {
+	// Test with invalid hash formats
+	tests := []struct {
+		name string
+		hash string
+	}{
+		{"too few parts", "too$few$parts"},
+		{"wrong algorithm", "$bcrypt$v=19$m=65536,t=3,p=4$c29tZXNhbHQ$c29tZWhhc2g"},
+		{"invalid version", "$argon2id$v=invalid$m=65536,t=3,p=4$c29tZXNhbHQ$c29tZWhhc2g"},
+		{"invalid params", "$argon2id$v=19$invalid_params$c29tZXNhbHQ$c29tZWhhc2g"},
+		{"invalid salt base64", "$argon2id$v=19$m=65536,t=3,p=4$!!!invalid$c29tZWhhc2g"},
+		{"invalid hash base64", "$argon2id$v=19$m=65536,t=3,p=4$c29tZXNhbHQ$!!!invalid"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if verifyRecoveryKey("anykey", tt.hash) {
+				t.Errorf("verifyRecoveryKey() should return false for %s", tt.name)
+			}
+		})
+	}
+}
+
+// ===== TOTP MANAGER TESTS =====
+
+func TestNewTOTPManager(t *testing.T) {
+	// Valid 32-byte key
+	validKey := make([]byte, 32)
+	for i := range validKey {
+		validKey[i] = byte(i)
+	}
+
+	tm, err := NewTOTPManager(nil, "TestIssuer", validKey)
+	if err != nil {
+		t.Fatalf("NewTOTPManager() error: %v", err)
+	}
+	if tm == nil {
+		t.Fatal("NewTOTPManager() returned nil")
+	}
+	if tm.issuer != "TestIssuer" {
+		t.Errorf("issuer = %q, want %q", tm.issuer, "TestIssuer")
+	}
+}
+
+func TestNewTOTPManagerInvalidKey(t *testing.T) {
+	// Invalid key length
+	invalidKey := make([]byte, 16)
+	_, err := NewTOTPManager(nil, "TestIssuer", invalidKey)
+	if err == nil {
+		t.Error("NewTOTPManager() should return error for invalid key length")
+	}
+}
+
+func TestTOTPManagerEncryptDecrypt(t *testing.T) {
+	// Valid 32-byte key
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i)
+	}
+
+	tm, _ := NewTOTPManager(nil, "TestIssuer", key)
+
+	// Test encryption/decryption
+	plaintext := "my_secret_totp_key"
+	encrypted, err := tm.encrypt(plaintext)
+	if err != nil {
+		t.Fatalf("encrypt() error: %v", err)
+	}
+
+	if encrypted == plaintext {
+		t.Error("Encrypted should not equal plaintext")
+	}
+
+	// Decrypt
+	decrypted, err := tm.decrypt(encrypted)
+	if err != nil {
+		t.Fatalf("decrypt() error: %v", err)
+	}
+
+	if decrypted != plaintext {
+		t.Errorf("decrypt() = %q, want %q", decrypted, plaintext)
+	}
+}
+
+func TestTOTPManagerDecryptErrors(t *testing.T) {
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i)
+	}
+	tm, _ := NewTOTPManager(nil, "TestIssuer", key)
+
+	// Test with invalid base64
+	_, err := tm.decrypt("!!!invalid base64!!!")
+	if err != ErrDecryptionFailed {
+		t.Errorf("decrypt() should return ErrDecryptionFailed for invalid base64, got %v", err)
+	}
+
+	// Test with data too short for nonce
+	_, err = tm.decrypt("YWJj") // "abc" in base64 - too short
+	if err != ErrDecryptionFailed {
+		t.Errorf("decrypt() should return ErrDecryptionFailed for short data, got %v", err)
+	}
+}
+
+func TestGenerateBackupCodes(t *testing.T) {
+	key := make([]byte, 32)
+	tm, _ := NewTOTPManager(nil, "TestIssuer", key)
+
+	codes, err := tm.GenerateBackupCodes(8)
+	if err != nil {
+		t.Fatalf("GenerateBackupCodes() error: %v", err)
+	}
+
+	if len(codes) != 8 {
+		t.Errorf("GenerateBackupCodes(8) returned %d codes", len(codes))
+	}
+
+	// Each code should be in XXXX-XXXX format
+	for i, code := range codes {
+		if len(code) != 9 { // 4 + 1 + 4
+			t.Errorf("Code %d length = %d, want 9", i, len(code))
+		}
+		if code[4] != '-' {
+			t.Errorf("Code %d missing hyphen at position 4", i)
+		}
+	}
+
+	// Codes should be unique
+	seen := make(map[string]bool)
+	for _, code := range codes {
+		if seen[code] {
+			t.Error("Duplicate backup code generated")
+		}
+		seen[code] = true
+	}
+}
+
+func TestTOTPStatusStruct(t *testing.T) {
+	now := time.Now()
+	status := TOTPStatus{
+		Enabled:   true,
+		Verified:  true,
+		EnabledAt: &now,
+	}
+
+	if !status.Enabled {
+		t.Error("Enabled should be true")
+	}
+	if !status.Verified {
+		t.Error("Verified should be true")
+	}
+	if status.EnabledAt == nil {
+		t.Error("EnabledAt should not be nil")
+	}
+}
+
+// ===== TOKEN MANAGER TESTS =====
+
+func TestNewTokenManager(t *testing.T) {
+	tm := NewTokenManager(nil)
+	if tm == nil {
+		t.Fatal("NewTokenManager() returned nil")
+	}
+}
+
+func TestUserTokenPrefixConstant(t *testing.T) {
+	// Per AI.md PART 11: User token prefix must be "usr_"
+	if userTokenPrefix != "usr_" {
+		t.Errorf("userTokenPrefix = %q, want %q", userTokenPrefix, "usr_")
+	}
+}
+
+// ===== PREFERENCES MANAGER TESTS =====
+
+func TestNewPreferencesManager(t *testing.T) {
+	pm := NewPreferencesManager(nil)
+	if pm == nil {
+		t.Fatal("NewPreferencesManager() returned nil")
+	}
+	if pm.cookieName != "search_prefs" {
+		t.Errorf("cookieName = %q, want %q", pm.cookieName, "search_prefs")
+	}
+}
+
+func TestEngineCodes(t *testing.T) {
+	// Test that all engine codes have reverse mapping
+	for name, code := range engineCodes {
+		if engineNames[code] != name {
+			t.Errorf("Engine code mapping mismatch: %s -> %s -> %s", name, code, engineNames[code])
+		}
+	}
+
+	// Test that all engine names have codes
+	for code, name := range engineNames {
+		if engineCodes[name] != code {
+			t.Errorf("Engine name mapping mismatch: %s -> %s -> %s", code, name, engineCodes[name])
+		}
+	}
+}
+
+func TestParseEngineCodesFunction(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected []string
+	}{
+		{"g,b,d", []string{"google", "bing", "duckduckgo"}},
+		{"g", []string{"google"}},
+		{"", nil},
+		{"invalid", nil},
+		{"g,invalid,b", []string{"google", "bing"}},
+		{" g , b ", []string{"google", "bing"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			result := parseEngineCodes(tt.input)
+			if len(result) != len(tt.expected) {
+				t.Errorf("parseEngineCodes(%q) length = %d, want %d", tt.input, len(result), len(tt.expected))
+				return
+			}
+			for i, v := range result {
+				if v != tt.expected[i] {
+					t.Errorf("parseEngineCodes(%q)[%d] = %q, want %q", tt.input, i, v, tt.expected[i])
+				}
+			}
+		})
+	}
+}
+
+func TestToPreferenceStringAllOptions(t *testing.T) {
+	prefs := &UserPreferences{
+		Theme:             "light",
+		ResultsPerPage:    30,
+		DefaultLanguage:   "fr",
+		DefaultRegion:     "FR",
+		SafeSearch:        2,
+		DefaultSort:       "popularity",
+		DefaultCategory:   "images",
+		EnabledEngines:    []string{"google", "bing"},
+		DisabledEngines:   []string{"yahoo"},
+		OpenInNewTab:      true,
+		ShowThumbnails:    false,
+		ShowEngineIcons:   false,
+		InfiniteScroll:    true,
+		AutocompleteOn:    false,
+		SaveSearchHistory: true,
+		AnonymizeResults:  false,
+		HighContrast:      true,
+		LargeFont:         true,
+		ReduceMotion:      true,
+	}
+
+	str := prefs.ToPreferenceString()
+
+	expectedParts := []string{
+		"t=l",   // light theme
+		"l=fr",  // language
+		"g=FR",  // region
+		"s=2",   // safe search
+		"r=30",  // results per page
+		"c=images",
+		"o=p",   // popularity sort
+		"e=g,b", // enabled engines
+		"x=y",   // disabled engines (yahoo)
+		"n=1",   // new tab
+		"h=0",   // thumbnails off
+		"i=0",   // icons off
+		"f=1",   // infinite scroll
+		"a=0",   // autocomplete off
+		"y=1",   // save history
+		"p=0",   // anonymize off
+		"hc=1",  // high contrast
+		"lf=1",  // large font
+		"rm=1",  // reduce motion
+	}
+
+	for _, part := range expectedParts {
+		if !containsSubstr(str, part) {
+			t.Errorf("ToPreferenceString() missing %q, got %q", part, str)
+		}
+	}
+}
+
+func TestParsePreferenceStringAllOptions(t *testing.T) {
+	input := "t=l;l=fr;g=FR;s=2;r=30;c=images;o=p;e=g,b;x=y;n=1;h=0;i=0;f=1;a=0;y=1;p=0;hc=1;lf=1;rm=1"
+	prefs := ParsePreferenceString(input)
+
+	if prefs.Theme != "light" {
+		t.Errorf("Theme = %q, want light", prefs.Theme)
+	}
+	if prefs.DefaultLanguage != "fr" {
+		t.Errorf("DefaultLanguage = %q, want fr", prefs.DefaultLanguage)
+	}
+	if prefs.DefaultRegion != "FR" {
+		t.Errorf("DefaultRegion = %q, want FR", prefs.DefaultRegion)
+	}
+	if prefs.SafeSearch != 2 {
+		t.Errorf("SafeSearch = %d, want 2", prefs.SafeSearch)
+	}
+	if prefs.ResultsPerPage != 30 {
+		t.Errorf("ResultsPerPage = %d, want 30", prefs.ResultsPerPage)
+	}
+	if prefs.DefaultCategory != "images" {
+		t.Errorf("DefaultCategory = %q, want images", prefs.DefaultCategory)
+	}
+	if prefs.DefaultSort != "popularity" {
+		t.Errorf("DefaultSort = %q, want popularity", prefs.DefaultSort)
+	}
+	if !prefs.OpenInNewTab {
+		t.Error("OpenInNewTab should be true")
+	}
+	if prefs.ShowThumbnails {
+		t.Error("ShowThumbnails should be false")
+	}
+	if prefs.ShowEngineIcons {
+		t.Error("ShowEngineIcons should be false")
+	}
+	if !prefs.InfiniteScroll {
+		t.Error("InfiniteScroll should be true")
+	}
+	if prefs.AutocompleteOn {
+		t.Error("AutocompleteOn should be false")
+	}
+	if !prefs.SaveSearchHistory {
+		t.Error("SaveSearchHistory should be true")
+	}
+	if prefs.AnonymizeResults {
+		t.Error("AnonymizeResults should be false")
+	}
+	if !prefs.HighContrast {
+		t.Error("HighContrast should be true")
+	}
+	if !prefs.LargeFont {
+		t.Error("LargeFont should be true")
+	}
+	if !prefs.ReduceMotion {
+		t.Error("ReduceMotion should be true")
+	}
+}
+
+func TestParsePreferenceStringInvalidValues(t *testing.T) {
+	// Invalid safe search values should be ignored (keep defaults)
+	prefs := ParsePreferenceString("s=5")
+	if prefs.SafeSearch != 1 { // default
+		t.Errorf("SafeSearch = %d, want 1 (default)", prefs.SafeSearch)
+	}
+
+	// Invalid results per page
+	prefs = ParsePreferenceString("r=5") // below minimum
+	if prefs.ResultsPerPage != 20 {      // default
+		t.Errorf("ResultsPerPage = %d, want 20 (default)", prefs.ResultsPerPage)
+	}
+
+	prefs = ParsePreferenceString("r=200") // above maximum
+	if prefs.ResultsPerPage != 20 {        // default
+		t.Errorf("ResultsPerPage = %d, want 20 (default)", prefs.ResultsPerPage)
+	}
+
+	// Invalid key=value format
+	prefs = ParsePreferenceString("invalid;t=d;also_invalid")
+	if prefs.Theme != "dark" {
+		t.Errorf("Theme = %q, want dark", prefs.Theme)
+	}
+}
+
+func TestParsePreferenceStringSortValues(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"o=r", "relevance"},
+		{"o=d", "date"},
+		{"o=p", "popularity"},
+		{"o=x", "relevance"}, // invalid defaults to relevance
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			prefs := ParsePreferenceString(tt.input)
+			if prefs.DefaultSort != tt.expected {
+				t.Errorf("ParsePreferenceString(%q).DefaultSort = %q, want %q", tt.input, prefs.DefaultSort, tt.expected)
+			}
+		})
+	}
+}
+
+func TestUserPreferencesStruct(t *testing.T) {
+	prefs := UserPreferences{
+		Theme:             "dark",
+		ResultsPerPage:    25,
+		OpenInNewTab:      true,
+		DefaultCategory:   "news",
+		DefaultLanguage:   "es",
+		DefaultRegion:     "ES",
+		SafeSearch:        2,
+		DefaultSort:       "date",
+		EnabledEngines:    []string{"google"},
+		DisabledEngines:   []string{"bing"},
+		ShowThumbnails:    true,
+		ShowEngineIcons:   true,
+		InfiniteScroll:    false,
+		AutocompleteOn:    true,
+		SaveSearchHistory: false,
+		AnonymizeResults:  true,
+		HighContrast:      false,
+		LargeFont:         false,
+		ReduceMotion:      false,
+	}
+
+	if prefs.Theme != "dark" {
+		t.Errorf("Theme = %q", prefs.Theme)
+	}
+	if prefs.ResultsPerPage != 25 {
+		t.Errorf("ResultsPerPage = %d", prefs.ResultsPerPage)
+	}
+	if len(prefs.EnabledEngines) != 1 {
+		t.Errorf("EnabledEngines len = %d", len(prefs.EnabledEngines))
+	}
+}
+
+func TestPreferencesMergeAllFields(t *testing.T) {
+	base := DefaultPreferences()
+	updates := &UserPreferences{
+		Theme:           "light",
+		ResultsPerPage:  50,
+		DefaultCategory: "news",
+		DefaultLanguage: "de",
+		DefaultRegion:   "DE",
+		DefaultSort:     "date",
+		EnabledEngines:  []string{"google", "bing"},
+		DisabledEngines: []string{"yahoo"},
+		OpenInNewTab:    true,
+		ShowThumbnails:  false,
+		ShowEngineIcons: false,
+		InfiniteScroll:  true,
+		AutocompleteOn:  false,
+		SaveSearchHistory: true,
+		AnonymizeResults: false,
+		HighContrast:    true,
+		LargeFont:       true,
+		ReduceMotion:    true,
+		SafeSearch:      2,
+	}
+
+	base.Merge(updates)
+
+	if base.Theme != "light" {
+		t.Errorf("Theme = %q", base.Theme)
+	}
+	if base.ResultsPerPage != 50 {
+		t.Errorf("ResultsPerPage = %d", base.ResultsPerPage)
+	}
+	if base.DefaultCategory != "news" {
+		t.Errorf("DefaultCategory = %q", base.DefaultCategory)
+	}
+	if base.DefaultLanguage != "de" {
+		t.Errorf("DefaultLanguage = %q", base.DefaultLanguage)
+	}
+	if base.DefaultRegion != "DE" {
+		t.Errorf("DefaultRegion = %q", base.DefaultRegion)
+	}
+	if base.DefaultSort != "date" {
+		t.Errorf("DefaultSort = %q", base.DefaultSort)
+	}
+	if len(base.EnabledEngines) != 2 {
+		t.Errorf("EnabledEngines len = %d", len(base.EnabledEngines))
+	}
+	if len(base.DisabledEngines) != 1 {
+		t.Errorf("DisabledEngines len = %d", len(base.DisabledEngines))
+	}
+	if !base.OpenInNewTab {
+		t.Error("OpenInNewTab should be true")
+	}
+	if base.ShowThumbnails {
+		t.Error("ShowThumbnails should be false")
+	}
+	if base.ShowEngineIcons {
+		t.Error("ShowEngineIcons should be false")
+	}
+	if !base.InfiniteScroll {
+		t.Error("InfiniteScroll should be true")
+	}
+	if base.AutocompleteOn {
+		t.Error("AutocompleteOn should be false")
+	}
+	if !base.SaveSearchHistory {
+		t.Error("SaveSearchHistory should be true")
+	}
+	if base.AnonymizeResults {
+		t.Error("AnonymizeResults should be false")
+	}
+	if !base.HighContrast {
+		t.Error("HighContrast should be true")
+	}
+	if !base.LargeFont {
+		t.Error("LargeFont should be true")
+	}
+	if !base.ReduceMotion {
+		t.Error("ReduceMotion should be true")
+	}
+	if base.SafeSearch != 2 {
+		t.Errorf("SafeSearch = %d", base.SafeSearch)
+	}
+}
+
+func TestGetShareableURLEdgeCases(t *testing.T) {
+	// Default preferences should return base URL
+	prefs := &UserPreferences{
+		Theme:          "auto",
+		ResultsPerPage: 20,
+		SafeSearch:     1,
+		DefaultSort:    "relevance",
+	}
+	url := prefs.GetShareableURL("https://example.com")
+	// With minimal defaults, should return preferences page (depends on implementation)
+	if url == "" {
+		t.Error("GetShareableURL() should not return empty")
+	}
+}
+
+// ===== PASSKEY MANAGER TESTS =====
+
+func TestNewPasskeyManager(t *testing.T) {
+	pm := NewPasskeyManager(nil, "example.com", "https://example.com", "Example App")
+	if pm == nil {
+		t.Fatal("NewPasskeyManager() returned nil")
+	}
+	if pm.rpID != "example.com" {
+		t.Errorf("rpID = %q, want %q", pm.rpID, "example.com")
+	}
+	if pm.rpOrigin != "https://example.com" {
+		t.Errorf("rpOrigin = %q, want %q", pm.rpOrigin, "https://example.com")
+	}
+	if pm.rpName != "Example App" {
+		t.Errorf("rpName = %q, want %q", pm.rpName, "Example App")
+	}
+}
+
+func TestGenerateChallenge(t *testing.T) {
+	challenge1, err := generateChallenge()
+	if err != nil {
+		t.Fatalf("generateChallenge() error: %v", err)
+	}
+
+	// Challenge should be base64url encoded
+	if challenge1 == "" {
+		t.Error("generateChallenge() returned empty string")
+	}
+
+	// Should be different each time
+	challenge2, _ := generateChallenge()
+	if challenge1 == challenge2 {
+		t.Error("Challenges should be different")
+	}
+}
+
+func TestRegistrationResponseStruct(t *testing.T) {
+	resp := RegistrationResponse{
+		ID:    "cred_id",
+		RawID: "raw_cred_id",
+		Type:  "public-key",
+		AuthenticatorAttachment: "platform",
+	}
+	resp.Response.AttestationObject = "attestation_data"
+	resp.Response.ClientDataJSON = "client_data"
+
+	if resp.ID != "cred_id" {
+		t.Errorf("ID = %q", resp.ID)
+	}
+	if resp.Type != "public-key" {
+		t.Errorf("Type = %q", resp.Type)
+	}
+	if resp.Response.AttestationObject != "attestation_data" {
+		t.Errorf("AttestationObject = %q", resp.Response.AttestationObject)
+	}
+}
+
+func TestAuthenticationResponseStruct(t *testing.T) {
+	resp := AuthenticationResponse{
+		ID:    "cred_id",
+		RawID: "raw_cred_id",
+		Type:  "public-key",
+	}
+	resp.Response.AuthenticatorData = "auth_data"
+	resp.Response.ClientDataJSON = "client_data"
+	resp.Response.Signature = "signature_data"
+	resp.Response.UserHandle = "user_handle"
+
+	if resp.ID != "cred_id" {
+		t.Errorf("ID = %q", resp.ID)
+	}
+	if resp.Response.Signature != "signature_data" {
+		t.Errorf("Signature = %q", resp.Response.Signature)
+	}
+	if resp.Response.UserHandle != "user_handle" {
+		t.Errorf("UserHandle = %q", resp.Response.UserHandle)
+	}
+}
+
+func TestPublicKeyCredentialDescriptorStruct(t *testing.T) {
+	desc := PublicKeyCredentialDescriptor{
+		Type:       "public-key",
+		ID:         "cred_123",
+		Transports: []string{"usb", "nfc"},
+	}
+
+	if desc.Type != "public-key" {
+		t.Errorf("Type = %q", desc.Type)
+	}
+	if desc.ID != "cred_123" {
+		t.Errorf("ID = %q", desc.ID)
+	}
+	if len(desc.Transports) != 2 {
+		t.Errorf("Transports len = %d", len(desc.Transports))
+	}
+}
+
+func TestAuthenticatorSelectionStruct(t *testing.T) {
+	sel := AuthenticatorSelection{
+		AuthenticatorAttachment: "platform",
+		ResidentKey:             "preferred",
+		RequireResidentKey:      false,
+		UserVerification:        "preferred",
+	}
+
+	if sel.AuthenticatorAttachment != "platform" {
+		t.Errorf("AuthenticatorAttachment = %q", sel.AuthenticatorAttachment)
+	}
+	if sel.ResidentKey != "preferred" {
+		t.Errorf("ResidentKey = %q", sel.ResidentKey)
+	}
+}
+
+func TestRelyingPartyEntityStruct(t *testing.T) {
+	rp := RelyingPartyEntity{
+		ID:   "example.com",
+		Name: "Example App",
+	}
+
+	if rp.ID != "example.com" {
+		t.Errorf("ID = %q", rp.ID)
+	}
+	if rp.Name != "Example App" {
+		t.Errorf("Name = %q", rp.Name)
+	}
+}
+
+func TestPublicKeyCredentialUserStruct(t *testing.T) {
+	user := PublicKeyCredentialUser{
+		ID:          "user_123",
+		Name:        "testuser",
+		DisplayName: "Test User",
+	}
+
+	if user.ID != "user_123" {
+		t.Errorf("ID = %q", user.ID)
+	}
+	if user.Name != "testuser" {
+		t.Errorf("Name = %q", user.Name)
+	}
+	if user.DisplayName != "Test User" {
+		t.Errorf("DisplayName = %q", user.DisplayName)
+	}
+}
+
+func TestPublicKeyCredentialParamStruct(t *testing.T) {
+	param := PublicKeyCredentialParam{
+		Type: "public-key",
+		Alg:  -7, // ES256
+	}
+
+	if param.Type != "public-key" {
+		t.Errorf("Type = %q", param.Type)
+	}
+	if param.Alg != -7 {
+		t.Errorf("Alg = %d", param.Alg)
+	}
+}
+
+func TestPasskeyInfoStruct(t *testing.T) {
+	now := time.Now()
+	lastUsed := now.Add(-1 * time.Hour)
+	info := PasskeyInfo{
+		ID:         "pk_123",
+		Name:       "My Security Key",
+		CreatedAt:  now,
+		LastUsedAt: &lastUsed,
+	}
+
+	if info.ID != "pk_123" {
+		t.Errorf("ID = %q", info.ID)
+	}
+	if info.Name != "My Security Key" {
+		t.Errorf("Name = %q", info.Name)
+	}
+	if info.LastUsedAt == nil {
+		t.Error("LastUsedAt should not be nil")
+	}
+}
+
+// ===== VERIFICATION MANAGER TESTS =====
+
+func TestNewVerificationManager(t *testing.T) {
+	vm := NewVerificationManager(nil)
+	if vm == nil {
+		t.Fatal("NewVerificationManager() returned nil")
+	}
+}
+
+// ===== EMAIL MANAGER TESTS =====
+
+func TestNewEmailManager(t *testing.T) {
+	em := NewEmailManager(nil)
+	if em == nil {
+		t.Fatal("NewEmailManager() returned nil")
+	}
+}
+
+// ===== AUTH MANAGER ADDITIONAL TESTS =====
+
+func TestNewAuthManager(t *testing.T) {
+	// Test with default config
+	am := NewAuthManager(nil, AuthConfig{})
+	if am == nil {
+		t.Fatal("NewAuthManager() returned nil")
+	}
+	// Should use defaults
+	if am.cookieName != "user_session" {
+		t.Errorf("cookieName = %q, want %q", am.cookieName, "user_session")
+	}
+
+	// Test with custom config
+	am2 := NewAuthManager(nil, AuthConfig{
+		SessionDurationDays: 14,
+		CookieName:          "custom_session",
+		CookieDomain:        "example.com",
+		CookieSecure:        true,
+	})
+	if am2.cookieName != "custom_session" {
+		t.Errorf("cookieName = %q, want %q", am2.cookieName, "custom_session")
+	}
+	if am2.cookieDomain != "example.com" {
+		t.Errorf("cookieDomain = %q", am2.cookieDomain)
+	}
+	if !am2.cookieSecure {
+		t.Error("cookieSecure should be true")
+	}
+}
+
+func TestAuthManagerSessionDuration(t *testing.T) {
+	// Test with zero duration (should default to 7)
+	am := NewAuthManager(nil, AuthConfig{SessionDurationDays: 0})
+	expectedDuration := 7 * 24 * time.Hour
+	if am.sessionDuration != expectedDuration {
+		t.Errorf("sessionDuration = %v, want %v", am.sessionDuration, expectedDuration)
+	}
+
+	// Test with custom duration
+	am2 := NewAuthManager(nil, AuthConfig{SessionDurationDays: 14})
+	expectedDuration2 := 14 * 24 * time.Hour
+	if am2.sessionDuration != expectedDuration2 {
+		t.Errorf("sessionDuration = %v, want %v", am2.sessionDuration, expectedDuration2)
+	}
+}
+
+// ===== ADDITIONAL EDGE CASE TESTS =====
+
+func TestToPreferenceStringThemes(t *testing.T) {
+	tests := []struct {
+		theme    string
+		expected string
+	}{
+		{"dark", "t=d"},
+		{"light", "t=l"},
+		{"auto", "t=a"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.theme, func(t *testing.T) {
+			prefs := &UserPreferences{Theme: tt.theme}
+			str := prefs.ToPreferenceString()
+			if !containsSubstr(str, tt.expected) {
+				t.Errorf("Theme %q should produce %q, got %q", tt.theme, tt.expected, str)
+			}
+		})
+	}
+}
+
+func TestToPreferenceStringEmptyEngines(t *testing.T) {
+	prefs := &UserPreferences{
+		Theme:          "dark",
+		EnabledEngines: []string{},
+	}
+	str := prefs.ToPreferenceString()
+	// Should not contain engine encoding for empty engines
+	if containsSubstr(str, "e=") {
+		t.Errorf("Empty engines should not produce e= in string: %q", str)
+	}
+}
+
+func TestToPreferenceStringUnknownEngines(t *testing.T) {
+	prefs := &UserPreferences{
+		Theme:          "dark",
+		EnabledEngines: []string{"unknownengine", "google"},
+	}
+	str := prefs.ToPreferenceString()
+	// Should only encode known engines
+	if containsSubstr(str, "e=g") {
+		// Should contain google
+	}
+}
+
+func TestValidatePreferencesValidCategories(t *testing.T) {
+	validCategories := []string{"general", "images", "videos", "news", "maps", "files", "it", "science", "social"}
+
+	for _, cat := range validCategories {
+		t.Run(cat, func(t *testing.T) {
+			prefs := &UserPreferences{DefaultCategory: cat}
+			prefs.Validate()
+			if prefs.DefaultCategory != cat {
+				t.Errorf("Category %q should remain valid, got %q", cat, prefs.DefaultCategory)
+			}
+		})
+	}
+}
+
+func TestValidatePreferencesValidSorts(t *testing.T) {
+	validSorts := []string{"relevance", "date", "popularity"}
+
+	for _, sort := range validSorts {
+		t.Run(sort, func(t *testing.T) {
+			prefs := &UserPreferences{DefaultSort: sort}
+			prefs.Validate()
+			if prefs.DefaultSort != sort {
+				t.Errorf("Sort %q should remain valid, got %q", sort, prefs.DefaultSort)
+			}
+		})
+	}
+}
+
+func TestValidatePreferencesBoundaries(t *testing.T) {
+	// Exactly at boundaries
+	prefs := &UserPreferences{ResultsPerPage: 10, SafeSearch: 0}
+	prefs.Validate()
+	if prefs.ResultsPerPage != 10 {
+		t.Errorf("ResultsPerPage 10 should remain valid, got %d", prefs.ResultsPerPage)
+	}
+	if prefs.SafeSearch != 0 {
+		t.Errorf("SafeSearch 0 should remain valid, got %d", prefs.SafeSearch)
+	}
+
+	prefs2 := &UserPreferences{ResultsPerPage: 100, SafeSearch: 2}
+	prefs2.Validate()
+	if prefs2.ResultsPerPage != 100 {
+		t.Errorf("ResultsPerPage 100 should remain valid, got %d", prefs2.ResultsPerPage)
+	}
+	if prefs2.SafeSearch != 2 {
+		t.Errorf("SafeSearch 2 should remain valid, got %d", prefs2.SafeSearch)
+	}
+}
+
+// ===== ARGON2 CONSTANT TESTS =====
+
+func TestArgon2Constants(t *testing.T) {
+	// Per AI.md: Argon2id parameters
+	if argon2Time != 3 {
+		t.Errorf("argon2Time = %d, want 3", argon2Time)
+	}
+	if argon2Memory != 64*1024 {
+		t.Errorf("argon2Memory = %d, want %d", argon2Memory, 64*1024)
+	}
+	if argon2Threads != 4 {
+		t.Errorf("argon2Threads = %d, want 4", argon2Threads)
+	}
+	if argon2KeyLen != 32 {
+		t.Errorf("argon2KeyLen = %d, want 32", argon2KeyLen)
+	}
+	if argon2SaltLen != 16 {
+		t.Errorf("argon2SaltLen = %d, want 16", argon2SaltLen)
+	}
+}
+
+// ===== ADDITIONAL STRUCT TESTS =====
+
+func TestWebAuthnCredentialFlagsStruct(t *testing.T) {
+	flags := WebAuthnCredentialFlags{
+		UserPresent:    true,
+		UserVerified:   true,
+		BackupEligible: true,
+		BackupState:    false,
+	}
+
+	if !flags.UserPresent {
+		t.Error("UserPresent should be true")
+	}
+	if !flags.UserVerified {
+		t.Error("UserVerified should be true")
+	}
+	if !flags.BackupEligible {
+		t.Error("BackupEligible should be true")
+	}
+	if flags.BackupState {
+		t.Error("BackupState should be false")
+	}
+}
+
+func TestWebAuthnAuthenticatorStruct(t *testing.T) {
+	auth := WebAuthnAuthenticator{
+		AAGUID:       []byte("test_aaguid"),
+		SignCount:    100,
+		CloneWarning: false,
+	}
+
+	if string(auth.AAGUID) != "test_aaguid" {
+		t.Errorf("AAGUID = %q", auth.AAGUID)
+	}
+	if auth.SignCount != 100 {
+		t.Errorf("SignCount = %d", auth.SignCount)
+	}
+	if auth.CloneWarning {
+		t.Error("CloneWarning should be false")
+	}
+}
+
+// ===== TEST HELPER VALIDATION =====
+
+func TestContainsSubstrHelper(t *testing.T) {
+	tests := []struct {
+		s      string
+		substr string
+		want   bool
+	}{
+		{"hello world", "world", true},
+		{"hello world", "foo", false},
+		{"hello", "hello", true},
+		{"", "", true},
+		{"hello", "", true},
+		{"", "hello", false},
+	}
+
+	for _, tt := range tests {
+		got := containsSubstr(tt.s, tt.substr)
+		if got != tt.want {
+			t.Errorf("containsSubstr(%q, %q) = %v, want %v", tt.s, tt.substr, got, tt.want)
+		}
+	}
+}

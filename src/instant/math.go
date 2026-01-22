@@ -216,14 +216,15 @@ func evalNode(node ast.Expr) (float64, error) {
 
 // formatNumber formats a number for display
 func formatNumber(n float64) string {
-	// Check if it's an integer
-	if n == math.Trunc(n) && math.Abs(n) < 1e15 {
+	// Check if it's an integer (include up to 1e15)
+	if n == math.Trunc(n) && math.Abs(n) <= 1e15 {
 		return strconv.FormatInt(int64(n), 10)
 	}
 
 	// Format with appropriate precision
+	// Use 'g' format for scientific notation to trim trailing zeros
 	if math.Abs(n) < 0.0001 || math.Abs(n) >= 1e10 {
-		return strconv.FormatFloat(n, 'e', 6, 64)
+		return strconv.FormatFloat(n, 'g', -1, 64)
 	}
 
 	// Remove trailing zeros

@@ -1,6 +1,6 @@
 # {PROJECTNAME} Specification
 
-**Name**: search
+**Name**: {projectname}
 
 ---
 
@@ -128,7 +128,7 @@ IDEA.md is the project PLAN. AI.md (this file) is the SOURCE OF TRUTH.
 | **CGO_ENABLED=0** | ALWAYS. No exceptions. Pure Go only. |
 | **Single static binary** | All assets embedded with Go `embed` package |
 | **8 platforms required** | linux, darwin, windows, freebsd × amd64, arm64 |
-| **Binary naming** | `{project}-{os}-{arch}` (windows adds `.exe`) |
+| **Binary naming** | `{projectname}-{os}-{arch}` (windows adds `.exe`) |
 | **NEVER use -musl suffix** | Alpine builds are NOT musl-specific |
 | **Build source** | ALWAYS `src` directory |
 
@@ -140,7 +140,7 @@ IDEA.md is the project PLAN. AI.md (this file) is the SOURCE OF TRUTH.
 
 | Command | Purpose | Output Location | When to Use |
 |---------|---------|-----------------|-------------|
-| `make dev` | **Development & Debugging** | `${TMPDIR}/${PROJECTORG}.XXXXXX/` | Active coding, quick tests |
+| `make dev` | **Development & Debugging** | `${TMPDIR}/${PROJECTORG}/${PROJECTNAME}-XXXXXX/` | Active coding, quick tests |
 | `make local` | **Production Testing** | `binaries/` (with version) | Test prod builds locally |
 | `make build` | **Full Release** | `binaries/` (all 8 platforms) | Before release |
 | `make test` | **Unit Tests** | Coverage report | After code changes |
@@ -159,11 +159,11 @@ IDEA.md is the project PLAN. AI.md (this file) is the SOURCE OF TRUTH.
 
 ```bash
 # After make dev, debug in Docker with tools
-BUILD_DIR=$(ls -td ${TMPDIR:-/tmp}/${PROJECTORG}.*/ | head -1)
+BUILD_DIR=$(ls -td ${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-*/ 2>/dev/null | head -1)
 docker run --rm -it -v "$BUILD_DIR:/app" alpine:latest sh -c "
   apk add --no-cache curl bash file jq  # Required debug tools
-  /app/search --help
-  /app/search --version
+  /app/{projectname} --help
+  /app/{projectname} --version
   # Interactive debugging...
 "
 ```
@@ -205,10 +205,10 @@ docker run --rm -it -v "$BUILD_DIR:/app" alpine:latest sh -c "
 make dev                # Quick build to temp dir
 
 # 2. Debug in Docker (with tools)
-BUILD_DIR=$(ls -td ${TMPDIR:-/tmp}/${PROJECTORG}.*/ | head -1)
+BUILD_DIR=$(ls -td ${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-*/ 2>/dev/null | head -1)
 docker run --rm -it -v "$BUILD_DIR:/app" alpine:latest sh -c "
   apk add --no-cache curl bash file jq
-  /app/search --help
+  /app/{projectname} --help
 "
 
 # 3. Unit tests
@@ -432,20 +432,20 @@ src/                        # Go source code (REQUIRED)
 src/main.go                 # Server application entry point
 src/config/                 # Configuration package
 src/server/                 # HTTP server package
-src/client/                 # CLI client (REQUIRED - all projects)
+src/client/                 # client (REQUIRED - all projects)
 src/agent/                  # Agent (OPTIONAL - monitoring/management projects only)
 docker/                     # Docker files (REQUIRED)
 docker/Dockerfile           # Multi-stage Dockerfile
 docker/docker-compose.yml   # Production docker-compose
-docker/rootfs/              # BUILD-TIME overlay (entrypoint.sh) - NOT runtime volumes
+docker/file_system/              # BUILD-TIME overlay (entrypoint.sh) - NOT runtime volumes
 binaries/                   # Build output (gitignored)
 releases/                   # Release artifacts (gitignored)
 ```
 
 **Notes:**
-- `src/client/` is only present if the project includes a CLI client. See PART 33 for CLI details.
-- `src/agent/` is only present if the project includes an agent. See PART 33 for agent details.
-- `docker/rootfs/` is for BUILD-TIME container overlay (copied into image). Runtime volumes (`./rootfs/config`, `./rootfs/data`) are NEVER in the repo - they exist only where docker-compose runs (production server or temp dir).
+- `src/client/` is REQUIRED for all projects (client binary is mandatory). See PART 33 for client details.
+- `src/agent/` is OPTIONAL (only for monitoring/management projects). See PART 33 for agent details.
+- `docker/file_system/` is for BUILD-TIME container overlay (copied into image). Runtime volumes (`./rootfs/config`, `./rootfs/data`) are NEVER in the repo - they exist only where docker-compose runs (production server or temp dir).
 
 ## File & Directory Naming Conventions
 
@@ -604,6 +604,15 @@ Quick reference: Accept `yes/no`, `true/false`, `1/0`, `on/off`, `enable/disable
 | Modify ENTRYPOINT/CMD | Customize via entrypoint.sh |
 | Use CGO | CGO_ENABLED=0 always |
 | Use `strconv.ParseBool()` | Use `config.ParseBool()` for all boolean parsing |
+| Hardcode dev machine values | Detect at runtime (hostname, IP, cores, memory) |
+| Use external cron for scheduling | Use internal scheduler (PART 19) |
+| Add comments to JSON files | JSON has no comment syntax |
+| Use `-musl` suffix in binary names | Alpine builds are not musl-specific |
+| Store tokens/passwords in plaintext | Passwords: Argon2id; Tokens: SHA-256 hash |
+| Implement usage limits/quotas | Rate limits protect servers; usage limits extract money |
+| Create enterprise/premium tiers | All features free for all users, always |
+| Use plural directory names | Use singular: `handler/`, `model/`, not `handlers/` |
+| Run Go locally | Use `make dev` / `make local` (containers only) |
 
 ## Files & Directories Master Rules
 
@@ -618,7 +627,7 @@ Quick reference: Accept `yes/no`, `true/false`, `1/0`, `on/off`, `enable/disable
 | **Config files** | lowercase, dot-extension | `server.yml`, `mkdocs.yml` | `SERVER.yml` |
 | **Documentation** | UPPERCASE.md | `README.md`, `LICENSE.md` | `readme.md` |
 | **Scripts** | lowercase, snake_case | `run_tests.sh` | `RunTests.sh` |
-| **Binaries** | `{project}-{os}-{arch}` | `echoip-linux-amd64` | `echoip_linux_amd64` |
+| **Binaries** | `{projectname}-{os}-{arch}` | `echoip-linux-amd64` | `echoip_linux_amd64` |
 
 ### NEVER Create These Files
 
@@ -647,7 +656,7 @@ Quick reference: Accept `yes/no`, `true/false`, `1/0`, `on/off`, `enable/disable
 | `config/` in root | Config is embedded, runtime-generated in OS dirs |
 | `data/` in root | Data goes to OS data directory at runtime |
 | `logs/` in root | Logs go to OS log directory at runtime |
-| `tmp/`, `temp/` in root | Use `/tmp/apimgr/search-XXXXXX/` |
+| `tmp/`, `temp/` in root | Use `/tmp/{projectorg}/{projectname}-XXXXXX/` |
 | `test-data/` in root | Test data goes to temp directories |
 | `build/`, `dist/`, `out/` | Use `binaries/` (gitignored) |
 | `vendor/` | Use Go modules, not vendoring |
@@ -694,14 +703,154 @@ Quick reference: Accept `yes/no`, `true/false`, `1/0`, `on/off`, `enable/disable
 
 **Claude Code Rules (.claude/rules/):**
 
-When Claude Code starts, it should create `.claude/rules/` with these files:
+When Claude Code starts, it should create `.claude/rules/` with these cheatsheet files. Each file groups related topics and references the relevant PARTs in AI.md:
 
-| File | Source |
-|------|--------|
-| `ai-rules.md` | @AI.md PART 0 |
-| `directory-structure.md` | @AI.md PART 3 |
-| `build-rules.md` | @AI.md PART 26 |
-| `testing-rules.md` | @AI.md PART 29 |
+| File | PARTs | Topics Covered |
+|------|-------|----------------|
+| `ai-rules.md` | 0, 1 | AI behavior rules, critical rules, compliance |
+| `project-rules.md` | 2, 3, 4 | License/attribution, project structure, OS-specific paths |
+| `config-rules.md` | 5, 6, 12 | Configuration handling, application modes, server settings |
+| `binary-rules.md` | 7, 8, 33 | Binary requirements, server CLI, client/agent |
+| `backend-rules.md` | 9, 10, 11 | Error handling/caching, database/cluster, security/logging |
+| `api-rules.md` | 13, 14, 15 | Health/versioning, API structure/routes, SSL/TLS |
+| `frontend-rules.md` | 16, 17 | Web frontend (HTML/CSS/JS), admin panel |
+| `features-rules.md` | 18, 19, 20, 21, 22, 23 | Email, scheduler, GeoIP, metrics, backup, update |
+| `service-rules.md` | 24, 25 | Privilege escalation, service management (systemd/launchd/etc.) |
+| `makefile-rules.md` | 26 | Makefile (local dev/tests/debug only - NOT used in CI/CD) |
+| `docker-rules.md` | 27 | Docker/containers, Dockerfile, docker-compose |
+| `cicd-rules.md` | 28 | CI/CD workflows (GitHub/GitLab/Gitea Actions) |
+| `testing-rules.md` | 29, 30, 31 | Testing/development, documentation, i18n/a11y |
+| `optional-rules.md` | 32, 34, 35, 36 | Tor hidden service, multi-user, organizations, custom domains |
+
+**Note:** PART 37 (IDEA.md Reference) and FINAL (Compliance Checklist) are reference-only, not rule files.
+
+**Cursor Rules (.cursor/rules/):**
+
+Cursor uses `.mdc` files. Create the same logical groupings:
+
+| File | PARTs | Topics Covered |
+|------|-------|----------------|
+| `ai-rules.mdc` | 0, 1 | AI behavior rules, critical rules, compliance |
+| `project-rules.mdc` | 2, 3, 4 | License/attribution, project structure, OS-specific paths |
+| `config-rules.mdc` | 5, 6, 12 | Configuration handling, application modes, server settings |
+| `binary-rules.mdc` | 7, 8, 33 | Binary requirements, server CLI, client/agent |
+| `backend-rules.mdc` | 9, 10, 11 | Error handling/caching, database/cluster, security/logging |
+| `api-rules.mdc` | 13, 14, 15 | Health/versioning, API structure/routes, SSL/TLS |
+| `frontend-rules.mdc` | 16, 17 | Web frontend (HTML/CSS/JS), admin panel |
+| `features-rules.mdc` | 18, 19, 20, 21, 22, 23 | Email, scheduler, GeoIP, metrics, backup, update |
+| `service-rules.mdc` | 24, 25 | Privilege escalation, service management |
+| `makefile-rules.mdc` | 26 | Makefile (local dev/tests/debug only) |
+| `docker-rules.mdc` | 27 | Docker/containers, Dockerfile, docker-compose |
+| `cicd-rules.mdc` | 28 | CI/CD workflows (GitHub/GitLab/Gitea Actions) |
+| `testing-rules.mdc` | 29, 30, 31 | Testing/development, documentation, i18n/a11y |
+| `optional-rules.mdc` | 32, 34, 35, 36 | Tor, multi-user, organizations, custom domains |
+
+**Aider Rules (.aider/):**
+
+Aider uses a conventions file. Create `.aider/CONVENTIONS.md` with sections referencing AI.md PARTs:
+
+```markdown
+# Project Conventions (Auto-generated from AI.md)
+
+## AI Behavior (PART 0, 1)
+[Key rules from PART 0 and 1]
+
+## Project Structure (PART 2, 3, 4)
+[Key rules from PART 2, 3, 4]
+
+## Configuration (PART 5, 6, 12)
+[Key rules...]
+
+... (same groupings as .claude/rules/)
+```
+
+**Windsurf Rules (.windsurf/rules/):**
+
+Windsurf uses same structure as Cursor. Create `.mdc` files with same groupings as `.cursor/rules/`.
+
+**Generic AI Rules (.ai/):**
+
+Fallback for other AI tools. Create `.ai/rules/` with `.md` files using same groupings as `.claude/rules/`.
+
+**All AI config directories use the same logical grouping** - only the file extension differs:
+- Claude Code: `.md`
+- Cursor: `.mdc`
+- Windsurf: `.mdc`
+- Aider: Single `CONVENTIONS.md`
+- Generic: `.md`
+
+**Project Memory File (REQUIRED):**
+
+Each AI tool directory MUST have a project memory file containing critical rules that should ALWAYS be loaded:
+
+| Tool | File |
+|------|------|
+| Claude Code | `.claude/CLAUDE.md` |
+| Cursor | `.cursor/CURSOR.md` |
+| Windsurf | `.windsurf/WINDSURF.md` |
+| Aider | `.aider/AIDER.md` |
+| Generic | `.ai/AI.md` |
+
+**Required Content Structure (~50-100 lines max):**
+
+```markdown
+# {PROJECTNAME} - AI Quick Reference
+
+## Binary Terminology
+- **server** = `{projectname}` (main binary, runs as service)
+- **client** = `{projectname}-cli` (REQUIRED companion, CLI/TUI/GUI)
+- **agent** = `{projectname}-agent` (optional, runs on remote machines)
+
+## Key Placeholders
+- `{projectname}` = [actual project name]
+- `{projectorg}` = [organization name]
+- `{admin_path}` = [admin URL path, default: admin]
+
+## Account Types (CRITICAL)
+- **Server Admin** = manages the app (NOT a privileged OS user)
+- **Primary Admin** = first admin, cannot be deleted
+- **Regular User** = end-user (PART 34, optional feature)
+- Server Admins ≠ Regular Users (separate DB tables)
+
+## Cluster vs Managed Nodes (CRITICAL)
+- **Cluster Node** = another instance of THIS app (horizontal scaling)
+- **Managed Node** = EXTERNAL resource app controls/monitors (Docker hosts, etc.)
+- Most apps only have cluster nodes
+
+## NEVER Do (Top 10)
+1. Use bcrypt → Use Argon2id
+2. Put Dockerfile in root → `docker/Dockerfile`
+3. Use CGO → CGO_ENABLED=0 always
+4. Hardcode dev values → Detect at runtime
+5. Use external cron → Internal scheduler (PART 19)
+6. Store passwords plaintext → Argon2id (tokens use SHA-256)
+7. Create premium tiers → All features free
+8. Use Makefile in CI/CD → Explicit commands
+9. Guess or assume → Read spec or ask
+10. Skip platforms → Build all 8
+
+## File Locations
+- Config: `{config_dir}/server.yml`
+- Data: `{data_dir}/`
+- Logs: `{log_dir}/`
+- Source: `src/`
+- Docker: `docker/`
+
+## Where to Find Details
+- AI behavior: `rules/ai-rules.md` (PART 0, 1)
+- Project structure: `rules/project-rules.md` (PART 2, 3, 4)
+- Frontend/WebUI: `rules/frontend-rules.md` (PART 16, 17)
+- Full spec: `AI.md` (~48k lines)
+
+## Current Project State
+[AI should update this section with current implementation status]
+```
+
+**Rules:**
+- This file is ALWAYS loaded first by the AI tool
+- Keep it under 100 lines - it's a quick reference, not the full spec
+- Points to rules/ files and AI.md for details
+- "Current Project State" section updated by AI as work progresses
 
 ### Allowed Root Directories (Exhaustive List)
 
@@ -753,15 +902,55 @@ When Claude Code starts, it should create `.claude/rules/` with these files:
 
 **These terms have SPECIFIC meanings in this specification. Understand them before proceeding.**
 
+## Template Placeholders
+
+**These placeholders appear throughout this specification and MUST be replaced with actual values:**
+
+| Placeholder | Description | Example |
+|-------------|-------------|---------|
+| `{projectname}` | Project name (lowercase, no spaces/hyphens) | `jokes`, `echoip`, `pastebin` |
+| `{projectorg}` | Organization/owner name (lowercase) | `sneak`, `acme`, `mycompany` |
+| `{projectversion}` | Current version (semver format) | `1.0.0`, `2.3.1` |
+| `{PROJECTNAME}` | Uppercase project name (for constants, env vars) | `JOKES`, `ECHOIP` |
+| `{officialsite}` | Official project website | `https://jokes.example.com` |
+| `{fqdn}` | Fully qualified domain name | `api.example.com` |
+| `{admin_path}` | Admin panel URL path (configurable, default: `admin`) | `admin`, `manage`, `control` |
+| `{api_version}` | API version prefix (default: `v1`) | `v1`, `v2` |
+
+**Directory placeholders (with platform-specific defaults):**
+
+| Placeholder | Linux/BSD Default | macOS Default | Windows Default |
+|-------------|-------------------|---------------|-----------------|
+| `{config_dir}` | `/etc/{projectorg}/{projectname}` | `/Library/Application Support/{projectorg}/{projectname}` | `%PROGRAMDATA%\{projectorg}\{projectname}` |
+| `{data_dir}` | `/var/lib/{projectorg}/{projectname}` | `/Library/Application Support/{projectorg}/{projectname}` | `%PROGRAMDATA%\{projectorg}\{projectname}` |
+| `{log_dir}` | `/var/log/{projectorg}/{projectname}` | `/Library/Logs/{projectorg}/{projectname}` | `%PROGRAMDATA%\{projectorg}\{projectname}\logs` |
+| `{cache_dir}` | `/var/cache/{projectorg}/{projectname}` | `/Library/Caches/{projectorg}/{projectname}` | `%PROGRAMDATA%\{projectorg}\{projectname}\cache` |
+| `{backup_dir}` | `/mnt/Backups/{projectorg}/{projectname}` | `/Library/Application Support/{projectorg}/{projectname}/backups` | `%PROGRAMDATA%\{projectorg}\{projectname}\backups` |
+| `{pid_file}` | `/var/run/{projectorg}/{projectname}.pid` | `/var/run/{projectorg}/{projectname}.pid` | N/A (Windows uses SCM) |
+
+## Binary Terminology
+
+**Three binaries may be built from a project. All support renaming (affects help/docs, not directories/user/group):**
+
+| Term | Default Binary Name | Description |
+|------|---------------------|-------------|
+| **server** | `{projectname}` | The main application binary - runs as service/daemon, serves API/WebUI |
+| **client** | `{projectname}-cli` | Required companion binary - terminal interface with CLI/TUI/GUI modes |
+| **agent** | `{projectname}-agent` | Optional companion binary - runs on remote machines, reports to server |
+
+**Renaming behavior:**
+- Renaming a binary (e.g., `cp jokes myjokes`) changes user-visible output (help text, banners, User-Agent)
+- Renaming does NOT change: directories, system user/group, config file names, database paths
+- Binary detects its own name at runtime via `os.Args[0]` or `filepath.Base(os.Executable())`
+
 ## Core Terms
 
-**Note:** "Project", "App", and "Application" are used interchangeably throughout this document - they all refer to the complete codebase including all files, configuration, and functionality.
+**Note:** "Project", "App", and "Application" are used interchangeably throughout this document - they all refer to the complete codebase including all binaries (server, client, agent), configuration, and functionality.
 
 | Term | Definition |
 |------|------------|
-| **Project / App / Application** | The server binary you are building (`search`) - used interchangeably |
-| **App Instance** | A single running copy of the app (one process) |
-| **Server** | This application - the binary/service you are building |
+| **Project / App / Application** | The complete codebase you are building - includes server, client, agent binaries |
+| **App Instance** | A single running copy of a binary (one process) |
 | **System** | The operating system (Linux, macOS, Windows, FreeBSD) - NOT this application |
 
 ## Server vs System Distinction (CRITICAL)
@@ -793,79 +982,96 @@ This distinction exists for clarity. When referring to OS-level resources that b
 
 | Term | Definition |
 |------|------------|
-| **Managed Node** | An EXTERNAL resource the app controls (NOT an app instance) |
-| **Extended Node Function** | What the app does with managed nodes beyond config sync |
+| **Managed Node** | An EXTERNAL resource the app controls/monitors (NOT an app instance) - e.g., Docker hosts, monitored servers |
 | **HA (High Availability)** | Automatic failover for critical apps - specialized, not standard |
+| **API Token** | Authentication credential for API access - prefixed by owner type (`adm_`, `usr_`, `org_`) |
+| **Agent Token** | Scoped API token for agents - includes owner prefix (`adm_agt_`, `usr_agt_`, `org_agt_`) |
+| **Rate Limiting** | Server protection against abuse/DDoS - NOT usage limits for monetization (we never do that) |
+| **Background Job** | Server-side scheduled or queued task (backup, sync, cleanup) - managed by internal scheduler, NOT cron |
+| **Leader Election** | Process where cluster nodes elect a Primary Node for cluster-wide tasks |
 
 ## Managed Nodes vs Cluster Nodes
 
-**CRITICAL DISTINCTION:**
+**CRITICAL DISTINCTION** (see definitions above):
 
-| Type | What It Is | Example |
-|------|------------|---------|
-| **Cluster Node** | Instance of YOUR app | 3 copies of `jokes` running, syncing config |
-| **Managed Node** | External thing your app CONTROLS | Docker hosts that Watchtower manages |
+| Type | What It Is | Examples |
+|------|------------|----------|
+| Cluster Node | Another instance of THIS app (horizontal scaling) | 3 copies of `jokes` behind a load balancer, all syncing config |
+| Managed Node | An EXTERNAL resource this app controls/monitors | Docker hosts, VMs, network devices, IoT sensors, backup targets |
 
-**Most apps only have cluster nodes. Managed nodes are app-specific.**
+**Key difference:** Cluster nodes run your code. Managed nodes are things your code talks to.
+
+**Most apps only have cluster nodes. Managed nodes are app-specific and require PART 33 agent functionality.**
 
 ## Examples
 
-| App | Cluster Nodes | Managed Nodes | HA |
-|-----|:-------------:|:-------------:|:--:|
-| Jokes API | ✓ (app instances syncing) | ✗ | ✗ |
-| Watchtower-type | ✓ (app instances syncing) | ✓ (Docker hosts) | ✗ |
-| DNS Server | ✓ (app instances syncing) | ✗ | ✓ |
-| Monitoring App | ✓ (app instances syncing) | ✓ (monitored servers) | ✗ |
+| App Type | Cluster Nodes | Managed Nodes | HA |
+|----------|---------------|---------------|:--:|
+| **Simple API** (jokes, pastebin) | ✓ Multiple instances syncing config | ✗ None | ✗ |
+| **Container Manager** (Watchtower-type) | ✓ Multiple instances syncing config | ✓ Docker hosts to update | ✗ |
+| **Monitoring/Observability** | ✓ Multiple instances syncing config | ✓ Servers/services being monitored | ✗ |
+| **DNS Server** | ✓ Multiple instances syncing zones | ✗ None | ✓ |
+| **Backup Manager** | ✓ Multiple instances syncing schedules | ✓ Remote backup targets (NAS, S3, etc.) | ✗ |
+| **IoT Hub** | ✓ Multiple instances syncing device registry | ✓ IoT devices/sensors reporting in | ✗ |
+| **CI/CD Controller** | ✓ Multiple instances syncing job queue | ✓ Build runners/agents | ✗ |
+| **Network Manager** | ✓ Multiple instances syncing config | ✓ Routers, switches, firewalls | ✗ |
+| **VM Orchestrator** | ✓ Multiple instances syncing state | ✓ Hypervisors, VM guests | ✓ |
+| **Certificate Manager** | ✓ Multiple instances syncing cert inventory | ✓ Servers needing cert deployment | ✗ |
+
+**Reading the table:**
+- **Cluster Nodes column**: What the app instances sync (config, zones, schedules, etc.)
+- **Managed Nodes column**: What external resources the app controls (if any)
+- **HA column**: Whether the app handles automatic failover for critical services
 
 ## Account Types
 
 | Term | Definition |
 |------|------------|
 | **Server Admin** | Administrative account for managing the application (NOT a privileged user) |
-| **Primary Admin** | The first Server Admin created during setup wizard (cannot be deleted) |
-| **Additional Admin** | Server Admins added by Primary Admin or other admins |
-| **OIDC/LDAP Admin** | Server Admin access via external identity provider group mapping |
-| **Regular User** | End-user account that uses the application's features |
+| **Primary Admin** | A Server Admin - specifically the first one created during setup wizard (cannot be deleted, prevents lockout) |
+| **Additional Admin** | A Server Admin - added later by Primary Admin or other admins (can be deleted) |
+| **OIDC/LDAP Admin** | A Server Admin - authenticated via external identity provider instead of local password |
+| **Regular User** | End-user account that uses the application's features (PART 34, optional) |
 
 **CRITICAL:** Server Admins and Regular Users are completely separate account types stored in different database tables. A Server Admin is NOT a "privileged user."
+
+## Setup & First-Run Terms
+
+| Term | Definition |
+|------|------------|
+| **Setup Wizard** | First-run configuration flow - server has web-based wizard (`/{admin_path}/server/setup`) to create Primary Admin; client has TUI/GUI wizard to configure server connection |
+| **Setup Token** | One-time 32-char hex token generated on server first-run, displayed in console, required to access server's web-based setup wizard |
 
 ## Other Terms
 
 | Term | Definition |
 |------|------------|
-| **CLI Client** | Required INTERACTIVE companion binary (`search-cli`) with CLI mode (commands) and TUI mode (interactive menus/panels); receives JSON from server and renders beautiful output itself; NOT treated as non-interactive |
-| **Agent** | Optional companion binary (`search-agent`) that runs on remote machines to collect data/interact with the OS and send to server; server may send commands to agent (e.g., Docker container management, nginx/apache vhost creation) |
-| **TUI** | Terminal User Interface - interactive terminal app with menus/panels (our CLI client supports TUI mode) |
+| **TUI** | Terminal User Interface - interactive terminal app with menus/panels (client supports TUI mode) |
 | **Text Browsers** | INTERACTIVE browsers (lynx, w3m, links, elinks) that receive **no-JS HTML** and render it in text mode; NO JavaScript support - forms via POST, server-rendered only |
 | **HTTP Tools** | NON-INTERACTIVE tools (curl, wget, httpie) that receive pre-formatted text via HTML2TextConverter; they just dump output |
-| **Admin Panel** | WebUI at `/admin` for server administration |
-| **FQDN** | Fully Qualified Domain Name (e.g., `api.example.com`) - use `{fqdn}` |
+| **Admin Panel** | WebUI at `/{admin_path}` for server administration (path is configurable, default: `admin`) |
+| **WebUI** | Web User Interface - browser-based interface served by the server |
+| **SCM** | Windows Service Control Manager - manages Windows services (replaces PID files on Windows) |
 | **Hostname** | Short hostname (e.g., `web01`) - equivalent to `hostname -s` |
 | **Machine** | A named system - defaults to hostname, can be custom name |
 | **Local** | The system (OS) where the binary is currently running |
 | **Remote** | Context-dependent - generally means "not local" |
 | **~~Host~~** | **DO NOT USE** - ambiguous term, use FQDN, Hostname, or Machine instead |
-| **Config Dir** | Where config files live (`{config_dir}`, default: `/etc/apimgr/search`) |
-| **Data Dir** | Where runtime data lives (`{data_dir}`, default: `/var/lib/apimgr/search`) |
-| **Log Dir** | Where log files live (`{log_dir}`, default: `/var/log/apimgr/search`) |
-| **Cache Dir** | Where cache files live (`{cache_dir}`, default: `/var/cache/apimgr/search`) |
-| **Backup Dir** | Where backups live (`{backup_dir}`, default: `/mnt/Backups/apimgr/search`) |
-| **PID File** | Process ID file path (`{pid_file}`, default: `/var/run/apimgr/search.pid`) |
 
 ---
 
 ## How to Read This Large File
 
-**AI.md is ~1.7MB and ~47,688 lines. You CANNOT read it all at once. Follow these procedures.**
+**AI.md is ~1.9MB and ~50,697 lines. You CANNOT read it all at once. Follow these procedures.**
 
 ### File Size Reality
 
 | Constraint | Value |
 |------------|-------|
-| File size | ~1.7MB |
-| Line count | ~47,688 lines |
+| File size | ~1.9MB |
+| Line count | ~50,697 lines |
 | Read limit | ~500 lines per read |
-| Full reads needed | ~95 reads (impractical) |
+| Full reads needed | ~100 reads (impractical) |
 
 **Use the PART index to find relevant sections, then read each section COMPLETELY.**
 
@@ -875,45 +1081,45 @@ This distinction exists for clarity. When referring to OS-level resources that b
 
 | PART | Line | Topic | When to Read |
 |------|------|-------|--------------|
-| 0 | ~1010 | AI Assistant Rules | **ALWAYS READ FIRST**, **AI Behavior Rules** |
-| 1 | ~2568 | Critical Rules | **ALWAYS READ FIRST** |
-| 2 | ~3423 | License & Attribution | License requirements |
-| 3 | ~3757 | Project Structure | Setting up new project, **CI/CD badge detection** |
-| 4 | ~4567 | OS-Specific Paths | Path handling |
-| 5 | ~4752 | Configuration | Config file work, **Path Security**, **Privileged Ports**, **Escalation** |
-| 6 | ~6580 | Application Modes | Mode handling, debug endpoints |
-| 7 | ~7188 | Binary Requirements | Binary building, **Display detection** |
-| 8 | ~7662 | Server Binary CLI | CLI flags/commands |
-| 9 | ~10633 | Error Handling & Caching | Error/cache patterns |
-| 10 | ~11010 | Database & Cluster | Database work |
-| 11 | ~11425 | Security & Logging | Security features, **Scoped Agent Tokens**, **Context Detection** |
-| 12 | ~13308 | Server Configuration | Server settings |
-| 13 | ~14372 | Health & Versioning | Health endpoints |
-| 14 | ~14876 | API Structure | REST/GraphQL/Route Compliance, **Non-Interactive Text Output** |
-| 15 | ~16468 | SSL/TLS & Let's Encrypt | SSL certificates |
-| 16 | ~17287 | Web Frontend | Frontend/UI, **Sitemap**, **Site Verification**, **Branding/SEO** |
-| 17 | ~21608 | Admin Panel | Admin UI, **Server Admin**, **Scoped Agents API** |
-| 18 | ~23648 | Email & Notifications | Email/SMTP, **SMTP Auto-Detection** |
-| 19 | ~24963 | Scheduler | Background tasks, **NO external schedulers**, **Backup tasks** |
-| 20 | ~25448 | GeoIP | GeoIP features |
-| 21 | ~25521 | Metrics | Metrics/monitoring |
-| 22 | ~26542 | Backup & Restore | Backup features, **Compliance encryption**, **Cluster backups** |
-| 23 | ~27271 | Update Command | Update feature |
-| 24 | ~27327 | Privilege Escalation & Service | Service/privilege work |
-| 25 | ~28225 | Service Support | Systemd/runit/rc.d/launchd templates |
-| 26 | ~28409 | Makefile | Build system, **make local** |
-| 27 | ~29135 | Docker | Docker/containers, **NEVER copy/symlink binaries** |
-| 28 | ~30495 | CI/CD Workflows | GitHub/GitLab/Gitea Actions |
-| 29 | ~33009 | Testing & Development | Testing/dev workflow, **100% Coverage** |
-| 30 | ~34660 | ReadTheDocs Documentation | Documentation |
-| 31 | ~35373 | I18N & A11Y | Internationalization |
-| 32 | ~35794 | Tor Hidden Service | Tor support, **binary controls Tor** |
-| 33 | ~36530 | CLI Client & Agent | CLI **REQUIRED**, Agent optional - CLI/TUI/GUI, **Scoped Agent Tokens**, **Smart Context**, **First-Run Wizard** |
-| 34 | ~40636 | Multi-User | **OPTIONAL** - Regular User accounts/registration, vanity URLs |
-| 35 | ~44207 | Organizations | **OPTIONAL** - multi-user orgs, vanity URLs |
-| 36 | ~44848 | Custom Domains | **OPTIONAL** - user/org branded domains |
-| 37 | ~45871 | IDEA.md Reference | **Examples only** - NEVER modify |
-| FINAL | ~46125 | Compliance Checklist | Final verification, **AI Quick Reference Rules** |
+| 0 | ~1216 | AI Assistant Rules | **ALWAYS READ FIRST**, **AI Behavior Rules** |
+| 1 | ~2808 | Critical Rules | **ALWAYS READ FIRST** |
+| 2 | ~3663 | License & Attribution | License requirements |
+| 3 | ~3997 | Project Structure | Setting up new project, **CI/CD badge detection** |
+| 4 | ~4865 | OS-Specific Paths | Path handling |
+| 5 | ~5050 | Configuration | Config file work, **Path Security**, **Privileged Ports**, **Escalation** |
+| 6 | ~6958 | Application Modes | Mode handling, debug endpoints |
+| 7 | ~7566 | Binary Requirements | Binary building, **Display detection** |
+| 8 | ~8149 | Server Binary CLI | CLI flags/commands |
+| 9 | ~11124 | Error Handling & Caching | Error/cache patterns |
+| 10 | ~11501 | Database & Cluster | Database work |
+| 11 | ~11916 | Security & Logging | Security features, **Scoped Agent Tokens**, **Context Detection** |
+| 12 | ~13799 | Server Configuration | Server settings |
+| 13 | ~14859 | Health & Versioning | Health endpoints |
+| 14 | ~15363 | API Structure | REST/GraphQL/Route Compliance, **Non-Interactive Text Output** |
+| 15 | ~16955 | SSL/TLS & Let's Encrypt | SSL certificates |
+| 16 | ~17808 | Web Frontend | Frontend/UI, **Sitemap**, **Site Verification**, **Branding/SEO** |
+| 17 | ~22230 | Admin Panel | Admin UI, **Server Admin**, **Scoped Agents API** |
+| 18 | ~24270 | Email & Notifications | Email/SMTP, **SMTP Auto-Detection** |
+| 19 | ~25590 | Scheduler | Background tasks, **NO external schedulers**, **Backup tasks** |
+| 20 | ~26075 | GeoIP | GeoIP features |
+| 21 | ~26148 | Metrics | Metrics/monitoring |
+| 22 | ~27169 | Backup & Restore | Backup features, **Compliance encryption**, **Cluster backups** |
+| 23 | ~27898 | Update Command | Update feature |
+| 24 | ~28377 | Privilege Escalation & Service | Service/privilege work |
+| 25 | ~29275 | Service Support | Systemd/runit/rc.d/launchd templates |
+| 26 | ~29459 | Makefile | Local dev/tests/debug only, **NOT used in CI/CD** |
+| 27 | ~30214 | Docker | Docker/containers, **NEVER copy/symlink binaries** |
+| 28 | ~31582 | CI/CD Workflows | GitHub/GitLab/Gitea Actions |
+| 29 | ~34436 | Testing & Development | Testing/dev workflow, **AI Docker Compose Rules**, **Content Negotiation Testing** |
+| 30 | ~36255 | ReadTheDocs Documentation | Documentation |
+| 31 | ~36968 | I18N & A11Y | Internationalization |
+| 32 | ~37389 | Tor Hidden Service | Tor support, **binary controls Tor** |
+| 33 | ~39168 | Client & Agent | Client **REQUIRED**, Agent optional - CLI/TUI/GUI, **Scoped Agent Tokens**, **Smart Context**, **First-Run Wizard** |
+| 34 | ~43562 | Multi-User | **OPTIONAL** - Regular User accounts/registration, vanity URLs |
+| 35 | ~47206 | Organizations | **OPTIONAL** - multi-user orgs, vanity URLs |
+| 36 | ~47847 | Custom Domains | **OPTIONAL** - user/org branded domains |
+| 37 | ~48870 | IDEA.md Reference | **Examples only** - NEVER modify |
+| FINAL | ~49124 | Compliance Checklist | Final verification, **AI Quick Reference Rules** |
 
 **When Implementing OPTIONAL PARTs (34-36, Agent from 33):**
 1. Change PART title from `OPTIONAL` → `NON-NEGOTIABLE` in AI.md
@@ -945,7 +1151,7 @@ When reading a PART and you encounter a reference like "See PART X" or "Read PAR
 2. Jump to the referenced PART and read it
 3. **Return to your original location** and continue reading
 
-Example: If you're reading PART 5 at line 4800 and it says "See PART 10", read PART 10, then **return to PART 5 line 4800** and continue.
+Example: If you're reading PART 5 at line 5017 and it says "See PART 10", read PART 10, then **return to PART 5 line 5017** and continue.
 
 **Never abandon your current PART after following a reference.**
 
@@ -1357,7 +1563,7 @@ See IDEA.md for the full project breakdown.
 ## After Work
 
 1. **Update IDEA.md** if features changed
-2. **Update AI.md** ONLY if changing OPTIONAL→REQUIRED (PARTS 33-35)
+2. **Update AI.md** ONLY if changing OPTIONAL→REQUIRED (PARTS 34-36)
 3. **Update TODO.AI.md** with any new tasks discovered
 4. **Verify compliance** - check against the FINAL CHECKPOINT
 5. **Update COMMIT_MESS** - only if files were changed (skip if no changes)
@@ -1527,7 +1733,7 @@ Implemented core server functionality and admin panel.
 | **docker/Dockerfile** | PART 27, actual code | Build stages, packages, paths correct |
 | **docker/docker-compose.yml** | PART 27, actual config | Ports, volumes, env vars match |
 | **docker/docker-compose.dev.yml** | PART 27 | Dev workflow correct |
-| **docker/rootfs/** | Actual entrypoint needs | Scripts match what app expects |
+| **docker/file_system/** | Actual entrypoint needs | Scripts match what app expects |
 | **.github/workflows/*.yml** | PART 28, actual build | CI/CD builds what exists, tests what exists |
 | **.gitea/workflows/*.yml** | PART 28, actual build | Same as GitHub workflows |
 | **Jenkinsfile** | PART 28, actual build | Pipeline matches project |
@@ -2226,6 +2432,7 @@ Enter choice [a-d]:
 - Include "Other" option when appropriate
 - Show valid range: `[1-4]` or `[a-d]`
 - Put recommended option first with "(recommended)" suffix
+- **Multiple questions: Present as wizard (one question at a time)** - don't overwhelm user with all questions at once during planning
 
 ## Migration Success Criteria
 
@@ -2246,8 +2453,8 @@ Enter choice [a-d]:
 # AI should run these checks and report results:
 
 # 1. Verify CLI
-./binaries/search --help
-./binaries/search --version
+./binaries/{projectname} --help
+./binaries/{projectname} --version
 
 # 2. Verify build
 make clean && make build
@@ -2329,7 +2536,7 @@ ls -la docker/
 | 37 | Project-Specific Sections | ✅ Customize for project |
 | FINAL | Compliance Checklist | ✅ Verify all items |
 
-### PART 33: CLI Client & Agent (REQUIRED)
+### PART 33: Client & Agent (REQUIRED)
 
 **CLI is REQUIRED for all projects. Agent is OPTIONAL (only for monitoring/remote management projects).**
 
@@ -2370,7 +2577,7 @@ ls -la docker/
 | Linktree clone | Weather API | Users want branded URLs |
 | Blog platform | Jokes API | Content published under user's domain |
 
-**PART 33: CLI Client**
+**PART 33: Client**
 
 | Include | Skip | Reason |
 |---------|------|--------|
@@ -2379,6 +2586,39 @@ ls -la docker/
 | Database management | Static content site | Bulk operations via CLI |
 
 **Once implemented, the optional PART becomes NON-NEGOTIABLE.**
+
+### CRITICAL: Unused Optional Features Must Not Exist in Code
+
+**If a project does NOT use PART 34, 35, or 36, those features must be completely absent from the codebase.**
+
+| Rule | Description |
+|------|-------------|
+| **No references** | Zero mentions of users, orgs, or custom domains in code |
+| **No conditionals** | No `if multiUserEnabled` or `if orgsEnabled` checks |
+| **No stubs** | No placeholder functions, empty tables, or "future" comments |
+| **No config options** | No `users.enabled: false` or similar toggle settings |
+| **No UI elements** | No hidden/disabled menu items for unused features |
+
+**The code should be written as if the unused features never existed.**
+
+| If NOT using... | These must NOT appear in code |
+|-----------------|------------------------------|
+| PART 34 (Multi-User) | `users` table, user registration, user preferences table, user API tokens, `/auth/register`, user profiles, `allow_user_preference` config options |
+| PART 35 (Organizations) | `organizations` table, org membership, org ownership, org API tokens, `/orgs/*` routes |
+| PART 36 (Custom Domains) | `custom_domains` table, domain verification, user/org domain settings, SSL for custom domains |
+
+**Why?** Unused code is dead code. It adds complexity, security surface, and maintenance burden for features that don't exist. If a feature isn't used, it shouldn't be in the codebase at all.
+
+**Client-Side Preferences (No PART 34 Required):**
+
+User preferences like theme, language, and UI settings can be stored client-side without PART 34:
+
+| Storage | Use Case | Persistence |
+|---------|----------|-------------|
+| `localStorage` | Theme, language, UI preferences | Until cleared |
+| Cookies | Session preferences, consent flags | Configurable expiry |
+
+These work for anonymous visitors and don't require user accounts. Server-side user preferences (stored in `user_preferences` table) require PART 34.
 
 ## AI Implementation Process
 
@@ -2393,7 +2633,7 @@ ls -la docker/
 │            │                                                     │
 │            ▼                                                     │
 │   ┌──────────────────┐                                          │
-│   │ 2. Determine     │ ◄─── Decide CLI client, Custom domains   │
+│   │ 2. Determine     │ ◄─── Decide client, Custom domains   │
 │   │    optional      │                                          │
 │   └────────┬─────────┘                                          │
 │            │                                                     │
@@ -2546,7 +2786,7 @@ If blocked on current feature:
 
 ### Optional (if included)
 ```
-□ CLI client follows SPEC (if PART 33 included)
+□ client follows SPEC (if PART 33 included)
 □ Custom domains follows SPEC (if PART 36 included)
 ```
 
@@ -2575,14 +2815,14 @@ Every feature MUST work via:
 1. **Web browser** - HTML pages, forms, interactive UI
 2. **PWA (Progressive Web App)** - Installable, offline-capable, native-like experience
 3. **API clients** - JSON for curl, wget, automation, scripts
-4. **CLI clients** - Dedicated command-line tools (if PART 33 implemented)
+4. **clients** - Dedicated command-line tools (if PART 33 implemented)
 
 | Client Type | Examples | Response Format |
 |-------------|----------|-----------------|
 | **Browser** | Chrome, Firefox, Safari | HTML (pretty UI) |
 | **PWA** | Installed web app (desktop/mobile) | HTML (same as browser) |
 | **API/Automation** | curl, wget, scripts, integrations | JSON |
-| **CLI tool** | `search-cli` | Text/JSON (configurable) |
+| **CLI tool** | `{projectname}-cli` | Text/JSON (configurable) |
 
 **Endpoint Pattern (applies to ENTIRE app):**
 | Web Route (HTML) | API Route (JSON) | Purpose |
@@ -2644,7 +2884,7 @@ When working on this project, the following roles are assumed based on the task:
 
 ```bash
 # CORRECT - Use Makefile targets
-make dev                    # Quick build to {tempdir}/apimgr.XXXXXX/search
+make dev                    # Quick build to {tempdir}/{projectorg}/{projectname}-XXXXXX/
 make local                   # Build with version info to binaries/
 make build                  # Full cross-platform build to binaries/
 make test                   # Run unit tests
@@ -2654,7 +2894,7 @@ make test                   # Run unit tests
 ./tests/incus.sh            # Full OS test with systemd (PREFERRED)
 
 # WRONG - Never run go directly on local machine
-go build -o binary/search ./src
+go build -o binary/{projectname} ./src
 ```
 
 **See PART 29: TESTING & DEVELOPMENT for full containerized build/test procedures.**
@@ -3041,7 +3281,7 @@ func gUBE(e string) (*U, error) {
 
 | Rule | Description |
 |------|-------------|
-| **AI.md is SOURCE OF TRUTH** | Only modify for OPTIONAL→REQUIRED (PARTS 33-35) |
+| **AI.md is SOURCE OF TRUTH** | Only modify for OPTIONAL→REQUIRED (PARTS 34-36) |
 | **IDEA.md is the project PLAN** | Update when features change, must follow AI.md |
 | **Keep documentation current** | Update when project state changes |
 | **TODO.AI.md for 3+ tasks** | Required when doing 3 or more tasks |
@@ -3061,10 +3301,10 @@ IDEA.md (project spec - update as needed)
 
 1. **Title & Badges** - Project name, build status, version badges
 2. **About** - Brief description of what the project does
-3. **Official Site** - Link to official site (if defined, e.g., `https://search.apimgr.us`)
+3. **Official Site** - Link to official site (if defined, e.g., `https://{projectname}.{projectorg}.us`)
 4. **Features** - Key features list
 5. **Production** - Production deployment instructions (Docker, binary, systemd)
-6. **CLI Client** - Client CLI installation and usage (if applicable)
+6. **Client** - Client installation and usage (if applicable)
 7. **Configuration** - Key configuration options
 8. **API** - API endpoints summary (if applicable)
 9. **Other** - Additional info (troubleshooting, FAQ, etc.)
@@ -3088,31 +3328,31 @@ Detect platform by checking for workflow files in this order:
 
 ```markdown
 # GitHub Actions
-[![Build](https://github.com/apimgr/search/actions/workflows/build.yml/badge.svg)](https://github.com/apimgr/search/actions/workflows/build.yml)
+[![Build](https://github.com/{projectorg}/{projectname}/actions/workflows/build.yml/badge.svg)](https://github.com/{projectorg}/{projectname}/actions/workflows/build.yml)
 
 # Gitea/Forgejo Actions
-[![Build](https://git.example.com/apimgr/search/actions/workflows/build.yml/badge.svg)](https://git.example.com/apimgr/search/actions)
+[![Build](https://git.example.com/{projectorg}/{projectname}/actions/workflows/build.yml/badge.svg)](https://git.example.com/{projectorg}/{projectname}/actions)
 
 # GitLab CI
-[![Build](https://gitlab.com/apimgr/search/badges/main/pipeline.svg)](https://gitlab.com/apimgr/search/-/pipelines)
+[![Build](https://gitlab.com/{projectorg}/{projectname}/badges/main/pipeline.svg)](https://gitlab.com/{projectorg}/{projectname}/-/pipelines)
 
 # Jenkins
-[![Build](https://jenkins.example.com/buildStatus/icon?job=apimgr/search)](https://jenkins.example.com/job/apimgr/job/search/)
+[![Build](https://jenkins.example.com/buildStatus/icon?job={projectorg}/{projectname})](https://jenkins.example.com/job/{projectorg}/job/{projectname}/)
 ```
 
 **Release/License badges also adapt to platform:**
 
 ```markdown
 # GitHub
-[![Release](https://img.shields.io/github/v/release/apimgr/search)](https://github.com/apimgr/search/releases)
-[![License](https://img.shields.io/github/license/apimgr/search)](LICENSE.md)
+[![Release](https://img.shields.io/github/v/release/{projectorg}/{projectname})](https://github.com/{projectorg}/{projectname}/releases)
+[![License](https://img.shields.io/github/license/{projectorg}/{projectname})](LICENSE.md)
 
 # GitLab
-[![Release](https://gitlab.com/apimgr/search/-/badges/release.svg)](https://gitlab.com/apimgr/search/-/releases)
+[![Release](https://gitlab.com/{projectorg}/{projectname}/-/badges/release.svg)](https://gitlab.com/{projectorg}/{projectname}/-/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 
 # Gitea/Forgejo (use shields.io with custom endpoint or static badge)
-[![Release](https://img.shields.io/badge/dynamic/json?url=https://git.example.com/api/{api_version}/repos/apimgr/search/releases/latest&query=$.tag_name&label=release)](https://git.example.com/apimgr/search/releases)
+[![Release](https://img.shields.io/badge/dynamic/json?url=https://git.example.com/api/{api_version}/repos/{projectorg}/{projectname}/releases/latest&query=$.tag_name&label=release)](https://git.example.com/{projectorg}/{projectname}/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 ```
 
@@ -3130,7 +3370,7 @@ Detect platform by checking for workflow files in this order:
 **Use the appropriate badges and URLs for your platform (see above).**
 
 ```markdown
-# search
+# {projectname}
 
 {PLATFORM_BUILD_BADGE}
 {PLATFORM_RELEASE_BADGE}
@@ -3142,7 +3382,7 @@ Detect platform by checking for workflow files in this order:
 
 ## Official Site
 
-https://search.apimgr.us
+https://{projectname}.{projectorg}.us
 
 ## Features
 
@@ -3156,11 +3396,11 @@ https://search.apimgr.us
 
 ```bash
 docker run -d \
-  --name search \
+  --name {projectname} \
   -p 64580:80 \
   -v ./rootfs/config:/config:z \
   -v ./rootfs/data:/data:z \
-  {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest
+  {PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:latest
 ```
 
 ### Docker Compose
@@ -3174,38 +3414,38 @@ docker compose up -d
 
 ```bash
 # Download latest release
-curl -LO {PLATFORM_RELEASE_URL}/search-linux-amd64
+curl -LO {PLATFORM_RELEASE_URL}/{projectname}-linux-amd64
 
 # Make executable and run
-chmod +x search-linux-amd64
-./search-linux-amd64
+chmod +x {projectname}-linux-amd64
+./{projectname}-linux-amd64
 ```
 
-## CLI Client
+## Client
 
-A companion CLI client is available for interacting with the server API.
+A companion client is available for interacting with the server API.
 
 ### Install
 
 ```bash
 # Download latest release
-curl -LO {PLATFORM_RELEASE_URL}/search-cli-linux-amd64
-chmod +x search-cli-linux-amd64
-sudo mv search-cli-linux-amd64 /usr/local/bin/search-cli
+curl -LO {PLATFORM_RELEASE_URL}/{projectname}-cli-linux-amd64
+chmod +x {projectname}-cli-linux-amd64
+sudo mv {projectname}-cli-linux-amd64 /usr/local/bin/{projectname}-cli
 ```
 
 ### Configure
 
 ```bash
-# Connect to server (creates ~/.config/apimgr/search/cli.yml)
-search-cli --server https://api.example.com --token YOUR_API_TOKEN
+# Connect to server (creates ~/.config/{projectorg}/{projectname}/cli.yml)
+{projectname}-cli --server https://api.example.com --token YOUR_API_TOKEN
 ```
 
 ### Usage
 
 ```bash
-search-cli --help
-search-cli [command] --help
+{projectname}-cli --help
+{projectname}-cli [command] --help
 ```
 
 ## Configuration
@@ -3229,7 +3469,7 @@ API documentation available at `/api/{api_version}/` when running.
 
 ### Troubleshooting
 
-- Check logs: `docker logs search`
+- Check logs: `docker logs {projectname}`
 - Health check: `curl http://{fqdn}:{port}/healthz`
 
 ## Development
@@ -3246,7 +3486,7 @@ API documentation available at `/api/{api_version}/` when running.
 ```bash
 # Clone
 git clone {PLATFORM_REPO_URL}
-cd search
+cd {projectname}
 
 # Quick dev build (outputs to OS temp dir)
 make dev
@@ -3430,7 +3670,7 @@ Before proceeding, confirm you understand:
 |-------------|-------|
 | License type | MIT License |
 | License file | `LICENSE.md` (REQUIRED in project root) |
-| Copyright holder | `apimgr` or individual/organization name |
+| Copyright holder | `{projectorg}` or individual/organization name |
 | Year | Current year or year of first publication |
 
 ## LICENSE.md Structure
@@ -3438,7 +3678,7 @@ Before proceeding, confirm you understand:
 ```markdown
 MIT License
 
-Copyright (c) {YEAR} apimgr
+Copyright (c) {YEAR} {projectorg}
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -3686,7 +3926,7 @@ echo "3. Commit the changes"
 **Every README.md MUST include a license badge:**
 
 ```markdown
-[![License](https://img.shields.io/github/license/apimgr/search)](LICENSE.md)
+[![License](https://img.shields.io/github/license/{projectorg}/{projectname})](LICENSE.md)
 ```
 
 This badge should appear in the badges section near the top of README.md.
@@ -3760,9 +4000,9 @@ package main
 
 | Field | Value |
 |-------|-------|
-| **Name** | search |
-| **Organization** | apimgr |
-| **Official Site** | https://search.apimgr.us |
+| **Name** | {projectname} |
+| **Organization** | {projectorg} |
+| **Official Site** | https://{projectname}.{projectorg}.us |
 | **Repository** | {PLATFORM_REPO_URL} |
 | **README** | README.md |
 | **License** | MIT > LICENSE.md |
@@ -3770,19 +4010,11 @@ package main
 
 ## Project Description
 
-Search is a privacy-respecting metasearch engine that aggregates results from multiple search engines (Google, Bing, DuckDuckGo, Brave, etc.) without tracking users. It provides anonymous web search with Tor integration for enhanced privacy.
+{Brief description of what this project does}
 
 ## Project-Specific Features
 
-- Privacy-first search with no server-side tracking
-- Multi-engine aggregation and result deduplication
-- Tor integration (SOCKS5 proxy, circuit rotation, .onion hidden service)
-- Multi-category search (web, images, videos, news)
-- Instant answers (calculator, weather, dictionary, IP lookup)
-- Bang shortcuts (!g, !w, !yt, !gh, etc.)
-- GeoIP-based country detection and blocking
-- Dark/light theme support
-- CLI client for terminal-based searching
+{List features unique to this project}
 
 ---
 
@@ -3790,17 +4022,17 @@ Search is a privacy-respecting metasearch engine that aggregates results from mu
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `search` | Project name (inferred from path) | `jokes` |
-| `apimgr` | Organization name (inferred from path) | `apimgr` |
-| `github.com` | Git hosting provider | `github`, `gitlab`, `private` |
+| `{projectname}` | Project name (inferred from path) | `jokes` |
+| `{projectorg}` | Organization name (inferred from path) | `apimgr` |
+| `{gitprovider}` | Git hosting provider | `github`, `gitlab`, `private` |
 | **Rule** | Anything in `{}` is a variable | |
 | **Rule** | Anything NOT in `{}` is literal | `/etc/letsencrypt/live` is a real path |
 
 ### Inferring Variables from Path
 
-**NEVER hardcode `search` or `apimgr` - always infer from git remote or directory path.**
+**NEVER hardcode `{projectname}` or `{projectorg}` - always infer from git remote or directory path.**
 
-**Recommended path structure:** `~/Projects/github.com/apimgr/search` (but works with any location)
+**Recommended path structure:** `~/Projects/{gitprovider}/{projectorg}/{projectname}` (but works with any location)
 
 ```bash
 # Method 1: Infer from git remote (PREFERRED - works regardless of directory location)
@@ -3818,13 +4050,13 @@ PROJECTNAME=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)(\.git
 PROJECTORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(\.git)?$|\1|' || basename "$(dirname "$PWD")")
 ```
 
-**Note:** When using path-based inference, `PROJECTORG` will be the parent directory name, which may not match the git organization unless you follow the recommended `~/Projects/github.com/apimgr/search` structure. Git remote inference is always more reliable.
+**Note:** When using path-based inference, `PROJECTORG` will be the parent directory name, which may not match the git organization unless you follow the recommended `~/Projects/{gitprovider}/{projectorg}/{projectname}` structure. Git remote inference is always more reliable.
 
 ### Variable Capitalization
 
 | Format | Use Case | Example |
 |--------|----------|---------|
-| `search` | Lowercase (filenames, paths, commands) | `jokes`, `/etc/apimgr/jokes/` |
+| `{projectname}` | Lowercase (filenames, paths, commands) | `jokes`, `/etc/apimgr/jokes/` |
 | `{projectName}` | camelCase (Go variables, JSON keys) | `projectName := "jokes"` |
 | `{Projectname}` | PascalCase (Go types, display names) | `type JokesServer struct` |
 | `{PROJECTNAME}` | UPPERCASE (env vars, Makefile vars) | `PROJECTNAME=jokes` |
@@ -3845,14 +4077,14 @@ PROJECTORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(
 
 **IMPORTANT: Project root can be located ANYWHERE on your system. This section describes a RECOMMENDED organizational structure, not a requirement.**
 
-**Recommended Format:** `~/Projects/github.com/apimgr/search`
+**Recommended Format:** `~/Projects/{gitprovider}/{projectorg}/{projectname}`
 
 | Component | Description | Examples |
 |-----------|-------------|----------|
 | `~/Projects/` | Base projects directory (recommended) | Can be `~/Projects/`, `~/Documents/`, `/opt/`, etc. |
-| `github.com` | Git hosting provider or `local` | `github`, `gitlab`, `bitbucket`, `private`, `local` |
-| `apimgr` | Organization/username (inferred) | `apimgr`, `casjay`, `myorg` |
-| `search` | Project name (inferred) | `jokes`, `icons`, `myproject` |
+| `{gitprovider}` | Git hosting provider or `local` | `github`, `gitlab`, `bitbucket`, `private`, `local` |
+| `{projectorg}` | Organization/username (inferred) | `apimgr`, `casjay`, `myorg` |
+| `{projectname}` | Project name (inferred) | `jokes`, `icons`, `myproject` |
 
 **Examples of recommended structure:**
 ```
@@ -3873,7 +4105,7 @@ PROJECTORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(
 
 ### Special: `local` Provider
 
-`~/Projects/local/apimgr/search` (or any other location) is used for:
+`~/Projects/local/{projectorg}/{projectname}` (or any other location) is used for:
 - **Prototyping** - Quick experiments and proof-of-concept
 - **Bootstrapping** - Initial project setup before pushing to VCS
 - **Local-only development** - Projects not intended for remote hosting
@@ -3905,15 +4137,48 @@ PROJECTORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(
 │       ├── daily.yml       # Daily builds
 │       └── docker.yml      # Docker images
 ├── .claude/                # Claude Code configuration
-│   ├── rules/              # Auto-loaded rule files (REQUIRED)
-│   │   ├── ai-rules.md         # AI behavior rules
-│   │   ├── directory-structure.md  # Project structure rules
-│   │   ├── build-rules.md      # Build/make rules
-│   │   └── testing-rules.md    # Testing rules
-│   └── CLAUDE.md           # Project memory (optional)
+│   ├── rules/              # Auto-loaded cheatsheet files (REQUIRED)
+│   │   ├── ai-rules.md         # PART 0, 1: AI behavior, critical rules
+│   │   ├── project-rules.md    # PART 2, 3, 4: License, structure, paths
+│   │   ├── config-rules.md     # PART 5, 6, 12: Config, modes, server settings
+│   │   ├── binary-rules.md     # PART 7, 8, 33: Binary, CLI, client/agent
+│   │   ├── backend-rules.md    # PART 9, 10, 11: Errors, database, security
+│   │   ├── api-rules.md        # PART 13, 14, 15: Health, API, SSL/TLS
+│   │   ├── frontend-rules.md   # PART 16, 17: WebUI, admin panel
+│   │   ├── features-rules.md   # PART 18-23: Email, scheduler, GeoIP, metrics, backup, update
+│   │   ├── service-rules.md    # PART 24, 25: Privilege, service management
+│   │   ├── makefile-rules.md   # PART 26: Makefile (local dev only)
+│   │   ├── docker-rules.md     # PART 27: Docker/containers
+│   │   ├── cicd-rules.md       # PART 28: CI/CD workflows
+│   │   ├── testing-rules.md    # PART 29, 30, 31: Testing, docs, i18n
+│   │   └── optional-rules.md   # PART 32, 34-36: Tor, multi-user, orgs, domains
+│   └── CLAUDE.md           # Project memory - critical rules (REQUIRED)
 ├── .cursor/                # Cursor AI configuration (optional)
+│   ├── rules/              # Same groupings as .claude/rules/ but .mdc extension
+│   │   ├── ai-rules.mdc
+│   │   ├── project-rules.mdc
+│   │   ├── config-rules.mdc
+│   │   ├── binary-rules.mdc
+│   │   ├── backend-rules.mdc
+│   │   ├── api-rules.mdc
+│   │   ├── frontend-rules.mdc
+│   │   ├── features-rules.mdc
+│   │   ├── service-rules.mdc
+│   │   ├── makefile-rules.mdc
+│   │   ├── docker-rules.mdc
+│   │   ├── cicd-rules.mdc
+│   │   ├── testing-rules.mdc
+│   │   └── optional-rules.mdc
+│   └── CURSOR.md           # Project memory - critical rules (REQUIRED)
 ├── .aider/                 # Aider AI configuration (optional)
+│   ├── CONVENTIONS.md      # Single file with all rule sections
+│   └── AIDER.md            # Project memory - critical rules (REQUIRED)
+├── .windsurf/              # Windsurf AI configuration (optional)
+│   ├── rules/              # Same as .cursor/rules/ (.mdc files)
+│   └── WINDSURF.md         # Project memory - critical rules (REQUIRED)
 ├── .ai/                    # Generic AI configuration (optional)
+│   ├── rules/              # Same as .claude/rules/ (.md files)
+│   └── AI.md               # Project memory - critical rules (REQUIRED)
 ├── docs/                   # ReadTheDocs documentation ONLY (MkDocs)
 │   ├── index.md            # Documentation homepage
 │   ├── installation.md     # Installation guide
@@ -3938,7 +4203,7 @@ PROJECTORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(
 │   ├── docker-compose.yml  # Production compose (NO debug)
 │   ├── docker-compose.dev.yml  # Development compose
 │   ├── docker-compose.test.yml # Test compose (DEBUG=true)
-│   └── rootfs/             # Container filesystem overlay
+│   └── file_system/        # Container filesystem overlay
 │       └── usr/
 │           └── local/
 │               └── bin/
@@ -4161,7 +4426,7 @@ Makefile
 | `src/` | Source code - required for build |
 | `go.mod`, `go.sum` | Go module files - required |
 | `docker/` | Dockerfile, rootfs overlay - required |
-| `docker/rootfs/` | Build-time overlay files (entrypoint.sh) |
+| `docker/file_system/` | Build-time overlay files (entrypoint.sh) |
 
 **RULE: Keep the base directory organized and clean - no clutter!**
 
@@ -4283,7 +4548,7 @@ cd /path/to/project && docker build -f docker/Dockerfile .
 
 **go.mod Example:**
 ```
-module github.com/apimgr/search
+module github.com/{projectorg}/{projectname}
 
 go 1.xx  // Use current latest stable version
 
@@ -4298,13 +4563,16 @@ require (
 
 ### Database Drivers
 
-| Database | Library | Driver Name | Notes |
-|----------|---------|-------------|-------|
-| **SQLite** | `modernc.org/sqlite` | `sqlite` | Pure Go, NO CGO |
-| **PostgreSQL** | `github.com/jackc/pgx/v5/stdlib` | `pgx` | Pure Go, best performance |
-| **MySQL/MariaDB** | `github.com/go-sql-driver/mysql` | `mysql` | Pure Go |
-| **MSSQL** | `github.com/microsoft/go-mssqldb` | `sqlserver` | Pure Go |
-| **MongoDB** | `go.mongodb.org/mongo-driver/mongo` | (native) | Pure Go, not database/sql |
+| Database | Library | Driver Name | Config Aliases | Notes |
+|----------|---------|-------------|----------------|-------|
+| **SQLite** | `modernc.org/sqlite` | `sqlite` | `sqlite2`, `sqlite3` | Pure Go, NO CGO |
+| **libSQL** | `github.com/tursodatabase/libsql-client-go` | `libsql` | `turso` | Pure Go, remote only (Turso/sqld) |
+| **PostgreSQL** | `github.com/jackc/pgx/v5/stdlib` | `pgx` | `postgres`, `pgsql`, `postgresql` | Pure Go, best performance |
+| **MySQL/MariaDB** | `github.com/go-sql-driver/mysql` | `mysql` | `mariadb` | Pure Go |
+| **MSSQL** | `github.com/microsoft/go-mssqldb` | `sqlserver` | `mssql` | Pure Go |
+| **MongoDB** | `go.mongodb.org/mongo-driver/mongo` | (native) | `mongodb`, `mongo` | Pure Go, not database/sql |
+
+**Driver Name vs Config Aliases:** The "Driver Name" column shows what Go's `sql.Open()` expects. The "Config Aliases" column shows what users can put in config files - these get normalized to the actual driver name internally. Users should use the friendly aliases (`postgres`, `mysql`, `mssql`, `sqlite`, `libsql`) in configs.
 
 ### Cache/Cluster
 
@@ -4376,6 +4644,40 @@ require (
 - Cross-compilation works without toolchain setup
 - Same SQLite functionality, just pure Go
 
+**Driver Name Aliases:**
+
+| Config Value | Internal Driver | Notes |
+|--------------|-----------------|-------|
+| `sqlite` | `sqlite` | Primary name (recommended) |
+| `sqlite2` | `sqlite` | Alias - maps to sqlite |
+| `sqlite3` | `sqlite` | Alias - maps to sqlite |
+
+**Why aliases?** Users coming from `mattn/go-sqlite3` expect the driver name `sqlite3`. Users from older projects may use `sqlite2`. All three config values are accepted and resolve to the same `modernc.org/sqlite` driver internally.
+
+**Implementation:**
+```go
+// Normalize driver name (config parsing)
+// Maps user-friendly config values to actual Go driver names
+func normalizeDriver(driver string) string {
+    switch strings.ToLower(driver) {
+    case "sqlite", "sqlite2", "sqlite3":
+        return "sqlite"     // All map to modernc.org/sqlite
+    case "libsql", "turso":
+        return "libsql"     // Turso/libSQL remote database
+    case "postgres", "pgsql", "postgresql":
+        return "pgx"        // pgx is the actual driver name
+    case "mysql", "mariadb":
+        return "mysql"      // MariaDB uses same driver as MySQL
+    case "mssql":
+        return "sqlserver"  // Microsoft driver uses "sqlserver"
+    case "mongodb", "mongo":
+        return "mongodb"    // MongoDB native driver
+    default:
+        return driver
+    }
+}
+```
+
 **Usage:**
 ```go
 import (
@@ -4384,7 +4686,8 @@ import (
 )
 
 func openDB(path string) (*sql.DB, error) {
-    // Driver name is "sqlite" (not "sqlite3")
+    // Go driver name is always "sqlite" (modernc.org/sqlite)
+    // Config aliases (sqlite2, sqlite3) are normalized before this call
     return sql.Open("sqlite", path)
 }
 ```
@@ -4393,6 +4696,82 @@ func openDB(path string) (*sql.DB, error) {
 ```
 require modernc.org/sqlite v1.29.1
 ```
+
+### libSQL Driver
+
+**Use `github.com/tursodatabase/libsql-client-go` for libSQL/Turso. This is a REMOTE-ONLY driver.**
+
+| Mode | Description |
+|------|-------------|
+| **Turso Cloud** | Managed service at turso.tech |
+| **Self-hosted sqld** | Run your own libSQL server |
+
+**libSQL requires a server URL - it does NOT support embedded/local mode with CGO_ENABLED=0.**
+
+**URL Formats (both supported):**
+
+| Format | Example |
+|--------|---------|
+| `libsql://` scheme | `libsql://your-db.turso.io?authToken=xxx` |
+| `https://` with token | `https://your-db.turso.io` + separate `token` field |
+
+**Configuration:**
+```yaml
+server:
+  database:
+    driver: libsql  # or "turso" (alias)
+
+    # Option 1: URL with embedded token
+    url: libsql://your-db-name.turso.io?authToken=${TURSO_AUTH_TOKEN}
+
+    # Option 2: Separate URL and token
+    url: https://your-db-name.turso.io
+    token: ${TURSO_AUTH_TOKEN}
+```
+
+**Validation:**
+```go
+func validateLibSQL(cfg *DatabaseConfig) error {
+    if cfg.URL == "" {
+        return fmt.Errorf("libsql driver requires url: use libsql://host?authToken=xxx or https://host with token field")
+    }
+    return nil
+}
+```
+
+**Usage:**
+```go
+import (
+    "database/sql"
+    _ "github.com/tursodatabase/libsql-client-go/libsql"
+)
+
+func openLibSQL(url, token string) (*sql.DB, error) {
+    // If token provided separately, append to URL
+    if token != "" && !strings.Contains(url, "authToken=") {
+        sep := "?"
+        if strings.Contains(url, "?") {
+            sep = "&"
+        }
+        url = url + sep + "authToken=" + token
+    }
+    return sql.Open("libsql", url)
+}
+```
+
+**go.mod:**
+```
+require github.com/tursodatabase/libsql-client-go v0.0.0-20240902231107-85af5b9d094d
+```
+
+**When to use libSQL vs SQLite:**
+
+| Use Case | Driver |
+|----------|--------|
+| Single server, local data | `sqlite` (modernc.org/sqlite) |
+| Edge/distributed, Turso cloud | `libsql` |
+| Self-hosted libSQL server | `libsql` |
+| Embedded, no network | `sqlite` |
 
 ### Forbidden Libraries
 
@@ -4411,13 +4790,14 @@ require modernc.org/sqlite v1.29.1
 ### Example go.mod
 
 ```go
-module github.com/apimgr/search
+module github.com/{projectorg}/{projectname}
 
 go 1.xx  // Use current latest stable version
 
 require (
 	// Database drivers
 	modernc.org/sqlite v1.34.5                      // SQLite (pure Go)
+	github.com/tursodatabase/libsql-client-go v0.0.0-20240902231107-85af5b9d094d  // libSQL/Turso (remote)
 	github.com/jackc/pgx/v5 v5.7.2                  // PostgreSQL
 	github.com/go-sql-driver/mysql v1.8.1           // MySQL/MariaDB
 	github.com/microsoft/go-mssqldb v1.8.0          // MSSQL
@@ -4572,36 +4952,36 @@ Before proceeding, confirm you understand:
 
 | Type | Path |
 |------|------|
-| Binary | `/usr/local/bin/search` |
-| Config | `/etc/apimgr/search/` |
-| Config File | `/etc/apimgr/search/server.yml` |
-| Data | `/var/lib/apimgr/search/` |
-| Cache | `/var/cache/apimgr/search/` |
-| Logs | `/var/log/apimgr/search/` |
-| Log File | `/var/log/apimgr/search/server.log` |
-| Backup | `/mnt/Backups/apimgr/search/` |
-| PID File | `/var/run/apimgr/search.pid` |
-| SSL | `/etc/apimgr/search/ssl/` (letsencrypt/, local/) |
-| Security | `/etc/apimgr/search/security/` (geoip/, blocklists/, cve/, trivy/) |
-| SQLite DB | `/var/lib/apimgr/search/db/` |
-| Service | `/etc/systemd/system/search.service` |
+| Binary | `/usr/local/bin/{projectname}` |
+| Config | `/etc/{projectorg}/{projectname}/` |
+| Config File | `/etc/{projectorg}/{projectname}/server.yml` |
+| Data | `/var/lib/{projectorg}/{projectname}/` |
+| Cache | `/var/cache/{projectorg}/{projectname}/` |
+| Logs | `/var/log/{projectorg}/{projectname}/` |
+| Log File | `/var/log/{projectorg}/{projectname}/server.log` |
+| Backup | `/mnt/Backups/{projectorg}/{projectname}/` |
+| PID File | `/var/run/{projectorg}/{projectname}.pid` |
+| SSL | `/etc/{projectorg}/{projectname}/ssl/` (letsencrypt/, local/) |
+| Security | `/etc/{projectorg}/{projectname}/security/` (geoip/, blocklists/, cve/, trivy/) |
+| SQLite DB | `/var/lib/{projectorg}/{projectname}/db/` |
+| Service | `/etc/systemd/system/{projectname}.service` |
 
 ### User (non-privileged)
 
 | Type | Path |
 |------|------|
-| Binary | `~/.local/bin/search` |
-| Config | `~/.config/apimgr/search/` |
-| Config File | `~/.config/apimgr/search/server.yml` |
-| Data | `~/.local/share/apimgr/search/` |
-| Cache | `~/.cache/apimgr/search/` |
-| Logs | `~/.local/log/apimgr/search/` |
-| Log File | `~/.local/log/apimgr/search/server.log` |
-| Backup | `~/.local/share/Backups/apimgr/search/` |
-| PID File | `~/.local/share/apimgr/search/search.pid` |
-| SSL | `~/.config/apimgr/search/ssl/` (letsencrypt/, local/) |
-| Security | `~/.config/apimgr/search/security/` (geoip/, blocklists/, cve/, trivy/) |
-| SQLite DB | `~/.local/share/apimgr/search/db/` |
+| Binary | `~/.local/bin/{projectname}` |
+| Config | `~/.config/{projectorg}/{projectname}/` |
+| Config File | `~/.config/{projectorg}/{projectname}/server.yml` |
+| Data | `~/.local/share/{projectorg}/{projectname}/` |
+| Cache | `~/.cache/{projectorg}/{projectname}/` |
+| Logs | `~/.local/log/{projectorg}/{projectname}/` |
+| Log File | `~/.local/log/{projectorg}/{projectname}/server.log` |
+| Backup | `~/.local/share/Backups/{projectorg}/{projectname}/` |
+| PID File | `~/.local/share/{projectorg}/{projectname}/{projectname}.pid` |
+| SSL | `~/.config/{projectorg}/{projectname}/ssl/` (letsencrypt/, local/) |
+| Security | `~/.config/{projectorg}/{projectname}/security/` (geoip/, blocklists/, cve/, trivy/) |
+| SQLite DB | `~/.local/share/{projectorg}/{projectname}/db/` |
 
 ---
 
@@ -4611,37 +4991,37 @@ Before proceeding, confirm you understand:
 
 | Type | Path |
 |------|------|
-| Binary | `/usr/local/bin/search` |
-| Config | `/Library/Application Support/apimgr/search/` |
-| Config File | `/Library/Application Support/apimgr/search/server.yml` |
-| Data | `/Library/Application Support/apimgr/search/data/` |
-| Cache | `/Library/Caches/apimgr/search/` |
-| Logs | `/Library/Logs/apimgr/search/` |
-| Log File | `/Library/Logs/apimgr/search/server.log` |
-| Backup | `/Library/Backups/apimgr/search/` |
-| PID File | `/var/run/apimgr/search.pid` |
-| SSL | `/Library/Application Support/apimgr/search/ssl/` (letsencrypt/, local/) |
-| Security | `/Library/Application Support/apimgr/search/security/` (geoip/, blocklists/, cve/, trivy/) |
-| SQLite DB | `/Library/Application Support/apimgr/search/db/` |
-| Service | `/Library/LaunchDaemons/com.apimgr.search.plist` |
+| Binary | `/usr/local/bin/{projectname}` |
+| Config | `/Library/Application Support/{projectorg}/{projectname}/` |
+| Config File | `/Library/Application Support/{projectorg}/{projectname}/server.yml` |
+| Data | `/Library/Application Support/{projectorg}/{projectname}/data/` |
+| Cache | `/Library/Caches/{projectorg}/{projectname}/` |
+| Logs | `/Library/Logs/{projectorg}/{projectname}/` |
+| Log File | `/Library/Logs/{projectorg}/{projectname}/server.log` |
+| Backup | `/Library/Backups/{projectorg}/{projectname}/` |
+| PID File | `/var/run/{projectorg}/{projectname}.pid` |
+| SSL | `/Library/Application Support/{projectorg}/{projectname}/ssl/` (letsencrypt/, local/) |
+| Security | `/Library/Application Support/{projectorg}/{projectname}/security/` (geoip/, blocklists/, cve/, trivy/) |
+| SQLite DB | `/Library/Application Support/{projectorg}/{projectname}/db/` |
+| Service | `/Library/LaunchDaemons/com.{projectorg}.{projectname}.plist` |
 
 ### User (non-privileged)
 
 | Type | Path |
 |------|------|
-| Binary | `~/bin/search` or `/usr/local/bin/search` |
-| Config | `~/Library/Application Support/apimgr/search/` |
-| Config File | `~/Library/Application Support/apimgr/search/server.yml` |
-| Data | `~/Library/Application Support/apimgr/search/` |
-| Cache | `~/Library/Caches/apimgr/search/` |
-| Logs | `~/Library/Logs/apimgr/search/` |
-| Log File | `~/Library/Logs/apimgr/search/server.log` |
-| Backup | `~/Library/Backups/apimgr/search/` |
-| PID File | `~/Library/Application Support/apimgr/search/search.pid` |
-| SSL | `~/Library/Application Support/apimgr/search/ssl/` (letsencrypt/, local/) |
-| Security | `~/Library/Application Support/apimgr/search/security/` (geoip/, blocklists/, cve/, trivy/) |
-| SQLite DB | `~/Library/Application Support/apimgr/search/db/` |
-| Service | `~/Library/LaunchAgents/com.apimgr.search.plist` |
+| Binary | `~/bin/{projectname}` or `/usr/local/bin/{projectname}` |
+| Config | `~/Library/Application Support/{projectorg}/{projectname}/` |
+| Config File | `~/Library/Application Support/{projectorg}/{projectname}/server.yml` |
+| Data | `~/Library/Application Support/{projectorg}/{projectname}/` |
+| Cache | `~/Library/Caches/{projectorg}/{projectname}/` |
+| Logs | `~/Library/Logs/{projectorg}/{projectname}/` |
+| Log File | `~/Library/Logs/{projectorg}/{projectname}/server.log` |
+| Backup | `~/Library/Backups/{projectorg}/{projectname}/` |
+| PID File | `~/Library/Application Support/{projectorg}/{projectname}/{projectname}.pid` |
+| SSL | `~/Library/Application Support/{projectorg}/{projectname}/ssl/` (letsencrypt/, local/) |
+| Security | `~/Library/Application Support/{projectorg}/{projectname}/security/` (geoip/, blocklists/, cve/, trivy/) |
+| SQLite DB | `~/Library/Application Support/{projectorg}/{projectname}/db/` |
+| Service | `~/Library/LaunchAgents/com.{projectorg}.{projectname}.plist` |
 
 ---
 
@@ -4651,36 +5031,36 @@ Before proceeding, confirm you understand:
 
 | Type | Path |
 |------|------|
-| Binary | `/usr/local/bin/search` |
-| Config | `/usr/local/etc/apimgr/search/` |
-| Config File | `/usr/local/etc/apimgr/search/server.yml` |
-| Data | `/var/db/apimgr/search/` |
-| Cache | `/var/cache/apimgr/search/` |
-| Logs | `/var/log/apimgr/search/` |
-| Log File | `/var/log/apimgr/search/server.log` |
-| Backup | `/var/backups/apimgr/search/` |
-| PID File | `/var/run/apimgr/search.pid` |
-| SSL | `/usr/local/etc/apimgr/search/ssl/` (letsencrypt/, local/) |
-| Security | `/usr/local/etc/apimgr/search/security/` (geoip/, blocklists/, cve/, trivy/) |
-| SQLite DB | `/var/db/apimgr/search/db/` |
-| Service | `/usr/local/etc/rc.d/search` |
+| Binary | `/usr/local/bin/{projectname}` |
+| Config | `/usr/local/etc/{projectorg}/{projectname}/` |
+| Config File | `/usr/local/etc/{projectorg}/{projectname}/server.yml` |
+| Data | `/var/db/{projectorg}/{projectname}/` |
+| Cache | `/var/cache/{projectorg}/{projectname}/` |
+| Logs | `/var/log/{projectorg}/{projectname}/` |
+| Log File | `/var/log/{projectorg}/{projectname}/server.log` |
+| Backup | `/var/backups/{projectorg}/{projectname}/` |
+| PID File | `/var/run/{projectorg}/{projectname}.pid` |
+| SSL | `/usr/local/etc/{projectorg}/{projectname}/ssl/` (letsencrypt/, local/) |
+| Security | `/usr/local/etc/{projectorg}/{projectname}/security/` (geoip/, blocklists/, cve/, trivy/) |
+| SQLite DB | `/var/db/{projectorg}/{projectname}/db/` |
+| Service | `/usr/local/etc/rc.d/{projectname}` |
 
 ### User (non-privileged)
 
 | Type | Path |
 |------|------|
-| Binary | `~/.local/bin/search` |
-| Config | `~/.config/apimgr/search/` |
-| Config File | `~/.config/apimgr/search/server.yml` |
-| Data | `~/.local/share/apimgr/search/` |
-| Cache | `~/.cache/apimgr/search/` |
-| Logs | `~/.local/log/apimgr/search/` |
-| Log File | `~/.local/log/apimgr/search/server.log` |
-| Backup | `~/.local/share/Backups/apimgr/search/` |
-| PID File | `~/.local/share/apimgr/search/search.pid` |
-| SSL | `~/.config/apimgr/search/ssl/` (letsencrypt/, local/) |
-| Security | `~/.config/apimgr/search/security/` (geoip/, blocklists/, cve/, trivy/) |
-| SQLite DB | `~/.local/share/apimgr/search/db/` |
+| Binary | `~/.local/bin/{projectname}` |
+| Config | `~/.config/{projectorg}/{projectname}/` |
+| Config File | `~/.config/{projectorg}/{projectname}/server.yml` |
+| Data | `~/.local/share/{projectorg}/{projectname}/` |
+| Cache | `~/.cache/{projectorg}/{projectname}/` |
+| Logs | `~/.local/log/{projectorg}/{projectname}/` |
+| Log File | `~/.local/log/{projectorg}/{projectname}/server.log` |
+| Backup | `~/.local/share/Backups/{projectorg}/{projectname}/` |
+| PID File | `~/.local/share/{projectorg}/{projectname}/{projectname}.pid` |
+| SSL | `~/.config/{projectorg}/{projectname}/ssl/` (letsencrypt/, local/) |
+| Security | `~/.config/{projectorg}/{projectname}/security/` (geoip/, blocklists/, cve/, trivy/) |
+| SQLite DB | `~/.local/share/{projectorg}/{projectname}/db/` |
 
 ---
 
@@ -4690,34 +5070,34 @@ Before proceeding, confirm you understand:
 
 | Type | Path |
 |------|------|
-| Binary | `C:\Program Files\apimgr\search\search.exe` |
-| Config | `%ProgramData%\apimgr\search\` |
-| Config File | `%ProgramData%\apimgr\search\server.yml` |
-| Data | `%ProgramData%\apimgr\search\data\` |
-| Cache | `%ProgramData%\apimgr\search\cache\` |
-| Logs | `%ProgramData%\apimgr\search\logs\` |
-| Log File | `%ProgramData%\apimgr\search\logs\server.log` |
-| Backup | `%ProgramData%\Backups\apimgr\search\` |
-| SSL | `%ProgramData%\apimgr\search\ssl\` (letsencrypt\, local\) |
-| Security | `%ProgramData%\apimgr\search\security\` (geoip\, blocklists\, cve\, trivy\) |
-| SQLite DB | `%ProgramData%\apimgr\search\db\` |
+| Binary | `C:\Program Files\{projectorg}\{projectname}\{projectname}.exe` |
+| Config | `%ProgramData%\{projectorg}\{projectname}\` |
+| Config File | `%ProgramData%\{projectorg}\{projectname}\server.yml` |
+| Data | `%ProgramData%\{projectorg}\{projectname}\data\` |
+| Cache | `%ProgramData%\{projectorg}\{projectname}\cache\` |
+| Logs | `%ProgramData%\{projectorg}\{projectname}\logs\` |
+| Log File | `%ProgramData%\{projectorg}\{projectname}\logs\server.log` |
+| Backup | `%ProgramData%\Backups\{projectorg}\{projectname}\` |
+| SSL | `%ProgramData%\{projectorg}\{projectname}\ssl\` (letsencrypt\, local\) |
+| Security | `%ProgramData%\{projectorg}\{projectname}\security\` (geoip\, blocklists\, cve\, trivy\) |
+| SQLite DB | `%ProgramData%\{projectorg}\{projectname}\db\` |
 | Service | Windows Service Manager |
 
 ### User (non-privileged)
 
 | Type | Path |
 |------|------|
-| Binary | `%LocalAppData%\apimgr\search\search.exe` |
-| Config | `%AppData%\apimgr\search\` |
-| Config File | `%AppData%\apimgr\search\server.yml` |
-| Data | `%LocalAppData%\apimgr\search\` |
-| Cache | `%LocalAppData%\apimgr\search\cache\` |
-| Logs | `%LocalAppData%\apimgr\search\logs\` |
-| Log File | `%LocalAppData%\apimgr\search\logs\server.log` |
-| Backup | `%LocalAppData%\Backups\apimgr\search\` |
-| SSL | `%AppData%\apimgr\search\ssl\` (letsencrypt\, local\) |
-| Security | `%AppData%\apimgr\search\security\` (geoip\, blocklists\, cve\, trivy\) |
-| SQLite DB | `%LocalAppData%\apimgr\search\db\` |
+| Binary | `%LocalAppData%\{projectorg}\{projectname}\{projectname}.exe` |
+| Config | `%AppData%\{projectorg}\{projectname}\` |
+| Config File | `%AppData%\{projectorg}\{projectname}\server.yml` |
+| Data | `%LocalAppData%\{projectorg}\{projectname}\` |
+| Cache | `%LocalAppData%\{projectorg}\{projectname}\cache\` |
+| Logs | `%LocalAppData%\{projectorg}\{projectname}\logs\` |
+| Log File | `%LocalAppData%\{projectorg}\{projectname}\logs\server.log` |
+| Backup | `%LocalAppData%\Backups\{projectorg}\{projectname}\` |
+| SSL | `%AppData%\{projectorg}\{projectname}\ssl\` (letsencrypt\, local\) |
+| Security | `%AppData%\{projectorg}\{projectname}\security\` (geoip\, blocklists\, cve\, trivy\) |
+| SQLite DB | `%LocalAppData%\{projectorg}\{projectname}\db\` |
 
 ---
 
@@ -4725,16 +5105,16 @@ Before proceeding, confirm you understand:
 
 | Type | Path |
 |------|------|
-| Binary | `/usr/local/bin/search` |
-| Config | `/config/search/` |
-| Config File | `/config/search/server.yml` |
-| Security DBs | `/config/search/security/` (geoip, blocklists, cve, trivy) |
-| Data | `/data/search/` |
-| Cache | `/data/search/cache/` |
-| Logs | `/data/log/search/` |
-| Log File | `/data/log/search/server.log` |
+| Binary | `/usr/local/bin/{projectname}` |
+| Config | `/config/{projectname}/` |
+| Config File | `/config/{projectname}/server.yml` |
+| Security DBs | `/config/{projectname}/security/` (geoip, blocklists, cve, trivy) |
+| Data | `/data/{projectname}/` |
+| Cache | `/data/{projectname}/cache/` |
+| Logs | `/data/log/{projectname}/` |
+| Log File | `/data/log/{projectname}/server.log` |
 | SQLite DB | `/data/db/{dbtype}/` |
-| Backup | `/data/backups/search/` |
+| Backup | `/data/backups/{projectname}/` |
 | Internal Port | `80` |
 
 ---
@@ -4745,7 +5125,7 @@ Before proceeding, confirm you understand:
 - [ ] Each OS has specific paths for privileged and non-privileged users
 - [ ] Config file is ALWAYS `server.yml` (not .yaml)
 - [ ] Docker uses simplified paths (/config, /data)
-- [ ] All paths follow the apimgr/search pattern
+- [ ] All paths follow the {projectorg}/{projectname} pattern
 
 ---
 
@@ -5416,19 +5796,14 @@ server:
     # Self-healing settings
     self_healing:
       enabled: true
-      retry_interval: 30
-      # seconds between retry attempts
-      max_attempts: 0
-      # 0 = unlimited (keep trying forever)
+      retry_interval: 30s            # Seconds between retry attempts
+      max_attempts: 0                # 0 = unlimited (keep trying forever)
 
     # Auto-cleanup thresholds
     cleanup:
-      disk_threshold: 90
-      # Start cleanup when disk > 90% full
-      log_retention_days: 7
-      # Delete logs older than 7 days during cleanup
-      backup_keep_count: 5
-      # Keep last 5 backups during cleanup
+      disk_threshold: 90             # Start cleanup when disk > 90% full
+      log_retention_days: 7          # Delete logs older than 7 days during cleanup
+      backup_keep_count: 5           # Keep last 5 backups during cleanup
 
     # Notifications
     notify:
@@ -5743,7 +6118,7 @@ func (req *CreateUserRequest) Parse() (*User, error) {
 |----------|-------------|
 | `DOMAIN` | FQDN override (highest priority for hostname resolution) |
 | `MODE` | `production` (default) or `development` |
-| `DATABASE_DRIVER` | `file`, `sqlite`, `mariadb`, `mysql`, `postgres`, `mssql`, `mongodb` |
+| `DATABASE_DRIVER` | `file`, `sqlite` (+ `sqlite2`, `sqlite3`), `libsql` (+ `turso`), `postgres` (+ `pgsql`, `postgresql`), `mysql` (+ `mariadb`), `mssql`, `mongodb` (+ `mongo`) |
 | `DATABASE_URL` | Database connection string |
 | `SMTP_HOST` | SMTP server hostname (if set, skips autodetect) |
 | `SMTP_PORT` | SMTP server port (default: 587) |
@@ -5794,8 +6169,8 @@ func (req *CreateUserRequest) Parse() (*User, error) {
 
 | User Type | Path |
 |-----------|------|
-| Root | `/etc/apimgr/search/server.yml` |
-| Regular | `~/.config/apimgr/search/server.yml` |
+| Root | `/etc/{projectorg}/{projectname}/server.yml` |
+| Regular | `~/.config/{projectorg}/{projectname}/server.yml` |
 
 ### Migration
 
@@ -5842,8 +6217,8 @@ func (req *CreateUserRequest) Parse() (*User, error) {
 
 | Mode | How Started | Port Restriction | Privilege Handling |
 |------|-------------|------------------|-------------------|
-| **Service (escalated)** | `sudo search --service install` | Any port | Runs as root/admin, binary drops after binding |
-| **User ($USER)** | `search` | >1024 only | Runs as calling user, no escalation |
+| **Service (escalated)** | `sudo {projectname} --service install` | Any port | Runs as root/admin, binary drops after binding |
+| **User ($USER)** | `{projectname}` | >1024 only | Runs as calling user, no escalation |
 
 #### Service Installation (One-Time Escalation)
 
@@ -5851,13 +6226,13 @@ func (req *CreateUserRequest) Parse() (*User, error) {
 
 ```bash
 # Unix-like (Linux, macOS, FreeBSD)
-sudo search --service install
+sudo {projectname} --service install
 # Binary creates service file configured to run as root
 # All future service starts run as root automatically
 
 # Windows (run as Administrator)
-search.exe --service install
-# Binary creates Windows service with Virtual Service Account (NT SERVICE\search)
+{projectname}.exe --service install
+# Binary creates Windows service with Virtual Service Account (NT SERVICE\{projectname})
 ```
 
 #### Unix-Like Platforms (Linux, macOS, FreeBSD)
@@ -5867,10 +6242,10 @@ search.exe --service install
 | Step | Running As | Actions |
 |------|-----------|---------|
 | 1 | **root** | Service manager starts binary |
-| 2 | **root** | Create system user `search` (if needed) |
+| 2 | **root** | Create system user `{projectname}` (if needed) |
 | 3 | **root** | Create directories, set ownership |
 | 4 | **root** | Bind configured ports (any port works) |
-| 5 | **root→user** | **DROP PRIVILEGES** to `search` user |
+| 5 | **root→user** | **DROP PRIVILEGES** to `{projectname}` user |
 | 6 | **user** | Initialize config, database, etc. |
 | 7 | **user** | Start serving requests |
 
@@ -5879,7 +6254,7 @@ Service start (automatic after install):
     ├─ Start as root (service manager)
     ├─ Create user/dirs if needed
     ├─ Bind port 80/443 (root)
-    ├─ Drop to search user
+    ├─ Drop to {projectname} user
     └─ Serve requests (user)
 ```
 
@@ -5889,7 +6264,7 @@ Service start (automatic after install):
 ENTRYPOINT [ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]
 
 # WRONG: Don't do this - prevents privileged port binding
-# USER search
+# USER {projectname}
 ```
 
 #### Windows
@@ -5898,10 +6273,10 @@ ENTRYPOINT [ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]
 
 | Step | Running As | Actions |
 |------|-----------|---------|
-| 1 | **NT SERVICE\\search** | Service manager starts binary |
-| 2 | **NT SERVICE\\search** | Create directories (has access via ACL) |
-| 3 | **NT SERVICE\\search** | Bind configured ports |
-| 4 | **NT SERVICE\\search** | Initialize and serve requests |
+| 1 | **NT SERVICE\\{projectname}** | Service manager starts binary |
+| 2 | **NT SERVICE\\{projectname}** | Create directories (has access via ACL) |
+| 3 | **NT SERVICE\\{projectname}** | Bind configured ports |
+| 4 | **NT SERVICE\\{projectname}** | Initialize and serve requests |
 
 **Note:** VSA is auto-created by Windows when service is installed. No manual user creation needed.
 
@@ -5911,7 +6286,7 @@ ENTRYPOINT [ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]
 
 ```bash
 # No sudo - runs as current user
-search --port 8080
+{projectname} --port 8080
 
 # Port must be >1024 (unprivileged)
 # Paths use user directories (~/.config/, ~/.local/, etc.)
@@ -5927,18 +6302,21 @@ search --port 8080
 
 **The binary MUST:**
 
-1. **Detect privilege level:**
-   ```go
-   if os.Geteuid() == 0 {
-       // Running as root - can bind any port, will drop privileges
-   } else {
-       // Running as user - ports >1024 only, user paths
-   }
-   ```
+1. **Platform-independent privilege detection (REQUIRED):**
 
-2. **Check if user can escalate (before asking):**
    ```go
-   // Unix-like: check if user can sudo
+   // --- privilege_unix.go ---
+   //go:build !windows
+   // +build !windows
+
+   import "os"
+
+   // isElevated returns true if running as root (Unix)
+   func isElevated() bool {
+       return os.Geteuid() == 0
+   }
+
+   // canEscalate checks if user can escalate privileges (Unix)
    func canEscalate() bool {
        // Check sudo -n (non-interactive) to see if user has sudo access
        cmd := exec.Command("sudo", "-n", "true")
@@ -5947,68 +6325,19 @@ search --port 8080
        }
 
        // Check if user is in sudo/wheel/admin group
-       user, _ := user.Current()
-       groups, _ := user.GroupIds()
+       u, _ := user.Current()
+       groups, _ := u.GroupIds()
        for _, gid := range groups {
            group, _ := user.LookupGroupId(gid)
-           if group.Name == "sudo" || group.Name == "wheel" || group.Name == "admin" {
+           if group != nil && (group.Name == "sudo" || group.Name == "wheel" || group.Name == "admin") {
                return true // Can sudo with password
            }
        }
        return false
    }
 
-   // Windows: check if user is admin or can elevate
-   func canEscalateWindows() bool {
-       // Check if running as admin
-       if isAdmin() {
-           return true
-       }
-       // Check if user is in Administrators group (can elevate via UAC)
-       return isInAdminGroup()
-   }
-   ```
-
-3. **Smart escalation flow:**
-   ```go
-   func handleEscalation(action string) error {
-       if os.Geteuid() == 0 || isAdmin() {
-           return nil // Already elevated
-       }
-
-       if !canEscalate() {
-           // User CANNOT escalate - don't ask, just inform
-           return fmt.Errorf("%s requires administrator privileges\n\n"+
-               "You do not have sudo/admin access. Contact your system administrator.", action)
-       }
-
-       // User CAN escalate - ask and re-exec with sudo
-       fmt.Printf("%s requires elevated privileges.\n", action)
-       fmt.Print("Escalate with sudo? [Y/n]: ")
-
-       var response string
-       fmt.Scanln(&response)
-       if response == "" || strings.ToLower(response) == "y" {
-           // Re-execute with sudo
-           return execWithSudo(os.Args)
-       }
-       return fmt.Errorf("escalation declined")
-   }
-   ```
-
-4. **Auto-escalate for service operations:**
-   ```go
-   // --service install/uninstall/start/stop require escalation
-   if serviceCmd != "" && os.Geteuid() != 0 {
-       if err := handleEscalation("Service management"); err != nil {
-           return err
-       }
-   }
-   ```
-
-5. **Re-execute with sudo (Unix-like):**
-   ```go
-   func execWithSudo(args []string) error {
+   // execElevated re-executes with elevated privileges (Unix)
+   func execElevated(args []string) error {
        sudoArgs := append([]string{"sudo"}, args...)
        cmd := exec.Command(sudoArgs[0], sudoArgs[1:]...)
        cmd.Stdin = os.Stdin
@@ -6018,28 +6347,150 @@ search --port 8080
    }
    ```
 
-6. **Windows UAC elevation:**
    ```go
-   // Windows: use ShellExecute with "runas" verb for UAC prompt
-   func execWithUAC(args []string) error {
+   // --- privilege_windows.go ---
+   //go:build windows
+   // +build windows
+
+   import (
+       "golang.org/x/sys/windows"
+       "unsafe"
+   )
+
+   // isElevated returns true if running as Administrator (Windows)
+   func isElevated() bool {
+       var sid *windows.SID
+       err := windows.AllocateAndInitializeSid(
+           &windows.SECURITY_NT_AUTHORITY,
+           2,
+           windows.SECURITY_BUILTIN_DOMAIN_RID,
+           windows.DOMAIN_ALIAS_RID_ADMINS,
+           0, 0, 0, 0, 0, 0,
+           &sid)
+       if err != nil {
+           return false
+       }
+       defer windows.FreeSid(sid)
+
+       token := windows.Token(0)
+       member, err := token.IsMember(sid)
+       return err == nil && member
+   }
+
+   // canEscalate checks if user can escalate via UAC (Windows)
+   func canEscalate() bool {
+       // If already elevated, no need to escalate
+       if isElevated() {
+           return true
+       }
+       // On Windows, any interactive user can potentially elevate via UAC
+       // (unless UAC is disabled or policy prevents it)
+       // Check if user is in Administrators group (can elevate)
+       return isInAdminGroup()
+   }
+
+   // isInAdminGroup checks if user is member of Administrators group
+   func isInAdminGroup() bool {
+       var sid *windows.SID
+       err := windows.AllocateAndInitializeSid(
+           &windows.SECURITY_NT_AUTHORITY,
+           2,
+           windows.SECURITY_BUILTIN_DOMAIN_RID,
+           windows.DOMAIN_ALIAS_RID_ADMINS,
+           0, 0, 0, 0, 0, 0,
+           &sid)
+       if err != nil {
+           return false
+       }
+       defer windows.FreeSid(sid)
+
+       token := windows.Token(0)
+       groups, err := token.GetTokenGroups()
+       if err != nil {
+           return false
+       }
+
+       for _, g := range groups.AllGroups() {
+           if windows.EqualSid(g.Sid, sid) {
+               return true
+           }
+       }
+       return false
+   }
+
+   // execElevated re-executes with elevated privileges via UAC (Windows)
+   func execElevated(args []string) error {
        verb := "runas"
        exe, _ := os.Executable()
        cwd, _ := os.Getwd()
        argStr := strings.Join(args[1:], " ")
-
-       return windows.ShellExecute(0, verb, exe, argStr, cwd, windows.SW_NORMAL)
+       return windows.ShellExecute(0, windows.StringToUTF16Ptr(verb),
+           windows.StringToUTF16Ptr(exe), windows.StringToUTF16Ptr(argStr),
+           windows.StringToUTF16Ptr(cwd), windows.SW_NORMAL)
    }
    ```
 
-7. **Bind privileged ports before dropping privileges:**
+2. **Detect privilege level (using platform-independent function):**
    ```go
-   if os.Geteuid() == 0 && port < 1024 {
+   if isElevated() {
+       // Running as root/admin - can bind any port, will drop privileges (Unix)
+   } else {
+       // Running as user - ports >1024 only, user paths
+   }
+   ```
+
+3. **Smart escalation flow:**
+   ```go
+   func handleEscalation(action string) error {
+       if isElevated() {
+           return nil // Already elevated
+       }
+
+       if !canEscalate() {
+           // User CANNOT escalate - don't ask, just inform
+           return fmt.Errorf("%s requires administrator privileges\n\n"+
+               "You do not have sudo/admin access. Contact your system administrator.", action)
+       }
+
+       // User CAN escalate - ask and re-exec with elevated privileges
+       fmt.Printf("%s requires elevated privileges.\n", action)
+       fmt.Print("Escalate? [Y/n]: ")
+
+       var response string
+       fmt.Scanln(&response)
+       if response == "" || strings.ToLower(response) == "y" {
+           // Re-execute with elevated privileges
+           return execElevated(os.Args)
+       }
+       return fmt.Errorf("escalation declined")
+   }
+   ```
+
+4. **Auto-escalate for service operations:**
+   ```go
+   // --service install/uninstall/start/stop require escalation
+   if serviceCmd != "" && !isElevated() {
+       if err := handleEscalation("Service management"); err != nil {
+           return err
+       }
+   }
+   ```
+
+5. **Bind privileged ports before dropping privileges (Unix only):**
+   ```go
+   //go:build !windows
+   // +build !windows
+
+   // Unix: bind privileged port while still root, then drop privileges
+   if isElevated() && port < 1024 {
        listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
        // Store listener, drop privileges later
    }
    ```
 
-8. **Error message when user cannot escalate:**
+   **Note:** Windows doesn't drop privileges (uses Virtual Service Account instead), so this pattern only applies to Unix-like systems.
+
+6. **Error message when user cannot escalate:**
    ```
    Error: Service installation requires administrator privileges.
 
@@ -6047,13 +6498,13 @@ search --port 8080
    Contact your system administrator to install the service.
    ```
 
-9. **Error message for port when not escalating:**
+7. **Error message for port when not escalating:**
    ```
    Error: Cannot bind to port 80
 
    Port 80 requires elevated privileges. Options:
-     1. Install as service (requires admin): sudo search --service install
-     2. Use high port (no admin needed): search --port 8080
+     1. Install as service (requires admin): sudo {projectname} --service install
+     2. Use high port (no admin needed): {projectname} --port 8080
    ```
 
 #### Commands Requiring Escalation
@@ -6076,7 +6527,7 @@ search --port 8080
 | `--service restart` | ⚠️ Check | Which service type is installed? | User service |
 | `--service reload` | ⚠️ Check | Which service type is installed? | User service |
 | `--service status` | ❌ No | N/A - read-only | N/A |
-| `--port <1024` | ⚠️ Check | `os.Geteuid() == 0`? | Random >1024 |
+| `--port <1024` | ⚠️ Check | `isElevated()`? | Random >1024 |
 | `--maintenance backup` | ❌ No | Can write to backup dir? (already owned) | N/A |
 | `--maintenance restore` | 🔐 Auth | Requires admin auth OR root OR first-run | N/A |
 | `--maintenance update` | ⚠️ Check | Can write to binary path? | None (error) |
@@ -6084,7 +6535,7 @@ search --port 8080
 | `--maintenance mode` | 🔐 Auth | Requires admin auth OR root | N/A |
 | (normal start) | ❌ No | Adapts paths to current user | N/A |
 
-**Key insight:** After service install, the `search` user owns all data directories. However, sensitive operations require AUTHORIZATION, not just file access.
+**Key insight:** After service install, the `{projectname}` user owns all data directories. However, sensitive operations require AUTHORIZATION, not just file access.
 
 #### Sensitive Operations (🔐 Auth Required)
 
@@ -6099,7 +6550,7 @@ search --port 8080
 **Setup authorization flow:**
 
 ```
-User runs: search --maintenance setup
+User runs: {projectname} --maintenance setup
 
 Binary checks:
 ├─ Is database empty (no admins exist)?
@@ -6111,21 +6562,21 @@ Binary checks:
 └─ NO authorization → Reject with:
    "Setup already completed. To reconfigure:
     1. Use existing admin credentials via WebUI
-    2. Run as root: sudo search --maintenance setup
+    2. Run as root: sudo {projectname} --maintenance setup
     3. Use setup token from server logs (if available)"
 ```
 
 **Restore authorization flow:**
 
 ```
-User runs: search --maintenance restore backup.tar.gz
+User runs: {projectname} --maintenance restore backup.tar.gz
 
 Binary checks:
 ├─ Is database empty (first-run/fresh install)?
 │   └─ YES → Allow restore (nothing to protect)
 ├─ Is user root?
 │   └─ YES → Allow restore (with confirmation prompt)
-├─ Is user the service user (search)?
+├─ Is user the service user ({projectname})?
 │   └─ YES → Require admin credentials:
 │            "This will OVERWRITE all data. Enter admin credentials to confirm."
 │            └─ Valid credentials → Allow restore
@@ -6138,12 +6589,12 @@ Binary checks:
 **Mode change authorization flow:**
 
 ```
-User runs: search --maintenance mode development
+User runs: {projectname} --maintenance mode development
 
 Binary checks:
 ├─ Is user root?
 │   └─ YES → Allow (with warning about security implications)
-├─ Is user the service user (search)?
+├─ Is user the service user ({projectname})?
 │   └─ YES → Require admin credentials
 └─ Random user → Reject
 ```
@@ -6161,12 +6612,17 @@ Binary checks:
 ```go
 // Service operations: check which type is installed
 func needsEscalationForService() bool {
-    // Check if system service exists
-    if fileExists("/etc/systemd/system/search.service") ||
-       fileExists("/Library/LaunchDaemons/apimgr.search.plist") ||
-       fileExists("/usr/local/etc/rc.d/search") {
-        // System service installed - need root to manage
-        return os.Geteuid() != 0
+    // Check if system service exists (Unix paths, Windows uses registry)
+    if runtime.GOOS == "windows" {
+        // Windows: check if service is registered
+        return !isElevated() && isWindowsServiceInstalled()
+    }
+    // Unix: check for system service files
+    if fileExists("/etc/systemd/system/{projectname}.service") ||
+       fileExists("/Library/LaunchDaemons/{projectorg}.{projectname}.plist") ||
+       fileExists("/usr/local/etc/rc.d/{projectname}") {
+        // System service installed - need elevated privileges to manage
+        return !isElevated()
     }
     // User service or no service - no escalation needed
     return false
@@ -6177,7 +6633,11 @@ func needsEscalationForPort(port int) bool {
     if port >= 1024 {
         return false // Unprivileged port
     }
-    return os.Geteuid() != 0 // Need root for <1024
+    // Windows: no concept of privileged ports (any user can bind any port)
+    if runtime.GOOS == "windows" {
+        return false
+    }
+    return !isElevated() // Unix: need root for <1024
 }
 
 // Update: check if binary is writable
@@ -6203,9 +6663,9 @@ func canSetup(token string) (bool, string) {
     if isDatabaseEmpty() {
         return true, "first-run"
     }
-    // Root: allowed with confirmation
-    if os.Geteuid() == 0 {
-        return true, "root"
+    // Elevated (root/admin): allowed with confirmation
+    if isElevated() {
+        return true, "elevated"
     }
     // Valid setup token: allowed (one-time)
     if token != "" && validateSetupToken(token) {
@@ -6221,9 +6681,9 @@ func canRestore() (bool, string) {
     if isDatabaseEmpty() {
         return true, "empty"
     }
-    // Root: allowed
-    if os.Geteuid() == 0 {
-        return true, "root"
+    // Elevated (root/admin): allowed
+    if isElevated() {
+        return true, "elevated"
     }
     // Service user: requires admin credentials (prompted)
     if isServiceUser() {
@@ -6235,8 +6695,8 @@ func canRestore() (bool, string) {
 
 // Mode change: check authorization
 func canChangeMode() (bool, string) {
-    if os.Geteuid() == 0 {
-        return true, "root"
+    if isElevated() {
+        return true, "elevated"
     }
     if isServiceUser() {
         return false, "need-creds" // Caller must prompt for creds
@@ -6248,7 +6708,7 @@ func canChangeMode() (bool, string) {
 **Smart escalation behavior:**
 
 ```
-User runs: search --service --install
+User runs: {projectname} --service --install
 
 Binary checks:
 ├─ Already root/admin? → Proceed with system service
@@ -6263,7 +6723,7 @@ Binary checks:
 **Port fallback behavior:**
 
 ```
-User runs: search --port 80
+User runs: {projectname} --port 80
 
 Binary checks:
 ├─ Already root/admin? → Bind port 80, proceed
@@ -6275,35 +6735,35 @@ Binary checks:
 └─ Warn user of actual port in use
 ```
 
-#### The `search` System User/Group
+#### The `{projectname}` System User/Group
 
 **Created automatically during first root/service startup.**
 
 | Property | Value |
 |----------|-------|
-| **Username** | `search` |
-| **Group** | `search` |
+| **Username** | `{projectname}` |
+| **Group** | `{projectname}` |
 | **Shell** | `/usr/sbin/nologin` (no login) |
-| **Home** | `/var/lib/apimgr/search` |
+| **Home** | `/var/lib/{projectorg}/{projectname}` |
 | **UID/GID** | Auto-assigned by system |
 | **Type** | System user (UID < 1000 on Linux) |
 
-**What the `search` user CAN do:**
+**What the `{projectname}` user CAN do:**
 
 | Permission | Details |
 |------------|---------|
-| Read/write config | `/etc/apimgr/search/` |
-| Read/write data | `/var/lib/apimgr/search/` |
-| Read/write cache | `/var/cache/apimgr/search/` |
-| Read/write logs | `/var/log/apimgr/search/` |
-| Read/write backups | `/var/lib/Backups/apimgr/search/` or `/mnt/Backups/...` |
+| Read/write config | `/etc/{projectorg}/{projectname}/` |
+| Read/write data | `/var/lib/{projectorg}/{projectname}/` |
+| Read/write cache | `/var/cache/{projectorg}/{projectname}/` |
+| Read/write logs | `/var/log/{projectorg}/{projectname}/` |
+| Read/write backups | `/var/lib/Backups/{projectorg}/{projectname}/` or `/mnt/Backups/...` |
 | Use bound sockets | Inherited from root before privilege drop |
 | Bind ports >1024 | New sockets after privilege drop |
 | Run scheduled tasks | Backup, cleanup, SSL renewal, etc. |
 | Manage database | SQLite in data dir |
 | Manage SSL certs | In `{config_dir}/ssl/` |
 
-**What the `search` user CANNOT do:**
+**What the `{projectname}` user CANNOT do:**
 
 | Restriction | Reason |
 |-------------|--------|
@@ -6319,19 +6779,19 @@ Binary checks:
 
 ```bash
 # Binary sets these during startup as root
-chown -R search:search /etc/apimgr/search/
-chown -R search:search /var/lib/apimgr/search/
-chown -R search:search /var/cache/apimgr/search/
-chown -R search:search /var/log/apimgr/search/
+chown -R {projectname}:{projectname} /etc/{projectorg}/{projectname}/
+chown -R {projectname}:{projectname} /var/lib/{projectorg}/{projectname}/
+chown -R {projectname}:{projectname} /var/cache/{projectorg}/{projectname}/
+chown -R {projectname}:{projectname} /var/log/{projectorg}/{projectname}/
 
 # Permissions
-chmod 755 /etc/apimgr/search/
-chmod 700 /etc/apimgr/search/security/
-chmod 700 /etc/apimgr/search/ssl/
-chmod 700 /etc/apimgr/search/tor/
-chmod 755 /var/lib/apimgr/search/
-chmod 755 /var/cache/apimgr/search/
-chmod 755 /var/log/apimgr/search/
+chmod 755 /etc/{projectorg}/{projectname}/
+chmod 700 /etc/{projectorg}/{projectname}/security/
+chmod 700 /etc/{projectorg}/{projectname}/ssl/
+chmod 700 /etc/{projectorg}/{projectname}/tor/
+chmod 755 /var/lib/{projectorg}/{projectname}/
+chmod 755 /var/cache/{projectorg}/{projectname}/
+chmod 755 /var/log/{projectorg}/{projectname}/
 ```
 
 **User creation:** See PART 24 for platform-specific user creation commands (Linux `useradd`, macOS `dscl`, FreeBSD `pw`).
@@ -6341,7 +6801,7 @@ chmod 755 /var/log/apimgr/search/
 | Aspect | System Service | User Service |
 |--------|---------------|--------------|
 | **Installed by** | root/admin | Regular user |
-| **Runs as** | root → drops to `search` | Calling user |
+| **Runs as** | root → drops to `{projectname}` | Calling user |
 | **Ports** | Any | >1024 only |
 | **Paths** | `/etc/`, `/var/` | `~/.config/`, `~/.local/` |
 | **Survives logout** | Yes | Depends on `lingering` |
@@ -6439,7 +6899,7 @@ server:
 
   # Branding & SEO - see PART 16 for full details
   branding:
-    title: "search"
+    title: "{projectname}"
     tagline: ""
     description: ""
   seo:
@@ -7065,7 +7525,7 @@ server:
 
     # Log request/response bodies (up to max_body_log_size)
     log_bodies: false
-    max_body_log_size: 10240  # 10KB
+    max_body_log_size: 10KB
 
     # Block profiling rate (0 = disabled)
     block_profile_rate: 1
@@ -7088,7 +7548,7 @@ import (
     "runtime"
     "strings"
 
-    "github.com/apimgr/search/src/config"
+    "github.com/{projectorg}/{projectname}/src/config"
 )
 
 var (
@@ -7448,6 +7908,115 @@ func (e DisplayEnv) IsAutoDetectDisplayModeCLI() bool      { return e.Mode == Di
 func (e DisplayEnv) IsAutoDetectDisplayModeHeadless() bool { return e.Mode == DisplayModeHeadless }
 ```
 
+### Platform-Specific Display Detection
+
+```go
+// --- detect_unix.go ---
+//go:build !windows
+// +build !windows
+
+package display
+
+import (
+    "os"
+    "os/exec"
+    "runtime"
+    "strings"
+)
+
+// detectPlatformDisplay - Unix/macOS display detection
+func (e *DisplayEnv) detectPlatformDisplay() {
+    // Check for Wayland first (preferred on Linux)
+    if waylandDisplay := os.Getenv("WAYLAND_DISPLAY"); waylandDisplay != "" {
+        e.HasDisplay = true
+        e.DisplayType = "wayland"
+        return
+    }
+
+    // Check for X11
+    if display := os.Getenv("DISPLAY"); display != "" {
+        e.HasDisplay = true
+        e.DisplayType = "x11"
+        return
+    }
+
+    // macOS: check if we have access to WindowServer
+    if runtime.GOOS == "darwin" {
+        // On macOS, display is always available unless:
+        // - Running over SSH
+        // - Running as a LaunchDaemon (no GUI session)
+        if !e.IsSSH && os.Getenv("__CFBundleIdentifier") != "" {
+            e.HasDisplay = true
+            e.DisplayType = "macos"
+            return
+        }
+        // Check if WindowServer is accessible
+        cmd := exec.Command("launchctl", "managername")
+        if output, err := cmd.Output(); err == nil {
+            if strings.Contains(string(output), "Aqua") {
+                e.HasDisplay = true
+                e.DisplayType = "macos"
+                return
+            }
+        }
+    }
+
+    e.HasDisplay = false
+    e.DisplayType = "none"
+}
+```
+
+```go
+// --- detect_windows.go ---
+//go:build windows
+// +build windows
+
+package display
+
+import (
+    "os"
+    "golang.org/x/sys/windows"
+)
+
+// detectPlatformDisplay - Windows display detection
+func (e *DisplayEnv) detectPlatformDisplay() {
+    // Windows always has a display unless running as a service
+    // Check if we're running as a Windows service (no interactive desktop)
+
+    // Method 1: Check if we have a console window
+    kernel32 := windows.NewLazySystemDLL("kernel32.dll")
+    getConsoleWindow := kernel32.NewProc("GetConsoleWindow")
+    hwnd, _, _ := getConsoleWindow.Call()
+
+    // Method 2: Check if we're in session 0 (service session)
+    var sessionID uint32
+    windows.ProcessIdToSessionId(windows.GetCurrentProcessId(), &sessionID)
+
+    if sessionID == 0 {
+        // Running as a service (session 0) - no interactive desktop
+        e.HasDisplay = false
+        e.DisplayType = "none"
+        return
+    }
+
+    // Check for remote desktop session
+    if os.Getenv("SESSIONNAME") == "RDP-Tcp#0" || os.Getenv("SESSIONNAME") != "" {
+        // Remote desktop - has display but may want different behavior
+        e.HasDisplay = true
+        e.DisplayType = "windows-rdp"
+        return
+    }
+
+    // Normal Windows session with display
+    e.HasDisplay = hwnd != 0
+    if e.HasDisplay {
+        e.DisplayType = "windows"
+    } else {
+        e.DisplayType = "none"
+    }
+}
+```
+
 ### Binary-Specific Behavior
 
 | Binary | GUI | TUI | CLI | Headless |
@@ -7501,7 +8070,7 @@ src/
 
 ```go
 // go.mod
-module apimgr/search
+module {projectorg}/{projectname}
 
 go 1.xx  // Use current latest stable version
 
@@ -7627,7 +8196,7 @@ package banner
 
 import (
     "fmt"
-    "apimgr/search/common/terminal"
+    "{projectorg}/{projectname}/common/terminal"
 )
 
 type BannerConfig struct {
@@ -7661,15 +8230,15 @@ func PrintStartupBanner(cfg BannerConfig) {
 
 # PART 8: SERVER BINARY CLI 
 
-**These are the command-line flags for the SERVER binary (`search`), NOT the CLI client (`search-cli`).**
+**These are the command-line flags for the SERVER binary (`{projectname}`), NOT the client (`{projectname}-cli`).**
 
 ## Binary Types
 
 | Binary | Default Name | Purpose | Key Flags |
 |--------|--------------|---------|-----------|
-| **Server** | `search` | Runs the HTTP server | `--config`, `--data`, `--port`, `--mode` |
-| **Agent** | `search-agent` | Reports to server | `--server`, `--token`, `--config` |
-| **CLI Client** | `search-cli` | User interface to server | `--server`, `--token`, `--output` |
+| **Server** | `{projectname}` | Runs the HTTP server | `--config`, `--data`, `--port`, `--mode` |
+| **Agent** | `{projectname}-agent` | Reports to server | `--server`, `--token`, `--config` |
+| **Client** | `{projectname}-cli` | User interface to server | `--server`, `--token`, `--output` |
 
 **Shared flags (ALL binaries):** `--help`, `--version`, `--shell`, `--debug`
 
@@ -7677,18 +8246,18 @@ func PrintStartupBanner(cfg BannerConfig) {
 
 | Binary | Default Name | User-Agent |
 |--------|--------------|------------|
-| Server | `search` | `search/{version}` |
-| Agent | `search-agent` | `search-agent/{version}` |
-| Client | `search-cli` | `search-cli/{version}` |
+| Server | `{projectname}` | `{projectname}/{version}` |
+| Agent | `{projectname}-agent` | `{projectname}-agent/{version}` |
+| Client | `{projectname}-cli` | `{projectname}-cli/{version}` |
 
 **ALL binaries can be renamed by users. Must show ACTUAL binary name in:**
 - `--help` and `--version` output
 - Error messages showing "run X --help"
 - Any user-facing documentation/instructions
 
-**Hardcode `search` for internal identifiers (never changes):**
+**Hardcode `{projectname}` for internal identifiers (never changes):**
 - User-Agent header (identifies binary type to server)
-- Default paths (`/etc/apimgr/search/`)
+- Default paths (`/etc/{projectorg}/{projectname}/`)
 - Config keys, database tables, API identifiers
 
 **Get actual binary name:**
@@ -7710,7 +8279,7 @@ User-Agent: jokes/1.0.0             # Hardcoded project name
 Default config: /etc/apimgr/jokes/  # Hardcoded project name
 ```
 
-**For CLI client and agent flags, see PART 33.**
+**For client and agent flags, see PART 33.**
 
 **THESE SERVER COMMANDS CANNOT BE CHANGED. This is the complete command set.**
 
@@ -7742,11 +8311,11 @@ Default config: /etc/apimgr/jokes/  # Hardcoded project name
 ### Server --help Output
 
 ```bash
-$ search --help
-search {projectversion} - {project description}
+$ {projectname} --help
+{projectname} {projectversion} - {project description}
 
 Usage:
-  search [flags]
+  {projectname} [flags]
 
 Information:
   -h, --help                        Show help (--help for any command shows its help)
@@ -7776,7 +8345,7 @@ Service Management:
       --maintenance CMD             Maintenance operations (--maintenance --help for details)
       --update [CMD]                Check/perform updates (--update --help for details)
 
-Run 'search <command> --help' for detailed help on any command.
+Run '{projectname} <command> --help' for detailed help on any command.
 ```
 
 ## Directory Flags
@@ -7785,12 +8354,12 @@ Run 'search <command> --help' for detailed help on any command.
 
 | Flag | Type | Default (Linux root) | Default (Linux user) |
 |------|------|----------------------|----------------------|
-| `--config` | Directory | `/etc/apimgr/search/` | `~/.config/apimgr/search/` |
-| `--data` | Directory | `/var/lib/apimgr/search/` | `~/.local/share/apimgr/search/` |
-| `--cache` | Directory | `/var/cache/apimgr/search/` | `~/.cache/apimgr/search/` |
-| `--log` | Directory | `/var/log/apimgr/search/` | `~/.local/log/apimgr/search/` |
-| `--backup` | Directory | `/mnt/Backups/apimgr/search/` (if writable) | `~/.local/share/Backups/apimgr/search/` |
-| `--pid` | File | `/var/run/apimgr/search.pid` | `~/.local/share/apimgr/search/search.pid` |
+| `--config` | Directory | `/etc/{projectorg}/{projectname}/` | `~/.config/{projectorg}/{projectname}/` |
+| `--data` | Directory | `/var/lib/{projectorg}/{projectname}/` | `~/.local/share/{projectorg}/{projectname}/` |
+| `--cache` | Directory | `/var/cache/{projectorg}/{projectname}/` | `~/.cache/{projectorg}/{projectname}/` |
+| `--log` | Directory | `/var/log/{projectorg}/{projectname}/` | `~/.local/log/{projectorg}/{projectname}/` |
+| `--backup` | Directory | `/mnt/Backups/{projectorg}/{projectname}/` (if writable) | `~/.local/share/Backups/{projectorg}/{projectname}/` |
+| `--pid` | File | `/var/run/{projectorg}/{projectname}.pid` | `~/.local/share/{projectorg}/{projectname}/{projectname}.pid` |
 
 **Note:** `--backup` prefers system backup dir if writable, falls back to user dir. See `GetBackupDir()` in PART 5.
 
@@ -7902,7 +8471,7 @@ func isOurProcess(pid int) bool {
         // On macOS/BSD, use ps command
         return isOurProcessDarwin(pid)
     }
-    return strings.Contains(filepath.Base(exePath), "search")
+    return strings.Contains(filepath.Base(exePath), "{projectname}")
 }
 
 // isOurProcessDarwin checks process on macOS/BSD
@@ -7912,7 +8481,7 @@ func isOurProcessDarwin(pid int) bool {
     if err != nil {
         return false
     }
-    return strings.Contains(string(output), "search")
+    return strings.Contains(string(output), "{projectname}")
 }
 
 // --- pid_windows.go ---
@@ -7951,7 +8520,7 @@ func isOurProcess(pid int) bool {
         return false
     }
     exePath := windows.UTF16ToString(buf[:size])
-    return strings.Contains(strings.ToLower(filepath.Base(exePath)), "search")
+    return strings.Contains(strings.ToLower(filepath.Base(exePath)), "{projectname}")
 }
 
 // WritePIDFile writes current process PID to file
@@ -8064,15 +8633,15 @@ PHASE 5: Server startup (actual server start)
 
 8. IF RUNNING AS ROOT - setup system resources BEFORE dropping privileges:
    a. Check/create system user:
-      ├─ User search exists → use it
-      └─ User missing → create search:search (see PART 25)
+      ├─ User {projectname} exists → use it
+      └─ User missing → create {projectname}:{projectname} (see PART 25)
    b. Create ALL directories (while still root):
       ├─ {config_dir}/ and subdirs (security/, ssl/, tor/)
       ├─ {data_dir}/ and subdirs (db/, tor/, tor/site/)
       ├─ {cache_dir}/
       ├─ {log_dir}/
       └─ {backup_dir}/
-   c. Set ownership: chown -R search:search on all dirs
+   c. Set ownership: chown -R {projectname}:{projectname} on all dirs
    d. Set permissions: 0755 general dirs, 0700 sensitive (security/, ssl/, tor/)
    e. Determine ports (see PART 15 for full port rules):
       ├─ Format 1: --port {port} (single port)
@@ -8089,15 +8658,15 @@ PHASE 5: Server startup (actual server start)
       ├─ For each port < 1024: create and bind socket, store fd
       ├─ If ANY privileged port fails: exit with error
       └─ Unprivileged ports (>= 1024) bound later in step 18
-   g. DROP PRIVILEGES to search user
+   g. DROP PRIVILEGES to {projectname} user
    h. Verify privilege drop succeeded (getuid() != 0)
 
 9. IF RUNNING AS USER (non-root) - setup user directories:
-   ├─ Create {config_dir} (~/.config/apimgr/search/)
-   ├─ Create {data_dir} (~/.local/share/apimgr/search/)
-   ├─ Create {cache_dir} (~/.cache/apimgr/search/)
-   ├─ Create {log_dir} (~/.local/log/apimgr/search/)
-   ├─ Create {backup_dir} (~/.local/share/Backups/apimgr/search/)
+   ├─ Create {config_dir} (~/.config/{projectorg}/{projectname}/)
+   ├─ Create {data_dir} (~/.local/share/{projectorg}/{projectname}/)
+   ├─ Create {cache_dir} (~/.cache/{projectorg}/{projectname}/)
+   ├─ Create {log_dir} (~/.local/log/{projectorg}/{projectname}/)
+   ├─ Create {backup_dir} (~/.local/share/Backups/{projectorg}/{projectname}/)
    ├─ Set permissions: 0700 on all dirs (user-only access)
    └─ Note: port must be >1024 (user mode cannot bind privileged ports)
 
@@ -8106,7 +8675,7 @@ PHASE 5: Server startup (actual server start)
     ├─ Set default log level (info)
     └─ Log "Server starting, version X.Y.Z"
 
-11. Check PID file (root: /var/run/apimgr/search.pid, user: {data_dir}/search.pid):
+11. Check PID file (root: /var/run/{projectorg}/{projectname}.pid, user: {data_dir}/{projectname}.pid):
     ├─ PID file exists AND process running → exit 1 "already running"
     ├─ PID file exists AND process dead → remove stale PID, continue
     └─ No PID file → continue
@@ -8155,12 +8724,16 @@ PHASE 5: Server startup (actual server start)
     │   └─ ... and others (see PART 19)
     └─ Start scheduler goroutine
 
-17. Start Tor (if tor binary available):
+17. Start Tor (if tor binary available) - see PART 32:
     ├─ tor not found in PATH → log INFO "Tor not available", skip
     ├─ tor found:
-    │   ├─ Write/update {config_dir}/tor/torrc
-    │   ├─ Start tor process with app user ownership
-    │   ├─ Wait for bootstrap (up to 60s)
+    │   ├─ Create directories: {config_dir}/tor/, {data_dir}/tor/, {data_dir}/tor/site/
+    │   ├─ Set permissions: 0700 for dirs, 0600 for files
+    │   ├─ Generate and write {config_dir}/tor/torrc
+    │   ├─ Start dedicated tor process (TorrcFile + DataDir)
+    │   ├─ Control: Unix socket (Unix/macOS/BSD) or localhost TCP (Windows)
+    │   ├─ Wait for bootstrap (up to 3 min)
+    │   ├─ Create hidden service, log .onion address
     │   └─ Error → log WARN, continue without Tor (non-fatal)
 
 18. Start HTTP server:
@@ -8262,7 +8835,7 @@ PHASE 5: Server startup (actual server start)
 | Init systems | Parent PID 1 is: `tini`, `dumb-init`, `s6-svscan`, `runsv`, `runsvdir`, `catatonit` |
 | Kubernetes | `KUBERNETES_SERVICE_HOST` env var set |
 | cgroup | `/proc/1/cgroup` contains `docker`, `kubepods`, `lxc` |
-| Self wrapper | Parent process is `search` (entrypoint wrapper)
+| Self wrapper | Parent process is `{projectname}` (entrypoint wrapper)
 
 **Manual Start Priority Order:**
 1. `--daemon` CLI flag (highest)
@@ -8304,7 +8877,7 @@ func isContainer() bool {
     switch parentName {
     case "tini", "dumb-init", "s6-svscan", "runsv", "runsvdir", "catatonit":
         return true
-    case "search":
+    case "{projectname}":
         // Parent is our own binary - likely container entrypoint
         return true
     }
@@ -8551,7 +9124,7 @@ myapp is running (PID 12345)
 **Used for Docker/compose healthcheck:**
 ```yaml
 healthcheck:
-  test: /usr/local/bin/search --status
+  test: /usr/local/bin/{projectname} --status
   interval: 10s
   timeout: 5s
   retries: 3
@@ -9917,7 +10490,7 @@ $ kill -TERM $(cat /var/run/myapp.pid)
 | (none) | `DATABASE_DIR` | SQLite database directory (defaults to `{data_dir}/db/`, changeable) |
 | (none) | `BACKUP_DIR` | Backup directory (defaults to `{data_dir}/backup/`, changeable) |
 
-**External backup mounts:** In production, `BACKUP_DIR` should typically point to external storage (NAS, separate disk, etc.) rather than staying under `{data_dir}`. Example: `BACKUP_DIR=/mnt/Backups/apimgr/search`. The default `{data_dir}/backup/` is for development/testing only.
+**External backup mounts:** In production, `BACKUP_DIR` should typically point to external storage (NAS, separate disk, etc.) rather than staying under `{data_dir}`. Example: `BACKUP_DIR=/mnt/Backups/{projectorg}/{projectname}`. The default `{data_dir}/backup/` is for development/testing only.
 
 **Implementation:**
 
@@ -9996,10 +10569,10 @@ func isWritable(path string) bool {
 }
 
 // systemBackupDir returns the system-level backup directory
-// Linux: /mnt/Backups/apimgr/search
-// macOS: /Library/Backups/apimgr/search
-// BSD:   /var/backups/apimgr/search
-// Windows: %ProgramData%\Backups\apimgr\search
+// Linux: /mnt/Backups/{projectorg}/{projectname}
+// macOS: /Library/Backups/{projectorg}/{projectname}
+// BSD:   /var/backups/{projectorg}/{projectname}
+// Windows: %ProgramData%\Backups\{projectorg}\{projectname}
 func systemBackupDir() string {
     switch runtime.GOOS {
     case "darwin":
@@ -10014,9 +10587,9 @@ func systemBackupDir() string {
 }
 
 // userBackupDir returns the user-level backup directory
-// Linux/BSD: ~/.local/share/Backups/apimgr/search
-// macOS: ~/Library/Backups/apimgr/search
-// Windows: %LocalAppData%\Backups\apimgr\search
+// Linux/BSD: ~/.local/share/Backups/{projectorg}/{projectname}
+// macOS: ~/Library/Backups/{projectorg}/{projectname}
+// Windows: %LocalAppData%\Backups\{projectorg}\{projectname}
 func userBackupDir() string {
     home, _ := os.UserHomeDir()
     switch runtime.GOOS {
@@ -10034,7 +10607,7 @@ func userBackupDir() string {
 
 ```bash
 # Configurable paths - organized by component
-# APP_NAME is set to search
+# APP_NAME is set to {projectname}
 export CONFIG_DIR="/config/${APP_NAME}"
 export DATA_DIR="/data/${APP_NAME}"
 export CACHE_DIR="/data/${APP_NAME}/cache"
@@ -10043,8 +10616,8 @@ export DATABASE_DIR="/data/db"
 export BACKUP_DIR="/data/backups/${APP_NAME}"
 
 # Tor directories under binary's dirs (binary owns Tor)
-# ${CONFIG_DIR}/tor/ = /config/search/tor/
-# ${DATA_DIR}/tor/   = /data/search/tor/
+# ${CONFIG_DIR}/tor/ = /config/{projectname}/tor/
+# ${DATA_DIR}/tor/   = /data/{projectname}/tor/
 ```
 
 ### Docker Compose Mapping
@@ -10053,13 +10626,13 @@ export BACKUP_DIR="/data/backups/${APP_NAME}"
 
 ```yaml
 services:
-  search:
-    image: {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest
+  {projectname}:
+    image: {PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:latest
     command:
       - --config=/config
       - --data=/data
       - --log=/logs
-      - --pid=/run/search.pid
+      - --pid=/run/{projectname}.pid
       - --port=8080
     volumes:
       - config:/config:ro          # Config (read-only)
@@ -10074,15 +10647,15 @@ services:
 
 ```yaml
 services:
-  search:
-    image: {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest
+  {projectname}:
+    image: {PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:latest
     volumes:
-      - search-data:/data
+      - {projectname}-data:/data
     ports:
       - "8080:8080"
 
 volumes:
-  search-data:
+  {projectname}-data:
 ```
 
 ### Commands Anyone Can Run (No Privileges)
@@ -10378,7 +10951,7 @@ This properly handles complex suffixes like `.co.uk`, `.com.au`, `.org.uk`, etc.
 - `.localhost`, `.test`, `.example`, `.invalid` (RFC 6761)
 - `.local`, `.lan`, `.internal`, `.home`, `.localdomain`
 - `.home.arpa`, `.intranet`, `.corp`, `.private`
-- `search` - dynamic (e.g., `app.jokes`, `dev.quotes`, `my.api`)
+- `{projectname}` - dynamic (e.g., `app.jokes`, `dev.quotes`, `my.api`)
 
 **Overlay Network TLDs (App-Managed, not set in DOMAIN):**
 - `.onion` - Tor hidden services (RFC 7686) - app generates/manages
@@ -10434,7 +11007,7 @@ func IsValidHost(host string, devMode bool, projectName string) bool {
         return true
     }
 
-    // Check dynamic project-specific TLD (e.g., app.jokes, dev.quotes, quotes, jokes, search)
+    // Check dynamic project-specific TLD (e.g., app.jokes, dev.quotes, quotes, jokes, {projectname})
     if projectName != "" && strings.HasSuffix(lower, "."+strings.ToLower(projectName)) {
         // Project TLDs only valid in dev mode
         return devMode
@@ -13388,17 +13961,13 @@ server:
     # Admin sessions (server.db admin_sessions table)
     admin:
       cookie_name: admin_session
-      # Cookie max age: 30 days (absolute session lifetime)
-      max_age: 2592000
-      # Idle timeout: 24 hours (session expires after inactivity)
-      idle_timeout: 86400
+      max_age: 30d                   # Absolute session lifetime
+      idle_timeout: 24h              # Session expires after inactivity
     # User sessions (users.db user_sessions table) - only if app has users
     user:
       cookie_name: user_session
-      # Cookie max age: 7 days
-      max_age: 604800
-      # Idle timeout: 24 hours
-      idle_timeout: 86400
+      max_age: 7d                    # Absolute session lifetime
+      idle_timeout: 24h              # Session expires after inactivity
     # Common settings (apply to both)
     extend_on_activity: true     # Reset idle timeout on each request
     # auto, true, false
@@ -14276,10 +14845,10 @@ server:
     timeout: 5s
 
     # Key prefix to avoid collisions (use unique prefix per app)
-    prefix: "search:"
+    prefix: "{projectname}:"
 
-    # Default TTL in seconds
-    ttl: 3600
+    # Default TTL
+    ttl: 1h
 
     # Cluster settings (when using Valkey/Redis Cluster)
     cluster: false
@@ -14311,7 +14880,7 @@ server:
   cache:
     type: valkey
     url: ${CACHE_URL}  # valkey://user:pass@valkey.example.com:6379/0
-    prefix: "search:"
+    prefix: "{projectname}:"
 ```
 
 **Using individual fields:**
@@ -14323,7 +14892,7 @@ server:
     port: 6379
     password: ${VALKEY_PASSWORD}
     db: 0
-    prefix: "search:"
+    prefix: "{projectname}:"
 ```
 
 **Valkey/Redis Cluster:**
@@ -14337,7 +14906,7 @@ server:
       - valkey2.example.com:6379
       - valkey3.example.com:6379
     password: ${VALKEY_PASSWORD}
-    prefix: "search:"
+    prefix: "{projectname}:"
 ```
 
 ### Cache Usage in Application
@@ -14412,7 +14981,7 @@ All settings above MUST be configurable via admin panel:
 
 **Required Elements:**
 - Full HTML document with `<head>` and `<body>`
-- Proper page title: "search - Health Status"
+- Proper page title: "{projectname} - Health Status"
 - Uses site theme (light/dark mode support)
 - Responsive layout
 - Header with navigation (if logged in) or minimal header (if public)
@@ -14439,7 +15008,7 @@ All settings above MUST be configurable via admin panel:
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <title>search - Health Status</title>
+  <title>{projectname} - Health Status</title>
   <!-- Standard meta, CSS, theme support -->
 </head>
 <body>
@@ -14816,7 +15385,7 @@ When not in cluster mode:
 | `cluster.nodes` | Array of all node URLs (for failover) |
 | `cluster.role` | member (all nodes are equal) |
 | `features.*` | Enabled features (bool or object) |
-| `features.tor.enabled` | Tor hidden service enabled (config) |
+| `features.tor.enabled` | Tor hidden service enabled (auto-detected or admin setting) |
 | `features.tor.running` | Tor process currently running |
 | `features.tor.status` | healthy, error:{short message} |
 | `features.tor.hostname` | Onion address (if running) |
@@ -14864,7 +15433,7 @@ When not in cluster mode:
 ### --version Output
 
 ```
-search {projectversion}
+{projectname} {projectversion}
 Built: {BUILD_DATE}
 Go: {GO_VERSION}
 OS/Arch: {GOOS}/{GOARCH}
@@ -15310,7 +15879,7 @@ tail -c 2 file.txt | od -An -tx1
 
 **Frontend routes (`/**`) have BUILT-IN smart detection:**
 - Browser request → HTML + JavaScript (full interactive page)
-- Our CLI client → JSON (renders own TUI/GUI)
+- Our client → JSON (renders own TUI/GUI)
 - Text browsers (lynx, w3m) → HTML without JavaScript (`renderNoJSHTML()`)
 - HTTP tools (curl, wget) → Formatted text (`HTML2TextConverter()`)
 - Accept: text/plain → Formatted text
@@ -15502,12 +16071,12 @@ When an HTTP tool (curl, wget, httpie) is detected, the server MUST:
 
 | Type | Examples | Detection | Response | Interactive | JS Support |
 |------|----------|-----------|----------|-------------|------------|
-| **Our CLI Client** | `search-cli` | `search-cli/` in User-Agent | JSON (client handles formatting) | **YES** (TUI/GUI) | N/A |
+| **Our Client** | `{projectname}-cli` | `{projectname}-cli/` in User-Agent | JSON (client handles formatting) | **YES** (TUI/GUI) | N/A |
 | **Text Browsers** | lynx, w3m, links, elinks | User-Agent patterns | HTML **without JavaScript** (no-JS alternative) | **YES** (navigate, click) | **NO** |
 | **HTTP Tools** | curl, wget, httpie | User-Agent patterns | Formatted text (HTML2TextConverter) | **NO** (just dump output) | N/A |
 
 **Interactive clients handle their own rendering:**
-- **Our CLI Client** - receives JSON, renders beautiful TUI/GUI itself
+- **Our Client** - receives JSON, renders beautiful TUI/GUI itself
 - **Text Browsers** - receive **no-JS HTML alternative** (server-rendered, forms work via POST, no AJAX)
 
 **Non-interactive tools get pre-formatted text:**
@@ -15528,8 +16097,8 @@ When an HTTP tool (curl, wget, httpie) is detected, the server MUST:
 ```go
 // src/common/httputil/detect.go
 
-// isOurCliClient detects our own CLI client
-// Our CLI is INTERACTIVE (TUI/GUI) - receives JSON, renders itself
+// isOurCliClient detects our own client binary ({projectname}-cli)
+// Client is INTERACTIVE (TUI/GUI) - receives JSON, renders itself
 func isOurCliClient(r *http.Request) bool {
     ua := r.Header.Get("User-Agent")
     return strings.HasPrefix(ua, projectName+"-cli/")
@@ -15587,9 +16156,9 @@ func isHttpTool(r *http.Request) bool {
 
 // isNonInteractiveClient detects clients that need pre-formatted text
 // ONLY HTTP tools are non-interactive
-// Our CLI client and text browsers are INTERACTIVE (handle their own rendering)
+// Our client and text browsers are INTERACTIVE (handle their own rendering)
 func isNonInteractiveClient(r *http.Request) bool {
-    // Our CLI client is INTERACTIVE - receives JSON
+    // Our client is INTERACTIVE - receives JSON
     if isOurCliClient(r) {
         return false
     }
@@ -15613,12 +16182,12 @@ func isNonInteractiveClient(r *http.Request) bool {
 | Client Type | Frontend Route (`/**`) | API Route (`/api/**`) | Why |
 |-------------|------------------------|----------------------|-----|
 | Browser (Chrome, Firefox) | HTML + JS | JSON | Full browser with JavaScript |
-| **Our CLI Client** | JSON | JSON | Renders own TUI/GUI |
+| **Our Client** | JSON | JSON | Renders own TUI/GUI |
 | **Text Browsers** (lynx, w3m) | HTML (no-JS) | Plain text | INTERACTIVE but NO JavaScript |
 | **HTTP Tools** (curl, wget) | Formatted text | Plain text | NON-INTERACTIVE, just dump output |
 
 **Interactive Clients (render their own output):**
-- **Our CLI Client** - receives JSON, renders beautiful TUI/GUI with colors, tables, progress bars
+- **Our Client** - receives JSON, renders beautiful TUI/GUI with colors, tables, progress bars
 - **Text Browsers** - receive no-JS HTML (`renderNoJSHTML()`), render in text mode, forms via POST
 
 **Non-Interactive Clients (need pre-formatted output):**
@@ -15758,7 +16327,7 @@ ID: joke_123
   • API Docs [/docs]
   • Get Another Joke [/jokes/random]
 ────────────────────────────────────────────────────────────────────────────────
-                    Powered by search • v{version}
+                    Powered by {projectname} • v{version}
 ```
 
 **Request Handler Integration:**
@@ -15767,7 +16336,7 @@ ID: joke_123
 func handleFrontendRequest(w http.ResponseWriter, r *http.Request) {
     data := getData(r)
 
-    // 1. Our CLI client - INTERACTIVE, receives JSON, renders own TUI/GUI
+    // 1. Our client - INTERACTIVE, receives JSON, renders own TUI/GUI
     if isOurCliClient(r) {
         w.Header().Set("Content-Type", "application/json; charset=utf-8")
         json.NewEncoder(w).Encode(data)
@@ -15814,13 +16383,13 @@ func renderNoJSHTML(w http.ResponseWriter, data interface{}) {
 | Client Type | Detection | Response | Interactive | JS Support |
 |-------------|-----------|----------|-------------|------------|
 | Browser (Chrome, Firefox) | User-Agent | HTML + JS | **Yes** | **Yes** |
-| **Our CLI Client** (`search-cli`) | `isOurCliClient()` | JSON | **Yes** (TUI/GUI) | N/A |
+| **Our Client** (`{projectname}-cli`) | `isOurCliClient()` | JSON | **Yes** (TUI/GUI) | N/A |
 | **Text Browsers** (lynx, w3m, links) | `isTextBrowser()` | HTML (no-JS) | **Yes** (navigate, click) | **No** |
 | **HTTP Tools** (curl, wget, httpie) | `isHttpTool()` | Formatted text | **No** (just dump) | N/A |
 | Accept: text/plain | Header | Formatted text | No | N/A |
 
 **Key Points:**
-1. **Our CLI client is INTERACTIVE** - receives JSON, renders its own beautiful TUI/GUI
+1. **Our client is INTERACTIVE** - receives JSON, renders its own beautiful TUI/GUI
 2. **Text browsers are INTERACTIVE but NO JavaScript** - receive `renderNoJSHTML()` output (server-rendered, forms via POST)
 3. **HTTP tools are NON-INTERACTIVE** - receive `HTML2TextConverter()` output (just dump to terminal)
 4. **Four detection functions:** `isOurCliClient()`, `isTextBrowser()`, `isHttpTool()`, `isNonInteractiveClient()`
@@ -16370,7 +16939,7 @@ Need additional compatible endpoints?"
 | `/metrics` | GET | Optional | Prometheus metrics |
 | `/{admin_path}` | GET | Session | Admin panel login |
 | `/{admin_path}/*` | ALL | Session | Admin panel pages |
-| `/api/autodiscover` | GET | None | Server settings for CLI/agent (non-versioned) |
+| `/api/autodiscover` | GET | None | Server settings, config schema, and options for CLI/agent (non-versioned) |
 | `/api/{api_version}/healthz` | GET | None | Health check (JSON) |
 | `/api/{api_version}/{admin_path}/*` | ALL | Bearer | Admin API |
 
@@ -16536,7 +17105,7 @@ Before proceeding, confirm you understand:
 
 | Environment | DOMAIN Value | Example |
 |-------------|--------------|---------|
-| **Development** | `search` | `DOMAIN=jokes` |
+| **Development** | `{projectname}` | `DOMAIN=jokes` |
 | **Production** | Valid FQDN | `DOMAIN=api.example.com` |
 
 **Valid Production DOMAIN formats (comma-separated list supported):**
@@ -16742,9 +17311,9 @@ export DOMAIN=myapp.com,www.myapp.com,api.myapp.com
 **Dev TLDs are allowed in development mode but require global IP fallback for remote access.**
 
 **Dynamic Dev TLDs (project name as TLD):**
-- `search` - e.g., `app.jokes`, `my.quotes`, `dev.api`
-- `search.local` - e.g., `app.jokes.local`
-- `search.test` - e.g., `app.jokes.test`
+- `{projectname}` - e.g., `app.jokes`, `my.quotes`, `dev.api`
+- `{projectname}.local` - e.g., `app.jokes.local`
+- `{projectname}.test` - e.g., `app.jokes.test`
 
 **Static Dev TLDs:**
 - `.local`, `.test`, `.example`, `.invalid` (RFC 6761)
@@ -16780,7 +17349,7 @@ func GetDisplayURL(projectName string, port int, isHTTPS bool) string {
 func isDevTLD(host, projectName string) bool {
     lower := strings.ToLower(host)
 
-    // Check dynamic project-specific TLD (e.g., app.jokes, dev.quotes, quotes, jokes, search)
+    // Check dynamic project-specific TLD (e.g., app.jokes, dev.quotes, quotes, jokes, {projectname})
     if projectName != "" && strings.HasSuffix(lower, "."+strings.ToLower(projectName)) {
         return true
     }
@@ -16928,8 +17497,13 @@ func init() {
 ```
 
 **Resize Handling (for long-running servers):**
+
 ```go
-// Handle SIGWINCH for terminal resize
+// --- resize_unix.go ---
+//go:build !windows
+// +build !windows
+
+// Handle SIGWINCH for terminal resize (Unix only)
 func watchTerminalSize(ctx context.Context) {
     sigCh := make(chan os.Signal, 1)
     signal.Notify(sigCh, syscall.SIGWINCH)
@@ -16942,6 +17516,35 @@ func watchTerminalSize(ctx context.Context) {
             width, height, _ := term.GetSize(int(os.Stdout.Fd()))
             runtime.TerminalWidth = width
             runtime.TerminalHeight = height
+        }
+    }
+}
+```
+
+```go
+// --- resize_windows.go ---
+//go:build windows
+// +build windows
+
+// Handle terminal resize (Windows - polling based)
+// Windows doesn't have SIGWINCH, so poll periodically
+func watchTerminalSize(ctx context.Context) {
+    ticker := time.NewTicker(500 * time.Millisecond)
+    defer ticker.Stop()
+
+    var lastWidth, lastHeight int
+
+    for {
+        select {
+        case <-ctx.Done():
+            return
+        case <-ticker.C:
+            width, height, _ := term.GetSize(int(os.Stdout.Fd()))
+            if width != lastWidth || height != lastHeight {
+                lastWidth, lastHeight = width, height
+                runtime.TerminalWidth = width
+                runtime.TerminalHeight = height
+            }
         }
     }
 }
@@ -18873,7 +19476,7 @@ See **JavaScript Rules** section below for `app.js` structure.
 <input type="checkbox" id="menu-toggle" hidden>
 <nav class="menu">
   <a href="/">Home</a>
-  <a href="/about">About</a>
+  <a href="/server/about">About</a>
 </nav>
 
 <style>
@@ -19047,7 +19650,7 @@ src/server/template/
 <!DOCTYPE html>
 <html lang="en" class="theme-dark">  <!-- or theme-light -->
 <head>
-  {{ template "partial/head.tmpl" . }}
+  {{ template "head" . }}
 </head>
 ```
 
@@ -19363,14 +19966,14 @@ partial/
 ```
 Desktop:
 ┌─────────────────────────────────────────────────────────────────┐
-│  search                                      [User Icon] │  ← Header
+│  {projectname}                                      [User Icon] │  ← Header
 ├─────────────────────────────────────────────────────────────────┤
 │  Home  |  [App Section 1]  |  [App Section 2]  |  ...           │  ← Nav
 └─────────────────────────────────────────────────────────────────┘
 
 Mobile:
 ┌─────────────────────────────────────────────────────────────────┐
-│  search                                      [User Icon] │  ← Header
+│  {projectname}                                      [User Icon] │  ← Header
 ├─────────────────────────────────────────────────────────────────┤
 │                                                      [☰ Menu]   │  ← Nav row
 └─────────────────────────────────────────────────────────────────┘
@@ -19385,7 +19988,7 @@ Mobile:
 ```html
 <!-- Header bar: site name + user icon -->
 <header class="header">
-  <a href="/" class="site-brand">search</a>
+  <a href="/" class="site-brand">{projectname}</a>
 
   <!-- User icon (always visible, far right) -->
   <div class="user-menu">
@@ -19914,8 +20517,8 @@ var ThemePaletteLight = ThemePalette{
 
 | Changes (User-Visible) | Does NOT Change (System) |
 |------------------------|--------------------------|
-| Page titles | Directory names (`search/`) |
-| Browser tab | System username (`search`) |
+| Page titles | Directory names (`{projectname}/`) |
+| Browser tab | System username (`{projectname}`) |
 | Header/logo text | Log filenames |
 | Footer branding | Config paths |
 | Email "From" name | Binary name |
@@ -19929,7 +20532,7 @@ var ThemePaletteLight = ThemePalette{
 server:
   branding:
     # Display name (e.g., "Jokes API")
-    title: "search"
+    title: "{projectname}"
     # Short slogan (e.g., "The best jokes API")
     tagline: ""
     # Longer description for SEO/about
@@ -20292,7 +20895,7 @@ func FetchRemoteImage(ctx context.Context, rawURL string, cfg FetchRemoteImageCo
     }
 
     // Set safe headers
-    req.Header.Set("User-Agent", "search-server/1.0")
+    req.Header.Set("User-Agent", "{projectname}-server/1.0")
     req.Header.Set("Accept", strings.Join(cfg.AllowedTypes, ", "))
 
     resp, err := client.Do(req)
@@ -20361,13 +20964,13 @@ if err != nil {
 
 | Field | Default Value |
 |-------|---------------|
-| `title` | `search` |
+| `title` | `{projectname}` |
 | `tagline` | Empty |
 | `description` | Empty |
 | `keywords` | Empty |
 | All others | Empty |
 
-**Rule:** If `title` is empty, fall back to `search`. Other fields are optional.
+**Rule:** If `title` is empty, fall back to `{projectname}`. Other fields are optional.
 
 ## Announcements 
 
@@ -20636,8 +21239,8 @@ When admin edits `custom_html`, show:
 | Variable | Description |
 |----------|-------------|
 | `{currentyear}` | Current year (e.g., 2025) |
-| `search` | Project name |
-| `apimgr` | Organization name |
+| `{projectname}` | Project name |
+| `{projectorg}` | Organization name |
 | `{projectversion}` | Application version |
 | `{builddatetime}` | Build date/time |
 
@@ -20670,6 +21273,107 @@ When admin edits `custom_html`, show:
   <a href="/healthz">Last update: {builddatetime}</a>
 </footer>
 ```
+
+### Default Admin Footer (Admin Panel)
+
+**Location:** `partial/admin/footer.tmpl`
+
+```html
+<footer class="admin-footer">
+  <div class="admin-footer-content">
+    <!-- Version info -->
+    <span class="admin-footer-version">
+      <a href="/{admin_path}/server/info">{projectname} {projectversion}</a>
+    </span>
+
+    <span class="admin-footer-separator">•</span>
+
+    <!-- Documentation link -->
+    <span class="admin-footer-docs">
+      <a href="https://{projectorg}-{projectname}.readthedocs.io" target="_blank" rel="noopener">
+        Docs
+      </a>
+    </span>
+
+    <span class="admin-footer-separator">•</span>
+
+    <!-- Server status indicator -->
+    <span class="admin-footer-status">
+      {{ if .ServerStatus.Healthy }}
+        <span class="status-indicator status-ok" title="All systems operational">●</span>
+        <span>Healthy</span>
+      {{ else if .ServerStatus.Degraded }}
+        <span class="status-indicator status-warning" title="Some issues detected">●</span>
+        <span>Degraded</span>
+      {{ else }}
+        <span class="status-indicator status-error" title="System issues">●</span>
+        <span>Issues</span>
+      {{ end }}
+    </span>
+  </div>
+</footer>
+```
+
+**Admin Footer CSS:**
+```css
+.admin-footer {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.admin-footer-content {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.admin-footer-separator {
+  color: var(--text-muted);
+}
+
+.admin-footer a {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.admin-footer a:hover {
+  color: var(--primary-color);
+  text-decoration: underline;
+}
+
+/* Status indicators */
+.status-indicator {
+  font-size: 0.75rem;
+  margin-right: 0.25rem;
+}
+
+.status-ok { color: var(--success-color); }
+.status-warning { color: var(--warning-color); }
+.status-error { color: var(--danger-color); }
+```
+
+**Admin Footer Contents:**
+
+| Element | Description |
+|---------|-------------|
+| Version | Links to `/{admin_path}/server/info` - shows project name and version |
+| Docs | External link to ReadTheDocs documentation |
+| Status | Server health indicator (green/yellow/red) with status text |
+
+**Admin Footer Rules:**
+
+| Rule | Description |
+|------|-------------|
+| **Compact** | Single line, minimal height |
+| **Informational** | Version, docs, status - no navigation |
+| **Status indicator** | Real-time server health from `/healthz` |
+| **Same position rules** | Bottom of page, scrolls with content, centered |
 
 ### Admin Panel (/{admin_path}/server/footer)
 
@@ -22121,24 +22825,24 @@ func RegisterAdminRoutes(r *mux.Router) {
 ╠══════════════════════════════════════════════════════════════════════╣
 ║                                                                      ║
 ║   🌐 Web Interface:                                                   ║
-║      http://localhost:64521                                          ║
-║      http://192.168.1.100:64521                                      ║
+║      http://myserver.example.com:64580                               ║
+║      http://192.168.1.100:64580                                      ║
 ║                                                                      ║
 ║   🔧 Admin Panel:                                                     ║
-║      http://localhost:64521/{admin_path}                             ║
+║      http://myserver.example.com:64580/{admin_path}                  ║
 ║                                                                      ║
 ║   🔑 Setup Token (use at /{admin_path}):                              ║
 ║      a1b2c3d4e5f67890abcdef1234567890                                ║
 ║                                                                      ║
-║   📧 SMTP: Auto-detected (localhost:25)                               ║
+║   📧 SMTP: 172.17.0.1:25                                                ║
 ║                                                                      ║
 ║   ⚠️  Save the setup token! It will not be shown again.               ║
 ║                                                                      ║
 ╚══════════════════════════════════════════════════════════════════════╝
 
 [INFO] Server started successfully
-[INFO] Listening on 0.0.0.0:64521
-[INFO] SMTP auto-detected: localhost:25 (enabled)
+[INFO] Listening on {address}:{port}
+[INFO] SMTP: 172.17.0.1:25
 ```
 
 ### App Usability Before Setup
@@ -22812,7 +23516,7 @@ Admin Panel Header:
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
-| `title` | Text | `search` | No | App display name |
+| `title` | Text | `{projectname}` | No | App display name |
 | `tagline` | Text | (empty) | No | Short slogan |
 | `description` | Textarea | (empty) | No | SEO/about description |
 | `logo` | File | (none) | No | Logo image upload |
@@ -23677,19 +24381,24 @@ Email templates allow Server Admins to customize ALL notification messages, incl
 
 **On first run, the server automatically detects local SMTP servers.**
 
-| Check | Hosts | Ports |
-|-------|-------|-------|
-| 1 | `localhost` | 25, 587, 465 |
-| 2 | `127.0.0.1` | 25, 587, 465 |
-| 3 | `172.17.0.1` (Docker host) | 25, 587, 465 |
-| 4 | Gateway IP | 25, 587, 465 |
+| Priority | Host | Description | Ports |
+|----------|------|-------------|-------|
+| 1 | `127.0.0.1` | Loopback (same machine) | 25, 465, 587 |
+| 2 | `172.17.0.1` | Docker bridge gateway | 25, 465, 587 |
+| 3 | `{gateway_ip}` | Default gateway IP | 25, 465, 587 |
+| 4 | `{fqdn}` | Detected FQDN (from GetFQDN) | 25, 465, 587 |
+| 5 | `{global_ipv4}` | Global IPv4 (if available) | 25, 465, 587 |
+| 6 | `mail.{fqdn}` | Common mail subdomain | 25, 465, 587 |
+| 7 | `smtp.{fqdn}` | Common SMTP subdomain | 25, 465, 587 |
 
 **Auto-Detection Process:**
-1. Try each host/port combination
+1. Try each host/port combination in priority order
 2. Attempt SMTP handshake (EHLO)
 3. First successful connection is used
-4. Save to `server.yml` and enable email features
-5. If all fail → email features disabled (not an error)
+4. Save detected `host:port` to `server.yml` and enable email features
+5. If all fail → email features disabled (not an error, just no SMTP available)
+
+**Display Note:** Detected SMTP `{host}:{port}` is shown in console/logs (exempt from "never show localhost" rules - users need to see the actual detected server for troubleshooting).
 
 **Connection Test (when host is set):**
 1. On every startup, test configured SMTP connection
@@ -23983,7 +24692,7 @@ IMPORTANT NEXT STEPS
 5. Enable two-factor authentication
 
 Keep your admin credentials secure. If you lose access, use:
-  search --maintenance setup
+  {projectname} --maintenance setup
 ────────────────────────────────────────────────────────────────────────
 
 --
@@ -25120,8 +25829,8 @@ server:
         enabled: true
         # Verify after creation (all checks must pass)
         verify: true
-        # Creates: search_backup_YYYY-MM-DD.tar.gz[.enc] (full)
-        #          search-daily.tar.gz[.enc] (incremental)
+        # Creates: {projectname}_backup_YYYY-MM-DD.tar.gz[.enc] (full)
+        #          {projectname}-daily.tar.gz[.enc] (incremental)
         retention:
           max_backups: 1     # 1-365: daily full backups to keep
           keep_weekly: 0     # 0-52: Sunday backups (0 = disabled)
@@ -25132,7 +25841,7 @@ server:
       backup_hourly:
         schedule: "@hourly"
         enabled: false
-        # Creates: search-hourly.tar.gz[.enc] (incremental since daily)
+        # Creates: {projectname}-hourly.tar.gz[.enc] (incremental since daily)
         # Always 1 file (replaced each hour)
 
       # Every 5 minutes
@@ -25386,11 +26095,11 @@ Execute task
 | Verify | Yes | All checks must pass |
 
 **What backup_daily creates (default: 2 files):**
-- `search_backup_YYYY-MM-DD.tar.gz[.enc]` - Full backup (yesterday's)
-- `search-daily.tar.gz[.enc]` - Daily incremental
+- `{projectname}_backup_YYYY-MM-DD.tar.gz[.enc]` - Full backup (yesterday's)
+- `{projectname}-daily.tar.gz[.enc]` - Daily incremental
 
 **What backup_hourly creates (if enabled: +1 file):**
-- `search-hourly.tar.gz[.enc]` - Hourly incremental
+- `{projectname}-hourly.tar.gz[.enc]` - Hourly incremental
 
 ### API Endpoints
 
@@ -25583,7 +26292,7 @@ var (
     // HTTP metrics
     HTTPRequestsTotal = promauto.NewCounterVec(
         prometheus.CounterOpts{
-            Name: "search_http_requests_total",
+            Name: "{projectname}_http_requests_total",
             Help: "Total number of HTTP requests",
         },
         []string{"method", "path", "status"},
@@ -25591,7 +26300,7 @@ var (
 
     HTTPRequestDuration = promauto.NewHistogramVec(
         prometheus.HistogramOpts{
-            Name:    "search_http_request_duration_seconds",
+            Name:    "{projectname}_http_request_duration_seconds",
             Help:    "HTTP request duration in seconds",
             Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
         },
@@ -25600,7 +26309,7 @@ var (
 
     HTTPRequestSize = promauto.NewHistogramVec(
         prometheus.HistogramOpts{
-            Name:    "search_http_request_size_bytes",
+            Name:    "{projectname}_http_request_size_bytes",
             Help:    "HTTP request size in bytes",
             Buckets: []float64{100, 1000, 10000, 100000, 1000000, 10000000},
         },
@@ -25609,7 +26318,7 @@ var (
 
     HTTPResponseSize = promauto.NewHistogramVec(
         prometheus.HistogramOpts{
-            Name:    "search_http_response_size_bytes",
+            Name:    "{projectname}_http_response_size_bytes",
             Help:    "HTTP response size in bytes",
             Buckets: []float64{100, 1000, 10000, 100000, 1000000, 10000000},
         },
@@ -25618,7 +26327,7 @@ var (
 
     HTTPActiveRequests = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "search_http_active_requests",
+            Name: "{projectname}_http_active_requests",
             Help: "Number of active HTTP requests",
         },
     )
@@ -25626,7 +26335,7 @@ var (
     // Database metrics
     DBQueriesTotal = promauto.NewCounterVec(
         prometheus.CounterOpts{
-            Name: "search_db_queries_total",
+            Name: "{projectname}_db_queries_total",
             Help: "Total number of database queries",
         },
         []string{"operation", "table"},
@@ -25634,7 +26343,7 @@ var (
 
     DBQueryDuration = promauto.NewHistogramVec(
         prometheus.HistogramOpts{
-            Name:    "search_db_query_duration_seconds",
+            Name:    "{projectname}_db_query_duration_seconds",
             Help:    "Database query duration in seconds",
             Buckets: []float64{0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1},
         },
@@ -25643,21 +26352,21 @@ var (
 
     DBConnectionsOpen = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "search_db_connections_open",
+            Name: "{projectname}_db_connections_open",
             Help: "Number of open database connections",
         },
     )
 
     DBConnectionsInUse = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "search_db_connections_in_use",
+            Name: "{projectname}_db_connections_in_use",
             Help: "Number of database connections in use",
         },
     )
 
     DBErrors = promauto.NewCounterVec(
         prometheus.CounterOpts{
-            Name: "search_db_errors_total",
+            Name: "{projectname}_db_errors_total",
             Help: "Total number of database errors",
         },
         []string{"operation", "error_type"},
@@ -25666,7 +26375,7 @@ var (
     // Cache metrics
     CacheHits = promauto.NewCounterVec(
         prometheus.CounterOpts{
-            Name: "search_cache_hits_total",
+            Name: "{projectname}_cache_hits_total",
             Help: "Total number of cache hits",
         },
         []string{"cache"},
@@ -25674,7 +26383,7 @@ var (
 
     CacheMisses = promauto.NewCounterVec(
         prometheus.CounterOpts{
-            Name: "search_cache_misses_total",
+            Name: "{projectname}_cache_misses_total",
             Help: "Total number of cache misses",
         },
         []string{"cache"},
@@ -25682,7 +26391,7 @@ var (
 
     CacheEvictions = promauto.NewCounterVec(
         prometheus.CounterOpts{
-            Name: "search_cache_evictions_total",
+            Name: "{projectname}_cache_evictions_total",
             Help: "Total number of cache evictions",
         },
         []string{"cache"},
@@ -25690,7 +26399,7 @@ var (
 
     CacheSize = promauto.NewGaugeVec(
         prometheus.GaugeOpts{
-            Name: "search_cache_size",
+            Name: "{projectname}_cache_size",
             Help: "Current cache size (items)",
         },
         []string{"cache"},
@@ -25698,7 +26407,7 @@ var (
 
     CacheBytes = promauto.NewGaugeVec(
         prometheus.GaugeOpts{
-            Name: "search_cache_bytes",
+            Name: "{projectname}_cache_bytes",
             Help: "Current cache size (bytes)",
         },
         []string{"cache"},
@@ -25707,7 +26416,7 @@ var (
     // Scheduler metrics
     SchedulerTasksTotal = promauto.NewCounterVec(
         prometheus.CounterOpts{
-            Name: "search_scheduler_tasks_total",
+            Name: "{projectname}_scheduler_tasks_total",
             Help: "Total number of scheduled tasks executed",
         },
         []string{"task", "status"},
@@ -25715,7 +26424,7 @@ var (
 
     SchedulerTaskDuration = promauto.NewHistogramVec(
         prometheus.HistogramOpts{
-            Name:    "search_scheduler_task_duration_seconds",
+            Name:    "{projectname}_scheduler_task_duration_seconds",
             Help:    "Scheduled task duration in seconds",
             Buckets: []float64{0.1, 0.5, 1, 5, 10, 30, 60, 300, 600},
         },
@@ -25724,7 +26433,7 @@ var (
 
     SchedulerTasksRunning = promauto.NewGaugeVec(
         prometheus.GaugeOpts{
-            Name: "search_scheduler_tasks_running",
+            Name: "{projectname}_scheduler_tasks_running",
             Help: "Number of currently running scheduled tasks",
         },
         []string{"task"},
@@ -25732,7 +26441,7 @@ var (
 
     SchedulerLastRun = promauto.NewGaugeVec(
         prometheus.GaugeOpts{
-            Name: "search_scheduler_last_run_timestamp",
+            Name: "{projectname}_scheduler_last_run_timestamp",
             Help: "Timestamp of last task run",
         },
         []string{"task"},
@@ -25741,7 +26450,7 @@ var (
     // Authentication metrics
     AuthAttempts = promauto.NewCounterVec(
         prometheus.CounterOpts{
-            Name: "search_auth_attempts_total",
+            Name: "{projectname}_auth_attempts_total",
             Help: "Total authentication attempts",
         },
         []string{"method", "status"},
@@ -25749,7 +26458,7 @@ var (
 
     AuthSessionsActive = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "search_auth_sessions_active",
+            Name: "{projectname}_auth_sessions_active",
             Help: "Number of active sessions",
         },
     )
@@ -25757,21 +26466,21 @@ var (
     // Business metrics
     UsersTotal = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "search_users_total",
+            Name: "{projectname}_users_total",
             Help: "Total number of registered users",
         },
     )
 
     UsersActive = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "search_users_active",
+            Name: "{projectname}_users_active",
             Help: "Number of users active in last 24 hours",
         },
     )
 
     APITokensActive = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "search_api_tokens_active",
+            Name: "{projectname}_api_tokens_active",
             Help: "Number of active API tokens",
         },
     )
@@ -25779,7 +26488,7 @@ var (
     // Application info
     AppInfo = promauto.NewGaugeVec(
         prometheus.GaugeOpts{
-            Name: "search_app_info",
+            Name: "{projectname}_app_info",
             Help: "Application information",
         },
         []string{"version", "commit", "build_date", "go_version"},
@@ -25787,14 +26496,14 @@ var (
 
     AppUptime = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "search_app_uptime_seconds",
+            Name: "{projectname}_app_uptime_seconds",
             Help: "Application uptime in seconds",
         },
     )
 
     AppStartTime = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "search_app_start_timestamp",
+            Name: "{projectname}_app_start_timestamp",
             Help: "Application start timestamp",
         },
     )
@@ -25818,7 +26527,7 @@ import (
     "strconv"
     "time"
 
-    "github.com/apimgr/search/src/server/metrics"
+    "github.com/{projectorg}/{projectname}/src/server/metrics"
 )
 
 // metricsMiddleware records HTTP metrics for all requests
@@ -25902,7 +26611,7 @@ import (
     "database/sql"
     "time"
 
-    "github.com/apimgr/search/src/server/metrics"
+    "github.com/{projectorg}/{projectname}/src/server/metrics"
 )
 
 // MetricsDB wraps sql.DB with metrics
@@ -26003,7 +26712,7 @@ package cache
 import (
     "time"
 
-    "github.com/apimgr/search/src/server/metrics"
+    "github.com/{projectorg}/{projectname}/src/server/metrics"
 )
 
 // MetricsCache wraps a cache with metrics
@@ -26056,7 +26765,7 @@ package scheduler
 import (
     "time"
 
-    "github.com/apimgr/search/src/server/metrics"
+    "github.com/{projectorg}/{projectname}/src/server/metrics"
 )
 
 // RecordTaskStart records when a task starts
@@ -26099,35 +26808,35 @@ var (
     // System metrics
     SystemCPUUsage = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "search_system_cpu_usage_percent",
+            Name: "{projectname}_system_cpu_usage_percent",
             Help: "Current CPU usage percentage",
         },
     )
 
     SystemMemoryUsage = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "search_system_memory_usage_percent",
+            Name: "{projectname}_system_memory_usage_percent",
             Help: "Current memory usage percentage",
         },
     )
 
     SystemMemoryUsed = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "search_system_memory_used_bytes",
+            Name: "{projectname}_system_memory_used_bytes",
             Help: "Memory used in bytes",
         },
     )
 
     SystemMemoryTotal = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "search_system_memory_total_bytes",
+            Name: "{projectname}_system_memory_total_bytes",
             Help: "Total memory in bytes",
         },
     )
 
     SystemDiskUsage = promauto.NewGaugeVec(
         prometheus.GaugeOpts{
-            Name: "search_system_disk_usage_percent",
+            Name: "{projectname}_system_disk_usage_percent",
             Help: "Disk usage percentage",
         },
         []string{"path"},
@@ -26135,7 +26844,7 @@ var (
 
     SystemDiskUsed = promauto.NewGaugeVec(
         prometheus.GaugeOpts{
-            Name: "search_system_disk_used_bytes",
+            Name: "{projectname}_system_disk_used_bytes",
             Help: "Disk used in bytes",
         },
         []string{"path"},
@@ -26143,7 +26852,7 @@ var (
 
     SystemDiskTotal = promauto.NewGaugeVec(
         prometheus.GaugeOpts{
-            Name: "search_system_disk_total_bytes",
+            Name: "{projectname}_system_disk_total_bytes",
             Help: "Total disk in bytes",
         },
         []string{"path"},
@@ -26152,35 +26861,35 @@ var (
     // Go runtime metrics
     GoGoroutines = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "search_go_goroutines",
+            Name: "{projectname}_go_goroutines",
             Help: "Number of goroutines",
         },
     )
 
     GoMemAlloc = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "search_go_mem_alloc_bytes",
+            Name: "{projectname}_go_mem_alloc_bytes",
             Help: "Bytes allocated and in use",
         },
     )
 
     GoMemSys = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "search_go_mem_sys_bytes",
+            Name: "{projectname}_go_mem_sys_bytes",
             Help: "Bytes obtained from system",
         },
     )
 
     GoGCRuns = promauto.NewCounter(
         prometheus.CounterOpts{
-            Name: "search_go_gc_runs_total",
+            Name: "{projectname}_go_gc_runs_total",
             Help: "Total number of GC runs",
         },
     )
 
     GoGCPauseTotal = promauto.NewCounter(
         prometheus.CounterOpts{
-            Name: "search_go_gc_pause_total_seconds",
+            Name: "{projectname}_go_gc_pause_total_seconds",
             Help: "Total GC pause time in seconds",
         },
     )
@@ -26328,35 +27037,35 @@ func StartUptimeUpdater() {
 ## Metrics Endpoint Output
 
 ```
-# HELP search_http_requests_total Total number of HTTP requests
-# TYPE search_http_requests_total counter
-search_http_requests_total{method="GET",path="/api/{api_version}/users",status="200"} 1523
-search_http_requests_total{method="POST",path="/api/{api_version}/users",status="201"} 42
+# HELP {projectname}_http_requests_total Total number of HTTP requests
+# TYPE {projectname}_http_requests_total counter
+{projectname}_http_requests_total{method="GET",path="/api/{api_version}/users",status="200"} 1523
+{projectname}_http_requests_total{method="POST",path="/api/{api_version}/users",status="201"} 42
 
-# HELP search_http_request_duration_seconds HTTP request duration in seconds
-# TYPE search_http_request_duration_seconds histogram
-search_http_request_duration_seconds_bucket{method="GET",path="/api/{api_version}/users",le="0.01"} 1400
-search_http_request_duration_seconds_bucket{method="GET",path="/api/{api_version}/users",le="0.1"} 1520
-search_http_request_duration_seconds_bucket{method="GET",path="/api/{api_version}/users",le="+Inf"} 1523
-search_http_request_duration_seconds_sum{method="GET",path="/api/{api_version}/users"} 12.456
-search_http_request_duration_seconds_count{method="GET",path="/api/{api_version}/users"} 1523
+# HELP {projectname}_http_request_duration_seconds HTTP request duration in seconds
+# TYPE {projectname}_http_request_duration_seconds histogram
+{projectname}_http_request_duration_seconds_bucket{method="GET",path="/api/{api_version}/users",le="0.01"} 1400
+{projectname}_http_request_duration_seconds_bucket{method="GET",path="/api/{api_version}/users",le="0.1"} 1520
+{projectname}_http_request_duration_seconds_bucket{method="GET",path="/api/{api_version}/users",le="+Inf"} 1523
+{projectname}_http_request_duration_seconds_sum{method="GET",path="/api/{api_version}/users"} 12.456
+{projectname}_http_request_duration_seconds_count{method="GET",path="/api/{api_version}/users"} 1523
 
-# HELP search_db_connections_open Number of open database connections
-# TYPE search_db_connections_open gauge
-search_db_connections_open 5
+# HELP {projectname}_db_connections_open Number of open database connections
+# TYPE {projectname}_db_connections_open gauge
+{projectname}_db_connections_open 5
 
-# HELP search_cache_hits_total Total number of cache hits
-# TYPE search_cache_hits_total counter
-search_cache_hits_total{cache="sessions"} 8234
-search_cache_hits_total{cache="users"} 1523
+# HELP {projectname}_cache_hits_total Total number of cache hits
+# TYPE {projectname}_cache_hits_total counter
+{projectname}_cache_hits_total{cache="sessions"} 8234
+{projectname}_cache_hits_total{cache="users"} 1523
 
-# HELP search_app_info Application information
-# TYPE search_app_info gauge
-search_app_info{version="1.2.3",commit="abc123",build_date="2025-01-15",go_version="go1.23"} 1
+# HELP {projectname}_app_info Application information
+# TYPE {projectname}_app_info gauge
+{projectname}_app_info{version="1.2.3",commit="abc123",build_date="2025-01-15",go_version="go1.23"} 1
 
-# HELP search_app_uptime_seconds Application uptime in seconds
-# TYPE search_app_uptime_seconds gauge
-search_app_uptime_seconds 86423.5
+# HELP {projectname}_app_uptime_seconds Application uptime in seconds
+# TYPE {projectname}_app_uptime_seconds gauge
+{projectname}_app_uptime_seconds 86423.5
 ```
 
 ## Alerting Rules (Prometheus)
@@ -26364,13 +27073,13 @@ search_app_uptime_seconds 86423.5
 ```yaml
 # alerts.yml - Example Prometheus alerting rules
 groups:
-  - name: search_alerts
+  - name: {projectname}_alerts
     rules:
       # High error rate
       - alert: HighErrorRate
         expr: |
-          sum(rate(search_http_requests_total{status=~"5.."}[5m]))
-          / sum(rate(search_http_requests_total[5m])) > 0.05
+          sum(rate({projectname}_http_requests_total{status=~"5.."}[5m]))
+          / sum(rate({projectname}_http_requests_total[5m])) > 0.05
         for: 5m
         labels:
           severity: critical
@@ -26381,7 +27090,7 @@ groups:
       # High latency
       - alert: HighLatency
         expr: |
-          histogram_quantile(0.95, rate(search_http_request_duration_seconds_bucket[5m])) > 1
+          histogram_quantile(0.95, rate({projectname}_http_request_duration_seconds_bucket[5m])) > 1
         for: 5m
         labels:
           severity: warning
@@ -26392,7 +27101,7 @@ groups:
       # Database connection pool exhausted
       - alert: DBConnectionPoolExhausted
         expr: |
-          search_db_connections_in_use / search_db_connections_open > 0.9
+          {projectname}_db_connections_in_use / {projectname}_db_connections_open > 0.9
         for: 5m
         labels:
           severity: warning
@@ -26401,7 +27110,7 @@ groups:
 
       # High memory usage
       - alert: HighMemoryUsage
-        expr: search_system_memory_usage_percent > 90
+        expr: {projectname}_system_memory_usage_percent > 90
         for: 10m
         labels:
           severity: warning
@@ -26410,7 +27119,7 @@ groups:
 
       # Disk space low
       - alert: DiskSpaceLow
-        expr: search_system_disk_usage_percent > 85
+        expr: {projectname}_system_disk_usage_percent > 85
         for: 5m
         labels:
           severity: warning
@@ -26419,18 +27128,18 @@ groups:
 
       # Application down
       - alert: ApplicationDown
-        expr: up{job="search"} == 0
+        expr: up{job="{projectname}"} == 0
         for: 1m
         labels:
           severity: critical
         annotations:
-          summary: "search is down"
+          summary: "{projectname} is down"
 
       # Goroutine leak
       - alert: GoroutineLeak
         expr: |
-          search_go_goroutines > 1000
-          and increase(search_go_goroutines[1h]) > 100
+          {projectname}_go_goroutines > 1000
+          and increase({projectname}_go_goroutines[1h]) > 100
         for: 30m
         labels:
           severity: warning
@@ -26441,7 +27150,7 @@ groups:
       # Scheduler task failing
       - alert: SchedulerTaskFailing
         expr: |
-          increase(search_scheduler_tasks_total{status="error"}[1h]) > 3
+          increase({projectname}_scheduler_tasks_total{status="error"}[1h]) > 3
         for: 0m
         labels:
           severity: warning
@@ -26459,66 +27168,66 @@ groups:
       "title": "Request Rate",
       "type": "graph",
       "targets": [
-        {"expr": "sum(rate(search_http_requests_total[5m]))"}
+        {"expr": "sum(rate({projectname}_http_requests_total[5m]))"}
       ]
     },
     {
       "title": "Error Rate",
       "type": "graph",
       "targets": [
-        {"expr": "sum(rate(search_http_requests_total{status=~\"5..\"}[5m])) / sum(rate(search_http_requests_total[5m]))"}
+        {"expr": "sum(rate({projectname}_http_requests_total{status=~\"5..\"}[5m])) / sum(rate({projectname}_http_requests_total[5m]))"}
       ]
     },
     {
       "title": "Latency (p50, p95, p99)",
       "type": "graph",
       "targets": [
-        {"expr": "histogram_quantile(0.50, rate(search_http_request_duration_seconds_bucket[5m]))", "legendFormat": "p50"},
-        {"expr": "histogram_quantile(0.95, rate(search_http_request_duration_seconds_bucket[5m]))", "legendFormat": "p95"},
-        {"expr": "histogram_quantile(0.99, rate(search_http_request_duration_seconds_bucket[5m]))", "legendFormat": "p99"}
+        {"expr": "histogram_quantile(0.50, rate({projectname}_http_request_duration_seconds_bucket[5m]))", "legendFormat": "p50"},
+        {"expr": "histogram_quantile(0.95, rate({projectname}_http_request_duration_seconds_bucket[5m]))", "legendFormat": "p95"},
+        {"expr": "histogram_quantile(0.99, rate({projectname}_http_request_duration_seconds_bucket[5m]))", "legendFormat": "p99"}
       ]
     },
     {
       "title": "Active Requests",
       "type": "stat",
       "targets": [
-        {"expr": "search_http_active_requests"}
+        {"expr": "{projectname}_http_active_requests"}
       ]
     },
     {
       "title": "Database Connections",
       "type": "graph",
       "targets": [
-        {"expr": "search_db_connections_open", "legendFormat": "open"},
-        {"expr": "search_db_connections_in_use", "legendFormat": "in_use"}
+        {"expr": "{projectname}_db_connections_open", "legendFormat": "open"},
+        {"expr": "{projectname}_db_connections_in_use", "legendFormat": "in_use"}
       ]
     },
     {
       "title": "Cache Hit Rate",
       "type": "graph",
       "targets": [
-        {"expr": "sum(rate(search_cache_hits_total[5m])) / (sum(rate(search_cache_hits_total[5m])) + sum(rate(search_cache_misses_total[5m])))"}
+        {"expr": "sum(rate({projectname}_cache_hits_total[5m])) / (sum(rate({projectname}_cache_hits_total[5m])) + sum(rate({projectname}_cache_misses_total[5m])))"}
       ]
     },
     {
       "title": "Memory Usage",
       "type": "gauge",
       "targets": [
-        {"expr": "search_system_memory_usage_percent"}
+        {"expr": "{projectname}_system_memory_usage_percent"}
       ]
     },
     {
       "title": "Goroutines",
       "type": "graph",
       "targets": [
-        {"expr": "search_go_goroutines"}
+        {"expr": "{projectname}_go_goroutines"}
       ]
     },
     {
       "title": "Uptime",
       "type": "stat",
       "targets": [
-        {"expr": "search_app_uptime_seconds"}
+        {"expr": "{projectname}_app_uptime_seconds"}
       ]
     }
   ]
@@ -26544,7 +27253,7 @@ groups:
 ## Backup Command
 
 ```bash
-search --maintenance backup [filename]
+{projectname} --maintenance backup [filename]
 ```
 
 ### Backup Contents
@@ -26576,7 +27285,7 @@ search --maintenance backup [filename]
 ### Backup Format
 
 - Single `.tar.gz` file (or `.tar.gz.enc` if encrypted)
-- Filename: `search_backup_YYYY-MM-DD_HHMMSS.tar.gz[.enc]`
+- Filename: `{projectname}_backup_YYYY-MM-DD_HHMMSS.tar.gz[.enc]`
 - Includes manifest with version info
 - Encrypted if backup password was set during setup
 
@@ -26679,14 +27388,14 @@ When `server.compliance.enabled: true`:
 
 ```bash
 # If encryption password set during setup:
-search --maintenance backup
+{projectname} --maintenance backup
 # Prompts for password, creates encrypted backup
 
 # Override with explicit password:
-search --maintenance backup --password "mypassword"
+{projectname} --maintenance backup --password "mypassword"
 
 # Restore encrypted backup:
-search --maintenance restore backup.tar.gz.enc
+{projectname} --maintenance restore backup.tar.gz.enc
 # Prompts for password
 ```
 
@@ -26754,9 +27463,9 @@ server:
 **Backup Creation Flow (backup_daily task at 02:00):**
 
 ```
-1. Create full backup: search_backup_YYYY-MM-DD.tar.gz[.enc]
+1. Create full backup: {projectname}_backup_YYYY-MM-DD.tar.gz[.enc]
 2. Verify full backup (all checks must pass)
-3. Create daily incremental: search-daily.tar.gz[.enc]
+3. Create daily incremental: {projectname}-daily.tar.gz[.enc]
 4. Verify daily incremental (all checks must pass)
 5. If ALL verifications pass:
    - Apply retention policy (delete old backups per retention settings)
@@ -26826,9 +27535,9 @@ Every backup is verified **immediately after creation** - backups must be 100% w
 
 | File | Description | Retention |
 |------|-------------|-----------|
-| `search_backup_YYYY-MM-DD.tar.gz[.enc]` | Full backup (yesterday's data) | Controlled by `max_backups` |
-| `search-daily.tar.gz[.enc]` | Daily incremental (changes since full) | Always 1 (replaced each run) |
-| `search-hourly.tar.gz[.enc]` | Hourly incremental (if enabled) | Always 1 (replaced each run) |
+| `{projectname}_backup_YYYY-MM-DD.tar.gz[.enc]` | Full backup (yesterday's data) | Controlled by `max_backups` |
+| `{projectname}-daily.tar.gz[.enc]` | Daily incremental (changes since full) | Always 1 (replaced each run) |
+| `{projectname}-hourly.tar.gz[.enc]` | Hourly incremental (if enabled) | Always 1 (replaced each run) |
 
 ### Retention Configuration
 
@@ -27008,7 +27717,7 @@ on a Sunday counts as daily + weekly + monthly + yearly - uses highest priority)
 ## Restore Command
 
 ```bash
-search --maintenance restore <backup-file>
+{projectname} --maintenance restore <backup-file>
 ```
 
 ### Restore Authorization
@@ -27037,16 +27746,16 @@ search --maintenance restore <backup-file>
 
 ```bash
 # Encrypted backup - prompts for password
-search --maintenance restore backup_2025-01-15.tar.gz.enc
+{projectname} --maintenance restore backup_2025-01-15.tar.gz.enc
 Enter backup password: ••••••••••••
 Verifying backup integrity... OK
 Restoring...
 
 # Encrypted backup - password via flag
-search --maintenance restore backup_2025-01-15.tar.gz.enc --password "mypassword"
+{projectname} --maintenance restore backup_2025-01-15.tar.gz.enc --password "mypassword"
 
 # Unencrypted backup - no password needed
-search --maintenance restore backup_2025-01-15.tar.gz
+{projectname} --maintenance restore backup_2025-01-15.tar.gz
 ```
 
 **WebUI Restore:**
@@ -27149,7 +27858,7 @@ Your existing password and settings will be preserved.
 ## Admin Recovery Command
 
 ```bash
-search --maintenance setup
+{projectname} --maintenance setup
 ```
 
 **Purpose:** Resets admin credentials and generates a new setup token. This is the ONLY way for a Server Admin to recover access if they have lost their password, API token, AND recovery keys.
@@ -27189,10 +27898,10 @@ search --maintenance setup
 
 ```bash
 # Stop the service first (recommended)
-search --service stop
+{projectname} --service stop
 
 # Run setup reset
-search --maintenance setup
+{projectname} --maintenance setup
 
 # Output:
 # ╔══════════════════════════════════════════════════════════════════╗
@@ -27205,14 +27914,14 @@ search --maintenance setup
 # ║  │  a1b2c3d4e5f67890abcdef1234567890                          │  ║
 # ║  └────────────────────────────────────────────────────────────┘  ║
 # ║                                                                  ║
-# ║  1. Start the service: search --service start             ║
+# ║  1. Start the service: {projectname} --service start             ║
 # ║  2. Go to: http://{fqdn}:{port}/{admin_path}                     ║
 # ║  3. Enter the setup token above                                  ║
 # ║  4. Create new admin account via setup wizard                    ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
 # Start the service
-search --service start
+{projectname} --service start
 ```
 
 ### Security Considerations
@@ -27247,7 +27956,7 @@ search --service start
 │  Admin locked out (no password, no token, no recovery keys)     │
 │                           │                                     │
 │                           ▼                                     │
-│  Server admin runs: search --maintenance setup           │
+│  Server admin runs: {projectname} --maintenance setup           │
 │                           │                                     │
 │                           ▼                                     │
 │  Admin credentials cleared, new setup token generated           │
@@ -27307,17 +28016,440 @@ search --service start
 
 ```bash
 # Check for updates (no privileges required)
-search --update check
+{projectname} --update check
 
 # Perform update (these are equivalent)
-search --update
-search --update yes
-search --maintenance update
+{projectname} --update
+{projectname} --update yes
+{projectname} --maintenance update
 
 # Switch channels
-search --update branch beta
-search --update branch daily
-search --update branch stable
+{projectname} --update branch beta
+{projectname} --update branch daily
+{projectname} --update branch stable
+```
+
+## Self-Update Implementation
+
+**Self-update is platform-specific because Windows cannot replace a running executable.**
+
+### Update Flow
+
+```
+1. Check for updates (GitHub Releases API)
+2. Download new binary to temp location
+3. Verify checksum (SHA256)
+4. Replace running binary (PLATFORM-SPECIFIC)
+5. Restart service or re-exec
+```
+
+### Platform-Specific Binary Replacement
+
+```go
+// --- update_unix.go ---
+//go:build !windows
+// +build !windows
+
+package updater
+
+import (
+    "fmt"
+    "os"
+    "path/filepath"
+    "syscall"
+)
+
+// replaceBinary replaces the running binary (Unix)
+// On Unix, we can replace a running binary - the old binary stays in memory
+// until the process exits, then the new one takes over on next start
+func replaceBinary(currentPath, newBinaryPath string) error {
+    // Get current binary permissions
+    info, err := os.Stat(currentPath)
+    if err != nil {
+        return fmt.Errorf("failed to stat current binary: %w", err)
+    }
+
+    // Atomic rename: new binary replaces current
+    // This works because Unix allows renaming over a running executable
+    if err := os.Rename(newBinaryPath, currentPath); err != nil {
+        return fmt.Errorf("failed to replace binary: %w", err)
+    }
+
+    // Restore permissions
+    if err := os.Chmod(currentPath, info.Mode()); err != nil {
+        return fmt.Errorf("failed to restore permissions: %w", err)
+    }
+
+    return nil
+}
+
+// restartSelf re-executes the current process (Unix)
+func restartSelf() error {
+    exe, err := os.Executable()
+    if err != nil {
+        return err
+    }
+
+    // syscall.Exec replaces the current process
+    return syscall.Exec(exe, os.Args, os.Environ())
+}
+```
+
+```go
+// --- update_windows.go ---
+//go:build windows
+// +build windows
+
+package updater
+
+import (
+    "fmt"
+    "os"
+    "os/exec"
+    "path/filepath"
+    "time"
+
+    "golang.org/x/sys/windows"
+)
+
+// replaceBinary replaces the running binary (Windows)
+// Windows cannot delete/rename a running executable, so we:
+// 1. Rename current binary to .old
+// 2. Move new binary to current path
+// 3. Schedule .old for deletion on reboot (or delete after restart)
+func replaceBinary(currentPath, newBinaryPath string) error {
+    oldPath := currentPath + ".old"
+
+    // Remove any existing .old file from previous update
+    os.Remove(oldPath)
+
+    // Rename running binary to .old (this works on Windows)
+    if err := os.Rename(currentPath, oldPath); err != nil {
+        return fmt.Errorf("failed to rename current binary: %w", err)
+    }
+
+    // Move new binary to current path
+    if err := os.Rename(newBinaryPath, currentPath); err != nil {
+        // Try to restore original
+        os.Rename(oldPath, currentPath)
+        return fmt.Errorf("failed to move new binary: %w", err)
+    }
+
+    // Schedule old binary for deletion on reboot
+    // MoveFileEx with MOVEFILE_DELAY_UNTIL_REBOOT
+    oldPathPtr, _ := windows.UTF16PtrFromString(oldPath)
+    windows.MoveFileEx(oldPathPtr, nil, windows.MOVEFILE_DELAY_UNTIL_REBOOT)
+
+    return nil
+}
+
+// restartSelf starts a new instance and exits (Windows)
+// Windows doesn't support exec() replacement, so we spawn new process and exit
+func restartSelf() error {
+    exe, err := os.Executable()
+    if err != nil {
+        return err
+    }
+
+    // Start new process
+    cmd := exec.Command(exe, os.Args[1:]...)
+    cmd.Stdout = os.Stdout
+    cmd.Stderr = os.Stderr
+    cmd.Stdin = os.Stdin
+
+    if err := cmd.Start(); err != nil {
+        return fmt.Errorf("failed to start new process: %w", err)
+    }
+
+    // Give the new process time to start
+    time.Sleep(100 * time.Millisecond)
+
+    // Exit current process
+    os.Exit(0)
+    return nil // unreachable
+}
+```
+
+### Shared Update Logic
+
+```go
+// --- update.go ---
+package updater
+
+import (
+    "context"
+    "crypto/sha256"
+    "encoding/hex"
+    "encoding/json"
+    "fmt"
+    "io"
+    "net/http"
+    "os"
+    "path/filepath"
+    "runtime"
+    "strings"
+)
+
+type Release struct {
+    TagName    string  `json:"tag_name"`
+    Prerelease bool    `json:"prerelease"`
+    Assets     []Asset `json:"assets"`
+}
+
+type Asset struct {
+    Name               string `json:"name"`
+    BrowserDownloadURL string `json:"browser_download_url"`
+}
+
+// CheckForUpdate checks GitHub releases for updates
+func CheckForUpdate(ctx context.Context, currentVersion, branch string) (*Release, error) {
+    // Determine API endpoint based on branch
+    var url string
+    switch branch {
+    case "stable":
+        url = "https://api.github.com/repos/{projectorg}/{projectname}/releases/latest"
+    default:
+        // For beta/daily, get all releases and filter
+        url = "https://api.github.com/repos/{projectorg}/{projectname}/releases"
+    }
+
+    req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+    if err != nil {
+        return nil, err
+    }
+    req.Header.Set("Accept", "application/vnd.github.v3+json")
+
+    resp, err := http.DefaultClient.Do(req)
+    if err != nil {
+        return nil, err
+    }
+    defer resp.Body.Close()
+
+    if resp.StatusCode == 404 {
+        return nil, nil // No updates available
+    }
+    if resp.StatusCode != 200 {
+        return nil, fmt.Errorf("GitHub API error: %d", resp.StatusCode)
+    }
+
+    if branch == "stable" {
+        var release Release
+        if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+            return nil, err
+        }
+        if release.TagName == currentVersion {
+            return nil, nil // Already up to date
+        }
+        return &release, nil
+    }
+
+    // For beta/daily, filter releases
+    var releases []Release
+    if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
+        return nil, err
+    }
+
+    for _, r := range releases {
+        if matchesBranch(r, branch) && r.TagName != currentVersion {
+            return &r, nil
+        }
+    }
+    return nil, nil
+}
+
+// DoUpdate downloads and installs the update
+func DoUpdate(ctx context.Context, release *Release) error {
+    // Find the right asset for this platform
+    assetName := getBinaryName()
+    var downloadURL string
+    for _, asset := range release.Assets {
+        if asset.Name == assetName {
+            downloadURL = asset.BrowserDownloadURL
+            break
+        }
+    }
+    if downloadURL == "" {
+        return fmt.Errorf("no binary found for %s/%s", runtime.GOOS, runtime.GOARCH)
+    }
+
+    // Download to temp file
+    tmpFile, err := os.CreateTemp("", "{projectname}-update-*")
+    if err != nil {
+        return fmt.Errorf("failed to create temp file: %w", err)
+    }
+    tmpPath := tmpFile.Name()
+    defer os.Remove(tmpPath) // Clean up on error
+
+    req, err := http.NewRequestWithContext(ctx, "GET", downloadURL, nil)
+    if err != nil {
+        return err
+    }
+
+    resp, err := http.DefaultClient.Do(req)
+    if err != nil {
+        return err
+    }
+    defer resp.Body.Close()
+
+    if _, err := io.Copy(tmpFile, resp.Body); err != nil {
+        tmpFile.Close()
+        return fmt.Errorf("failed to download: %w", err)
+    }
+    tmpFile.Close()
+
+    // Make executable (Unix)
+    if runtime.GOOS != "windows" {
+        if err := os.Chmod(tmpPath, 0755); err != nil {
+            return fmt.Errorf("failed to set permissions: %w", err)
+        }
+    }
+
+    // Get current binary path
+    currentPath, err := os.Executable()
+    if err != nil {
+        return fmt.Errorf("failed to get executable path: %w", err)
+    }
+    currentPath, err = filepath.EvalSymlinks(currentPath)
+    if err != nil {
+        return fmt.Errorf("failed to resolve symlinks: %w", err)
+    }
+
+    // Replace binary (platform-specific)
+    if err := replaceBinary(currentPath, tmpPath); err != nil {
+        return err
+    }
+
+    return nil
+}
+
+// getBinaryName returns the expected binary name for this platform
+func getBinaryName() string {
+    name := "{projectname}-" + runtime.GOOS + "-" + runtime.GOARCH
+    if runtime.GOOS == "windows" {
+        name += ".exe"
+    }
+    return name
+}
+
+func matchesBranch(r Release, branch string) bool {
+    switch branch {
+    case "beta":
+        return strings.HasSuffix(r.TagName, "-beta")
+    case "daily":
+        // Daily builds are timestamps: YYYYMMDDHHMMSS
+        return len(r.TagName) == 14 && !strings.Contains(r.TagName, ".")
+    default:
+        return !r.Prerelease
+    }
+}
+```
+
+### Service-Aware Update
+
+**When running as a service, update must coordinate with service manager:**
+
+| Platform | Service Manager | Update Method |
+|----------|-----------------|---------------|
+| Linux (systemd) | systemd | Replace binary, `systemctl restart` |
+| Linux (other) | runit/s6/OpenRC | Replace binary, service-specific restart |
+| macOS | launchd | Replace binary, `launchctl kickstart` |
+| FreeBSD | rc.d | Replace binary, `service restart` |
+| Windows | SCM | Replace binary, `sc stop && sc start` |
+
+```go
+// restartService restarts the service after update
+func restartService() error {
+    switch runtime.GOOS {
+    case "linux":
+        return restartLinuxService()
+    case "darwin":
+        return restartDarwinService()
+    case "freebsd", "openbsd", "netbsd":
+        return restartBSDService()
+    case "windows":
+        return restartWindowsService()
+    default:
+        return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
+    }
+}
+
+// --- service_linux.go ---
+//go:build linux
+// +build linux
+
+func restartLinuxService() error {
+    // Try systemd first
+    if _, err := exec.LookPath("systemctl"); err == nil {
+        cmd := exec.Command("systemctl", "restart", "{projectname}")
+        return cmd.Run()
+    }
+    // Fall back to generic service command
+    cmd := exec.Command("service", "{projectname}", "restart")
+    return cmd.Run()
+}
+
+// --- service_darwin.go ---
+//go:build darwin
+// +build darwin
+
+func restartDarwinService() error {
+    label := "{projectorg}.{projectname}"
+    // kickstart -k kills existing and starts fresh
+    cmd := exec.Command("launchctl", "kickstart", "-k", "system/"+label)
+    return cmd.Run()
+}
+
+// --- service_windows.go ---
+//go:build windows
+// +build windows
+
+func restartWindowsService() error {
+    // Stop service
+    stopCmd := exec.Command("sc", "stop", "{projectname}")
+    stopCmd.Run() // Ignore error if not running
+
+    // Wait for stop
+    time.Sleep(2 * time.Second)
+
+    // Start service
+    startCmd := exec.Command("sc", "start", "{projectname}")
+    return startCmd.Run()
+}
+
+// --- service_bsd.go ---
+//go:build freebsd || openbsd || netbsd
+// +build freebsd openbsd netbsd
+
+func restartBSDService() error {
+    cmd := exec.Command("service", "{projectname}", "restart")
+    return cmd.Run()
+}
+```
+
+### Update Checksum Verification
+
+**All downloads MUST be verified against checksums from the release:**
+
+```go
+// verifyChecksum verifies SHA256 checksum
+func verifyChecksum(filePath, expectedHash string) error {
+    f, err := os.Open(filePath)
+    if err != nil {
+        return err
+    }
+    defer f.Close()
+
+    h := sha256.New()
+    if _, err := io.Copy(h, f); err != nil {
+        return err
+    }
+
+    actualHash := hex.EncodeToString(h.Sum(nil))
+    if actualHash != expectedHash {
+        return fmt.Errorf("checksum mismatch: expected %s, got %s", expectedHash, actualHash)
+    }
+    return nil
+}
 ```
 
 ---
@@ -27330,7 +28462,7 @@ search --update branch stable
 
 Application user creation **REQUIRES** privilege escalation. If the user cannot escalate privileges, the application runs as the current user with user-level directories.
 
-**IMPORTANT: See PART 5 "Smart Escalation Logic" (lines ~5967-5989) for the complete escalation flow:**
+**IMPORTANT: See PART 5 "Smart Escalation Logic" (lines ~6059-6094) for the complete escalation flow:**
 - Binary first checks if already root/admin → skips escalation prompt entirely
 - Only prompts if user CAN actually escalate (is in sudoers/wheel/admin group)
 - Never prompts if user cannot escalate → shows informative error instead
@@ -27440,7 +28572,7 @@ ON --service --disable:
 ## Service Help Output
 
 ```bash
-$ search --service --help
+$ {projectname} --service --help
 Service management commands:
 
   start       Start the service
@@ -27462,11 +28594,11 @@ Current status:
 ## Maintenance Help Output
 
 ```bash
-$ search --maintenance --help
+$ {projectname} --maintenance --help
 Maintenance commands:
 
   backup [file]     Create backup of all data
-                    Default: {backup_dir}/search-{timestamp}.tar.gz
+                    Default: {backup_dir}/{projectname}-{timestamp}.tar.gz
 
   restore <file>    Restore from backup file
                     Stops server, restores data, restarts server
@@ -27484,19 +28616,19 @@ Maintenance commands:
                     Creates primary Server Admin, configures server
 
 Examples:
-  search --maintenance backup
-  search --maintenance backup /path/to/backup.tar.gz
-  search --maintenance restore /path/to/backup.tar.gz
-  search --maintenance update check
-  search --maintenance update yes
-  search --maintenance mode development
-  search --maintenance setup
+  {projectname} --maintenance backup
+  {projectname} --maintenance backup /path/to/backup.tar.gz
+  {projectname} --maintenance restore /path/to/backup.tar.gz
+  {projectname} --maintenance update check
+  {projectname} --maintenance update yes
+  {projectname} --maintenance mode development
+  {projectname} --maintenance setup
 ```
 
 ## Shell Help Output
 
 ```bash
-$ search --shell --help
+$ {projectname} --shell --help
 Shell integration commands:
 
   completions [SHELL]   Print shell completion script
@@ -27508,21 +28640,21 @@ Shell integration commands:
 
 Usage:
   # Add to shell profile for persistent completions
-  search --shell init >> ~/.bashrc      # bash
-  search --shell init >> ~/.zshrc       # zsh
-  search --shell init >> ~/.config/fish/config.fish  # fish
+  {projectname} --shell init >> ~/.bashrc      # bash
+  {projectname} --shell init >> ~/.zshrc       # zsh
+  {projectname} --shell init >> ~/.config/fish/config.fish  # fish
 
   # Or eval directly for current session
-  eval "$(search --shell init)"
+  eval "$({projectname} --shell init)"
 
   # Generate completion script only
-  search --shell completions bash > /etc/bash_completion.d/search
+  {projectname} --shell completions bash > /etc/bash_completion.d/{projectname}
 ```
 
 ## Update Help Output
 
 ```bash
-$ search --update --help
+$ {projectname} --update --help
 Update management:
 
   check                 Check for available updates
@@ -27537,9 +28669,9 @@ Update management:
                         daily  - Daily builds (development)
 
 Examples:
-  search --update check
-  search --update yes
-  search --update branch beta
+  {projectname} --update check
+  {projectname} --update yes
+  {projectname} --update branch beta
 
 Current:
   Version:  {projectversion}
@@ -27550,7 +28682,7 @@ Current:
 ## CLI Admin Help Output
 
 ```bash
-$ search-cli --admin --help
+$ {projectname}-cli --admin --help
 Admin CLI - manage users, organizations, and API tokens.
 
 AUTHENTICATION REQUIRED:
@@ -27592,16 +28724,16 @@ Global Flags:
   --quiet               Suppress non-essential output
 
 Examples:
-  search-cli --admin user list
-  search-cli --admin user create newuser
-  search-cli --admin org create myorg
-  search-cli --admin token create "CI Token"
+  {projectname}-cli --admin user list
+  {projectname}-cli --admin user create newuser
+  {projectname}-cli --admin org create myorg
+  {projectname}-cli --admin token create "CI Token"
 ```
 
 ## CLI Admin User Help Output
 
 ```bash
-$ search-cli --admin user --help
+$ {projectname}-cli --admin user --help
 User management commands:
 
   list                  List all users
@@ -27631,18 +28763,18 @@ User management commands:
                         Disable two-factor authentication for user
 
 Examples:
-  search-cli --admin user list
-  search-cli --admin user list --status suspended
-  search-cli --admin user get johndoe
-  search-cli --admin user create johndoe --email john@example.com
-  search-cli --admin user suspend johndoe
-  search-cli --admin user reset-password johndoe
+  {projectname}-cli --admin user list
+  {projectname}-cli --admin user list --status suspended
+  {projectname}-cli --admin user get johndoe
+  {projectname}-cli --admin user create johndoe --email john@example.com
+  {projectname}-cli --admin user suspend johndoe
+  {projectname}-cli --admin user reset-password johndoe
 ```
 
 ## CLI Admin Org Help Output
 
 ```bash
-$ search-cli --admin org --help
+$ {projectname}-cli --admin org --help
 Organization management commands:
 
   list                  List all organizations
@@ -27671,16 +28803,16 @@ Organization management commands:
     --force             Skip confirmation prompt
 
 Examples:
-  search-cli --admin org list
-  search-cli --admin org create myorg --display-name "My Organization"
-  search-cli --admin org members myorg
-  search-cli --admin org add-member myorg johndoe --role admin
+  {projectname}-cli --admin org list
+  {projectname}-cli --admin org create myorg --display-name "My Organization"
+  {projectname}-cli --admin org members myorg
+  {projectname}-cli --admin org add-member myorg johndoe --role admin
 ```
 
 ## CLI Admin Token Help Output
 
 ```bash
-$ search-cli --admin token --help
+$ {projectname}-cli --admin token --help
 API token management commands:
 
   list                  List all tokens
@@ -27698,16 +28830,16 @@ API token management commands:
     --format FORMAT     Output format (table|json|yaml)
 
 Examples:
-  search-cli --admin token list
-  search-cli --admin token create "CI Token" --expires 90d --scopes read,write
-  search-cli --admin token revoke tk_abc123
-  search-cli --admin token info tk_abc123
+  {projectname}-cli --admin token list
+  {projectname}-cli --admin token create "CI Token" --expires 90d --scopes read,write
+  {projectname}-cli --admin token revoke tk_abc123
+  {projectname}-cli --admin token info tk_abc123
 ```
 
 ## CLI Admin Server Help Output
 
 ```bash
-$ search-cli --admin server --help
+$ {projectname}-cli --admin server --help
 Server admin CLI - server configuration and management.
 
 AUTHENTICATION REQUIRED:
@@ -27741,17 +28873,17 @@ Global Flags:
   --format {table|json|yaml}  Output format (default: table)
 
 Examples:
-  search-cli --admin server config list
-  search-cli --admin server config get registration.mode
-  search-cli --admin server config set registration.mode private
-  search-cli --admin server admin list
-  search-cli --admin server stats overview
+  {projectname}-cli --admin server config list
+  {projectname}-cli --admin server config get registration.mode
+  {projectname}-cli --admin server config set registration.mode private
+  {projectname}-cli --admin server admin list
+  {projectname}-cli --admin server stats overview
 ```
 
 ## CLI Admin Server Config Help Output
 
 ```bash
-$ search-cli --admin server config --help
+$ {projectname}-cli --admin server config --help
 Server configuration commands:
 
   get [key]             Get configuration value
@@ -27778,17 +28910,17 @@ Common Configuration Keys:
   email.from_address    From email address
 
 Examples:
-  search-cli --admin server config list
-  search-cli --admin server config get registration.mode
-  search-cli --admin server config set registration.mode private
-  search-cli --admin server config set branding.title "My Server"
-  search-cli --admin server config reset registration.mode
+  {projectname}-cli --admin server config list
+  {projectname}-cli --admin server config get registration.mode
+  {projectname}-cli --admin server config set registration.mode private
+  {projectname}-cli --admin server config set branding.title "My Server"
+  {projectname}-cli --admin server config reset registration.mode
 ```
 
 ## CLI Admin Server Admin Help Output
 
 ```bash
-$ search-cli --admin server admin --help
+$ {projectname}-cli --admin server admin --help
 Server admin management commands:
 
   list                  List all server admins
@@ -27809,16 +28941,16 @@ Server admin management commands:
 Note: Primary server admin cannot be removed. Use --maintenance setup for recovery.
 
 Examples:
-  search-cli --admin server admin list
-  search-cli --admin server admin invite newadmin --email admin@example.com
-  search-cli --admin server admin remove oldadmin
-  search-cli --admin server admin reset-password adminuser
+  {projectname}-cli --admin server admin list
+  {projectname}-cli --admin server admin invite newadmin --email admin@example.com
+  {projectname}-cli --admin server admin remove oldadmin
+  {projectname}-cli --admin server admin reset-password adminuser
 ```
 
 ## CLI Admin Server Stats Help Output
 
 ```bash
-$ search-cli --admin server stats --help
+$ {projectname}-cli --admin server stats --help
 Server statistics commands:
 
   overview              General server statistics
@@ -27838,24 +28970,24 @@ Flags:
   --period PERIOD       Time period (1h|24h|7d|30d, default: 24h)
 
 Examples:
-  search-cli --admin server stats overview
-  search-cli --admin server stats users --period 30d
-  search-cli --admin server stats storage --format json
-  search-cli --admin server stats performance
+  {projectname}-cli --admin server stats overview
+  {projectname}-cli --admin server stats users --period 30d
+  {projectname}-cli --admin server stats storage --format json
+  {projectname}-cli --admin server stats performance
 ```
 
 ## System User Requirements 
 
 | Requirement | Value |
 |-------------|-------|
-| Username | `search` |
-| Group | `search` |
+| Username | `{projectname}` |
+| Group | `{projectname}` |
 | UID/GID | **Must match** - same value for both UID and GID |
 | UID/GID Range | **200-899** (safe system range, avoids well-known service IDs) |
 | Shell | `/sbin/nologin` or `/usr/sbin/nologin` |
-| Home | Config directory (`/etc/apimgr/search`) or data directory (`/var/lib/apimgr/search`) |
+| Home | Config directory (`/etc/{projectorg}/{projectname}`) or data directory (`/var/lib/{projectorg}/{projectname}`) |
 | Type | System user (no password, no login) |
-| Gecos | `search service account` |
+| Gecos | `{projectname} service account` |
 
 ### UID/GID Selection Logic
 
@@ -27953,14 +29085,14 @@ func findAvailableSystemID() (int, error) {
 **Linux:**
 ```bash
 # Create group with specific GID
-groupadd --system --gid {id} search
+groupadd --system --gid {id} {projectname}
 
 # Create user with matching UID, same primary group
 useradd --system --uid {id} --gid {id} \
-  --home-dir /etc/apimgr/search \
+  --home-dir /etc/{projectorg}/{projectname} \
   --shell /sbin/nologin \
-  --comment "search service account" \
-  search
+  --comment "{projectname} service account" \
+  {projectname}
 ```
 
 ### macOS Service Account
@@ -27971,10 +29103,10 @@ useradd --system --uid {id} --gid {id} \
 |-------|-----------|---------|
 | Start | root | launchd starts binary as root |
 | Bind | root | Bind privileged ports (<1024) |
-| Drop | root→`search` | Binary drops privileges |
-| Run | `search` | Serve requests as unprivileged user |
+| Drop | root→`{projectname}` | Binary drops privileges |
+| Run | `{projectname}` | Serve requests as unprivileged user |
 
-**The `search` user is created automatically by the binary on first startup.**
+**The `{projectname}` user is created automatically by the binary on first startup.**
 
 macOS uses `dscl` (Directory Service Command Line) to create system users. The user is hidden from login screen and has no shell access.
 
@@ -27996,21 +29128,21 @@ Same reserved IDs as Linux apply (see Reserved/Well-Known UIDs table above).
 # Start at 399, work down, skip reserved IDs
 
 # Create group with specific GID
-dscl . -create /Groups/search
-dscl . -create /Groups/search PrimaryGroupID {id}
-dscl . -create /Groups/search Password "*"
+dscl . -create /Groups/{projectname}
+dscl . -create /Groups/{projectname} PrimaryGroupID {id}
+dscl . -create /Groups/{projectname} Password "*"
 
 # Create user with matching UID
-dscl . -create /Users/search
-dscl . -create /Users/search UniqueID {id}
-dscl . -create /Users/search PrimaryGroupID {id}
-dscl . -create /Users/search UserShell /usr/bin/false
-dscl . -create /Users/search RealName "search service account"
-dscl . -create /Users/search NFSHomeDirectory /usr/local/var/apimgr/search
-dscl . -create /Users/search Password "*"
+dscl . -create /Users/{projectname}
+dscl . -create /Users/{projectname} UniqueID {id}
+dscl . -create /Users/{projectname} PrimaryGroupID {id}
+dscl . -create /Users/{projectname} UserShell /usr/bin/false
+dscl . -create /Users/{projectname} RealName "{projectname} service account"
+dscl . -create /Users/{projectname} NFSHomeDirectory /usr/local/var/{projectorg}/{projectname}
+dscl . -create /Users/{projectname} Password "*"
 
 # Hide user from login window
-dscl . -create /Users/search IsHidden 1
+dscl . -create /Users/{projectname} IsHidden 1
 ```
 
 **launchd plist (runs as root, binary drops privileges):**
@@ -28020,14 +29152,14 @@ dscl . -create /Users/search IsHidden 1
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>apimgr.search</string>
+    <string>{projectorg}.{projectname}</string>
 
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/local/bin/search</string>
+        <string>/usr/local/bin/{projectname}</string>
     </array>
 
-    <!-- No UserName/GroupName - starts as root, binary drops to search user -->
+    <!-- No UserName/GroupName - starts as root, binary drops to {projectname} user -->
 
     <key>RunAtLoad</key>
     <true/>
@@ -28036,10 +29168,10 @@ dscl . -create /Users/search IsHidden 1
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/var/log/apimgr/search/stdout.log</string>
+    <string>/var/log/{projectorg}/{projectname}/stdout.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/var/log/apimgr/search/stderr.log</string>
+    <string>/var/log/{projectorg}/{projectname}/stderr.log</string>
 </dict>
 </plist>
 ```
@@ -28048,11 +29180,11 @@ dscl . -create /Users/search IsHidden 1
 
 | Directory | Path | Purpose |
 |-----------|------|---------|
-| Binary | `/usr/local/bin/search` | Executable |
-| Config | `/usr/local/etc/apimgr/search/` | Configuration files |
-| Data | `/usr/local/var/apimgr/search/` | Application data |
-| Logs | `/usr/local/var/log/apimgr/search/` | Log files |
-| launchd plist | `/Library/LaunchDaemons/apimgr.search.plist` | Service definition |
+| Binary | `/usr/local/bin/{projectname}` | Executable |
+| Config | `/usr/local/etc/{projectorg}/{projectname}/` | Configuration files |
+| Data | `/usr/local/var/{projectorg}/{projectname}/` | Application data |
+| Logs | `/usr/local/var/log/{projectorg}/{projectname}/` | Log files |
+| launchd plist | `/Library/LaunchDaemons/{projectorg}.{projectname}.plist` | Service definition |
 
 **Go Implementation (macOS):**
 ```go
@@ -28111,11 +29243,11 @@ func createMacOSServiceUser(name string, id int, homeDir string) error {
 **FreeBSD:**
 ```bash
 # Create user and group with matching ID
-pw groupadd -n search -g {id}
-pw useradd -n search -u {id} -g {id} \
-  -d /var/lib/apimgr/search \
+pw groupadd -n {projectname} -g {id}
+pw useradd -n {projectname} -u {id} -g {id} \
+  -d /var/lib/{projectorg}/{projectname} \
   -s /usr/sbin/nologin \
-  -c "search service account"
+  -c "{projectname} service account"
 ```
 
 ### Windows Service Account
@@ -28135,33 +29267,33 @@ pw useradd -n search -u {id} -g {id} \
 
 Virtual Service Accounts are automatically managed by Windows, require no password management, and have minimal privileges. They are created automatically when the service is installed.
 
-**Service Account Format:** `NT SERVICE\search`
+**Service Account Format:** `NT SERVICE\{projectname}`
 
 ```powershell
 # Create service with Virtual Service Account (automatic)
-New-Service -Name "search" `
-  -BinaryPathName "C:\Program Files\apimgr\search\search.exe" `
-  -DisplayName "search" `
-  -Description "search service" `
+New-Service -Name "{projectname}" `
+  -BinaryPathName "C:\Program Files\{projectorg}\{projectname}\{projectname}.exe" `
+  -DisplayName "{projectname}" `
+  -Description "{projectname} service" `
   -StartupType Automatic
 
-# Service automatically runs as NT SERVICE\search
+# Service automatically runs as NT SERVICE\{projectname}
 # No user creation needed - Windows manages it
 ```
 
 **Directory Permissions:**
 ```powershell
 # Grant Virtual Service Account access to config/data directories
-$acl = Get-Acl "C:\ProgramData\apimgr\search"
+$acl = Get-Acl "C:\ProgramData\{projectorg}\{projectname}"
 $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
-    "NT SERVICE\search",
+    "NT SERVICE\{projectname}",
     "FullControl",
     "ContainerInherit,ObjectInherit",
     "None",
     "Allow"
 )
 $acl.SetAccessRule($rule)
-Set-Acl "C:\ProgramData\apimgr\search" $acl
+Set-Acl "C:\ProgramData\{projectorg}\{projectname}" $acl
 ```
 
 **Go Implementation (Windows):**
@@ -28182,11 +29314,11 @@ func installWindowsService() error {
     // Create service - runs as Virtual Service Account by default
     // when ServiceStartName is empty or "NT SERVICE\{name}"
     s, err := m.CreateService(
-        "search",
+        "{projectname}",
         exePath,
         mgr.Config{
-            DisplayName:     "search",
-            Description:     "search service",
+            DisplayName:     "{projectname}",
+            Description:     "{projectname} service",
             StartType:       mgr.StartAutomatic,
             // Empty = Virtual Service Account
             ServiceStartName: "",
@@ -28205,17 +29337,17 @@ func installWindowsService() error {
 
 | Directory | Path | Purpose |
 |-----------|------|---------|
-| Binary | `C:\Program Files\apimgr\search\` | Executable |
-| Config | `C:\ProgramData\apimgr\search\config\` | Configuration files |
-| Data | `C:\ProgramData\apimgr\search\data\` | Application data |
-| Logs | `C:\ProgramData\apimgr\search\logs\` | Log files |
+| Binary | `C:\Program Files\{projectorg}\{projectname}\` | Executable |
+| Config | `C:\ProgramData\{projectorg}\{projectname}\config\` | Configuration files |
+| Data | `C:\ProgramData\{projectorg}\{projectname}\data\` | Application data |
+| Logs | `C:\ProgramData\{projectorg}\{projectname}\logs\` | Log files |
 
 ### Home Directory Selection
 
 | Directory | Use When |
 |-----------|----------|
-| Config dir (`/etc/apimgr/search`) | Default - user needs access to config files |
-| Data dir (`/var/lib/apimgr/search`) | When data dir contains user-writable content |
+| Config dir (`/etc/{projectorg}/{projectname}`) | Default - user needs access to config files |
+| Data dir (`/var/lib/{projectorg}/{projectname}`) | When data dir contains user-writable content |
 
 **Note:** Home directory must exist before user creation. Create directories first, then user, then set ownership.
 
@@ -28243,25 +29375,25 @@ func installWindowsService() error {
 
 ## Service Templates
 
-**Unix: Service starts as root, binary drops to `search` user after port binding.**
-**Windows: Service runs as Virtual Service Account (`NT SERVICE\search`).**
+**Unix: Service starts as root, binary drops to `{projectname}` user after port binding.**
+**Windows: Service runs as Virtual Service Account (`NT SERVICE\{projectname}`).**
 
 This allows any port configuration without service file changes.
 
 ### systemd (Linux)
 
-**Installation path:** `/etc/systemd/system/search.service`
+**Installation path:** `/etc/systemd/system/{projectname}.service`
 
 ```ini
 [Unit]
-Description=search service
-Documentation=https://apimgr.github.io/search
+Description={projectname} service
+Documentation=https://{projectorg}.github.io/{projectname}
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/search
+ExecStart=/usr/local/bin/{projectname}
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
@@ -28271,10 +29403,10 @@ StandardError=journal
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=/etc/apimgr/search
-ReadWritePaths=/var/lib/apimgr/search
-ReadWritePaths=/var/cache/apimgr/search
-ReadWritePaths=/var/log/apimgr/search
+ReadWritePaths=/etc/{projectorg}/{projectname}
+ReadWritePaths=/var/lib/{projectorg}/{projectname}
+ReadWritePaths=/var/cache/{projectorg}/{projectname}
+ReadWritePaths=/var/log/{projectorg}/{projectname}
 
 [Install]
 WantedBy=multi-user.target
@@ -28282,10 +29414,10 @@ WantedBy=multi-user.target
 
 ### runit (Linux)
 
-**Installation path:** `/etc/sv/search/`
+**Installation path:** `/etc/sv/{projectname}/`
 
 ```
-/etc/sv/search/
+/etc/sv/{projectname}/
 ├── run           # Main service script
 ├── log/
 │   └── run       # Logging script
@@ -28295,31 +29427,31 @@ WantedBy=multi-user.target
 **run script:**
 ```bash
 #!/bin/sh
-exec /usr/local/bin/search 2>&1
+exec /usr/local/bin/{projectname} 2>&1
 ```
 
 **log/run script:**
 ```bash
 #!/bin/sh
-exec svlogd -tt /var/log/apimgr/search
+exec svlogd -tt /var/log/{projectorg}/{projectname}
 ```
 
 ### rc.d (FreeBSD)
 
-**Installation path:** `/usr/local/etc/rc.d/search`
+**Installation path:** `/usr/local/etc/rc.d/{projectname}`
 
 ```bash
 #!/bin/sh
 
-# PROVIDE: search
+# PROVIDE: {projectname}
 # REQUIRE: NETWORKING
 # KEYWORD: shutdown
 
 . /etc/rc.subr
 
-name="search"
-rcvar="search_enable"
-command="/usr/local/bin/search"
+name="{projectname}"
+rcvar="{projectname}_enable"
+command="/usr/local/bin/{projectname}"
 
 load_rc_config $name
 run_rc_command "$1"
@@ -28327,7 +29459,7 @@ run_rc_command "$1"
 
 ### launchd (macOS)
 
-**Installation path:** `/Library/LaunchDaemons/apimgr.search.plist`
+**Installation path:** `/Library/LaunchDaemons/{projectorg}.{projectname}.plist`
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -28335,19 +29467,19 @@ run_rc_command "$1"
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>apimgr.search</string>
+    <string>{projectorg}.{projectname}</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/local/bin/search</string>
+        <string>/usr/local/bin/{projectname}</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/var/log/apimgr/search/stdout.log</string>
+    <string>/var/log/{projectorg}/{projectname}/stdout.log</string>
     <key>StandardErrorPath</key>
-    <string>/var/log/apimgr/search/stderr.log</string>
+    <string>/var/log/{projectorg}/{projectname}/stderr.log</string>
 </dict>
 </plist>
 ```
@@ -28355,13 +29487,13 @@ run_rc_command "$1"
 **Commands:**
 ```bash
 # Load and start service
-sudo launchctl load /Library/LaunchDaemons/apimgr.search.plist
+sudo launchctl load /Library/LaunchDaemons/{projectorg}.{projectname}.plist
 
 # Unload service
-sudo launchctl unload /Library/LaunchDaemons/apimgr.search.plist
+sudo launchctl unload /Library/LaunchDaemons/{projectorg}.{projectname}.plist
 
 # Check status
-sudo launchctl list | grep search
+sudo launchctl list | grep {projectname}
 ```
 
 ### Windows Service
@@ -28370,7 +29502,7 @@ sudo launchctl list | grep search
 
 | Account | Description |
 |---------|-------------|
-| `NT SERVICE\search` | Virtual Service Account - auto-managed by Windows |
+| `NT SERVICE\{projectname}` | Virtual Service Account - auto-managed by Windows |
 
 Use `golang.org/x/sys/windows/svc` for Windows service integration:
 
@@ -28380,7 +29512,7 @@ Use `golang.org/x/sys/windows/svc` for Windows service integration:
 import "golang.org/x/sys/windows/svc"
 
 func runAsService() error {
-    return svc.Run("search", &windowsService{})
+    return svc.Run("{projectname}", &windowsService{})
 }
 
 type windowsService struct{}
@@ -28414,7 +29546,7 @@ func (ws *windowsService) Execute(args []string, r <-chan svc.ChangeRequest, s c
 
 | Target | Purpose | Output Location | When to Use |
 |--------|---------|-----------------|-------------|
-| `dev` | Quick development build | `${TMPDIR}/${PROJECTORG}.XXXXXX/` | Active coding, quick tests |
+| `dev` | Quick development build | `${TMPDIR}/${PROJECTORG}/${PROJECTNAME}-XXXXXX/` | Active coding, quick tests |
 | `local` | Production test build | `binaries/` (with version) | Test prod builds locally |
 | `build` | Full release (all 8 platforms) | `binaries/` | Before release |
 | `test` | Run unit tests | Coverage report | After code changes |
@@ -28510,13 +29642,13 @@ format_version_tag() {
 
 ### Naming Pattern
 
-**Pattern: `search[-type]-{os}-{arch}[.exe]`**
+**Pattern: `{projectname}[-type]-{os}-{arch}[.exe]`**
 
 | Binary | Local Build | Distribution |
 |--------|------------|--------------|
-| **Server** | `search` | `search-{os}-{arch}` |
-| **CLI** | `search-cli` | `search-cli-{os}-{arch}` |
-| **Agent** | `search-agent` | `search-agent-{os}-{arch}` |
+| **Server** | `{projectname}` | `{projectname}-{os}-{arch}` |
+| **CLI** | `{projectname}-cli` | `{projectname}-cli-{os}-{arch}` |
+| **Agent** | `{projectname}-agent` | `{projectname}-agent-{os}-{arch}` |
 
 ### Examples
 
@@ -28530,22 +29662,22 @@ format_version_tag() {
 
 ```
 binaries/
-├── search                      # Local server binary
-├── search-cli                  # Local CLI binary (if src/client/ exists)
-├── search-agent                # Local agent binary (if src/agent/ exists)
-├── search-linux-amd64          # Server distributions
-├── search-linux-arm64
-├── search-darwin-amd64
-├── search-darwin-arm64
-├── search-windows-amd64.exe
-├── search-windows-arm64.exe
-├── search-freebsd-amd64
-├── search-freebsd-arm64
-├── search-cli-linux-amd64      # CLI distributions
-├── search-cli-linux-arm64
+├── {projectname}                      # Local server binary
+├── {projectname}-cli                  # Local CLI binary (if src/client/ exists)
+├── {projectname}-agent                # Local agent binary (if src/agent/ exists)
+├── {projectname}-linux-amd64          # Server distributions
+├── {projectname}-linux-arm64
+├── {projectname}-darwin-amd64
+├── {projectname}-darwin-arm64
+├── {projectname}-windows-amd64.exe
+├── {projectname}-windows-arm64.exe
+├── {projectname}-freebsd-amd64
+├── {projectname}-freebsd-arm64
+├── {projectname}-cli-linux-amd64      # CLI distributions
+├── {projectname}-cli-linux-arm64
 ├── ...
-├── search-agent-linux-amd64    # Agent distributions
-├── search-agent-linux-arm64
+├── {projectname}-agent-linux-amd64    # Agent distributions
+├── {projectname}-agent-linux-arm64
 └── ...
 ```
 
@@ -28553,7 +29685,7 @@ binaries/
 
 | Context | Path |
 |---------|------|
-| Temp build | `$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}.XXXXXX")/search` |
+| Temp build | `$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-XXXXXX")` |
 
 **If built with musl → strip binary before release. Final name has NO `-musl` suffix.**
 
@@ -28634,17 +29766,45 @@ build: clean
 	@$(GO_DOCKER) sh -c "GOOS=$$(go env GOOS) GOARCH=$$(go env GOARCH) \
 		go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(PROJECTNAME) ./src"
 
-	# Build all platforms
+	# Build server for all platforms
 	@for platform in $(PLATFORMS); do \
 		OS=$${platform%/*}; \
 		ARCH=$${platform#*/}; \
 		OUTPUT=$(BINDIR)/$(PROJECTNAME)-$$OS-$$ARCH; \
 		[ "$$OS" = "windows" ] && OUTPUT=$$OUTPUT.exe; \
-		echo "Building $$OS/$$ARCH..."; \
+		echo "Building server $$OS/$$ARCH..."; \
 		$(GO_DOCKER) sh -c "GOOS=$$OS GOARCH=$$ARCH \
 			go build -ldflags \"$(LDFLAGS)\" \
-			-o $$OUTPUT src" || exit 1; \
+			-o $$OUTPUT ./src" || exit 1; \
 	done
+
+	# Build CLI for all platforms (if exists)
+	@if [ -d "src/client" ]; then \
+		for platform in $(PLATFORMS); do \
+			OS=$${platform%/*}; \
+			ARCH=$${platform#*/}; \
+			OUTPUT=$(BINDIR)/$(PROJECTNAME)-cli-$$OS-$$ARCH; \
+			[ "$$OS" = "windows" ] && OUTPUT=$$OUTPUT.exe; \
+			echo "Building CLI $$OS/$$ARCH..."; \
+			$(GO_DOCKER) sh -c "GOOS=$$OS GOARCH=$$ARCH \
+				go build -ldflags \"$(LDFLAGS)\" \
+				-o $$OUTPUT ./src/client" || exit 1; \
+		done; \
+	fi
+
+	# Build agent for all platforms (if exists)
+	@if [ -d "src/agent" ]; then \
+		for platform in $(PLATFORMS); do \
+			OS=$${platform%/*}; \
+			ARCH=$${platform#*/}; \
+			OUTPUT=$(BINDIR)/$(PROJECTNAME)-agent-$$OS-$$ARCH; \
+			[ "$$OS" = "windows" ] && OUTPUT=$$OUTPUT.exe; \
+			echo "Building agent $$OS/$$ARCH..."; \
+			$(GO_DOCKER) sh -c "GOOS=$$OS GOARCH=$$ARCH \
+				go build -ldflags \"$(LDFLAGS)\" \
+				-o $$OUTPUT ./src/agent" || exit 1; \
+		done; \
+	fi
 
 	@echo "Build complete: $(BINDIR)/"
 
@@ -28769,7 +29929,8 @@ test:
 dev:
 	@mkdir -p $(GOCACHE) $(GODIR)
 	@$(GO_DOCKER) go mod tidy
-	@BUILD_DIR=$$(mktemp -d "$${TMPDIR:-/tmp}/$(PROJECTORG).XXXXXX") && \
+	@mkdir -p "$${TMPDIR:-/tmp}/$(PROJECTORG)" && \
+		BUILD_DIR=$$(mktemp -d "$${TMPDIR:-/tmp}/$(PROJECTORG)/$(PROJECTNAME)-XXXXXX") && \
 		echo "Quick dev build to $$BUILD_DIR..." && \
 		$(GO_DOCKER) go build -o $$BUILD_DIR/$(PROJECTNAME) ./src && \
 		echo "Built: $$BUILD_DIR/$(PROJECTNAME)" && \
@@ -28840,8 +30001,8 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 2. Creates cache directories if needed
 3. Downloads Go modules (cached)
 4. Creates `binaries/` directory
-5. Builds local binary: `binaries/search`
-6. Builds all platform binaries: `binaries/search-{os}-{arch}`
+5. Builds local binary: `binaries/{projectname}`
+6. Builds all platform binaries: `binaries/{projectname}-{os}-{arch}`
 7. Uses `CGO_ENABLED=0` for static binaries
 8. Embeds Version, CommitID, BuildDate via `-ldflags`
 9. All builds via Docker (`golang:alpine`)
@@ -28880,7 +30041,7 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 1. Quick build for local development/testing
 2. Builds local platform only (fastest)
 3. No `-ldflags` (version info not embedded)
-4. Outputs to `{tempdir}/apimgr.XXXXXX/search` (isolated, org-identifiable)
+4. Outputs to `{tempdir}/{projectorg}/{projectname}-XXXXXX/` (isolated, org-identifiable)
 5. Uses Docker (`golang:alpine`) - keeps local machine clean
 6. Easy cleanup: `rm -rf "${TMPDIR:-/tmp}"/${PROJECTORG}.*/` or auto-deleted on reboot
 
@@ -28897,7 +30058,7 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 
 | Command | Purpose | Output | When to Use |
 |---------|---------|--------|-------------|
-| `make dev` | **Development & Debugging** | `${TMPDIR}/${PROJECTORG}.XXXXXX/` | Active coding, quick tests, debugging |
+| `make dev` | **Development & Debugging** | `${TMPDIR}/${PROJECTORG}/${PROJECTNAME}-XXXXXX/` | Active coding, quick tests, debugging |
 | `make local` | **Production Testing** | `binaries/` (with version) | Test production builds locally before release |
 | `make build` | **Full Release Build** | `binaries/` (all 8 platforms) | Before tagging release, cross-platform verification |
 | `make test` | **Unit Tests** | Coverage report | After code changes, before commits |
@@ -28917,7 +30078,7 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 
 ```bash
 # After make dev, test in Docker with debug tools
-BUILD_DIR=$(ls -td ${TMPDIR:-/tmp}/${PROJECTORG}.*/ | head -1)
+BUILD_DIR=$(ls -td ${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-*/ 2>/dev/null | head -1)
 docker run --rm -it \
   -v "$BUILD_DIR:/app" \
   alpine:latest sh -c "
@@ -29009,34 +30170,34 @@ The **only** time binaries are copied is during CI/CD release process, where the
 
 | File | Description |
 |------|-------------|
-| `search-linux-amd64` | Linux AMD64 server binary |
-| `search-linux-arm64` | Linux ARM64 server binary |
-| `search-darwin-amd64` | macOS AMD64 server binary |
-| `search-darwin-arm64` | macOS ARM64 (Apple Silicon) server binary |
-| `search-windows-amd64.exe` | Windows AMD64 server binary |
-| `search-windows-arm64.exe` | Windows ARM64 server binary |
-| `search-freebsd-amd64` | FreeBSD AMD64 server binary |
-| `search-freebsd-arm64` | FreeBSD ARM64 server binary |
+| `{projectname}-linux-amd64` | Linux AMD64 server binary |
+| `{projectname}-linux-arm64` | Linux ARM64 server binary |
+| `{projectname}-darwin-amd64` | macOS AMD64 server binary |
+| `{projectname}-darwin-arm64` | macOS ARM64 (Apple Silicon) server binary |
+| `{projectname}-windows-amd64.exe` | Windows AMD64 server binary |
+| `{projectname}-windows-arm64.exe` | Windows ARM64 server binary |
+| `{projectname}-freebsd-amd64` | FreeBSD AMD64 server binary |
+| `{projectname}-freebsd-arm64` | FreeBSD ARM64 server binary |
 
 ### CLI Binaries (If Project Has CLI)
 
 | File | Description |
 |------|-------------|
-| `search-cli-linux-amd64` | Linux AMD64 CLI binary |
-| `search-cli-linux-arm64` | Linux ARM64 CLI binary |
-| `search-cli-darwin-amd64` | macOS AMD64 CLI binary |
-| `search-cli-darwin-arm64` | macOS ARM64 (Apple Silicon) CLI binary |
-| `search-cli-windows-amd64.exe` | Windows AMD64 CLI binary |
-| `search-cli-windows-arm64.exe` | Windows ARM64 CLI binary |
-| `search-cli-freebsd-amd64` | FreeBSD AMD64 CLI binary |
-| `search-cli-freebsd-arm64` | FreeBSD ARM64 CLI binary |
+| `{projectname}-cli-linux-amd64` | Linux AMD64 CLI binary |
+| `{projectname}-cli-linux-arm64` | Linux ARM64 CLI binary |
+| `{projectname}-cli-darwin-amd64` | macOS AMD64 CLI binary |
+| `{projectname}-cli-darwin-arm64` | macOS ARM64 (Apple Silicon) CLI binary |
+| `{projectname}-cli-windows-amd64.exe` | Windows AMD64 CLI binary |
+| `{projectname}-cli-windows-arm64.exe` | Windows ARM64 CLI binary |
+| `{projectname}-cli-freebsd-amd64` | FreeBSD AMD64 CLI binary |
+| `{projectname}-cli-freebsd-arm64` | FreeBSD ARM64 CLI binary |
 
 ### Metadata Files (Always)
 
 | File | Description | Example Content |
 |------|-------------|-----------------|
 | `version.txt` | Version string only | `1.2.3`, `20251218060432-beta`, `20251218060432` |
-| `search-{version}-source.tar.gz` | Source code archive | Excludes `.git`, `.github`, `binaries/`, `releases/` |
+| `{projectname}-{version}-source.tar.gz` | Source code archive | Excludes `.git`, `.github`, `binaries/`, `releases/` |
 
 ### version.txt Content
 
@@ -29142,10 +30303,10 @@ All Docker-related files MUST be in `docker/`:
 docker/
 ├── Dockerfile              # Production Dockerfile
 ├── Dockerfile.dev          # Development Dockerfile (optional)
-├── docker-compose.yml      # Production compose (NO debug options)
-├── docker-compose.dev.yml  # Development compose (DEBUG commented)
-├── docker-compose.test.yml # Test compose (DEBUG=true enabled)
-└── rootfs/                 # Container filesystem overlay
+├── docker-compose.yml      # Production compose - HUMAN USE ONLY
+├── docker-compose.dev.yml  # Development compose - HUMAN USE ONLY
+├── docker-compose.test.yml # Test compose - AI/AUTOMATED TESTING ONLY
+└── file_system/            # Container filesystem overlay (build-time only)
     └── usr/
         └── local/
             └── bin/
@@ -29156,7 +30317,7 @@ docker/
 - Docker build context is project root (`.`)
 - Dockerfile specified with `-f docker/Dockerfile`
 - Multi-stage build: Go binary compiled in builder stage
-- rootfs copied from `docker/rootfs/`
+- rootfs copied from `docker/file_system/`
 
 **Rules:**
 - NEVER place Dockerfile or docker-compose.yml in project root
@@ -29176,7 +30337,7 @@ docker/
 | Meta labels | All OCI labels (see below) |
 | Required packages | git, curl, bash, tini, tor |
 | Tor handling | Installed but **binary controls** (see PART 32) |
-| Binary location | `/usr/local/bin/search` |
+| Binary location | `/usr/local/bin/{projectname}` |
 | Entrypoint script | `/usr/local/bin/entrypoint.sh` |
 | Init system | **tini** |
 | Internal port | **80** |
@@ -29188,21 +30349,21 @@ docker/
 
 | Path | Purpose |
 |------|---------|
-| `/config/search/` | Binary's {config_dir} (server.yml, etc.) |
-| `/config/search/security/` | Security databases (geoip, blocklists, cve, trivy) |
-| `/config/search/tor/` | Tor config (torrc) - binary owns Tor |
+| `/config/{projectname}/` | Binary's {config_dir} (server.yml, etc.) |
+| `/config/{projectname}/security/` | Security databases (geoip, blocklists, cve, trivy) |
+| `/config/{projectname}/tor/` | Tor config (torrc) - binary owns Tor |
 | `/config/{servicename}/` | External service configs (valkey, nginx, etc.) |
-| `/data/search/` | Binary's {data_dir} |
-| `/data/search/tor/` | Tor data (hidden service keys) - binary owns Tor |
+| `/data/{projectname}/` | Binary's {data_dir} |
+| `/data/{projectname}/tor/` | Tor data (hidden service keys) - binary owns Tor |
 | `/data/db/{dbtype}/` | Database data (postgres, valkey, mssql, etc.) |
-| `/data/log/search/` | App logs (access.log, error.log, tor.log, etc.) |
+| `/data/log/{projectname}/` | App logs (access.log, error.log, tor.log, etc.) |
 | `/data/log/{servicename}/` | Service logs (nginx, caddy, etc.) |
-| `/data/backups/search/` | Backup archives |
+| `/data/backups/{projectname}/` | Backup archives |
 | `/data/{servicename}/` | External service data (nginx, apache, etc.) |
-| `/usr/local/bin/search` | Application binary |
+| `/usr/local/bin/{projectname}` | Application binary |
 | `/root/Dockerfile` | Build reference and backup |
 
-**Key principle:** Binary owns Tor completely - Tor dirs are under `search/`, not separate.
+**Key principle:** Binary owns Tor completely - Tor dirs are under `{projectname}/`, not separate.
 
 ### OCI Meta Labels (Required)
 
@@ -29211,11 +30372,11 @@ All Dockerfiles MUST include these labels:
 | Label | Value |
 |-------|-------|
 | `maintainer` | `{maintainer_name} <{maintainer_email}>` |
-| `org.opencontainers.image.vendor` | `apimgr` |
-| `org.opencontainers.image.authors` | `apimgr` |
-| `org.opencontainers.image.title` | `search` |
-| `org.opencontainers.image.base.name` | `search` |
-| `org.opencontainers.image.description` | `Containerized version of search` |
+| `org.opencontainers.image.vendor` | `{projectorg}` |
+| `org.opencontainers.image.authors` | `{projectorg}` |
+| `org.opencontainers.image.title` | `{projectname}` |
+| `org.opencontainers.image.base.name` | `{projectname}` |
+| `org.opencontainers.image.description` | `{projectname} - standard image (alpine)` or `{projectname} - all-in-one (...)` |
 | `org.opencontainers.image.licenses` | License (e.g., `MIT`) |
 | `org.opencontainers.image.created` | `${BUILD_DATE}` (ARG) |
 | `org.opencontainers.image.version` | `${VERSION}` (ARG) |
@@ -29289,7 +30450,7 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags "-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}' -X 'main.OfficialSite=${OFFICIALSITE}'" \
-    -o /build/binary/search src
+    -o /build/binary/{projectname} src
 
 # =============================================================================
 # Runtime Stage - Minimal Alpine image
@@ -29304,11 +30465,11 @@ ARG LICENSE=MIT
 
 # Static Labels
 LABEL maintainer="{maintainer_name} <{maintainer_email}>" \
-      org.opencontainers.image.vendor="apimgr" \
-      org.opencontainers.image.authors="apimgr" \
-      org.opencontainers.image.title="search" \
-      org.opencontainers.image.base.name="search" \
-      org.opencontainers.image.description="Containerized version of search" \
+      org.opencontainers.image.vendor="{projectorg}" \
+      org.opencontainers.image.authors="{projectorg}" \
+      org.opencontainers.image.title="{projectname}" \
+      org.opencontainers.image.base.name="{projectname}" \
+      org.opencontainers.image.description="{projectname} - standard image (alpine)" \
       org.opencontainers.image.url="{PLATFORM_REPO_URL}" \
       org.opencontainers.image.source="{PLATFORM_REPO_URL}" \
       org.opencontainers.image.documentation="{PLATFORM_REPO_URL}" \
@@ -29336,11 +30497,11 @@ RUN apk add --no-cache \
 # Docker volume mounts auto-create mount points
 
 # Copy binary from builder stage (multi-stage build)
-COPY --from=builder /build/binary/search /usr/local/bin/search
+COPY --from=builder /build/binary/{projectname} /usr/local/bin/{projectname}
 
-# Copy BUILD-TIME overlay (entrypoint.sh) from docker/rootfs/ into image
-# Note: This is docker/rootfs/ (build context), NOT runtime ./rootfs/ volumes
-COPY docker/rootfs/ /
+# Copy BUILD-TIME overlay (entrypoint.sh) from docker/file_system/ into image
+# Note: This is docker/file_system/ (build context), NOT runtime ./rootfs/ volumes
+COPY docker/file_system/ /
 
 # Copy Dockerfile to image (for reference and backup)
 COPY docker/Dockerfile /root/Dockerfile
@@ -29361,7 +30522,7 @@ STOPSIGNAL SIGRTMIN+3
 
 # Health check (long start period for services that need initialization)
 HEALTHCHECK --start-period=10m --interval=5m --timeout=15s --retries=3 \
-    CMD /usr/local/bin/search --status || exit 1
+    CMD /usr/local/bin/{projectname} --status || exit 1
 
 # Use tini as init with signal propagation
 # -p SIGTERM: propagate SIGTERM to child processes
@@ -29382,7 +30543,7 @@ ENTRYPOINT [ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]
 
 ### Entrypoint Script (REQUIRED)
 
-**Location:** `docker/rootfs/usr/local/bin/entrypoint.sh`
+**Location:** `docker/file_system/usr/local/bin/entrypoint.sh`
 
 **Entrypoint is MINIMAL.** It only does:
 1. Set environment variables/flags
@@ -29402,7 +30563,7 @@ set -e
 # Binary handles: directories, permissions, user/group, Tor, etc.
 # =============================================================================
 
-APP_NAME="search"
+APP_NAME="{projectname}"
 APP_BIN="/usr/local/bin/${APP_NAME}"
 
 # Export environment defaults (binary reads these)
@@ -29503,23 +30664,23 @@ exec $APP_BIN $FLAGS "$@"
 |-------------|-------|
 | `build:` | **NEVER include** |
 | `version:` | **NEVER include** |
-| `name:` | `search` (top-level) |
-| `container_name:` | `search-{servicename}` |
+| `name:` | `{projectname}` (top-level) |
+| `container_name:` | `{projectname}-{servicename}` |
 | Main service name | `server` (not `app`) |
 | `pull_policy:` | `always` |
 | `restart:` | `always` |
 | `x-logging:` | Anchor for consistent logging (see below) |
-| Network | Custom `search` with `external: false` |
+| Network | Custom `{projectname}` with `external: false` |
 | Environment variables | **Hardcode with sane defaults** (NEVER use .env files) |
 | **environment: MODE** | **production** (strict host validation) |
 
 ### Docker Compose Structure 
 
 ```yaml
-# search - {brief description}
+# {projectname} - {brief description}
 # nginx proxy address - http://172.17.0.1:{port}
 
-name: search
+name: {projectname}
 
 x-logging: &default-logging
   options:
@@ -29529,8 +30690,8 @@ x-logging: &default-logging
 
 services:
   server:
-    image: {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest
-    container_name: search-server
+    image: {PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:latest
+    container_name: {projectname}-server
     hostname: ${BASE_HOST_NAME:-$HOSTNAME}
     restart: always
     pull_policy: always
@@ -29546,17 +30707,17 @@ services:
     ports:
       - '172.17.0.1:64580:80'
     healthcheck:
-      test: /usr/local/bin/search --status
+      test: /usr/local/bin/{projectname} --status
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 90s
     networks:
-      - search
+      - {projectname}
 
 networks:
-  search:
-    name: search
+  {projectname}:
+    name: {projectname}
     external: false
 ```
 
@@ -29564,14 +30725,14 @@ networks:
 
 | Field | Value | Description |
 |-------|-------|-------------|
-| `name:` | `search` | Top-level compose project name |
-| `container_name:` | `search-{servicename}` | e.g., `jokes-server`, `jokes-db`, `jokes-cache` |
+| `name:` | `{projectname}` | Top-level compose project name |
+| `container_name:` | `{projectname}-{servicename}` | e.g., `jokes-server`, `jokes-db`, `jokes-cache` |
 | Main service | `server` | Primary application service (not `app`) |
 | `hostname:` | `${BASE_HOST_NAME:-$HOSTNAME}` | Uses env or system hostname |
 | `restart:` | `always` | Always restart on failure |
 | `pull_policy:` | `always` | Always pull latest image |
 | `logging:` | `*default-logging` | Use the logging anchor |
-| `networks:` | `search` | Isolated network per project |
+| `networks:` | `{projectname}` | Isolated network per project |
 
 ### Logging Anchor 
 
@@ -29595,10 +30756,10 @@ services:
 ### Multi-Service Example
 
 ```yaml
-# search - with Redis cache
+# {projectname} - with Redis cache
 # nginx proxy address - http://172.17.0.1:64580
 
-name: search
+name: {projectname}
 
 x-logging: &default-logging
   options:
@@ -29608,8 +30769,8 @@ x-logging: &default-logging
 
 services:
   server:
-    image: ghcr.io/apimgr/search:latest
-    container_name: search-server
+    image: ghcr.io/{projectorg}/{projectname}:latest
+    container_name: {projectname}-server
     hostname: ${BASE_HOST_NAME:-$HOSTNAME}
     restart: always
     pull_policy: always
@@ -29625,7 +30786,7 @@ services:
     ports:
       - '172.17.0.1:64580:80'
     healthcheck:
-      test: /usr/local/bin/search --status
+      test: /usr/local/bin/{projectname} --status
       interval: 10s
       timeout: 5s
       retries: 3
@@ -29634,11 +30795,11 @@ services:
       cache:
         condition: service_healthy
     networks:
-      - search
+      - {projectname}
 
   cache:
     image: redis:alpine
-    container_name: search-cache
+    container_name: {projectname}-cache
     hostname: ${BASE_HOST_NAME:-$HOSTNAME}
     restart: always
     pull_policy: always
@@ -29652,11 +30813,11 @@ services:
       retries: 3
       start_period: 30s
     networks:
-      - search
+      - {projectname}
 
 networks:
-  search:
-    name: search
+  {projectname}:
+    name: {projectname}
     external: false
 ```
 
@@ -29689,7 +30850,7 @@ networks:
 - Uses SQLite (embedded) or embedded key-value store
 - Valkey/Redis runs inside container via supervisor or embedded
 - Service name: `server`
-- Container name: `search-server`
+- Container name: `{projectname}-server`
 - Simpler deployment, single image
 - **Trade-offs:** No horizontal scaling, single point of failure, harder to debug
 
@@ -29705,11 +30866,11 @@ networks:
 **All-in-One docker-compose (`docker/all-in-one.yml`):**
 
 ```yaml
-# search - All-in-One (app + embedded DB)
+# {projectname} - All-in-One (app + embedded DB)
 # nginx proxy address - http://172.17.0.1:64580
 # Usage: docker compose -f all-in-one.yml up -d
 
-name: search
+name: {projectname}
 
 x-logging: &default-logging
   options:
@@ -29719,8 +30880,8 @@ x-logging: &default-logging
 
 services:
   server:
-    image: ghcr.io/apimgr/search-aio:latest
-    container_name: search-server
+    image: ghcr.io/{projectorg}/{projectname}-aio:latest
+    container_name: {projectname}-server
     hostname: ${BASE_HOST_NAME:-$HOSTNAME}
     restart: always
     pull_policy: always
@@ -29736,17 +30897,17 @@ services:
     ports:
       - '172.17.0.1:64580:80'
     healthcheck:
-      test: /usr/local/bin/search --status
+      test: /usr/local/bin/{projectname} --status
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 90s
     networks:
-      - search
+      - {projectname}
 
 networks:
-  search:
-    name: search
+  {projectname}:
+    name: {projectname}
     external: false
 ```
 
@@ -29777,13 +30938,13 @@ networks:
 ```dockerfile
 # All-in-One Dockerfile - includes app + postgresql + valkey + tor
 # Base: debian:latest (stable, broad compatibility)
-# Image name: {PLATFORM_CONTAINER_REGISTRY}/apimgr/search-aio:latest
+# Image name: {PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}-aio:latest
 # PORTS: Only 80 exposed (db/cache are internal-only)
 
 FROM debian:latest
 
 LABEL org.opencontainers.image.source="{PLATFORM_REPO_URL}"
-LABEL org.opencontainers.image.description="search - all-in-one container"
+LABEL org.opencontainers.image.description="{projectname} - all-in-one (debian + postgresql + valkey + tor)"
 LABEL org.opencontainers.image.licenses="MIT"
 
 # Install dependencies (PostgreSQL + Valkey + Tor + Supervisor)
@@ -29799,20 +30960,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Create directories - organized by component
-RUN mkdir -p /config/search /config/search/security /config/search/tor \
+RUN mkdir -p /config/{projectname} /config/{projectname}/security /config/{projectname}/tor \
              /config/valkey /config/postgres \
-             /data/search /data/search/tor \
+             /data/{projectname} /data/{projectname}/tor \
              /data/db/postgres /data/db/valkey \
-             /data/log/search /data/backups/search \
+             /data/log/{projectname} /data/backups/{projectname} \
              /run/postgresql /run/valkey \
     && chown -R postgres:postgres /data/db/postgres /run/postgresql
 
 # Copy configs and entrypoint
-COPY docker/rootfs/ /
+COPY docker/file_system/ /
 
 # Copy application binary from builder or pre-built
-COPY search /usr/local/bin/
-RUN chmod +x /usr/local/bin/search /usr/local/bin/entrypoint.sh
+COPY {projectname} /usr/local/bin/
+RUN chmod +x /usr/local/bin/{projectname} /usr/local/bin/entrypoint.sh
 
 # Default environment
 ENV MODE=production \
@@ -29821,8 +30982,8 @@ ENV MODE=production \
     TZ=America/New_York \
     PGDATA=/data/db \
     DB_HOST=/run/postgresql \
-    DB_NAME=search \
-    DB_USER=search \
+    DB_NAME={projectname} \
+    DB_USER={projectname} \
     VALKEY_SOCKET=/run/valkey/valkey.sock
 
 # Only expose app port - db/cache are internal
@@ -29834,7 +30995,7 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=90s --retries=3 \
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 ```
 
-**All-in-One supervisor config (`docker/rootfs/etc/supervisor/conf.d/services.conf`):**
+**All-in-One supervisor config (`docker/file_system/etc/supervisor/conf.d/services.conf`):**
 
 ```ini
 [supervisord]
@@ -29868,7 +31029,7 @@ stdout_logfile=/data/log/tor.log
 stderr_logfile=/data/log/tor.log
 
 [program:app]
-command=/usr/local/bin/search
+command=/usr/local/bin/{projectname}
 autostart=true
 autorestart=true
 priority=100
@@ -29876,7 +31037,7 @@ stdout_logfile=/data/log/app.log
 stderr_logfile=/data/log/app.log
 ```
 
-**All-in-One PostgreSQL config (`docker/rootfs/etc/postgresql/postgresql-aio.conf`):**
+**All-in-One PostgreSQL config (`docker/file_system/etc/postgresql/postgresql-aio.conf`):**
 
 ```ini
 # PostgreSQL configuration optimized for AIO containers
@@ -29917,7 +31078,7 @@ autovacuum_naptime = 60s
 ssl = off
 ```
 
-**All-in-One Valkey config (`docker/rootfs/etc/valkey/valkey-aio.conf`):**
+**All-in-One Valkey config (`docker/file_system/etc/valkey/valkey-aio.conf`):**
 
 ```ini
 # Valkey configuration optimized for AIO containers
@@ -29933,7 +31094,7 @@ maxmemory 64mb
 maxmemory-policy allkeys-lru
 
 # Persistence (AOF for durability)
-dir /data/cache
+dir /data/db/valkey
 appendonly yes
 appendfsync everysec
 auto-aof-rewrite-percentage 100
@@ -29954,7 +31115,7 @@ logfile ""
 protected-mode no
 ```
 
-**All-in-One entrypoint.sh (`docker/rootfs/usr/local/bin/entrypoint.sh`):**
+**All-in-One entrypoint.sh (`docker/file_system/usr/local/bin/entrypoint.sh`):**
 
 ```bash
 #!/bin/bash
@@ -29987,9 +31148,9 @@ if [ ! -f /data/db/postgres/PG_VERSION ]; then
     sleep 3
 
     # Create application database and user
-    su - postgres -c "psql -c \"CREATE USER ${DB_USER:-search} WITH PASSWORD '${DB_PASSWORD:-search}';\""
-    su - postgres -c "psql -c \"CREATE DATABASE ${DB_NAME:-search} OWNER ${DB_USER:-search};\""
-    su - postgres -c "psql -c \"GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME:-search} TO ${DB_USER:-search};\""
+    su - postgres -c "psql -c \"CREATE USER ${DB_USER:-{projectname}} WITH PASSWORD '${DB_PASSWORD:-{projectname}}';\""
+    su - postgres -c "psql -c \"CREATE DATABASE ${DB_NAME:-{projectname}} OWNER ${DB_USER:-{projectname}};\""
+    su - postgres -c "psql -c \"GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME:-{projectname}} TO ${DB_USER:-{projectname}};\""
 
     # Stop PostgreSQL (supervisor will start it)
     su - postgres -c "/usr/lib/postgresql/15/bin/pg_ctl -D /data/db/postgres stop"
@@ -30017,9 +31178,9 @@ exec /usr/bin/supervisord -c /etc/supervisor/supervisord.conf
 | `PORT` | `80` | Application port |
 | `DEBUG` | `false` | Debug mode |
 | `TZ` | `America/New_York` | Timezone |
-| `DB_NAME` | `search` | PostgreSQL database name |
-| `DB_USER` | `search` | PostgreSQL username |
-| `DB_PASSWORD` | `search` | PostgreSQL password |
+| `DB_NAME` | `{projectname}` | PostgreSQL database name |
+| `DB_USER` | `{projectname}` | PostgreSQL username |
+| `DB_PASSWORD` | `{projectname}` | PostgreSQL password |
 | `TOR_ENABLED` | `false` | Enable Tor hidden service |
 
 **App Connection Strings (internal):**
@@ -30036,10 +31197,10 @@ valkeyURL := "unix:///run/valkey/valkey.sock"
 
 ```bash
 # Standard image (context is project root)
-docker build -t {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest -f docker/Dockerfile .
+docker build -t {PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:latest -f docker/Dockerfile .
 
 # All-in-one image (context is project root)
-docker build -t {PLATFORM_CONTAINER_REGISTRY}/apimgr/search-aio:latest -f docker/Dockerfile.aio .
+docker build -t {PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}-aio:latest -f docker/Dockerfile.aio .
 ```
 
 **When to use All-in-One:**
@@ -30060,15 +31221,15 @@ docker build -t {PLATFORM_CONTAINER_REGISTRY}/apimgr/search-aio:latest -f docker
 
 | Context | Location | Purpose | In Repo? |
 |---------|----------|---------|----------|
-| **Build-time** | `docker/rootfs/` | Container overlay (entrypoint.sh) | YES |
+| **Build-time** | `docker/file_system/` | Container overlay (entrypoint.sh) | YES |
 | **Runtime** | `./rootfs/` in docker-compose | Volume mounts (config, data) | NEVER |
 
-**Build-time `docker/rootfs/`** (in repo):
+**Build-time `docker/file_system/`** (in repo):
 ```
 docker/
-├── Dockerfile           # COPY docker/rootfs/ / ← copies into container image
+├── Dockerfile           # COPY docker/file_system/ / ← copies into container image
 ├── docker-compose.yml
-└── rootfs/              # BUILD overlay - committed to git
+└── file_system/         # BUILD overlay - committed to git
     └── usr/local/bin/
         └── entrypoint.sh
 ```
@@ -30090,7 +31251,7 @@ $TEMP_DIR/
     └── data/
 ```
 
-**Why same name works:** The `./rootfs/` path in docker-compose.yml is relative to where docker-compose runs from, not where it lives in the repo. Dockerfile's `COPY docker/rootfs/ /` uses build context (`.` project root).
+**Why same name works:** The `./rootfs/` path in docker-compose.yml is relative to where docker-compose runs from, not where it lives in the repo. Dockerfile's `COPY docker/file_system/ /` uses build context (`.` project root).
 
 ### Volume Paths (Local Side)
 
@@ -30105,22 +31266,22 @@ $TEMP_DIR/
 
 | Container Path | Contents |
 |----------------|----------|
-| `/config/search/` | Binary's {config_dir} - server.yml, etc. |
-| `/config/search/security/` | TLS certs, keys, security DBs |
-| `/config/search/tor/` | Tor config (torrc) - binary owns Tor |
+| `/config/{projectname}/` | Binary's {config_dir} - server.yml, etc. |
+| `/config/{projectname}/security/` | TLS certs, keys, security DBs |
+| `/config/{projectname}/tor/` | Tor config (torrc) - binary owns Tor |
 | `/config/{servicename}/` | External service configs (valkey, nginx, etc.) |
-| `/data/search/` | Binary's {data_dir} |
-| `/data/search/tor/` | Tor data (hidden service keys) - binary owns Tor |
+| `/data/{projectname}/` | Binary's {data_dir} |
+| `/data/{projectname}/tor/` | Tor data (hidden service keys) - binary owns Tor |
 | `/data/db/{dbtype}/` | Database data (postgres, valkey, sqlite, etc.) |
-| `/data/log/search/` | App logs (access.log, error.log, tor.log) |
+| `/data/log/{projectname}/` | App logs (access.log, error.log, tor.log) |
 | `/data/log/{servicename}/` | Service logs (nginx, caddy, etc.) |
-| `/data/backups/search/` | Backup files |
+| `/data/backups/{projectname}/` | Backup files |
 | `/data/{servicename}/` | External service data (nginx, apache, etc.) |
 
 **Rules:**
 - Production volumes use `:z` suffix (SELinux shared label)
 - Development volumes omit `:z` (not needed in temp dir)
-- `docker/rootfs/` is for container overlay (entrypoint.sh) - NOT for runtime volumes
+- `docker/file_system/` is for container overlay (entrypoint.sh) - NOT for runtime volumes
 - NEVER create runtime `rootfs/` in the project repo
 
 ### Running Docker Compose 
@@ -30135,7 +31296,7 @@ $TEMP_DIR/
 5. Data lives in temp dir, isolated from project
 
 ```bash
-# Setup (uses OS temp dir: {ostempdir}/apimgr/search-XXXXXX/)
+# Setup (uses OS temp dir: {ostempdir}/{projectorg}/{projectname}-XXXXXX/)
 # Set PROJECT_ROOT to your actual project location
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"  # Use git top-level
 # Or use absolute path: PROJECT_ROOT="/path/to/your/project"
@@ -30203,19 +31364,21 @@ rm -rf "$TEMP_DIR"
 - No outdated .env.example files
 - Users can override by editing docker-compose.yml directly
 
-### Docker Compose (Development)
+### Docker Compose (Development) - HUMAN USE ONLY
 
 **Location:** `docker/docker-compose.dev.yml`
 
-**Development mode with optional debug. MUST use temp directory workflow.**
+**⚠️ FOR HUMAN USE ONLY - AI assistants must NEVER use this file.**
+
+Development mode with optional debug. Humans run this manually for local development.
 
 ```yaml
-name: search-dev
+name: {projectname}-dev
 
 services:
-  search:
-    image: {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest
-    container_name: search-dev
+  {projectname}:
+    image: {PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:latest
+    container_name: {projectname}-dev
     restart: unless-stopped
     environment:
       # Development: relaxed security, verbose logging, no caching
@@ -30233,36 +31396,38 @@ services:
       - ./rootfs/config:/config
       - ./rootfs/data:/data
     networks:
-      - search-dev
+      - {projectname}-dev
 
 networks:
-  search-dev:
-    name: search-dev
+  {projectname}-dev:
+    name: {projectname}-dev
     external: false
 ```
 
 **Run:**
 ```bash
-mkdir -p "${TMPDIR:-/tmp}/apimgr"
-TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/apimgr/search-XXXXXX")
+mkdir -p "${TMPDIR:-/tmp}/{projectorg}"
+TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/{projectorg}/{projectname}-XXXXXX")
 mkdir -p "$TEMP_DIR/rootfs/config" "$TEMP_DIR/rootfs/data"
 cp docker/docker-compose.dev.yml "$TEMP_DIR/docker-compose.yml"
 cd "$TEMP_DIR" && docker compose up -d
 ```
 
-### Docker Compose (Production)
+### Docker Compose (Production) - HUMAN USE ONLY
 
 **Location:** `docker/docker-compose.yml`
 
-**Production has NO debug options. Debug must be set via CLI if needed.**
+**⚠️ FOR HUMAN USE ONLY - AI assistants must NEVER use this file.**
+
+Production has NO debug options. Debug must be set via CLI if needed. Humans deploy this for production use.
 
 ```yaml
-name: search
+name: {projectname}
 
 services:
-  search:
-    image: {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest
-    container_name: search
+  {projectname}:
+    image: {PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:latest
+    container_name: {projectname}
     restart: unless-stopped
     environment:
       # Production: strict security, minimal logging, caching enabled
@@ -30285,36 +31450,38 @@ services:
       - ./rootfs/config:/config:z
       - ./rootfs/data:/data:z
     networks:
-      - search
+      - {projectname}
 
 networks:
-  search:
-    name: search
+  {projectname}:
+    name: {projectname}
     external: false
 ```
 
 **Run:**
 ```bash
-mkdir -p "${TMPDIR:-/tmp}/apimgr"
-TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/apimgr/search-XXXXXX")
+mkdir -p "${TMPDIR:-/tmp}/{projectorg}"
+TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/{projectorg}/{projectname}-XXXXXX")
 mkdir -p "$TEMP_DIR/rootfs/config" "$TEMP_DIR/rootfs/data"
 cp docker/docker-compose.yml "$TEMP_DIR/"
 cd "$TEMP_DIR" && docker compose up -d
 ```
 
-### Docker Compose (Test)
+### Docker Compose (Test) - AI/AUTOMATED TESTING
 
 **Location:** `docker/docker-compose.test.yml`
 
-**For running tests in CI/CD or locally. Debug enabled for test visibility. MUST use temp directory workflow.**
+**✅ FOR AI AND AUTOMATED TESTING - This is the ONLY docker-compose file AI may use.**
+
+Debug enabled for test visibility. **MUST be copied to temp directory before use - NEVER run from project directory.**
 
 ```yaml
-name: search-test
+name: {projectname}-test
 
 services:
-  search:
-    image: {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest
-    container_name: search-test
+  {projectname}:
+    image: {PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:latest
+    container_name: {projectname}-test
     restart: "no"
     environment:
       - MODE=development
@@ -30323,23 +31490,24 @@ services:
     ports:
       - "64581:80"
     volumes:
-      # TEMP DIR WORKFLOW: ./rootfs/ resolves to $TEMP_DIR/rootfs/
-      # NEVER run from project directory - always use temp dir workflow
+      # CRITICAL: ./rootfs/ must resolve to $TEMP_DIR/rootfs/, NOT project directory
+      # This file MUST be copied to a temp directory before running
+      # AI: NEVER run this from the project directory
       - ./rootfs/config:/config
       - ./rootfs/data:/data
     networks:
-      - search-test
+      - {projectname}-test
 
 networks:
-  search-test:
-    name: search-test
+  {projectname}-test:
+    name: {projectname}-test
     external: false
 ```
 
-**Run:**
+**AI/Automated Testing Workflow (REQUIRED):**
 ```bash
-mkdir -p "${TMPDIR:-/tmp}/apimgr"
-TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/apimgr/search-XXXXXX")
+mkdir -p "${TMPDIR:-/tmp}/{projectorg}"
+TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/{projectorg}/{projectname}-XXXXXX")
 mkdir -p "$TEMP_DIR/rootfs/config" "$TEMP_DIR/rootfs/data"
 cp docker/docker-compose.test.yml "$TEMP_DIR/docker-compose.yml"
 cd "$TEMP_DIR" && docker compose up --abort-on-container-exit
@@ -30351,12 +31519,12 @@ rm -rf "$TEMP_DIR"  # Cleanup after tests
 **Location:** `docker/docker-compose.yml`
 
 ```yaml
-name: search
+name: {projectname}
 
 services:
-  search:
-    image: {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest
-    container_name: search
+  {projectname}:
+    image: {PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:latest
+    container_name: {projectname}
     restart: unless-stopped
     depends_on:
       - postgres
@@ -30369,9 +31537,9 @@ services:
       # - DOMAIN=myapp.com,www.myapp.com,api.myapp.com
       - DB_HOST=postgres
       - DB_PORT=5432
-      - DB_NAME=search
-      - DB_USER=search
-      - DB_PASS=search
+      - DB_NAME={projectname}
+      - DB_USER={projectname}
+      - DB_PASS={projectname}
     ports:
       # Production: bound to Docker bridge only (reverse proxy handles external)
       - "172.17.0.1:64580:80"
@@ -30379,25 +31547,25 @@ services:
       - ./rootfs/config:/config:z
       - ./rootfs/data:/data:z
     networks:
-      - search
+      - {projectname}
 
   postgres:
     image: postgres:alpine
-    container_name: search-postgres
+    container_name: {projectname}-postgres
     restart: unless-stopped
     environment:
-      - POSTGRES_DB=search
-      - POSTGRES_USER=search
-      - POSTGRES_PASSWORD=search
+      - POSTGRES_DB={projectname}
+      - POSTGRES_USER={projectname}
+      - POSTGRES_PASSWORD={projectname}
       - TZ=America/New_York
     volumes:
       - ./rootfs/data/db/postgres:/var/lib/postgresql/data:z
     networks:
-      - search
+      - {projectname}
 
 networks:
-  search:
-    name: search
+  {projectname}:
+    name: {projectname}
     external: false
 ```
 
@@ -30408,15 +31576,15 @@ networks:
 | Setting | Value |
 |---------|-------|
 | Internal port | **80** (always) |
-| Config dir | `/config/search/` (binary's {config_dir}) |
-| Security dir | `/config/search/security/` |
-| Tor config dir | `/config/search/tor/` (binary owns Tor) |
-| Data dir | `/data/search/` (binary's {data_dir}) |
-| Tor data dir | `/data/search/tor/` (binary owns Tor) |
+| Config dir | `/config/{projectname}/` (binary's {config_dir}) |
+| Security dir | `/config/{projectname}/security/` |
+| Tor config dir | `/config/{projectname}/tor/` (binary owns Tor) |
+| Data dir | `/data/{projectname}/` (binary's {data_dir}) |
+| Tor data dir | `/data/{projectname}/tor/` (binary owns Tor) |
 | Database dir | `/data/db/{dbtype}/` (postgres, valkey, sqlite) |
-| Log dir | `/data/log/search/` |
-| Backup dir | `/data/backups/search/` |
-| Binary | `/usr/local/bin/search` |
+| Log dir | `/data/log/{projectname}/` |
+| Backup dir | `/data/backups/{projectname}/` |
+| Binary | `/usr/local/bin/{projectname}` |
 | HEALTHCHECK | `{binary} --status` |
 
 **Path Mapping (Container vs Local):**
@@ -30425,8 +31593,8 @@ networks:
 |----------------|-----------|---------|
 | `/config` | `./rootfs/config` | Configuration root (organized by component) |
 | `/data` | `./rootfs/data` | Data root (organized by component) |
-| `/config/search/` | `./rootfs/config/search/` | Binary's config |
-| `/data/search/` | `./rootfs/data/search/` | Binary's data |
+| `/config/{projectname}/` | `./rootfs/config/{projectname}/` | Binary's config |
+| `/data/{projectname}/` | `./rootfs/data/{projectname}/` | Binary's data |
 | `/data/db/` | `./rootfs/data/db/` | Database data |
 | `/data/log/` | `./rootfs/data/log/` | Log files |
 
@@ -30438,9 +31606,10 @@ networks:
 |----------|-------------|
 | Auto-detection | Tor starts automatically if `tor` binary is installed |
 | Always enabled | Docker image includes `tor`, so always enabled in containers |
-| Data persistence | Tor keys in `/data/search/tor/site/` (survives restart) |
+| Config location | Torrc in `/config/{projectname}/tor/torrc` |
+| Data persistence | Tor keys in `/data/{projectname}/tor/site/` (survives restart) |
 | .onion address | Persists across container restarts via volume mount |
-| Binary owns Tor | Tor dirs under `search/`, not separate service |
+| Binary owns Tor | Tor dirs under `{projectname}/`, not separate service |
 
 ## Container Detection
 
@@ -30463,17 +31632,17 @@ networks:
 
 | Tag | Description | Example |
 |-----|-------------|---------|
-| `{PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest` | Latest stable release | `ghcr.io/myorg/myapp:latest` |
-| `{PLATFORM_CONTAINER_REGISTRY}/apimgr/search:{version}` | Specific version | `ghcr.io/myorg/myapp:1.2.3` |
-| `{PLATFORM_CONTAINER_REGISTRY}/apimgr/search:{YYMM}` | Year/month tag | `ghcr.io/myorg/myapp:2512` |
-| `{PLATFORM_CONTAINER_REGISTRY}/apimgr/search:{commit}` | Git commit (7 char) | `ghcr.io/myorg/myapp:abc1234` |
+| `{PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:latest` | Latest stable release | `ghcr.io/myorg/myapp:latest` |
+| `{PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:{version}` | Specific version | `ghcr.io/myorg/myapp:1.2.3` |
+| `{PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:{YYMM}` | Year/month tag | `ghcr.io/myorg/myapp:2512` |
+| `{PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:{commit}` | Git commit (7 char) | `ghcr.io/myorg/myapp:abc1234` |
 
 ### Development Tags (Local)
 
 | Tag | Description | Example |
 |-----|-------------|---------|
-| `search:dev` | Local development build | `myapp:dev` |
-| `search:test` | Local test build | `myapp:test` |
+| `{projectname}:dev` | Local development build | `myapp:dev` |
+| `{projectname}:test` | Local test build | `myapp:test` |
 
 ### Registry
 
@@ -30484,7 +31653,7 @@ networks:
 
 ### Tag Rules
 
-1. **Release builds** MUST push to `{PLATFORM_CONTAINER_REGISTRY}/apimgr/search`
+1. **Release builds** MUST push to `{PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}`
 2. **Development builds** MUST use local-only tags (no registry prefix)
 3. **NEVER push `:dev` or `:test` tags to production registry**
 4. All release images built for `linux/amd64` AND `linux/arm64`
@@ -30568,7 +31737,7 @@ on:
       - '[0-9]*.[0-9]*.[0-9]*'
 
 env:
-  PROJECTNAME: search
+  PROJECTNAME: {projectname}
 
 jobs:
   build:
@@ -30644,6 +31813,24 @@ jobs:
           name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
           path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli${{ matrix.ext }}
 
+      # Agent build - only if src/agent/ directory exists
+      - name: Build Agent
+        if: hashFiles('src/agent/') != ''
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent${{ matrix.ext }} ./src/agent
+
+      - name: Upload Agent artifact
+        if: hashFiles('src/agent/') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent
+          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent${{ matrix.ext }}
+
   release:
     needs: build
     runs-on: ubuntu-latest
@@ -30704,7 +31891,7 @@ on:
       - beta
 
 env:
-  PROJECTNAME: search
+  PROJECTNAME: {projectname}
 
 jobs:
   build:
@@ -30764,6 +31951,24 @@ jobs:
           name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
           path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
 
+      # Agent build - only if src/agent/ directory exists
+      - name: Build Agent
+        if: hashFiles('src/agent/') != ''
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent ./src/agent
+
+      - name: Upload Agent artifact
+        if: hashFiles('src/agent/') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent
+          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent
+
   release:
     needs: build
     runs-on: ubuntu-latest
@@ -30811,7 +32016,7 @@ on:
   workflow_dispatch:
 
 env:
-  PROJECTNAME: search
+  PROJECTNAME: {projectname}
 
 jobs:
   build:
@@ -30822,6 +32027,20 @@ jobs:
           - goos: linux
             goarch: amd64
           - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+            ext: .exe
+          - goos: windows
+            goarch: arm64
+            ext: .exe
+          - goos: freebsd
+            goarch: amd64
+          - goos: freebsd
             goarch: arm64
 
     steps:
@@ -30845,7 +32064,7 @@ jobs:
           CGO_ENABLED: 0
         run: |
           LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }} ./src
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src
 
       # CLI build - only if src/client/ directory exists
       - name: Build CLI
@@ -30856,20 +32075,38 @@ jobs:
           CGO_ENABLED: 0
         run: |
           LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli ./src/client
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
       - name: Upload CLI artifact
         if: hashFiles('src/client/') != ''
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
-          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
+          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli${{ matrix.ext }}
+
+      # Agent build - only if src/agent/ directory exists
+      - name: Build Agent
+        if: hashFiles('src/agent/') != ''
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent${{ matrix.ext }} ./src/agent
+
+      - name: Upload Agent artifact
+        if: hashFiles('src/agent/') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent
+          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent${{ matrix.ext }}
 
   release:
     needs: build
@@ -30947,7 +32184,7 @@ on:
   workflow_dispatch:
 
 env:
-  PROJECTNAME: search
+  PROJECTNAME: {projectname}
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
@@ -31019,9 +32256,10 @@ jobs:
             BUILD_DATE=${{ env.BUILD_DATE }}
             COMMIT_ID=${{ env.COMMIT_ID }}
           labels: |
-            org.opencontainers.image.vendor=apimgr
-            org.opencontainers.image.authors=apimgr
+            org.opencontainers.image.vendor={projectorg}
+            org.opencontainers.image.authors={projectorg}
             org.opencontainers.image.title=${{ env.PROJECTNAME }}
+            org.opencontainers.image.base.name=${{ env.PROJECTNAME }}
             org.opencontainers.image.description=${{ env.PROJECTNAME }} - standard image (alpine)
             org.opencontainers.image.version=${{ env.VERSION }}
             org.opencontainers.image.created=${{ env.BUILD_DATE }}
@@ -31031,9 +32269,10 @@ jobs:
             org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.licenses=MIT
           annotations: |
-            manifest:org.opencontainers.image.vendor=apimgr
-            manifest:org.opencontainers.image.authors=apimgr
+            manifest:org.opencontainers.image.vendor={projectorg}
+            manifest:org.opencontainers.image.authors={projectorg}
             manifest:org.opencontainers.image.title=${{ env.PROJECTNAME }}
+            manifest:org.opencontainers.image.base.name=${{ env.PROJECTNAME }}
             manifest:org.opencontainers.image.description=${{ env.PROJECTNAME }} - standard image (alpine)
             manifest:org.opencontainers.image.version=${{ env.VERSION }}
             manifest:org.opencontainers.image.created=${{ env.BUILD_DATE }}
@@ -31112,8 +32351,8 @@ jobs:
             BUILD_DATE=${{ env.BUILD_DATE }}
             COMMIT_ID=${{ env.COMMIT_ID }}
           labels: |
-            org.opencontainers.image.vendor=apimgr
-            org.opencontainers.image.authors=apimgr
+            org.opencontainers.image.vendor={projectorg}
+            org.opencontainers.image.authors={projectorg}
             org.opencontainers.image.title=${{ env.PROJECTNAME }}-aio
             org.opencontainers.image.description=${{ env.PROJECTNAME }} - all-in-one (debian + postgresql + valkey + tor)
             org.opencontainers.image.version=${{ env.VERSION }}
@@ -31124,8 +32363,8 @@ jobs:
             org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.licenses=MIT
           annotations: |
-            manifest:org.opencontainers.image.vendor=apimgr
-            manifest:org.opencontainers.image.authors=apimgr
+            manifest:org.opencontainers.image.vendor={projectorg}
+            manifest:org.opencontainers.image.authors={projectorg}
             manifest:org.opencontainers.image.title=${{ env.PROJECTNAME }}-aio
             manifest:org.opencontainers.image.description=${{ env.PROJECTNAME }} - all-in-one (debian + postgresql + valkey + tor)
             manifest:org.opencontainers.image.version=${{ env.VERSION }}
@@ -31215,7 +32454,7 @@ on:
       - '[0-9]*.[0-9]*.[0-9]*'
 
 env:
-  PROJECTNAME: search
+  PROJECTNAME: {projectname}
 
 jobs:
   build:
@@ -31289,6 +32528,24 @@ jobs:
           name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
           path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli${{ matrix.ext }}
 
+      # Agent build - only if src/agent/ directory exists
+      - name: Build Agent
+        if: hashFiles('src/agent/') != ''
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent${{ matrix.ext }} ./src/agent
+
+      - name: Upload Agent artifact
+        if: hashFiles('src/agent/') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent
+          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent${{ matrix.ext }}
+
   release:
     needs: build
     runs-on: ubuntu-latest
@@ -31349,7 +32606,7 @@ on:
       - beta
 
 env:
-  PROJECTNAME: search
+  PROJECTNAME: {projectname}
 
 jobs:
   build:
@@ -31409,6 +32666,24 @@ jobs:
           name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
           path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
 
+      # Agent build - only if src/agent/ directory exists
+      - name: Build Agent
+        if: hashFiles('src/agent/') != ''
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent ./src/agent
+
+      - name: Upload Agent artifact
+        if: hashFiles('src/agent/') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent
+          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent
+
   release:
     needs: build
     runs-on: ubuntu-latest
@@ -31456,7 +32731,7 @@ on:
   workflow_dispatch:
 
 env:
-  PROJECTNAME: search
+  PROJECTNAME: {projectname}
 
 jobs:
   build:
@@ -31467,6 +32742,20 @@ jobs:
           - goos: linux
             goarch: amd64
           - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+            ext: .exe
+          - goos: windows
+            goarch: arm64
+            ext: .exe
+          - goos: freebsd
+            goarch: amd64
+          - goos: freebsd
             goarch: arm64
 
     steps:
@@ -31490,7 +32779,7 @@ jobs:
           CGO_ENABLED: 0
         run: |
           LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }} ./src
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src
 
       # CLI build - only if src/client/ directory exists
       - name: Build CLI
@@ -31501,20 +32790,38 @@ jobs:
           CGO_ENABLED: 0
         run: |
           LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli ./src/client
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
       - name: Upload CLI artifact
         if: hashFiles('src/client/') != ''
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
-          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
+          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli${{ matrix.ext }}
+
+      # Agent build - only if src/agent/ directory exists
+      - name: Build Agent
+        if: hashFiles('src/agent/') != ''
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent${{ matrix.ext }} ./src/agent
+
+      - name: Upload Agent artifact
+        if: hashFiles('src/agent/') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent
+          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent${{ matrix.ext }}
 
   release:
     needs: build
@@ -31571,7 +32878,7 @@ on:
   workflow_dispatch:
 
 env:
-  PROJECTNAME: search
+  PROJECTNAME: {projectname}
   # Registry auto-detected from Gitea instance (works with self-hosted)
   # Format: {gitea-server}/owner/repo -> extracts server for registry
   IMAGE_NAME: ${{ gitea.repository }}
@@ -31658,9 +32965,10 @@ jobs:
             BUILD_DATE=${{ env.BUILD_DATE }}
             COMMIT_ID=${{ env.COMMIT_ID }}
           labels: |
-            org.opencontainers.image.vendor=apimgr
-            org.opencontainers.image.authors=apimgr
+            org.opencontainers.image.vendor={projectorg}
+            org.opencontainers.image.authors={projectorg}
             org.opencontainers.image.title=${{ env.PROJECTNAME }}
+            org.opencontainers.image.base.name=${{ env.PROJECTNAME }}
             org.opencontainers.image.description=${{ env.PROJECTNAME }} - standard image (alpine)
             org.opencontainers.image.version=${{ env.VERSION }}
             org.opencontainers.image.created=${{ env.BUILD_DATE }}
@@ -31670,9 +32978,10 @@ jobs:
             org.opencontainers.image.documentation=${{ gitea.server_url }}/${{ gitea.repository }}
             org.opencontainers.image.licenses=MIT
           annotations: |
-            manifest:org.opencontainers.image.vendor=apimgr
-            manifest:org.opencontainers.image.authors=apimgr
+            manifest:org.opencontainers.image.vendor={projectorg}
+            manifest:org.opencontainers.image.authors={projectorg}
             manifest:org.opencontainers.image.title=${{ env.PROJECTNAME }}
+            manifest:org.opencontainers.image.base.name=${{ env.PROJECTNAME }}
             manifest:org.opencontainers.image.description=${{ env.PROJECTNAME }} - standard image (alpine)
             manifest:org.opencontainers.image.version=${{ env.VERSION }}
             manifest:org.opencontainers.image.created=${{ env.BUILD_DATE }}
@@ -31758,8 +33067,8 @@ jobs:
             BUILD_DATE=${{ env.BUILD_DATE }}
             COMMIT_ID=${{ env.COMMIT_ID }}
           labels: |
-            org.opencontainers.image.vendor=apimgr
-            org.opencontainers.image.authors=apimgr
+            org.opencontainers.image.vendor={projectorg}
+            org.opencontainers.image.authors={projectorg}
             org.opencontainers.image.title=${{ env.PROJECTNAME }}-aio
             org.opencontainers.image.description=${{ env.PROJECTNAME }} - all-in-one (debian + postgresql + valkey + tor)
             org.opencontainers.image.version=${{ env.VERSION }}
@@ -31770,8 +33079,8 @@ jobs:
             org.opencontainers.image.documentation=${{ gitea.server_url }}/${{ gitea.repository }}
             org.opencontainers.image.licenses=MIT
           annotations: |
-            manifest:org.opencontainers.image.vendor=apimgr
-            manifest:org.opencontainers.image.authors=apimgr
+            manifest:org.opencontainers.image.vendor={projectorg}
+            manifest:org.opencontainers.image.authors={projectorg}
             manifest:org.opencontainers.image.title=${{ env.PROJECTNAME }}-aio
             manifest:org.opencontainers.image.description=${{ env.PROJECTNAME }} - all-in-one (debian + postgresql + valkey + tor)
             manifest:org.opencontainers.image.version=${{ env.VERSION }}
@@ -31843,12 +33152,12 @@ All `$CI_*` variables are auto-populated by GitLab (works with self-hosted).
 **File:** `.gitlab-ci.yml`
 
 ```yaml
-# GitLab CI/CD Pipeline for search
+# GitLab CI/CD Pipeline for {projectname}
 # Equivalent to GitHub Actions: release.yml, beta.yml, daily.yml, docker.yml
 
 variables:
-  PROJECTNAME: "search"
-  PROJECTORG: "apimgr"
+  PROJECTNAME: "{projectname}"
+  PROJECTORG: "{projectorg}"
   CGO_ENABLED: "0"
   GOOS: linux
   GOARCH: amd64
@@ -31888,6 +33197,7 @@ build:linux-amd64:
   script:
     - go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-linux-amd64 ./src
     - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-linux-amd64 ./src/client; fi
+    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-linux-amd64 ./src/agent; fi
   artifacts:
     paths:
       - ${PROJECTNAME}-linux-amd64*
@@ -31904,6 +33214,7 @@ build:linux-arm64:
   script:
     - go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-linux-arm64 ./src
     - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-linux-arm64 ./src/client; fi
+    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-linux-arm64 ./src/agent; fi
   artifacts:
     paths:
       - ${PROJECTNAME}-linux-arm64*
@@ -31920,6 +33231,7 @@ build:darwin-amd64:
   script:
     - go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-darwin-amd64 ./src
     - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-darwin-amd64 ./src/client; fi
+    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-darwin-amd64 ./src/agent; fi
   artifacts:
     paths:
       - ${PROJECTNAME}-darwin-amd64*
@@ -31936,6 +33248,7 @@ build:darwin-arm64:
   script:
     - go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-darwin-arm64 ./src
     - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-darwin-arm64 ./src/client; fi
+    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-darwin-arm64 ./src/agent; fi
   artifacts:
     paths:
       - ${PROJECTNAME}-darwin-arm64*
@@ -31952,6 +33265,7 @@ build:windows-amd64:
   script:
     - go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-windows-amd64.exe ./src
     - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-windows-amd64.exe ./src/client; fi
+    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-windows-amd64.exe ./src/agent; fi
   artifacts:
     paths:
       - ${PROJECTNAME}-windows-amd64*.exe
@@ -31968,6 +33282,7 @@ build:windows-arm64:
   script:
     - go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-windows-arm64.exe ./src
     - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-windows-arm64.exe ./src/client; fi
+    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-windows-arm64.exe ./src/agent; fi
   artifacts:
     paths:
       - ${PROJECTNAME}-windows-arm64*.exe
@@ -31984,6 +33299,7 @@ build:freebsd-amd64:
   script:
     - go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-freebsd-amd64 ./src
     - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-freebsd-amd64 ./src/client; fi
+    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-freebsd-amd64 ./src/agent; fi
   artifacts:
     paths:
       - ${PROJECTNAME}-freebsd-amd64*
@@ -32000,6 +33316,7 @@ build:freebsd-arm64:
   script:
     - go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-freebsd-arm64 ./src
     - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-freebsd-arm64 ./src/client; fi
+    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-freebsd-arm64 ./src/agent; fi
   artifacts:
     paths:
       - ${PROJECTNAME}-freebsd-arm64*
@@ -32074,12 +33391,9 @@ release:
 # BETA BUILDS (Push to beta branch)
 # =============================================================================
 
-build:beta:linux:
+build:beta:
   <<: *go-build
   stage: build
-  variables:
-    GOOS: linux
-    GOARCH: amd64
   before_script:
     - apk add --no-cache git bash
     - export VERSION="$(date +%Y%m%d%H%M%S)-beta"
@@ -32087,25 +33401,47 @@ build:beta:linux:
     - export BUILD_DATE="$(date +"%a %b %d, %Y at %H:%M:%S %Z")"
     - export LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}' -X 'main.OfficialSite=${OFFICIALSITE}'"
   script:
-    - go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-linux-amd64 ./src
-    - go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-linux-arm64 ./src
+    # Build all 8 platforms
+    - GOOS=linux GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-linux-amd64 ./src
+    - GOOS=linux GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-linux-arm64 ./src
+    - GOOS=darwin GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-darwin-amd64 ./src
+    - GOOS=darwin GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-darwin-arm64 ./src
+    - GOOS=windows GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-windows-amd64.exe ./src
+    - GOOS=windows GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-windows-arm64.exe ./src
+    - GOOS=freebsd GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-freebsd-amd64 ./src
+    - GOOS=freebsd GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-freebsd-arm64 ./src
+    # Build CLI if exists
+    - if [ -d "src/client" ]; then GOOS=linux GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-linux-amd64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=linux GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-linux-arm64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=darwin GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-darwin-amd64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=darwin GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-darwin-arm64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=windows GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-windows-amd64.exe ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=windows GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-windows-arm64.exe ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=freebsd GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-freebsd-amd64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=freebsd GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-freebsd-arm64 ./src/client; fi
+    # Build Agent if exists
+    - if [ -d "src/agent" ]; then GOOS=linux GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-linux-amd64 ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=linux GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-linux-arm64 ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=darwin GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-darwin-amd64 ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=darwin GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-darwin-arm64 ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=windows GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-windows-amd64.exe ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=windows GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-windows-arm64.exe ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=freebsd GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-freebsd-amd64 ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=freebsd GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-freebsd-arm64 ./src/agent; fi
   artifacts:
     paths:
-      - ${PROJECTNAME}-linux-*
+      - ${PROJECTNAME}-*
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_BRANCH == "beta"
 
 # =============================================================================
-# DAILY BUILDS (Scheduled + main/master push)
+# DAILY BUILDS (Scheduled + main/master push) - All 8 platforms
 # =============================================================================
 
-build:daily:linux:
+build:daily:
   <<: *go-build
   stage: build
-  variables:
-    GOOS: linux
-    GOARCH: amd64
   before_script:
     - apk add --no-cache git bash
     - export VERSION="$(date +%Y%m%d%H%M%S)"
@@ -32113,11 +33449,36 @@ build:daily:linux:
     - export BUILD_DATE="$(date +"%a %b %d, %Y at %H:%M:%S %Z")"
     - export LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}' -X 'main.OfficialSite=${OFFICIALSITE}'"
   script:
-    - go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-linux-amd64 ./src
-    - go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-linux-arm64 ./src
+    # Build all 8 platforms
+    - GOOS=linux GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-linux-amd64 ./src
+    - GOOS=linux GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-linux-arm64 ./src
+    - GOOS=darwin GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-darwin-amd64 ./src
+    - GOOS=darwin GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-darwin-arm64 ./src
+    - GOOS=windows GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-windows-amd64.exe ./src
+    - GOOS=windows GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-windows-arm64.exe ./src
+    - GOOS=freebsd GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-freebsd-amd64 ./src
+    - GOOS=freebsd GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-freebsd-arm64 ./src
+    # Build CLI if exists
+    - if [ -d "src/client" ]; then GOOS=linux GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-linux-amd64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=linux GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-linux-arm64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=darwin GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-darwin-amd64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=darwin GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-darwin-arm64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=windows GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-windows-amd64.exe ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=windows GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-windows-arm64.exe ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=freebsd GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-freebsd-amd64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=freebsd GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-freebsd-arm64 ./src/client; fi
+    # Build Agent if exists
+    - if [ -d "src/agent" ]; then GOOS=linux GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-linux-amd64 ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=linux GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-linux-arm64 ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=darwin GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-darwin-amd64 ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=darwin GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-darwin-arm64 ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=windows GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-windows-amd64.exe ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=windows GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-windows-arm64.exe ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=freebsd GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-freebsd-amd64 ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=freebsd GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-freebsd-arm64 ./src/agent; fi
   artifacts:
     paths:
-      - ${PROJECTNAME}-linux-*
+      - ${PROJECTNAME}-*
     expire_in: 1 day
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
@@ -32167,7 +33528,7 @@ docker:build:
         --label "org.opencontainers.image.authors=${PROJECTORG}" \
         --label "org.opencontainers.image.title=${PROJECTNAME}" \
         --label "org.opencontainers.image.base.name=${PROJECTNAME}" \
-        --label "org.opencontainers.image.description=Containerized version of ${PROJECTNAME}" \
+        --label "org.opencontainers.image.description=${PROJECTNAME} - standard image (alpine)" \
         --label "org.opencontainers.image.licenses=MIT" \
         --label "org.opencontainers.image.version=${VERSION}" \
         --label "org.opencontainers.image.created=${BUILD_DATE}" \
@@ -32178,7 +33539,8 @@ docker:build:
         --annotation "manifest:org.opencontainers.image.vendor=${PROJECTORG}" \
         --annotation "manifest:org.opencontainers.image.authors=${PROJECTORG}" \
         --annotation "manifest:org.opencontainers.image.title=${PROJECTNAME}" \
-        --annotation "manifest:org.opencontainers.image.description=Containerized version of ${PROJECTNAME}" \
+        --annotation "manifest:org.opencontainers.image.base.name=${PROJECTNAME}" \
+        --annotation "manifest:org.opencontainers.image.description=${PROJECTNAME} - standard image (alpine)" \
         --annotation "manifest:org.opencontainers.image.licenses=MIT" \
         --annotation "manifest:org.opencontainers.image.version=${VERSION}" \
         --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE}" \
@@ -32341,8 +33703,8 @@ pipeline {
     }
 
     environment {
-        PROJECTNAME = 'search'
-        PROJECTORG = 'apimgr'
+        PROJECTNAME = '{projectname}'
+        PROJECTORG = '{projectorg}'
         BINDIR = 'binaries'
         RELDIR = 'releases'
         GODIR = "/tmp/${PROJECTORG}/go"
@@ -32403,6 +33765,7 @@ pipeline {
                     env.BUILD_DATE = sh(script: 'date +"%a %b %d, %Y at %H:%M:%S %Z"', returnStdout: true).trim()
                     env.LDFLAGS = "-s -w -X 'main.Version=${env.VERSION}' -X 'main.CommitID=${env.COMMIT_ID}' -X 'main.BuildDate=${env.BUILD_DATE}' -X 'main.OfficialSite=${env.OFFICIALSITE}'"
                     env.HAS_CLI = sh(script: '[ -d src/client ] && echo true || echo false', returnStdout: true).trim()
+                    env.HAS_AGENT = sh(script: '[ -d src/agent ] && echo true || echo false', returnStdout: true).trim()
                 }
                 sh 'mkdir -p ${BINDIR} ${RELDIR}'
                 echo "Build type: ${BUILD_TYPE}, Version: ${VERSION}"
@@ -32699,6 +34062,151 @@ pipeline {
             }
         }
 
+        // Agent builds - only if src/agent/ exists (matches GitHub Actions)
+        stage('Build Agent') {
+            when {
+                expression { env.HAS_AGENT == 'true' }
+            }
+            parallel {
+                stage('Agent Linux AMD64') {
+                    agent { label 'amd64' }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                -v ${WORKSPACE}:/build \
+                                -v ${GOCACHE}:/root/.cache/go-build \
+                                -v ${GODIR}:/go \
+                                -w /build \
+                                -e CGO_ENABLED=0 \
+                                -e GOOS=linux \
+                                -e GOARCH=amd64 \
+                                golang:alpine \
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-agent-linux-amd64 ./src/agent
+                        '''
+                    }
+                }
+                stage('Agent Linux ARM64') {
+                    agent { label 'arm64' }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                -v ${WORKSPACE}:/build \
+                                -v ${GOCACHE}:/root/.cache/go-build \
+                                -v ${GODIR}:/go \
+                                -w /build \
+                                -e CGO_ENABLED=0 \
+                                -e GOOS=linux \
+                                -e GOARCH=arm64 \
+                                golang:alpine \
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-agent-linux-arm64 ./src/agent
+                        '''
+                    }
+                }
+                stage('Agent Darwin AMD64') {
+                    agent { label 'amd64' }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                -v ${WORKSPACE}:/build \
+                                -v ${GOCACHE}:/root/.cache/go-build \
+                                -v ${GODIR}:/go \
+                                -w /build \
+                                -e CGO_ENABLED=0 \
+                                -e GOOS=darwin \
+                                -e GOARCH=amd64 \
+                                golang:alpine \
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-agent-darwin-amd64 ./src/agent
+                        '''
+                    }
+                }
+                stage('Agent Darwin ARM64') {
+                    agent { label 'amd64' }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                -v ${WORKSPACE}:/build \
+                                -v ${GOCACHE}:/root/.cache/go-build \
+                                -v ${GODIR}:/go \
+                                -w /build \
+                                -e CGO_ENABLED=0 \
+                                -e GOOS=darwin \
+                                -e GOARCH=arm64 \
+                                golang:alpine \
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-agent-darwin-arm64 ./src/agent
+                        '''
+                    }
+                }
+                stage('Agent Windows AMD64') {
+                    agent { label 'amd64' }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                -v ${WORKSPACE}:/build \
+                                -v ${GOCACHE}:/root/.cache/go-build \
+                                -v ${GODIR}:/go \
+                                -w /build \
+                                -e CGO_ENABLED=0 \
+                                -e GOOS=windows \
+                                -e GOARCH=amd64 \
+                                golang:alpine \
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-agent-windows-amd64.exe ./src/agent
+                        '''
+                    }
+                }
+                stage('Agent Windows ARM64') {
+                    agent { label 'amd64' }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                -v ${WORKSPACE}:/build \
+                                -v ${GOCACHE}:/root/.cache/go-build \
+                                -v ${GODIR}:/go \
+                                -w /build \
+                                -e CGO_ENABLED=0 \
+                                -e GOOS=windows \
+                                -e GOARCH=arm64 \
+                                golang:alpine \
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-agent-windows-arm64.exe ./src/agent
+                        '''
+                    }
+                }
+                stage('Agent FreeBSD AMD64') {
+                    agent { label 'amd64' }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                -v ${WORKSPACE}:/build \
+                                -v ${GOCACHE}:/root/.cache/go-build \
+                                -v ${GODIR}:/go \
+                                -w /build \
+                                -e CGO_ENABLED=0 \
+                                -e GOOS=freebsd \
+                                -e GOARCH=amd64 \
+                                golang:alpine \
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-agent-freebsd-amd64 ./src/agent
+                        '''
+                    }
+                }
+                stage('Agent FreeBSD ARM64') {
+                    agent { label 'amd64' }
+                    steps {
+                        sh '''
+                            docker run --rm \
+                                -v ${WORKSPACE}:/build \
+                                -v ${GOCACHE}:/root/.cache/go-build \
+                                -v ${GODIR}:/go \
+                                -w /build \
+                                -e CGO_ENABLED=0 \
+                                -e GOOS=freebsd \
+                                -e GOARCH=arm64 \
+                                golang:alpine \
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-agent-freebsd-arm64 ./src/agent
+                        '''
+                    }
+                }
+            }
+        }
+
         stage('Test') {
             agent { label 'amd64' }
             steps {
@@ -32817,7 +34325,7 @@ pipeline {
                             --label "org.opencontainers.image.authors=${PROJECTORG}" \
                             --label "org.opencontainers.image.title=${PROJECTNAME}" \
                             --label "org.opencontainers.image.base.name=${PROJECTNAME}" \
-                            --label "org.opencontainers.image.description=Containerized version of ${PROJECTNAME}" \
+                            --label "org.opencontainers.image.description=${PROJECTNAME} - standard image (alpine)" \
                             --label "org.opencontainers.image.licenses=MIT" \
                             --label "org.opencontainers.image.version=${VERSION}" \
                             --label "org.opencontainers.image.created=${BUILD_DATE}" \
@@ -32828,7 +34336,8 @@ pipeline {
                             --annotation "manifest:org.opencontainers.image.vendor=${PROJECTORG}" \
                             --annotation "manifest:org.opencontainers.image.authors=${PROJECTORG}" \
                             --annotation "manifest:org.opencontainers.image.title=${PROJECTNAME}" \
-                            --annotation "manifest:org.opencontainers.image.description=Containerized version of ${PROJECTNAME}" \
+                            --annotation "manifest:org.opencontainers.image.base.name=${PROJECTNAME}" \
+                            --annotation "manifest:org.opencontainers.image.description=${PROJECTNAME} - standard image (alpine)" \
                             --annotation "manifest:org.opencontainers.image.licenses=MIT" \
                             --annotation "manifest:org.opencontainers.image.version=${VERSION}" \
                             --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE}" \
@@ -32930,7 +34439,7 @@ pipeline {
 | Agent labels | `amd64` and `arm64` MUST be available |
 | Docker | Required on all agents (builds use golang:alpine) |
 | Docker buildx | Required on amd64 agent for multi-arch builds |
-| Go caches | `/tmp/apimgr/go-cache` and `/tmp/apimgr/go-mod-cache` |
+| Go caches | `/tmp/{projectorg}/go-cache` and `/tmp/{projectorg}/go-mod-cache` |
 
 ### Credentials Setup (Jenkins → Credentials → Add Credentials)
 
@@ -33016,11 +34525,71 @@ Before proceeding, confirm you understand:
 
 | REQUIRED | Example |
 |----------|---------|
-| Temp directory | `/tmp/apimgr/search-XXXXXX/` |
-| Volume mounts | `/tmp/apimgr/search-XXXXXX/rootfs/` |
+| Temp directory | `/tmp/{projectorg}/{projectname}-XXXXXX/` |
+| Volume mounts | `/tmp/{projectorg}/{projectname}-XXXXXX/rootfs/` |
 | Test databases | In temp directory, never project |
 
 **The project directory is for SOURCE CODE ONLY. All runtime/test data goes to the OS temp directory.**
+
+## AI Docker Compose Rules
+
+**AI assistants have STRICT rules about docker-compose usage:**
+
+### FORBIDDEN for AI (Human Use Only)
+
+| File | Purpose | Why AI Cannot Use |
+|------|---------|-------------------|
+| `docker/docker-compose.yml` | Production deployment | Human-only, production data |
+| `docker/docker-compose.dev.yml` | Development work | Human-only, manual testing |
+
+**AI must NEVER:**
+- Run `docker compose up` with `docker-compose.yml` or `docker-compose.dev.yml`
+- Use `./rootfs/`, `./docker/rootfs/`, or `./docker/file_system/` for runtime (project directory pollution)
+- Create or modify files in the project directory during testing
+- Mount project directory paths as volumes
+
+### ALLOWED for AI (Automated Testing Only)
+
+| File | Purpose | How AI Uses It |
+|------|---------|----------------|
+| `docker/docker-compose.test.yml` | Automated testing | Copy to temp dir, run from there |
+
+**AI testing workflow:**
+```bash
+# 1. Create temp directory (REQUIRED)
+mkdir -p "${TMPDIR:-/tmp}/${PROJECTORG}"
+TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-XXXXXX")
+mkdir -p "$TEMP_DIR/rootfs/config" "$TEMP_DIR/rootfs/data"
+
+# 2. Copy ONLY docker-compose.test.yml to temp dir
+cp docker/docker-compose.test.yml "$TEMP_DIR/docker-compose.yml"
+
+# 3. Run from temp dir (./rootfs resolves to $TEMP_DIR/rootfs)
+cd "$TEMP_DIR" && docker compose up -d
+
+# 4. Run tests...
+
+# 5. Cleanup
+cd - && docker compose -f "$TEMP_DIR/docker-compose.yml" down
+rm -rf "$TEMP_DIR"
+```
+
+### Path Rules
+
+| Path | Allowed | Why |
+|------|---------|-----|
+| `./rootfs/` | ❌ NEVER | Pollutes project directory |
+| `./docker/rootfs/` | ❌ NEVER | Pollutes project directory |
+| `./docker/file_system/` | ❌ NEVER for runtime | Build-time only (Dockerfile COPY) |
+| `$TEMP_DIR/rootfs/` | ✅ ALWAYS | Proper temp directory isolation |
+| `/tmp/{org}/{project}-XXXXXX/rootfs/` | ✅ ALWAYS | Full path equivalent |
+
+### Summary
+
+| Actor | docker-compose.yml | docker-compose.dev.yml | docker-compose.test.yml |
+|-------|-------------------|------------------------|------------------------|
+| **Human** | ✅ Production | ✅ Development | ✅ Testing |
+| **AI** | ❌ FORBIDDEN | ❌ FORBIDDEN | ✅ ONLY THIS (in temp dir) |
 
 ## Config Files: Runtime-Generated Only 
 
@@ -33031,7 +34600,8 @@ Config files are NEVER in the repository. They are generated at RUNTIME:
 | File | Location | Created When |
 |------|----------|--------------|
 | `server.yml` | `{config_dir}/server.yml` (see PART 4) | Server first run |
-| `cli.yml` | `~/.config/apimgr/search/cli.yml` | CLI first run |
+| `cli.yml` | `~/.config/{projectorg}/{projectname}/cli.yml` | CLI first run |
+| Tor config | `{config_dir}/tor/torrc` (see PART 32) | When Tor enabled |
 | Tor data | `{data_dir}/tor/` (see PART 32) | When Tor enabled |
 
 **Why runtime-generated?**
@@ -33057,16 +34627,16 @@ Config files are NEVER in the repository. They are generated at RUNTIME:
 
 ## Temporary Directory Structure 
 
-**CRITICAL: NEVER use `/tmp` root directory directly. ALWAYS use `/tmp/apimgr/search-XXXXXX` structure.**
+**CRITICAL: NEVER use `/tmp` root directory directly. ALWAYS use `/tmp/{projectorg}/{projectname}-XXXXXX` structure.**
 
 **FORBIDDEN:**
 - ❌ `/tmp/myfile` - Root tmp directory
-- ❌ `/tmp/search` - Missing org prefix
+- ❌ `/tmp/{projectname}` - Missing org prefix
 - ❌ `mktemp -d` - No org/project structure
 - ❌ `/tmp/test-data` - Generic paths
 
 **REQUIRED:**
-- ✓ `/tmp/apimgr/search-XXXXXX/` - Full structure
+- ✓ `/tmp/{projectorg}/{projectname}-XXXXXX/` - Full structure
 - ✓ `/tmp/cloudops/echoip-aB3xY9/` - Org + project + random
 - ✓ `mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-XXXXXX"` - Proper command
 
@@ -33074,7 +34644,7 @@ Config files are NEVER in the repository. They are generated at RUNTIME:
 
 ### Creating Temp Directories
 
-**Always use `apimgr/search-` structure for identifiable temp dirs:**
+**Always use `{projectorg}/{projectname}-` structure for identifiable temp dirs:**
 
 | Language | How to Create Prefixed Temp Dir |
 |----------|--------------------------------|
@@ -33088,9 +34658,9 @@ Config files are NEVER in the repository. They are generated at RUNTIME:
 
 | Purpose | Path Pattern | Example |
 |---------|--------------|---------|
-| Dev/Test runtime | `{tempdir}/apimgr/search-XXXXXX/` | `/tmp/apimgr/search-aB3xY9/` |
-| Config volume | `{tempdir}/apimgr/search-XXXXXX/rootfs/config/` | `/tmp/apimgr/search-aB3xY9/rootfs/config/` |
-| Data volume | `{tempdir}/apimgr/search-XXXXXX/rootfs/data/` | `/tmp/apimgr/search-aB3xY9/rootfs/data/` |
+| Dev/Test runtime | `{tempdir}/{projectorg}/{projectname}-XXXXXX/` | `/tmp/{projectorg}/{projectname}-aB3xY9/` |
+| Config volume | `{tempdir}/{projectorg}/{projectname}-XXXXXX/rootfs/config/` | `/tmp/{projectorg}/{projectname}-aB3xY9/rootfs/config/` |
+| Data volume | `{tempdir}/{projectorg}/{projectname}-XXXXXX/rootfs/data/` | `/tmp/{projectorg}/{projectname}-aB3xY9/rootfs/data/` |
 
 ### OS Temp Directories
 
@@ -33108,24 +34678,24 @@ Config files are NEVER in the repository. They are generated at RUNTIME:
 | **NEVER** | Use project directory for test/runtime data |
 | **NEVER** | Hardcode `/tmp` - use `os.TempDir()` or `mktemp` |
 | **NEVER** | Use bare `mktemp -d` without org prefix |
-| **ALWAYS** | Use `apimgr.` prefix for all temp dirs |
+| **ALWAYS** | Use `{projectorg}/{projectname}-` structure for all temp dirs |
 | **ALWAYS** | Detect org from git remote or directory path |
 
 ### Cleanup
 
 ```bash
 # Find all temp dirs for this org
-ls -la "${TMPDIR:-/tmp}"/${PROJECTORG}.*/
+ls -la "${TMPDIR:-/tmp}/${PROJECTORG}/"
 
 # Clean all temp dirs for this org
-rm -rf "${TMPDIR:-/tmp}"/${PROJECTORG}.*/
+rm -rf "${TMPDIR:-/tmp}/${PROJECTORG}/"
 ```
 
 ### Correct vs Incorrect
 
 | WRONG | RIGHT | Why |
 |-------|-------|-----|
-| `/tmp/` | `/tmp/apimgr/search-XXXXXX/` | NEVER use root tmp |
+| `/tmp/` | `/tmp/{projectorg}/{projectname}-XXXXXX/` | NEVER use root tmp |
 | `/tmp/myfile` | `/tmp/cloudops/echoip-aB3xY9/myfile` | Always use org/project structure |
 | `/tmp/echoip` | `/tmp/cloudops/echoip-kL9mN2/` | Missing org, missing random suffix |
 | `/tmp/test-data/` | `/tmp/devtools/quotesvc-Qw5rT1/test-data/` | Generic path not allowed |
@@ -33133,19 +34703,19 @@ rm -rf "${TMPDIR:-/tmp}"/${PROJECTORG}.*/
 | `os.TempDir()` alone | `os.MkdirTemp(filepath.Join(os.TempDir(), projectOrg), projectName+"-")` | Must nest under org |
 | Hardcoded org name | Detect from git remote or path | Auto-detect, never hardcode |
 
-**Rule: ALL temp directories MUST be under `/tmp/apimgr/search-XXXXXX/` - no exceptions.**
+**Rule: ALL temp directories MUST be under `/tmp/{projectorg}/{projectname}-XXXXXX/` - no exceptions.**
 
 ### Summary: Temp Directory Rules
 
 **The ONLY acceptable temp directory pattern:**
 ```
-/tmp/apimgr/search-XXXXXX/
+/tmp/{projectorg}/{projectname}-XXXXXX/
 ```
 
 **Breaking it down:**
 - `/tmp/` or `$TMPDIR` - OS temp directory base
-- `apimgr/` - Organization directory (cloudops, acmesoft, etc.)
-- `search-XXXXXX` - Project directory with random suffix
+- `{projectorg}/` - Organization directory (cloudops, acmesoft, etc.)
+- `{projectname}-XXXXXX` - Project directory with random suffix
 
 **Examples of CORRECT paths:**
 - `/tmp/cloudops/echoip-aB3xY9/` ✓
@@ -33160,7 +34730,7 @@ rm -rf "${TMPDIR:-/tmp}"/${PROJECTORG}.*/
 
 **Why this structure:**
 - Prevents conflicts between projects
-- Makes cleanup easy (`rm -rf /tmp/apimgr.*`)
+- Makes cleanup easy (`rm -rf /tmp/{projectorg}/`)
 - Identifies which project created temp files
 - Prevents pollution of root `/tmp` directory
 - Multiple projects can run simultaneously
@@ -33179,8 +34749,8 @@ rm -rf "${TMPDIR:-/tmp}"/${PROJECTORG}.*/
 | **NEVER run binaries locally** | All binaries run inside containers, never directly |
 | **NEVER** | Run `go build` directly on local machine |
 | **NEVER** | Run `go test` directly on local machine |
-| **NEVER** | Run `binaries/search` on local machine |
-| **NEVER** | Run `$BUILD_DIR/search` on local machine |
+| **NEVER** | Run `binaries/{projectname}` on local machine |
+| **NEVER** | Run `$BUILD_DIR/{projectname}` on local machine |
 | **ALWAYS** | Build inside container, run inside container |
 
 ### Container Types
@@ -33224,10 +34794,112 @@ rm -rf "${TMPDIR:-/tmp}"/${PROJECTORG}.*/
 - ✓ Test ALL project-specific endpoints (IDEA.md)
 - ✓ If project has CRUD → Test full CRUD (Create, Read, Update, Delete)
 - ✓ Test both API endpoints (`/api/{api_version}/*`) AND frontend routes (`/**`)
-- ✓ Test API .txt extension (for simplicity)
-- ✓ Test Accept headers (application/json, text/plain, text/html)
+- ✓ Test ALL `.txt` endpoints (robots.txt, security.txt, API .txt extension)
+- ✓ Test content negotiation with ALL required Accept headers (see below)
 - ✓ Test frontend smart detection (browser → HTML, CLI → formatted text)
 - ✓ Test authentication (admin, user if applicable)
+
+### Content Negotiation Testing (REQUIRED)
+
+**Every route MUST be tested with ALL applicable Accept headers. No exceptions.**
+
+| Route Type | Required Accept Headers | Why |
+|------------|------------------------|-----|
+| **Frontend routes** (`/**`) | `text/html`, `text/plain` | Browsers get HTML, CLI/curl gets plain text |
+| **Backend/API routes** (`/api/*`) | `application/json`, `text/plain` | API clients get JSON, CLI/curl gets plain text |
+
+**Frontend Route Testing (ALL routes):**
+```bash
+# Every frontend route MUST be tested with BOTH:
+curl -H "Accept: text/html" /route          # Returns HTML
+curl -H "Accept: text/plain" /route         # Returns plain text
+
+# Example: Test user profile page
+curl -H "Accept: text/html" /users/john     # HTML page
+curl -H "Accept: text/plain" /users/john    # Plain text output
+```
+
+**Backend/API Route Testing (ALL routes):**
+```bash
+# Every API route MUST be tested with BOTH:
+curl -H "Accept: application/json" /api/v1/resource    # Returns JSON
+curl -H "Accept: text/plain" /api/v1/resource          # Returns plain text
+
+# Example: Test jokes API
+curl -H "Accept: application/json" /api/v1/jokes/random   # JSON response
+curl -H "Accept: text/plain" /api/v1/jokes/random         # Plain text response
+```
+
+**Backend .txt Endpoint Testing (ALL endpoints):**
+```bash
+# Every *.txt endpoint MUST be tested:
+curl /robots.txt                            # Robots file
+curl /security.txt                          # Security policy
+curl /.well-known/security.txt              # Security policy (well-known)
+curl /api/v1/jokes/random.txt               # API .txt extension
+
+# ALL API endpoints that support .txt MUST be tested with .txt
+curl /api/v1/users/john.txt                 # User profile as text
+curl /api/v1/weather/Chicago.txt            # Weather as text
+```
+
+**Test Matrix Template:**
+```bash
+#!/bin/bash
+# tests/test_content_negotiation.sh
+
+# Frontend routes - test BOTH text/html and text/plain
+frontend_routes=(
+    "/"
+    "/users"
+    "/users/john"
+    "/settings"
+)
+
+for route in "${frontend_routes[@]}"; do
+    # Test HTML response
+    curl -sf -H "Accept: text/html" "${BASE_URL}${route}" | grep -q "<!DOCTYPE html" || fail "HTML failed for $route"
+    # Test plain text response
+    curl -sf -H "Accept: text/plain" "${BASE_URL}${route}" | head -1 || fail "Plain text failed for $route"
+done
+
+# Backend routes - test BOTH application/json and text/plain
+api_routes=(
+    "/api/v1/status"
+    "/api/v1/jokes/random"
+    "/api/v1/users/john"
+)
+
+for route in "${api_routes[@]}"; do
+    # Test JSON response
+    curl -sf -H "Accept: application/json" "${BASE_URL}${route}" | jq . || fail "JSON failed for $route"
+    # Test plain text response
+    curl -sf -H "Accept: text/plain" "${BASE_URL}${route}" || fail "Plain text failed for $route"
+done
+
+# Backend .txt endpoints - test ALL of them
+txt_endpoints=(
+    "/robots.txt"
+    "/security.txt"
+    "/.well-known/security.txt"
+    "/api/v1/jokes/random.txt"
+    "/api/v1/users/john.txt"
+)
+
+for endpoint in "${txt_endpoints[@]}"; do
+    curl -sf "${BASE_URL}${endpoint}" || fail ".txt failed for $endpoint"
+done
+```
+
+**Coverage Verification:**
+
+| Test Type | Verification |
+|-----------|--------------|
+| Frontend + text/html | Response contains `<!DOCTYPE html` |
+| Frontend + text/plain | Response is plain text (no HTML tags) |
+| Backend + application/json | Response parses as valid JSON |
+| Backend + text/plain | Response is plain text |
+| *.txt endpoints | Response returns 200 with text content |
 
 **Example: User management project MUST test:**
 ```bash
@@ -33558,27 +35230,28 @@ verify_all_endpoints_tested
 
 ```bash
 # 1. Build in Docker (always use Docker for builds)
-BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}.XXXXXX")
+mkdir -p "${TMPDIR:-/tmp}/${PROJECTORG}"
+BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-XXXXXX")
 docker run --rm -v $(pwd):/build -w /build -e CGO_ENABLED=0 \
-  golang:alpine go build -o /build/binaries/search ./src
+  golang:alpine go build -o /build/binaries/{projectname} ./src
 
 # 2. Test (prefer Incus, fallback to Docker)
 if command -v incus &>/dev/null; then
   # PREFERRED: Full OS test in Incus (debian + systemd)
   # Use latest Debian stable (currently 12/bookworm)
   echo "Testing with Incus (Debian + systemd)..."
-  incus launch images:debian/12 test-search
-  incus file push binaries/search test-search/usr/local/bin/
-  incus exec test-search -- chmod +x /usr/local/bin/search
-  incus exec test-search -- search --help
-  incus exec test-search -- search --service --install
-  incus exec test-search -- systemctl status search
-  incus delete test-search --force
+  incus launch images:debian/12 test-{projectname}
+  incus file push binaries/{projectname} test-{projectname}/usr/local/bin/
+  incus exec test-{projectname} -- chmod +x /usr/local/bin/{projectname}
+  incus exec test-{projectname} -- {projectname} --help
+  incus exec test-{projectname} -- {projectname} --service --install
+  incus exec test-{projectname} -- systemctl status {projectname}
+  incus delete test-{projectname} --force
 else
   # FALLBACK: Quick test in Docker (alpine, no systemd)
   echo "Incus not available, testing with Docker..."
   docker run --rm -v $(pwd)/binaries:/app alpine:latest \
-    /app/search --help
+    /app/{projectname} --help
 fi
 ```
 
@@ -33606,7 +35279,7 @@ fi
 1. Set up Go cache directories (GODIR/GOCACHE) for faster builds
 2. Build all binaries using Docker (golang:alpine) in temp directory:
    - Server (`./src`)
-   - CLI client (`./src/client`) if exists
+   - client (`./src/client`) if exists
    - Agent (`./src/agent`) if exists
 3. Install test tools in container (Docker: `apk add --no-cache curl bash file jq`)
 4. Copy binaries to test container
@@ -33637,7 +35310,8 @@ PROJECTNAME=$(basename "$PWD")
 PROJECTORG=$(basename "$(dirname "$PWD")")
 
 # Create temp directory for build
-BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}.XXXXXX")
+mkdir -p "${TMPDIR:-/tmp}/${PROJECTORG}"
+BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-XXXXXX")
 trap "rm -rf $BUILD_DIR" EXIT
 
 # Go cache directories (same as Makefile)
@@ -33657,9 +35331,9 @@ GO_DOCKER="docker run --rm \
 echo "Building server binary in Docker..."
 $GO_DOCKER go build -o "$BUILD_DIR/${PROJECTNAME}" ./src
 
-# Build CLI client if exists
+# Build client if exists
 if [ -d "src/client" ]; then
-    echo "Building CLI client in Docker..."
+    echo "Building client in Docker..."
     $GO_DOCKER go build -o "$BUILD_DIR/${PROJECTNAME}-cli" ./src/client
 fi
 
@@ -33794,7 +35468,7 @@ docker run --rm \
         echo '✗ FAILED: Server --help does not show renamed binary name'
     fi
 
-    echo '=== CLI Client Tests (if exists) ==='
+    echo '=== Client Tests (if exists) ==='
     if [ -f /app/${PROJECTNAME}-cli ]; then
         /app/${PROJECTNAME}-cli --version || echo 'FAILED: CLI --version'
         /app/${PROJECTNAME}-cli --help || echo 'FAILED: CLI --help'
@@ -33820,7 +35494,7 @@ docker run --rm \
             /app/${PROJECTNAME}-cli --server http://localhost:64580 status || echo 'CLI status (no token) failed or not applicable'
         fi
     else
-        echo 'CLI client not built - skipping'
+        echo 'client not built - skipping'
     fi
 
     echo '=== Agent Tests (if exists) ==='
@@ -33883,7 +35557,8 @@ CONTAINER_NAME="test-${PROJECTNAME}-$$"
 INCUS_IMAGE="images:debian/12"
 
 # Create temp directory for build
-BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}.XXXXXX")
+mkdir -p "${TMPDIR:-/tmp}/${PROJECTORG}"
+BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-XXXXXX")
 trap "rm -rf $BUILD_DIR; incus delete $CONTAINER_NAME --force 2>/dev/null || true" EXIT
 
 # Go cache directories (same as Makefile)
@@ -33903,9 +35578,9 @@ GO_DOCKER="docker run --rm \
 echo "Building server binary in Docker..."
 $GO_DOCKER go build -o "$BUILD_DIR/${PROJECTNAME}" ./src
 
-# Build CLI client if exists
+# Build client if exists
 if [ -d "src/client" ]; then
-    echo "Building CLI client in Docker..."
+    echo "Building client in Docker..."
     $GO_DOCKER go build -o "$BUILD_DIR/${PROJECTNAME}-cli" ./src/client
 fi
 
@@ -33925,7 +35600,7 @@ echo "Copying binaries to container..."
 incus file push "$BUILD_DIR/${PROJECTNAME}" "$CONTAINER_NAME/usr/local/bin/"
 incus exec "$CONTAINER_NAME" -- chmod +x "/usr/local/bin/${PROJECTNAME}"
 
-# Copy CLI client if built
+# Copy client if built
 if [ -f "$BUILD_DIR/${PROJECTNAME}-cli" ]; then
     incus file push "$BUILD_DIR/${PROJECTNAME}-cli" "$CONTAINER_NAME/usr/local/bin/"
     incus exec "$CONTAINER_NAME" -- chmod +x "/usr/local/bin/${PROJECTNAME}-cli"
@@ -34060,7 +35735,7 @@ incus exec "$CONTAINER_NAME" -- bash -c "
         echo '✗ FAILED: Server --help does not show renamed binary name'
     fi
 
-    echo '=== CLI Client Tests (if exists) ==='
+    echo '=== Client Tests (if exists) ==='
     if [ -f /usr/local/bin/${PROJECTNAME}-cli ]; then
         ${PROJECTNAME}-cli --version || echo 'FAILED: CLI --version'
         ${PROJECTNAME}-cli --help || echo 'FAILED: CLI --help'
@@ -34085,7 +35760,7 @@ incus exec "$CONTAINER_NAME" -- bash -c "
             ${PROJECTNAME}-cli --server http://localhost:80 status || echo 'CLI status (no token) failed or not applicable'
         fi
     else
-        echo 'CLI client not installed - skipping'
+        echo 'client not installed - skipping'
     fi
 
     echo '=== Agent Tests (if exists) ==='
@@ -34157,9 +35832,9 @@ fi
 | **Build method** | ALWAYS use Docker (golang:alpine) with GODIR/GOCACHE |
 | **Go cache** | Use `GODIR="${HOME}/.local/share/go"` and `GOCACHE="${HOME}/.local/share/go/build"` |
 | **Build location** | ALWAYS use temp directory |
-| **Build all components** | Build server, CLI client (if `src/client/` exists), agent (if `src/agent/` exists) |
+| **Build all components** | Build server, client (if `src/client/` exists), agent (if `src/agent/` exists) |
 | **Test container tools** | Docker alpine MUST install: `apk add --no-cache curl bash file jq` |
-| **Test all binaries** | Test `--version` and `--help` for server, CLI client, and agent if built |
+| **Test all binaries** | Test `--version` and `--help` for server, client, and agent if built |
 | **Binary rename test** | Copy binary with new name, verify `--help` shows renamed name (not hardcoded) |
 | **Admin setup** | Use setup token to create admin account, login, generate API token |
 | **CLI full functionality** | Test CLI with API token against running server (not just --help) |
@@ -34182,14 +35857,14 @@ See PART 33: "Shell Completions (Built-in)" for full implementation details.
 
 ```bash
 # Generate and install completions (prints to stdout, user redirects)
-search --shell completions bash > /etc/bash_completion.d/search
-search-cli --shell completions bash > /etc/bash_completion.d/search-cli
-search-agent --shell completions bash > /etc/bash_completion.d/search-agent
+{projectname} --shell completions bash > /etc/bash_completion.d/{projectname}
+{projectname}-cli --shell completions bash > /etc/bash_completion.d/{projectname}-cli
+{projectname}-agent --shell completions bash > /etc/bash_completion.d/{projectname}-agent
 
 # Or use eval in shell rc file
-eval "$(search --shell init)"
-eval "$(search-cli --shell init)"
-eval "$(search-agent --shell init)"
+eval "$({projectname} --shell init)"
+eval "$({projectname}-cli --shell init)"
+eval "$({projectname}-agent --shell init)"
 ```
 
 | Advantage | Description |
@@ -34374,7 +36049,7 @@ func AdminAuthMiddleware(next http.Handler) http.Handler {
 # Set project path to YOUR actual project location (examples shown below)
 # Use git top-level if in a git repo: PROJECT_PATH="$(git rev-parse --show-toplevel)"
 # Or use absolute path to your project directory
-PROJECT_PATH="/root/Projects/github/apimgr/search"  # Example 1
+PROJECT_PATH="/root/Projects/github/apimgr/{projectname}"  # Example 1
 # PROJECT_PATH="~/Documents/myproject"                     # Example 2
 # PROJECT_PATH="~/myproject"                               # Example 3
 # PROJECT_PATH="/workspace/dev/myproject"                  # Example 4
@@ -34393,7 +36068,7 @@ GO_DOCKER="docker run --rm \
   -e CGO_ENABLED=0"
 
 # Build (outputs to binaries/ which can be mounted into test containers)
-$GO_DOCKER golang:alpine go build -o /build/binaries/search ./src
+$GO_DOCKER golang:alpine go build -o /build/binaries/{projectname} ./src
 
 # Run tests
 $GO_DOCKER golang:alpine go test ./...
@@ -34438,20 +36113,20 @@ docker run --rm \
   -v $GOCACHE:/root/.cache/go-build \
   -v $GODIR:/go \
   -w /build -e CGO_ENABLED=0 \
-  golang:alpine go build -o /build/binaries/search ./src
+  golang:alpine go build -o /build/binaries/{projectname} ./src
 
 # Test in Docker (quick) - install tools first
 docker run --rm -v $(pwd)/binaries:/app alpine:latest sh -c "
   apk add --no-cache curl bash file jq >/dev/null
-  /app/search --help
+  /app/{projectname} --help
 "
 
 # Test in Incus (full OS with systemd) - PREFERRED
 # Use latest Debian stable (currently 12/bookworm)
-incus launch images:debian/12 test-search
-incus file push binaries/search test-search/usr/local/bin/
-incus exec test-search -- search --help
-incus delete test-search --force
+incus launch images:debian/12 test-{projectname}
+incus file push binaries/{projectname} test-{projectname}/usr/local/bin/
+incus exec test-{projectname} -- {projectname} --help
+incus delete test-{projectname} --force
 ```
 
 ### Testing with Config/Data
@@ -34463,7 +36138,8 @@ GOCACHE="${HOME}/.local/share/go/build"
 mkdir -p "$GODIR" "$GOCACHE"
 
 # Create prefixed temp dir for test data
-TEST_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}.XXXXXX")
+mkdir -p "${TMPDIR:-/tmp}/${PROJECTORG}"
+TEST_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-XXXXXX")
 mkdir -p $TEST_DIR/{config,data,logs}
 
 # Build to binaries/ (with caching)
@@ -34472,20 +36148,20 @@ docker run --rm \
   -v $GOCACHE:/root/.cache/go-build \
   -v $GODIR:/go \
   -w /build -e CGO_ENABLED=0 \
-  golang:alpine go build -o /build/binaries/search ./src
+  golang:alpine go build -o /build/binaries/{projectname} ./src
 
 # Quick test in Docker (install tools first)
 docker run --rm -v $(pwd)/binaries:/app alpine:latest sh -c "
   apk add --no-cache curl bash file jq >/dev/null
-  /app/search --help
-  /app/search --version
+  /app/{projectname} --help
+  /app/{projectname} --version
 "
 
 # Full test with config/data in Docker
 docker run --rm \
   -v $(pwd)/binaries:/app \
   -v $TEST_DIR:/test \
-  alpine:latest /app/search \
+  alpine:latest /app/{projectname} \
     --config /test/config \
     --data /test/data \
     --log /test/logs
@@ -34500,28 +36176,29 @@ rm -rf $TEST_DIR
 
 ```bash
 # Create prefixed temp dir
-TEST_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}.XXXXXX")
+mkdir -p "${TMPDIR:-/tmp}/${PROJECTORG}"
+TEST_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-XXXXXX")
 mkdir -p $TEST_DIR/{config,data,logs}
 
 # Build
 docker run --rm -v $(pwd):/build -w /build -e CGO_ENABLED=0 \
-  golang:alpine go build -o /build/binaries/search ./src
+  golang:alpine go build -o /build/binaries/{projectname} ./src
 
 # Launch Incus container (use latest Debian stable)
-incus launch images:debian/12 test-search
+incus launch images:debian/12 test-{projectname}
 
 # Push binary and test data
-incus file push binaries/search test-search/usr/local/bin/
-incus exec test-search -- mkdir -p /etc/apimgr/search /var/lib/apimgr/search
+incus file push binaries/{projectname} test-{projectname}/usr/local/bin/
+incus exec test-{projectname} -- mkdir -p /etc/{projectorg}/{projectname} /var/lib/{projectorg}/{projectname}
 
 # Test
-incus exec test-search -- search --help
-incus exec test-search -- search --version
-incus exec test-search -- search --service --install
-incus exec test-search -- systemctl status search
+incus exec test-{projectname} -- {projectname} --help
+incus exec test-{projectname} -- {projectname} --version
+incus exec test-{projectname} -- {projectname} --service --install
+incus exec test-{projectname} -- systemctl status {projectname}
 
 # Cleanup
-incus delete test-search --force
+incus delete test-{projectname} --force
 rm -rf $TEST_DIR
 ```
 
@@ -34566,11 +36243,11 @@ rm -rf $TEST_DIR
 
 **Kill Process Flow:**
 ```
-1. pgrep -la search           # List matching processes
+1. pgrep -la {projectname}           # List matching processes
 2. Verify the PID is correct          # CHECK before killing
 3. kill {pid}                         # Graceful termination (SIGTERM)
 4. sleep 5                            # Wait for graceful shutdown
-5. pgrep -la search           # Check if still running
+5. pgrep -la {projectname}           # Check if still running
 6. kill -9 {pid}                      # Force kill ONLY if still running
 ```
 
@@ -34578,23 +36255,23 @@ rm -rf $TEST_DIR
 
 | Rule | Description |
 |------|-------------|
-| **ONLY this project** | Only stop/remove containers named `search` |
+| **ONLY this project** | Only stop/remove containers named `{projectname}` |
 | **NEVER other containers** | Even if they look related or unused |
-| **NEVER images not ours** | Only remove `apimgr/search:*` images |
+| **NEVER images not ours** | Only remove `{projectorg}/{projectname}:*` images |
 | **NEVER base images** | Never remove `golang`, `alpine`, `ubuntu`, etc. |
 | **NEVER volumes** | Unless explicitly part of this project |
 
 **Docker Cleanup Flow:**
 ```
-1. docker ps -a --filter name=search     # List ONLY this project's containers
-2. Verify output shows ONLY search       # CHECK before removing
-3. docker stop search                    # Stop gracefully
-4. docker rm search                      # Remove container
+1. docker ps -a --filter name={projectname}     # List ONLY this project's containers
+2. Verify output shows ONLY {projectname}       # CHECK before removing
+3. docker stop {projectname}                    # Stop gracefully
+4. docker rm {projectname}                      # Remove container
 
 # For images:
-1. docker images apimgr/search     # List ONLY this project's images
+1. docker images {projectorg}/{projectname}     # List ONLY this project's images
 2. Verify output shows ONLY our images          # CHECK before removing
-3. docker rmi apimgr/search:tag    # Remove SPECIFIC tag
+3. docker rmi {projectorg}/{projectname}:tag    # Remove SPECIFIC tag
 ```
 
 ### Allowed Commands (Project-Scoped ONLY)
@@ -34602,10 +36279,10 @@ rm -rf $TEST_DIR
 | Command | Description |
 |---------|-------------|
 | `kill {specific-pid}` | Kill exact PID only (after verification) |
-| `pkill -x search` | Exact binary name match only |
-| `docker stop search` | Stop specific container by name |
-| `docker rm search` | Remove specific container by name |
-| `docker rmi apimgr/search:tag` | Remove specific image:tag |
+| `pkill -x {projectname}` | Exact binary name match only |
+| `docker stop {projectname}` | Stop specific container by name |
+| `docker rm {projectname}` | Remove specific container by name |
+| `docker rmi {projectorg}/{projectname}:tag` | Remove specific image:tag |
 | `rm -rf $BUILD_DIR` | Remove temp build dir (from mktemp) |
 | `rm -rf $TEST_DIR` | Remove temp test dir (from mktemp) |
 
@@ -34628,10 +36305,10 @@ rm -rf $TEST_DIR
 | Temp build dir | `rm -rf $BUILD_DIR` (saved from mktemp) |
 | Temp test dir | `rm -rf $TEST_DIR` (saved from mktemp) |
 | All mktemp dirs | Cleaned automatically on reboot |
-| Project binaries | `rm -rf binaries/search*` |
-| Project releases | `rm -rf releases/search*` |
+| Project binaries | `rm -rf binaries/{projectname}*` |
+| Project releases | `rm -rf releases/{projectname}*` |
 
-**Note:** Always use `mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}.XXXXXX"` and save the path to a variable for cleanup. Temp dirs are auto-cleaned on reboot.
+**Note:** Always use `mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-XXXXXX"` and save the path to a variable for cleanup. Temp dirs are auto-cleaned on reboot.
 
 ### NEVER Delete Without Confirmation
 
@@ -34675,7 +36352,7 @@ Documentation uses MkDocs Material theme with dark/light/auto switching.
 | Theme | MkDocs Material (follows PART 16 theme rules) |
 | Theme files | `docs/stylesheets/dark.css`, `docs/stylesheets/light.css` |
 | Hosting | ReadTheDocs |
-| URL format | `https://apimgr-search.readthedocs.io` |
+| URL format | `https://{projectorg}-{projectname}.readthedocs.io` |
 | Source directory | `docs/` (ONLY ReadTheDocs files) |
 
 ## Required Files
@@ -34706,11 +36383,11 @@ Documentation uses MkDocs Material theme with dark/light/auto switching.
 
 ```yaml
 site_name: {PROJECTNAME}
-site_url: https://apimgr-search.readthedocs.io
+site_url: https://{projectorg}-{projectname}.readthedocs.io
 site_description: "{Project description}"
-site_author: apimgr
+site_author: {projectorg}
 
-repo_name: apimgr/search
+repo_name: {projectorg}/{projectname}
 repo_url: {PLATFORM_REPO_URL}
 edit_uri: edit/main/docs/  # Adjust path format for GitLab/Gitea if needed
 
@@ -34789,8 +36466,8 @@ markdown_extensions:
   - pymdownx.keys
   - pymdownx.magiclink:
       repo_url_shorthand: true
-      user: apimgr
-      repo: search
+      user: {projectorg}
+      repo: {projectname}
   - pymdownx.mark
   - pymdownx.smartsymbols
   - pymdownx.superfences:
@@ -35143,10 +36820,10 @@ pymdown-extensions>=10.0
 
 ```bash
 # Docker
-docker run -p 64580:80 {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest
+docker run -p 64580:80 {PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:latest
 
 # Binary
-./search-linux-amd64 --config server.yml
+./{projectname}-linux-amd64 --config server.yml
 ```
 
 ## Features
@@ -35166,7 +36843,7 @@ docker run -p 64580:80 {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest
 ## Links
 
 - [Repository]({PLATFORM_REPO_URL})
-- [Live Demo](https://search.apimgr.us) (if applicable)
+- [Live Demo](https://{projectname}.{projectorg}.us) (if applicable)
 - [API Documentation](/openapi) (Swagger UI)
 - [GraphQL Playground](/graphql)
 
@@ -35184,10 +36861,10 @@ MIT - See [LICENSE.md]({PLATFORM_REPO_URL}/blob/main/LICENSE.md)
 
 ```bash
 docker run -d \
-  --name search \
+  --name {projectname} \
   -p 64580:80 \
-  -v search-data:/data \
-  {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest
+  -v {projectname}-data:/data \
+  {PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:latest
 ```
 
 ## Binary
@@ -35196,17 +36873,17 @@ Download from [releases]({PLATFORM_REPO_URL}/releases):
 
 ```bash
 # Linux AMD64
-wget {PLATFORM_RELEASE_URL}/search-linux-amd64
-chmod +x search-linux-amd64
-./search-linux-amd64
+wget {PLATFORM_RELEASE_URL}/{projectname}-linux-amd64
+chmod +x {projectname}-linux-amd64
+./{projectname}-linux-amd64
 ```
 
 ## Systemd Service
 
 ```bash
-sudo ./search --service install
-sudo systemctl start search
-sudo systemctl enable search
+sudo ./{projectname} --service install
+sudo systemctl start {projectname}
+sudo systemctl enable {projectname}
 ```
 
 ## Configuration
@@ -35221,7 +36898,7 @@ See [Configuration](configuration.md) for all options.
 
 ## Config File
 
-Default location: `/etc/apimgr/search/server.yml`
+Default location: `/etc/{projectorg}/{projectname}/server.yml`
 
 ```yaml
 server:
@@ -35320,14 +36997,14 @@ Programmatic access via `/api/{api_version}/{admin_path}/` with bearer token aut
 
 ```bash
 git clone {PLATFORM_REPO_URL}
-cd search
+cd {projectname}
 make build
 ```
 
 ## Run Locally
 
 ```bash
-./binaries/search --config server.yml --debug
+./binaries/{projectname} --config server.yml --debug
 ```
 
 ## Testing
@@ -35527,7 +37204,7 @@ server:
       - zh
     fallback_language: en
     cookie_name: lang
-    cookie_max_age: 31536000  # 1 year
+    cookie_max_age: 365d  # 1 year
 ```
 
 ---
@@ -35797,29 +37474,273 @@ func TestAccessibility(t *testing.T) {
 
 **ALL projects MUST have built-in Tor hidden service support.**
 
+**Tor provides two capabilities:**
+1. **Hidden Service** - server-side .onion hosting (always enabled if Tor binary found)
+2. **Outbound Network** - route server's outbound requests through Tor (optional)
+
+**Tor is NOT used for:**
+- SOCKS proxy / browsing through Tor (client-side)
+- Tor relay or exit node functionality
+
 Tor integration uses **external Tor binary** via `github.com/cretz/bine`. This maintains `CGO_ENABLED=0` compatibility for static binaries while providing full Tor hidden service functionality.
 
+**Key Architecture Points:**
+- **Server binary owns Tor** - starts, stops, and manages Tor process lifecycle
+- **Hidden service maps to server port** - `.onion:80` → `localhost:{server_port}`
+- **Server enforces permissions** - creates all dirs/files with correct owner/group/perms
+- **HiddenServiceVersion 3** - v3 onion addresses (56 characters, ed25519) via ADD_ONION
+- **Unix socket for control** - No TCP exposure for Tor control on Unix/macOS/BSD
+- **SafeLogging enabled** - Scrubs sensitive info from Tor logs
+
 ## Configuration
+
+**Hidden service is ALWAYS enabled if Tor binary is found.** No enable/disable toggle - if Tor exists, use it.
 
 ```yaml
 server:
   tor:
     # Path to Tor binary (auto-detected if empty)
+    # Leave empty for auto-detection (recommended)
     binary: ""
-    # Data directory for this instance's Tor data
-    # Default: {data_dir}/tor/
-    data_dir: ""
+
+    # --- Outbound Network Settings ---
+    # Use Tor network for outbound connections (server-wide default)
+    use_network: false
+
+    # Allow users to set their own Tor network preference
+    allow_user_preference: true
+
+    # --- Performance Settings ---
+    # Maximum circuits to keep open (higher = faster but more memory)
+    max_circuits: 32
+
+    # Circuit timeout (how long before giving up)
+    circuit_timeout: 60s
+
+    # Bootstrap timeout (wait for Tor network connection)
+    bootstrap_timeout: 3m
+
+    # --- Security Settings ---
+    # Scrub sensitive info from Tor logs
+    safe_logging: true
+
+    # Maximum concurrent streams per circuit
+    max_streams_per_circuit: 100
+
+    # Close circuit when stream limit exceeded
+    close_circuit_on_stream_limit: true
+
+    # --- Bandwidth Settings ---
+    # Maximum bandwidth rate per second (e.g., "1 MB", "500 KB")
+    bandwidth_rate: "1 MB"
+
+    # Maximum bandwidth burst per second (e.g., "2 MB", "1 MB")
+    bandwidth_burst: "2 MB"
+
+    # Maximum monthly bandwidth (e.g., "100 GB", "50 GB", "unlimited")
+    # Server tracks usage and warns at 80%, 90%, 95% thresholds
+    max_monthly_bandwidth: "100 GB"
+
+    # --- Hidden Service Settings ---
+    # Number of introduction points (3-10, more = resilient but more traffic)
+    num_intro_points: 3
+
+    # Virtual port for hidden service (what users connect to)
+    virtual_port: 80
 ```
+
+**CRITICAL: Port Requirements**
+- **NEVER use default Tor ports** (9050, 9051, etc.)
+- **Unix sockets preferred** for all Tor communication (Unix/macOS/BSD)
+- **If TCP required (Windows):** Use ports 62000-65535 ONLY
+- Server's Tor instance is completely isolated from any system Tor
 
 **Notes:**
 - Uses external Tor binary (not embedded) for CGO_ENABLED=0 compatibility
-- **Auto-enabled if tor binary is installed** - no enable flag needed
+- **Auto-enabled if tor binary is installed** - no enable flag needed, no disable option
 - Binary manages its OWN Tor instance (not system Tor)
 - When binary stops, its Tor instance stops (clean shutdown)
-- .onion address derived from keys in `{data_dir}/tor/site/`
 - Completely isolated from any system Tor installation
 - **App handles EVERYTHING** - directory creation, permissions, torrc generation, process management
 - No external scripts needed - all Tor management is built into the server binary
+
+## Tor Network for Outbound Connections
+
+**Server can route outbound HTTP requests through Tor network for privacy.**
+
+This is separate from hosting a hidden service - it uses Tor's SOCKS5 proxy for outbound traffic.
+
+### Use Cases (15 App Examples)
+
+| # | App Type | Why Tor Network Helps |
+|---|----------|----------------------|
+| 1 | **Search Aggregator** | Anonymize queries to external search APIs (DuckDuckGo, etc.) |
+| 2 | **Price Comparison** | Avoid price discrimination based on IP/location |
+| 3 | **Security/Breach Checker** | Check haveibeenpwned without revealing what you're checking |
+| 4 | **Cryptocurrency Wallet** | Privacy for blockchain API queries, hide wallet activity |
+| 5 | **News/RSS Aggregator** | Fetch articles without revealing reading habits |
+| 6 | **Email Client/Relay** | Anonymous connections to email servers |
+| 7 | **DNS/WHOIS Lookup** | Anonymous domain research, hide investigation targets |
+| 8 | **VPN/Proxy Manager** | Anonymous connection testing, check for IP leaks |
+| 9 | **Social Media Manager** | Manage multiple accounts without IP correlation |
+| 10 | **Translation Service** | Private text translation, hide content being translated |
+| 11 | **Weather/Location Service** | Get location data without revealing actual location |
+| 12 | **Stock/Financial Tracker** | Anonymous market data fetching, hide trading interest |
+| 13 | **Package/Shipping Tracker** | Check deliveries without linking to identity |
+| 14 | **Vulnerability Scanner** | Anonymous security testing of external targets |
+| 15 | **Content Aggregator** | Anonymous web scraping, avoid rate limiting by IP |
+
+### Configuration Hierarchy
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ Server Admin Setting: server.tor.use_network                       │
+│ Default: false (direct connections)                                 │
+└─────────────┬───────────────────────────────────────────────────────┘
+              │
+              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│ Server Admin Setting: server.tor.allow_user_preference              │
+│ Default: true (users can override)                                  │
+└─────────────┬───────────────────────────────────────────────────────┘
+              │ if true
+              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│ User Account Setting: user.preferences.use_tor_network              │
+│ Default: inherit from server (null = use server setting)            │
+│ Options: true (always), false (never), null (inherit)               │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+| Server Setting | User Preference | Result |
+|----------------|-----------------|--------|
+| `use_network: false`, `allow_user_preference: false` | (ignored) | Direct |
+| `use_network: true`, `allow_user_preference: false` | (ignored) | Tor |
+| `use_network: false`, `allow_user_preference: true` | `null` | Direct |
+| `use_network: false`, `allow_user_preference: true` | `true` | Tor |
+| `use_network: true`, `allow_user_preference: true` | `false` | Direct |
+| `use_network: true`, `allow_user_preference: true` | `null` | Tor |
+
+### User Preference Schema
+
+```yaml
+# In user account/preferences table
+user:
+  preferences:
+    # Use Tor network for outbound requests made on behalf of this user
+    # null = inherit server setting, true = always use Tor, false = never use Tor
+    use_tor_network: null
+```
+
+### Outbound Implementation
+
+**See full `TorService` struct and implementation in the main Implementation section below.**
+
+```go
+// ShouldUseTor determines if Tor network should be used for a request
+// based on server config and user preference
+func ShouldUseTor(serverConfig *Config, userPref *bool) bool {
+    // If user preferences not allowed, use server setting
+    if !serverConfig.Tor.AllowUserPreference {
+        return serverConfig.Tor.UseNetwork
+    }
+
+    // If user has no preference (nil), inherit server setting
+    if userPref == nil {
+        return serverConfig.Tor.UseNetwork
+    }
+
+    // User preference overrides
+    return *userPref
+}
+
+// Example: Making a request with user's Tor preference
+func (s *Service) FetchExternalData(ctx context.Context, userID int, url string) ([]byte, error) {
+    // Get user's Tor preference
+    user, _ := s.db.GetUser(userID)
+    useTor := ShouldUseTor(s.config, user.Preferences.UseTorNetwork)
+
+    // Get appropriate HTTP client (TorManager.GetHTTPClient handles routing)
+    client := s.torManager.GetHTTPClient(useTor)
+
+    req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
+    resp, err := client.Do(req)
+    if err != nil {
+        return nil, err
+    }
+    defer resp.Body.Close()
+
+    return io.ReadAll(resp.Body)
+}
+```
+
+### torrc Configuration for Outbound
+
+When `use_network` or `allow_user_preference` is enabled, the torrc includes `SocksPort auto` for outbound connections. Otherwise `SocksPort 0` disables outbound.
+
+**See full `getTorConfig()` implementation in the Implementation section below.**
+
+### Admin Panel UI
+
+**Server Settings → Tor → Network Usage:**
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ Tor Network for Outbound Connections                                │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│ Route outbound requests through Tor:  [ ] Enabled (server-wide)    │
+│                                                                     │
+│ Allow users to set preference:        [✓] Enabled                  │
+│   └─ Users can override in their account settings                  │
+│                                                                     │
+│ ⓘ When enabled, external API requests (search, price checks,       │
+│   breach lookups, etc.) are routed through Tor for privacy.        │
+│   This is slower but provides anonymity.                           │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**User Settings → Privacy → Tor Network:**
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ Tor Network Privacy                                                 │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│ Route my requests through Tor:                                      │
+│                                                                     │
+│   (•) Use server default (currently: Off)                          │
+│   ( ) Always use Tor network                                        │
+│   ( ) Never use Tor network                                         │
+│                                                                     │
+│ ⓘ Tor provides privacy by anonymizing your requests to external    │
+│   services. Requests may be slower when Tor is enabled.            │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Tor directories are NOT configurable** - always derived from app's directories:
+- Config: `{config_dir}/tor/` (torrc file)
+- Data: `{data_dir}/tor/` (runtime data, hidden service keys)
+- Log: `{log_dir}/tor.log`
+
+## Platform-Specific Requirements
+
+### Unix/macOS/BSD (Preferred)
+- **Control connection**: Unix socket (`control.sock`) - no network exposure
+- **Hidden service target**: Server's HTTP port via localhost (bine handles via ADD_ONION)
+- **No TCP ports required** for Tor control communication
+
+### Windows Limitations
+
+**Windows CANNOT use Unix sockets for control connection.** Control uses TCP on localhost.
+
+| Feature | Unix/macOS/BSD | Windows |
+|---------|---------------|---------|
+| Control connection | Unix socket (`control.sock`) | TCP `127.0.0.1:auto` |
+| Hidden service target | `localhost:{server_port}` | `localhost:{server_port}` |
+| Security | No network exposure for control | Control on localhost only |
+
+**Note:** The hidden service forwards to the server's HTTP port on ALL platforms. Only the Tor control connection differs (Unix socket vs TCP).
 
 ## Tor Process Management 
 
@@ -35838,15 +37759,26 @@ This prevents conflicts with any existing Tor installation on the system.
    │   └─ BSD: /usr/local/bin/tor
    └─ NOT FOUND: Log INFO, disable Tor features, continue without Tor
 
-2. Start DEDICATED Tor process:
-   ├─ Use application's own DataDir: `{data_dir}/tor/`
-   ├─ Use random available ControlPort (not 9051)
-   ├─ Disable SocksPort (server-only, not browsing)
+2. Create directories with proper permissions:
+   ├─ `{config_dir}/tor/` (0700) - torrc location
+   ├─ `{data_dir}/tor/` (0700) - Tor runtime data
+   └─ `{data_dir}/tor/site/` (0700) - Hidden service keys
+
+3. Generate and write torrc:
+   ├─ Generate torrc content with getTorConfig()
+   └─ Write to `{config_dir}/tor/torrc` (0600)
+
+4. Start DEDICATED Tor process:
+   ├─ TorrcFile: `{config_dir}/tor/torrc`
+   ├─ DataDir: `{data_dir}/tor/`
+   ├─ Control connection: Unix socket (Unix/macOS/BSD) or localhost TCP (Windows)
+   ├─ SocksPort: auto (if outbound enabled) or 0 (hidden service only)
    ├─ Completely isolated from system Tor
    ├─ Wait for bootstrap completion
-   └─ Create hidden service via ADD_ONION
+   ├─ Create hidden service via ADD_ONION
+   └─ Initialize Dialer (if outbound enabled)
 
-3. On application shutdown:
+5. On application shutdown:
    └─ Terminate the dedicated Tor process
 ```
 
@@ -35854,11 +37786,12 @@ This prevents conflicts with any existing Tor installation on the system.
 
 | Reason | Description |
 |--------|-------------|
-| **No conflicts** | System Tor uses 9050/9051, we use random ports |
+| **No conflicts** | System Tor uses 9050/9051, we use Unix socket (or localhost TCP on Windows) |
 | **Isolation** | Our DataDir is separate from system Tor |
 | **Clean shutdown** | We control the process lifecycle |
 | **No permissions issues** | Don't need access to system Tor control |
 | **Predictable behavior** | Always same configuration |
+| **Security** | Unix socket is local-only; Windows uses 127.0.0.1 only |
 
 ### Tor Logging Levels 
 
@@ -35882,6 +37815,57 @@ This prevents conflicts with any existing Tor installation on the system.
 - Server NEVER fails to start due to Tor issues
 - All Tor operations are best-effort, non-blocking
 
+**Console Output Rules:**
+- **Normal mode**: Silent during bootstrap, only show errors after timeout
+- **Debug mode**: Show all Tor messages (verbose output from Tor process)
+- **NEVER spam console** with bootstrap progress during normal operation
+- Success message (`Tor: {onion_address}`) shown once at startup, then silent unless errors
+
+| Event | When to Show | Message |
+|-------|--------------|---------|
+| Bootstrap starting | Never (silent) | - |
+| Bootstrap progress | Debug only | `Tor: bootstrap 45%...` |
+| Bootstrap success | Always (once) | `Tor: {onion_address}` |
+| Bootstrap slow (>30s) | Normal | `Tor: connecting...` |
+| Bootstrap failed | Always | `Tor: bootstrap failed: {reason}` |
+| Connection lost | Always | `Tor: connection lost, reconnecting` |
+| Runtime errors | Always | `Tor: {error}` |
+
+**Bootstrap timeout logic:**
+1. Start Tor silently (no console output)
+2. Wait up to 30 seconds without output
+3. If still bootstrapping after 30s → show `Tor: connecting...`
+4. If bootstrap completes → show onion address
+5. If bootstrap fails → show error message
+
+### Tor Process Ownership
+
+**Tor process MUST run as the same user the server runs as (after privilege drop).**
+
+| Server Started As | Server Runs As | Tor Runs As |
+|-------------------|----------------|-------------|
+| `root` | `{projectname}` (after drop) | `{projectname}` |
+| `{projectname}` | `{projectname}` | `{projectname}` |
+| Regular user | Regular user | Regular user |
+
+**Process:**
+1. Server starts (possibly as root for port binding)
+2. Server drops privileges to `{projectname}` user (if started as root)
+3. Server starts Tor process **as the current (dropped) user**
+4. Tor inherits user context from server process
+
+**CRITICAL:**
+- Tor process is a **child of the server process** - inherits user/group
+- Server does NOT need to explicitly set Tor's user - it inherits from parent
+- All Tor files/directories are owned by the server's running user
+- When server stops, Tor child process is terminated
+
+**Why same user?**
+- Tor needs read/write access to `{data_dir}/tor/` (owned by server user)
+- Tor control socket must be accessible by server
+- Simplifies permissions - no cross-user access needed
+- Clean process tree - server owns Tor lifecycle
+
 ## Implementation
 
 ### Library
@@ -35890,103 +37874,422 @@ Use `github.com/cretz/bine` (pure Go, CGO_ENABLED=0 compatible):
 
 ```go
 import (
+    "context"
+    "crypto"
+    "fmt"
+    "log"
+    "net/http"
+    "os"
+    "path/filepath"
+    "runtime"
+    "sync"
+    "time"
+
+    "github.com/cretz/bine/control"
     "github.com/cretz/bine/tor"
+    "github.com/cretz/bine/torutil/ed25519"
 )
 
-func startDedicatedTor(ctx context.Context, localPort int) (*tor.Tor, *tor.OnionService, error) {
-    // Start OUR OWN Tor process - completely separate from system Tor
-    t, err := tor.Start(ctx, &tor.StartConf{
-        // Our own data directory - isolated from system Tor
-        DataDir: paths.GetDataDir() + "/tor",
+// TorService manages the Tor hidden service and outbound connections.
+// Server binary fully owns and controls the Tor process lifecycle.
+type TorService struct {
+    tor        *tor.Tor
+    serviceID  string              // .onion address (without .onion suffix)
+    key        crypto.PrivateKey   // ED25519 private key for persistent address
+    serverPort int                 // Server's HTTP port that hidden service forwards to
+    dialer     *tor.Dialer         // For outbound Tor connections (nil if disabled)
+}
 
-        // Let bine pick available ports (avoids conflict with system Tor 9050/9051)
-        // These are set automatically to available ports
-        NoAutoSocksPort: false,
+// TorConfig holds Tor-related configuration from server config
+type TorConfig struct {
+    // Binary path (empty = auto-detect)
+    Binary string `yaml:"binary" json:"binary"`
 
-        // Optional: specify path if not in PATH
-        // ExePath: "/usr/bin/tor",
+    // Outbound network settings
+    UseNetwork          bool `yaml:"use_network" json:"use_network"`
+    AllowUserPreference bool `yaml:"allow_user_preference" json:"allow_user_preference"`
+
+    // Performance settings
+    MaxCircuits      int `yaml:"max_circuits" json:"max_circuits"`           // 1-128, default 32
+    CircuitTimeout   int `yaml:"circuit_timeout" json:"circuit_timeout"`     // 10-300s, default 60
+    BootstrapTimeout int `yaml:"bootstrap_timeout" json:"bootstrap_timeout"` // 30-600s, default 180
+
+    // Security settings
+    SafeLogging               bool `yaml:"safe_logging" json:"safe_logging"`
+    MaxStreamsPerCircuit      int  `yaml:"max_streams_per_circuit" json:"max_streams_per_circuit"`             // 10-500, default 100
+    CloseCircuitOnStreamLimit bool `yaml:"close_circuit_on_stream_limit" json:"close_circuit_on_stream_limit"` // default true
+
+    // Bandwidth settings
+    BandwidthRate        string `yaml:"bandwidth_rate" json:"bandwidth_rate"`                 // e.g., "1 MB" per second
+    BandwidthBurst       string `yaml:"bandwidth_burst" json:"bandwidth_burst"`               // e.g., "2 MB" per second
+    MaxMonthlyBandwidth  string `yaml:"max_monthly_bandwidth" json:"max_monthly_bandwidth"`   // e.g., "100 GB", "unlimited"
+
+    // Hidden service settings
+    NumIntroPoints int `yaml:"num_intro_points" json:"num_intro_points"` // 3-10, default 3
+    VirtualPort    int `yaml:"virtual_port" json:"virtual_port"`         // 1-65535, default 80
+}
+
+// DefaultTorConfig returns the default Tor configuration
+func DefaultTorConfig() TorConfig {
+    return TorConfig{
+        Binary:                    "",       // auto-detect
+        UseNetwork:                false,
+        AllowUserPreference:       true,
+        MaxCircuits:               32,
+        CircuitTimeout:            60,
+        BootstrapTimeout:          180,
+        SafeLogging:               true,
+        MaxStreamsPerCircuit:      100,
+        CloseCircuitOnStreamLimit: true,
+        BandwidthRate:             "1 MB",
+        BandwidthBurst:            "2 MB",
+        MaxMonthlyBandwidth:       "100 GB", // default 100GB per month
+        NumIntroPoints:            3,
+        VirtualPort:               80,
+    }
+}
+
+// startDedicatedTor starts a Tor process owned by this server binary.
+// serverPort is the server's HTTP port that the hidden service will forward to.
+// cfg contains all Tor configuration settings (validated before calling).
+// The hidden service maps: .onion:{virtual_port} → 127.0.0.1:serverPort
+//
+// IMPORTANT: serverPort is the port where the server's HTTP listener is ALREADY running.
+// Tor forwards incoming .onion connections to this existing listener.
+// Hidden service is ALWAYS enabled if Tor binary is found.
+func startDedicatedTor(ctx context.Context, serverPort int, cfg *TorConfig) (*TorService, error) {
+    configDir := paths.GetConfigDir()
+    dataDir := paths.GetDataDir()
+
+    // Ensure all Tor directories exist with proper permissions
+    // Server binary owns all Tor files - correct owner/group/permissions enforced
+    if err := ensureTorDirs(); err != nil {
+        return nil, fmt.Errorf("failed to create tor directories: %w", err)
+    }
+
+    // Paths
+    torrcPath := filepath.Join(configDir, "tor", "torrc")
+    torDataDir := filepath.Join(dataDir, "tor")
+    controlSocket := filepath.Join(torDataDir, "control.sock")
+    keyPath := filepath.Join(dataDir, "tor", "site", "hs_ed25519_secret_key")
+
+    // Generate torrc content from config
+    torrcContent := getTorConfig(controlSocket, cfg)
+
+    // Create torrc only if it doesn't exist (persistent)
+    // torrc is preserved across restarts - only admin panel can update it
+    created, err := ensureTorrc(torrcPath, []byte(torrcContent))
+    if err != nil {
+        return nil, fmt.Errorf("failed to ensure torrc: %w", err)
+    }
+    if created {
+        log.Printf("Created new torrc at %s", torrcPath)
+    } else {
+        log.Printf("Using existing torrc at %s", torrcPath)
+    }
+
+    // Build platform-specific StartConf
+    conf := &tor.StartConf{
+        // Use our custom torrc from config directory
+        TorrcFile: torrcPath,
+
+        // Runtime data directory - isolated from system Tor
+        DataDir: torDataDir,
+
+        // Let torrc control SocksPort (auto if outbound enabled, 0 if not)
+        NoAutoSocksPort: true,
 
         // Debug output (development only)
         // DebugWriter: os.Stderr,
-    })
-    if err != nil {
-        return nil, nil, fmt.Errorf("failed to start dedicated tor: %w", err)
     }
 
-    // Wait for Tor to bootstrap
-    dialCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+    // Use custom Tor binary path if specified in config
+    if cfg.Binary != "" {
+        conf.ExePath = cfg.Binary
+    }
+
+    // Platform-specific control connection
+    if runtime.GOOS == "windows" {
+        // Windows: Unix sockets NOT SUPPORTED, use localhost TCP
+        // bine auto-selects available port for ControlPort
+    } else {
+        // Unix/macOS/BSD: Use Unix socket (more secure, no network exposure)
+        conf.ControlSocket = controlSocket
+    }
+
+    // Start OUR OWN Tor process - completely separate from system Tor
+    // Server starts → Tor starts; Server stops → Tor stops
+    t, err := tor.Start(ctx, conf)
+    if err != nil {
+        return nil, fmt.Errorf("failed to start dedicated tor: %w", err)
+    }
+
+    // Wait for Tor to bootstrap (connect to network)
+    // Use bootstrap timeout from config (default 180 seconds = 3 minutes)
+    bootstrapTimeout := time.Duration(cfg.BootstrapTimeout) * time.Second
+    dialCtx, cancel := context.WithTimeout(ctx, bootstrapTimeout)
     defer cancel()
     if err := t.EnableNetwork(dialCtx, true); err != nil {
         t.Close()
-        return nil, nil, fmt.Errorf("failed to enable tor network: %w", err)
+        return nil, fmt.Errorf("failed to enable tor network: %w", err)
     }
 
-    // Create hidden service
-    onion, err := t.Listen(ctx, &tor.ListenConf{
-        RemotePorts: []int{80},
-        LocalPort:   localPort,
-    })
+    // Load or generate ED25519 key for persistent .onion address
+    var key crypto.PrivateKey
+    if keyData, err := os.ReadFile(keyPath); err == nil && len(keyData) > 0 {
+        // Load existing key for persistent address
+        key, err = ed25519.FromCryptoPrivateKey(keyData)
+        if err != nil {
+            t.Close()
+            return nil, fmt.Errorf("failed to parse existing key: %w", err)
+        }
+    }
+
+    // Create hidden service via ADD_ONION control command
+    // This forwards .onion:{virtual_port} → 127.0.0.1:serverPort (existing HTTP server)
+    addOnionReq := &control.AddOnionRequest{
+        // Port mapping: virtual port (from config) → server's HTTP port
+        Ports: []*control.KeyVal{
+            control.NewKeyVal(fmt.Sprintf("%d", cfg.VirtualPort), fmt.Sprintf("127.0.0.1:%d", serverPort)),
+        },
+    }
+
+    if key != nil {
+        // Use existing key for persistent .onion address
+        addOnionReq.Key = control.ED25519KeyFromBlob(key.(ed25519.PrivateKey))
+    } else {
+        // Generate new ED25519-V3 key (v3 onion address)
+        addOnionReq.Key = control.GenKey(control.KeyAlgoED25519V3)
+    }
+
+    // Call ADD_ONION via control connection
+    resp, err := t.Control.AddOnion(addOnionReq)
     if err != nil {
         t.Close()
-        return nil, nil, fmt.Errorf("failed to create onion service: %w", err)
+        return nil, fmt.Errorf("failed to create onion service: %w", err)
     }
 
-    // onion.ID contains the .onion address (without .onion suffix)
-    log.Printf("Tor hidden service started: %s.onion", onion.ID)
-    return t, onion, nil
+    // Save key for persistent address (if newly generated)
+    if key == nil && resp.Key != nil {
+        if err := saveOnionKey(keyPath, resp.Key); err != nil {
+            log.Printf("Warning: failed to save onion key: %v", err)
+        }
+    }
+
+    svc := &TorService{
+        tor:        t,
+        serviceID:  resp.ServiceID,
+        key:        key,
+        serverPort: serverPort,
+    }
+
+    // Initialize outbound dialer if enabled (server-wide or user preference allowed)
+    if cfg.UseNetwork || cfg.AllowUserPreference {
+        dialer, err := t.Dialer(ctx, nil)
+        if err != nil {
+            log.Printf("Warning: failed to create Tor dialer: %v", err)
+            // Continue without outbound - hidden service still works
+        } else {
+            svc.dialer = dialer
+            log.Printf("Tor outbound connections enabled")
+        }
+    }
+
+    log.Printf("Tor hidden service started: %s.onion:%d → 127.0.0.1:%d", resp.ServiceID, cfg.VirtualPort, serverPort)
+    return svc, nil
 }
 
-// Shutdown cleanly terminates our dedicated Tor process
-func shutdownTor(t *tor.Tor) error {
-    if t != nil {
-        return t.Close()
+// OnionAddress returns the full .onion address
+func (s *TorService) OnionAddress() string {
+    return s.serviceID + ".onion"
+}
+
+// OutboundEnabled returns true if Tor outbound connections are available
+func (s *TorService) OutboundEnabled() bool {
+    return s.dialer != nil
+}
+
+// GetHTTPClient returns an HTTP client, optionally routed through Tor
+// useTor: true = route through Tor SOCKS5 proxy, false = direct connection
+func (s *TorService) GetHTTPClient(useTor bool) *http.Client {
+    if !useTor || s.dialer == nil {
+        // Direct connection
+        return &http.Client{
+            Timeout: 30 * time.Second,
+        }
+    }
+
+    // Route through Tor network
+    return &http.Client{
+        Timeout: 60 * time.Second,  // Tor is slower
+        Transport: &http.Transport{
+            DialContext: s.dialer.DialContext,
+        },
+    }
+}
+
+// Close shuts down the Tor process
+func (s *TorService) Close() error {
+    if s.tor != nil {
+        return s.tor.Close()
     }
     return nil
 }
+
+// saveOnionKey saves the ED25519 private key for persistent .onion address
+func saveOnionKey(path string, key control.Key) error {
+    // Ensure directory exists
+    if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+        return err
+    }
+    // Write key with restricted permissions
+    return os.WriteFile(path, key.Blob(), 0600)
+}
 ```
 
-### Port Allocation
+### Port/Socket Allocation
 
-| Port | System Tor | Our Tor |
-|------|------------|---------|
-| SocksPort | 9050 | 0 (disabled - server only) |
-| ControlPort | 9051 | Random available |
-| DataDir | `/var/lib/tor` | `{data_dir}/tor/` |
+| Resource | System Tor | Our Tor (Unix) | Our Tor (Windows) |
+|----------|------------|----------------|-------------------|
+| SocksPort | 9050 | 0 (disabled) | 0 (disabled) |
+| ControlPort | 9051 | 0 (disabled) | 127.0.0.1:auto |
+| ControlSocket | N/A | `{data_dir}/tor/control.sock` | N/A (not supported) |
+| DataDir | `/var/lib/tor` | `{data_dir}/tor/` | `{data_dir}\tor\` |
 
-**bine automatically selects available ControlPort**, ensuring no conflict with system Tor. SocksPort is disabled since we're running as a hidden service server, not browsing through Tor.
+**How Hidden Service Forwarding Works:**
 
-### Tor Configuration Optimizations 
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ External Tor User                                                   │
+│ (Tor Browser)                                                       │
+└─────────────┬───────────────────────────────────────────────────────┘
+              │ connects to
+              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│ Tor Network                                                         │
+│ xyz...abc.onion:80                                                  │
+└─────────────┬───────────────────────────────────────────────────────┘
+              │ forwards to (via ADD_ONION)
+              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│ Server's Tor Process (owned by server binary)                      │
+│ Control: Unix socket (Unix) or 127.0.0.1:auto (Windows)            │
+└─────────────┬───────────────────────────────────────────────────────┘
+              │ connects to
+              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│ Server's HTTP Listener                                              │
+│ 127.0.0.1:{server_port}  (server's existing HTTP port)             │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
-**Tor is used ONLY for hidden services. Optimize accordingly.**
+- **bine uses `control.AddOnion()`** with port mapping: `80 → 127.0.0.1:{server_port}`
+- **Tor forwards to server's existing HTTP port** - no new listener created
+- **Same on ALL platforms** - only control connection differs (Unix socket vs TCP)
+- **Server port is NOT a Tor port** - it's the server's normal HTTP listener
+
+**Platform-specific control connection:**
+- **Unix/macOS/BSD**: Unix socket (`control.sock`) - no network exposure
+- **Windows**: TCP on `127.0.0.1:auto` - localhost only (Unix sockets not supported)
+
+**SocksPort configuration:**
+- `SocksPort 0` - hidden service only (no outbound)
+- `SocksPort auto` - enable outbound connections via SOCKS5 proxy
+
+### Tor Configuration Optimizations
+
+**Hidden Service → Server Port Mapping:**
+- **Uses `control.AddOnion()`** - NOT torrc-based HiddenServiceDir
+- Hidden service forwards `.onion:80` → `127.0.0.1:{server_port}` (server's existing HTTP port)
+- Port mapping specified via `control.KeyVal`: virtual port 80 → target `127.0.0.1:{server_port}`
+- Tor connects to server's existing HTTP listener - no new ports opened
 
 ```go
-// Optimized torrc settings for hidden-service-only mode
-func getTorConfig() string {
-    return `
-# Hidden service only - not a relay or exit
-SocksPort 0
-# No SOCKS proxy needed - we're server only
+// getTorConfig generates torrc content from TorConfig settings
+//
+// NOTE: Hidden service is created via control.AddOnion(), NOT torrc
+// The torrc only configures Tor daemon settings, not the hidden service itself
+//
+// PORT DETECTION: All ports use runtime detection via "auto" - never saved/hardcoded
+// - SocksPort auto: Tor picks available high port at startup
+// - ControlPort 127.0.0.1:auto: Tor picks available high port (Windows only)
+// - bine reads actual port from control connection after Tor starts
+//
+// NEVER uses default Tor ports (9050, 9051) - uses Unix sockets or auto high ports
+func getTorConfig(controlSocket string, cfg *TorConfig) string {
+    // Platform-specific control connection
+    // NEVER use default ports 9050/9051 - use runtime detection
+    var controlConfig string
+    if runtime.GOOS == "windows" {
+        // Windows: Unix sockets NOT SUPPORTED, use localhost TCP
+        // "auto" = Tor picks available high port at runtime (never saved)
+        controlConfig = "ControlPort 127.0.0.1:auto"
+    } else {
+        // Unix/macOS/BSD: Use Unix socket (no TCP port at all)
+        controlConfig = fmt.Sprintf("ControlPort 0\nControlSocket %s", controlSocket)
+    }
 
-# Disable unused features
+    // SocksPort: enabled for outbound connections, disabled for hidden service only
+    // "auto" = Tor picks available high port at runtime (never saved)
+    var socksConfig string
+    if cfg.UseNetwork || cfg.AllowUserPreference {
+        // Enable SOCKS for outbound - "auto" picks high port at runtime
+        socksConfig = "SocksPort auto"
+    } else {
+        socksConfig = "SocksPort 0"  // Disabled
+    }
+
+    // SafeLogging
+    safeLogging := "1"
+    if !cfg.SafeLogging {
+        safeLogging = "0"
+    }
+
+    // Monthly bandwidth accounting (if not "unlimited")
+    var accountingConfig string
+    if cfg.MaxMonthlyBandwidth != "" && cfg.MaxMonthlyBandwidth != "unlimited" {
+        // AccountingMax limits total bytes per accounting period
+        // AccountingStart sets when the period resets (month day 1)
+        accountingConfig = fmt.Sprintf(`
+# Monthly bandwidth limit
+AccountingStart month 1 00:00
+AccountingMax %s`, cfg.MaxMonthlyBandwidth)
+    }
+
+    return fmt.Sprintf(`
+# ============================================================
+# Tor Configuration - Generated by server binary
+# This file is PERSISTENT - edits via admin panel are preserved
+# Manual edits may be overwritten when config is saved via admin
+# ============================================================
+
+# SOCKS port for outbound connections (0 = disabled, auto = runtime port)
+# NEVER uses default port 9050 - runtime detection only
+%s
+
+# Platform-specific control connection
+# NEVER uses default port 9051 - uses socket (Unix) or runtime port (Windows)
+%s
+
+# Security Hardening
+SafeLogging %s
+
+# Circuit limits
+MaxCircuitDirtiness 600
+
+# Bandwidth limits per second (from config)
+BandwidthRate %s
+BandwidthBurst %s
+%s
+
+# Disable unused features - not a relay or exit
 ExitRelay 0
 ExitPolicy reject *:*
-# Never act as exit node
-
-# Don't relay traffic for others
 ORPort 0
 DirPort 0
 
-# Reduce circuit building (we only need service circuits)
-MaxCircuitDirtiness 600
-# Keep circuits longer
-
-# Reduce bandwidth for Tor overhead
-BandwidthRate 1 MB
-BandwidthBurst 2 MB
-
-# Hidden service optimizations
+# Hidden service optimizations (actual HS created via ADD_ONION)
 HiddenServiceSingleHopMode 0
-# Keep full anonymity (3 hops)
 
 # Faster startup
 FetchDirInfoEarly 1
@@ -35994,31 +38297,60 @@ FetchDirInfoExtraEarly 1
 
 # Reduce memory usage
 DisableDebuggerAttachment 1
-`
+`, socksConfig, controlConfig, safeLogging, cfg.BandwidthRate, cfg.BandwidthBurst, accountingConfig)
 }
 ```
 
 | Setting | Value | Reason |
 |---------|-------|--------|
-| `SocksPort 0` | Disabled | Not browsing, server only |
+| `SocksPort` | `0` / `auto` | `0` = hidden service only; `auto` = runtime port for outbound |
+| `ControlPort` | `0` (Unix) / `auto` (Windows) | Unix uses socket; Windows uses runtime localhost TCP |
+| `ControlSocket` | `{data_dir}/tor/control.sock` | Unix only - secure, no network exposure |
+| `SafeLogging 1` | Enabled | Scrubs sensitive info from Tor logs |
+| `AccountingStart` | `month 1 00:00` | Reset bandwidth counter on 1st of each month |
+| `AccountingMax` | e.g., `100 GB` | Monthly bandwidth limit (from config) |
 | `ExitRelay 0` | Disabled | Not an exit node |
 | `ORPort 0` | Disabled | Not relaying traffic |
 | `DirPort 0` | Disabled | Not a directory server |
 | `ExitPolicy reject *:*` | Block all | Extra safety |
 | `MaxCircuitDirtiness 600` | 10 minutes | Keep circuits longer |
 
-### Tor Process Lifecycle 
+**Runtime Port Detection:**
+- Ports are NEVER hardcoded or saved - always detected at runtime
+- `SocksPort auto` → Tor picks available high port, bine reads it after startup
+- `ControlPort 127.0.0.1:auto` (Windows) → Tor picks available high port
+- Unix/macOS/BSD use Unix socket instead of TCP - no port needed
+
+**Hidden Service Settings (via `control.AddOnion()`, not torrc):**
+
+The hidden service is created using bine's `control.AddOnion()` method, which sends the ADD_ONION command to Tor:
+
+| Setting | How Applied | Description |
+|---------|-------------|-------------|
+| Version 3 | `control.GenKey(control.KeyAlgoED25519V3)` | v3 onion (56 chars, ed25519) |
+| Target port | `control.NewKeyVal("80", "127.0.0.1:{port}")` | Forwards to server's HTTP port |
+| Virtual port | Key in KeyVal (e.g., "80") | `.onion` port users connect to |
+| Key persistence | `{data_dir}/tor/site/hs_ed25519_secret_key` | Server saves/loads key for persistent address |
+
+**Required bine imports:**
+```go
+"github.com/cretz/bine/control"        // AddOnion, KeyVal, GenKey
+"github.com/cretz/bine/tor"            // Start, Tor, StartConf
+"github.com/cretz/bine/torutil/ed25519" // ED25519 key handling
+```
+
+### Tor Process Lifecycle
 
 **The application MUST fully manage the Tor process lifecycle.**
 
-| Event | Action |
-|-------|--------|
-| **App Start** | Find Tor binary → Start dedicated Tor process → Wait for bootstrap → Create hidden service |
-| **App Running** | Monitor Tor process, restart if crashed |
-| **App Shutdown** | Terminate Tor process gracefully (SIGTERM) |
-| **App Crash** | Tor process should terminate (child process dies with parent) |
-| **SIGTERM/SIGINT** | Graceful shutdown: stop Tor, then exit |
-| **SIGHUP** | Reload config, restart Tor if settings changed |
+| Event | Action | Notes |
+|-------|--------|-------|
+| **App Start** | Find Tor binary → Start dedicated Tor process → Wait for bootstrap → Create hidden service | All platforms |
+| **App Running** | Monitor Tor process, restart if crashed | All platforms |
+| **App Shutdown** | Terminate Tor process gracefully | Unix: SIGTERM; Windows: TerminateProcess |
+| **App Crash** | Tor process should terminate (child process dies with parent) | All platforms |
+| **Shutdown signal** | Graceful shutdown: stop Tor, then exit | Unix: SIGTERM/SIGINT; Windows: CTRL_C_EVENT |
+| **Reload signal** | Reload config, restart Tor if settings changed | Unix: SIGHUP; Windows: N/A (use API) |
 
 ### Tor Restart Triggers 
 
@@ -36039,14 +38371,44 @@ DisableDebuggerAttachment 1
 
 ```go
 // TorManager handles all Tor lifecycle operations
+// Server binary fully owns the Tor process - starts/stops/restarts as needed
+// NOTE: Hidden service is ALWAYS enabled if Tor binary is found - no enable/disable toggle
 type TorManager struct {
-    mu        sync.Mutex
-    tor       *tor.Tor
-    onion     *tor.OnionService
-    dataDir   string
-    localPort int
-    ctx       context.Context
-    cancel    context.CancelFunc
+    mu         sync.Mutex
+    service    *TorService  // Our TorService wrapper
+    config     *TorConfig   // Tor configuration settings
+    dataDir    string
+    serverPort int          // Server's HTTP port to forward to
+    ctx        context.Context
+    cancel     context.CancelFunc
+}
+
+// NewTorManager creates a new Tor manager with the given configuration
+func NewTorManager(ctx context.Context, serverPort int, config *TorConfig) *TorManager {
+    return &TorManager{
+        config:     config,
+        dataDir:    filepath.Join(paths.GetDataDir(), "tor"),
+        serverPort: serverPort,
+        ctx:        ctx,
+    }
+}
+
+// Start initializes Tor if binary is found
+// Hidden service is ALWAYS enabled if Tor binary exists
+func (tm *TorManager) Start() error {
+    tm.mu.Lock()
+    defer tm.mu.Unlock()
+    return tm.startLocked()
+}
+
+// startLocked starts Tor (must be called with mutex held)
+func (tm *TorManager) startLocked() error {
+    service, err := startDedicatedTor(tm.ctx, tm.serverPort, tm.config)
+    if err != nil {
+        return err
+    }
+    tm.service = service
+    return nil
 }
 
 // Restart stops and starts Tor (used for config changes, recovery)
@@ -36055,13 +38417,41 @@ func (tm *TorManager) Restart() error {
     defer tm.mu.Unlock()
 
     // Stop existing
-    if tm.tor != nil {
-        tm.tor.Close()
-        tm.tor = nil
-        tm.onion = nil
+    if tm.service != nil {
+        tm.service.Close()
+        tm.service = nil
     }
 
-    // Start fresh
+    // Start fresh with current config
+    return tm.startLocked()
+}
+
+// UpdateConfig updates the configuration, regenerates torrc, and restarts Tor
+// This is called when admin saves new Tor settings via the admin panel
+func (tm *TorManager) UpdateConfig(config *TorConfig) error {
+    tm.mu.Lock()
+    defer tm.mu.Unlock()
+
+    tm.config = config
+
+    // Stop existing Tor process
+    if tm.service != nil {
+        tm.service.Close()
+        tm.service = nil
+    }
+
+    // Regenerate torrc with new settings (overwrite existing)
+    configDir := paths.GetConfigDir()
+    torrcPath := filepath.Join(configDir, "tor", "torrc")
+    controlSocket := filepath.Join(tm.dataDir, "control.sock")
+    torrcContent := getTorConfig(controlSocket, config)
+
+    if err := updateTorrc(torrcPath, []byte(torrcContent)); err != nil {
+        return fmt.Errorf("failed to update torrc: %w", err)
+    }
+    log.Printf("Updated torrc with new settings")
+
+    // Start Tor with new config
     return tm.startLocked()
 }
 
@@ -36071,10 +38461,9 @@ func (tm *TorManager) RegenerateAddress() (string, error) {
     defer tm.mu.Unlock()
 
     // Stop Tor
-    if tm.tor != nil {
-        tm.tor.Close()
-        tm.tor = nil
-        tm.onion = nil
+    if tm.service != nil {
+        tm.service.Close()
+        tm.service = nil
     }
 
     // Delete existing keys
@@ -36083,12 +38472,12 @@ func (tm *TorManager) RegenerateAddress() (string, error) {
         return "", fmt.Errorf("failed to remove old keys: %w", err)
     }
 
-    // Start Tor - new keys will be generated
+    // Start Tor - new keys will be generated by control.AddOnion
     if err := tm.startLocked(); err != nil {
         return "", err
     }
 
-    return tm.onion.ID + ".onion", nil
+    return tm.service.OnionAddress(), nil
 }
 
 // ApplyKeys stops Tor, replaces keys, and restarts
@@ -36097,10 +38486,9 @@ func (tm *TorManager) ApplyKeys(privateKey []byte) (string, error) {
     defer tm.mu.Unlock()
 
     // Stop Tor
-    if tm.tor != nil {
-        tm.tor.Close()
-        tm.tor = nil
-        tm.onion = nil
+    if tm.service != nil {
+        tm.service.Close()
+        tm.service = nil
     }
 
     // Write new keys
@@ -36116,26 +38504,43 @@ func (tm *TorManager) ApplyKeys(privateKey []byte) (string, error) {
         return "", err
     }
 
-    return tm.onion.ID + ".onion", nil
+    return tm.service.OnionAddress(), nil
 }
 
-// SetEnabled enables or disables Tor
-func (tm *TorManager) SetEnabled(enabled bool) error {
+// Close shuts down the Tor process
+func (tm *TorManager) Close() error {
     tm.mu.Lock()
     defer tm.mu.Unlock()
 
-    if enabled {
-        if tm.tor == nil {
-            return tm.startLocked()
-        }
-    } else {
-        if tm.tor != nil {
-            tm.tor.Close()
-            tm.tor = nil
-            tm.onion = nil
-        }
+    if tm.service != nil {
+        err := tm.service.Close()
+        tm.service = nil
+        return err
     }
     return nil
+}
+
+// OnionAddress returns the current .onion address (empty if not running)
+func (tm *TorManager) OnionAddress() string {
+    tm.mu.Lock()
+    defer tm.mu.Unlock()
+
+    if tm.service != nil {
+        return tm.service.OnionAddress()
+    }
+    return ""
+}
+
+// GetHTTPClient returns an HTTP client, optionally routed through Tor
+func (tm *TorManager) GetHTTPClient(useTor bool) *http.Client {
+    tm.mu.Lock()
+    defer tm.mu.Unlock()
+
+    if tm.service != nil {
+        return tm.service.GetHTTPClient(useTor)
+    }
+    // Fallback to direct connection if Tor not running
+    return &http.Client{Timeout: 30 * time.Second}
 }
 ```
 
@@ -36146,8 +38551,15 @@ func main() {
     ctx, cancel := context.WithCancel(context.Background())
     defer cancel()
 
-    // Start Tor
-    torProcess, onion, err := startDedicatedTor(ctx, localPort)
+    // Server's HTTP port (already listening)
+    serverPort := 8080
+
+    // Get Tor configuration (from config file)
+    torConfig := config.Tor  // Uses TorConfig struct with all settings
+
+    // Start Tor - forwards .onion:{virtual_port} → 127.0.0.1:serverPort
+    // TorConfig contains all settings including outbound network options
+    torService, err := startDedicatedTor(ctx, serverPort, &torConfig)
     if err != nil {
         log.Printf("Warning: Tor disabled - %v", err)
         // Continue without Tor
@@ -36164,10 +38576,10 @@ func main() {
         <-sigChan
         log.Println("Shutting down...")
 
-        // Stop Tor FIRST
-        if torProcess != nil {
+        // Stop Tor FIRST (server owns Tor lifecycle)
+        if torService != nil {
             log.Println("Stopping Tor process...")
-            torProcess.Close()
+            torService.Close()
         }
 
         // Then cancel context for other goroutines
@@ -36182,7 +38594,8 @@ func main() {
 
 ```go
 // Monitor Tor and restart if it crashes
-func monitorTor(ctx context.Context, torProcess *tor.Tor, restartFunc func() (*tor.Tor, error)) {
+// Server binary is responsible for keeping Tor running
+func monitorTor(ctx context.Context, service *TorService, restartFunc func() (*TorService, error)) {
     ticker := time.NewTicker(30 * time.Second)
     defer ticker.Stop()
 
@@ -36192,16 +38605,16 @@ func monitorTor(ctx context.Context, torProcess *tor.Tor, restartFunc func() (*t
             return
         case <-ticker.C:
             // Check if Tor is still responsive
-            if torProcess != nil {
+            if service != nil && service.tor != nil {
                 // Ping control connection
-                if _, err := torProcess.Control.GetInfo("version"); err != nil {
+                if _, err := service.tor.Control.GetInfo("version"); err != nil {
                     log.Println("Tor process unresponsive, restarting...")
-                    torProcess.Close()
-                    newTor, err := restartFunc()
+                    service.Close()
+                    newService, err := restartFunc()
                     if err != nil {
                         log.Printf("Failed to restart Tor: %v", err)
                     } else {
-                        torProcess = newTor
+                        service = newService
                     }
                 }
             }
@@ -36216,26 +38629,29 @@ No impact on binary size - Tor is external. Application binary remains small and
 
 ### Storage Locations
 
-**Tor dirs are ALWAYS under the app's dirs (binary owns Tor):**
+**Tor dirs are ALWAYS under the app's dirs (server binary owns Tor):**
 
-| Data | Location |
-|------|----------|
-| Tor config directory | `{config_dir}/tor/` |
-| Tor config file | `{config_dir}/tor/torrc` |
-| Tor data directory | `{data_dir}/tor/` |
-| Hidden service keys | `{data_dir}/tor/site/` |
-| Tor process PID | `{data_dir}/tor/tor.pid` |
-| Tor log file | `{log_dir}/tor.log` |
+| Data | Location | Notes |
+|------|----------|-------|
+| Tor config directory | `{config_dir}/tor/` | Server creates with 0700 |
+| Tor config file | `{config_dir}/tor/torrc` | Server generates with 0600 |
+| Tor data directory | `{data_dir}/tor/` | Server creates with 0700 |
+| Control socket | `{data_dir}/tor/control.sock` | Unix/macOS/BSD only |
+| Hidden service keys | `{data_dir}/tor/site/` | Server creates with 0700 |
+| Tor process PID | `{data_dir}/tor/tor.pid` | |
+| Tor log file | `{log_dir}/tor.log` | |
 
-**This applies to ALL environments:**
+**Paths resolve to (based on environment):**
 
-| Environment | Tor Config | Tor Data | Tor Log |
-|-------------|------------|----------|---------|
-| Docker | `/config/search/tor/` | `/data/search/tor/` | `/data/log/search/tor.log` |
-| Linux root | `/etc/apimgr/search/tor/` | `/var/lib/apimgr/search/tor/` | `/var/log/apimgr/search/tor.log` |
-| Linux user | `~/.config/apimgr/search/tor/` | `~/.local/share/apimgr/search/tor/` | `~/.local/log/apimgr/search/tor.log` |
-| macOS | `~/Library/Application Support/.../tor/` | Same | `~/Library/Logs/apimgr/search/tor.log` |
-| Windows | `%AppData%\...\tor\` | Same | `%AppData%\...\log\tor.log` |
+| Environment | {config_dir} | {data_dir} | {log_dir} |
+|-------------|--------------|------------|-----------|
+| Docker | `/config/{projectname}/` | `/data/{projectname}/` | `/data/log/{projectname}/` |
+| Linux root | `/etc/{projectorg}/{projectname}/` | `/var/lib/{projectorg}/{projectname}/` | `/var/log/{projectorg}/{projectname}/` |
+| Linux user | `~/.config/{projectorg}/{projectname}/` | `~/.local/share/{projectorg}/{projectname}/` | `~/.local/log/{projectorg}/{projectname}/` |
+| macOS | `~/Library/Application Support/{projectorg}/{projectname}/` | Same as config | `~/Library/Logs/{projectorg}/{projectname}/` |
+| Windows | `%AppData%\{projectorg}\{projectname}\` | Same as config | `%AppData%\{projectorg}\{projectname}\log\` |
+
+**Tor directories are ALWAYS `{config_dir}/tor/`, `{data_dir}/tor/`, `{log_dir}/tor.log` - never hardcoded paths.**
 
 ### Runtime Directory Handling 
 
@@ -36277,7 +38693,72 @@ func ensureTorDirs() error {
     return nil
 }
 
-// ensureTorFile creates/updates a file with correct permissions
+// ensureTorrc creates torrc only if it doesn't exist (persistent)
+// Returns true if file was created, false if it already existed
+func ensureTorrc(path string, content []byte) (bool, error) {
+    // Ensure parent dir exists
+    if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+        return false, fmt.Errorf("create parent dir: %w", err)
+    }
+
+    // Check if torrc already exists - DON'T overwrite
+    if _, err := os.Stat(path); err == nil {
+        // File exists - preserve it, just fix permissions
+        if err := os.Chmod(path, 0600); err != nil {
+            return false, fmt.Errorf("chmod file: %w", err)
+        }
+        return false, nil  // Not created, already existed
+    }
+
+    // File doesn't exist - create it
+    if err := os.WriteFile(path, content, 0600); err != nil {
+        return false, fmt.Errorf("write file: %w", err)
+    }
+
+    // Enforce ownership
+    uid := os.Getuid()
+    gid := os.Getgid()
+    if runtime.GOOS != "windows" {
+        if err := os.Chown(path, uid, gid); err != nil {
+            return false, fmt.Errorf("chown file: %w", err)
+        }
+    }
+
+    return true, nil  // Created new file
+}
+
+// updateTorrc overwrites torrc with new content (for config changes)
+// Only called when admin explicitly saves new Tor config
+func updateTorrc(path string, content []byte) error {
+    // Ensure parent dir exists
+    if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+        return fmt.Errorf("create parent dir: %w", err)
+    }
+
+    // Overwrite file with new content
+    if err := os.WriteFile(path, content, 0600); err != nil {
+        return fmt.Errorf("write file: %w", err)
+    }
+
+    // Enforce permissions
+    if err := os.Chmod(path, 0600); err != nil {
+        return fmt.Errorf("chmod file: %w", err)
+    }
+
+    // Enforce ownership
+    uid := os.Getuid()
+    gid := os.Getgid()
+    if runtime.GOOS != "windows" {
+        if err := os.Chown(path, uid, gid); err != nil {
+            return fmt.Errorf("chown file: %w", err)
+        }
+    }
+
+    return nil
+}
+
+// ensureTorFile creates/updates a generic Tor file with correct permissions
+// Used for files other than torrc (keys, etc.)
 func ensureTorFile(path string, content []byte) error {
     // Ensure parent dir exists
     if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
@@ -36310,62 +38791,243 @@ func ensureTorFile(path string, content []byte) error {
 | Rule | Description |
 |------|-------------|
 | **Create before write** | Dirs must exist before creating torrc or keys |
-| **Permissions: 0700** | Tor directories are private (owner only, `rwx------`) |
-| **Permissions: 0600** | Tor files are private (owner only, `rw-------`) |
+| **Permissions: 0700** | Tor directories are private (Unix: `rwx------`) |
+| **Permissions: 0600** | Tor files are private (Unix: `rw-------`) |
 | **Ownership** | Current user/group (NOT tor user, app owns everything) |
-| **Enforce on exist** | Always chmod/chown even if dir/file already exists |
+| **Enforce on exist** | Always chmod/chown even if dir/file already exists (Unix only) |
 | **Idempotent** | Safe to call multiple times |
+| **Windows** | chmod/chown skipped; Windows uses inherited ACLs from user profile |
 
-**Tor File Permissions:**
+**Tor File Permissions (Unix - Windows uses inherited ACLs):**
 
-| File/Dir | Path | Permissions | Owner |
-|----------|------|-------------|-------|
-| Config dir | `{config_dir}/tor/` | `0700` | app user |
-| torrc | `{config_dir}/tor/torrc` | `0600` | app user |
-| Data dir | `{data_dir}/tor/` | `0700` | app user |
-| Site dir | `{data_dir}/tor/site/` | `0700` | app user |
-| Private key | `{data_dir}/tor/site/hs_ed25519_secret_key` | `0600` | app user |
-| Public key | `{data_dir}/tor/site/hs_ed25519_public_key` | `0600` | app user |
-| Hostname | `{data_dir}/tor/site/hostname` | `0600` | app user |
-| PID file | `{data_dir}/tor/tor.pid` | `0600` | app user |
-| Log file | `{log_dir}/tor.log` | `0600` | app user |
+| File/Dir | Path | Permissions | Owner | Notes |
+|----------|------|-------------|-------|-------|
+| Config dir | `{config_dir}/tor/` | `0700` | app user | Server creates/enforces |
+| torrc | `{config_dir}/tor/torrc` | `0600` | app user | Server generates |
+| Data dir | `{data_dir}/tor/` | `0700` | app user | Server creates/enforces |
+| Control socket | `{data_dir}/tor/control.sock` | `0600` | app user | Unix only |
+| Site dir | `{data_dir}/tor/site/` | `0700` | app user | Server creates/enforces |
+| Private key | `{data_dir}/tor/site/hs_ed25519_secret_key` | `0600` | app user | Tor creates |
+| Public key | `{data_dir}/tor/site/hs_ed25519_public_key` | `0600` | app user | Tor creates |
+| Hostname | `{data_dir}/tor/site/hostname` | `0600` | app user | Tor creates |
+| PID file | `{data_dir}/tor/tor.pid` | `0600` | app user | |
+| Log file | `{log_dir}/tor.log` | `0600` | app user | |
 
 ## Admin Panel
 
 ### /{admin_path}/server/tor (WebUI)
 
+**Hidden service is ALWAYS enabled if Tor binary is found.** No enable/disable toggle.
+
+#### Status Section (Read-Only)
+
 | Element | Type | Description |
 |---------|------|-------------|
-| Tor Service | Toggle switch | Start/Stop hidden service (auto-starts on boot) |
-| Status | Indicator | ● Connected / ○ Disconnected / ⚠ Error |
+| Tor Status | Indicator | ● Connected / ○ Not Installed / ⚠ Error |
+| Binary Path | Read-only text | Detected Tor binary location |
+| Binary Version | Read-only text | Tor version (e.g., "0.4.8.9") |
 | .onion Address | Read-only text | Full address with copy button |
-| Regenerate Address | Button | Creates new random .onion (requires confirmation modal) |
-| Vanity Prefix | Text input | Desired prefix (max 6 characters) |
-| Generate Vanity | Button | Starts background generation |
-| Vanity Status | Progress indicator | Shows when generating in background |
-| Import Keys | File upload | Import externally generated keys |
+| Uptime | Read-only text | Time since Tor started |
+| Circuits Active | Read-only text | Number of active circuits |
 
-**Status Card Example:**
+#### Configuration Settings (All Settings with Validation)
+
+**All settings validated before saving. Invalid settings show inline errors.**
+
+| Setting | Type | Default | Validation | Description |
+|---------|------|---------|------------|-------------|
+| **Outbound Network** | | | | |
+| `use_network` | Boolean | `false` | - | Use Tor for outbound connections |
+| `allow_user_preference` | Boolean | `true` | - | Allow users to override outbound setting |
+| **Performance** | | | | |
+| `max_circuits` | Integer | `32` | 1-128 | Maximum circuits to keep open |
+| `circuit_timeout` | Integer | `60` | 10-300 | Circuit timeout (seconds) |
+| `bootstrap_timeout` | Integer | `180` | 30-600 | Bootstrap timeout (seconds) |
+| **Security** | | | | |
+| `safe_logging` | Boolean | `true` | - | Scrub sensitive info from logs |
+| `max_streams_per_circuit` | Integer | `100` | 10-500 | Max streams per circuit |
+| `close_circuit_on_stream_limit` | Boolean | `true` | - | Close circuit on stream limit |
+| **Bandwidth** | | | | |
+| `bandwidth_rate` | String | `"1 MB"` | Pattern: `^\d+\s*(KB\|MB)$` | Max bandwidth rate/second |
+| `bandwidth_burst` | String | `"2 MB"` | Pattern: `^\d+\s*(KB\|MB)$`, >= rate | Max bandwidth burst/second |
+| `max_monthly_bandwidth` | String | `"100 GB"` | Pattern: `^\d+\s*(GB\|TB)\|unlimited$` | Monthly limit (or "unlimited") |
+| **Hidden Service** | | | | |
+| `num_intro_points` | Integer | `3` | 3-10 | Number of introduction points |
+| `virtual_port` | Integer | `80` | 1-65535 | Virtual port (.onion port) |
+
+#### Validation Rules
+
+```go
+type TorConfigValidation struct {
+    Field   string
+    Rule    string
+    Message string
+}
+
+var torValidationRules = []TorConfigValidation{
+    // Performance
+    {"max_circuits", "min:1,max:128", "Must be between 1 and 128"},
+    {"circuit_timeout", "min:10,max:300", "Must be between 10 and 300 seconds"},
+    {"bootstrap_timeout", "min:30,max:600", "Must be between 30 and 600 seconds"},
+
+    // Security
+    {"max_streams_per_circuit", "min:10,max:500", "Must be between 10 and 500"},
+
+    // Bandwidth
+    {"bandwidth_rate", "pattern:^\\d+\\s*(KB|MB)$", "Format: number + KB or MB (e.g., '1 MB')"},
+    {"bandwidth_burst", "pattern:^\\d+\\s*(KB|MB)$,gte:bandwidth_rate", "Must be >= bandwidth_rate"},
+    {"max_monthly_bandwidth", "pattern:^(\\d+\\s*(GB|TB)|unlimited)$", "Format: number + GB/TB or 'unlimited'"},
+
+    // Hidden Service
+    {"num_intro_points", "min:3,max:10", "Must be between 3 and 10"},
+    {"virtual_port", "min:1,max:65535", "Must be valid port (1-65535)"},
+}
+
+// ValidateTorConfig validates all Tor settings before saving
+func ValidateTorConfig(config *TorConfig) []ValidationError {
+    var errors []ValidationError
+
+    // Performance validation
+    if config.MaxCircuits < 1 || config.MaxCircuits > 128 {
+        errors = append(errors, ValidationError{
+            Field:   "max_circuits",
+            Message: "Must be between 1 and 128",
+        })
+    }
+
+    if config.CircuitTimeout < 10 || config.CircuitTimeout > 300 {
+        errors = append(errors, ValidationError{
+            Field:   "circuit_timeout",
+            Message: "Must be between 10 and 300 seconds",
+        })
+    }
+
+    // Bandwidth validation
+    rate, rateErr := parseBandwidth(config.BandwidthRate)
+    burst, burstErr := parseBandwidth(config.BandwidthBurst)
+
+    if rateErr != nil {
+        errors = append(errors, ValidationError{
+            Field:   "bandwidth_rate",
+            Message: "Invalid format. Use: '1 MB' or '500 KB'",
+        })
+    }
+
+    if burstErr != nil {
+        errors = append(errors, ValidationError{
+            Field:   "bandwidth_burst",
+            Message: "Invalid format. Use: '2 MB' or '1 MB'",
+        })
+    }
+
+    if rateErr == nil && burstErr == nil && burst < rate {
+        errors = append(errors, ValidationError{
+            Field:   "bandwidth_burst",
+            Message: "Must be greater than or equal to bandwidth_rate",
+        })
+    }
+
+    // Hidden service validation
+    if config.NumIntroPoints < 3 || config.NumIntroPoints > 10 {
+        errors = append(errors, ValidationError{
+            Field:   "num_intro_points",
+            Message: "Must be between 3 and 10",
+        })
+    }
+
+    return errors
+}
 ```
-┌─────────────────────────────────────────────────────────┐
-│ Tor Hidden Service                                      │
-│                                                         │
-│ Status: ● Connected                                     │
-│ Address: abcd1234...wxyz.onion                  [Copy]  │
-│                                                         │
-│ [Regenerate Address]                                    │
-├─────────────────────────────────────────────────────────┤
-│ Vanity Address                                          │
-│                                                         │
-│ Prefix: [______] (max 6 chars)  [Generate]              │
-│                                                         │
-│ ⏳ Generating: "jokes" - 2h 15m elapsed...              │
-│    [Cancel]                                             │
-├─────────────────────────────────────────────────────────┤
-│ Import External Keys                      [Import Keys] │
-│ ⓘ Help: How to generate longer vanity addresses        │
-└─────────────────────────────────────────────────────────┘
+
+#### WebUI Layout
+
 ```
+┌─────────────────────────────────────────────────────────────────────┐
+│ Tor Hidden Service                                                  │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│ Status: ● Connected              Uptime: 2d 5h 32m                  │
+│ Binary: /usr/bin/tor             Version: 0.4.8.9                   │
+│                                                                     │
+│ .onion Address:                                                     │
+│ ┌─────────────────────────────────────────────────────────────────┐ │
+│ │ abcdef1234567890abcdef1234567890abcdef1234567890abcdef12.onion  │ │
+│ └─────────────────────────────────────────────────────────[Copy]──┘ │
+│                                                                     │
+│ [Regenerate Address]                                                │
+├─────────────────────────────────────────────────────────────────────┤
+│ Vanity Address                                                      │
+│                                                                     │
+│ Prefix: [______] (max 6 chars)  [Generate]                          │
+│ ⏳ Generating: "myapp" - 2h 15m elapsed... [Cancel]                 │
+├─────────────────────────────────────────────────────────────────────┤
+│ Import External Keys                                   [Import Keys]│
+│ ⓘ Help: How to generate longer vanity addresses                    │
+├─────────────────────────────────────────────────────────────────────┤
+│ Configuration                                            [Expand ▼] │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│ ┌─ Outbound Network ────────────────────────────────────────────┐   │
+│ │ Use Tor for outbound connections:  [ ] Enabled                │   │
+│ │ Allow users to set preference:     [✓] Enabled                │   │
+│ └───────────────────────────────────────────────────────────────┘   │
+│                                                                     │
+│ ┌─ Performance ─────────────────────────────────────────────────┐   │
+│ │ Max circuits:         [32___]  (1-128)                        │   │
+│ │ Circuit timeout:      [60___]  seconds (10-300)               │   │
+│ │ Bootstrap timeout:    [180__]  seconds (30-600)               │   │
+│ └───────────────────────────────────────────────────────────────┘   │
+│                                                                     │
+│ ┌─ Security ────────────────────────────────────────────────────┐   │
+│ │ Safe logging:                    [✓] Enabled                  │   │
+│ │ Max streams per circuit:         [100__]  (10-500)            │   │
+│ │ Close circuit on stream limit:   [✓] Enabled                  │   │
+│ └───────────────────────────────────────────────────────────────┘   │
+│                                                                     │
+│ ┌─ Bandwidth ───────────────────────────────────────────────────┐   │
+│ │ Bandwidth rate:     [1___] [MB ▼]  (per second)               │   │
+│ │ Bandwidth burst:    [2___] [MB ▼]  (per second)               │   │
+│ │ Monthly limit:      [100_] [GB ▼]  ☐ Unlimited                │   │
+│ │   Current usage: 23.4 GB / 100 GB (23%)  ▓▓░░░░░░░░           │   │
+│ └───────────────────────────────────────────────────────────────┘   │
+│                                                                     │
+│ ┌─ Hidden Service ──────────────────────────────────────────────┐   │
+│ │ Introduction points:  [3___]  (3-10, more = resilient)        │   │
+│ │ Virtual port:         [80__]  (.onion port)                   │   │
+│ └───────────────────────────────────────────────────────────────┘   │
+│                                                                     │
+│                              [Cancel] [Save Configuration]          │
+│                                                                     │
+│ ⚠ Changes require Tor restart. Hidden service will be briefly      │
+│   unavailable during restart.                                       │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+#### Validation Error Display
+
+```
+┌─ Bandwidth ───────────────────────────────────────────────────┐
+│ Bandwidth rate:   [abc__] [MB ▼]                              │
+│                   ⚠ Invalid format. Use: '1 MB' or '500 KB'   │
+│ Bandwidth burst:  [1___] [MB ▼]                               │
+│                   ⚠ Must be greater than or equal to rate     │
+└───────────────────────────────────────────────────────────────┘
+```
+
+#### Save Flow
+
+1. User clicks "Save Configuration"
+2. Client-side validation runs (immediate feedback)
+3. If client validation passes, send PATCH request
+4. Server validates again (never trust client)
+5. If server validation fails, return errors with field names
+6. If validation passes:
+   - Save new config to file
+   - Regenerate torrc with new settings
+   - Restart Tor process
+   - Return success with new status
+7. WebUI shows "Configuration saved. Tor restarting..." toast
+8. Poll status endpoint until Tor reconnects
 
 ### Vanity Address Generation
 
@@ -36389,7 +39051,7 @@ func ensureTorFile(path string, content []byte) error {
 
 For prefixes longer than 6 characters, use external tools with GPU acceleration. The admin panel includes documentation (expandable help section):
 
-**Using mkp224o (CPU):**
+**Using mkp224o (Linux/macOS/BSD):**
 ```bash
 # Install
 git clone https://github.com/cathugger/mkp224o
@@ -36404,7 +39066,7 @@ cd mkp224o && ./autogen.sh && ./configure && make
 #   └── hs_ed25519_secret_key
 ```
 
-**Using mkp224o (GPU - much faster):**
+**Using mkp224o with GPU (Linux/macOS - much faster):**
 ```bash
 # With CUDA support
 ./configure --enable-cuda
@@ -36413,6 +39075,11 @@ make
 # Generate
 ./mkp224o -d ./keys myapp12
 ```
+
+**Windows users:**
+- Use WSL (Windows Subsystem for Linux) to run mkp224o
+- Or use pre-built Windows binaries if available from trusted sources
+- Generated keys are portable - generate on any platform, import via admin panel
 
 **Importing keys:**
 1. Generate keys using mkp224o or similar tool
@@ -36440,9 +39107,11 @@ make
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/{api_version}/{admin_path}/server/tor` | GET | Get Tor status and .onion address |
-| `/api/{api_version}/{admin_path}/server/tor` | PATCH | Update Tor settings |
+| `/api/{api_version}/{admin_path}/server/tor` | GET | Get Tor status, config, and .onion address |
+| `/api/{api_version}/{admin_path}/server/tor` | PATCH | Update Tor settings (validates before saving) |
+| `/api/{api_version}/{admin_path}/server/tor/validate` | POST | Validate config without saving |
 | `/api/{api_version}/{admin_path}/server/tor/regenerate` | POST | Regenerate .onion address |
+| `/api/{api_version}/{admin_path}/server/tor/restart` | POST | Restart Tor process |
 | `/api/{api_version}/{admin_path}/server/tor/vanity` | GET | Get vanity generation status |
 | `/api/{api_version}/{admin_path}/server/tor/vanity` | POST | Start vanity generation |
 | `/api/{api_version}/{admin_path}/server/tor/vanity` | DELETE | Cancel vanity generation |
@@ -36451,12 +39120,62 @@ make
 
 ### Response Format
 
+**GET `/api/{api_version}/{admin_path}/server/tor`**
+
 ```json
 {
-  "enabled": true,
-  "status": "connected",
-  "onion_address": "abcd1234efgh5678ijkl9012mnop3456qrst7890uvwx.onion",
-  "uptime": "2d 5h 30m"
+  "status": {
+    "state": "connected",
+    "binary_path": "/usr/bin/tor",
+    "binary_version": "0.4.8.9",
+    "onion_address": "exampleonionaddressv3fordemoabcdefghijklmnopqrstuvwxyz23.onion",
+    "uptime_seconds": 192600,
+    "circuits_active": 12
+  },
+  "config": {
+    "use_network": false,
+    "allow_user_preference": true,
+    "max_circuits": 32,
+    "circuit_timeout": 60,
+    "bootstrap_timeout": 180,
+    "safe_logging": true,
+    "max_streams_per_circuit": 100,
+    "close_circuit_on_stream_limit": true,
+    "bandwidth_rate": "1 MB",
+    "bandwidth_burst": "2 MB",
+    "num_intro_points": 3,
+    "virtual_port": 80
+  }
+}
+```
+
+**POST `/api/{api_version}/{admin_path}/server/tor/validate`** (or PATCH with invalid config)
+
+```json
+{
+  "valid": false,
+  "errors": [
+    {
+      "field": "max_circuits",
+      "message": "Must be between 1 and 128"
+    },
+    {
+      "field": "bandwidth_burst",
+      "message": "Must be greater than or equal to bandwidth_rate"
+    }
+  ]
+}
+```
+
+**PATCH `/api/{api_version}/{admin_path}/server/tor`** (success)
+
+```json
+{
+  "success": true,
+  "message": "Configuration saved. Tor restarting...",
+  "status": {
+    "state": "restarting"
+  }
 }
 ```
 
@@ -36464,10 +39183,11 @@ make
 
 | Scenario | Behavior |
 |----------|----------|
-| First run | Tor starts, generates .onion address, saves to config |
-| Subsequent runs | Tor starts, uses existing .onion address |
-| Disabled in config | Tor does not start, no .onion available |
-| Regenerate address | Old keys deleted, new .onion generated, config updated |
+| First run (tor found) | Tor starts, generates .onion address, keys saved to `{data_dir}/tor/site/` |
+| Subsequent runs | Tor starts, loads existing keys, same .onion address |
+| Tor binary not found | Log INFO, continue without Tor (not an error) |
+| Regenerate address | Old keys deleted from `{data_dir}/tor/site/`, new .onion generated |
+| Import keys | Keys replaced in `{data_dir}/tor/site/`, Tor restarts with new address |
 | Network issues | Tor retries connection automatically |
 
 ## CLI
@@ -36527,13 +39247,13 @@ Tor Hidden Service: Connected
 
 
 
-# PART 33: CLI CLIENT & AGENT 
+# PART 33: CLIENT & AGENT
 
 ## Overview
 
-**CLI client is REQUIRED for all projects. Agent is PER-PROJECT determination.**
+**client is REQUIRED for all projects. Agent is PER-PROJECT determination.**
 
-Every server MUST have a companion CLI client. The CLI provides terminal-based access to all server functionality and is essential for:
+Every server MUST have a companion client. The client provides terminal-based access to all server functionality and is essential for:
 - Scripting and automation
 - Headless/SSH environments
 - CI/CD pipelines
@@ -36541,14 +39261,15 @@ Every server MUST have a companion CLI client. The CLI provides terminal-based a
 
 **Agent remains optional** - only needed for monitoring, remote management, or similar projects (see "When Agent is Needed" section).
 
-When a project includes a CLI client, it provides a terminal-based interface for interacting with the server. The CLI supports both standard command-line usage and an interactive TUI (Terminal User Interface) mode.
+When a project includes a client, it provides a terminal-based interface for interacting with the server. The client supports both standard command-line usage and an interactive TUI (Terminal User Interface) mode.
 
 | Attribute | Value |
 |-----------|-------|
-| Default binary name | `search-cli` |
+| Default binary name | `{projectname}-cli` |
 | Versioning | Same as main application |
 | Build | Part of same Makefile (`make build` produces both binaries) |
-| Config location | `~/.config/apimgr/search/cli.yml` |
+| Config location (Unix) | `~/.config/{projectorg}/{projectname}/cli.yml` |
+| Config location (Windows) | `%APPDATA%\{projectorg}\{projectname}\cli.yml` |
 
 ## Binary Naming Rules 
 
@@ -36556,18 +39277,18 @@ When a project includes a CLI client, it provides a terminal-based interface for
 
 | Rule | Display | Internal |
 |------|---------|----------|
-| Binary name | ACTUAL name (`filepath.Base(os.Args[0])`) | Hardcoded `search` |
+| Binary name | ACTUAL name (`filepath.Base(os.Args[0])`) | Hardcoded `{projectname}` |
 | `--help` output | Shows actual binary name | - |
 | `--version` output | Shows actual binary name | - |
-| User-Agent | - | `search-cli/{version}` (hardcoded) |
-| Config paths | - | `/etc/apimgr/search/` (hardcoded) |
+| User-Agent | - | `{projectname}-cli/{version}` (hardcoded) |
+| Config paths | - | `/etc/{projectorg}/{projectname}/` (hardcoded) |
 
 ```go
 // Display: use actual binary name
 binaryName := filepath.Base(os.Args[0])
 
 // Internal: hardcoded project name (compiled via -ldflags)
-const projectName = "search"
+const projectName = "{projectname}"
 userAgent := fmt.Sprintf("%s-cli/%s", projectName, version)
 ```
 
@@ -36585,7 +39306,7 @@ userAgent := fmt.Sprintf("%s-cli/%s", projectName, version)
 2. `--token-file` flag (file path)
 3. Environment variable: `{PROJECTNAME}_TOKEN`
 4. Config file: `cli.yml` → `token: xxx`
-5. Token file: `~/.config/apimgr/search/token`
+5. Token file: `{config_dir}/token` (Unix: `~/.config/{projectorg}/{projectname}/token`, Windows: `%APPDATA%\{projectorg}\{projectname}\token`)
 
 **Token format:** See PART 11 "API Token Security" for token format and validation.
 
@@ -36619,15 +39340,15 @@ func getToken(flags *Flags) (string, error) {
 **Usage:**
 ```bash
 # Explicit token
-search-cli --token "usr_abc123..." list
+{projectname}-cli --token "usr_abc123..." list
 
 # From environment
 export {PROJECTNAME}_TOKEN="usr_abc123..."
-search-cli list
+{projectname}-cli list
 
 # Store token (interactive login)
-search-cli login
-# Saves to ~/.config/apimgr/search/token
+{projectname}-cli login
+# Saves to {config_dir}/token (see platform-specific paths above)
 ```
 
 ## User/Org Context (Smart Detection, NON-NEGOTIABLE)
@@ -36731,17 +39452,17 @@ func ValidateAccess(ctx context.Context, token *Token, target string, action str
 
 ```bash
 # Default: use token owner's personal context (no --user flag)
-search-cli list                    # GET /api/{api_version}/users/{resource} (current user)
+{projectname}-cli list                    # GET /api/{api_version}/users/{resource} (current user)
 
 # Explicit user context (view another user's public resources)
-search-cli --user @alice list      # GET /api/{api_version}/users/alice/{resource}
+{projectname}-cli --user @alice list      # GET /api/{api_version}/users/alice/{resource}
 
 # Org context (user must have org access)
-search-cli --user +acme-corp list  # GET /api/{api_version}/orgs/acme-corp/{resource}
+{projectname}-cli --user +acme-corp list  # GET /api/{api_version}/orgs/acme-corp/{resource}
 
 # Auto-detect: CLI determines if name is user or org
-search-cli --user alice list       # GET /api/{api_version}/users/alice/{resource} (if user)
-search-cli --user acme-corp list   # GET /api/{api_version}/orgs/acme-corp/{resource} (if org)
+{projectname}-cli --user alice list       # GET /api/{api_version}/users/alice/{resource} (if user)
+{projectname}-cli --user acme-corp list   # GET /api/{api_version}/orgs/acme-corp/{resource} (if org)
 ```
 
 **Note:** `{resource}` is the project-specific resource type (e.g., `repos`, `pastes`, `links`). See IDEA.md for your project's resources.
@@ -36759,7 +39480,7 @@ search-cli --user acme-corp list   # GET /api/{api_version}/orgs/acme-corp/{reso
 
 ```bash
 # CLI translates --user to URL-scoped route
-search-cli --user acme-corp list
+{projectname}-cli --user acme-corp list
 
 # Becomes:
 GET /api/{api_version}/orgs/acme-corp/{resource}
@@ -36804,23 +39525,23 @@ CLI receives --user flag
 
 ```bash
 # Token: alice (no org access)
-search-cli list                    # Uses alice's context (only option)
-search-cli --user alice list       # Same (redundant but valid)
-search-cli --user acme-corp list   # ERROR: no access to acme-corp
+{projectname}-cli list                    # Uses alice's context (only option)
+{projectname}-cli --user alice list       # Same (redundant but valid)
+{projectname}-cli --user acme-corp list   # ERROR: no access to acme-corp
 
 # Token: scoped to acme-corp only (org-specific token)
-search-cli list                    # Uses acme-corp context (only option)
-search-cli --user acme-corp list   # Same (redundant but valid)
-search-cli --user @me list         # ERROR: token not scoped to user
+{projectname}-cli list                    # Uses acme-corp context (only option)
+{projectname}-cli --user acme-corp list   # Same (redundant but valid)
+{projectname}-cli --user @me list         # ERROR: token not scoped to user
 
 # Token: alice + acme-corp (user has one org)
-search-cli list                    # Uses alice's context (default = user)
-search-cli --user acme-corp list   # Uses acme-corp context
+{projectname}-cli list                    # Uses alice's context (default = user)
+{projectname}-cli --user acme-corp list   # Uses acme-corp context
 
 # Token: alice + acme-corp + dev-team (user has multiple orgs)
-search-cli list                    # Uses alice's context (default = user)
-search-cli --user acme-corp list   # Uses acme-corp context
-search-cli --user dev-team list    # Uses dev-team context
+{projectname}-cli list                    # Uses alice's context (default = user)
+{projectname}-cli --user acme-corp list   # Uses acme-corp context
+{projectname}-cli --user dev-team list    # Uses dev-team context
 ```
 
 **Server-side scope detection:**
@@ -36904,11 +39625,11 @@ func SaveIfEmptyOrInvalid(current, flagValue string, validate func(string) bool)
 **Example:**
 ```bash
 # First run: no server configured
-search-cli --server https://api.example.com list
+{projectname}-cli --server https://api.example.com list
 # → Saves to cli.yml (was empty)
 
 # Second run: server already configured
-search-cli --server https://staging.example.com list
+{projectname}-cli --server https://staging.example.com list
 # → Uses staging for THIS command, but cli.yml still has api.example.com
 
 # To permanently change: edit cli.yml directly
@@ -36930,7 +39651,7 @@ search-cli --server https://staging.example.com list
 
 ```bash
 # @me always means token owner
-search-cli --user @me list    # Always personal context
+{projectname}-cli --user @me list    # Always personal context
 ```
 
 ## Modes
@@ -36986,25 +39707,25 @@ display:
 
 **Exit-immediately flags (NEVER launch TUI):**
 ```bash
-search-cli -h                    # Print help, exit
-search-cli --help                # Print help, exit
-search-cli -v                    # Print version, exit
-search-cli --version             # Print version, exit
+{projectname}-cli -h                    # Print help, exit
+{projectname}-cli --help                # Print help, exit
+{projectname}-cli -v                    # Print version, exit
+{projectname}-cli --version             # Print version, exit
 ```
 
 **Config flags (still launch TUI):**
 ```bash
-search-cli                                    # TUI mode
-search-cli --config dev                       # TUI mode (with dev.yml)
-search-cli --server https://example.com       # TUI mode (with server)
-search-cli --token abc123                     # TUI mode (with token)
+{projectname}-cli                                    # TUI mode
+{projectname}-cli --config dev                       # TUI mode (with dev.yml)
+{projectname}-cli --server https://example.com       # TUI mode (with server)
+{projectname}-cli --token abc123                     # TUI mode (with token)
 ```
 
 **Command/args (CLI mode):**
 ```bash
-search-cli list                               # CLI mode
-search-cli golang tutorials                   # CLI mode (search)
-search-cli notes.txt                          # CLI mode (paste file)
+{projectname}-cli list                               # CLI mode
+{projectname}-cli golang tutorials                   # CLI mode (search)
+{projectname}-cli notes.txt                          # CLI mode (paste file)
 ```
 
 ```go
@@ -37110,7 +39831,7 @@ if env.IsAutoDetectDisplayModeGUI() {
 
 **Agent connection string example (provided by server admin panel):**
 ```
-search-agent --connect "https://api.example.com?token=agt_xxx&name=office-pc"
+{projectname}-agent --connect "https://api.example.com?token=agt_xxx&name=office-pc"
 ```
 
 ### CLI: Full TUI/GUI App with Setup Wizard
@@ -37174,14 +39895,14 @@ Why CLI needs a setup wizard:
 ### CLI First-Run Flow
 
 ```
-User double-clicks search-cli:
+User double-clicks {projectname}-cli:
 
 1. SETUP WIZARD (GUI or TUI based on environment)
    ┌─────────────────────────────────────────────────────────────┐
    │  {PROJECTNAME} CLI Setup                                [X] │
    ├─────────────────────────────────────────────────────────────┤
    │                                                             │
-   │  Connect to a search server:                         │
+   │  Connect to a {projectname} server:                         │
    │                                                             │
    │  Server URL:                                                │
    │  [https://                                           ] [?]  │
@@ -37295,7 +40016,7 @@ func selectSetupMode() SetupMode {
 **CLI Setup Wizard Flow:**
 
 ```
-User double-clicks search-cli:
+User double-clicks {projectname}-cli:
 
 1. Check for config file (cli.yml)
    ├─ Config exists with valid server URL?
@@ -37319,7 +40040,7 @@ User double-clicks search-cli:
 ```
 Agent is configured via server-provided connection string:
 
-search-agent --connect "https://api.example.com?token=agt_xxx&name=office-pc"
+{projectname}-agent --connect "https://api.example.com?token=agt_xxx&name=office-pc"
 
 First run without connection string:
 - Show error: "No connection configured. Use --connect flag with server-provided URL."
@@ -37432,6 +40153,228 @@ func LaunchGUI(config *Config) error {
 }
 ```
 
+### Platform-Specific GUI Launchers
+
+```go
+// --- gui_linux.go ---
+//go:build linux && gui
+// +build linux,gui
+
+package gui
+
+import (
+    "github.com/diamondburned/gotk4/pkg/gtk/v4"
+    "github.com/diamondburned/gotk4/pkg/gio/v2"
+)
+
+func launchGTKGui(config *Config) error {
+    app := gtk.NewApplication("{projectorg}.{projectname}.cli", gio.ApplicationFlagsNone)
+
+    app.ConnectActivate(func() {
+        win := gtk.NewApplicationWindow(app)
+        win.SetTitle("{PROJECTNAME} CLI")
+        win.SetDefaultSize(800, 600)
+
+        // Build UI from config
+        buildMainWindow(win, config)
+
+        win.Show()
+    })
+
+    return app.Run(nil)
+}
+
+func buildMainWindow(win *gtk.ApplicationWindow, config *Config) {
+    // Main container
+    box := gtk.NewBox(gtk.OrientationVertical, 10)
+    box.SetMarginTop(10)
+    box.SetMarginBottom(10)
+    box.SetMarginStart(10)
+    box.SetMarginEnd(10)
+
+    // Header
+    header := gtk.NewHeaderBar()
+    header.SetShowTitleButtons(true)
+    win.SetTitlebar(header)
+
+    // Content area - implement based on CLI functionality
+    // ...
+
+    win.SetChild(box)
+}
+```
+
+```go
+// --- gui_darwin.go ---
+//go:build darwin && gui
+// +build darwin,gui
+
+package gui
+
+/*
+#cgo CFLAGS: -x objective-c
+#cgo LDFLAGS: -framework Cocoa
+#import <Cocoa/Cocoa.h>
+
+void launchCocoaApp(const char* title, int width, int height);
+*/
+import "C"
+import "unsafe"
+
+func launchCocoaGui(config *Config) error {
+    title := C.CString("{PROJECTNAME} CLI")
+    defer C.free(unsafe.Pointer(title))
+
+    C.launchCocoaApp(title, 800, 600)
+    return nil
+}
+
+// Objective-C implementation in gui_darwin.m:
+// @interface AppDelegate : NSObject <NSApplicationDelegate>
+// @property (strong) NSWindow *window;
+// @end
+//
+// @implementation AppDelegate
+// - (void)applicationDidFinishLaunching:(NSNotification *)notification {
+//     NSRect frame = NSMakeRect(0, 0, 800, 600);
+//     self.window = [[NSWindow alloc] initWithContentRect:frame
+//         styleMask:(NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |
+//                    NSWindowStyleMaskResizable | NSWindowStyleMaskMiniaturizable)
+//         backing:NSBackingStoreBuffered defer:NO];
+//     [self.window setTitle:@"{PROJECTNAME} CLI"];
+//     [self.window center];
+//     [self.window makeKeyAndOrderFront:nil];
+// }
+// @end
+```
+
+```go
+// --- gui_windows.go ---
+//go:build windows && gui
+// +build windows,gui
+
+package gui
+
+import (
+    "syscall"
+    "unsafe"
+
+    "golang.org/x/sys/windows"
+)
+
+var (
+    user32           = windows.NewLazySystemDLL("user32.dll")
+    createWindowExW  = user32.NewProc("CreateWindowExW")
+    defWindowProcW   = user32.NewProc("DefWindowProcW")
+    dispatchMessageW = user32.NewProc("DispatchMessageW")
+    getMessageW      = user32.NewProc("GetMessageW")
+    postQuitMessage  = user32.NewProc("PostQuitMessage")
+    registerClassExW = user32.NewProc("RegisterClassExW")
+    showWindow       = user32.NewProc("ShowWindow")
+    translateMessage = user32.NewProc("TranslateMessage")
+    updateWindow     = user32.NewProc("UpdateWindow")
+)
+
+const (
+    WS_OVERLAPPEDWINDOW = 0x00CF0000
+    WS_VISIBLE          = 0x10000000
+    SW_SHOW             = 5
+    WM_DESTROY          = 0x0002
+)
+
+func launchWin32Gui(config *Config) error {
+    className := windows.StringToUTF16Ptr("{projectname}_cli_window")
+    windowName := windows.StringToUTF16Ptr("{PROJECTNAME} CLI")
+
+    // Register window class
+    var wc WNDCLASSEXW
+    wc.CbSize = uint32(unsafe.Sizeof(wc))
+    wc.LpfnWndProc = syscall.NewCallback(wndProc)
+    wc.HInstance = 0
+    wc.LpszClassName = className
+
+    registerClassExW.Call(uintptr(unsafe.Pointer(&wc)))
+
+    // Create window
+    hwnd, _, _ := createWindowExW.Call(
+        0,
+        uintptr(unsafe.Pointer(className)),
+        uintptr(unsafe.Pointer(windowName)),
+        WS_OVERLAPPEDWINDOW|WS_VISIBLE,
+        100, 100, 800, 600, // x, y, width, height
+        0, 0, 0, 0,
+    )
+
+    showWindow.Call(hwnd, SW_SHOW)
+    updateWindow.Call(hwnd)
+
+    // Message loop
+    var msg MSG
+    for {
+        ret, _, _ := getMessageW.Call(
+            uintptr(unsafe.Pointer(&msg)), 0, 0, 0,
+        )
+        if ret == 0 {
+            break
+        }
+        translateMessage.Call(uintptr(unsafe.Pointer(&msg)))
+        dispatchMessageW.Call(uintptr(unsafe.Pointer(&msg)))
+    }
+
+    return nil
+}
+
+func wndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
+    switch msg {
+    case WM_DESTROY:
+        postQuitMessage.Call(0)
+        return 0
+    }
+    ret, _, _ := defWindowProcW.Call(hwnd, msg, wParam, lParam)
+    return ret
+}
+
+type WNDCLASSEXW struct {
+    CbSize        uint32
+    Style         uint32
+    LpfnWndProc   uintptr
+    CbClsExtra    int32
+    CbWndExtra    int32
+    HInstance     uintptr
+    HIcon         uintptr
+    HCursor       uintptr
+    HbrBackground uintptr
+    LpszMenuName  *uint16
+    LpszClassName *uint16
+    HIconSm       uintptr
+}
+
+type MSG struct {
+    Hwnd    uintptr
+    Message uint32
+    WParam  uintptr
+    LParam  uintptr
+    Time    uint32
+    Pt      struct{ X, Y int32 }
+}
+```
+
+```go
+// --- gui_bsd.go ---
+//go:build (freebsd || openbsd || netbsd) && gui
+// +build freebsd openbsd netbsd
+// +build gui
+
+package gui
+
+// BSD uses the same GTK implementation as Linux
+func launchGTKGui(config *Config) error {
+    // Same implementation as gui_linux.go
+    // GTK4 works on BSD systems
+    return launchGTKGuiImpl(config)
+}
+```
+
 ### SSH/Mosh Detection 
 
 **Remote sessions ALWAYS use TUI or CLI. Never attempt GUI over SSH/mosh.**
@@ -37527,7 +40470,7 @@ import (
 // Apply palette colors to CLI text output
 func (o *Output) PrintSuccess(msg string) {
     if o.colors {
-        fmt.Printf("\033[38;2;%sм%s\033[0m\n", hexToRGB(o.palette.Success), msg)
+        fmt.Printf("\033[38;2;%sm%s\033[0m\n", hexToRGB(o.palette.Success), msg)
     } else {
         fmt.Println(msg)
     }
@@ -37535,7 +40478,7 @@ func (o *Output) PrintSuccess(msg string) {
 
 func (o *Output) PrintError(msg string) {
     if o.colors {
-        fmt.Printf("\033[38;2;%sм%s\033[0m\n", hexToRGB(o.palette.Error), msg)
+        fmt.Printf("\033[38;2;%sm%s\033[0m\n", hexToRGB(o.palette.Error), msg)
     } else {
         fmt.Println(msg)
     }
@@ -37627,7 +40570,7 @@ func calculateGUILayout(width, height int, dpi float64) Layout {
 // src/client/tui/layout.go
 package tui
 
-import "apimgr/search/common/terminal"
+import "{projectorg}/{projectname}/common/terminal"
 
 // LayoutConfig provides TUI-specific layout settings based on SizeMode
 type LayoutConfig struct {
@@ -37759,7 +40702,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
     return m, nil
 }
 
-// Server/Agent: Handle SIGWINCH for console output
+// Server/Agent: Handle window resize for console output
+// Platform-specific implementations below
+
+// --- watch_unix.go ---
+//go:build !windows
+// +build !windows
+
 func watchWindowSize(ctx context.Context, callback func(w, h int)) {
     sigCh := make(chan os.Signal, 1)
     signal.Notify(sigCh, syscall.SIGWINCH)
@@ -37771,6 +40720,31 @@ func watchWindowSize(ctx context.Context, callback func(w, h int)) {
         case <-sigCh:
             w, h, _ := term.GetSize(int(os.Stdout.Fd()))
             callback(w, h)
+        }
+    }
+}
+
+// --- watch_windows.go ---
+//go:build windows
+// +build windows
+
+func watchWindowSize(ctx context.Context, callback func(w, h int)) {
+    // Windows: Poll for size changes (no SIGWINCH)
+    ticker := time.NewTicker(500 * time.Millisecond)
+    defer ticker.Stop()
+
+    var lastW, lastH int
+
+    for {
+        select {
+        case <-ctx.Done():
+            return
+        case <-ticker.C:
+            w, h, _ := term.GetSize(int(os.Stdout.Fd()))
+            if w != lastW || h != lastH {
+                lastW, lastH = w, h
+                callback(w, h)
+            }
         }
     }
 }
@@ -37883,10 +40857,10 @@ When command arguments are provided:
 
 ```bash
 # Standard CLI output (your project)
-search-cli create --file notes.txt --expire 24h
-search-cli get abc123 --output json
-search-cli list --limit 10
-search-cli search --query "keyword"
+{projectname}-cli create --file notes.txt --expire 24h
+{projectname}-cli get abc123 --output json
+{projectname}-cli list --limit 10
+{projectname}-cli search --query "keyword"
 ```
 
 ### TUI Mode (Automatic)
@@ -37895,7 +40869,7 @@ When launched with no arguments in an interactive terminal:
 
 ```bash
 # Launch TUI (no arguments needed)
-search-cli              # Opens TUI automatically
+{projectname}-cli              # Opens TUI automatically
 
 # TUI provides:
 # - Interactive menus
@@ -37911,7 +40885,7 @@ search-cli              # Opens TUI automatically
 
 ### Directory Structure
 
-**CLI client ALWAYS runs as user. NEVER as root/administrator. NEVER uses system directories.**
+**client ALWAYS runs as user. NEVER as root/administrator. NEVER uses system directories.**
 
 The CLI binary:
 - Runs as current user only (no privilege escalation)
@@ -37920,29 +40894,29 @@ The CLI binary:
 - Sets permissions and ownership before creating any files
 - Works identically across all platforms (Linux, macOS, Windows)
 
-The CLI client uses the same user directory structure as the server in user mode. This allows the CLI to share configuration with a locally running server when appropriate.
+The client uses the same user directory structure as the server in user mode. This allows the client to share configuration with a locally running server when appropriate.
 
 #### Linux / macOS
 
 | Directory | Path | Purpose |
 |-----------|------|---------|
-| Config | `~/.config/apimgr/search/` | Configuration files |
-| Config File | `~/.config/apimgr/search/cli.yml` | CLI configuration |
-| Data | `~/.local/share/apimgr/search/` | Persistent data |
-| Cache | `~/.cache/apimgr/search/` | Temporary/cached data |
-| Logs | `~/.local/log/apimgr/search/` | Log files |
-| Log File | `~/.local/log/apimgr/search/cli.log` | CLI log output |
+| Config | `~/.config/{projectorg}/{projectname}/` | Configuration files |
+| Config File | `~/.config/{projectorg}/{projectname}/cli.yml` | CLI configuration |
+| Data | `~/.local/share/{projectorg}/{projectname}/` | Persistent data |
+| Cache | `~/.cache/{projectorg}/{projectname}/` | Temporary/cached data |
+| Logs | `~/.local/log/{projectorg}/{projectname}/` | Log files |
+| Log File | `~/.local/log/{projectorg}/{projectname}/cli.log` | CLI log output |
 
 #### Windows
 
 | Directory | Path | Purpose |
 |-----------|------|---------|
-| Config | `%APPDATA%\apimgr\search\` | Configuration files |
-| Config File | `%APPDATA%\apimgr\search\cli.yml` | CLI configuration |
-| Data | `%LOCALAPPDATA%\apimgr\search\data\` | Persistent data |
-| Cache | `%LOCALAPPDATA%\apimgr\search\cache\` | Temporary/cached data |
-| Logs | `%LOCALAPPDATA%\apimgr\search\log\` | Log files |
-| Log File | `%LOCALAPPDATA%\apimgr\search\log\cli.log` | CLI log output |
+| Config | `%APPDATA%\{projectorg}\{projectname}\` | Configuration files |
+| Config File | `%APPDATA%\{projectorg}\{projectname}\cli.yml` | CLI configuration |
+| Data | `%LOCALAPPDATA%\{projectorg}\{projectname}\data\` | Persistent data |
+| Cache | `%LOCALAPPDATA%\{projectorg}\{projectname}\cache\` | Temporary/cached data |
+| Logs | `%LOCALAPPDATA%\{projectorg}\{projectname}\log\` | Log files |
+| Log File | `%LOCALAPPDATA%\{projectorg}\{projectname}\log\cli.log` | CLI log output |
 
 #### Directory Usage
 
@@ -37954,9 +40928,9 @@ The CLI client uses the same user directory structure as the server in user mode
 | Logs | `cli.log`, debug logs | Optional |
 
 **NEVER use OS system directories:**
-- `/etc/apimgr/search/` (Linux system config)
-- `/var/lib/apimgr/search/` (Linux system data)
-- `/var/log/apimgr/search/` (Linux system logs)
+- `/etc/{projectorg}/{projectname}/` (Linux system config)
+- `/var/lib/{projectorg}/{projectname}/` (Linux system data)
+- `/var/log/{projectorg}/{projectname}/` (Linux system logs)
 - `C:\ProgramData\` (Windows system data)
 - Any directory requiring elevated privileges
 
@@ -37968,10 +40942,10 @@ On every startup, the CLI MUST:
 
 1. **Ensure directories exist** (create if missing):
    ```
-   ├─ {config_dir}/           (~/.config/apimgr/search/)
-   ├─ {data_dir}/             (~/.local/share/apimgr/search/)
-   ├─ {cache_dir}/            (~/.cache/apimgr/search/)
-   └─ {log_dir}/              (~/.local/log/apimgr/search/)
+   ├─ {config_dir}/           (~/.config/{projectorg}/{projectname}/)
+   ├─ {data_dir}/             (~/.local/share/{projectorg}/{projectname}/)
+   ├─ {cache_dir}/            (~/.cache/{projectorg}/{projectname}/)
+   └─ {log_dir}/              (~/.local/log/{projectorg}/{projectname}/)
    ```
 
 2. **Set correct permissions** (user-only access):
@@ -38007,11 +40981,45 @@ func EnsureDirs() error {
 		if err := os.MkdirAll(dir, 0700); err != nil {
 			return fmt.Errorf("create dir %s: %w", dir, err)
 		}
-		// Ensure permissions even if dir existed
-		if err := os.Chmod(dir, 0700); err != nil {
-			return fmt.Errorf("chmod dir %s: %w", dir, err)
+		// Set permissions (platform-specific)
+		if err := setDirPermissions(dir); err != nil {
+			return fmt.Errorf("set permissions %s: %w", dir, err)
 		}
 	}
+	return nil
+}
+
+// --- permissions_unix.go ---
+//go:build !windows
+// +build !windows
+
+func setDirPermissions(dir string) error {
+	// Unix: ensure 0700 (user-only access)
+	return os.Chmod(dir, 0700)
+}
+
+func setFilePermissions(path string) error {
+	// Unix: ensure 0600 (user-only read/write)
+	return os.Chmod(path, 0600)
+}
+
+// --- permissions_windows.go ---
+//go:build windows
+// +build windows
+
+import "golang.org/x/sys/windows"
+
+func setDirPermissions(dir string) error {
+	// Windows: ACLs are inherited from parent by default in user directories
+	// %APPDATA% and %LOCALAPPDATA% already have user-only access
+	// No explicit ACL modification needed for user directories
+	return nil
+}
+
+func setFilePermissions(path string) error {
+	// Windows: files inherit ACLs from directory
+	// For sensitive files, we could set explicit ACLs, but for user
+	// directories this is not needed as they inherit from %APPDATA%
 	return nil
 }
 
@@ -38046,8 +41054,8 @@ import (
 )
 
 const (
-	projectOrg  = "apimgr"
-	projectName = "search"
+	projectOrg  = "{projectorg}"
+	projectName = "{projectname}"
 )
 
 // ConfigDir returns the CLI config directory
@@ -38174,9 +41182,9 @@ func resolveYamlExtension(path string) string {
 **Example usage:**
 ```bash
 # Use different configs for different environments
-search-cli --config dev list              # Uses ~/.config/.../dev.yml
-search-cli --config staging list          # Uses ~/.config/.../staging.yml
-search-cli --config ~/work/prod.yml list  # Uses absolute path
+{projectname}-cli --config dev list              # Uses ~/.config/.../dev.yml
+{projectname}-cli --config staging list          # Uses ~/.config/.../staging.yml
+{projectname}-cli --config ~/work/prod.yml list  # Uses absolute path
 
 # Config profiles allow different servers/tokens without flags
 # dev.yml:   server: https://dev.example.com, token: dev-token
@@ -38188,8 +41196,8 @@ search-cli --config ~/work/prod.yml list  # Uses absolute path
 **EVERYTHING must be configurable via cli.yml. Sane defaults match server where applicable.**
 
 ```yaml
-# ~/.config/apimgr/search/cli.yml
-# CLI client configuration - ALL options with defaults
+# ~/.config/{projectorg}/{projectname}/cli.yml
+# client configuration - ALL options with defaults
 
 # Server connection
 server:
@@ -38197,9 +41205,9 @@ server:
   cluster: []                      # Auto-discovered cluster nodes
   api_version: v1                  # API version prefix (default: v1, must match server)
   admin_path: admin                # Admin path (default: admin, must match server)
-  timeout: 30                      # Request timeout in seconds (match server default)
+  timeout: 30s                     # Request timeout (match server default)
   retry: 3                         # Retry attempts on failure
-  retry_delay: 1                   # Seconds between retries
+  retry_delay: 1s                  # Delay between retries
 
 # Authentication (required for multi-user, see PART 34/35)
 auth:
@@ -38227,14 +41235,14 @@ tui:
 logging:
   level: warn                      # debug, info, warn, error (match server default)
   file: ""                         # Log file path (empty = {log_dir}/cli.log)
-  max_size: 10                     # Max log file size in MB (match server default)
+  max_size: 10MB                   # Max log file size (match server default)
   max_files: 5                     # Max log files to keep (match server default)
 
 # Cache
 cache:
   enabled: true                    # Enable response caching
-  ttl: 300                         # Cache TTL in seconds (5 minutes)
-  max_size: 100                    # Max cache size in MB
+  ttl: 5m                          # Cache TTL (5 minutes)
+  max_size: 100MB                  # Max cache size
 
 # Debug
 debug: false                       # Enable debug mode (same as --debug)
@@ -38269,7 +41277,7 @@ defaults:
 
 ### CLI Cluster Failover 
 
-**CLI client MUST support automatic cluster failover. Background node discovery keeps config current.**
+**client MUST support automatic cluster failover. Background node discovery keeps config current.**
 
 | Feature | Behavior |
 |---------|----------|
@@ -38343,23 +41351,23 @@ func saveIfEmpty(current, newValue string, validate func(string) bool) (string, 
 **Error when no server configured (projects without official site):**
 
 ```bash
-$ search-cli list
+$ {projectname}-cli list
 Error: no server configured
 
 To configure a server, run:
-  search-cli --server https://your-server.example.com list
+  {projectname}-cli --server https://your-server.example.com list
 
 This will save the server address for future commands.
-Or edit ~/.config/apimgr/search/cli.yml directly.
+Or edit ~/.config/{projectorg}/{projectname}/cli.yml directly.
 ```
 
 **Projects with official site show default in help:**
 
 ```bash
-$ search-cli --help
+$ {projectname}-cli --help
 ...
 Flags:
-      --server string    Server address (default: https://search.example.com)
+      --server string    Server address (default: https://{projectname}.example.com)
 ...
 ```
 
@@ -38370,7 +41378,7 @@ Flags:
 - CLI/Agent: Default `--server` URL (so users don't need to specify)
 
 **What official site does NOT affect:**
-- Docker labels (use `apimgr`, `search`, `{fqdn}`)
+- Docker labels (use `{projectorg}`, `{projectname}`, `{fqdn}`)
 - Documentation structure or content
 - Build artifacts or binary metadata
 - Any runtime behavior (just a compiled default)
@@ -38417,11 +41425,11 @@ See PART 5: Boolean Handling for the complete implementation.
 
 **Usage in flags:**
 ```bash
-search-cli --public                    # Boolean flag (true)
-search-cli --public=yes                # Explicit truthy
-search-cli --public=no                 # Explicit falsey
-search-cli --expire=0                  # Falsey = no expiration
-search-cli --expire=disabled           # Falsey = no expiration
+{projectname}-cli --public                    # Boolean flag (true)
+{projectname}-cli --public=yes                # Explicit truthy
+{projectname}-cli --public=no                 # Explicit falsey
+{projectname}-cli --expire=0                  # Falsey = no expiration
+{projectname}-cli --expire=disabled           # Falsey = no expiration
 ```
 
 **Config file (cli.yml):**
@@ -38465,29 +41473,29 @@ server:
 **Search/Query CLI (minimal flags):**
 ```bash
 # Args ARE the search - no flags needed for basic use
-search-cli golang tutorials           # Search
-search-cli --limit 10 golang          # With limit
-search-cli --output json golang       # JSON output
+{projectname}-cli golang tutorials           # Search
+{projectname}-cli --limit 10 golang          # With limit
+{projectname}-cli --output json golang       # JSON output
 ```
 
 **Pastebin/Content CLI:**
 ```bash
 # Smart detection handles input, flags for metadata
-search-cli notes.txt                          # File (detected), uses defaults
-search-cli notes.txt --public yes             # Public paste
-search-cli notes.txt --public no              # Private (requires auth)
-search-cli notes.txt --public unlisted        # Unlisted (default)
-search-cli notes.txt --expire 24h             # Expiration
-search-cli notes.txt --syntax python          # Syntax highlight
-search-cli notes.txt --author "John"          # Author name
+{projectname}-cli notes.txt                          # File (detected), uses defaults
+{projectname}-cli notes.txt --public yes             # Public paste
+{projectname}-cli notes.txt --public no              # Private (requires auth)
+{projectname}-cli notes.txt --public unlisted        # Unlisted (default)
+{projectname}-cli notes.txt --expire 24h             # Expiration
+{projectname}-cli notes.txt --syntax python          # Syntax highlight
+{projectname}-cli notes.txt --author "John"          # Author name
 ```
 
 **API/Data CLI:**
 ```bash
 # Resource-specific flags
-search-cli get abc123                         # Get by ID
-search-cli list --limit 20 --offset 0         # Pagination
-search-cli delete abc123 --force              # Dangerous ops need confirm
+{projectname}-cli get abc123                         # Get by ID
+{projectname}-cli list --limit 20 --offset 0         # Pagination
+{projectname}-cli delete abc123 --force              # Dangerous ops need confirm
 ```
 
 ### Flag Defaults from Config 
@@ -38534,12 +41542,12 @@ defaults:
 **`--shell init` is just a convenience wrapper:**
 ```bash
 # These are equivalent:
-eval "$(search --shell init)"
-eval "$(search --shell init bash)"      # if $SHELL=/bin/bash
+eval "$({projectname} --shell init)"
+eval "$({projectname} --shell init bash)"      # if $SHELL=/bin/bash
 
 # init outputs the eval command, completions outputs the script:
-search --shell init        # → source <(search --shell completions bash)
-search --shell completions # → (actual completion script)
+{projectname} --shell init        # → source <({projectname} --shell completions bash)
+{projectname} --shell completions # → (actual completion script)
 ```
 
 **Supported shells:**
@@ -38563,28 +41571,28 @@ search --shell completions # → (actual completion script)
 **Usage examples:**
 ```bash
 # Explicit shell specification
-search --shell completions bash > ~/.local/share/bash-completion/completions/search
-search-cli --shell completions zsh > ~/.zsh/completions/_search-cli
-search-agent --shell completions fish > ~/.config/fish/completions/search-agent.fish
-search --shell completions powershell > ~/Documents/PowerShell/completions/search.ps1
+{projectname} --shell completions bash > ~/.local/share/bash-completion/completions/{projectname}
+{projectname}-cli --shell completions zsh > ~/.zsh/completions/_{projectname}-cli
+{projectname}-agent --shell completions fish > ~/.config/fish/completions/{projectname}-agent.fish
+{projectname} --shell completions powershell > ~/Documents/PowerShell/completions/{projectname}.ps1
 
 # Auto-detect shell (omit SHELL argument)
-search --shell completions > ~/completions/search
-search-cli --shell init                    # auto-detect, print init
-eval "$(search --shell init)"              # auto-detect in eval
+{projectname} --shell completions > ~/completions/{projectname}
+{projectname}-cli --shell init                    # auto-detect, print init
+eval "$({projectname} --shell init)"              # auto-detect in eval
 
 # Specific shell init
-eval "$(search-cli --shell init bash)"
-eval "$(search-agent --shell init zsh)"
-search --shell init fish | source
+eval "$({projectname}-cli --shell init bash)"
+eval "$({projectname}-agent --shell init zsh)"
+{projectname} --shell init fish | source
 ```
 
 **Add to shell rc file:**
 ```bash
 # ~/.bashrc, ~/.zshrc, ~/.config/fish/config.fish, etc.
-eval "$(search --shell init)"        # server (auto-detect)
-eval "$(search-cli --shell init)"    # client (auto-detect)
-eval "$(search-agent --shell init)"  # agent (auto-detect)
+eval "$({projectname} --shell init)"        # server (auto-detect)
+eval "$({projectname}-cli --shell init)"    # client (auto-detect)
+eval "$({projectname}-agent --shell init)"  # agent (auto-detect)
 ```
 
 **Why built-in (not separate files):**
@@ -38670,12 +41678,12 @@ func printInit(shell, binaryName string) {
 ### --help Output
 
 ```bash
-$ search-cli --help
-search-cli {projectversion} - CLI for search
+$ {projectname}-cli --help
+{projectname}-cli {projectversion} - CLI for {projectname}
 
 Usage:
-  search-cli [args] [flags]
-  search-cli                    # TUI mode (no args)
+  {projectname}-cli [args] [flags]
+  {projectname}-cli                    # TUI mode (no args)
 
 Flags:
   -h, --help                        Show help
@@ -38700,13 +41708,13 @@ Administration (requires admin token):
 Shells: bash, zsh, fish, sh, dash, ksh, powershell, pwsh
 
 Run without arguments for interactive TUI mode.
-Run 'search-cli <command> --help' for detailed help on any command.
+Run '{projectname}-cli <command> --help' for detailed help on any command.
 ```
 
 **If user renames binary:**
 ```bash
 $ mypaste --help
-mypaste {projectversion} - CLI client for search API   # Shows actual binary name
+mypaste {projectversion} - client for {projectname} API   # Shows actual binary name
 
 Usage:
   mypaste [command] [flags]                     # Shows actual binary name
@@ -38718,8 +41726,8 @@ Usage:
 **MUST match server `--version` format. Shows ACTUAL binary name:**
 
 ```bash
-$ search-cli --version
-search-cli {projectversion} ({COMMIT_SHA}) built {BUILD_DATE}
+$ {projectname}-cli --version
+{projectname}-cli {projectversion} ({COMMIT_SHA}) built {BUILD_DATE}
 
 # If renamed:
 $ mypaste --version
@@ -38734,7 +41742,7 @@ pastebin {projectversion} ({COMMIT_SHA}) built {BUILD_DATE}
 
 ## Commands
 
-**CLI clients have project-specific commands only.** No standard commands required.
+**clients have project-specific commands only.** No standard commands required.
 
 Example commands (project-dependent):
 - `create`, `get`, `list`, `delete` (pastebin)
@@ -38790,16 +41798,16 @@ Example commands (project-dependent):
 ### User-Agent Format
 
 ```
-search-cli/{version}
+{projectname}-cli/{version}
 ```
 
 **Examples (User-Agent uses compiled project name, not binary name):**
 
 | Binary Name | User-Agent Header |
 |-------------|-------------------|
-| `search-cli` | `search-cli/1.2.3` |
-| `mypaste` (renamed by user) | `search-cli/1.2.3` |
-| `pb` (renamed by user) | `search-cli/1.2.3` |
+| `{projectname}-cli` | `{projectname}-cli/1.2.3` |
+| `mypaste` (renamed by user) | `{projectname}-cli/1.2.3` |
+| `pb` (renamed by user) | `{projectname}-cli/1.2.3` |
 
 ### Implementation
 
@@ -38827,7 +41835,7 @@ func GetBinaryName() string {
 **Build command (CI/CD injects version from git tag):**
 ```bash
 # VERSION comes from git tag (see PART 26/28 for version handling)
-go build -ldflags "-X main.ProjectName=search -X main.Version=${VERSION}" -o search-cli ./src/client
+go build -ldflags "-X main.ProjectName={projectname} -X main.Version=${VERSION}" -o {projectname}-cli ./src/client
 ```
 
 ### Server-Side Client Detection
@@ -38973,7 +41981,7 @@ package api
 
 import (
     "net/http"
-    "github.com/apimgr/search/common/urlutil"
+    "github.com/{projectorg}/{projectname}/common/urlutil"
 )
 
 type APIClient struct {
@@ -39048,7 +42056,7 @@ func (c *APIClient) doAPIRequest(method, apiURL string, body io.Reader) (*APIRes
 ### JSON
 
 ```bash
-$ search-cli get abc123 --output json
+$ {projectname}-cli get abc123 --output json
 {
   "id": "abc123",
   "content": "Hello world example code snippet",
@@ -39060,7 +42068,7 @@ $ search-cli get abc123 --output json
 ### Table
 
 ```bash
-$ search-cli list --output table
+$ {projectname}-cli list --output table
 ┌──────────┬─────────────────────────────────────────────┬──────────┬─────────────┐
 │ ID       │ Content                                     │ Language │ Expires     │
 ├──────────┼─────────────────────────────────────────────┼──────────┼─────────────┤
@@ -39073,7 +42081,7 @@ $ search-cli list --output table
 ### Plain
 
 ```bash
-$ search-cli get abc123 --output plain
+$ {projectname}-cli get abc123 --output plain
 Hello world example code snippet
 ```
 
@@ -39088,18 +42096,18 @@ Each project defines its own commands based on its API.
 **Search/Query Services:**
 ```bash
 # Bare args = search term (no --query flag needed)
-search-cli golang tutorials        # Search for "golang tutorials"
-search-cli "exact phrase"          # Quoted = exact match
-search-cli --limit 5 golang        # Flags before search term OK
+{projectname}-cli golang tutorials        # Search for "golang tutorials"
+{projectname}-cli "exact phrase"          # Quoted = exact match
+{projectname}-cli --limit 5 golang        # Flags before search term OK
 ```
 
 **Content/Paste Services:**
 ```bash
 # Detection order: stdin → file → directory → text
-echo "hello" | search-cli          # stdin detected → paste stdin
-search-cli notes.txt               # File exists → paste file content
-search-cli /path/to/dir            # Directory → error or list
-search-cli "some text here"        # Not file → paste as text
+echo "hello" | {projectname}-cli          # stdin detected → paste stdin
+{projectname}-cli notes.txt               # File exists → paste file content
+{projectname}-cli /path/to/dir            # Directory → error or list
+{projectname}-cli "some text here"        # Not file → paste as text
 ```
 
 **Detection Logic:**
@@ -39143,8 +42151,8 @@ func detectInput(args []string) (content string, source string) {
 
 **Explicit flags still work (override detection):**
 ```bash
-search-cli --file notes.txt        # Force file mode
-search-cli --text "notes.txt"      # Force text mode (not file)
+{projectname}-cli --file notes.txt        # Force file mode
+{projectname}-cli --text "notes.txt"      # Force text mode (not file)
 ```
 
 ## Build Integration
@@ -39156,15 +42164,15 @@ search-cli --text "notes.txt"      # Force text mode (not file)
 ```bash
 # Quick dev build (server + CLI + agent if exist)
 make dev
-# Output: ${TMPDIR}/${PROJECTORG}.XXXXXX/search, search-cli, search-agent
+# Output: ${TMPDIR}/${PROJECTORG}/${PROJECTNAME}-XXXXXX/{projectname}, {projectname}-cli, {projectname}-agent
 
 # Production test build
 make local
-# Output: binaries/search, binaries/search-cli (with version)
+# Output: binaries/{projectname}, binaries/{projectname}-cli (with version)
 
 # Full release (all 8 platforms)
 make build
-# Output: binaries/search-{os}-{arch}, binaries/search-cli-{os}-{arch}
+# Output: binaries/{projectname}-{os}-{arch}, binaries/{projectname}-cli-{os}-{arch}
 ```
 
 ### CI/CD (Direct go build - NOT Makefile)
@@ -39178,13 +42186,13 @@ go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli ./src/client
 ### Directory Structure
 
 ```
-search/
+{projectname}/
 ├── src/                    # Server application
 │   ├── main.go
 │   ├── config/
 │   ├── server/
 │   ├── ...
-│   └── client/             # CLI client (if project has CLI)
+│   └── client/             # client (if project has client)
 │       ├── main.go         # Entry point, mode detection
 │       ├── cmd/            # Command implementations
 │       │   ├── root.go     # Root command, --help, --version flags
@@ -39251,10 +42259,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 | **Minimal** | 40-59 | 10-15 | `SizeModeMinimal` | Single column, no borders, text only |
 | **Micro** | <40 | <10 | `SizeModeMicro` | Critical info only, scrollable |
 
-CLI client uses `common/terminal` from PART 7:
+client uses `common/terminal` from PART 7:
 ```go
 // CLI uses common/terminal package (defined in PART 7)
-import "apimgr/search/common/terminal"
+import "{projectorg}/{projectname}/common/terminal"
 
 func (m SizeMode) MaxTableColumns() int {
     switch m {
@@ -39529,19 +42537,19 @@ stty rows 10 cols 40
 
 ```bash
 # Connection error
-$ search-cli list
-Error: cannot connect to server at https://search.example.com
+$ {projectname}-cli list
+Error: cannot connect to server at https://{projectname}.example.com
   Check your network connection and server address.
   Use --server to specify a different server.
 
 # Auth error
-$ search-cli admin users --token invalid
+$ {projectname}-cli admin users --token invalid
 Error: authentication failed
   Your API token is invalid or expired.
   Update server.token in cli.yml or use --token flag.
 
 # Not found
-$ search-cli get abc123
+$ {projectname}-cli get abc123
 Error: resource not found: abc123
 ```
 
@@ -39550,10 +42558,10 @@ Error: resource not found: abc123
 When server is reachable, `--version` can show extended info:
 
 ```bash
-$ search-cli --version
-search-cli {projectversion} ({COMMIT_SHA}) built {BUILD_DATE}
+$ {projectname}-cli --version
+{projectname}-cli {projectversion} ({COMMIT_SHA}) built {BUILD_DATE}
 
-Server: https://search.example.com
+Server: https://{projectname}.example.com
 Server Version: {projectversion} (compatible)
 
 Build Info:
@@ -39895,15 +42903,15 @@ Answer these questions for your specific project:
 
 | Attribute | Value |
 |-----------|-------|
-| Binary naming | `search-agent-{os}-{arch}` |
+| Binary naming | `{projectname}-agent-{os}-{arch}` |
 | Examples | `monitor-agent-linux-amd64`, `monitor-agent-windows-arm64` |
-| Versioning | Same as server and CLI client |
+| Versioning | Same as server and client |
 | Build | Part of same Makefile (`make build` builds all if `src/agent/` exists) |
 | Config file | `{config_dir}/agent.yml` (same dir as server) |
 | Data directory | `{data_dir}/` (same as server) |
 | Database | `{data_dir}/db/agent.db` (if needed, same dir as server) |
 | Privileges | **Root/Admin required** (for full system access) |
-| Update mechanism | Same as CLI client (self-update) |
+| Update mechanism | Same as client (self-update) |
 
 ### Agent Binary Structure (Same as Server)
 
@@ -40008,12 +43016,12 @@ register                      # Interactive registration with server
 ### Agent --help Output
 
 ```bash
-$ search-agent --help
-search-agent {projectversion} - Agent for search
+$ {projectname}-agent --help
+{projectname}-agent {projectversion} - Agent for {projectname}
 
 Usage:
-  search-agent [flags]
-  search-agent [command]
+  {projectname}-agent [flags]
+  {projectname}-agent [command]
 
 Commands:
   status                        Show agent status
@@ -40049,10 +43057,10 @@ Shells: bash, zsh, fish, sh, dash, ksh, powershell, pwsh
 
 ```bash
 # Default: run agent (foreground)
-search-agent
+{projectname}-agent
 
 # Status: show current agent status
-search-agent status
+{projectname}-agent status
   Agent: monitor-agent v1.0.0
   Hostname: web-server-01
   Server: https://monitor.example.com
@@ -40061,14 +43069,14 @@ search-agent status
   Next Report: 2025-01-15 10:31:00
 
 # Test: verify server connection
-search-agent test
+{projectname}-agent test
   Testing connection to https://monitor.example.com...
   ✅ Connection successful
   ✅ Authentication valid
   ✅ Agent registered
 
 # Connect: one-liner from server panel (preferred)
-search-agent --server https://monitor.example.com --token adm_agt_abc123def456...
+{projectname}-agent --server https://monitor.example.com --token adm_agt_abc123def456...
   Connecting to https://monitor.example.com...
   ✅ Connection successful
   ✅ Token validated
@@ -40081,11 +43089,11 @@ search-agent --server https://monitor.example.com --token adm_agt_abc123def456..
   Agent is now sending data to server for admin scope.
 
 # Service management
-search-agent --service install   # Install as system service
-search-agent --service start     # Start service
-search-agent --service stop      # Stop service
-search-agent --service status    # Show service status
-search-agent --service uninstall # Remove service
+{projectname}-agent --service install   # Install as system service
+{projectname}-agent --service start     # Start service
+{projectname}-agent --service stop      # Stop service
+{projectname}-agent --service status    # Show service status
+{projectname}-agent --service uninstall # Remove service
 ```
 
 ### Agent Setup Process 
@@ -40103,7 +43111,7 @@ search-agent --service uninstall # Remove service
 │                                                             │
 │  2. On Target Machine (one command)                            │
 │     └─→ Paste and run the one-liner:                        │
-│         search-agent --server {url} --token {token}  │
+│         {projectname}-agent --server {url} --token {token}  │
 │     └─→ Agent connects, registers, saves config             │
 │     └─→ Server shows notification: "{name} has connected"   │
 │                                                             │
@@ -40200,8 +43208,8 @@ func GenerateAgentToken(scope AgentScope) string {
 **File: `{config_dir}/agent.yml`** (same directory as server.yml)
 
 ```yaml
-# /etc/apimgr/search/agent.yml (root)
-# ~/.config/apimgr/search/agent.yml (user)
+# /etc/{projectorg}/{projectname}/agent.yml (root)
+# ~/.config/{projectorg}/{projectname}/agent.yml (user)
 # Agent configuration - ALL options with defaults
 
 # Server connection
@@ -40210,10 +43218,10 @@ server:
   cluster: []                      # Auto-discovered cluster nodes
   api_version: v1                  # API version prefix (default: v1, must match server)
   admin_path: admin                # Admin path (default: admin, must match server)
-  timeout: 30                      # Request timeout in seconds (match server default)
+  timeout: 30s                     # Request timeout (match server default)
   retry: 3                         # Retry attempts on failure
-  retry_delay: 5                   # Seconds between retries
-  reconnect_delay: 10              # Seconds before reconnect attempt
+  retry_delay: 5s                  # Delay between retries
+  reconnect_delay: 10s             # Delay before reconnect attempt
 
 # Authentication
 auth:
@@ -40230,7 +43238,7 @@ identity:
 # Data collection (project-specific)
 collection:
   enabled: true                    # Enable data collection
-  interval: 60                     # Collection interval in seconds
+  interval: 60s                    # Collection interval
   batch_size: 100                  # Max items per batch
   buffer_size: 1000                # Max buffered items if offline
 
@@ -40238,13 +43246,13 @@ collection:
 logging:
   level: info                      # debug, info, warn, error (match server default)
   file: ""                         # Log file path (empty = {log_dir}/agent.log)
-  max_size: 10                     # Max log file size in MB (match server default)
+  max_size: 10MB                   # Max log file size (match server default)
   max_files: 5                     # Max log files to keep (match server default)
 
 # Health reporting
 health:
   enabled: true                    # Report agent health to server
-  interval: 30                     # Health check interval in seconds
+  interval: 30s                    # Health check interval
 
 # Debug
 debug: false                       # Enable debug mode (same as --debug)
@@ -40323,9 +43331,9 @@ mode: ""                           # production, development (empty = auto-detec
 
 **Same privilege escalation as server (see PART 24)** - agent requires root/admin for full system access.
 
-### Agent vs CLI Client vs Server
+### Agent vs Client vs Server
 
-| Aspect | Server | CLI Client | Agent |
+| Aspect | Server | Client | Agent |
 |--------|--------|------------|-------|
 | **Runs as** | Service/daemon | Interactive/one-shot | Service/daemon |
 | **Purpose** | Serve API, WebUI | User interaction | Data collection |
@@ -40337,17 +43345,17 @@ mode: ""                           # production, development (empty = auto-detec
 
 ### Execution Context 
 
-**CLI Client and Agent run in fundamentally different execution contexts:**
+**Client and Agent run in fundamentally different execution contexts:**
 
-| Aspect | CLI Client | Agent |
+| Aspect | Client | Agent |
 |--------|------------|-------|
 | **Execution context** | User context | System context |
 | **Runs as** | Current user | root/Administrator |
 | **Config base path** | `~/` (user home) | `/` (system root) |
-| **Config directory** | `~/.config/apimgr/search/` | `/etc/apimgr/search/` |
-| **Data directory** | `~/.local/share/apimgr/search/` | `/var/lib/apimgr/search/` |
-| **Log directory** | `~/.local/log/apimgr/search/` | `/var/log/apimgr/search/` |
-| **Cache directory** | `~/.cache/apimgr/search/` | `/var/cache/apimgr/search/` |
+| **Config directory** | `~/.config/{projectorg}/{projectname}/` | `/etc/{projectorg}/{projectname}/` |
+| **Data directory** | `~/.local/share/{projectorg}/{projectname}/` | `/var/lib/{projectorg}/{projectname}/` |
+| **Log directory** | `~/.local/log/{projectorg}/{projectname}/` | `/var/log/{projectorg}/{projectname}/` |
+| **Cache directory** | `~/.cache/{projectorg}/{projectname}/` | `/var/cache/{projectorg}/{projectname}/` |
 | **Privilege level** | Normal user | Elevated (root/admin) |
 | **System access** | User files only | Full system access |
 
@@ -40355,35 +43363,35 @@ mode: ""                           # production, development (empty = auto-detec
 
 | Component | Context | Reason |
 |-----------|---------|--------|
-| **CLI Client** | User (`~/`) | User tool - accesses user's files, runs with user permissions, stores user-specific settings |
+| **Client** | User (`~/`) | User tool - accesses user's files, runs with user permissions, stores user-specific settings |
 | **Agent** | System (`/`) | System daemon - needs root for system metrics, hardware access, service management |
 
 **Path Examples:**
 
 ```bash
-# CLI Client (user context - runs as "alice")
-~/.config/apimgr/search/cli.yml        # Alice's config
-~/.local/share/apimgr/search/          # Alice's data
-~/.local/log/apimgr/search/cli.log     # Alice's logs
+# Client (user context - runs as "alice")
+~/.config/{projectorg}/{projectname}/cli.yml        # Alice's config
+~/.local/share/{projectorg}/{projectname}/          # Alice's data
+~/.local/log/{projectorg}/{projectname}/cli.log     # Alice's logs
 
 # Agent (system context - runs as root)
-/etc/apimgr/search/agent.yml           # System config
-/var/lib/apimgr/search/                # System data
-/var/log/apimgr/search/agent.log       # System logs
+/etc/{projectorg}/{projectname}/agent.yml           # System config
+/var/lib/{projectorg}/{projectname}/                # System data
+/var/log/{projectorg}/{projectname}/agent.log       # System logs
 ```
 
 **Platform-Specific Paths:**
 
-| Platform | CLI Client Config | Agent Config |
+| Platform | Client Config | Agent Config |
 |----------|-------------------|--------------|
-| **Linux** | `~/.config/apimgr/search/` | `/etc/apimgr/search/` |
-| **macOS** | `~/Library/Application Support/apimgr/search/` | `/Library/Application Support/apimgr/search/` |
-| **Windows** | `%APPDATA%\apimgr\search\` | `%PROGRAMDATA%\apimgr\search\` |
-| **FreeBSD** | `~/.config/apimgr/search/` | `/usr/local/etc/apimgr/search/` |
+| **Linux** | `~/.config/{projectorg}/{projectname}/` | `/etc/{projectorg}/{projectname}/` |
+| **macOS** | `~/Library/Application Support/{projectorg}/{projectname}/` | `/Library/Application Support/{projectorg}/{projectname}/` |
+| **Windows** | `%APPDATA%\{projectorg}\{projectname}\` | `%PROGRAMDATA%\{projectorg}\{projectname}\` |
+| **FreeBSD** | `~/.config/{projectorg}/{projectname}/` | `/usr/local/etc/{projectorg}/{projectname}/` |
 
 ### Purpose Matching 
 
-**CLI Client and Agent are companion binaries designed FOR the Server. They match the server's intent, purpose, and functionality.**
+**Client and Agent are companion binaries designed FOR the Server. They match the server's intent, purpose, and functionality.**
 
 All three binaries are built for the SAME project and work together as a system:
 
@@ -40394,7 +43402,7 @@ All three binaries are built for the SAME project and work together as a system:
 │                                                                            │
 │  ┌─────────────────────┐                                                   │
 │  │       SERVER        │  Central server - serves API, WebUI, manages data│
-│  │    search    │  Runs as service/daemon                           │
+│  │    {projectname}    │  Runs as service/daemon                           │
 │  └──────────┬──────────┘                                                   │
 │             │                                                              │
 │             │ API                                                          │
@@ -40403,11 +43411,11 @@ All three binaries are built for the SAME project and work together as a system:
 │       │           │                                                        │
 │       ▼           ▼                                                        │
 │  ┌─────────────────────┐     ┌─────────────────────────┐                   │
-│  │     CLI CLIENT      │     │         AGENT           │                   │
-│  │  search-cli  │     │  search-agent    │                   │
+│  │ {projectname} CLIENT │     │         AGENT           │                   │
+│  │  {projectname}-cli  │     │  {projectname}-agent    │                   │
 │  └─────────────────────┘     └─────────────────────────┘                   │
 │                                                                            │
-│  CLI CLIENT:                      AGENT:                                   │
+│  {projectname} CLIENT:                AGENT:                                   │
 │  • Full remote admin              • Purpose-specific daemon                │
 │  • TUI/CLI/GUI modes              • Headless, no admin                     │
 │  • User context (~/)              • System context (/)                     │
@@ -40418,7 +43426,7 @@ All three binaries are built for the SAME project and work together as a system:
 
 **Real-World Examples:**
 
-| Product | Server | CLI Client | Agent |
+| Product | Server | Client | Agent |
 |---------|--------|------------|-------|
 | **Jenkins** | Jenkins Server (WebUI, job management) | Jenkins CLI (remote admin) | Jenkins Agent (executes builds on nodes) |
 | **Portainer** | Portainer Server (container management UI) | - | Portainer Agent (runs on Docker hosts) |
@@ -40439,7 +43447,7 @@ All three binaries are built for the SAME project and work together as a system:
 │  SERVER: Central control, WebUI, data storage, orchestration           │
 │  └─► Portainer, Zabbix Server, Jenkins, Proxmox VE, K8s API Server      │
 ├─────────────────────────────────────────────────────────────────────────┤
-│  CLI CLIENT: Full remote administration, scripting, automation           │
+│  CLIENT: Full remote administration, scripting, automation │
 │  └─► kubectl, pvesh, salt, zabbix_get, jenkins-cli                      │
 ├─────────────────────────────────────────────────────────────────────────┤
 │  AGENT: Runs on managed hosts, reports to server, executes tasks         │
@@ -40452,7 +43460,7 @@ All three binaries are built for the SAME project and work together as a system:
 | Component | Purpose | Admin Capabilities | Modes |
 |-----------|---------|-------------------|-------|
 | **Server** | Central server | N/A (IS the admin) | Daemon/service |
-| **CLI Client** | Full remote administration | ✅ `--admin*` flags, full server control | TUI, CLI, GUI |
+| **Client** | Full remote administration | ✅ `--admin*` flags, full server control | TUI, CLI, GUI |
 | **Agent** | Purpose-specific work | ❌ No admin flags | Daemon/service (headless) |
 
 ### Agent Shares Server Structure 
@@ -40473,7 +43481,7 @@ The Agent is essentially the Server's "little sibling" - same professional struc
 | **Listens for connections** | ✅ Yes (`--port`, `--address`) | ❌ No |
 | **Connects to parent server** | ❌ No (IS the server) | ✅ Yes (`--server`, `--token`) |
 | **Setup wizard** | ✅ Yes (`--setup-token`) | ❌ No (registers with server) |
-| **Admin operations** | N/A (IS the server) | ❌ No (CLI Client's job) |
+| **Admin operations** | N/A (IS the server) | ❌ No (Client's job) |
 | **WebUI** | ✅ Yes | ❌ No (headless) |
 | **Database** | ✅ `server.db` | ✅ `agent.db` (if needed) |
 
@@ -40492,11 +43500,11 @@ SERVER STARTUP                          AGENT STARTUP
 8. Listen for connections               8. Begin agent tasks ← different
 ```
 
-### CLI Client = Full Server Access 
+### Client = Full Server Access
 
-**The CLI Client is a COMPLETE interface to the server. It can do EVERYTHING the server offers.**
+**The Client is a COMPLETE interface to the server. It can do EVERYTHING the server offers.**
 
-| CLI Client Capability | Description |
+| Client Capability | Description |
 |-----------------------|-------------|
 | **All user operations** | Everything a logged-in user can do |
 | **All org operations** | Everything org members can do |
@@ -40505,13 +43513,13 @@ SERVER STARTUP                          AGENT STARTUP
 | **CLI mode** | Scriptable command-line |
 | **GUI mode** | Native graphical interface (if available) |
 
-**Admin flags (CLI Client only):**
+**Admin flags (Client only):**
 ```bash
-search-cli --admin users list          # List all users
-search-cli --admin users create ...    # Create user
-search-cli --admin server status       # Server status
-search-cli --admin server config       # View/edit config
-search-cli --admin backup create       # Create backup
+{projectname}-cli --admin users list          # List all users
+{projectname}-cli --admin users create ...    # Create user
+{projectname}-cli --admin server status       # Server status
+{projectname}-cli --admin server config       # View/edit config
+{projectname}-cli --admin backup create       # Create backup
 ```
 
 ### Agent = Purpose-Specific Worker 
@@ -40551,7 +43559,7 @@ src/
 │   ├── version/      # Version info (shared across all binaries)
 │   └── ...           # Other shared packages as needed
 ├── server/           # Server-specific code
-├── client/           # CLI Client-specific code (TUI, GUI, admin commands)
+├── client/           # Client-specific code (TUI, GUI, admin commands)
 └── agent/            # Agent-specific code (collectors, reporters)
 ```
 
@@ -40562,20 +43570,20 @@ src/
 | **Shared packages** | `src/common/` used by server, client, and agent |
 | **Same API** | Client and Agent use server's API |
 | **Same models** | Shared data structures across all components |
-| **Cluster support** | Both CLI Client and Agent support automatic cluster failover |
+| **Cluster support** | Both Client and Agent support automatic cluster failover |
 
-### Cluster Support (CLI Client and Agent)
+### Cluster Support (Client and Agent)
 
-**Both CLI Client and Agent support automatic cluster failover. See dedicated sections for details:**
+**Both Client and Agent support automatic cluster failover. See dedicated sections for details:**
 
 | Component | Cluster Section | Config Key |
 |-----------|-----------------|------------|
-| **CLI Client** | "CLI Cluster Failover" | `server.primary`, `server.cluster` in `cli.yml` |
+| **Client** | "CLI Cluster Failover" | `server.primary`, `server.cluster` in `cli.yml` |
 | **Agent** | "Agent Cluster Failover" | `server.primary`, `server.cluster` in `agent.yml` |
 
 **Shared Cluster Behavior:**
 
-| Feature | CLI Client | Agent |
+| Feature | Client | Agent |
 |---------|------------|-------|
 | **Discovery** | Background `/api/autodiscover` | On connect `/api/autodiscover` |
 | **Auto-update** | Updates `cli.yml` with discovered nodes | Updates `agent.yml` with discovered nodes |
@@ -40613,18 +43621,18 @@ src/
 
 ```
 binaries/
-├── search                         # Local server binary - for testing
-├── search-cli                     # Local CLI binary (if src/client/ exists)
-├── search-agent                   # Local agent binary (if src/agent/ exists)
-├── search-linux-amd64             # Server
-├── search-linux-arm64
-├── search-cli-linux-amd64         # CLI (if src/client/ exists)
-├── search-cli-linux-arm64
-├── search-agent-linux-amd64       # Agent (if src/agent/ exists)
-├── search-agent-linux-arm64
-├── search-agent-windows-amd64.exe
-├── search-agent-darwin-amd64
-└── search-agent-darwin-arm64
+├── {projectname}                         # Local server binary - for testing
+├── {projectname}-cli                     # Local CLI binary (if src/client/ exists)
+├── {projectname}-agent                   # Local agent binary (if src/agent/ exists)
+├── {projectname}-linux-amd64             # Server
+├── {projectname}-linux-arm64
+├── {projectname}-cli-linux-amd64         # CLI (if src/client/ exists)
+├── {projectname}-cli-linux-arm64
+├── {projectname}-agent-linux-amd64       # Agent (if src/agent/ exists)
+├── {projectname}-agent-linux-arm64
+├── {projectname}-agent-windows-amd64.exe
+├── {projectname}-agent-darwin-amd64
+└── {projectname}-agent-darwin-arm64
 ```
 
 **See PART 26 (Makefile) for full build details.**
@@ -41068,7 +44076,7 @@ var UsernameBlocklist = []string{
     "webmaster", "hostmaster", "abuse", "spam", "junk", "trash",
 
     // Project-specific (dynamic)
-    "search", "apimgr",
+    "{projectname}", "{projectorg}",
 }
 ```
 
@@ -41679,11 +44687,11 @@ The Server Admin (administrator with access to the server/binary) has ONE recove
 
 | Scenario | Recovery Method |
 |----------|-----------------|
-| Admin forgot password | `search --maintenance setup` |
-| Admin lost API token | `search --maintenance setup` |
-| Admin lost recovery keys | `search --maintenance setup` |
-| Admin lost 2FA + no recovery keys | `search --maintenance setup` |
-| Admin lost everything | `search --maintenance setup` |
+| Admin forgot password | `{projectname} --maintenance setup` |
+| Admin lost API token | `{projectname} --maintenance setup` |
+| Admin lost recovery keys | `{projectname} --maintenance setup` |
+| Admin lost 2FA + no recovery keys | `{projectname} --maintenance setup` |
+| Admin lost everything | `{projectname} --maintenance setup` |
 
 **This requires:**
 - Console/SSH access to the server to run the binary
@@ -42583,7 +45591,41 @@ curl "/api/{api_version}/search/hello"                # Path-based search (also 
   "api_version": "v1",
   "timeout": 30,
   "retry": 3,
-  "retry_delay": 1
+  "retry_delay": 1,
+  "config": {
+    "database": {
+      "drivers": ["file", "sqlite", "libsql", "postgres", "mysql", "mssql", "mongodb"],
+      "aliases": {
+        "sqlite2": "sqlite",
+        "sqlite3": "sqlite",
+        "turso": "libsql",
+        "pgsql": "postgres",
+        "postgresql": "postgres",
+        "mariadb": "mysql",
+        "mongo": "mongodb"
+      },
+      "ssl_modes": ["disable", "require", "verify-full"]
+    },
+    "cache": {
+      "types": ["none", "memory", "valkey", "redis"]
+    },
+    "formats": {
+      "duration": ["s", "m", "h", "d"],
+      "size": ["KB", "MB", "GB"]
+    },
+    "logging": {
+      "levels": ["debug", "info", "warn", "error"]
+    },
+    "smtp": {
+      "tls_modes": ["auto", "starttls", "tls", "none"]
+    },
+    "features": {
+      "clustering": true,
+      "tor": true,
+      "webauthn": true,
+      "oauth": ["google", "github", "gitlab", "microsoft"]
+    }
+  }
 }
 ```
 
@@ -42597,6 +45639,18 @@ curl "/api/{api_version}/search/hello"                # Path-based search (also 
 | `timeout` | int | Recommended request timeout in seconds |
 | `retry` | int | Recommended retry attempts |
 | `retry_delay` | int | Recommended seconds between retries |
+| `config` | object | Configuration schema, options, aliases, and enabled features |
+
+**Config Section:**
+
+| Field | Description |
+|-------|-------------|
+| `config.database` | Supported drivers, aliases (`sqlite2`→`sqlite`, `mariadb`→`mysql`), SSL modes |
+| `config.cache` | Supported cache types |
+| `config.formats` | Duration (`s`,`m`,`h`,`d`) and size (`KB`,`MB`,`GB`) unit suffixes |
+| `config.logging` | Valid log levels |
+| `config.smtp` | SMTP TLS mode options |
+| `config.features` | Server-enabled features (for conditional UI) |
 
 **Security :**
 
@@ -42623,12 +45677,47 @@ func AutodiscoverHandler(w http.ResponseWriter, r *http.Request) {
         "timeout":     cfg.Server.Timeout,
         "retry":       cfg.Server.Retry,
         "retry_delay": cfg.Server.RetryDelay,
+        "config": map[string]interface{}{
+            "database": map[string]interface{}{
+                "drivers": []string{"file", "sqlite", "libsql", "postgres", "mysql", "mssql", "mongodb"},
+                "aliases": map[string]string{
+                    "sqlite2":    "sqlite",
+                    "sqlite3":    "sqlite",
+                    "turso":      "libsql",
+                    "pgsql":      "postgres",
+                    "postgresql": "postgres",
+                    "mariadb":    "mysql",
+                    "mongo":      "mongodb",
+                },
+                "ssl_modes": []string{"disable", "require", "verify-full"},
+            },
+            "cache": map[string]interface{}{
+                "types": []string{"none", "memory", "valkey", "redis"},
+            },
+            "formats": map[string]interface{}{
+                "duration": []string{"s", "m", "h", "d"},
+                "size":     []string{"KB", "MB", "GB"},
+            },
+            "logging": map[string]interface{}{
+                "levels": []string{"debug", "info", "warn", "error"},
+            },
+            "smtp": map[string]interface{}{
+                "tls_modes": []string{"auto", "starttls", "tls", "none"},
+            },
+            "features": map[string]interface{}{
+                "clustering": cfg.Cluster.Enabled,
+                "tor":        cfg.Tor.Enabled,
+                "webauthn":   cfg.Auth.WebAuthn.Enabled,
+                "oauth":      cfg.Auth.OAuth.EnabledProviders(),
+            },
+        },
     }
 
     // NEVER include admin_path - security by obscurity
     // NEVER include internal addresses
 
     w.Header().Set("Content-Type", "application/json")
+    w.Header().Set("Cache-Control", "public, max-age=3600")
     json.NewEncoder(w).Encode(response)
 }
 ```
@@ -44997,8 +48086,8 @@ server:
       # Allow wildcard domains (*.example.com)
       allow_wildcard: false
 
-      # Verification token TTL (24 hours)
-      verification_ttl: 86400
+      # Verification token TTL
+      verification_ttl: 24h
 
       # Renew SSL certs N days before expiry
       ssl_renewal_days: 7
@@ -45887,7 +48976,7 @@ IDEA.md must follow this structure:
 ## IDEA.md Template
 
 ```markdown
-# search
+# {projectname}
 
 ## Project Description
 
@@ -46210,7 +49299,7 @@ A weather aggregation API that fetches data from external providers, caches it, 
 | `go build` locally | `make dev` or `make local` or `make build` |
 | `go test` locally | `make test` (includes coverage enforcement) |
 | `go mod tidy` locally | Handled by `make build/local/dev` automatically |
-| `./binaries/search` locally | Run binary inside Docker/Incus container |
+| `./binaries/{projectname}` locally | Run binary inside Docker/Incus container |
 | Go installed locally | Use Makefile targets (they use Docker internally) |
 
 **GODIR (Go Module Cache):**
@@ -46224,15 +49313,16 @@ GOCACHE := $(HOME)/.local/share/go/build  # Local machine path for build cache
 | NEVER | ALWAYS |
 |-------|--------|
 | `docker compose up` in project dir | Use temp directory workflow |
-| Runtime data in project directory | `/tmp/apimgr/search-XXXXXX/` |
+| Runtime data in project directory | `/tmp/{projectorg}/{projectname}-XXXXXX/` |
 | `mktemp -d` (bare) | `mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-XXXXXX"` |
-| `/tmp/myfile` | `/tmp/apimgr/search-XXXXXX/myfile` |
+| `/tmp/myfile` | `/tmp/{projectorg}/{projectname}-XXXXXX/myfile` |
 
 ```bash
 # Temp dir workflow
+mkdir -p "${TMPDIR:-/tmp}/${PROJECTORG}"
 TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-XXXXXX")
 mkdir -p "$TEMP_DIR/rootfs/config" "$TEMP_DIR/rootfs/data"
-cp docker/docker-compose.yml "$TEMP_DIR/"
+cp docker/docker-compose.test.yml "$TEMP_DIR/docker-compose.yml"
 cd "$TEMP_DIR" && docker compose up -d
 ```
 
@@ -46241,7 +49331,7 @@ cd "$TEMP_DIR" && docker compose up -d
 |--------------|--------|
 | `config/`, `data/`, `logs/`, `cache/` | Runtime dirs go to temp/OS paths |
 | `server.yml`, `cli.yml` | Generated at runtime, not in repo |
-| `rootfs/` in project root | Only in `docker/rootfs/` for build overlay |
+| `rootfs/` in project root | Only in `docker/file_system/` for build overlay |
 | `.env` with secrets | Use environment variables or admin panel |
 
 **Config Files:**
@@ -46278,7 +49368,7 @@ make docker # Build Docker image
 |------|------------------|------------|
 | Config | `/tmp/{org}/{proj}-XXX/rootfs/config/` | `/etc/{org}/{proj}/` (Linux) |
 | Data | `/tmp/{org}/{proj}-XXX/rootfs/data/` | `/var/lib/{org}/{proj}/` (Linux) |
-| Binary | `binaries/search` | `/usr/local/bin/search` |
+| Binary | `binaries/{projectname}` | `/usr/local/bin/{projectname}` |
 
 ---
 
@@ -46315,7 +49405,7 @@ make docker # Build Docker image
 - [ ] BSD paths: Same as Linux
 - [ ] Docker paths: `/config/`, `/data/`
 - [ ] Root vs user path detection works
-- [ ] All path functions use `apimgr/search` structure
+- [ ] All path functions use `{projectorg}/{projectname}` structure
 
 **PART 5: Configuration**
 - [ ] Config file: `server.yml` (not .yaml, not .json)
@@ -46519,8 +49609,8 @@ make docker # Build Docker image
 - [ ] Backup includes: database, config, uploads
 - [ ] Restore is atomic (all or nothing)
 - [ ] **Backup verification after creation** (checksum, decrypt, extract, DB integrity)
-- [ ] **Daily incremental** `search-daily.tar.gz[.enc]` always valid
-- [ ] **Hourly incremental** `search-hourly.tar.gz[.enc]` (if enabled)
+- [ ] **Daily incremental** `{projectname}-daily.tar.gz[.enc]` always valid
+- [ ] **Hourly incremental** `{projectname}-hourly.tar.gz[.enc]` (if enabled)
 - [ ] **Cluster mode**: each node maintains own valid backups (max_backups per node)
 
 ### Phase 8: Maintenance (PARTS 23-26)
@@ -46626,6 +49716,7 @@ make docker # Build Docker image
 - [ ] .onion address generation
 - [ ] Vanity address generation option
 - [ ] Tor status in admin panel
+- [ ] Tor config in `{config_dir}/tor/torrc`
 - [ ] Tor data in `{data_dir}/tor/`
 - [ ] Tor fields in `/api/{api_version}/healthz`:
   - [ ] `features.tor.enabled` (yes/no)
@@ -46654,15 +49745,15 @@ make docker # Build Docker image
 - [ ] DNS verification
 - [ ] Domain management in admin
 
-**PART 33: CLI Client & Agent**
+**PART 33: Client & Agent**
 
-*CLI Client (REQUIRED for all projects):*
-- [ ] Binary: `search-cli`
+*Client (REQUIRED for all projects):*
+- [ ] Binary: `{projectname}-cli`
 - [ ] `src/client/` directory exists
 - [ ] Same version as server
 - [ ] CLI mode (standard commands)
 - [ ] TUI mode (interactive)
-- [ ] Config: `~/.config/apimgr/search/cli.yml`
+- [ ] Config: `~/.config/{projectorg}/{projectname}/cli.yml`
 - [ ] Theme matching server (dark default)
 - [ ] Shell completions (bash, zsh, fish, powershell)
 - [ ] All server API operations accessible via CLI
@@ -46673,12 +49764,12 @@ make docker # Build Docker image
   - [ ] Automatic failover to next node if primary fails
 
 *Agent (only for monitoring/remote management projects):*
-- [ ] Binary: `search-agent`
+- [ ] Binary: `{projectname}-agent`
 - [ ] `src/agent/` directory exists
 - [ ] Runs directly on system, NOT in container
 - [ ] Same version as server
 - [ ] Systemd/launchd/Windows service support
-- [ ] Config: `/etc/apimgr/search/agent.yml`
+- [ ] Config: `/etc/{projectorg}/{projectname}/agent.yml`
 - [ ] Connects to central server
 - [ ] Same flags as server EXCEPT no `--port`/`--address` (agents don't serve HTTP)
 - [ ] Communication pattern documented:
@@ -46890,18 +49981,18 @@ make docker # Build Docker image
 ### Client Type Detection & Response 
 
 **Three Types of CLI Tools:**
-- [ ] **Our CLI Client** (`search-cli`) - INTERACTIVE, receives JSON, renders own TUI/GUI
+- [ ] **Our Client** (`{projectname}-cli`) - INTERACTIVE, receives JSON, renders own TUI/GUI
 - [ ] **Text Browsers** (lynx, w3m, links, elinks) - INTERACTIVE, receive no-JS HTML via `renderNoJSHTML()`, NO JavaScript
 - [ ] **HTTP Tools** (curl, wget, httpie) - NON-INTERACTIVE, receive formatted text via `HTML2TextConverter()`
 
 **Detection Functions:**
-- [ ] `isOurCliClient()` detects our CLI client (INTERACTIVE)
+- [ ] `isOurCliClient()` detects our client (INTERACTIVE)
 - [ ] `isTextBrowser()` detects text browsers (INTERACTIVE - lynx, w3m, links, elinks)
 - [ ] `isHttpTool()` detects HTTP tools (NON-INTERACTIVE - curl, wget, httpie, libcurl, etc.)
 - [ ] `isNonInteractiveClient()` returns true ONLY for HTTP tools (NOT our CLI or text browsers)
 - [ ] Empty User-Agent treated as HTTP tool (non-interactive)
 
-**Our CLI Client (INTERACTIVE):**
+**Our Client (INTERACTIVE):**
 - [ ] Receives JSON (not HTML or pre-formatted text)
 - [ ] Renders beautiful TUI/GUI itself
 - [ ] Supports CLI mode (commands) and TUI mode (interactive)
@@ -47295,7 +50386,7 @@ Before starting integration:
 ## Example TODO.AI.md for Integration
 
 ```markdown
-# Integration Tasks for search
+# Integration Tasks for {projectname}
 
 ## Critical (P0) - Do First
 
@@ -47372,20 +50463,20 @@ When bootstrapping a new project from this specification:
 ### Phase 1: Project Initialization
 
 1. **Confirm project details:**
-   - Project name: `search`
-   - Organization: `apimgr`
+   - Project name: `{projectname}`
+   - Organization: `{projectorg}`
    - Description: What does this project do?
    - Primary purpose: What problem does it solve?
 
 2. **Create directory structure:**
    ```bash
-   mkdir -p search
-   cd search
+   mkdir -p {projectname}
+   cd {projectname}
 
    # Create all required directories
    mkdir -p src/{config,server,swagger,graphql,mode,paths,ssl,scheduler,service,admin}
    mkdir -p src/server/{handler,service,model,store,template}
-   mkdir -p docker/rootfs/usr/local/bin
+   mkdir -p docker/file_system/usr/local/bin
    mkdir -p docs/stylesheets
    mkdir -p tests
    mkdir -p scripts
@@ -47413,7 +50504,7 @@ When bootstrapping a new project from this specification:
    touch docker/docker-compose.yml
    touch docker/docker-compose.dev.yml
    touch docker/docker-compose.test.yml
-   touch docker/rootfs/usr/local/bin/entrypoint.sh
+   touch docker/file_system/usr/local/bin/entrypoint.sh
 
    # ReadTheDocs files
    touch mkdocs.yml
@@ -47443,7 +50534,7 @@ When bootstrapping a new project from this specification:
 
 1. **Initialize Go module:**
    ```bash
-   go mod init github.com/apimgr/search
+   go mod init github.com/{projectorg}/{projectname}
    ```
 
 2. **Create src/main.go** - Minimal entry point
@@ -47532,7 +50623,7 @@ Implement as needed for your project:
 1. **PART 34:** Multi-User (if project needs Regular User accounts)
 2. **PART 35:** Organizations (requires PART 34)
 3. **PART 36:** Custom Domains (if users/orgs need branded domains)
-4. **PART 33:** CLI Client (if project needs command-line tool)
+4. **PART 33:** Client (if project needs command-line tool)
 
 #### Step 9: Documentation (PART 30)
 

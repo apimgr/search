@@ -47,14 +47,15 @@ func validatePathSegment(segment string) error {
 	if segment == "" {
 		return ErrInvalidPath
 	}
+	// Check for traversal before other validation
+	if segment == "." || segment == ".." {
+		return ErrPathTraversal
+	}
 	if len(segment) > 64 {
 		return ErrPathTooLong
 	}
 	if !validPathSegment.MatchString(segment) {
 		return ErrInvalidPath
-	}
-	if segment == "." || segment == ".." {
-		return ErrPathTraversal
 	}
 	return nil
 }

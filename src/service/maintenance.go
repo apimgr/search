@@ -308,7 +308,9 @@ func (m *MaintenanceService) SetMode(mode MaintenanceMode, message string) {
 		m.mu.RUnlock()
 
 		for _, cb := range callbacks {
-			go cb(mode)
+			if cb != nil {
+				go cb(mode)
+			}
 		}
 	}
 }

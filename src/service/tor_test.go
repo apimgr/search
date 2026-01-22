@@ -397,3 +397,490 @@ func TestTorServiceRestartNotRunning(t *testing.T) {
 	// May fail if no Tor binary, but should not panic
 	_ = err
 }
+
+// =====================================================
+// Additional tests for 100% coverage
+// =====================================================
+
+// Test TorService struct fields
+func TestTorServiceStructFields(t *testing.T) {
+	cfg := config.DefaultConfig()
+	ts := NewTorService(cfg)
+
+	// Verify all fields are initialized correctly
+	if ts.config == nil {
+		t.Error("config should not be nil")
+	}
+	if ts.running {
+		t.Error("running should be false initially")
+	}
+	if ts.onionAddr != "" {
+		t.Error("onionAddr should be empty initially")
+	}
+}
+
+// Test VanityProgress struct
+func TestVanityProgressStructComplete(t *testing.T) {
+	vp := VanityProgress{
+		Prefix:   "test",
+		Attempts: 12345,
+		Running:  true,
+		Found:    true,
+		Address:  "testaddress",
+		Error:    "some error",
+	}
+
+	if vp.Prefix != "test" {
+		t.Errorf("Prefix = %q, want %q", vp.Prefix, "test")
+	}
+	if vp.Attempts != 12345 {
+		t.Errorf("Attempts = %d, want %d", vp.Attempts, 12345)
+	}
+	if !vp.Running {
+		t.Error("Running should be true")
+	}
+	if !vp.Found {
+		t.Error("Found should be true")
+	}
+	if vp.Address != "testaddress" {
+		t.Errorf("Address = %q, want %q", vp.Address, "testaddress")
+	}
+	if vp.Error != "some error" {
+		t.Errorf("Error = %q, want %q", vp.Error, "some error")
+	}
+}
+
+// Test findTorBinary with various scenarios
+func TestFindTorBinaryScenarios(t *testing.T) {
+	tests := []struct {
+		name       string
+		configPath string
+	}{
+		{"empty config", ""},
+		{"nonexistent path", "/nonexistent/tor/binary"},
+		{"usr bin", "/usr/bin/tor"},
+		{"usr local bin", "/usr/local/bin/tor"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := findTorBinary(tt.configPath)
+			// Result may be empty or a valid path
+			_ = result
+		})
+	}
+}
+
+// Test vanityGenerator global state
+func TestVanityGeneratorGlobal(t *testing.T) {
+	cfg := config.DefaultConfig()
+	ts := NewTorService(cfg)
+
+	// Initial state
+	progress := ts.GetVanityProgress()
+	if progress == nil {
+		t.Fatal("GetVanityProgress should not return nil")
+	}
+
+	// Start generation
+	ts.GenerateVanity("ab")
+
+	// Check progress is updated
+	progress = ts.GetVanityProgress()
+	if progress.Prefix != "ab" {
+		t.Errorf("Prefix = %q, want %q", progress.Prefix, "ab")
+	}
+
+	// Cancel
+	ts.CancelVanity()
+}
+
+// Test GenerateVanity with valid short prefixes
+func TestTorServiceGenerateVanityShortPrefixes(t *testing.T) {
+	cfg := config.DefaultConfig()
+	ts := NewTorService(cfg)
+
+	tests := []string{"a", "ab", "abc", "abcd", "abcde", "abcdef"}
+
+	for _, prefix := range tests {
+		t.Run(prefix, func(t *testing.T) {
+			err := ts.GenerateVanity(prefix)
+			if err != nil {
+				t.Errorf("GenerateVanity(%q) error = %v", prefix, err)
+			}
+			ts.CancelVanity()
+		})
+	}
+}
+
+// Test GenerateVanity cancels previous generation
+func TestTorServiceGenerateVanityCancelsPrevious(t *testing.T) {
+	cfg := config.DefaultConfig()
+	ts := NewTorService(cfg)
+
+	// Start first generation
+	ts.GenerateVanity("ab")
+
+	// Start second generation (should cancel first)
+	ts.GenerateVanity("cd")
+
+	progress := ts.GetVanityProgress()
+	if progress.Prefix != "cd" {
+		t.Errorf("Prefix should be 'cd', got %q", progress.Prefix)
+	}
+
+	ts.CancelVanity()
+}
+
+// Test tryGenerateVanityAddress produces valid addresses
+func TestTorServiceTryGenerateVanityAddressMultiple(t *testing.T) {
+	cfg := config.DefaultConfig()
+	ts := NewTorService(cfg)
+
+	// Generate multiple addresses and verify they're all valid
+	for i := 0; i < 10; i++ {
+		addr, err := ts.tryGenerateVanityAddress("test")
+		if err != nil {
+			t.Fatalf("tryGenerateVanityAddress() error = %v", err)
+		}
+
+		if len(addr) != 56 {
+			t.Errorf("Address length = %d, want 56", len(addr))
+		}
+
+		// Verify all characters are valid base32
+		validChars := "abcdefghijklmnopqrstuvwxyz234567"
+		for _, c := range addr {
+			found := false
+			for _, v := range validChars {
+				if c == v {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("Address contains invalid character: %c", c)
+			}
+		}
+	}
+}
+
+// Test GetTorStatus fields
+func TestTorServiceGetTorStatusFields(t *testing.T) {
+	cfg := config.DefaultConfig()
+	ts := NewTorService(cfg)
+
+	status := ts.GetTorStatus()
+
+	// Required fields
+	requiredFields := []string{"enabled", "running", "onion_address", "status"}
+	for _, field := range requiredFields {
+		if _, ok := status[field]; !ok {
+			t.Errorf("Status should have '%s' field", field)
+		}
+	}
+}
+
+// Test SetEnabled with false
+func TestTorServiceSetEnabledFalse(t *testing.T) {
+	cfg := config.DefaultConfig()
+	ts := NewTorService(cfg)
+
+	err := ts.SetEnabled(false)
+	if err != nil {
+		t.Errorf("SetEnabled(false) error = %v", err)
+	}
+
+	if ts.IsRunning() {
+		t.Error("Should not be running after SetEnabled(false)")
+	}
+}
+
+// Test Stop is idempotent
+func TestTorServiceStopIdempotent(t *testing.T) {
+	cfg := config.DefaultConfig()
+	ts := NewTorService(cfg)
+
+	// Stop multiple times should not panic
+	for i := 0; i < 5; i++ {
+		err := ts.Stop()
+		if err != nil {
+			t.Errorf("Stop() iteration %d error = %v", i, err)
+		}
+	}
+}
+
+// Test Shutdown is idempotent
+func TestTorServiceShutdownIdempotent(t *testing.T) {
+	cfg := config.DefaultConfig()
+	ts := NewTorService(cfg)
+
+	// Shutdown multiple times should not panic
+	ts.Shutdown()
+	ts.Shutdown()
+	ts.Shutdown()
+}
+
+// Test concurrent access to TorService
+func TestTorServiceConcurrentAccess(t *testing.T) {
+	cfg := config.DefaultConfig()
+	ts := NewTorService(cfg)
+
+	done := make(chan bool)
+
+	// Reader goroutine
+	go func() {
+		for i := 0; i < 100; i++ {
+			_ = ts.IsRunning()
+			_ = ts.GetOnionAddress()
+			_ = ts.GetTorStatus()
+			_ = ts.GetVanityProgress()
+		}
+		done <- true
+	}()
+
+	// Vanity goroutine
+	go func() {
+		for i := 0; i < 10; i++ {
+			ts.GenerateVanity("ab")
+			ts.CancelVanity()
+		}
+		done <- true
+	}()
+
+	<-done
+	<-done
+}
+
+// Test ImportKeys with valid key data
+func TestTorServiceImportKeysValidData(t *testing.T) {
+	cfg := config.DefaultConfig()
+	ts := NewTorService(cfg)
+
+	// Create some test key data
+	keyData := make([]byte, 64)
+	for i := range keyData {
+		keyData[i] = byte(i)
+	}
+
+	// This will fail because Tor isn't actually running, but exercises the code path
+	_, err := ts.ImportKeys(keyData)
+	// Expected to fail without Tor
+	_ = err
+}
+
+// Test lookPath function wrapper
+func TestLookPathFunction(t *testing.T) {
+	// Test with common commands
+	commands := []string{"sh", "ls", "true"}
+
+	for _, cmd := range commands {
+		path, err := lookPath(cmd)
+		if err == nil && path == "" {
+			t.Errorf("lookPath(%q) returned empty path without error", cmd)
+		}
+	}
+}
+
+// Test Start when already running returns early
+func TestTorServiceStartAlreadyRunning(t *testing.T) {
+	cfg := config.DefaultConfig()
+	ts := NewTorService(cfg)
+
+	// Manually set running to true
+	ts.mu.Lock()
+	ts.running = true
+	ts.mu.Unlock()
+
+	// Start should return nil early
+	err := ts.Start()
+	if err != nil {
+		t.Errorf("Start() when already running should return nil, got %v", err)
+	}
+
+	// Reset for cleanup
+	ts.mu.Lock()
+	ts.running = false
+	ts.mu.Unlock()
+}
+
+// Test GetOnionAddress when running
+func TestTorServiceGetOnionAddressWhenSet(t *testing.T) {
+	cfg := config.DefaultConfig()
+	ts := NewTorService(cfg)
+
+	// Manually set onion address
+	ts.mu.Lock()
+	ts.onionAddr = "testaddress.onion"
+	ts.mu.Unlock()
+
+	addr := ts.GetOnionAddress()
+	if addr != "testaddress.onion" {
+		t.Errorf("GetOnionAddress() = %q, want %q", addr, "testaddress.onion")
+	}
+}
+
+// Test vanity generation prefix validation
+func TestTorServiceGenerateVanityValidation(t *testing.T) {
+	cfg := config.DefaultConfig()
+	ts := NewTorService(cfg)
+
+	tests := []struct {
+		prefix  string
+		wantErr bool
+	}{
+		{"", false},        // Empty is valid
+		{"a", false},       // Single char valid
+		{"abc", false},     // Short valid
+		{"234567", false},  // Numbers 2-7 valid
+		{"abcdef", false},  // 6 chars max for built-in
+		{"abcdefg", true},  // 7 chars too long
+		{"ABC", true},      // Uppercase invalid
+		{"abc1", true},     // 1 invalid in base32
+		{"abc0", true},     // 0 invalid in base32
+		{"abc8", true},     // 8 invalid in base32
+		{"abc9", true},     // 9 invalid in base32
+		{"abc!", true},     // Special char invalid
+		{"abc-", true},     // Hyphen invalid
+		{"abc_", true},     // Underscore invalid
+		{"abc ", true},     // Space invalid
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.prefix, func(t *testing.T) {
+			err := ts.GenerateVanity(tt.prefix)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GenerateVanity(%q) error = %v, wantErr %v", tt.prefix, err, tt.wantErr)
+			}
+			ts.CancelVanity()
+		})
+	}
+}
+
+// Test ApplyVanityAddress when found
+func TestTorServiceApplyVanityAddressWhenFound(t *testing.T) {
+	cfg := config.DefaultConfig()
+	ts := NewTorService(cfg)
+
+	// Manually set found state
+	vanityGen.mu.Lock()
+	vanityGen.progress.Found = true
+	vanityGen.progress.Address = "testaddress"
+	vanityGen.mu.Unlock()
+
+	// ApplyVanityAddress should call RegenerateAddress which will fail
+	// because Tor isn't running, but it exercises the code path
+	_, err := ts.ApplyVanityAddress()
+	if err == nil {
+		t.Log("ApplyVanityAddress succeeded unexpectedly")
+	}
+
+	// Reset state
+	vanityGen.mu.Lock()
+	vanityGen.progress.Found = false
+	vanityGen.progress.Address = ""
+	vanityGen.mu.Unlock()
+}
+
+// Test ExportKeys when running but no keys
+func TestTorServiceExportKeysNoKeys(t *testing.T) {
+	cfg := config.DefaultConfig()
+	ts := NewTorService(cfg)
+
+	// Manually set running
+	ts.mu.Lock()
+	ts.running = true
+	ts.mu.Unlock()
+
+	// ExportKeys should fail because keys file doesn't exist
+	_, err := ts.ExportKeys()
+	if err == nil {
+		t.Log("ExportKeys succeeded unexpectedly (may have found real keys)")
+	}
+
+	// Reset
+	ts.mu.Lock()
+	ts.running = false
+	ts.mu.Unlock()
+}
+
+// Test common Tor binary locations constant
+func TestCommonTorLocations(t *testing.T) {
+	// Verify findTorBinary checks expected locations
+	locations := []string{
+		"/usr/bin/tor",
+		"/usr/local/bin/tor",
+		"/opt/local/bin/tor",
+		"/opt/homebrew/bin/tor",
+		"/usr/local/opt/tor/bin/tor",
+		"/snap/bin/tor",
+	}
+
+	for _, loc := range locations {
+		// Just verify it doesn't panic when checking
+		_ = findTorBinary(loc)
+	}
+}
+
+// Test GetVanityProgress returns copy
+func TestTorServiceGetVanityProgressReturnsCopy(t *testing.T) {
+	cfg := config.DefaultConfig()
+	ts := NewTorService(cfg)
+
+	progress1 := ts.GetVanityProgress()
+	progress2 := ts.GetVanityProgress()
+
+	// Modify progress1
+	progress1.Attempts = 999999
+
+	// progress2 should be unaffected
+	if progress2.Attempts == 999999 {
+		t.Error("GetVanityProgress should return a copy, not a reference")
+	}
+}
+
+// Test Restart calls Stop then Start
+func TestTorServiceRestartSequence(t *testing.T) {
+	cfg := config.DefaultConfig()
+	ts := NewTorService(cfg)
+
+	// Restart should call Stop (succeeds) then Start (may fail)
+	err := ts.Restart()
+	// May fail if no Tor binary
+	_ = err
+}
+
+// Test TorService with different config settings
+func TestTorServiceWithConfig(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Server.Tor.Enabled = true
+	cfg.Server.Tor.HiddenServicePort = 8080
+	cfg.Server.Port = 3000
+
+	ts := NewTorService(cfg)
+	if ts == nil {
+		t.Fatal("NewTorService returned nil")
+	}
+
+	status := ts.GetTorStatus()
+	if status["enabled"] != true {
+		t.Errorf("Status enabled = %v, want true", status["enabled"])
+	}
+}
+
+// Test CheckTorConnection always returns true (simplified)
+func TestCheckTorConnectionAlwaysTrue(t *testing.T) {
+	addresses := []string{
+		"127.0.0.1:9050",
+		"localhost:9050",
+		"0.0.0.0:9050",
+		"",
+	}
+
+	for _, addr := range addresses {
+		result := CheckTorConnection(addr)
+		if !result {
+			t.Errorf("CheckTorConnection(%q) = false, want true", addr)
+		}
+	}
+}

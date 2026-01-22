@@ -176,6 +176,9 @@ func (m *Manager) parseAcceptLanguage(header string) string {
 			qPart := strings.TrimSpace(langParts[1])
 			if strings.HasPrefix(qPart, "q=") {
 				fmt.Sscanf(qPart, "q=%f", &quality)
+			} else {
+				// Handle bare quality value (e.g., "en;0.5")
+				fmt.Sscanf(qPart, "%f", &quality)
 			}
 		}
 

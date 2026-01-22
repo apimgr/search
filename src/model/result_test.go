@@ -644,3 +644,329 @@ func TestRSSStructs(t *testing.T) {
 		t.Errorf("RSSFeed.Version = %q, want %q", feed.Version, "2.0")
 	}
 }
+
+func TestSearchResultsCalculateTotalPagesZeroPerPage(t *testing.T) {
+	sr := &SearchResults{
+		TotalResults: 100,
+		PerPage:      0,
+	}
+	sr.CalculateTotalPages()
+	// When PerPage is 0, division is skipped
+	if sr.TotalPages != 0 {
+		t.Errorf("TotalPages with zero PerPage = %d, want %d", sr.TotalPages, 0)
+	}
+}
+
+func TestSearchResultsCalculateTotalPagesNegativePerPage(t *testing.T) {
+	sr := &SearchResults{
+		TotalResults: 100,
+		PerPage:      -5,
+	}
+	sr.CalculateTotalPages()
+	// When PerPage is negative, division is skipped
+	if sr.TotalPages != 0 {
+		t.Errorf("TotalPages with negative PerPage = %d, want %d", sr.TotalPages, 0)
+	}
+}
+
+func TestSearchResultsUpdateFacetsEmptyDomain(t *testing.T) {
+	sr := NewSearchResults("test", CategoryGeneral)
+
+	// Add a result with empty URL which will result in empty domain
+	result := Result{
+		Title:    "Test",
+		URL:      "",
+		Language: "en",
+	}
+
+	sr.AddResult(result)
+
+	// Domains should not have empty string key
+	if _, exists := sr.Domains[""]; exists {
+		t.Error("Empty domain should not be added to Domains map")
+	}
+	// But language should still be added
+	if sr.Languages["en"] != 1 {
+		t.Errorf("Languages[en] = %d, want %d", sr.Languages["en"], 1)
+	}
+}
+
+func TestSearchResultsUpdateFacetsEmptyLanguage(t *testing.T) {
+	sr := NewSearchResults("test", CategoryGeneral)
+
+	// Add a result with no language
+	result := Result{
+		Title:    "Test",
+		URL:      "https://example.com",
+		Language: "",
+	}
+
+	sr.AddResult(result)
+
+	// Domain should be added
+	if sr.Domains["example.com"] != 1 {
+		t.Errorf("Domains[example.com] = %d, want %d", sr.Domains["example.com"], 1)
+	}
+	// Empty language should not be added
+	if _, exists := sr.Languages[""]; exists {
+		t.Error("Empty language should not be added to Languages map")
+	}
+}
+
+func TestSearchResultsAddResultsEmpty(t *testing.T) {
+	sr := NewSearchResults("test", CategoryGeneral)
+	sr.AddResults([]Result{})
+
+	if len(sr.Results) != 0 {
+		t.Errorf("Results length = %d, want %d", len(sr.Results), 0)
+	}
+	if sr.TotalResults != 0 {
+		t.Errorf("TotalResults = %d, want %d", sr.TotalResults, 0)
+	}
+}
+
+func TestResultExtractDomainEmptyURL(t *testing.T) {
+	r := &Result{URL: ""}
+	domain := r.ExtractDomain()
+	if domain != "" {
+		t.Errorf("ExtractDomain() = %q for empty URL, want empty string", domain)
+	}
+}
+
+func TestResultExtractDomainNoProtocol(t *testing.T) {
+	r := &Result{URL: "example.com/path"}
+	domain := r.ExtractDomain()
+	if domain != "example.com" {
+		t.Errorf("ExtractDomain() = %q, want %q", domain, "example.com")
+	}
+}
+
+func TestResultExtractDomainWWWOnly(t *testing.T) {
+	r := &Result{URL: "www.example.com"}
+	domain := r.ExtractDomain()
+	if domain != "example.com" {
+		t.Errorf("ExtractDomain() = %q, want %q", domain, "example.com")
+	}
+}
+
+func TestSearchResultsGetPageStartAtEnd(t *testing.T) {
+	sr := NewSearchResults("test", CategoryGeneral)
+	sr.PerPage = 10
+
+	// Add exactly 10 results
+	for i := 0; i < 10; i++ {
+		sr.Results = append(sr.Results, Result{Title: string(rune('A' + i))})
+	}
+
+	// Page 2 should return empty since we only have 10 results
+	results := sr.GetPage(2)
+	if len(results) != 0 {
+		t.Errorf("GetPage(2) returned %d results, want 0", len(results))
+	}
+}
+
+func TestSearchResultsGetPageFirstPage(t *testing.T) {
+	sr := NewSearchResults("test", CategoryGeneral)
+	sr.PerPage = 5
+
+	for i := 0; i < 12; i++ {
+		sr.Results = append(sr.Results, Result{Title: string(rune('A' + i))})
+	}
+
+	results := sr.GetPage(1)
+	if len(results) != 5 {
+		t.Errorf("GetPage(1) returned %d results, want 5", len(results))
+	}
+	if results[0].Title != "A" {
+		t.Errorf("First result title = %q, want %q", results[0].Title, "A")
+	}
+}
+
+func TestSearchResultsMultipleAddResult(t *testing.T) {
+	sr := NewSearchResults("test", CategoryGeneral)
+
+	sr.AddResult(Result{Title: "First", URL: "https://a.com", Language: "en"})
+	sr.AddResult(Result{Title: "Second", URL: "https://a.com/page", Language: "en"})
+	sr.AddResult(Result{Title: "Third", URL: "https://b.com", Language: "de"})
+
+	if len(sr.Results) != 3 {
+		t.Errorf("Results length = %d, want %d", len(sr.Results), 3)
+	}
+	if sr.Domains["a.com"] != 2 {
+		t.Errorf("Domains[a.com] = %d, want %d", sr.Domains["a.com"], 2)
+	}
+	if sr.Languages["en"] != 2 {
+		t.Errorf("Languages[en] = %d, want %d", sr.Languages["en"], 2)
+	}
+}
+
+func TestResultSanitizeEmptyFields(t *testing.T) {
+	r := &Result{
+		Title:       "",
+		URL:         "",
+		Content:     "",
+		Engine:      "",
+		Thumbnail:   "",
+		Author:      "",
+		Domain:      "",
+		ImageFormat: "",
+		FileType:    "",
+		Language:    "",
+	}
+
+	r.Sanitize()
+
+	// All fields should remain empty after sanitize
+	if r.Title != "" || r.URL != "" || r.Content != "" || r.Engine != "" {
+		t.Error("Empty fields should remain empty after Sanitize")
+	}
+}
+
+func TestResultIsRecentEdgeCase(t *testing.T) {
+	// Test exactly at boundary
+	r := &Result{PublishedAt: time.Now().Add(-24 * time.Hour)}
+
+	// Should NOT be recent when checking for 24 hours (equal time)
+	if r.IsRecent(24) {
+		t.Error("Result exactly 24 hours old should not be recent for 24 hour check")
+	}
+
+	// Should be recent when checking for 25 hours
+	if !r.IsRecent(25) {
+		t.Error("Result 24 hours old should be recent for 25 hour check")
+	}
+}
+
+func TestResultAgeFuture(t *testing.T) {
+	// Test with future date
+	r := &Result{PublishedAt: time.Now().Add(1 * time.Hour)}
+	age := r.Age()
+	if age >= 0 {
+		t.Errorf("Age() for future date should be negative, got %v", age)
+	}
+}
+
+func TestSearchResultsToJSONEncoding(t *testing.T) {
+	sr := NewSearchResults("test", CategoryGeneral)
+	sr.AddResult(Result{
+		Title:    "Test <Title> & \"Special\"",
+		URL:      "https://example.com?foo=bar&baz=qux",
+		Content:  "Content with special chars: <>&\"'",
+		Engine:   "google",
+		Category: CategoryGeneral,
+	})
+
+	var buf bytes.Buffer
+	err := sr.ToJSON(&buf, false)
+	if err != nil {
+		t.Fatalf("ToJSON() error = %v", err)
+	}
+
+	// Verify it's valid JSON by parsing it back
+	var decoded SearchResults
+	err = json.Unmarshal(buf.Bytes(), &decoded)
+	if err != nil {
+		t.Fatalf("json.Unmarshal error = %v", err)
+	}
+
+	if decoded.Results[0].Title != "Test <Title> & \"Special\"" {
+		t.Errorf("Title not properly encoded/decoded: %q", decoded.Results[0].Title)
+	}
+}
+
+func TestSearchResultsToCSVMultipleRows(t *testing.T) {
+	sr := NewSearchResults("test", CategoryGeneral)
+	sr.AddResult(Result{
+		Title:   "Result 1",
+		URL:     "https://a.com",
+		Content: "Content 1",
+		Engine:  "google",
+	})
+	sr.AddResult(Result{
+		Title:   "Result 2",
+		URL:     "https://b.com",
+		Content: "Content 2",
+		Engine:  "bing",
+	})
+
+	var buf bytes.Buffer
+	err := sr.ToCSV(&buf)
+	if err != nil {
+		t.Fatalf("ToCSV() error = %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	if len(lines) != 3 { // 1 header + 2 data rows
+		t.Errorf("CSV should have 3 lines, got %d", len(lines))
+	}
+}
+
+func TestSearchResultsToRSSMultipleItems(t *testing.T) {
+	sr := NewSearchResults("test", CategoryGeneral)
+	sr.Engines = []string{"google"}
+
+	for i := 0; i < 3; i++ {
+		sr.AddResult(Result{
+			Title:  string(rune('A' + i)),
+			URL:    "https://example.com/" + string(rune('a'+i)),
+			Engine: "google",
+		})
+	}
+
+	var buf bytes.Buffer
+	err := sr.ToRSS(&buf, "https://search.example.com")
+	if err != nil {
+		t.Fatalf("ToRSS() error = %v", err)
+	}
+
+	output := buf.String()
+	// Count item tags
+	itemCount := strings.Count(output, "<item>")
+	if itemCount != 3 {
+		t.Errorf("RSS should have 3 items, got %d", itemCount)
+	}
+}
+
+func TestSearchResultsToAtomMultipleEntries(t *testing.T) {
+	sr := NewSearchResults("test", CategoryGeneral)
+
+	for i := 0; i < 3; i++ {
+		sr.AddResult(Result{
+			Title:  string(rune('A' + i)),
+			URL:    "https://example.com/" + string(rune('a'+i)),
+			Engine: "google",
+		})
+	}
+
+	var buf bytes.Buffer
+	err := sr.ToAtom(&buf, "https://search.example.com")
+	if err != nil {
+		t.Fatalf("ToAtom() error = %v", err)
+	}
+
+	output := buf.String()
+	// Count entry tags
+	entryCount := strings.Count(output, "<entry>")
+	if entryCount != 3 {
+		t.Errorf("Atom should have 3 entries, got %d", entryCount)
+	}
+}
+
+func TestSortOrderConstants(t *testing.T) {
+	tests := []struct {
+		order SortOrder
+		want  string
+	}{
+		{SortRelevance, "relevance"},
+		{SortDate, "date"},
+		{SortDateAsc, "date_asc"},
+		{SortPopularity, "popularity"},
+		{SortRandom, "random"},
+	}
+
+	for _, tt := range tests {
+		if string(tt.order) != tt.want {
+			t.Errorf("SortOrder %v = %q, want %q", tt.order, string(tt.order), tt.want)
+		}
+	}
+}

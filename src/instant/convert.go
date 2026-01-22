@@ -283,6 +283,9 @@ func convertTemperature(value float64, from, to string) float64 {
 		celsius = (value - 32) * 5 / 9
 	case "kelvin":
 		celsius = value - 273.15
+	default:
+		// Unknown from unit, return original value
+		return value
 	}
 
 	// Convert from Celsius to target
@@ -293,7 +296,8 @@ func convertTemperature(value float64, from, to string) float64 {
 		return celsius*9/5 + 32
 	case "kelvin":
 		return celsius + 273.15
+	default:
+		// Unknown to unit, return original value
+		return value
 	}
-
-	return value
 }

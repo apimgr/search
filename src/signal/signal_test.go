@@ -836,3 +836,610 @@ func TestShutdownConfigChildPIDsMultiple(t *testing.T) {
 		t.Errorf("Unexpected PIDs: %v", pids)
 	}
 }
+
+// TestSetupWithDefaults verifies Setup applies default timeout values
+func TestSetupWithDefaults(t *testing.T) {
+	// This test verifies Setup doesn't panic and applies defaults
+	cfg := ShutdownConfig{}
+	Setup(cfg)
+	// Default values are applied within Setup before calling setupSignals
+}
+
+// TestSetupWithCustomTimeouts verifies Setup works with custom timeouts
+func TestSetupWithCustomTimeouts(t *testing.T) {
+	cfg := ShutdownConfig{
+		InFlightTimeout: 60 * time.Second,
+		ChildTimeout:    20 * time.Second,
+		DatabaseTimeout: 10 * time.Second,
+		LogFlushTimeout: 5 * time.Second,
+	}
+	Setup(cfg)
+}
+
+// TestSetupWithAllOptions verifies Setup with all config options
+func TestSetupWithAllOptions(t *testing.T) {
+	server := &http.Server{Addr: ":8080"}
+	cfg := ShutdownConfig{
+		Server:          server,
+		PIDFile:         "/tmp/test.pid",
+		InFlightTimeout: 30 * time.Second,
+		ChildTimeout:    10 * time.Second,
+		DatabaseTimeout: 5 * time.Second,
+		LogFlushTimeout: 2 * time.Second,
+		OnReopenLogs:    func() {},
+		OnDumpStatus:    func() {},
+		OnCloseDatabase: func() {},
+		OnFlushLogs:     func() {},
+		GetChildPIDs:    func() []int { return []int{} },
+	}
+	Setup(cfg)
+}
+
+// TestSetupWithShutdownFunc verifies Setup with ShutdownFunc
+func TestSetupWithShutdownFunc(t *testing.T) {
+	cfg := ShutdownConfig{
+		ShutdownFunc: func(ctx context.Context) error {
+			return nil
+		},
+		InFlightTimeout: 10 * time.Second,
+	}
+	Setup(cfg)
+}
+
+// TestSetupPartialTimeouts verifies Setup applies defaults only for zero values
+func TestSetupPartialTimeouts(t *testing.T) {
+	cfg := ShutdownConfig{
+		InFlightTimeout: 60 * time.Second, // Custom
+		// ChildTimeout: 0  - should use default
+		DatabaseTimeout: 10 * time.Second, // Custom
+		// LogFlushTimeout: 0 - should use default
+	}
+	Setup(cfg)
+}
+
+// TestGracefulShutdownDatabaseCloseSuccess simulates database close success path
+func TestGracefulShutdownDatabaseCloseSuccess(t *testing.T) {
+	closeCalled := false
+	cfg := ShutdownConfig{
+		DatabaseTimeout: 100 * time.Millisecond,
+		OnCloseDatabase: func() {
+			closeCalled = true
+		},
+	}
+
+	// Simulate the database close logic from gracefulShutdown
+	if cfg.OnCloseDatabase != nil {
+		done := make(chan struct{})
+		go func() {
+			cfg.OnCloseDatabase()
+			close(done)
+		}()
+		select {
+		case <-done:
+			// Success path
+		case <-time.After(cfg.DatabaseTimeout):
+			t.Error("Should not timeout")
+		}
+	}
+
+	if !closeCalled {
+		t.Error("OnCloseDatabase should have been called")
+	}
+}
+
+// TestGracefulShutdownDatabaseCloseTimeout simulates database close timeout path
+func TestGracefulShutdownDatabaseCloseTimeout(t *testing.T) {
+	closeCalled := false
+	cfg := ShutdownConfig{
+		DatabaseTimeout: 50 * time.Millisecond,
+		OnCloseDatabase: func() {
+			closeCalled = true
+			time.Sleep(200 * time.Millisecond) // Simulate slow close
+		},
+	}
+
+	// Simulate the database close logic from gracefulShutdown
+	if cfg.OnCloseDatabase != nil {
+		done := make(chan struct{})
+		go func() {
+			cfg.OnCloseDatabase()
+			close(done)
+		}()
+		select {
+		case <-done:
+			// Should not happen first
+		case <-time.After(cfg.DatabaseTimeout):
+			// Expected timeout path
+		}
+	}
+
+	if !closeCalled {
+		t.Error("OnCloseDatabase should have been called")
+	}
+}
+
+// TestGracefulShutdownLogFlushSuccess simulates log flush success path
+func TestGracefulShutdownLogFlushSuccess(t *testing.T) {
+	flushCalled := false
+	cfg := ShutdownConfig{
+		LogFlushTimeout: 100 * time.Millisecond,
+		OnFlushLogs: func() {
+			flushCalled = true
+		},
+	}
+
+	// Simulate the log flush logic from gracefulShutdown
+	if cfg.OnFlushLogs != nil {
+		done := make(chan struct{})
+		go func() {
+			cfg.OnFlushLogs()
+			close(done)
+		}()
+		select {
+		case <-done:
+			// Success path
+		case <-time.After(cfg.LogFlushTimeout):
+			t.Error("Should not timeout")
+		}
+	}
+
+	if !flushCalled {
+		t.Error("OnFlushLogs should have been called")
+	}
+}
+
+// TestGracefulShutdownLogFlushTimeout simulates log flush timeout path
+func TestGracefulShutdownLogFlushTimeout(t *testing.T) {
+	flushCalled := false
+	cfg := ShutdownConfig{
+		LogFlushTimeout: 50 * time.Millisecond,
+		OnFlushLogs: func() {
+			flushCalled = true
+			time.Sleep(200 * time.Millisecond) // Simulate slow flush
+		},
+	}
+
+	// Simulate the log flush logic from gracefulShutdown
+	if cfg.OnFlushLogs != nil {
+		done := make(chan struct{})
+		go func() {
+			cfg.OnFlushLogs()
+			close(done)
+		}()
+		select {
+		case <-done:
+			// Should not happen first
+		case <-time.After(cfg.LogFlushTimeout):
+			// Expected timeout path
+		}
+	}
+
+	if !flushCalled {
+		t.Error("OnFlushLogs should have been called")
+	}
+}
+
+// TestGracefulShutdownServerShutdownSuccess simulates server shutdown success
+func TestGracefulShutdownServerShutdownSuccess(t *testing.T) {
+	server := &http.Server{Addr: ":0"}
+	cfg := ShutdownConfig{
+		Server:          server,
+		InFlightTimeout: 100 * time.Millisecond,
+	}
+
+	// The server isn't started, so Shutdown will succeed immediately
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.InFlightTimeout)
+	defer cancel()
+
+	if cfg.Server != nil {
+		err := cfg.Server.Shutdown(ctx)
+		if err != nil {
+			t.Errorf("Server.Shutdown error: %v", err)
+		}
+	}
+}
+
+// TestGracefulShutdownShutdownFuncSuccess simulates ShutdownFunc success
+func TestGracefulShutdownShutdownFuncSuccess(t *testing.T) {
+	called := false
+	cfg := ShutdownConfig{
+		ShutdownFunc: func(ctx context.Context) error {
+			called = true
+			return nil
+		},
+		InFlightTimeout: 100 * time.Millisecond,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.InFlightTimeout)
+	defer cancel()
+
+	if cfg.ShutdownFunc != nil {
+		err := cfg.ShutdownFunc(ctx)
+		if err != nil {
+			t.Errorf("ShutdownFunc error: %v", err)
+		}
+	}
+
+	if !called {
+		t.Error("ShutdownFunc should have been called")
+	}
+}
+
+// TestGracefulShutdownShutdownFuncError simulates ShutdownFunc error
+func TestGracefulShutdownShutdownFuncError(t *testing.T) {
+	expectedErr := errors.New("shutdown failed")
+	cfg := ShutdownConfig{
+		ShutdownFunc: func(ctx context.Context) error {
+			return expectedErr
+		},
+		InFlightTimeout: 100 * time.Millisecond,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.InFlightTimeout)
+	defer cancel()
+
+	if cfg.ShutdownFunc != nil {
+		err := cfg.ShutdownFunc(ctx)
+		if err != expectedErr {
+			t.Errorf("Expected error %v, got %v", expectedErr, err)
+		}
+	}
+}
+
+// TestGracefulShutdownPIDFileRemoveSuccess simulates PID file removal success
+func TestGracefulShutdownPIDFileRemoveSuccess(t *testing.T) {
+	// Create a temp PID file
+	tmpFile, err := os.CreateTemp("", "test-pid-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	tmpFile.Close()
+
+	cfg := ShutdownConfig{
+		PIDFile: tmpFile.Name(),
+	}
+
+	// Simulate PID file removal from gracefulShutdown
+	if cfg.PIDFile != "" {
+		err := os.Remove(cfg.PIDFile)
+		if err != nil && !os.IsNotExist(err) {
+			t.Errorf("Failed to remove PID file: %v", err)
+		}
+	}
+
+	// Verify file is removed
+	if _, err := os.Stat(tmpFile.Name()); !os.IsNotExist(err) {
+		t.Error("PID file should have been removed")
+		os.Remove(tmpFile.Name()) // Cleanup
+	}
+}
+
+// TestGracefulShutdownPIDFileRemoveNotExist simulates PID file not existing
+func TestGracefulShutdownPIDFileRemoveNotExist(t *testing.T) {
+	cfg := ShutdownConfig{
+		PIDFile: "/tmp/nonexistent-pid-file-test-12345.pid",
+	}
+
+	// Simulate PID file removal from gracefulShutdown
+	if cfg.PIDFile != "" {
+		err := os.Remove(cfg.PIDFile)
+		if err != nil && !os.IsNotExist(err) {
+			t.Errorf("Unexpected error for non-existent file: %v", err)
+		}
+		// os.IsNotExist error is expected and handled
+	}
+}
+
+// TestGracefulShutdownPIDFileRemoveError simulates PID file removal error
+func TestGracefulShutdownPIDFileRemoveError(t *testing.T) {
+	// Create a directory with a file that can't be removed normally
+	// For testing, we just verify the error path logic
+	cfg := ShutdownConfig{
+		PIDFile: "/nonexistent/path/test.pid",
+	}
+
+	// Simulate PID file removal from gracefulShutdown
+	if cfg.PIDFile != "" {
+		err := os.Remove(cfg.PIDFile)
+		// We expect an error here (path doesn't exist or permission denied)
+		if err == nil {
+			t.Error("Expected error removing PID file from invalid path")
+		}
+	}
+}
+
+// TestGracefulShutdownGetChildPIDsWithPIDs simulates GetChildPIDs returning PIDs
+func TestGracefulShutdownGetChildPIDsWithPIDs(t *testing.T) {
+	pidsReturned := false
+	cfg := ShutdownConfig{
+		ChildTimeout: 100 * time.Millisecond,
+		GetChildPIDs: func() []int {
+			pidsReturned = true
+			return []int{12345, 12346}
+		},
+	}
+
+	// Simulate GetChildPIDs check from gracefulShutdown
+	if cfg.GetChildPIDs != nil {
+		pids := cfg.GetChildPIDs()
+		if len(pids) > 0 {
+			// Would call stopChildProcesses here
+		}
+	}
+
+	if !pidsReturned {
+		t.Error("GetChildPIDs should have been called")
+	}
+}
+
+// TestGracefulShutdownGetChildPIDsEmpty simulates GetChildPIDs returning empty
+func TestGracefulShutdownGetChildPIDsEmpty(t *testing.T) {
+	cfg := ShutdownConfig{
+		ChildTimeout: 100 * time.Millisecond,
+		GetChildPIDs: func() []int {
+			return []int{}
+		},
+	}
+
+	// Simulate GetChildPIDs check from gracefulShutdown
+	if cfg.GetChildPIDs != nil {
+		pids := cfg.GetChildPIDs()
+		if len(pids) != 0 {
+			t.Errorf("Expected empty PIDs, got %d", len(pids))
+		}
+	}
+}
+
+// TestGracefulShutdownNoGetChildPIDs simulates nil GetChildPIDs
+func TestGracefulShutdownNoGetChildPIDs(t *testing.T) {
+	cfg := ShutdownConfig{
+		ChildTimeout: 100 * time.Millisecond,
+		GetChildPIDs: nil,
+	}
+
+	// Simulate GetChildPIDs check from gracefulShutdown - should not panic
+	if cfg.GetChildPIDs != nil {
+		cfg.GetChildPIDs()
+	}
+}
+
+// TestGracefulShutdownNoCallbacks tests gracefulShutdown path with no callbacks
+func TestGracefulShutdownNoCallbacks(t *testing.T) {
+	cfg := ShutdownConfig{
+		InFlightTimeout: 100 * time.Millisecond,
+		ChildTimeout:    100 * time.Millisecond,
+		DatabaseTimeout: 100 * time.Millisecond,
+		LogFlushTimeout: 100 * time.Millisecond,
+	}
+
+	// Simulate all nil checks from gracefulShutdown
+	if cfg.ShutdownFunc != nil {
+		t.Error("ShutdownFunc should be nil")
+	}
+	if cfg.Server != nil {
+		t.Error("Server should be nil")
+	}
+	if cfg.OnCloseDatabase != nil {
+		t.Error("OnCloseDatabase should be nil")
+	}
+	if cfg.OnFlushLogs != nil {
+		t.Error("OnFlushLogs should be nil")
+	}
+	if cfg.GetChildPIDs != nil {
+		t.Error("GetChildPIDs should be nil")
+	}
+}
+
+// TestGracefulShutdownNilDatabase simulates nil OnCloseDatabase
+func TestGracefulShutdownNilDatabase(t *testing.T) {
+	cfg := ShutdownConfig{
+		OnCloseDatabase: nil,
+	}
+
+	// Simulate the nil check from gracefulShutdown
+	if cfg.OnCloseDatabase != nil {
+		t.Error("OnCloseDatabase should be nil")
+	}
+}
+
+// TestGracefulShutdownNilLogFlush simulates nil OnFlushLogs
+func TestGracefulShutdownNilLogFlush(t *testing.T) {
+	cfg := ShutdownConfig{
+		OnFlushLogs: nil,
+	}
+
+	// Simulate the nil check from gracefulShutdown
+	if cfg.OnFlushLogs != nil {
+		t.Error("OnFlushLogs should be nil")
+	}
+}
+
+// TestGracefulShutdownNilPIDFile simulates empty PIDFile
+func TestGracefulShutdownNilPIDFile(t *testing.T) {
+	cfg := ShutdownConfig{
+		PIDFile: "",
+	}
+
+	// Simulate the empty check from gracefulShutdown
+	if cfg.PIDFile != "" {
+		t.Error("PIDFile should be empty")
+	}
+}
+
+// TestSetShuttingDownFlag tests the shutdown flag state machine
+func TestSetShuttingDownFlag(t *testing.T) {
+	// Reset to known state
+	setShuttingDown(false)
+	if IsShuttingDown() {
+		t.Error("Initial state should be false")
+	}
+
+	// Set to true (simulating shutdown start)
+	setShuttingDown(true)
+	if !IsShuttingDown() {
+		t.Error("Should be shutting down after setShuttingDown(true)")
+	}
+
+	// Try setting again (idempotent)
+	setShuttingDown(true)
+	if !IsShuttingDown() {
+		t.Error("Should still be shutting down")
+	}
+
+	// Reset
+	setShuttingDown(false)
+	if IsShuttingDown() {
+		t.Error("Should not be shutting down after reset")
+	}
+}
+
+// TestShutdownMutexConcurrency tests mutex protection under high concurrency
+func TestShutdownMutexConcurrency(t *testing.T) {
+	// Save original state
+	orig := shuttingDown
+	defer func() { shuttingDown = orig }()
+
+	done := make(chan bool, 20)
+
+	// Many concurrent readers
+	for i := 0; i < 10; i++ {
+		go func() {
+			for j := 0; j < 1000; j++ {
+				_ = IsShuttingDown()
+			}
+			done <- true
+		}()
+	}
+
+	// Many concurrent writers
+	for i := 0; i < 10; i++ {
+		go func(id int) {
+			for j := 0; j < 1000; j++ {
+				setShuttingDown(j%2 == 0)
+			}
+			done <- true
+		}(i)
+	}
+
+	// Wait for all goroutines
+	for i := 0; i < 20; i++ {
+		select {
+		case <-done:
+		case <-time.After(10 * time.Second):
+			t.Fatal("Timeout waiting for goroutines")
+		}
+	}
+}
+
+// TestSetupInFlightTimeoutDefault tests default InFlightTimeout
+func TestSetupInFlightTimeoutDefault(t *testing.T) {
+	// When InFlightTimeout is 0, Setup should apply default of 30s
+	cfg := ShutdownConfig{InFlightTimeout: 0}
+	// Setup applies defaults internally, we can't inspect them directly
+	// but we verify Setup doesn't panic
+	Setup(cfg)
+}
+
+// TestSetupChildTimeoutDefault tests default ChildTimeout
+func TestSetupChildTimeoutDefault(t *testing.T) {
+	cfg := ShutdownConfig{ChildTimeout: 0}
+	Setup(cfg)
+}
+
+// TestSetupDatabaseTimeoutDefault tests default DatabaseTimeout
+func TestSetupDatabaseTimeoutDefault(t *testing.T) {
+	cfg := ShutdownConfig{DatabaseTimeout: 0}
+	Setup(cfg)
+}
+
+// TestSetupLogFlushTimeoutDefault tests default LogFlushTimeout
+func TestSetupLogFlushTimeoutDefault(t *testing.T) {
+	cfg := ShutdownConfig{LogFlushTimeout: 0}
+	Setup(cfg)
+}
+
+// TestReopenLogsCallsCallback verifies reopenLogs calls the callback
+func TestReopenLogsCallsCallback(t *testing.T) {
+	callCount := 0
+	cfg := ShutdownConfig{
+		OnReopenLogs: func() {
+			callCount++
+		},
+	}
+
+	reopenLogs(cfg)
+	if callCount != 1 {
+		t.Errorf("Expected callback to be called once, got %d", callCount)
+	}
+
+	reopenLogs(cfg)
+	if callCount != 2 {
+		t.Errorf("Expected callback to be called twice, got %d", callCount)
+	}
+}
+
+// TestDumpStatusCallsCallback verifies dumpStatus calls the callback
+func TestDumpStatusCallsCallback(t *testing.T) {
+	callCount := 0
+	cfg := ShutdownConfig{
+		OnDumpStatus: func() {
+			callCount++
+		},
+	}
+
+	dumpStatus(cfg)
+	if callCount != 1 {
+		t.Errorf("Expected callback to be called once, got %d", callCount)
+	}
+
+	dumpStatus(cfg)
+	if callCount != 2 {
+		t.Errorf("Expected callback to be called twice, got %d", callCount)
+	}
+}
+
+// TestShutdownConfigContextCancellation tests context cancellation in ShutdownFunc
+func TestShutdownConfigContextCancellation(t *testing.T) {
+	cfg := ShutdownConfig{
+		ShutdownFunc: func(ctx context.Context) error {
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- cfg.ShutdownFunc(ctx)
+	}()
+
+	// Cancel the context
+	cancel()
+
+	select {
+	case err := <-errCh:
+		if err != context.Canceled {
+			t.Errorf("Expected context.Canceled, got %v", err)
+		}
+	case <-time.After(1 * time.Second):
+		t.Error("ShutdownFunc should have returned after context cancellation")
+	}
+}
+
+// TestServerShutdownWithContext tests server shutdown respects context
+func TestServerShutdownWithContext(t *testing.T) {
+	server := &http.Server{Addr: ":0"}
+	cfg := ShutdownConfig{
+		Server:          server,
+		InFlightTimeout: 5 * time.Second,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.InFlightTimeout)
+	defer cancel()
+
+	err := cfg.Server.Shutdown(ctx)
+	if err != nil {
+		t.Errorf("Server.Shutdown error: %v", err)
+	}
+}

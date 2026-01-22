@@ -531,7 +531,7 @@ var defaultBangs = []*Bang{
 	// FINANCE & CRYPTO
 	// ============================================================================
 	{Shortcut: "yahoo", Name: "Yahoo Finance", URL: "https://finance.yahoo.com/quote/{query}", Category: "finance", Aliases: []string{"yf"}},
-	{Shortcut: "google", Name: "Google Finance", URL: "https://www.google.com/finance/quote/{query}", Category: "finance", Aliases: []string{"gf"}},
+	{Shortcut: "gfinance", Name: "Google Finance", URL: "https://www.google.com/finance/quote/{query}", Category: "finance", Aliases: []string{"gf", "googlefinance"}},
 	{Shortcut: "tradingview", Name: "TradingView", URL: "https://www.tradingview.com/symbols/{query}/", Category: "finance", Aliases: []string{"tv"}},
 	{Shortcut: "marketwatch", Name: "MarketWatch", URL: "https://www.marketwatch.com/search?q={query}", Category: "finance"},
 	{Shortcut: "seekingalpha", Name: "Seeking Alpha", URL: "https://seekingalpha.com/search?q={query}", Category: "finance"},

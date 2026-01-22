@@ -30,9 +30,11 @@ func init() {
 }
 
 func runStatus() error {
-	// Initialize client
-	if err := initClient(); err != nil {
-		return err
+	// Initialize client if not already done
+	if apiClient == nil {
+		if err := initClient(); err != nil {
+			return err
+		}
 	}
 
 	// Measure response time

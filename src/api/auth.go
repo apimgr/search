@@ -577,6 +577,11 @@ func (h *AuthHandler) handleSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.authManager == nil {
+		h.errorResponse(w, http.StatusServiceUnavailable, "Service unavailable", "")
+		return
+	}
+
 	token := h.authManager.GetSessionToken(r)
 	if token == "" {
 		h.errorResponse(w, http.StatusUnauthorized, "Not authenticated", "")

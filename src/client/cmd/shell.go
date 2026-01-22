@@ -72,9 +72,15 @@ func init() {
 func detectShell() string {
 	shellPath := os.Getenv("SHELL")
 	if shellPath == "" {
-		return "bash" // default fallback
+		// Default fallback
+		return "bash"
 	}
-	return filepath.Base(shellPath)
+	// Handle both Unix forward slash and Windows backslash separators
+	base := filepath.Base(shellPath)
+	if idx := strings.LastIndex(base, "\\"); idx >= 0 {
+		base = base[idx+1:]
+	}
+	return base
 }
 
 // printCompletions generates and prints shell completion script

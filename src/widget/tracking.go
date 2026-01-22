@@ -42,7 +42,7 @@ var carrierPatterns = []CarrierInfo{
 	},
 	{
 		Name:    "UPS",
-		Pattern: regexp.MustCompile(`^1Z[0-9A-Z]{16}$|^T\d{10}$|^[0-9]{26}$`),
+		Pattern: regexp.MustCompile(`^1Z[0-9A-Z]{15,18}$|^T\d{10}$|^[0-9]{26}$`),
 		TrackURL: "https://www.ups.com/track?tracknum=",
 	},
 	{

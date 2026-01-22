@@ -101,6 +101,11 @@ func SafeFilePath(input string) (string, error) {
 		return "", ErrPathTooLong
 	}
 
+	// Empty input is invalid
+	if input == "" {
+		return "", ErrInvalidPath
+	}
+
 	// Check for traversal attempts
 	if strings.Contains(input, "..") {
 		return "", ErrPathTraversal
@@ -110,6 +115,7 @@ func SafeFilePath(input string) (string, error) {
 	cleaned := path.Clean(input)
 	cleaned = strings.Trim(cleaned, "/")
 
+	// After cleaning and trimming, path should not be empty
 	if cleaned == "" {
 		return "", ErrInvalidPath
 	}

@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseBool(t *testing.T) {
 	tests := []struct {
@@ -142,6 +145,140 @@ func TestIsFalsy(t *testing.T) {
 			got := IsFalsy(tt.input)
 			if got != tt.want {
 				t.Errorf("IsFalsy(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestParseBoolExtendedTruthy tests all truthy values defined in bool.go
+func TestParseBoolExtendedTruthy(t *testing.T) {
+	truthyValues := []string{
+		"1", "y", "t",
+		"yes", "true", "on", "ok",
+		"enable", "enabled",
+		"yep", "yup", "yeah",
+		"aye", "si", "oui", "da", "hai",
+		"affirmative", "accept", "allow", "grant",
+		"sure", "totally",
+	}
+
+	for _, val := range truthyValues {
+		t.Run(val, func(t *testing.T) {
+			result, err := ParseBool(val, false)
+			if err != nil {
+				t.Errorf("ParseBool(%q) error = %v", val, err)
+			}
+			if !result {
+				t.Errorf("ParseBool(%q) = false, want true", val)
+			}
+
+			// Also test uppercase
+			result, err = ParseBool(strings.ToUpper(val), false)
+			if err != nil {
+				t.Errorf("ParseBool(%q) error = %v", strings.ToUpper(val), err)
+			}
+			if !result {
+				t.Errorf("ParseBool(%q) = false, want true", strings.ToUpper(val))
+			}
+		})
+	}
+}
+
+// TestParseBoolExtendedFalsy tests all falsy values defined in bool.go
+func TestParseBoolExtendedFalsy(t *testing.T) {
+	falsyValues := []string{
+		"0", "n", "f",
+		"no", "false", "off",
+		"disable", "disabled",
+		"nope", "nah", "nay",
+		"nein", "non", "niet", "iie", "lie",
+		"negative", "reject", "block", "revoke",
+		"deny", "never", "noway",
+	}
+
+	for _, val := range falsyValues {
+		t.Run(val, func(t *testing.T) {
+			result, err := ParseBool(val, true) // default true to verify it returns false
+			if err != nil {
+				t.Errorf("ParseBool(%q) error = %v", val, err)
+			}
+			if result {
+				t.Errorf("ParseBool(%q) = true, want false", val)
+			}
+
+			// Also test uppercase
+			result, err = ParseBool(strings.ToUpper(val), true)
+			if err != nil {
+				t.Errorf("ParseBool(%q) error = %v", strings.ToUpper(val), err)
+			}
+			if result {
+				t.Errorf("ParseBool(%q) = true, want false", strings.ToUpper(val))
+			}
+		})
+	}
+}
+
+// TestIsTruthyExtended tests all truthy values
+func TestIsTruthyExtended(t *testing.T) {
+	truthyValues := []string{
+		"1", "y", "t", "yes", "true", "on", "ok",
+		"enable", "enabled", "yep", "yup", "yeah",
+		"aye", "si", "oui", "da", "hai",
+		"affirmative", "accept", "allow", "grant",
+		"sure", "totally",
+	}
+
+	for _, val := range truthyValues {
+		if !IsTruthy(val) {
+			t.Errorf("IsTruthy(%q) = false, want true", val)
+		}
+		if !IsTruthy(strings.ToUpper(val)) {
+			t.Errorf("IsTruthy(%q) = false, want true", strings.ToUpper(val))
+		}
+	}
+}
+
+// TestIsFalsyExtended tests all falsy values
+func TestIsFalsyExtended(t *testing.T) {
+	falsyValues := []string{
+		"0", "n", "f", "no", "false", "off",
+		"disable", "disabled", "nope", "nah", "nay",
+		"nein", "non", "niet", "iie", "lie",
+		"negative", "reject", "block", "revoke",
+		"deny", "never", "noway",
+	}
+
+	for _, val := range falsyValues {
+		if !IsFalsy(val) {
+			t.Errorf("IsFalsy(%q) = false, want true", val)
+		}
+		if !IsFalsy(strings.ToUpper(val)) {
+			t.Errorf("IsFalsy(%q) = false, want true", strings.ToUpper(val))
+		}
+	}
+}
+
+// TestParseBoolWithWhitespace tests whitespace handling
+func TestParseBoolWithWhitespace(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"  true  ", true},
+		{"\ttrue\t", true},
+		{"\nfalse\n", false},
+		{"  yes  ", true},
+		{"  no  ", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got, err := ParseBool(tt.input, !tt.want)
+			if err != nil {
+				t.Errorf("ParseBool(%q) error = %v", tt.input, err)
+			}
+			if got != tt.want {
+				t.Errorf("ParseBool(%q) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
 	}

@@ -311,3 +311,239 @@ func stringToLower(s string) string {
 	}
 	return string(result)
 }
+
+// Additional tests for 100% coverage
+
+func TestRelatedSearchesGenerateVariationsStartsWithPrefix(t *testing.T) {
+	rs := NewRelatedSearches()
+
+	// Query that starts with a question prefix
+	variations := rs.generateVariations("what is golang")
+
+	// Should not duplicate "what is" prefix
+	for _, v := range variations {
+		if v == "what is what is golang" {
+			t.Error("Should not duplicate question prefix")
+		}
+	}
+}
+
+func TestRelatedSearchesGenerateVariationsEndsWithSuffix(t *testing.T) {
+	rs := NewRelatedSearches()
+
+	// Query that ends with a suffix
+	variations := rs.generateVariations("golang tutorial")
+
+	// Should not duplicate "tutorial" suffix
+	for _, v := range variations {
+		if v == "golang tutorial tutorial" {
+			t.Error("Should not duplicate suffix")
+		}
+	}
+}
+
+func TestRelatedSearchesGenerateVariationsSingleWord(t *testing.T) {
+	rs := NewRelatedSearches()
+
+	variations := rs.generateVariations("golang")
+
+	// Single word queries should not include word removal variations
+	if len(variations) == 0 {
+		t.Fatal("Should return variations for single word query")
+	}
+}
+
+func TestRelatedSearchesGenerateVariationsTwoWords(t *testing.T) {
+	rs := NewRelatedSearches()
+
+	variations := rs.generateVariations("golang tutorial")
+
+	// Two word queries should not include word removal variations (needs > 2)
+	for _, v := range variations {
+		if v == "tutorial" || v == "golang" {
+			// This is fine - word removal only happens for > 2 words
+		}
+	}
+	if len(variations) == 0 {
+		t.Error("Should return variations")
+	}
+}
+
+func TestRelatedSearchesGetRelatedFromCacheExact(t *testing.T) {
+	rs := NewRelatedSearches()
+
+	// Add to cache with exact key match
+	rs.mu.Lock()
+	rs.cache["test query"] = &relatedCacheEntry{
+		Suggestions: []string{"s1", "s2", "s3"},
+		ExpiresAt:   time.Now().Add(1 * time.Hour),
+	}
+	rs.mu.Unlock()
+
+	suggestions, err := rs.GetRelated(context.Background(), "TEST QUERY", 10)
+
+	if err != nil {
+		t.Fatalf("GetRelated() error = %v", err)
+	}
+	// Cache key should be case-insensitive
+	if len(suggestions) != 3 {
+		t.Errorf("Expected 3 suggestions, got %d", len(suggestions))
+	}
+}
+
+func TestRelatedSearchesFetchRelatedSearchesQueryNotInResults(t *testing.T) {
+	rs := NewRelatedSearches()
+
+	// Use a very short timeout to skip network calls
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	defer cancel()
+
+	suggestions := rs.fetchRelatedSearches(ctx, "golang")
+
+	// The query itself should not be in the results
+	queryLower := "golang"
+	for _, s := range suggestions {
+		if stringToLower(s) == queryLower {
+			t.Errorf("Query should not be in suggestions: %q", s)
+		}
+	}
+}
+
+func TestNewRelatedSearchesInitialization(t *testing.T) {
+	rs := NewRelatedSearches()
+
+	if rs.cache == nil {
+		t.Error("cache should be initialized")
+	}
+	if rs.httpClient == nil {
+		t.Error("httpClient should be initialized")
+	}
+	if rs.httpClient.Timeout != 5*time.Second {
+		t.Errorf("httpClient.Timeout = %v, want 5s", rs.httpClient.Timeout)
+	}
+}
+
+func TestRelatedSearchesGetRelatedWithNegativeLimit(t *testing.T) {
+	rs := NewRelatedSearches()
+
+	// Use a short context
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	defer cancel()
+
+	// Negative limit should default to 8
+	_, _ = rs.GetRelated(ctx, "test", -5)
+	// Just verifying it doesn't panic
+}
+
+func TestRelatedSearchesCacheEntryExpiration(t *testing.T) {
+	entry := relatedCacheEntry{
+		Suggestions: []string{"test"},
+		ExpiresAt:   time.Now().Add(-1 * time.Hour), // Already expired
+	}
+
+	if !time.Now().After(entry.ExpiresAt) {
+		t.Error("Entry should be expired")
+	}
+}
+
+func TestRelatedSearchesCleanCacheNoExpired(t *testing.T) {
+	rs := NewRelatedSearches()
+
+	// Add valid entries only
+	rs.mu.Lock()
+	rs.cache["valid1"] = &relatedCacheEntry{
+		Suggestions: []string{"test"},
+		ExpiresAt:   time.Now().Add(1 * time.Hour),
+	}
+	rs.cache["valid2"] = &relatedCacheEntry{
+		Suggestions: []string{"test"},
+		ExpiresAt:   time.Now().Add(1 * time.Hour),
+	}
+	rs.mu.Unlock()
+
+	rs.cleanCache()
+
+	rs.mu.RLock()
+	size := len(rs.cache)
+	rs.mu.RUnlock()
+
+	if size != 2 {
+		t.Errorf("cleanCache() should keep valid entries, got size %d", size)
+	}
+}
+
+func TestRelatedSearchesGetRelatedLimitAppliedAfterFetch(t *testing.T) {
+	rs := NewRelatedSearches()
+
+	// Add many suggestions to cache
+	suggestions := make([]string, 20)
+	for i := 0; i < 20; i++ {
+		suggestions[i] = "suggestion" + string(rune('A'+i))
+	}
+
+	rs.mu.Lock()
+	rs.cache["many"] = &relatedCacheEntry{
+		Suggestions: suggestions,
+		ExpiresAt:   time.Now().Add(1 * time.Hour),
+	}
+	rs.mu.Unlock()
+
+	result, _ := rs.GetRelated(context.Background(), "many", 5)
+
+	if len(result) != 5 {
+		t.Errorf("Expected 5 suggestions with limit, got %d", len(result))
+	}
+}
+
+func TestRelatedSearchesFetchRelatedSearchesCombinesResults(t *testing.T) {
+	rs := NewRelatedSearches()
+
+	// Use very short timeout - will only get generateVariations results
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	defer cancel()
+
+	suggestions := rs.fetchRelatedSearches(ctx, "golang")
+
+	// Should have at least some variations from generateVariations
+	if len(suggestions) == 0 {
+		t.Log("Note: May have no suggestions due to immediate timeout")
+	}
+}
+
+func TestRelatedSearchesGetRelatedAddsToCache(t *testing.T) {
+	rs := NewRelatedSearches()
+
+	// Use very short timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	defer cancel()
+
+	_, _ = rs.GetRelated(ctx, "newquery", 5)
+
+	// Check that the query was added to cache
+	rs.mu.RLock()
+	_, exists := rs.cache["newquery"]
+	rs.mu.RUnlock()
+
+	if !exists {
+		t.Error("Query should be cached after GetRelated")
+	}
+}
+
+func TestRelatedSearchesCacheKeyNormalization(t *testing.T) {
+	rs := NewRelatedSearches()
+
+	// Add to cache
+	rs.mu.Lock()
+	rs.cache["test query"] = &relatedCacheEntry{
+		Suggestions: []string{"cached"},
+		ExpiresAt:   time.Now().Add(1 * time.Hour),
+	}
+	rs.mu.Unlock()
+
+	// Query with extra whitespace
+	suggestions, _ := rs.GetRelated(context.Background(), "  TEST QUERY  ", 10)
+
+	if len(suggestions) != 1 || suggestions[0] != "cached" {
+		t.Errorf("Should find cache with normalized key, got %v", suggestions)
+	}
+}

@@ -162,6 +162,11 @@ func New(db *sql.DB, nodeID string) *Scheduler {
 		catchUpWindow: 1 * time.Hour, // Default catch-up window
 	}
 
+	// Initialize database tables early so Register() can save state
+	if db != nil {
+		s.initDatabase()
+	}
+
 	return s
 }
 
@@ -236,6 +241,7 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 			Run:         handlers.SSLRenewal,
 			Skippable:   false,
 			RunOnStart:  true,
+			Enabled:     true,
 		})
 	}
 
@@ -249,6 +255,7 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 			TaskType:    TaskTypeGlobal,
 			Run:         handlers.GeoIPUpdate,
 			Skippable:   true,
+			Enabled:     true,
 		})
 	}
 
@@ -262,6 +269,7 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 			TaskType:    TaskTypeGlobal,
 			Run:         handlers.BlocklistUpdate,
 			Skippable:   true,
+			Enabled:     true,
 		})
 	}
 
@@ -275,6 +283,7 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 			TaskType:    TaskTypeGlobal,
 			Run:         handlers.CVEUpdate,
 			Skippable:   true,
+			Enabled:     true,
 		})
 	}
 
@@ -288,6 +297,7 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 			TaskType:    TaskTypeLocal,
 			Run:         handlers.SessionCleanup,
 			Skippable:   false,
+			Enabled:     true,
 		})
 	}
 
@@ -301,6 +311,7 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 			TaskType:    TaskTypeLocal,
 			Run:         handlers.TokenCleanup,
 			Skippable:   false,
+			Enabled:     true,
 		})
 	}
 
@@ -314,6 +325,7 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 			TaskType:    TaskTypeLocal,
 			Run:         handlers.LogRotation,
 			Skippable:   false,
+			Enabled:     true,
 		})
 	}
 
@@ -327,6 +339,7 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 			TaskType:    TaskTypeGlobal,
 			Run:         handlers.BackupDaily,
 			Skippable:   true,
+			Enabled:     true,
 		})
 	}
 
@@ -341,8 +354,9 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 			Run:         handlers.BackupHourly,
 			Skippable:   true,
 		}
-		task.Enabled = false // Disabled by default
 		s.Register(task)
+		// Disable after registration (Register sets Enabled=true by default)
+		task.Enabled = false
 	}
 
 	// Health Check Self - Every 5 minutes, NOT skippable
@@ -356,6 +370,7 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 			Run:         handlers.HealthcheckSelf,
 			Skippable:   false,
 			RunOnStart:  true,
+			Enabled:     true,
 		})
 	}
 
@@ -370,6 +385,7 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 			Run:         handlers.TorHealth,
 			Skippable:   false,
 			RunOnStart:  true,
+			Enabled:     true,
 		})
 	}
 
@@ -384,6 +400,7 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 			Run:         handlers.ClusterHeartbeat,
 			Skippable:   false,
 			RunOnStart:  true,
+			Enabled:     true,
 		})
 	}
 }

@@ -6,15 +6,36 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
-	// Database drivers per AI.md PART 6-10
-	_ "github.com/go-sql-driver/mysql"           // MySQL/MariaDB
-	_ "github.com/jackc/pgx/v5/stdlib"           // PostgreSQL
-	_ "github.com/microsoft/go-mssqldb"          // MSSQL
-	_ "modernc.org/sqlite"                       // SQLite
+	// Database drivers per AI.md PART 5
+	_ "github.com/go-sql-driver/mysql"                            // MySQL/MariaDB
+	_ "github.com/jackc/pgx/v5/stdlib"                             // PostgreSQL
+	_ "github.com/microsoft/go-mssqldb"                            // MSSQL
+	_ "github.com/tursodatabase/libsql-client-go/libsql"           // libSQL/Turso
+	_ "modernc.org/sqlite"                                         // SQLite
 )
+
+// normalizeDriver maps user-friendly config values to actual Go driver names.
+// Per AI.md PART 5: Database Drivers - Config Aliases
+func normalizeDriver(driver string) string {
+	switch strings.ToLower(strings.TrimSpace(driver)) {
+	case "sqlite", "sqlite2", "sqlite3":
+		return "sqlite"
+	case "libsql", "turso":
+		return "libsql"
+	case "postgres", "pgsql", "postgresql", "pgx":
+		return "pgx"
+	case "mysql", "mariadb":
+		return "mysql"
+	case "mssql", "sqlserver":
+		return "sqlserver"
+	default:
+		return driver
+	}
+}
 
 // DB represents a single database connection
 type DB struct {
@@ -91,23 +112,39 @@ func NewDatabaseManager(cfg *Config) (*DatabaseManager, error) {
 }
 
 // connectDatabase creates a connection to a specific database
-// Per AI.md PART 6-10: Multi-database driver support
+// Per AI.md PART 5: Multi-database driver support with config aliases
 func (dm *DatabaseManager) connectDatabase(cfg *Config, dbName string) (*DB, error) {
+	// Normalize driver name per AI.md PART 5
+	normalizedDriver := normalizeDriver(cfg.Driver)
+
 	db := &DB{
-		driver: cfg.Driver,
+		driver: normalizedDriver,
 	}
 
 	var err error
-	switch cfg.Driver {
-	case "sqlite", "sqlite3":
-		// Build DSN for SQLite
+	switch normalizedDriver {
+	case "sqlite":
+		// Build DSN for SQLite (modernc.org/sqlite)
 		db.dsn = filepath.Join(cfg.DataDir, dbName)
 		db.db, err = sql.Open("sqlite", db.dsn)
 		if err != nil {
 			return nil, fmt.Errorf("failed to open sqlite database: %w", err)
 		}
 
-	case "postgres", "pgx":
+	case "libsql":
+		// libSQL/Turso - uses DSN from config
+		// DSN format: libsql://your-db.turso.io?authToken=xxx
+		// Or: https://your-db.turso.io with separate token
+		if cfg.DSN == "" {
+			return nil, fmt.Errorf("libsql requires DSN in config (libsql://host?authToken=xxx)")
+		}
+		db.dsn = cfg.DSN
+		db.db, err = sql.Open("libsql", db.dsn)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open libsql database: %w", err)
+		}
+
+	case "pgx":
 		// PostgreSQL - uses DSN from config
 		// DSN format: postgres://user:password@host:port/database?sslmode=require
 		if cfg.DSN == "" {
@@ -119,7 +156,7 @@ func (dm *DatabaseManager) connectDatabase(cfg *Config, dbName string) (*DB, err
 			return nil, fmt.Errorf("failed to open postgres database: %w", err)
 		}
 
-	case "mysql", "mariadb":
+	case "mysql":
 		// MySQL/MariaDB - uses DSN from config
 		// DSN format: user:password@tcp(host:port)/database?parseTime=true&charset=utf8mb4
 		if cfg.DSN == "" {
@@ -131,7 +168,7 @@ func (dm *DatabaseManager) connectDatabase(cfg *Config, dbName string) (*DB, err
 			return nil, fmt.Errorf("failed to open mysql database: %w", err)
 		}
 
-	case "mssql", "sqlserver":
+	case "sqlserver":
 		// MSSQL - uses DSN from config
 		// DSN format: sqlserver://user:password@host:port?database=dbname
 		if cfg.DSN == "" {
@@ -144,7 +181,7 @@ func (dm *DatabaseManager) connectDatabase(cfg *Config, dbName string) (*DB, err
 		}
 
 	default:
-		return nil, fmt.Errorf("unsupported database driver: %s (supported: sqlite, postgres, mysql, mssql)", cfg.Driver)
+		return nil, fmt.Errorf("unsupported database driver: %s (supported: sqlite, libsql, postgres, mysql, mssql)", cfg.Driver)
 	}
 
 	// Configure connection pool
@@ -161,7 +198,7 @@ func (dm *DatabaseManager) connectDatabase(cfg *Config, dbName string) (*DB, err
 	}
 
 	// Enable foreign keys and WAL mode for SQLite
-	if cfg.Driver == "sqlite" || cfg.Driver == "sqlite3" {
+	if normalizedDriver == "sqlite" {
 		if _, err := db.db.Exec("PRAGMA foreign_keys = ON"); err != nil {
 			return nil, fmt.Errorf("failed to enable foreign keys: %w", err)
 		}
@@ -264,14 +301,30 @@ func (db *DB) connect(cfg *Config) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
+	// Normalize driver name per AI.md PART 5
+	normalizedDriver := normalizeDriver(cfg.Driver)
+	db.driver = normalizedDriver
+
 	var err error
 
-	switch cfg.Driver {
-	case "sqlite", "sqlite3":
+	switch normalizedDriver {
+	case "sqlite":
 		// Use modernc.org/sqlite (pure Go SQLite)
 		db.db, err = sql.Open("sqlite", cfg.DSN)
+	case "libsql":
+		// libSQL/Turso remote database
+		db.db, err = sql.Open("libsql", cfg.DSN)
+	case "pgx":
+		// PostgreSQL
+		db.db, err = sql.Open("pgx", cfg.DSN)
+	case "mysql":
+		// MySQL/MariaDB
+		db.db, err = sql.Open("mysql", cfg.DSN)
+	case "sqlserver":
+		// MSSQL
+		db.db, err = sql.Open("sqlserver", cfg.DSN)
 	default:
-		return fmt.Errorf("unsupported database driver: %s", cfg.Driver)
+		return fmt.Errorf("unsupported database driver: %s (supported: sqlite, libsql, postgres, mysql, mssql)", cfg.Driver)
 	}
 
 	if err != nil {
@@ -291,12 +344,11 @@ func (db *DB) connect(cfg *Config) error {
 		return fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	// Enable foreign keys for SQLite
-	if cfg.Driver == "sqlite" || cfg.Driver == "sqlite3" {
+	// Enable foreign keys and WAL mode for SQLite
+	if normalizedDriver == "sqlite" {
 		if _, err := db.db.Exec("PRAGMA foreign_keys = ON"); err != nil {
 			return fmt.Errorf("failed to enable foreign keys: %w", err)
 		}
-		// Enable WAL mode for better concurrency
 		if _, err := db.db.Exec("PRAGMA journal_mode = WAL"); err != nil {
 			return fmt.Errorf("failed to enable WAL mode: %w", err)
 		}
@@ -325,11 +377,12 @@ func (db *DB) IsReady() bool {
 	return db.ready
 }
 
-// IsRemote returns true if using a remote database (not SQLite)
+// IsRemote returns true if using a remote database (not local SQLite)
 // Per AI.md PART 5: Cluster mode uses remote database
 func (db *DB) IsRemote() bool {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
+	// sqlite is local, all others (libsql, pgx, mysql, sqlserver) are remote
 	return db.driver != "" && db.driver != "sqlite"
 }
 

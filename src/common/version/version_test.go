@@ -74,9 +74,50 @@ func TestGetShort(t *testing.T) {
 }
 
 func TestGetCommitShort(t *testing.T) {
-	s := GetCommitShort()
-	if len(Commit) >= 7 && len(s) != 7 {
-		t.Errorf("GetCommitShort() = %q, should be 7 chars when commit is long enough", s)
+	// Save original
+	orig := Commit
+	defer func() { Commit = orig }()
+
+	tests := []struct {
+		name   string
+		commit string
+		want   string
+	}{
+		{
+			name:   "long commit hash",
+			commit: "abc1234567890",
+			want:   "abc1234",
+		},
+		{
+			name:   "exactly 7 characters",
+			commit: "abc1234",
+			want:   "abc1234",
+		},
+		{
+			name:   "short commit less than 7 chars",
+			commit: "abc",
+			want:   "abc",
+		},
+		{
+			name:   "empty commit",
+			commit: "",
+			want:   "",
+		},
+		{
+			name:   "6 characters",
+			commit: "abc123",
+			want:   "abc123",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			Commit = tt.commit
+			got := GetCommitShort()
+			if got != tt.want {
+				t.Errorf("GetCommitShort() with commit %q = %q, want %q", tt.commit, got, tt.want)
+			}
+		})
 	}
 }
 

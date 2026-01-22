@@ -302,8 +302,9 @@ func NewEmailTemplate() *EmailTemplate {
 	}
 
 	// Parse all templates
+	// Option missingkey=error ensures templates fail on missing data fields
 	for templateType, tmpl := range rawTemplates {
-		t, err := template.New(string(templateType)).Parse(tmpl)
+		t, err := template.New(string(templateType)).Option("missingkey=error").Parse(tmpl)
 		if err != nil {
 			// Log error but don't fail - use empty template
 			continue
