@@ -3,6 +3,31 @@
 # Base: debian:latest (stable, broad compatibility)
 # PORTS: Only 80 exposed (db/cache are internal-only)
 
+# =============================================================================
+# Build Stage - Compile Go binary
+# =============================================================================
+FROM golang:alpine AS builder
+
+RUN apk add --no-cache git bash
+
+ARG TARGETARCH
+ARG VERSION=dev
+ARG BUILD_DATE
+ARG COMMIT_ID
+
+WORKDIR /build
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
+    -ldflags "-s -w -X 'github.com/apimgr/search/src/config.Version=${VERSION}' -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/config.BuildDate=${BUILD_DATE}'" \
+    -o /app ./src
+
+# =============================================================================
+# Runtime Stage - Debian with PostgreSQL + Valkey + Tor
+# =============================================================================
 FROM debian:latest
 
 LABEL org.opencontainers.image.source="https://github.com/apimgr/search"
@@ -34,8 +59,8 @@ RUN mkdir -p /config/search /config/search/security /config/search/tor \
 # Copy configs and entrypoint
 COPY docker/file_system/ /
 
-# Copy application binary from builder or pre-built
-COPY search /usr/local/bin/
+# Copy application binary from builder stage
+COPY --from=builder /app /usr/local/bin/search
 RUN chmod +x /usr/local/bin/search /usr/local/bin/entrypoint.sh
 
 # Default environment
