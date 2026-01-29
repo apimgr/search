@@ -472,6 +472,355 @@ nutrition facts chicken breast
 - Common serving sizes
 **Source**: USDA FoodData Central API
 
+### Direct Answers (Full Page Results)
+
+Unlike Instant Answers (widgets above search results), Direct Answers ARE the result. When a direct answer operator is detected, the response is a full-page dedicated view - no search results list.
+
+**Syntax:** `{type}:{term}` or `{type}: {term}` (space after colon allowed)
+
+---
+
+#### tldr:{command}
+**Purpose**: Quick command reference from tldr-pages
+**Triggers**: `tldr:git`, `tldr:tar`, `tldr: docker`
+```
+tldr:curl
+tldr:ffmpeg
+tldr: kubectl
+```
+**Displays**:
+- Command name and description
+- Common usage examples with explanations
+- Platform indicator (linux/osx/windows/common)
+- Copy button for each example
+- Link to full man page
+**Source**: tldr-pages (https://tldr.sh) - cached locally, updated weekly
+**Fallback**: If command not found, offer to search or show man page
+
+---
+
+#### man:{page}
+**Purpose**: Unix/Linux manual pages
+**Triggers**: `man:ls`, `man:grep`, `man: awk`
+```
+man:bash
+man:ssh
+man: systemctl
+```
+**Displays**:
+- Man page content with sections (NAME, SYNOPSIS, DESCRIPTION, OPTIONS, etc.)
+- Syntax highlighting for code blocks
+- Collapsible sections for long pages
+- Table of contents sidebar
+- Section navigation (1-8)
+- Copy button for command examples
+**Source**: man.cx API / local man-db cache
+**Features**:
+- Section selector: `man:printf.3` (C library) vs `man:printf.1` (shell command)
+- Search within page
+- Related pages (SEE ALSO section)
+
+---
+
+#### cache:{url}
+**Purpose**: View cached/archived version of a webpage
+**Triggers**: `cache:example.com`, `cache:https://site.com/page`
+```
+cache:reddit.com
+cache:https://news.ycombinator.com/item?id=12345
+```
+**Displays**:
+- Archived page content (rendered)
+- Archive date/timestamp
+- Multiple archive sources if available
+- Original URL link
+- "Save new snapshot" button
+**Sources** (checked in order):
+1. Google Cache (if available)
+2. Wayback Machine (archive.org)
+3. Archive.today
+4. Common Crawl
+**Features**:
+- Timeline slider to view different archive dates
+- Side-by-side comparison with live site
+- Download archived version
+
+---
+
+#### whois:{domain}
+**Purpose**: Domain registration and ownership information
+**Triggers**: `whois:google.com`, `whois: example.org`
+```
+whois:github.com
+whois:cloudflare.com
+```
+**Displays**:
+- Registrar information
+- Registration/expiration dates
+- Name servers
+- Registrant info (if public)
+- Domain status codes
+- DNSSEC status
+**Source**: WHOIS protocol servers / RDAP
+
+---
+
+#### dns:{domain}
+**Purpose**: DNS record lookup
+**Triggers**: `dns:example.com`, `dns: google.com`
+```
+dns:cloudflare.com
+dns:github.io
+```
+**Displays**:
+- A/AAAA records (IP addresses)
+- MX records (mail servers)
+- NS records (name servers)
+- TXT records (SPF, DKIM, etc.)
+- CNAME records
+- SOA record
+- TTL values
+**Source**: Built-in DNS resolver / multiple DNS servers
+**Features**: Query specific record types: `dns:example.com/mx`, `dns:example.com/txt`
+
+---
+
+#### wiki:{topic}
+**Purpose**: Wikipedia article summary and content
+**Triggers**: `wiki:quantum computing`, `wiki: linux`
+```
+wiki:rust programming language
+wiki:solar system
+```
+**Displays**:
+- Article title and main image
+- Introduction/summary paragraphs
+- Table of contents
+- Infobox data (if applicable)
+- Key sections expandable
+- Related articles
+- "Read full article" link
+**Source**: Wikipedia API
+**Features**: Language selection, mobile-friendly rendering
+
+---
+
+#### dict:{word}
+**Purpose**: Full dictionary entry (alias for define:, but full-page)
+**Triggers**: `dict:serendipity`, `dict: ephemeral`
+```
+dict:ubiquitous
+dict:catharsis
+```
+**Displays**:
+- Word, pronunciation (IPA), audio playback
+- All parts of speech with definitions
+- Example sentences for each meaning
+- Etymology (word origin)
+- Related words (synonyms, antonyms)
+- Word frequency/usage level
+- Translations (if multilingual enabled)
+**Source**: Wiktionary API / Free Dictionary API
+
+---
+
+#### thesaurus:{word}
+**Purpose**: Comprehensive synonym/antonym lookup
+**Triggers**: `thesaurus:happy`, `thesaurus: important`
+```
+thesaurus:beautiful
+thesaurus:fast
+```
+**Displays**:
+- Synonyms grouped by meaning/sense
+- Antonyms grouped by meaning/sense
+- Related words and phrases
+- Usage examples
+- Formal/informal indicators
+- Word intensity scale (e.g., happy → ecstatic → elated)
+**Source**: Datamuse API / WordNet / Wiktionary
+
+---
+
+#### pkg:{name}
+**Purpose**: Package/library information across registries
+**Triggers**: `pkg:lodash`, `pkg:requests`, `pkg: chi`
+```
+pkg:express
+pkg:numpy
+pkg:go-chi/chi
+```
+**Displays**:
+- Package name, description, version
+- Installation command (npm, pip, go get, etc.)
+- Weekly downloads / popularity
+- License
+- Dependencies count
+- Last updated
+- Repository link
+- README preview
+**Sources**: npm, PyPI, pkg.go.dev, crates.io, RubyGems
+**Features**:
+- Auto-detect registry from package name format
+- Explicit registry: `pkg:npm/lodash`, `pkg:pip/requests`, `pkg:go/chi`
+
+---
+
+#### cve:{id}
+**Purpose**: Security vulnerability details
+**Triggers**: `cve:2021-44228`, `cve: CVE-2023-1234`
+```
+cve:2021-44228
+cve:2014-0160
+```
+**Displays**:
+- CVE ID and description
+- CVSS score and severity
+- Affected products/versions
+- Remediation/patches
+- References and advisories
+- Exploit availability indicator
+- Timeline (published, modified dates)
+**Source**: NVD (National Vulnerability Database) / MITRE
+
+---
+
+#### rfc:{number}
+**Purpose**: IETF RFC document viewer
+**Triggers**: `rfc:2616`, `rfc: 7231`
+```
+rfc:2616
+rfc:793
+rfc:7540
+```
+**Displays**:
+- RFC title and status
+- Abstract
+- Table of contents
+- Full document with section navigation
+- Related RFCs (obsoletes, updated by)
+- Authors and date
+**Source**: IETF datatracker / rfc-editor.org
+**Features**: Section deep-linking, search within document
+
+---
+
+#### ascii:{text}
+**Purpose**: ASCII art text generator
+**Triggers**: `ascii:hello`, `ascii: SEARCH`
+```
+ascii:Hello World
+ascii:SEARCH
+```
+**Displays**:
+- Large ASCII art rendering of text
+- Multiple font style options (banner, big, block, bubble, etc.)
+- Copy button
+- Download as text file
+**Source**: Built-in figlet-compatible renderer
+
+---
+
+#### qr:{text}
+**Purpose**: QR code generator (full page with options)
+**Triggers**: `qr:https://example.com`, `qr: wifi:...`
+```
+qr:https://github.com
+qr:WIFI:T:WPA;S:MyNetwork;P:MyPassword;;
+```
+**Displays**:
+- Large QR code image
+- Size options (S/M/L/XL)
+- Download buttons (PNG/SVG)
+- Error correction level selector
+- Customization (colors, logo embed)
+**Source**: Built-in QR generator
+**Features**: WiFi QR format, vCard format, URL shortening option
+
+---
+
+#### resolve:{hostname}
+**Purpose**: Hostname to IP resolution with details
+**Triggers**: `resolve:google.com`, `resolve: cloudflare.com`
+```
+resolve:github.com
+resolve:api.example.com
+```
+**Displays**:
+- IPv4 addresses (A records)
+- IPv6 addresses (AAAA records)
+- Reverse DNS (PTR)
+- GeoIP location for each IP
+- ASN information
+- Response time from multiple DNS servers
+**Source**: Built-in resolver + GeoIP database
+
+---
+
+#### cert:{domain}
+**Purpose**: SSL/TLS certificate information
+**Triggers**: `cert:google.com`, `cert: github.com`
+```
+cert:cloudflare.com
+cert:example.com
+```
+**Displays**:
+- Certificate chain (root → intermediate → leaf)
+- Validity dates (issued, expires)
+- Subject and issuer details
+- SANs (Subject Alternative Names)
+- Key algorithm and size
+- Certificate transparency logs
+- Grade/security rating
+**Source**: Direct TLS connection / crt.sh
+
+---
+
+#### headers:{url}
+**Purpose**: HTTP response headers inspection
+**Triggers**: `headers:example.com`, `headers: https://api.github.com`
+```
+headers:google.com
+headers:https://cloudflare.com
+```
+**Displays**:
+- All response headers
+- Security headers analysis (CSP, HSTS, X-Frame-Options, etc.)
+- Server identification
+- Caching headers
+- Cookie attributes
+- Security grade
+**Source**: Direct HTTP request
+**Features**: Follow redirects option, custom request headers
+
+---
+
+### Direct Answer Behavior
+
+**Query Processing Order:**
+1. Check for direct answer operator (`type:term`)
+2. If found → render full-page direct answer
+3. If not found → continue to instant answers → search
+
+**URL Format:**
+- Direct answers accessible via: `/direct/{type}/{term}`
+- Example: `/direct/tldr/git`, `/direct/man/bash`
+- Also triggered from search: `/search?q=tldr:git`
+
+**Caching:**
+- tldr pages: 7 days (updated weekly)
+- man pages: 30 days
+- DNS/whois: 1 hour
+- cache/archive: no cache (always fetch fresh)
+- wiki: 24 hours
+- pkg: 6 hours
+- cve: 24 hours
+
+**Error Handling:**
+- Not found: Show "No results for {type}:{term}" with suggestions
+- Timeout: Show cached version if available, else error
+- Rate limited: Queue request, show loading state
+
 ### Bang Shortcuts
 
 Quick redirects to specific sites/engines:
