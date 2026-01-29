@@ -229,8 +229,8 @@ func TestRateLimitConfigDefaults(t *testing.T) {
 	if !cfg.Server.RateLimit.Enabled {
 		t.Error("RateLimit.Enabled should be true by default")
 	}
-	if cfg.Server.RateLimit.RequestsPerMinute != 60 {
-		t.Errorf("RateLimit.RequestsPerMinute = %d, want 60", cfg.Server.RateLimit.RequestsPerMinute)
+	if cfg.Server.RateLimit.RequestsPerMinute != 300 {
+		t.Errorf("RateLimit.RequestsPerMinute = %d, want 300", cfg.Server.RateLimit.RequestsPerMinute)
 	}
 }
 
@@ -992,7 +992,7 @@ func TestValidateAndApplyDefaultsComprehensive(t *testing.T) {
 	if cfg.Server.Mode != "production" {
 		t.Errorf("Mode not fixed, got %q", cfg.Server.Mode)
 	}
-	if cfg.Server.RateLimit.RequestsPerMinute != 30 {
+	if cfg.Server.RateLimit.RequestsPerMinute != 300 {
 		t.Errorf("RateLimit.RequestsPerMinute not fixed, got %d", cfg.Server.RateLimit.RequestsPerMinute)
 	}
 	if cfg.Server.Compression.Level != 6 {
