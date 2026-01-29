@@ -1567,6 +1567,59 @@ country:276
 
 ---
 
+#### slang:{term}
+**Purpose**: Slang, internet lingo, and informal language definitions
+**Triggers**: `slang:yeet`, `slang:67`, `slang: bussin`
+```
+slang:yeet
+slang:no cap
+slang:simp
+slang:67
+slang:rizz
+```
+**Displays**:
+- Term and pronunciation (if applicable)
+- Definition(s) ranked by popularity/votes
+- Example usage in context
+- Origin/etymology (when known)
+- Related slang terms
+- Age/generation indicator (Gen Z, Millennial, etc.)
+- Region indicator (US, UK, internet-wide, etc.)
+- Upvotes/popularity score
+- Date added/last updated
+- NSFW warning (if applicable)
+**Source**: Urban Dictionary API
+**Features**:
+- Multiple definitions shown (top 5 by votes)
+- NSFW filter option (configurable)
+- "Random slang" if no term provided
+- Number codes (67, 420, etc.) supported
+
+---
+
+#### rules:{query}
+**Purpose**: Rules of the Internet lookup (easter egg)
+**Triggers**: `rules:`, `rules:34`, `rules: cat`, `rules:all`
+```
+rules:
+rules:34
+rules:1
+rules:cat
+rules:all
+```
+**Displays**:
+- `rules:` or `rules:all` - All rules of the internet
+- `rules:{number}` - Specific rule by number (e.g., rule 34)
+- `rules:{term}` - Search rules containing the term
+- Invalid number falls back to showing all rules
+**Source**: Built-in database (classic internet culture)
+**Features**:
+- Complete rules 1-100+ from internet folklore
+- Search functionality for finding relevant rules
+- Humorous/nostalgic easter egg for internet veterans
+
+---
+
 ### Direct Answer Behavior
 
 **Query Processing Order:**

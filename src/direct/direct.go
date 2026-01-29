@@ -76,6 +76,8 @@ const (
 	AnswerTypeMIME      AnswerType = "mime"
 	AnswerTypeLicense   AnswerType = "license"
 	AnswerTypeCountry   AnswerType = "country"
+	AnswerTypeSlang     AnswerType = "slang"
+	AnswerTypeRules     AnswerType = "rules"
 
 	// Generators
 	AnswerTypeASCII AnswerType = "ascii"
@@ -137,6 +139,8 @@ var CacheDurations = map[AnswerType]time.Duration{
 	AnswerTypeMIME:      0,
 	AnswerTypeLicense:   30 * 24 * time.Hour, // 30 days
 	AnswerTypeCountry:   30 * 24 * time.Hour, // 30 days
+	AnswerTypeSlang:     1 * time.Hour,       // 1 hour (votes/definitions change)
+	AnswerTypeRules:     0,                   // No cache (static built-in)
 	// Generators - no cache
 	AnswerTypeASCII: 0,
 	AnswerTypeQR:    0,
@@ -227,6 +231,8 @@ func NewManager() *Manager {
 	m.Register(NewMIMEHandler())
 	m.Register(NewLicenseHandler())
 	m.Register(NewCountryHandler())
+	m.Register(NewSlangHandler())
+	m.Register(NewRulesHandler())
 	m.Register(NewASCIIHandler())
 	m.Register(NewQRHandler())
 
