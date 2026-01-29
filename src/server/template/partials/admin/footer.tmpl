@@ -1,13 +1,11 @@
 {{/* Admin Panel Footer */}}
 {{/* Per AI.md PART 18: Admin Panel Layout */}}
-<footer class="admin-footer">
-  <div class="admin-footer-content">
-    <span class="admin-footer-version">
-      <a href="/admin/server/info">v{{.Config.Server.Version}}</a>
-    </span>
-    <span class="admin-footer-sep">•</span>
-    <a href="https://github.com/apimgr/search" target="_blank" rel="noopener">Documentation</a>
-    <span class="admin-footer-sep">•</span>
-    <a href="/admin/server/status">Status</a>
-  </div>
+<footer class="footer">
+    <p>
+        <a href="/admin/server/info">{{version}}</a>
+        <span>•</span>
+        <a href="https://github.com/apimgr/search" target="_blank" rel="noopener">Documentation</a>
+        <span>•</span>
+        <a href="/admin/server/status">Status</a>
+    </p>
 </footer>

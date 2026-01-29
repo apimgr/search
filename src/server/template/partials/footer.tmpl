@@ -1,25 +1,29 @@
 {{define "footer"}}
 <footer class="footer">
-    {{/* Standard page links (always first) */}}
-    <p class="footer-links">
+    {{/* Standard page links (always first) - per AI.md PART 17 */}}
+    <p>
         <a href="/server/about">About</a>
-        <span class="footer-divider">•</span>
+        <span>•</span>
         <a href="/server/privacy">Privacy</a>
-        <span class="footer-divider">•</span>
+        <span>•</span>
         <a href="/server/contact">Contact</a>
-        <span class="footer-divider">•</span>
+        <span>•</span>
         <a href="/server/help">Help</a>
     </p>
 
-    {{/* Application branding */}}
-    <p class="footer-branding">
+    <br />
+
+    {{/* Application branding - per AI.md PART 17 */}}
+    <p>
         <a href="https://github.com/apimgr/search" target="_blank" rel="noopener">Search</a>
-        <span class="footer-divider">•</span>
+        <span>•</span>
         <span>Made with ❤️</span>
-        <span class="footer-divider">•</span>
-        <span>v{{version}}</span>
+        <span>•</span>
+        <span>{{version}}</span>
     </p>
 
-    <a href="/healthz" class="footer-version">Last update: {{.BuildDate}}</a>
+    <br />
+
+    <a href="/healthz">{{.BuildDate}}</a>
 </footer>
 {{end}}

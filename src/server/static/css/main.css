@@ -238,6 +238,74 @@ html.theme-light .theme-icon-dark {
     transition: transform 0.2s ease;
 }
 
+/* Navigation bar - separate row below header per AI.md PART 16 */
+.nav {
+    background-color: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    padding: 0.5rem 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Mobile nav panel (slide-in menu) */
+.nav-panel {
+    display: none;
+    position: fixed;
+    top: 0;
+    right: -280px;
+    width: 280px;
+    height: 100vh;
+    background-color: var(--bg-secondary);
+    border-left: 1px solid var(--border-color);
+    z-index: 1000;
+    padding: 1rem;
+    flex-direction: column;
+    gap: 0.5rem;
+    transition: right 0.3s ease;
+}
+
+.nav-panel.active {
+    right: 0;
+}
+
+.nav-panel-link {
+    display: block;
+    padding: 0.75rem 1rem;
+    color: var(--text-primary);
+    border-radius: 6px;
+}
+
+.nav-panel-link:hover,
+.nav-panel-link.active {
+    background-color: var(--bg-tertiary);
+    color: var(--accent-primary);
+}
+
+.nav-panel-theme {
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    text-align: left;
+}
+
+/* Nav overlay for mobile */
+.nav-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+}
+
+.nav-overlay.active {
+    display: block;
+}
+
 /* Main Content */
 .main-content {
     flex: 1;
@@ -588,12 +656,44 @@ html.theme-light .theme-icon-dark {
     border: 1px solid var(--border-color);
 }
 
-/* Footer */
+/* Footer - per AI.md PART 17 */
+.footer,
 .site-footer {
     background-color: var(--bg-secondary);
     border-top: 1px solid var(--border-color);
     padding: 1.5rem 1rem;
     margin-top: auto;
+    text-align: center;
+}
+
+.footer p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.footer p a {
+    color: var(--text-secondary);
+}
+
+.footer p a:hover {
+    color: var(--accent-primary);
+}
+
+.footer p span {
+    color: var(--text-muted);
+    margin: 0 0.25rem;
+}
+
+.footer br {
+    display: block;
+    margin: 0.5rem 0;
+    content: "";
+}
+
+.footer a {
+    color: var(--text-muted);
+    font-size: 0.85rem;
 }
 
 .footer-container {
@@ -1307,6 +1407,11 @@ html.theme-light .theme-icon-dark {
         margin-left: auto;
     }
 
+    /* Mobile nav panel becomes visible when active */
+    .nav-panel {
+        display: flex;
+    }
+
     .home-container {
         min-height: calc(100vh - 250px);
     }
@@ -1470,6 +1575,7 @@ html.theme-light .theme-icon-dark {
     padding: 0.75rem 1rem;
     background-color: var(--bg-tertiary);
     border-bottom: 1px solid var(--border-color);
+    position: relative;
 }
 
 .widget-title {

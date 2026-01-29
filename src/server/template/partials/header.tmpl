@@ -1,12 +1,13 @@
 {{define "header"}}
-<header class="header">
-    <a href="/" class="site-brand">
+<header class="site-header">
+    <div class="nav-container">
+    <a href="/" class="logo">
         {{if .Config.Server.Branding.LogoURL}}
         <img src="{{.Config.Server.Branding.LogoURL}}" alt="{{.Config.Server.Title}}" class="logo-img">
         {{else}}
         <span class="logo-icon">🔍</span>
         {{end}}
-        <span class="brand-text">{{default "Search" .Config.Server.Branding.AppName}}</span>
+        {{default "Search" .Config.Server.Branding.AppName}}
     </a>
 
     {{/* User icon (always visible, far right) */}}
@@ -37,6 +38,7 @@
             </svg>
         </a>
         {{end}}
+    </div>
     </div>
 </header>
 {{end}}
