@@ -115,6 +115,114 @@ func initSchemaImpl() error {
 		},
 	})
 
+	// Define the DirectAnswerData type
+	directAnswerDataType := graphql.NewObject(graphql.ObjectConfig{
+		Name:        "DirectAnswerData",
+		Description: "Direct answer data payload",
+		Fields: graphql.Fields{
+			"type": &graphql.Field{
+				Type:        graphql.String,
+				Description: "Answer type (tldr, man, dns, whois, wiki, http, port, chmod, cron, etc.)",
+			},
+			"term": &graphql.Field{
+				Type:        graphql.String,
+				Description: "Term that was looked up",
+			},
+			"title": &graphql.Field{
+				Type:        graphql.String,
+				Description: "Title of the answer",
+			},
+			"description": &graphql.Field{
+				Type:        graphql.String,
+				Description: "Brief description",
+			},
+			"content": &graphql.Field{
+				Type:        graphql.String,
+				Description: "Main content (HTML or text)",
+			},
+			"source": &graphql.Field{
+				Type:        graphql.String,
+				Description: "Source of the information",
+			},
+			"sourceUrl": &graphql.Field{
+				Type:        graphql.String,
+				Description: "URL to the source",
+			},
+			"cacheTtlSeconds": &graphql.Field{
+				Type:        graphql.Int,
+				Description: "Cache TTL in seconds",
+			},
+			"found": &graphql.Field{
+				Type:        graphql.Boolean,
+				Description: "Whether the answer was found",
+			},
+		},
+	})
+
+	// Define the DirectAnswer type
+	directAnswerType := graphql.NewObject(graphql.ObjectConfig{
+		Name:        "DirectAnswer",
+		Description: "Direct answer response",
+		Fields: graphql.Fields{
+			"ok": &graphql.Field{
+				Type:        graphql.Boolean,
+				Description: "Whether the request was successful",
+			},
+			"data": &graphql.Field{
+				Type:        directAnswerDataType,
+				Description: "Answer data",
+			},
+		},
+	})
+
+	// Define the InstantAnswerData type
+	instantAnswerDataType := graphql.NewObject(graphql.ObjectConfig{
+		Name:        "InstantAnswerData",
+		Description: "Instant answer data payload",
+		Fields: graphql.Fields{
+			"query": &graphql.Field{
+				Type:        graphql.String,
+				Description: "Original query",
+			},
+			"type": &graphql.Field{
+				Type:        graphql.String,
+				Description: "Answer type (calculator, converter, dictionary, etc.)",
+			},
+			"title": &graphql.Field{
+				Type:        graphql.String,
+				Description: "Title of the answer",
+			},
+			"content": &graphql.Field{
+				Type:        graphql.String,
+				Description: "Main content",
+			},
+			"source": &graphql.Field{
+				Type:        graphql.String,
+				Description: "Source of the information",
+			},
+			"found": &graphql.Field{
+				Type:        graphql.Boolean,
+				Description: "Whether an instant answer was found",
+			},
+		},
+	})
+
+	// Define the InstantAnswer type
+	instantAnswerType := graphql.NewObject(graphql.ObjectConfig{
+		Name:        "InstantAnswer",
+		Description: "Instant answer response",
+		Fields: graphql.Fields{
+			"ok": &graphql.Field{
+				Type:        graphql.Boolean,
+				Description: "Whether the request was successful",
+			},
+			"data": &graphql.Field{
+				Type:        instantAnswerDataType,
+				Description: "Answer data",
+			},
+		},
+	})
+
 	// Define the root query
 	rootQuery := graphql.NewObject(graphql.ObjectConfig{
 		Name: "Query",
@@ -158,6 +266,32 @@ func initSchemaImpl() error {
 				Description: "Get server health status",
 				Resolve:     resolveHealth,
 			},
+			"directAnswer": &graphql.Field{
+				Type:        directAnswerType,
+				Description: "Get a direct answer for a specific type and term (e.g., tldr:git, dns:example.com, http:404)",
+				Args: graphql.FieldConfigArgument{
+					"type": &graphql.ArgumentConfig{
+						Type:        graphql.NewNonNull(graphql.String),
+						Description: "Answer type (tldr, man, dns, whois, wiki, http, port, chmod, cron, etc.)",
+					},
+					"term": &graphql.ArgumentConfig{
+						Type:        graphql.NewNonNull(graphql.String),
+						Description: "Term to look up",
+					},
+				},
+				Resolve: resolveDirectAnswer,
+			},
+			"instant": &graphql.Field{
+				Type:        instantAnswerType,
+				Description: "Get an instant answer widget for a query (calculator, converter, dictionary, etc.)",
+				Args: graphql.FieldConfigArgument{
+					"q": &graphql.ArgumentConfig{
+						Type:        graphql.NewNonNull(graphql.String),
+						Description: "Query to process for instant answer",
+					},
+				},
+				Resolve: resolveInstant,
+			},
 		},
 	})
 
@@ -196,6 +330,44 @@ func resolveHealth(p graphql.ResolveParams) (interface{}, error) {
 		"version": config.Version,
 		"uptime":  "0s",
 		"mode":    "production",
+	}, nil
+}
+
+// resolveDirectAnswer handles direct answer queries
+// GraphQL directAnswer returns stub data by design - use REST API /api/v1/direct/{type}/{term} for full functionality
+func resolveDirectAnswer(p graphql.ResolveParams) (interface{}, error) {
+	answerType, _ := p.Args["type"].(string)
+	term, _ := p.Args["term"].(string)
+	return map[string]interface{}{
+		"ok": true,
+		"data": map[string]interface{}{
+			"type":            answerType,
+			"term":            term,
+			"title":           "",
+			"description":     "",
+			"content":         "",
+			"source":          "",
+			"sourceUrl":       "",
+			"cacheTtlSeconds": 0,
+			"found":           false,
+		},
+	}, nil
+}
+
+// resolveInstant handles instant answer queries
+// GraphQL instant returns stub data by design - use REST API /api/v1/instant for full functionality
+func resolveInstant(p graphql.ResolveParams) (interface{}, error) {
+	query, _ := p.Args["q"].(string)
+	return map[string]interface{}{
+		"ok": true,
+		"data": map[string]interface{}{
+			"query":   query,
+			"type":    "",
+			"title":   "",
+			"content": "",
+			"source":  "",
+			"found":   false,
+		},
 	}, nil
 }
 

@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/apimgr/search/src/common/version"
+	"github.com/apimgr/search/src/version"
 )
 
 // RelatedSearches provides related search suggestions

@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/apimgr/search/src/backup"
-	"github.com/apimgr/search/src/common/banner"
+	"github.com/apimgr/search/src/banner"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/mode"
 	"github.com/apimgr/search/src/model"

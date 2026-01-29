@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apimgr/search/src/common/version"
+	"github.com/apimgr/search/src/version"
 )
 
 // WikiHandler handles wiki:{topic} queries

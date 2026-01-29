@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apimgr/search/src/common/version"
+	"github.com/apimgr/search/src/version"
 )
 
 // DefinitionHandler handles word definitions

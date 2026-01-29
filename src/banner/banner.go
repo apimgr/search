@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/apimgr/search/src/common/terminal"
+	"github.com/apimgr/search/src/terminal"
 )
 
 const boxWidth = 72 // Per AI.md PART 14 console output format

@@ -235,6 +235,104 @@ func generatePaths() map[string]PathItem {
 		},
 	}
 
+	// Direct answer endpoint
+	paths["/api/v1/direct/{type}/{term}"] = PathItem{
+		Get: &Operation{
+			Summary:     "Direct answer lookup",
+			Description: "Get a direct answer for a specific type and term (e.g., tldr:git, dns:example.com, http:404)",
+			Tags:        []string{"Direct Answers"},
+			Parameters: []Parameter{
+				{
+					Name:        "type",
+					In:          "path",
+					Description: "Answer type (tldr, man, dns, whois, wiki, http, port, chmod, cron, etc.)",
+					Required:    true,
+					Schema:      &Schema{Type: "string"},
+				},
+				{
+					Name:        "term",
+					In:          "path",
+					Description: "Term to look up",
+					Required:    true,
+					Schema:      &Schema{Type: "string"},
+				},
+			},
+			Responses: map[string]Response{
+				"200": {
+					Description: "Direct answer result",
+					Content: map[string]MediaType{
+						"application/json": {
+							Schema: &Schema{
+								Type: "object",
+								Properties: map[string]Schema{
+									"ok": {Type: "boolean"},
+									"data": {
+										Type: "object",
+										Properties: map[string]Schema{
+											"type":              {Type: "string"},
+											"term":              {Type: "string"},
+											"title":             {Type: "string"},
+											"description":       {Type: "string"},
+											"content":           {Type: "string"},
+											"source":            {Type: "string"},
+											"source_url":        {Type: "string"},
+											"cache_ttl_seconds": {Type: "integer"},
+											"found":             {Type: "boolean"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Instant answer endpoint
+	paths["/api/v1/instant"] = PathItem{
+		Get: &Operation{
+			Summary:     "Instant answer",
+			Description: "Get an instant answer widget for a query (calculator, converter, dictionary, etc.)",
+			Tags:        []string{"Instant Answers"},
+			Parameters: []Parameter{
+				{
+					Name:        "q",
+					In:          "query",
+					Description: "Query to process for instant answer",
+					Required:    true,
+					Schema:      &Schema{Type: "string"},
+				},
+			},
+			Responses: map[string]Response{
+				"200": {
+					Description: "Instant answer result",
+					Content: map[string]MediaType{
+						"application/json": {
+							Schema: &Schema{
+								Type: "object",
+								Properties: map[string]Schema{
+									"ok": {Type: "boolean"},
+									"data": {
+										Type: "object",
+										Properties: map[string]Schema{
+											"query":   {Type: "string"},
+											"type":    {Type: "string"},
+											"title":   {Type: "string"},
+											"content": {Type: "string"},
+											"source":  {Type: "string"},
+											"found":   {Type: "boolean"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
 	return paths
 }
 

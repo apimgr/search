@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apimgr/search/src/common/version"
+	"github.com/apimgr/search/src/version"
 	"github.com/apimgr/search/src/config"
 )
 

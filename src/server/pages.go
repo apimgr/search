@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apimgr/search/src/common/httputil"
+	"github.com/apimgr/search/src/httputil"
 	"github.com/apimgr/search/src/config"
 )
 
