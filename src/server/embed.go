@@ -211,6 +211,8 @@ type PageData struct {
 	Description    string
 	Page           string
 	Theme          string
+	Lang           string // Language code for html lang attribute (default: "en")
+	Dir            string // Text direction for html dir attribute (default: "ltr")
 	Config         *config.Config
 	User           interface{}
 	CSRF           string
@@ -391,6 +393,8 @@ func NewPageData(cfg *config.Config, title, page string) *PageData {
 		Description: cfg.Server.Description,
 		Page:        page,
 		Theme:       "dark",
+		Lang:        "en",
+		Dir:         "ltr",
 		Config:      cfg,
 		BuildDate:   time.Now().Format(time.RFC3339),
 	}

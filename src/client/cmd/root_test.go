@@ -13,6 +13,33 @@ import (
 	"github.com/apimgr/search/src/client/api"
 )
 
+// TestMain sets up HOME environment for all tests in this package.
+// Per AI.md PART 13: Test data goes to temp directories, NEVER project directory.
+func TestMain(m *testing.M) {
+	// Save original HOME
+	origHome := os.Getenv("HOME")
+
+	// Create temp dir for tests and set HOME
+	tempDir, err := os.MkdirTemp("", "search-cmd-test-")
+	if err != nil {
+		os.Exit(1)
+	}
+	os.Setenv("HOME", tempDir)
+
+	// Run tests
+	code := m.Run()
+
+	// Restore HOME and cleanup
+	if origHome != "" {
+		os.Setenv("HOME", origHome)
+	} else {
+		os.Unsetenv("HOME")
+	}
+	os.RemoveAll(tempDir)
+
+	os.Exit(code)
+}
+
 // Tests for package variables
 
 func TestProjectName(t *testing.T) {
@@ -124,6 +151,11 @@ func TestGetTokenFromFlag(t *testing.T) {
 	viper.Reset()
 	token = "flag-token"
 
+	// Set HOME to temp directory per AI.md PART 13 (test data goes to temp dirs)
+	tempDir := t.TempDir()
+	os.Setenv("HOME", tempDir)
+	// HOME restored by TestMain
+
 	result := getToken()
 
 	if result != "flag-token" {
@@ -142,6 +174,10 @@ func TestGetTokenFromFile(t *testing.T) {
 	os.WriteFile(tokenPath, []byte("file-token\n"), 0600)
 	tokenFile = tokenPath
 
+	// Set HOME to temp directory per AI.md PART 13 (test data goes to temp dirs)
+	os.Setenv("HOME", tempDir)
+	// HOME restored by TestMain
+
 	result := getToken()
 
 	if result != "file-token" {
@@ -158,6 +194,11 @@ func TestGetTokenFromEnv(t *testing.T) {
 	os.Setenv("SEARCH_TOKEN", "env-token")
 	defer os.Unsetenv("SEARCH_TOKEN")
 
+	// Set HOME to temp directory per AI.md PART 13 (test data goes to temp dirs)
+	tempDir := t.TempDir()
+	os.Setenv("HOME", tempDir)
+	// HOME restored by TestMain
+
 	result := getToken()
 
 	if result != "env-token" {
@@ -172,6 +213,11 @@ func TestGetTokenFromConfig(t *testing.T) {
 	os.Unsetenv("SEARCH_TOKEN")
 	viper.Set("server.token", "config-token")
 
+	// Set HOME to temp directory per AI.md PART 13 (test data goes to temp dirs)
+	tempDir := t.TempDir()
+	os.Setenv("HOME", tempDir)
+	// HOME restored by TestMain
+
 	result := getToken()
 
 	if result != "config-token" {
@@ -185,6 +231,11 @@ func TestGetTokenFromDefaultFile(t *testing.T) {
 	tokenFile = ""
 	os.Unsetenv("SEARCH_TOKEN")
 
+	// Set HOME to temp directory per AI.md PART 13 (test data goes to temp dirs)
+	tempDir := t.TempDir()
+	os.Setenv("HOME", tempDir)
+	// HOME restored by TestMain
+
 	// Test default token file path
 	// This test may not find the file, which is expected
 	result := getToken()
@@ -197,6 +248,11 @@ func TestGetTokenPriority(t *testing.T) {
 	os.Setenv("SEARCH_TOKEN", "env-token")
 	viper.Set("server.token", "config-token")
 	defer os.Unsetenv("SEARCH_TOKEN")
+
+	// Set HOME to temp directory per AI.md PART 13 (test data goes to temp dirs)
+	tempDir := t.TempDir()
+	os.Setenv("HOME", tempDir)
+	// HOME restored by TestMain
 
 	result := getToken()
 
@@ -261,6 +317,10 @@ func TestSaveServerToConfig(t *testing.T) {
 	viper.Reset()
 	tempDir := t.TempDir()
 
+	// Set HOME to temp directory per AI.md PART 13 (test data goes to temp dirs)
+	os.Setenv("HOME", tempDir)
+	// HOME restored by TestMain
+
 	// Set config path
 	viper.Set("server.primary", "")
 
@@ -269,14 +329,17 @@ func TestSaveServerToConfig(t *testing.T) {
 	if viper.GetString("server.primary") != "https://saved.example.com" {
 		t.Error("saveServerToConfig() should set server.primary")
 	}
-
-	_ = tempDir
 }
 
 // Tests for updateClusterConfig
 
 func TestUpdateClusterConfig(t *testing.T) {
 	viper.Reset()
+
+	// Set HOME to temp directory per AI.md PART 13 (test data goes to temp dirs)
+	tempDir := t.TempDir()
+	os.Setenv("HOME", tempDir)
+	// HOME restored by TestMain
 
 	updateClusterConfig("https://primary.example.com", []string{"node1", "node2"})
 
@@ -294,6 +357,11 @@ func TestUpdateClusterConfigEmptyPrimary(t *testing.T) {
 	viper.Reset()
 	viper.Set("server.primary", "existing")
 
+	// Set HOME to temp directory per AI.md PART 13 (test data goes to temp dirs)
+	tempDir := t.TempDir()
+	os.Setenv("HOME", tempDir)
+	// HOME restored by TestMain
+
 	updateClusterConfig("", []string{"node1"})
 
 	// Should not change existing primary
@@ -305,6 +373,11 @@ func TestUpdateClusterConfigEmptyPrimary(t *testing.T) {
 func TestUpdateClusterConfigEmptyNodes(t *testing.T) {
 	viper.Reset()
 	viper.Set("server.cluster", []string{"existing"})
+
+	// Set HOME to temp directory per AI.md PART 13 (test data goes to temp dirs)
+	tempDir := t.TempDir()
+	os.Setenv("HOME", tempDir)
+	// HOME restored by TestMain
 
 	updateClusterConfig("primary", []string{})
 
@@ -625,7 +698,7 @@ func TestInitConfig(t *testing.T) {
 
 	tempDir := t.TempDir()
 	os.Setenv("HOME", tempDir)
-	defer os.Unsetenv("HOME")
+	// HOME restored by TestMain
 
 	// Should not panic
 	initConfig()
@@ -650,7 +723,7 @@ func TestInitConfigDefaults(t *testing.T) {
 
 	tempDir := t.TempDir()
 	os.Setenv("HOME", tempDir)
-	defer os.Unsetenv("HOME")
+	// HOME restored by TestMain
 
 	initConfig()
 

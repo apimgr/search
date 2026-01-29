@@ -28,8 +28,24 @@ func ConfigDir() string {
 	if osGetter() == "windows" {
 		return filepath.Join(os.Getenv("APPDATA"), projectOrg, projectName)
 	}
-	home, _ := os.UserHomeDir()
+	home := getHomeDir()
 	return filepath.Join(home, ".config", projectOrg, projectName)
+}
+
+// getHomeDir returns the user's home directory.
+// Uses HOME env var first (respects test overrides), falls back to os.UserHomeDir().
+// Panics if no home directory can be determined (fatal configuration error).
+func getHomeDir() string {
+	// Check HOME env var first (allows test overrides)
+	if home := os.Getenv("HOME"); home != "" {
+		return home
+	}
+	// Fall back to os.UserHomeDir()
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		return home
+	}
+	// Cannot determine home directory - this is a fatal configuration error
+	panic("cannot determine home directory: HOME env var not set and os.UserHomeDir() failed")
 }
 
 // DataDir returns the CLI data directory
@@ -39,7 +55,7 @@ func DataDir() string {
 	if osGetter() == "windows" {
 		return filepath.Join(os.Getenv("LOCALAPPDATA"), projectOrg, projectName, "data")
 	}
-	home, _ := os.UserHomeDir()
+	home := getHomeDir()
 	return filepath.Join(home, ".local", "share", projectOrg, projectName)
 }
 
@@ -50,7 +66,7 @@ func CacheDir() string {
 	if osGetter() == "windows" {
 		return filepath.Join(os.Getenv("LOCALAPPDATA"), projectOrg, projectName, "cache")
 	}
-	home, _ := os.UserHomeDir()
+	home := getHomeDir()
 	return filepath.Join(home, ".cache", projectOrg, projectName)
 }
 
@@ -61,7 +77,7 @@ func LogDir() string {
 	if osGetter() == "windows" {
 		return filepath.Join(os.Getenv("LOCALAPPDATA"), projectOrg, projectName, "log")
 	}
-	home, _ := os.UserHomeDir()
+	home := getHomeDir()
 	return filepath.Join(home, ".local", "log", projectOrg, projectName)
 }
 
@@ -117,7 +133,7 @@ func ResolveConfigPath(configFlag string) (string, error) {
 
 	// Expand ~ to home directory
 	if strings.HasPrefix(configFlag, "~/") {
-		home, _ := os.UserHomeDir()
+		home := getHomeDir()
 		configFlag = filepath.Join(home, configFlag[2:])
 	}
 

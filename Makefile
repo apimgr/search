@@ -224,6 +224,7 @@ docker:
 # =============================================================================
 # Two-phase testing: verify pass first, then collect coverage
 # Service package has Go 1.20+ integration coverage issues in Docker
+# Per AI.md PART 13: Test artifacts go to /tmp/apimgr/search-XXXXXX/, NEVER project dir
 test:
 	@echo "Running tests..."
 	@mkdir -p $(GOCACHE) $(GODIR)
@@ -231,7 +232,7 @@ test:
 	@echo "Phase 1: Verify all tests pass..."
 	@$(GO_DOCKER) go test ./...
 	@echo "Phase 2: Collect coverage (ignoring service integration coverage error)..."
-	@$(GO_DOCKER) sh -c "go test -cover -coverprofile=coverage.out ./... 2>&1 || true"
+	@$(GO_DOCKER) sh -c "mkdir -p /tmp/$(PROJECTORG) && TEST_DIR=\$$(mktemp -d /tmp/$(PROJECTORG)/$(PROJECTNAME)-XXXXXX) && go test -cover -coverprofile=\$$TEST_DIR/coverage.out ./... 2>&1 || true"
 	@echo "Tests complete"
 
 # =============================================================================

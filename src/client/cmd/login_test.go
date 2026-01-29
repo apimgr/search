@@ -172,7 +172,7 @@ func TestTestTokenConnectionError(t *testing.T) {
 func TestRunLoginWithTokenFlag(t *testing.T) {
 	tempDir := t.TempDir()
 	os.Setenv("HOME", tempDir)
-	defer os.Unsetenv("HOME")
+	// HOME restored by TestMain
 
 	// Create config dir
 	configDir := filepath.Join(tempDir, ".config", "apimgr", "search")
@@ -204,7 +204,7 @@ func TestRunLoginWithTokenFlag(t *testing.T) {
 func TestRunLoginWithAdminToken(t *testing.T) {
 	tempDir := t.TempDir()
 	os.Setenv("HOME", tempDir)
-	defer os.Unsetenv("HOME")
+	// HOME restored by TestMain
 
 	configDir := filepath.Join(tempDir, ".config", "apimgr", "search")
 	os.MkdirAll(configDir, 0700)
@@ -224,7 +224,7 @@ func TestRunLoginWithAdminToken(t *testing.T) {
 func TestRunLoginWithUnexpectedTokenPrefix(t *testing.T) {
 	tempDir := t.TempDir()
 	os.Setenv("HOME", tempDir)
-	defer os.Unsetenv("HOME")
+	// HOME restored by TestMain
 
 	configDir := filepath.Join(tempDir, ".config", "apimgr", "search")
 	os.MkdirAll(configDir, 0700)
@@ -253,7 +253,7 @@ func TestRunLoginWithServerVerification(t *testing.T) {
 
 	tempDir := t.TempDir()
 	os.Setenv("HOME", tempDir)
-	defer os.Unsetenv("HOME")
+	// HOME restored by TestMain
 
 	configDir := filepath.Join(tempDir, ".config", "apimgr", "search")
 	os.MkdirAll(configDir, 0700)
@@ -279,7 +279,7 @@ func TestRunLoginWithServerVerificationFailed(t *testing.T) {
 
 	tempDir := t.TempDir()
 	os.Setenv("HOME", tempDir)
-	defer os.Unsetenv("HOME")
+	// HOME restored by TestMain
 
 	configDir := filepath.Join(tempDir, ".config", "apimgr", "search")
 	os.MkdirAll(configDir, 0700)
@@ -310,7 +310,7 @@ func TestRunLoginEmptyToken(t *testing.T) {
 func TestRunLogoutSuccess(t *testing.T) {
 	tempDir := t.TempDir()
 	os.Setenv("HOME", tempDir)
-	defer os.Unsetenv("HOME")
+	// HOME restored by TestMain
 
 	// Create token file
 	configDir := filepath.Join(tempDir, ".config", "apimgr", "search")
@@ -333,7 +333,7 @@ func TestRunLogoutSuccess(t *testing.T) {
 func TestRunLogoutNoToken(t *testing.T) {
 	tempDir := t.TempDir()
 	os.Setenv("HOME", tempDir)
-	defer os.Unsetenv("HOME")
+	// HOME restored by TestMain
 
 	// No token file exists
 	err := runLogout()
@@ -348,7 +348,7 @@ func TestRunLogoutNoToken(t *testing.T) {
 func TestLoginCmdRunE(t *testing.T) {
 	tempDir := t.TempDir()
 	os.Setenv("HOME", tempDir)
-	defer os.Unsetenv("HOME")
+	// HOME restored by TestMain
 
 	configDir := filepath.Join(tempDir, ".config", "apimgr", "search")
 	os.MkdirAll(configDir, 0700)
@@ -370,7 +370,7 @@ func TestLoginCmdRunE(t *testing.T) {
 func TestLogoutCmdRunE(t *testing.T) {
 	tempDir := t.TempDir()
 	os.Setenv("HOME", tempDir)
-	defer os.Unsetenv("HOME")
+	// HOME restored by TestMain
 
 	configDir := filepath.Join(tempDir, ".config", "apimgr", "search")
 	os.MkdirAll(configDir, 0700)
@@ -389,7 +389,7 @@ func TestLogoutCmdRunE(t *testing.T) {
 func TestRunLoginTokenFilePermissions(t *testing.T) {
 	tempDir := t.TempDir()
 	os.Setenv("HOME", tempDir)
-	defer os.Unsetenv("HOME")
+	// HOME restored by TestMain
 
 	configDir := filepath.Join(tempDir, ".config", "apimgr", "search")
 	os.MkdirAll(configDir, 0700)
@@ -423,7 +423,7 @@ func TestRunLoginTokenFilePermissions(t *testing.T) {
 func TestRunLoginCreatesConfigDir(t *testing.T) {
 	tempDir := t.TempDir()
 	os.Setenv("HOME", tempDir)
-	defer os.Unsetenv("HOME")
+	// HOME restored by TestMain
 
 	// Don't create config dir - runLogin should create it
 	token = "usr_test-token"
@@ -475,7 +475,7 @@ func TestTokenPrefixValidation(t *testing.T) {
 func TestRunLoginWithViperConfig(t *testing.T) {
 	tempDir := t.TempDir()
 	os.Setenv("HOME", tempDir)
-	defer os.Unsetenv("HOME")
+	// HOME restored by TestMain
 
 	viper.Reset()
 
@@ -499,7 +499,7 @@ func TestRunLoginWithViperConfig(t *testing.T) {
 func TestMultipleLoginLogoutCycles(t *testing.T) {
 	tempDir := t.TempDir()
 	os.Setenv("HOME", tempDir)
-	defer os.Unsetenv("HOME")
+	// HOME restored by TestMain
 
 	configDir := filepath.Join(tempDir, ".config", "apimgr", "search")
 	os.MkdirAll(configDir, 0700)
