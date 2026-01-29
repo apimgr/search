@@ -41,29 +41,82 @@ func NewClient(baseURL, token string, timeout int) *Client {
 
 // SearchResult represents a search result
 type SearchResult struct {
-	ID      string  `json:"id"`
-	Title   string  `json:"title"`
-	URL     string  `json:"url"`
-	Snippet string  `json:"snippet"`
-	Score   float64 `json:"score"`
+	Title       string  `json:"title"`
+	URL         string  `json:"url"`
+	Description string  `json:"description"`
+	Engine      string  `json:"engine"`
+	Score       float64 `json:"score"`
+	Category    string  `json:"category"`
+	Thumbnail   string  `json:"thumbnail,omitempty"`
+	Domain      string  `json:"domain,omitempty"`
 }
 
-// SearchResponse represents the API search response
+// SearchPagination represents pagination info per AI.md PART 14
+type SearchPagination struct {
+	Page  int `json:"page"`
+	Limit int `json:"limit"`
+	Total int `json:"total"`
+	Pages int `json:"pages"`
+}
+
+// SearchResponse represents the API search response per AI.md PART 14
 type SearchResponse struct {
-	Results    []SearchResult `json:"results"`
-	TotalCount int            `json:"total_count"`
-	Query      string         `json:"query"`
-	Page       int            `json:"page"`
-	PerPage    int            `json:"per_page"`
+	Query      string           `json:"query"`
+	Category   string           `json:"category"`
+	Results    []SearchResult   `json:"results"`
+	Pagination SearchPagination `json:"pagination"`
+	SearchTime float64          `json:"search_time_ms"`
+	Engines    []string         `json:"engines_used"`
+}
+
+// apiResponse wraps API responses with ok and data fields
+type apiResponse struct {
+	OK   bool            `json:"ok"`
+	Data json.RawMessage `json:"data"`
 }
 
 // HealthResponse represents health check response
 type HealthResponse struct {
-	Status    string            `json:"status"`
-	Version   string            `json:"version,omitempty"`
-	Uptime    string            `json:"uptime,omitempty"`
-	Timestamp string            `json:"timestamp,omitempty"`
-	Checks    map[string]string `json:"checks,omitempty"`
+	Status         string            `json:"status"`
+	Version        string            `json:"version,omitempty"`
+	GoVersion      string            `json:"go_version,omitempty"`
+	Mode           string            `json:"mode,omitempty"`
+	Uptime         string            `json:"uptime,omitempty"`
+	Timestamp      string            `json:"timestamp,omitempty"`
+	Build          *BuildInfo        `json:"build,omitempty"`
+	Node           *NodeInfo         `json:"node,omitempty"`
+	Cluster        *ClusterInfo      `json:"cluster,omitempty"`
+	Features       map[string]bool   `json:"features,omitempty"`
+	Checks         map[string]string `json:"checks,omitempty"`
+	Stats          *HealthStats      `json:"stats,omitempty"`
+	PendingRestart bool              `json:"pending_restart,omitempty"`
+	RestartReason  []string          `json:"restart_reason,omitempty"`
+}
+
+// BuildInfo represents build information
+type BuildInfo struct {
+	CommitID  string `json:"commit_id"`
+	BuildDate string `json:"build_date"`
+}
+
+// NodeInfo represents node information
+type NodeInfo struct {
+	ID       string `json:"id"`
+	Hostname string `json:"hostname"`
+}
+
+// ClusterInfo represents cluster information
+type ClusterInfo struct {
+	Enabled bool   `json:"enabled"`
+	Status  string `json:"status"`
+	Nodes   int    `json:"nodes"`
+}
+
+// HealthStats represents health statistics
+type HealthStats struct {
+	RequestsTotal     int64 `json:"requests_total"`
+	Requests24h       int64 `json:"requests_24h"`
+	ActiveConnections int   `json:"active_connections"`
 }
 
 // Search performs a search query
@@ -71,7 +124,7 @@ func (c *Client) Search(query string, page, perPage int) (*SearchResponse, error
 	params := url.Values{}
 	params.Set("q", query)
 	params.Set("page", fmt.Sprintf("%d", page))
-	params.Set("per_page", fmt.Sprintf("%d", perPage))
+	params.Set("limit", fmt.Sprintf("%d", perPage))
 
 	resp, err := c.get("/api/v1/search?" + params.Encode())
 	if err != nil {
@@ -79,9 +132,19 @@ func (c *Client) Search(query string, page, perPage int) (*SearchResponse, error
 	}
 	defer resp.Body.Close()
 
-	var result SearchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	// API returns {"ok": true, "data": {...}} - unwrap the data field
+	var apiResp apiResponse
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if !apiResp.OK {
+		return nil, fmt.Errorf("API returned error")
+	}
+
+	var result SearchResponse
+	if err := json.Unmarshal(apiResp.Data, &result); err != nil {
+		return nil, fmt.Errorf("failed to decode search data: %w", err)
 	}
 	return &result, nil
 }
@@ -94,9 +157,15 @@ func (c *Client) Health() (*HealthResponse, error) {
 	}
 	defer resp.Body.Close()
 
-	var result HealthResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	// API returns {"ok": true, "data": {...}} - unwrap the data field
+	var apiResp apiResponse
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	var result HealthResponse
+	if err := json.Unmarshal(apiResp.Data, &result); err != nil {
+		return nil, fmt.Errorf("failed to decode health data: %w", err)
 	}
 	return &result, nil
 }

@@ -15,11 +15,17 @@ const (
 	projectName = "search"
 )
 
+// osGetter returns the current OS. Abstracted for testing.
+var osGetter = func() string { return runtime.GOOS }
+
+// chmodFunc wraps os.Chmod for testing.
+var chmodFunc = os.Chmod
+
 // ConfigDir returns the CLI config directory
 // Linux: ~/.config/apimgr/search/
 // Windows: %APPDATA%\apimgr\search\
 func ConfigDir() string {
-	if runtime.GOOS == "windows" {
+	if osGetter() == "windows" {
 		return filepath.Join(os.Getenv("APPDATA"), projectOrg, projectName)
 	}
 	home, _ := os.UserHomeDir()
@@ -30,7 +36,7 @@ func ConfigDir() string {
 // Linux: ~/.local/share/apimgr/search/
 // Windows: %LOCALAPPDATA%\apimgr\search\data\
 func DataDir() string {
-	if runtime.GOOS == "windows" {
+	if osGetter() == "windows" {
 		return filepath.Join(os.Getenv("LOCALAPPDATA"), projectOrg, projectName, "data")
 	}
 	home, _ := os.UserHomeDir()
@@ -41,7 +47,7 @@ func DataDir() string {
 // Linux: ~/.cache/apimgr/search/
 // Windows: %LOCALAPPDATA%\apimgr\search\cache\
 func CacheDir() string {
-	if runtime.GOOS == "windows" {
+	if osGetter() == "windows" {
 		return filepath.Join(os.Getenv("LOCALAPPDATA"), projectOrg, projectName, "cache")
 	}
 	home, _ := os.UserHomeDir()
@@ -52,7 +58,7 @@ func CacheDir() string {
 // Linux: ~/.local/log/apimgr/search/
 // Windows: %LOCALAPPDATA%\apimgr\search\log\
 func LogDir() string {
-	if runtime.GOOS == "windows" {
+	if osGetter() == "windows" {
 		return filepath.Join(os.Getenv("LOCALAPPDATA"), projectOrg, projectName, "log")
 	}
 	home, _ := os.UserHomeDir()
@@ -85,7 +91,7 @@ func EnsureDirs() error {
 			return fmt.Errorf("create dir %s: %w", dir, err)
 		}
 		// Ensure permissions even if dir existed
-		if err := os.Chmod(dir, 0700); err != nil {
+		if err := chmodFunc(dir, 0700); err != nil {
 			return fmt.Errorf("chmod dir %s: %w", dir, err)
 		}
 	}

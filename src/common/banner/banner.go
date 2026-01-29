@@ -29,13 +29,17 @@ type Config struct {
 // Per AI.md PART 7 and PART 14: Console Output (First Run)
 func Print(cfg Config) {
 	size := terminal.GetSize()
+	printWithSize(cfg, size.Mode)
+}
 
+// printWithSize prints the banner for the given size mode (internal, testable)
+func printWithSize(cfg Config, mode terminal.SizeMode) {
 	switch {
-	case size.Mode >= terminal.SizeModeStandard:
+	case mode >= terminal.SizeModeStandard:
 		printFull(cfg)
-	case size.Mode >= terminal.SizeModeCompact:
+	case mode >= terminal.SizeModeCompact:
 		printCompact(cfg)
-	case size.Mode >= terminal.SizeModeMinimal:
+	case mode >= terminal.SizeModeMinimal:
 		printMinimal(cfg)
 	default:
 		printMicro(cfg)

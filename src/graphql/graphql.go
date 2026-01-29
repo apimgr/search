@@ -11,9 +11,18 @@ import (
 // Schema represents the GraphQL schema
 var Schema graphql.Schema
 
+// initSchemaFunc is used for testing - allows injecting errors
+// By default, this is set to initSchemaImpl
+var initSchemaFunc = initSchemaImpl
+
 // InitSchema initializes the GraphQL schema
-// Per AI.md PART 19: GraphQL must be in sync with REST API
 func InitSchema() error {
+	return initSchemaFunc()
+}
+
+// initSchemaImpl is the actual schema initialization implementation
+// Per AI.md PART 19: GraphQL must be in sync with REST API
+func initSchemaImpl() error {
 	// Define the SearchResult type
 	searchResultType := graphql.NewObject(graphql.ObjectConfig{
 		Name: "SearchResult",

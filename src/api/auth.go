@@ -290,6 +290,11 @@ func (h *AuthHandler) handleLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.authManager == nil {
+		h.errorResponse(w, http.StatusServiceUnavailable, "Authentication not configured", "")
+		return
+	}
+
 	token := h.authManager.GetSessionToken(r)
 	if token == "" {
 		h.errorResponse(w, http.StatusUnauthorized, "Not authenticated", "")

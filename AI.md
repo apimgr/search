@@ -1,6 +1,79 @@
-# {PROJECTNAME} Specification
+# SEARCH Specification
 
-**Name**: {projectname}
+**Name**: search
+
+---
+
+# 🆕 FIRST-TIME AI.md SETUP
+
+**If you see `search` or `SEARCH` placeholders in this file, this is a fresh template that needs configuration.**
+
+## Detecting Fresh Template
+
+```bash
+# Check if placeholders exist (fresh template)
+grep -q 'search' AI.md && echo "FRESH TEMPLATE - needs setup"
+```
+
+## Auto-Detecting Project Values
+
+**Project name and org can be inferred automatically:**
+
+| Value | Primary Source | Fallback |
+|-------|----------------|----------|
+| `search` | IDEA.md (if exists) | `basename "$PWD"` |
+| `apimgr` | IDEA.md (if exists) | `basename "$(dirname "$PWD")"` |
+
+**Detection commands:**
+```bash
+# Project name: current directory name
+projectname=$(basename "$PWD")
+
+# Project org: parent directory name (assumes ~/org/project structure)
+projectorg=$(basename "$(dirname "$PWD")")
+
+# Example: /home/user/github/myorg/myproject
+#   projectname = myproject
+#   projectorg = myorg
+```
+
+## First-Time Setup Flow
+
+```
+AI reads AI.md for the first time
+│
+├─► Check: Does AI.md contain literal "search"?
+│   │
+│   ├─► YES (fresh template)
+│   │   │
+│   │   ├─► 1. Check if IDEA.md exists
+│   │   │   ├─► YES: Extract projectname/projectorg from IDEA.md
+│   │   │   └─► NO: Infer from directory structure
+│   │   │
+│   │   ├─► 2. Confirm with user: "Project: search, Org: apimgr - correct?"
+│   │   │
+│   │   ├─► 3. Replace ALL placeholders in AI.md:
+│   │   │   - search → actual project name (lowercase)
+│   │   │   - SEARCH → actual project name (UPPERCASE)
+│   │   │   - apimgr → actual org name (lowercase)
+│   │   │   - APIMGR → actual org name (UPPERCASE)
+│   │   │
+│   │   └─► 4. Create IDEA.md if it doesn't exist (from template or ask user)
+│   │
+│   └─► NO (already configured)
+│       └─► Proceed with normal operation - read PART 0 first
+```
+
+## Placeholder Reference
+
+| Placeholder | Case | Example |
+|-------------|------|---------|
+| `search` | lowercase | `myapp` |
+| `SEARCH` | UPPERCASE | `MYAPP` |
+| `apimgr` | lowercase | `myorg` |
+| `APIMGR` | UPPERCASE | `MYORG` |
+
+**After setup, this section becomes reference-only. The placeholders above will show actual values.**
 
 ---
 
@@ -128,7 +201,7 @@ IDEA.md is the project PLAN. AI.md (this file) is the SOURCE OF TRUTH.
 | **CGO_ENABLED=0** | ALWAYS. No exceptions. Pure Go only. |
 | **Single static binary** | All assets embedded with Go `embed` package |
 | **8 platforms required** | linux, darwin, windows, freebsd × amd64, arm64 |
-| **Binary naming** | `{projectname}-{os}-{arch}` (windows adds `.exe`) |
+| **Binary naming** | `search-{os}-{arch}` (windows adds `.exe`) |
 | **NEVER use -musl suffix** | Alpine builds are NOT musl-specific |
 | **Build source** | ALWAYS `src` directory |
 
@@ -140,7 +213,7 @@ IDEA.md is the project PLAN. AI.md (this file) is the SOURCE OF TRUTH.
 
 | Command | Purpose | Output Location | When to Use |
 |---------|---------|-----------------|-------------|
-| `make dev` | **Development & Debugging** | `${TMPDIR}/${PROJECTORG}/${PROJECTNAME}-XXXXXX/` | Active coding, quick tests |
+| `make dev` | **Development & Debugging** | `${TMPDIR}/$APIMGR/$SEARCH-XXXXXX/` | Active coding, quick tests |
 | `make local` | **Production Testing** | `binaries/` (with version) | Test prod builds locally |
 | `make build` | **Full Release** | `binaries/` (all 8 platforms) | Before release |
 | `make test` | **Unit Tests** | Coverage report | After code changes |
@@ -159,11 +232,11 @@ IDEA.md is the project PLAN. AI.md (this file) is the SOURCE OF TRUTH.
 
 ```bash
 # After make dev, debug in Docker with tools
-BUILD_DIR=$(ls -td ${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-*/ 2>/dev/null | head -1)
+BUILD_DIR=$(ls -td ${TMPDIR:-/tmp}/$APIMGR/$SEARCH-*/ 2>/dev/null | head -1)
 docker run --rm -it -v "$BUILD_DIR:/app" alpine:latest sh -c "
   apk add --no-cache curl bash file jq  # Required debug tools
-  /app/{projectname} --help
-  /app/{projectname} --version
+  /app/search --help
+  /app/search --version
   # Interactive debugging...
 "
 ```
@@ -205,10 +278,10 @@ docker run --rm -it -v "$BUILD_DIR:/app" alpine:latest sh -c "
 make dev                # Quick build to temp dir
 
 # 2. Debug in Docker (with tools)
-BUILD_DIR=$(ls -td ${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-*/ 2>/dev/null | head -1)
+BUILD_DIR=$(ls -td ${TMPDIR:-/tmp}/$APIMGR/$SEARCH-*/ 2>/dev/null | head -1)
 docker run --rm -it -v "$BUILD_DIR:/app" alpine:latest sh -c "
   apk add --no-cache curl bash file jq
-  /app/{projectname} --help
+  /app/search --help
 "
 
 # 3. Unit tests
@@ -627,7 +700,7 @@ Quick reference: Accept `yes/no`, `true/false`, `1/0`, `on/off`, `enable/disable
 | **Config files** | lowercase, dot-extension | `server.yml`, `mkdocs.yml` | `SERVER.yml` |
 | **Documentation** | UPPERCASE.md | `README.md`, `LICENSE.md` | `readme.md` |
 | **Scripts** | lowercase, snake_case | `run_tests.sh` | `RunTests.sh` |
-| **Binaries** | `{projectname}-{os}-{arch}` | `echoip-linux-amd64` | `echoip_linux_amd64` |
+| **Binaries** | `search-{os}-{arch}` | `echoip-linux-amd64` | `echoip_linux_amd64` |
 
 ### NEVER Create These Files
 
@@ -656,7 +729,7 @@ Quick reference: Accept `yes/no`, `true/false`, `1/0`, `on/off`, `enable/disable
 | `config/` in root | Config is embedded, runtime-generated in OS dirs |
 | `data/` in root | Data goes to OS data directory at runtime |
 | `logs/` in root | Logs go to OS log directory at runtime |
-| `tmp/`, `temp/` in root | Use `/tmp/{projectorg}/{projectname}-XXXXXX/` |
+| `tmp/`, `temp/` in root | Use `/tmp/apimgr/search-XXXXXX/` |
 | `test-data/` in root | Test data goes to temp directories |
 | `build/`, `dist/`, `out/` | Use `binaries/` (gitignored) |
 | `vendor/` | Use Go modules, not vendoring |
@@ -794,16 +867,16 @@ Each AI tool directory MUST have a project memory file containing critical rules
 **Required Content Structure (~50-100 lines max):**
 
 ```markdown
-# {PROJECTNAME} - AI Quick Reference
+# SEARCH - AI Quick Reference
 
 ## Binary Terminology
-- **server** = `{projectname}` (main binary, runs as service)
-- **client** = `{projectname}-cli` (REQUIRED companion, CLI/TUI/GUI)
-- **agent** = `{projectname}-agent` (optional, runs on remote machines)
+- **server** = `search` (main binary, runs as service)
+- **client** = `search-cli` (REQUIRED companion, CLI/TUI/GUI)
+- **agent** = `search-agent` (optional, runs on remote machines)
 
 ## Key Placeholders
-- `{projectname}` = [actual project name]
-- `{projectorg}` = [organization name]
+- `search` = [actual project name]
+- `apimgr` = [organization name]
 - `{admin_path}` = [admin URL path, default: admin]
 
 ## Account Types (CRITICAL)
@@ -851,6 +924,190 @@ Each AI tool directory MUST have a project memory file containing critical rules
 - Keep it under 100 lines - it's a quick reference, not the full spec
 - Points to rules/ files and AI.md for details
 - "Current Project State" section updated by AI as work progresses
+
+**Claude Code Settings (.claude/settings.local.json):**
+
+Project-specific Claude Code permissions and configuration. This file is gitignored and overrides/extends global `~/.claude/settings.json`.
+
+**File Structure:**
+
+```json
+{
+  "model": "",
+  "thinking": "off",
+  "permissions": {
+    "allow": [],
+    "deny": [],
+    "ask": []
+  },
+  "preferences": {
+    "auto_commit": false
+  },
+  "hooks": {
+    "PreToolUse": [],
+    "PostToolUse": []
+  },
+  "env": {}
+}
+```
+
+**Field Reference:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `model` | string | Model override (empty = default, e.g., `"claude-sonnet-4-20250514"`) |
+| `thinking` | string | Extended thinking: `"off"`, `"on"`, or token limit (e.g., `"10000"`) |
+| `permissions` | object | Tool permission rules (allow/deny/ask arrays) |
+| `preferences` | object | Behavior preferences |
+| `hooks` | object | Pre/post tool execution hooks |
+| `env` | object | Environment variables for Bash commands |
+
+**Example Project Configuration:**
+
+```json
+{
+  "model": "",
+  "thinking": "off",
+  "permissions": {
+    "allow": [
+      "Read(**)",
+      "Write(**)",
+      "Edit(**)",
+      "Bash(go:*)",
+      "Bash(make:*)",
+      "Bash(docker:*)",
+      "Bash(docker-compose:*)",
+      "Bash(git:*)",
+      "Bash(curl:*)",
+      "Bash(tree:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(rm:*)",
+      "Bash(mv:*)",
+      "Bash(cp:*)",
+      "Bash(mkdir:*)",
+      "Bash(chmod:*)",
+      "Bash(ln:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(ls:*)",
+      "Bash(pwd:*)",
+      "Bash(timeout:*)",
+      "Bash(sort:*)",
+      "Bash(wc:*)",
+      "Bash(diff:*)",
+      "Bash(:*::*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:pkg.go.dev)",
+      "WebFetch(domain:go.dev)",
+      "WebFetch(domain:golang.org)"
+    ],
+    "deny": [
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git push:+)",
+      "Bash(rm -rf /*:*)",
+      "Bash(sudo:*)"
+    ],
+    "ask": [
+      "Bash(git rebase:*)",
+      "Bash(git reset:*)",
+      "Bash(git checkout -- :*)"
+    ]
+  },
+  "preferences": {
+    "auto_commit": false
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write(**)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if grep -qi 'anthropic\\|claude' \"$file\" 2>/dev/null; then echo 'Error: File contains vendor names (Anthropic/Claude)' >&2; exit 1; fi"
+          }
+        ]
+      },
+      {
+        "matcher": "Write(*.go)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "gofmt -l \"$file\" 2>/dev/null | grep -q . && echo 'Error: Go file would not be formatted' >&2 && exit 1 || exit 0"
+          }
+        ]
+      }
+    ]
+  },
+  "env": {
+    "CGO_ENABLED": "0"
+  }
+}
+```
+
+**Permission Pattern Syntax:**
+
+| Pattern | Description | Example |
+|---------|-------------|---------|
+| `Read(**)` | Read any file | All files recursively |
+| `Write(**)` | Write any file | All files recursively |
+| `Edit(**)` | Edit any file | All files recursively |
+| `Bash(cmd:*)` | Command with zero or more args | `Bash(go:*)` → `go`, `go build`, `go test ./...` |
+| `Bash(cmd:+)` | Command with one or more args | `Bash(git push:+)` → `git push origin`, NOT bare `git push` |
+| `Bash(cmd arg:*)` | Command with specific prefix | `Bash(git commit:*)` → `git commit -m "msg"` |
+| `Bash(:*::*)` | Piped/chained commands | `cmd1 | cmd2`, `cmd1 && cmd2` |
+| `WebFetch(domain:x)` | Fetch from specific domain | `WebFetch(domain:github.com)` |
+| `WebSearch` | Allow web searches | N/A |
+
+**Pattern Wildcards:**
+
+| Wildcard | Meaning | Notes |
+|----------|---------|-------|
+| `*` | Zero or more of anything | Matches empty string too |
+| `+` | One or more of anything | Requires at least one character/arg |
+| `**` | Recursive glob | For file paths (all subdirectories) |
+
+**Permission Sections:**
+
+| Section | Behavior |
+|---------|----------|
+| `allow` | Auto-approved without prompting |
+| `deny` | Blocked entirely (returns error) |
+| `ask` | Prompt user for approval each time |
+
+**Hook Configuration:**
+
+| Hook Event | When Triggered | Can Block |
+|------------|----------------|-----------|
+| `PreToolUse` | Before tool execution | Yes (exit 1) |
+| `PostToolUse` | After tool execution | No |
+
+**Hook Variables (available in command):**
+
+| Variable | Description |
+|----------|-------------|
+| `$file` | File path for Read/Write/Edit operations |
+| `$command` | Command string for Bash operations |
+
+**Project-Specific Recommendations:**
+
+| Project Type | Additional Allows | Additional Denies |
+|--------------|-------------------|-------------------|
+| Go project | `Bash(go:*)`, `Bash(golangci-lint:*)` | - |
+| Docker project | `Bash(docker:*)`, `Bash(docker-compose:*)` | `Bash(docker system prune:*)` |
+| Node project | `Bash(npm:*)`, `Bash(node:*)` | `Bash(npm publish:*)` |
+| Python project | `Bash(python:*)`, `Bash(pip:*)`, `Bash(uv:*)` | `Bash(pip install --user:*)` |
+
+**CRITICAL Rules:**
+- NEVER allow `Bash(sudo:*)` - privilege escalation should be explicit and manual
+- NEVER allow `Bash(rm -rf /*:*)` or similar destructive patterns
+- ALWAYS deny `git commit` and `git push` - commits should be reviewed manually
+- Use `PreToolUse` hooks to enforce project standards (formatting, no vendor names)
+- The `env` section sets environment variables for ALL Bash commands in the session
+- Settings are merged: project settings extend/override global `~/.claude/settings.json`
 
 ### Allowed Root Directories (Exhaustive List)
 
@@ -908,10 +1165,10 @@ Each AI tool directory MUST have a project memory file containing critical rules
 
 | Placeholder | Description | Example |
 |-------------|-------------|---------|
-| `{projectname}` | Project name (lowercase, no spaces/hyphens) | `jokes`, `echoip`, `pastebin` |
-| `{projectorg}` | Organization/owner name (lowercase) | `sneak`, `acme`, `mycompany` |
+| `search` | Project name (lowercase, no spaces/hyphens) | `jokes`, `echoip`, `pastebin` |
+| `apimgr` | Organization/owner name (lowercase) | `sneak`, `acme`, `mycompany` |
 | `{projectversion}` | Current version (semver format) | `1.0.0`, `2.3.1` |
-| `{PROJECTNAME}` | Uppercase project name (for constants, env vars) | `JOKES`, `ECHOIP` |
+| `SEARCH` | Uppercase project name (for constants, env vars) | `JOKES`, `ECHOIP` |
 | `{officialsite}` | Official project website | `https://jokes.example.com` |
 | `{fqdn}` | Fully qualified domain name | `api.example.com` |
 | `{admin_path}` | Admin panel URL path (configurable, default: `admin`) | `admin`, `manage`, `control` |
@@ -921,12 +1178,12 @@ Each AI tool directory MUST have a project memory file containing critical rules
 
 | Placeholder | Linux/BSD Default | macOS Default | Windows Default |
 |-------------|-------------------|---------------|-----------------|
-| `{config_dir}` | `/etc/{projectorg}/{projectname}` | `/Library/Application Support/{projectorg}/{projectname}` | `%PROGRAMDATA%\{projectorg}\{projectname}` |
-| `{data_dir}` | `/var/lib/{projectorg}/{projectname}` | `/Library/Application Support/{projectorg}/{projectname}` | `%PROGRAMDATA%\{projectorg}\{projectname}` |
-| `{log_dir}` | `/var/log/{projectorg}/{projectname}` | `/Library/Logs/{projectorg}/{projectname}` | `%PROGRAMDATA%\{projectorg}\{projectname}\logs` |
-| `{cache_dir}` | `/var/cache/{projectorg}/{projectname}` | `/Library/Caches/{projectorg}/{projectname}` | `%PROGRAMDATA%\{projectorg}\{projectname}\cache` |
-| `{backup_dir}` | `/mnt/Backups/{projectorg}/{projectname}` | `/Library/Application Support/{projectorg}/{projectname}/backups` | `%PROGRAMDATA%\{projectorg}\{projectname}\backups` |
-| `{pid_file}` | `/var/run/{projectorg}/{projectname}.pid` | `/var/run/{projectorg}/{projectname}.pid` | N/A (Windows uses SCM) |
+| `{config_dir}` | `/etc/apimgr/search` | `/Library/Application Support/apimgr/search` | `%PROGRAMDATA%\apimgr\search` |
+| `{data_dir}` | `/var/lib/apimgr/search` | `/Library/Application Support/apimgr/search` | `%PROGRAMDATA%\apimgr\search` |
+| `{log_dir}` | `/var/log/apimgr/search` | `/Library/Logs/apimgr/search` | `%PROGRAMDATA%\apimgr\search\logs` |
+| `{cache_dir}` | `/var/cache/apimgr/search` | `/Library/Caches/apimgr/search` | `%PROGRAMDATA%\apimgr\search\cache` |
+| `{backup_dir}` | `/mnt/Backups/apimgr/search` | `/Library/Application Support/apimgr/search/backups` | `%PROGRAMDATA%\apimgr\search\backups` |
+| `{pid_file}` | `/var/run/apimgr/search.pid` | `/var/run/apimgr/search.pid` | N/A (Windows uses SCM) |
 
 ## Binary Terminology
 
@@ -934,9 +1191,9 @@ Each AI tool directory MUST have a project memory file containing critical rules
 
 | Term | Default Binary Name | Description |
 |------|---------------------|-------------|
-| **server** | `{projectname}` | The main application binary - runs as service/daemon, serves API/WebUI |
-| **client** | `{projectname}-cli` | Required companion binary - terminal interface with CLI/TUI/GUI modes |
-| **agent** | `{projectname}-agent` | Optional companion binary - runs on remote machines, reports to server |
+| **server** | `search` | The main application binary - runs as service/daemon, serves API/WebUI |
+| **client** | `search-cli` | Required companion binary - terminal interface with CLI/TUI/GUI modes |
+| **agent** | `search-agent` | Optional companion binary - runs on remote machines, reports to server |
 
 **Renaming behavior:**
 - Renaming a binary (e.g., `cp jokes myjokes`) changes user-visible output (help text, banners, User-Agent)
@@ -1058,20 +1315,69 @@ This distinction exists for clarity. When referring to OS-level resources that b
 | **Remote** | Context-dependent - generally means "not local" |
 | **~~Host~~** | **DO NOT USE** - ambiguous term, use FQDN, Hostname, or Machine instead |
 
+## Monitoring Endpoints
+
+**Two separate purposes. Do NOT confuse them.**
+
+| Purpose | Endpoints | Access | Format |
+|---------|-----------|--------|--------|
+| **Public server status/info** | `/healthz`, `/api/{api_version}/healthz` | **PUBLIC** | HTML/JSON/text |
+| **Prometheus metrics** | `/metrics` | **INTERNAL** | Prometheus text exposition (everything) |
+
+**Endpoints:**
+
+| Endpoint | Description |
+|----------|-------------|
+| `/healthz` | Frontend route - content negotiation (HTML for browsers, JSON for API clients, text for CLI) |
+| `/api/{api_version}/healthz` | API route - always JSON |
+| `/metrics` | Prometheus - all metrics, internal only |
+
+**Key differences:**
+
+| Aspect | Public Status (PART 13) | Prometheus Metrics (PART 21) |
+|--------|-------------------------|------------------------------|
+| **Endpoints** | `/healthz`, `/api/{api_version}/healthz` | `/metrics` |
+| **Visibility** | Public internet | Internal network only |
+| **Authentication** | None | Optional bearer token |
+| **Data** | Public-safe status/info only | Everything (all telemetry) |
+| **Format** | HTML, JSON, text | Prometheus text exposition |
+| **Use case** | "Is the server running? What version?" | "How is it performing? Alert on this." |
+
+**What goes where:**
+
+| Data Type | Public Status | Prometheus | Why |
+|-----------|:-------------:|:----------:|-----|
+| Status (healthy/unhealthy) | ✓ | ✗ | Public info |
+| Version, uptime, build info | ✓ | ✓ | Safe to expose |
+| Cluster nodes, Tor address | ✓ | ✗ | Public feature info |
+| Request counts (total) | ✓ | ✓ | Aggregate is safe |
+| Request counts (by path/status) | ✗ | ✓ | Internal detail, high cardinality |
+| Request latency histograms | ✗ | ✓ | Performance telemetry |
+| Database connections | ✗ | ✓ | Internal infrastructure |
+| Cache hit/miss rates | ✗ | ✓ | Internal performance |
+| CPU/memory/disk usage | ✗ | ✓ | System telemetry |
+| Goroutines, GC stats | ✗ | ✓ | Runtime internals |
+
+**NEVER:**
+- Expose `/metrics` publicly (firewall it, or use token auth)
+- Include metrics status in public healthz response
+- Use healthz stats for alerting (use Prometheus for that)
+- Duplicate detailed metrics in healthz (keep it simple)
+
 ---
 
 ## How to Read This Large File
 
-**AI.md is ~1.9MB and ~50,697 lines. You CANNOT read it all at once. Follow these procedures.**
+**AI.md is ~2.0MB and ~54,100 lines. You CANNOT read it all at once. Follow these procedures.**
 
 ### File Size Reality
 
 | Constraint | Value |
 |------------|-------|
-| File size | ~1.9MB |
-| Line count | ~50,697 lines |
+| File size | ~2.0MB |
+| Line count | ~54,100 lines |
 | Read limit | ~500 lines per read |
-| Full reads needed | ~100 reads (impractical) |
+| Full reads needed | ~108 reads (impractical) |
 
 **Use the PART index to find relevant sections, then read each section COMPLETELY.**
 
@@ -1081,45 +1387,45 @@ This distinction exists for clarity. When referring to OS-level resources that b
 
 | PART | Line | Topic | When to Read |
 |------|------|-------|--------------|
-| 0 | ~1216 | AI Assistant Rules | **ALWAYS READ FIRST**, **AI Behavior Rules** |
-| 1 | ~2808 | Critical Rules | **ALWAYS READ FIRST** |
-| 2 | ~3663 | License & Attribution | License requirements |
-| 3 | ~3997 | Project Structure | Setting up new project, **CI/CD badge detection** |
-| 4 | ~4865 | OS-Specific Paths | Path handling |
-| 5 | ~5050 | Configuration | Config file work, **Path Security**, **Privileged Ports**, **Escalation** |
-| 6 | ~6958 | Application Modes | Mode handling, debug endpoints |
-| 7 | ~7566 | Binary Requirements | Binary building, **Display detection** |
-| 8 | ~8149 | Server Binary CLI | CLI flags/commands |
-| 9 | ~11124 | Error Handling & Caching | Error/cache patterns |
-| 10 | ~11501 | Database & Cluster | Database work |
-| 11 | ~11916 | Security & Logging | Security features, **Scoped Agent Tokens**, **Context Detection** |
-| 12 | ~13799 | Server Configuration | Server settings |
-| 13 | ~14859 | Health & Versioning | Health endpoints |
-| 14 | ~15363 | API Structure | REST/GraphQL/Route Compliance, **Non-Interactive Text Output** |
-| 15 | ~16955 | SSL/TLS & Let's Encrypt | SSL certificates |
-| 16 | ~17808 | Web Frontend | Frontend/UI, **Sitemap**, **Site Verification**, **Branding/SEO** |
-| 17 | ~22230 | Admin Panel | Admin UI, **Server Admin**, **Scoped Agents API** |
-| 18 | ~24270 | Email & Notifications | Email/SMTP, **SMTP Auto-Detection** |
-| 19 | ~25590 | Scheduler | Background tasks, **NO external schedulers**, **Backup tasks** |
-| 20 | ~26075 | GeoIP | GeoIP features |
-| 21 | ~26148 | Metrics | Metrics/monitoring |
-| 22 | ~27169 | Backup & Restore | Backup features, **Compliance encryption**, **Cluster backups** |
-| 23 | ~27898 | Update Command | Update feature |
-| 24 | ~28377 | Privilege Escalation & Service | Service/privilege work |
-| 25 | ~29275 | Service Support | Systemd/runit/rc.d/launchd templates |
-| 26 | ~29459 | Makefile | Local dev/tests/debug only, **NOT used in CI/CD** |
-| 27 | ~30214 | Docker | Docker/containers, **NEVER copy/symlink binaries** |
-| 28 | ~31582 | CI/CD Workflows | GitHub/GitLab/Gitea Actions |
-| 29 | ~34436 | Testing & Development | Testing/dev workflow, **AI Docker Compose Rules**, **Content Negotiation Testing** |
-| 30 | ~36255 | ReadTheDocs Documentation | Documentation |
-| 31 | ~36968 | I18N & A11Y | Internationalization |
-| 32 | ~37389 | Tor Hidden Service | Tor support, **binary controls Tor** |
-| 33 | ~39168 | Client & Agent | Client **REQUIRED**, Agent optional - CLI/TUI/GUI, **Scoped Agent Tokens**, **Smart Context**, **First-Run Wizard** |
-| 34 | ~43562 | Multi-User | **OPTIONAL** - Regular User accounts/registration, vanity URLs |
-| 35 | ~47206 | Organizations | **OPTIONAL** - multi-user orgs, vanity URLs |
-| 36 | ~47847 | Custom Domains | **OPTIONAL** - user/org branded domains |
-| 37 | ~48870 | IDEA.md Reference | **Examples only** - NEVER modify |
-| FINAL | ~49124 | Compliance Checklist | Final verification, **AI Quick Reference Rules** |
+| 0 | ~1522 | AI Assistant Rules | **ALWAYS READ FIRST**, **AI Behavior Rules** |
+| 1 | ~3221 | Critical Rules | **ALWAYS READ FIRST** |
+| 2 | ~4468 | License & Attribution | License requirements |
+| 3 | ~4802 | Project Structure | Setting up new project, **CI/CD badge detection** |
+| 4 | ~5752 | OS-Specific Paths | Path handling |
+| 5 | ~5937 | Configuration | Config file work, **Path Security**, **Privileged Ports**, **Escalation** |
+| 6 | ~7847 | Application Modes | Mode handling, debug endpoints |
+| 7 | ~8455 | Binary Requirements | Binary building, **Display detection**, **TERM=dumb**, **NO_COLOR** |
+| 8 | ~9118 | Server Binary CLI | CLI flags/commands, **NO_COLOR Support**, **--color flag** |
+| 9 | ~12271 | Error Handling & Caching | Error/cache patterns |
+| 10 | ~12648 | Database & Cluster | Database work |
+| 11 | ~13063 | Security & Logging | Security features, **Scoped Agent Tokens**, **Context Detection** |
+| 12 | ~14955 | Server Configuration | Server settings |
+| 13 | ~16015 | Health & Versioning | Health endpoints |
+| 14 | ~16766 | API Structure | REST/GraphQL/Route Compliance, **Non-Interactive Text Output** |
+| 15 | ~18358 | SSL/TLS & Let's Encrypt | SSL certificates |
+| 16 | ~19231 | Web Frontend | Frontend/UI, **Sitemap**, **Site Verification**, **Branding/SEO** |
+| 17 | ~25167 | Admin Panel | Admin UI, **Server Admin**, **Scoped Agents API** |
+| 18 | ~27207 | Email & Notifications | Email/SMTP, **SMTP Auto-Detection** |
+| 19 | ~28527 | Scheduler | Background tasks, **NO external schedulers**, **Backup tasks** |
+| 20 | ~29012 | GeoIP | GeoIP features |
+| 21 | ~29085 | Metrics | Prometheus metrics, **INTERNAL only** |
+| 22 | ~30530 | Backup & Restore | Backup features, **Compliance encryption**, **Cluster backups** |
+| 23 | ~31259 | Update Command | Update feature |
+| 24 | ~31738 | Privilege Escalation & Service | Service/privilege work |
+| 25 | ~32636 | Service Support | Systemd/runit/rc.d/launchd templates |
+| 26 | ~32820 | Makefile | Local dev/tests/debug only, **NOT used in CI/CD** |
+| 27 | ~33575 | Docker | Docker/containers, **NEVER copy/symlink binaries** |
+| 28 | ~34943 | CI/CD Workflows | GitHub/GitLab/Gitea Actions |
+| 29 | ~37797 | Testing & Development | Testing/dev workflow, **AI Docker Compose Rules**, **Content Negotiation Testing** |
+| 30 | ~39618 | ReadTheDocs Documentation | Documentation |
+| 31 | ~40348 | I18N & A11Y | Internationalization |
+| 32 | ~40769 | Tor Hidden Service | Tor support, **binary controls Tor** |
+| 33 | ~42548 | Client & Agent | Client **REQUIRED**, Agent optional - CLI/TUI/GUI, **Scoped Agent Tokens**, **Smart Context**, **First-Run Wizard** |
+| 34 | ~46957 | Multi-User | **OPTIONAL** - Regular User accounts/registration, vanity URLs |
+| 35 | ~50609 | Organizations | **OPTIONAL** - multi-user orgs, vanity URLs |
+| 36 | ~51250 | Custom Domains | **OPTIONAL** - user/org branded domains |
+| 37 | ~52273 | IDEA.md Reference | **Examples only** - NEVER modify |
+| FINAL | ~52527 | Compliance Checklist | Final verification, **AI Quick Reference Rules** |
 
 **When Implementing OPTIONAL PARTs (34-36, Agent from 33):**
 1. Change PART title from `OPTIONAL` → `NON-NEGOTIABLE` in AI.md
@@ -1151,7 +1457,7 @@ When reading a PART and you encounter a reference like "See PART X" or "Read PAR
 2. Jump to the referenced PART and read it
 3. **Return to your original location** and continue reading
 
-Example: If you're reading PART 5 at line 5017 and it says "See PART 10", read PART 10, then **return to PART 5 line 5017** and continue.
+Example: If you're reading PART 5 at line 5356 and it says "See PART 10", read PART 10, then **return to PART 5 line 5356** and continue.
 
 **Never abandon your current PART after following a reference.**
 
@@ -1574,18 +1880,120 @@ See IDEA.md for the full project breakdown.
 
 **File:** `{project_dir}/.git/COMMIT_MESS`
 
-| Action | When |
-|--------|------|
-| **Create/Update** | Only when files were actually changed |
-| **Skip** | If no files were modified (nothing to commit) |
-| **Delete** | Not AI's responsibility (user deletes after commit) |
+### COMMIT_MESS Must Reflect Actual Changes
 
-**Before writing COMMIT_MESS, verify changes exist:**
+**The commit message MUST accurately describe the current state of uncommitted changes.**
+
+**Before ANY COMMIT_MESS action, check actual changes:**
 ```bash
-git status --porcelain  # If empty, no changes - skip COMMIT_MESS
+git status --porcelain  # What files are modified/added/deleted?
+git diff --stat         # Summary of changes
 ```
 
-**Rule:** No changes = no COMMIT_MESS. Don't create empty or unnecessary commit messages.
+| Situation | Action |
+|-----------|--------|
+| No changes (`git status --porcelain` empty) | **Do nothing** - no COMMIT_MESS needed |
+| Changes exist, no COMMIT_MESS | **Create** new COMMIT_MESS |
+| Changes exist, COMMIT_MESS exists and matches | **Append** new changes to existing |
+| Changes exist, COMMIT_MESS exists but stale | **Recreate** COMMIT_MESS from scratch |
+
+### Detecting Stale COMMIT_MESS
+
+**COMMIT_MESS is stale when:**
+- It describes files that are no longer modified (user already committed them)
+- It doesn't mention files that ARE modified
+- The described changes don't match `git diff --stat`
+
+**Check before appending:**
+```bash
+# Compare COMMIT_MESS content against actual changes
+git status --porcelain | cut -c4-  # List of changed files
+# If COMMIT_MESS mentions files not in this list = stale, recreate
+# If this list has files not in COMMIT_MESS = append or recreate
+```
+
+### Append vs Recreate Logic
+
+```
+AI made changes to file X
+│
+├─► No COMMIT_MESS exists
+│   └─► CREATE new COMMIT_MESS describing X
+│
+├─► COMMIT_MESS exists, describes X
+│   └─► DO NOTHING (already covered)
+│
+├─► COMMIT_MESS exists, describes Y (not X)
+│   ├─► Y still in `git status`?
+│   │   └─► APPEND: Add X changes to existing message
+│   └─► Y NOT in `git status`? (user committed Y already)
+│       └─► RECREATE: New message describing only X
+│
+└─► COMMIT_MESS exists, describes X and Y
+    └─► Y NOT in `git status`? (user committed Y already)
+        └─► RECREATE: New message describing only X
+```
+
+### COMMIT_MESS Accuracy Rules
+
+**COMMIT_MESS must ALWAYS match `git status`. Never describe committed changes. Never omit uncommitted changes.**
+
+| Rule | Description |
+|------|-------------|
+| **List actual files** | Mention specific files/paths that changed, not vague descriptions |
+| **Describe actual changes** | What was added/modified/removed must match `git diff` |
+| **No phantom changes** | Never describe work that isn't in `git status` |
+| **No missing changes** | Every modified file must be accounted for |
+| **No stale content** | If user committed, recreate to reflect current state |
+| **Verify before write** | Always run `git status --porcelain` before creating/updating |
+
+**COMMIT_MESS content must answer:**
+1. Which files were changed? (from `git status`)
+2. What was changed in each? (from `git diff`)
+3. Why was it changed? (context from the task)
+
+**Example verification flow:**
+```bash
+# 1. Check what's actually changed
+git status --porcelain
+#  M src/server/config.go
+#  M src/server/handler.go
+# ?? src/server/newfile.go
+
+# 2. COMMIT_MESS must mention ALL of these:
+#    - config.go changes
+#    - handler.go changes
+#    - newfile.go addition
+
+# 3. If COMMIT_MESS mentions "database.go" but it's not in git status = STALE
+```
+
+**Bad vs Good:**
+```
+# BAD - vague, doesn't mention files
+✨ Add new feature ✨
+Added some improvements to the server.
+
+# GOOD - specific, lists actual changes (code files)
+✨ Add NO_COLOR support for terminal output ✨
+Implement NO_COLOR environment variable handling per no-color.org spec.
+
+- src/common/display/detect.go: Add IsDumbTerminal() helper
+- src/common/output/color.go: Add ColorEnabled(), EmojiEnabled() functions
+- src/server/banner/banner.go: Add plainMode check and printServerBannerPlain()
+
+# GOOD - when AI.md itself is modified
+📝 Add NO_COLOR and TERM=dumb specs to AI.md 📝
+Document terminal output handling for plain text environments.
+
+- AI.md PART 7: Add TERM=dumb handling section, IsDumbTerminal() helper
+- AI.md PART 8: Add NO_COLOR section, --color flag, EmojiEnabled() function
+- AI.md PART 11: Add emoji fallback table to Log Output Rules
+- AI.md PART 15: Update startup banner with plain mode support
+- AI.md PART 33: Add plain banner example for agent
+```
+
+**Note:** When modifying AI.md, reference the PART number and section name for clarity.
 
 **Format:**
 ```
@@ -1664,14 +2072,14 @@ Implemented core server functionality and admin panel.
 - Built admin panel with authentication
 ```
 
-**Rules:**
+**TODO Completion Rules:**
 - The ✅ emoji MUST be used for todo completion commits
 - Title is EXACTLY: `✅ all todo items have been completed ✅`
 - Body MUST summarize what was accomplished
 - Empty TODO.AI.md BEFORE writing COMMIT_MESS
 - File stays empty until new tasks are added
 
-**Rules:**
+**Format Rules:**
 - Title line: max 64 characters (including emojis)
 - Blank line after title
 - Detailed description follows
@@ -1841,11 +2249,16 @@ Spec version: {line count or hash}
 
 ## Attribution
 
+**AI operates on behalf of the user in a Senior Developer / UI-UX Designer capacity.**
+
 | Rule | Description |
 |------|-------------|
-| **NEVER** | Include AI attribution in code, comments, commits, or documentation |
-| **NEVER** | "authored by Claude", "generated by AI", "Co-Authored-By: Claude" |
-| **ALWAYS** | Code should appear as if written by a human developer |
+| **NEVER** | Include AI attribution anywhere (code, comments, commits, PRs, documentation) |
+| **NEVER** | Add "authored by Claude", "generated by AI", "Co-Authored-By: Claude/AI", etc. |
+| **NEVER** | Add AI-related comments like "AI-generated", "written by assistant", etc. |
+| **NEVER** | Reference AI tools in commit messages, PR descriptions, or changelogs |
+| **ALWAYS** | All output should appear as if written by a human senior developer |
+| **ALWAYS** | AI acts as an extension of the user, not a separate contributor |
 
 ## Tool Access
 
@@ -2453,8 +2866,8 @@ Enter choice [a-d]:
 # AI should run these checks and report results:
 
 # 1. Verify CLI
-./binaries/{projectname} --help
-./binaries/{projectname} --version
+./binaries/search --help
+./binaries/search --version
 
 # 2. Verify build
 make clean && make build
@@ -2822,7 +3235,7 @@ Every feature MUST work via:
 | **Browser** | Chrome, Firefox, Safari | HTML (pretty UI) |
 | **PWA** | Installed web app (desktop/mobile) | HTML (same as browser) |
 | **API/Automation** | curl, wget, scripts, integrations | JSON |
-| **CLI tool** | `{projectname}-cli` | Text/JSON (configurable) |
+| **CLI tool** | `search-cli` | Text/JSON (configurable) |
 
 **Endpoint Pattern (applies to ENTIRE app):**
 | Web Route (HTML) | API Route (JSON) | Purpose |
@@ -2884,7 +3297,7 @@ When working on this project, the following roles are assumed based on the task:
 
 ```bash
 # CORRECT - Use Makefile targets
-make dev                    # Quick build to {tempdir}/{projectorg}/{projectname}-XXXXXX/
+make dev                    # Quick build to {tempdir}/apimgr/search-XXXXXX/
 make local                   # Build with version info to binaries/
 make build                  # Full cross-platform build to binaries/
 make test                   # Run unit tests
@@ -2894,7 +3307,7 @@ make test                   # Run unit tests
 ./tests/incus.sh            # Full OS test with systemd (PREFERRED)
 
 # WRONG - Never run go directly on local machine
-go build -o binary/{projectname} ./src
+go build -o binary/search ./src
 ```
 
 **See PART 29: TESTING & DEVELOPMENT for full containerized build/test procedures.**
@@ -3299,17 +3712,18 @@ IDEA.md (project spec - update as needed)
 
 #### Section Order (MUST follow this order)
 
-1. **Title & Badges** - Project name, build status, version badges
+1. **Title & Badges** - Project name, build status, version, license, docs badges
 2. **About** - Brief description of what the project does
-3. **Official Site** - Link to official site (if defined, e.g., `https://{projectname}.{projectorg}.us`)
+3. **Official Site** - Link to official site (if `{officialsite}` is defined)
 4. **Features** - Key features list
 5. **Production** - Production deployment instructions (Docker, binary, systemd)
 6. **Client** - Client installation and usage (if applicable)
 7. **Configuration** - Key configuration options
-8. **API** - API endpoints summary (if applicable)
+8. **API** - API endpoints summary with full URLs if `{officialsite}` is set
 9. **Other** - Additional info (troubleshooting, FAQ, etc.)
 10. **Development** - Development setup (ALWAYS LAST - for contributors only)
-11. **License** - License info
+11. **Disclaimer** - Clear, readable disclaimer (see template below)
+12. **License** - License info
 
 #### CI/CD Badge Detection
 
@@ -3328,33 +3742,325 @@ Detect platform by checking for workflow files in this order:
 
 ```markdown
 # GitHub Actions
-[![Build](https://github.com/{projectorg}/{projectname}/actions/workflows/build.yml/badge.svg)](https://github.com/{projectorg}/{projectname}/actions/workflows/build.yml)
+[![Build](https://github.com/apimgr/search/actions/workflows/build.yml/badge.svg)](https://github.com/apimgr/search/actions/workflows/build.yml)
 
 # Gitea/Forgejo Actions
-[![Build](https://git.example.com/{projectorg}/{projectname}/actions/workflows/build.yml/badge.svg)](https://git.example.com/{projectorg}/{projectname}/actions)
+[![Build](https://git.example.com/apimgr/search/actions/workflows/build.yml/badge.svg)](https://git.example.com/apimgr/search/actions)
 
 # GitLab CI
-[![Build](https://gitlab.com/{projectorg}/{projectname}/badges/main/pipeline.svg)](https://gitlab.com/{projectorg}/{projectname}/-/pipelines)
+[![Build](https://gitlab.com/apimgr/search/badges/main/pipeline.svg)](https://gitlab.com/apimgr/search/-/pipelines)
 
 # Jenkins
-[![Build](https://jenkins.example.com/buildStatus/icon?job={projectorg}/{projectname})](https://jenkins.example.com/job/{projectorg}/job/{projectname}/)
+[![Build](https://jenkins.example.com/buildStatus/icon?job=apimgr/search)](https://jenkins.example.com/job/apimgr/job/search/)
 ```
 
-**Release/License badges also adapt to platform:**
+**Release/License/Docs badges also adapt to platform:**
 
 ```markdown
 # GitHub
-[![Release](https://img.shields.io/github/v/release/{projectorg}/{projectname})](https://github.com/{projectorg}/{projectname}/releases)
-[![License](https://img.shields.io/github/license/{projectorg}/{projectname})](LICENSE.md)
+[![Release](https://img.shields.io/github/v/release/apimgr/search)](https://github.com/apimgr/search/releases)
+[![License](https://img.shields.io/github/license/apimgr/search)](LICENSE.md)
+[![Docs](https://readthedocs.org/projects/{RTD_PROJECT}/badge/?version=latest)](https://{RTD_URL})
 
 # GitLab
-[![Release](https://gitlab.com/{projectorg}/{projectname}/-/badges/release.svg)](https://gitlab.com/{projectorg}/{projectname}/-/releases)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
+[![Release](https://gitlab.com/apimgr/search/-/badges/release.svg)](https://gitlab.com/apimgr/search/-/releases)
+[![License](https://img.shields.io/github/license/apimgr/search)](LICENSE.md)
+[![Docs](https://readthedocs.org/projects/{RTD_PROJECT}/badge/?version=latest)](https://{RTD_URL})
 
 # Gitea/Forgejo (use shields.io with custom endpoint or static badge)
-[![Release](https://img.shields.io/badge/dynamic/json?url=https://git.example.com/api/{api_version}/repos/{projectorg}/{projectname}/releases/latest&query=$.tag_name&label=release)](https://git.example.com/{projectorg}/{projectname}/releases)
+[![Release](https://img.shields.io/badge/dynamic/json?url=https://git.example.com/api/{api_version}/repos/apimgr/search/releases/latest&query=$.tag_name&label=release)](https://git.example.com/apimgr/search/releases)
+[![License](https://img.shields.io/github/license/apimgr/search)](LICENSE.md)
+[![Docs](https://readthedocs.org/projects/{RTD_PROJECT}/badge/?version=latest)](https://{RTD_URL})
+
+# {RTD_PROJECT} and {RTD_URL} - Use one of:
+#   apimgr-search / apimgr-search.readthedocs.io
+#   search / search.readthedocs.io
+#   Custom project name / {custom_rtd_address}
+```
+
+#### License Badge - GitHub Detection
+
+**Problem:** Static license badges like `![License](https://img.shields.io/badge/license-MIT-blue.svg)` show "MIT" but GitHub cannot auto-detect the license, showing "View license" instead of "MIT License" in the repo sidebar.
+
+**Solution:** Use GitHub's license API endpoint which reads from your LICENSE file:
+
+```markdown
+# ✅ CORRECT - GitHub can detect license
+[![License](https://img.shields.io/github/license/apimgr/search)](LICENSE.md)
+
+# ❌ WRONG - Static badge, GitHub cannot detect
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 ```
+
+**Requirements for GitHub to detect license:**
+1. File must be named `LICENSE`, `LICENSE.md`, or `LICENSE.txt` (root of repo)
+2. License text must match a known license (use exact template from choosealicense.com)
+3. Do NOT modify the license text (except copyright year/name in header)
+
+**Verify detection:**
+- Go to repo page → Look at right sidebar → Should show "MIT License" (not just "View license")
+- API check: `curl -q -LSsf https://api.github.com/repos/apimgr/search/license`
+
+#### Docs Badge - Avoid "unknown"
+
+**Problem:** Generic docs badges show "unknown" when documentation isn't configured.
+
+**Solution:** Only add docs badge when documentation is actually deployed:
+
+| Docs Platform | Badge | Condition |
+|---------------|-------|-----------|
+| ReadTheDocs | See ReadTheDocs URL formats below | RTD project exists |
+| GitHub Pages | `[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://apimgr.github.io/search)` | gh-pages branch exists |
+| GitBook | `[![Docs](https://img.shields.io/badge/docs-GitBook-blue)](https://apimgr.gitbook.io/search)` | GitBook project exists |
+| Self-hosted | `[![Docs](https://img.shields.io/badge/docs-online-blue)]({docs_url})` | Docs site is live |
+| None | **Do not add docs badge** | No docs deployed |
+
+**Rules:**
+- Do NOT add a docs badge if documentation is not deployed
+- Do NOT use `https://img.shields.io/badge/docs-unknown-lightgrey` or similar
+- If docs are planned but not ready, omit the badge entirely
+
+#### ReadTheDocs URL Formats
+
+**ReadTheDocs supports three URL formats (use the one that matches your project):**
+
+| Format | URL Pattern | When to Use |
+|--------|-------------|-------------|
+| **Org-Project** | `https://apimgr-search.readthedocs.io` | Default for organization projects |
+| **Project Only** | `https://search.readthedocs.io` | When project name is unique enough |
+| **Custom Domain** | `https://{custom_rtd_address}` | When custom domain is configured in RTD |
+
+**Badge formats:**
+
+```markdown
+# Option 1: Org-Project format (most common)
+[![Docs](https://readthedocs.org/projects/apimgr-search/badge/?version=latest)](https://apimgr-search.readthedocs.io)
+
+# Option 2: Project only format
+[![Docs](https://readthedocs.org/projects/search/badge/?version=latest)](https://search.readthedocs.io)
+
+# Option 3: Custom domain
+[![Docs](https://img.shields.io/badge/docs-online-blue)](https://{custom_rtd_address})
+```
+
+**Determining which format to use:**
+1. Check your ReadTheDocs project settings for the actual URL
+2. If using organization account → likely `apimgr-search`
+3. If standalone project → likely just `search`
+4. If custom domain configured → use that
+
+**mkdocs.yml site_url must match:**
+```yaml
+# Must match whichever RTD URL format you're using
+site_url: https://apimgr-search.readthedocs.io
+# OR
+site_url: https://search.readthedocs.io
+# OR
+site_url: https://{custom_rtd_address}
+```
+
+#### Disclaimer Section
+
+**Every README.md MUST include a Disclaimer section (typically before or after License).**
+
+**Good Disclaimer - Clear, professional, covers key points:**
+
+```markdown
+## Disclaimer
+
+This software is provided "as is" without warranty of any kind. Use at your own risk.
+
+- **No Warranty**: The authors are not responsible for any damages, data loss, or issues arising from use of this software
+- **Not Professional Advice**: This software does not constitute legal, financial, medical, or other professional advice
+- **Third-Party Services**: If this software connects to external APIs or services, their terms of service apply separately
+- **Security**: While we strive to follow security best practices, no software is guaranteed to be free of vulnerabilities
+- **Production Use**: Evaluate thoroughly before deploying in production environments
+
+By using this software, you acknowledge that you have read and understood this disclaimer.
+```
+
+**Bad Disclaimer examples to AVOID:**
+
+| ❌ Bad | Why |
+|--------|-----|
+| "Use at your own risk" (one line only) | Too vague, doesn't cover key concerns |
+| "No warranty blah blah blah" (copy-paste legalese) | Unreadable, users skip it |
+| "We are not responsible for anything" | Too broad, unprofessional |
+| No disclaimer at all | Missing important legal protection |
+| Disclaimer hidden in LICENSE file only | Users don't read LICENSE, README is primary |
+
+**Disclaimer placement:**
+- Add as a section in README.md (after "Other" or before "License")
+- Keep it readable (bullet points, not a wall of text)
+- Optionally also include in LICENSE.md, but README is primary
+
+#### URL Standards (PROJECT-WIDE)
+
+**Two different URL formats depending on context:**
+
+| Context | URL Format | Example |
+|---------|------------|---------|
+| **Documentation** (README, docs/, examples) | `{officialsite}/path` | `GET https://api.example.com/healthz` |
+| **Embedded code** (Go, JS, templates) | `{fqdn}/path` | `fmt.Sprintf("https://%s/healthz", cfg.FQDN)` |
+
+**Why the distinction:**
+- **Documentation**: Users copy-paste. Full URLs work immediately.
+- **Embedded code**: Must use configured FQDN variable for the running instance.
+
+---
+
+**{officialsite} - Documentation URLs (README, docs/, API docs, examples)**
+
+If `{officialsite}` is defined, ALL documentation examples MUST use the full URL.
+
+| Scenario | Example Format |
+|----------|----------------|
+| **{officialsite} is set** | `GET https://api.example.com/v1/users` |
+| **{officialsite} is NOT set** | `GET /v1/users` |
+
+**Applies to:**
+- README.md
+- docs/ directory
+- API documentation
+- Swagger/OpenAPI examples
+- GraphQL documentation
+- Installation guides
+- Troubleshooting guides
+- Any user-facing documentation
+
+**Example transformation when {officialsite} = `https://api.example.com`:**
+
+```markdown
+# ❌ WRONG - Relative paths when officialsite exists
+GET /healthz
+GET /api/v1/users
+GET /api/autoconfig
+curl http://localhost:8080/api/v1/data
+
+# ✅ CORRECT - Full URLs using officialsite
+GET https://api.example.com/healthz
+GET https://api.example.com/api/v1/users
+GET https://api.example.com/api/autoconfig
+curl -q -LSsf https://api.example.com/api/v1/data
+```
+
+**Rules:**
+1. **API examples**: Always use `{officialsite}` as base URL
+2. **curl commands**: Use `{officialsite}`, not `localhost` or relative paths
+3. **Client examples**: Show connecting to `{officialsite}` by default
+4. **Endpoint tables**: Show full URLs: `GET {officialsite}/api/v1/users`
+5. **Docker examples**: OK to use localhost for local deployment instructions
+6. **Development section**: OK to use localhost (it's for local dev)
+
+**Template variables:**
+```markdown
+## API
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET {officialsite}/healthz` | Health check |
+| `GET {officialsite}/api/v1/users` | List users |
+| `POST {officialsite}/api/v1/users` | Create user |
+| `GET {officialsite}/api/autoconfig` | Auto-configuration |
+
+### Examples
+
+```bash
+# Get server status
+curl -q -LSsf {officialsite}/healthz
+
+# List all users (requires auth)
+curl -q -LSsf -H "Authorization: Bearer TOKEN" {officialsite}/api/v1/users
+
+# Auto-config for clients
+curl -q -LSsf {officialsite}/api/autoconfig
+```
+```
+
+**If {officialsite} is not defined:**
+- Use relative paths: `GET /healthz`, `GET /api/v1/users`
+- Use placeholder in curl: `curl -q -LSsf http://YOUR_SERVER/healthz`
+- Document that user must specify their server URL
+
+---
+
+**{fqdn} - Embedded Code URLs (Go, JavaScript, templates)**
+
+For code that runs in the application, NEVER use bare `/path`. Always use `{fqdn}/path`.
+
+| Context | ❌ Wrong | ✅ Correct |
+|---------|----------|------------|
+| **Go code** | `"/api/v1/users"` | `fmt.Sprintf("https://%s/api/v1/users", cfg.FQDN)` |
+| **JavaScript** | `fetch('/api/v1/users')` | `fetch(\`${window.location.origin}/api/v1/users\`)` |
+| **HTML templates** | `href="/api/docs"` | `href="https://{{.FQDN}}/api/docs"` |
+| **Config files** | `url: /callback` | `url: https://{fqdn}/callback` |
+| **Email templates** | `<a href="/verify">` | `<a href="https://{{.FQDN}}/verify">` |
+
+**Why:** Bare paths break when:
+- Behind reverse proxy with different base path
+- Emails/notifications need absolute URLs
+- OAuth callbacks require full URLs
+- Webhooks need full URLs
+- API responses with links (HATEOAS)
+
+**Go examples:**
+
+```go
+// ❌ WRONG - Bare path
+redirectURL := "/auth/callback"
+link := "/api/v1/users/" + userID
+
+// ✅ CORRECT - Using FQDN
+redirectURL := fmt.Sprintf("https://%s/auth/callback", cfg.FQDN)
+link := fmt.Sprintf("https://%s/api/v1/users/%s", cfg.FQDN, userID)
+
+// ✅ CORRECT - Helper function
+func BuildURL(path string) string {
+    return fmt.Sprintf("https://%s%s", cfg.FQDN, path)
+}
+link := BuildURL("/api/v1/users/" + userID)
+```
+
+**JavaScript examples:**
+
+```javascript
+// ❌ WRONG - Bare path (breaks with base paths)
+fetch('/api/v1/users')
+
+// ✅ CORRECT - Full URL
+fetch(`${window.location.origin}/api/v1/users`)
+
+// ✅ CORRECT - From config
+fetch(`${config.apiBaseUrl}/api/v1/users`)
+```
+
+**HTML template examples:**
+
+```html
+<!-- ❌ WRONG - Bare path (breaks in emails, notifications) -->
+<a href="/verify?token={{.Token}}">Verify Email</a>
+
+<!-- ✅ CORRECT - Full URL using FQDN -->
+<a href="https://{{.FQDN}}/verify?token={{.Token}}">Verify Email</a>
+```
+
+**Exception - Internal routing only:**
+```go
+// OK to use bare paths for internal router registration
+router.GET("/api/v1/users", handleUsers)
+router.GET("/healthz", handleHealth)
+```
+
+**Summary:**
+
+| Location | Format | Example |
+|----------|--------|---------|
+| README.md | `{officialsite}/path` | `GET https://api.example.com/healthz` |
+| docs/*.md | `{officialsite}/path` | `curl -q -LSsf https://api.example.com/api/v1/users` |
+| Go code | `{fqdn}/path` | `fmt.Sprintf("https://%s/path", cfg.FQDN)` |
+| JS code | `origin/path` | `${window.location.origin}/path` |
+| Email templates | `{fqdn}/path` | `https://{{.FQDN}}/verify` |
+| Router registration | `/path` | `router.GET("/api/v1/users", ...)` (internal only) |
 
 **Platform-Specific URLs:**
 
@@ -3370,11 +4076,12 @@ Detect platform by checking for workflow files in this order:
 **Use the appropriate badges and URLs for your platform (see above).**
 
 ```markdown
-# {projectname}
+# search
 
 {PLATFORM_BUILD_BADGE}
 {PLATFORM_RELEASE_BADGE}
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
+[![License](https://img.shields.io/github/license/apimgr/search)](LICENSE.md)
+{PLATFORM_DOCS_BADGE}  <!-- Only include if docs are deployed -->
 
 ## About
 
@@ -3382,7 +4089,7 @@ Detect platform by checking for workflow files in this order:
 
 ## Official Site
 
-https://{projectname}.{projectorg}.us
+{officialsite}
 
 ## Features
 
@@ -3396,17 +4103,17 @@ https://{projectname}.{projectorg}.us
 
 ```bash
 docker run -d \
-  --name {projectname} \
+  --name search \
   -p 64580:80 \
   -v ./rootfs/config:/config:z \
   -v ./rootfs/data:/data:z \
-  {PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:latest
+  {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest
 ```
 
 ### Docker Compose
 
 ```bash
-curl -O {PLATFORM_RAW_URL}/docker/docker-compose.yml
+curl -q -LSsf -O {PLATFORM_RAW_URL}/docker/docker-compose.yml
 docker compose up -d
 ```
 
@@ -3414,11 +4121,11 @@ docker compose up -d
 
 ```bash
 # Download latest release
-curl -LO {PLATFORM_RELEASE_URL}/{projectname}-linux-amd64
+curl -q -LSsf -O {PLATFORM_RELEASE_URL}/search-linux-amd64
 
 # Make executable and run
-chmod +x {projectname}-linux-amd64
-./{projectname}-linux-amd64
+chmod +x search-linux-amd64
+./search-linux-amd64
 ```
 
 ## Client
@@ -3429,23 +4136,23 @@ A companion client is available for interacting with the server API.
 
 ```bash
 # Download latest release
-curl -LO {PLATFORM_RELEASE_URL}/{projectname}-cli-linux-amd64
-chmod +x {projectname}-cli-linux-amd64
-sudo mv {projectname}-cli-linux-amd64 /usr/local/bin/{projectname}-cli
+curl -q -LSsf -O {PLATFORM_RELEASE_URL}/search-cli-linux-amd64
+chmod +x search-cli-linux-amd64
+sudo mv search-cli-linux-amd64 /usr/local/bin/search-cli
 ```
 
 ### Configure
 
 ```bash
-# Connect to server (creates ~/.config/{projectorg}/{projectname}/cli.yml)
-{projectname}-cli --server https://api.example.com --token YOUR_API_TOKEN
+# Connect to official server (creates ~/.config/apimgr/search/cli.yml)
+search-cli --server {officialsite} --token YOUR_API_TOKEN
 ```
 
 ### Usage
 
 ```bash
-{projectname}-cli --help
-{projectname}-cli [command] --help
+search-cli --help
+search-cli [command] --help
 ```
 
 ## Configuration
@@ -3458,19 +4165,29 @@ Key settings:
 
 ## API
 
-API documentation available at `/api/{api_version}/` when running.
+API documentation available at `{officialsite}/api/{api_version}/` when running.
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /healthz` | Health check |
-| `GET /api/{api_version}/...` | API endpoints |
+| `GET {officialsite}/healthz` | Health check |
+| `GET {officialsite}/api/{api_version}/...` | API endpoints |
+
+### Examples
+
+```bash
+# Health check
+curl -q -LSsf {officialsite}/healthz
+
+# API request (requires auth)
+curl -q -LSsf -H "Authorization: Bearer TOKEN" {officialsite}/api/{api_version}/resource
+```
 
 ## Other
 
 ### Troubleshooting
 
-- Check logs: `docker logs {projectname}`
-- Health check: `curl http://{fqdn}:{port}/healthz`
+- Check logs: `docker logs search`
+- Health check: `curl -q -LSsf {officialsite}/healthz`
 
 ## Development
 
@@ -3486,7 +4203,7 @@ API documentation available at `/api/{api_version}/` when running.
 ```bash
 # Clone
 git clone {PLATFORM_REPO_URL}
-cd {projectname}
+cd search
 
 # Quick dev build (outputs to OS temp dir)
 make dev
@@ -3506,6 +4223,18 @@ tests/         # Test files
 binaries/      # Built binaries (gitignored)
 ```
 
+## Disclaimer
+
+This software is provided "as is" without warranty of any kind. Use at your own risk.
+
+- **No Warranty**: The authors are not responsible for any damages, data loss, or issues arising from use of this software
+- **Not Professional Advice**: This software does not constitute legal, financial, medical, or other professional advice
+- **Third-Party Services**: If this software connects to external APIs or services, their terms of service apply separately
+- **Security**: While we strive to follow security best practices, no software is guaranteed to be free of vulnerabilities
+- **Production Use**: Evaluate thoroughly before deploying in production environments
+
+By using this software, you acknowledge that you have read and understood this disclaimer.
+
 ## License
 
 MIT - See [LICENSE.md](LICENSE.md)
@@ -3523,6 +4252,82 @@ MIT - See [LICENSE.md](LICENSE.md)
 | Breaking change | Yes - add notice at top |
 
 **NEVER let README become outdated. It is the first thing users see.**
+
+---
+
+### curl Command Standard (PROJECT-WIDE)
+
+**ALL curl commands in docs, examples, tests, and scripts MUST use this format:**
+
+```bash
+# Standard curl command (base format)
+curl -q -LSsf {url}
+
+# With headers only (HEAD request)
+curl -q -LSsfI {url}
+
+# With output to file
+curl -q -LSsf -o {file} {url}
+
+# With custom headers
+curl -q -LSsf -H "Authorization: Bearer TOKEN" {url}
+
+# With data (POST/PUT)
+curl -q -LSsf -X POST -d '{"key":"value"}' {url}
+```
+
+**Flag breakdown:**
+
+| Flag | Purpose | Why Required |
+|------|---------|--------------|
+| `-q` | Quiet mode | Don't read `.curlrc` - ensures consistent behavior |
+| `-L` | Follow redirects | Handle 301/302 automatically |
+| `-S` | Show errors | Display errors even in silent mode |
+| `-s` | Silent | No progress bar/meter |
+| `-f` | Fail silently | Return proper exit code on HTTP errors (4xx/5xx) |
+
+**Additional flags (add as needed):**
+
+| Flag | When to Use |
+|------|-------------|
+| `-I` | Headers only (HEAD request) |
+| `-o {file}` | Download to file |
+| `-O` | Download with remote filename |
+| `-H "Header: Value"` | Custom headers |
+| `-X METHOD` | Specify HTTP method |
+| `-d 'data'` | Send data (POST body) |
+| `--connect-timeout N` | Connection timeout in seconds |
+| `--max-time N` | Maximum time for entire operation |
+
+**Examples:**
+
+```bash
+# ✅ CORRECT
+curl -q -LSsf https://api.example.com/healthz
+curl -q -LSsfI https://api.example.com/healthz
+curl -q -LSsf -H "Accept: application/json" https://api.example.com/users
+curl -q -LSsf -X POST -d '{"name":"test"}' https://api.example.com/users
+curl -q -LSsf -o app.tar.gz https://releases.example.com/app-1.0.tar.gz
+curl -q -LSsf -O https://releases.example.com/app-linux-amd64
+
+# ❌ WRONG - Missing standard flags
+curl https://api.example.com/healthz
+curl -s https://api.example.com/healthz
+curl -L https://api.example.com/healthz
+```
+
+**Where this applies:**
+- README.md examples
+- docs/ documentation
+- Test scripts
+- Makefiles
+- CI/CD pipelines
+- Agent install scripts
+- Any shell script
+
+**Exceptions:**
+- **Interactive debugging** - Use `curl -v` for verbose output
+- **HTTP status code testing** - Use `curl -q -LSs` (no `-f`) when capturing status codes with `-w "%{http_code}"`, since `-f` exits on 4xx/5xx before returning the code
 
 ---
 
@@ -3670,7 +4475,7 @@ Before proceeding, confirm you understand:
 |-------------|-------|
 | License type | MIT License |
 | License file | `LICENSE.md` (REQUIRED in project root) |
-| Copyright holder | `{projectorg}` or individual/organization name |
+| Copyright holder | `apimgr` or individual/organization name |
 | Year | Current year or year of first publication |
 
 ## LICENSE.md Structure
@@ -3678,7 +4483,7 @@ Before proceeding, confirm you understand:
 ```markdown
 MIT License
 
-Copyright (c) {YEAR} {projectorg}
+Copyright (c) {YEAR} apimgr
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -3926,7 +4731,7 @@ echo "3. Commit the changes"
 **Every README.md MUST include a license badge:**
 
 ```markdown
-[![License](https://img.shields.io/github/license/{projectorg}/{projectname})](LICENSE.md)
+[![License](https://img.shields.io/github/license/apimgr/search)](LICENSE.md)
 ```
 
 This badge should appear in the badges section near the top of README.md.
@@ -4000,9 +4805,9 @@ package main
 
 | Field | Value |
 |-------|-------|
-| **Name** | {projectname} |
-| **Organization** | {projectorg} |
-| **Official Site** | https://{projectname}.{projectorg}.us |
+| **Name** | search |
+| **Organization** | apimgr |
+| **Official Site** | https://search.apimgr.us |
 | **Repository** | {PLATFORM_REPO_URL} |
 | **README** | README.md |
 | **License** | MIT > LICENSE.md |
@@ -4022,17 +4827,17 @@ package main
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `{projectname}` | Project name (inferred from path) | `jokes` |
-| `{projectorg}` | Organization name (inferred from path) | `apimgr` |
+| `search` | Project name (inferred from path) | `jokes` |
+| `apimgr` | Organization name (inferred from path) | `apimgr` |
 | `{gitprovider}` | Git hosting provider | `github`, `gitlab`, `private` |
 | **Rule** | Anything in `{}` is a variable | |
 | **Rule** | Anything NOT in `{}` is literal | `/etc/letsencrypt/live` is a real path |
 
 ### Inferring Variables from Path
 
-**NEVER hardcode `{projectname}` or `{projectorg}` - always infer from git remote or directory path.**
+**NEVER hardcode `search` or `apimgr` - always infer from git remote or directory path.**
 
-**Recommended path structure:** `~/Projects/{gitprovider}/{projectorg}/{projectname}` (but works with any location)
+**Recommended path structure:** `~/Projects/{gitprovider}/apimgr/search` (but works with any location)
 
 ```bash
 # Method 1: Infer from git remote (PREFERRED - works regardless of directory location)
@@ -4050,16 +4855,16 @@ PROJECTNAME=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)(\.git
 PROJECTORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(\.git)?$|\1|' || basename "$(dirname "$PWD")")
 ```
 
-**Note:** When using path-based inference, `PROJECTORG` will be the parent directory name, which may not match the git organization unless you follow the recommended `~/Projects/{gitprovider}/{projectorg}/{projectname}` structure. Git remote inference is always more reliable.
+**Note:** When using path-based inference, `PROJECTORG` will be the parent directory name, which may not match the git organization unless you follow the recommended `~/Projects/{gitprovider}/apimgr/search` structure. Git remote inference is always more reliable.
 
 ### Variable Capitalization
 
 | Format | Use Case | Example |
 |--------|----------|---------|
-| `{projectname}` | Lowercase (filenames, paths, commands) | `jokes`, `/etc/apimgr/jokes/` |
+| `search` | Lowercase (filenames, paths, commands) | `jokes`, `/etc/apimgr/jokes/` |
 | `{projectName}` | camelCase (Go variables, JSON keys) | `projectName := "jokes"` |
 | `{Projectname}` | PascalCase (Go types, display names) | `type JokesServer struct` |
-| `{PROJECTNAME}` | UPPERCASE (env vars, Makefile vars) | `PROJECTNAME=jokes` |
+| `SEARCH` | UPPERCASE (env vars, Makefile vars) | `PROJECTNAME=jokes` |
 
 **Examples (assuming no git remote, inferred from path):**
 
@@ -4077,14 +4882,14 @@ PROJECTORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(
 
 **IMPORTANT: Project root can be located ANYWHERE on your system. This section describes a RECOMMENDED organizational structure, not a requirement.**
 
-**Recommended Format:** `~/Projects/{gitprovider}/{projectorg}/{projectname}`
+**Recommended Format:** `~/Projects/{gitprovider}/apimgr/search`
 
 | Component | Description | Examples |
 |-----------|-------------|----------|
 | `~/Projects/` | Base projects directory (recommended) | Can be `~/Projects/`, `~/Documents/`, `/opt/`, etc. |
 | `{gitprovider}` | Git hosting provider or `local` | `github`, `gitlab`, `bitbucket`, `private`, `local` |
-| `{projectorg}` | Organization/username (inferred) | `apimgr`, `casjay`, `myorg` |
-| `{projectname}` | Project name (inferred) | `jokes`, `icons`, `myproject` |
+| `apimgr` | Organization/username (inferred) | `apimgr`, `casjay`, `myorg` |
+| `search` | Project name (inferred) | `jokes`, `icons`, `myproject` |
 
 **Examples of recommended structure:**
 ```
@@ -4105,7 +4910,7 @@ PROJECTORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(
 
 ### Special: `local` Provider
 
-`~/Projects/local/{projectorg}/{projectname}` (or any other location) is used for:
+`~/Projects/local/apimgr/search` (or any other location) is used for:
 - **Prototyping** - Quick experiments and proof-of-concept
 - **Bootstrapping** - Initial project setup before pushing to VCS
 - **Local-only development** - Projects not intended for remote hosting
@@ -4548,7 +5353,7 @@ cd /path/to/project && docker build -f docker/Dockerfile .
 
 **go.mod Example:**
 ```
-module github.com/{projectorg}/{projectname}
+module github.com/apimgr/search
 
 go 1.xx  // Use current latest stable version
 
@@ -4790,7 +5595,7 @@ require github.com/tursodatabase/libsql-client-go v0.0.0-20240902231107-85af5b9d
 ### Example go.mod
 
 ```go
-module github.com/{projectorg}/{projectname}
+module github.com/apimgr/search
 
 go 1.xx  // Use current latest stable version
 
@@ -4952,36 +5757,36 @@ Before proceeding, confirm you understand:
 
 | Type | Path |
 |------|------|
-| Binary | `/usr/local/bin/{projectname}` |
-| Config | `/etc/{projectorg}/{projectname}/` |
-| Config File | `/etc/{projectorg}/{projectname}/server.yml` |
-| Data | `/var/lib/{projectorg}/{projectname}/` |
-| Cache | `/var/cache/{projectorg}/{projectname}/` |
-| Logs | `/var/log/{projectorg}/{projectname}/` |
-| Log File | `/var/log/{projectorg}/{projectname}/server.log` |
-| Backup | `/mnt/Backups/{projectorg}/{projectname}/` |
-| PID File | `/var/run/{projectorg}/{projectname}.pid` |
-| SSL | `/etc/{projectorg}/{projectname}/ssl/` (letsencrypt/, local/) |
-| Security | `/etc/{projectorg}/{projectname}/security/` (geoip/, blocklists/, cve/, trivy/) |
-| SQLite DB | `/var/lib/{projectorg}/{projectname}/db/` |
-| Service | `/etc/systemd/system/{projectname}.service` |
+| Binary | `/usr/local/bin/search` |
+| Config | `/etc/apimgr/search/` |
+| Config File | `/etc/apimgr/search/server.yml` |
+| Data | `/var/lib/apimgr/search/` |
+| Cache | `/var/cache/apimgr/search/` |
+| Logs | `/var/log/apimgr/search/` |
+| Log File | `/var/log/apimgr/search/server.log` |
+| Backup | `/mnt/Backups/apimgr/search/` |
+| PID File | `/var/run/apimgr/search.pid` |
+| SSL | `/etc/apimgr/search/ssl/` (letsencrypt/, local/) |
+| Security | `/etc/apimgr/search/security/` (geoip/, blocklists/, cve/, trivy/) |
+| SQLite DB | `/var/lib/apimgr/search/db/` |
+| Service | `/etc/systemd/system/search.service` |
 
 ### User (non-privileged)
 
 | Type | Path |
 |------|------|
-| Binary | `~/.local/bin/{projectname}` |
-| Config | `~/.config/{projectorg}/{projectname}/` |
-| Config File | `~/.config/{projectorg}/{projectname}/server.yml` |
-| Data | `~/.local/share/{projectorg}/{projectname}/` |
-| Cache | `~/.cache/{projectorg}/{projectname}/` |
-| Logs | `~/.local/log/{projectorg}/{projectname}/` |
-| Log File | `~/.local/log/{projectorg}/{projectname}/server.log` |
-| Backup | `~/.local/share/Backups/{projectorg}/{projectname}/` |
-| PID File | `~/.local/share/{projectorg}/{projectname}/{projectname}.pid` |
-| SSL | `~/.config/{projectorg}/{projectname}/ssl/` (letsencrypt/, local/) |
-| Security | `~/.config/{projectorg}/{projectname}/security/` (geoip/, blocklists/, cve/, trivy/) |
-| SQLite DB | `~/.local/share/{projectorg}/{projectname}/db/` |
+| Binary | `~/.local/bin/search` |
+| Config | `~/.config/apimgr/search/` |
+| Config File | `~/.config/apimgr/search/server.yml` |
+| Data | `~/.local/share/apimgr/search/` |
+| Cache | `~/.cache/apimgr/search/` |
+| Logs | `~/.local/log/apimgr/search/` |
+| Log File | `~/.local/log/apimgr/search/server.log` |
+| Backup | `~/.local/share/Backups/apimgr/search/` |
+| PID File | `~/.local/share/apimgr/search/search.pid` |
+| SSL | `~/.config/apimgr/search/ssl/` (letsencrypt/, local/) |
+| Security | `~/.config/apimgr/search/security/` (geoip/, blocklists/, cve/, trivy/) |
+| SQLite DB | `~/.local/share/apimgr/search/db/` |
 
 ---
 
@@ -4991,37 +5796,37 @@ Before proceeding, confirm you understand:
 
 | Type | Path |
 |------|------|
-| Binary | `/usr/local/bin/{projectname}` |
-| Config | `/Library/Application Support/{projectorg}/{projectname}/` |
-| Config File | `/Library/Application Support/{projectorg}/{projectname}/server.yml` |
-| Data | `/Library/Application Support/{projectorg}/{projectname}/data/` |
-| Cache | `/Library/Caches/{projectorg}/{projectname}/` |
-| Logs | `/Library/Logs/{projectorg}/{projectname}/` |
-| Log File | `/Library/Logs/{projectorg}/{projectname}/server.log` |
-| Backup | `/Library/Backups/{projectorg}/{projectname}/` |
-| PID File | `/var/run/{projectorg}/{projectname}.pid` |
-| SSL | `/Library/Application Support/{projectorg}/{projectname}/ssl/` (letsencrypt/, local/) |
-| Security | `/Library/Application Support/{projectorg}/{projectname}/security/` (geoip/, blocklists/, cve/, trivy/) |
-| SQLite DB | `/Library/Application Support/{projectorg}/{projectname}/db/` |
-| Service | `/Library/LaunchDaemons/com.{projectorg}.{projectname}.plist` |
+| Binary | `/usr/local/bin/search` |
+| Config | `/Library/Application Support/apimgr/search/` |
+| Config File | `/Library/Application Support/apimgr/search/server.yml` |
+| Data | `/Library/Application Support/apimgr/search/data/` |
+| Cache | `/Library/Caches/apimgr/search/` |
+| Logs | `/Library/Logs/apimgr/search/` |
+| Log File | `/Library/Logs/apimgr/search/server.log` |
+| Backup | `/Library/Backups/apimgr/search/` |
+| PID File | `/var/run/apimgr/search.pid` |
+| SSL | `/Library/Application Support/apimgr/search/ssl/` (letsencrypt/, local/) |
+| Security | `/Library/Application Support/apimgr/search/security/` (geoip/, blocklists/, cve/, trivy/) |
+| SQLite DB | `/Library/Application Support/apimgr/search/db/` |
+| Service | `/Library/LaunchDaemons/com.apimgr.search.plist` |
 
 ### User (non-privileged)
 
 | Type | Path |
 |------|------|
-| Binary | `~/bin/{projectname}` or `/usr/local/bin/{projectname}` |
-| Config | `~/Library/Application Support/{projectorg}/{projectname}/` |
-| Config File | `~/Library/Application Support/{projectorg}/{projectname}/server.yml` |
-| Data | `~/Library/Application Support/{projectorg}/{projectname}/` |
-| Cache | `~/Library/Caches/{projectorg}/{projectname}/` |
-| Logs | `~/Library/Logs/{projectorg}/{projectname}/` |
-| Log File | `~/Library/Logs/{projectorg}/{projectname}/server.log` |
-| Backup | `~/Library/Backups/{projectorg}/{projectname}/` |
-| PID File | `~/Library/Application Support/{projectorg}/{projectname}/{projectname}.pid` |
-| SSL | `~/Library/Application Support/{projectorg}/{projectname}/ssl/` (letsencrypt/, local/) |
-| Security | `~/Library/Application Support/{projectorg}/{projectname}/security/` (geoip/, blocklists/, cve/, trivy/) |
-| SQLite DB | `~/Library/Application Support/{projectorg}/{projectname}/db/` |
-| Service | `~/Library/LaunchAgents/com.{projectorg}.{projectname}.plist` |
+| Binary | `~/bin/search` or `/usr/local/bin/search` |
+| Config | `~/Library/Application Support/apimgr/search/` |
+| Config File | `~/Library/Application Support/apimgr/search/server.yml` |
+| Data | `~/Library/Application Support/apimgr/search/` |
+| Cache | `~/Library/Caches/apimgr/search/` |
+| Logs | `~/Library/Logs/apimgr/search/` |
+| Log File | `~/Library/Logs/apimgr/search/server.log` |
+| Backup | `~/Library/Backups/apimgr/search/` |
+| PID File | `~/Library/Application Support/apimgr/search/search.pid` |
+| SSL | `~/Library/Application Support/apimgr/search/ssl/` (letsencrypt/, local/) |
+| Security | `~/Library/Application Support/apimgr/search/security/` (geoip/, blocklists/, cve/, trivy/) |
+| SQLite DB | `~/Library/Application Support/apimgr/search/db/` |
+| Service | `~/Library/LaunchAgents/com.apimgr.search.plist` |
 
 ---
 
@@ -5031,36 +5836,36 @@ Before proceeding, confirm you understand:
 
 | Type | Path |
 |------|------|
-| Binary | `/usr/local/bin/{projectname}` |
-| Config | `/usr/local/etc/{projectorg}/{projectname}/` |
-| Config File | `/usr/local/etc/{projectorg}/{projectname}/server.yml` |
-| Data | `/var/db/{projectorg}/{projectname}/` |
-| Cache | `/var/cache/{projectorg}/{projectname}/` |
-| Logs | `/var/log/{projectorg}/{projectname}/` |
-| Log File | `/var/log/{projectorg}/{projectname}/server.log` |
-| Backup | `/var/backups/{projectorg}/{projectname}/` |
-| PID File | `/var/run/{projectorg}/{projectname}.pid` |
-| SSL | `/usr/local/etc/{projectorg}/{projectname}/ssl/` (letsencrypt/, local/) |
-| Security | `/usr/local/etc/{projectorg}/{projectname}/security/` (geoip/, blocklists/, cve/, trivy/) |
-| SQLite DB | `/var/db/{projectorg}/{projectname}/db/` |
-| Service | `/usr/local/etc/rc.d/{projectname}` |
+| Binary | `/usr/local/bin/search` |
+| Config | `/usr/local/etc/apimgr/search/` |
+| Config File | `/usr/local/etc/apimgr/search/server.yml` |
+| Data | `/var/db/apimgr/search/` |
+| Cache | `/var/cache/apimgr/search/` |
+| Logs | `/var/log/apimgr/search/` |
+| Log File | `/var/log/apimgr/search/server.log` |
+| Backup | `/var/backups/apimgr/search/` |
+| PID File | `/var/run/apimgr/search.pid` |
+| SSL | `/usr/local/etc/apimgr/search/ssl/` (letsencrypt/, local/) |
+| Security | `/usr/local/etc/apimgr/search/security/` (geoip/, blocklists/, cve/, trivy/) |
+| SQLite DB | `/var/db/apimgr/search/db/` |
+| Service | `/usr/local/etc/rc.d/search` |
 
 ### User (non-privileged)
 
 | Type | Path |
 |------|------|
-| Binary | `~/.local/bin/{projectname}` |
-| Config | `~/.config/{projectorg}/{projectname}/` |
-| Config File | `~/.config/{projectorg}/{projectname}/server.yml` |
-| Data | `~/.local/share/{projectorg}/{projectname}/` |
-| Cache | `~/.cache/{projectorg}/{projectname}/` |
-| Logs | `~/.local/log/{projectorg}/{projectname}/` |
-| Log File | `~/.local/log/{projectorg}/{projectname}/server.log` |
-| Backup | `~/.local/share/Backups/{projectorg}/{projectname}/` |
-| PID File | `~/.local/share/{projectorg}/{projectname}/{projectname}.pid` |
-| SSL | `~/.config/{projectorg}/{projectname}/ssl/` (letsencrypt/, local/) |
-| Security | `~/.config/{projectorg}/{projectname}/security/` (geoip/, blocklists/, cve/, trivy/) |
-| SQLite DB | `~/.local/share/{projectorg}/{projectname}/db/` |
+| Binary | `~/.local/bin/search` |
+| Config | `~/.config/apimgr/search/` |
+| Config File | `~/.config/apimgr/search/server.yml` |
+| Data | `~/.local/share/apimgr/search/` |
+| Cache | `~/.cache/apimgr/search/` |
+| Logs | `~/.local/log/apimgr/search/` |
+| Log File | `~/.local/log/apimgr/search/server.log` |
+| Backup | `~/.local/share/Backups/apimgr/search/` |
+| PID File | `~/.local/share/apimgr/search/search.pid` |
+| SSL | `~/.config/apimgr/search/ssl/` (letsencrypt/, local/) |
+| Security | `~/.config/apimgr/search/security/` (geoip/, blocklists/, cve/, trivy/) |
+| SQLite DB | `~/.local/share/apimgr/search/db/` |
 
 ---
 
@@ -5070,34 +5875,34 @@ Before proceeding, confirm you understand:
 
 | Type | Path |
 |------|------|
-| Binary | `C:\Program Files\{projectorg}\{projectname}\{projectname}.exe` |
-| Config | `%ProgramData%\{projectorg}\{projectname}\` |
-| Config File | `%ProgramData%\{projectorg}\{projectname}\server.yml` |
-| Data | `%ProgramData%\{projectorg}\{projectname}\data\` |
-| Cache | `%ProgramData%\{projectorg}\{projectname}\cache\` |
-| Logs | `%ProgramData%\{projectorg}\{projectname}\logs\` |
-| Log File | `%ProgramData%\{projectorg}\{projectname}\logs\server.log` |
-| Backup | `%ProgramData%\Backups\{projectorg}\{projectname}\` |
-| SSL | `%ProgramData%\{projectorg}\{projectname}\ssl\` (letsencrypt\, local\) |
-| Security | `%ProgramData%\{projectorg}\{projectname}\security\` (geoip\, blocklists\, cve\, trivy\) |
-| SQLite DB | `%ProgramData%\{projectorg}\{projectname}\db\` |
+| Binary | `C:\Program Files\apimgr\search\search.exe` |
+| Config | `%ProgramData%\apimgr\search\` |
+| Config File | `%ProgramData%\apimgr\search\server.yml` |
+| Data | `%ProgramData%\apimgr\search\data\` |
+| Cache | `%ProgramData%\apimgr\search\cache\` |
+| Logs | `%ProgramData%\apimgr\search\logs\` |
+| Log File | `%ProgramData%\apimgr\search\logs\server.log` |
+| Backup | `%ProgramData%\Backups\apimgr\search\` |
+| SSL | `%ProgramData%\apimgr\search\ssl\` (letsencrypt\, local\) |
+| Security | `%ProgramData%\apimgr\search\security\` (geoip\, blocklists\, cve\, trivy\) |
+| SQLite DB | `%ProgramData%\apimgr\search\db\` |
 | Service | Windows Service Manager |
 
 ### User (non-privileged)
 
 | Type | Path |
 |------|------|
-| Binary | `%LocalAppData%\{projectorg}\{projectname}\{projectname}.exe` |
-| Config | `%AppData%\{projectorg}\{projectname}\` |
-| Config File | `%AppData%\{projectorg}\{projectname}\server.yml` |
-| Data | `%LocalAppData%\{projectorg}\{projectname}\` |
-| Cache | `%LocalAppData%\{projectorg}\{projectname}\cache\` |
-| Logs | `%LocalAppData%\{projectorg}\{projectname}\logs\` |
-| Log File | `%LocalAppData%\{projectorg}\{projectname}\logs\server.log` |
-| Backup | `%LocalAppData%\Backups\{projectorg}\{projectname}\` |
-| SSL | `%AppData%\{projectorg}\{projectname}\ssl\` (letsencrypt\, local\) |
-| Security | `%AppData%\{projectorg}\{projectname}\security\` (geoip\, blocklists\, cve\, trivy\) |
-| SQLite DB | `%LocalAppData%\{projectorg}\{projectname}\db\` |
+| Binary | `%LocalAppData%\apimgr\search\search.exe` |
+| Config | `%AppData%\apimgr\search\` |
+| Config File | `%AppData%\apimgr\search\server.yml` |
+| Data | `%LocalAppData%\apimgr\search\` |
+| Cache | `%LocalAppData%\apimgr\search\cache\` |
+| Logs | `%LocalAppData%\apimgr\search\logs\` |
+| Log File | `%LocalAppData%\apimgr\search\logs\server.log` |
+| Backup | `%LocalAppData%\Backups\apimgr\search\` |
+| SSL | `%AppData%\apimgr\search\ssl\` (letsencrypt\, local\) |
+| Security | `%AppData%\apimgr\search\security\` (geoip\, blocklists\, cve\, trivy\) |
+| SQLite DB | `%LocalAppData%\apimgr\search\db\` |
 
 ---
 
@@ -5105,16 +5910,16 @@ Before proceeding, confirm you understand:
 
 | Type | Path |
 |------|------|
-| Binary | `/usr/local/bin/{projectname}` |
-| Config | `/config/{projectname}/` |
-| Config File | `/config/{projectname}/server.yml` |
-| Security DBs | `/config/{projectname}/security/` (geoip, blocklists, cve, trivy) |
-| Data | `/data/{projectname}/` |
-| Cache | `/data/{projectname}/cache/` |
-| Logs | `/data/log/{projectname}/` |
-| Log File | `/data/log/{projectname}/server.log` |
+| Binary | `/usr/local/bin/search` |
+| Config | `/config/search/` |
+| Config File | `/config/search/server.yml` |
+| Security DBs | `/config/search/security/` (geoip, blocklists, cve, trivy) |
+| Data | `/data/search/` |
+| Cache | `/data/search/cache/` |
+| Logs | `/data/log/search/` |
+| Log File | `/data/log/search/server.log` |
 | SQLite DB | `/data/db/{dbtype}/` |
-| Backup | `/data/backups/{projectname}/` |
+| Backup | `/data/backups/search/` |
 | Internal Port | `80` |
 
 ---
@@ -5125,7 +5930,7 @@ Before proceeding, confirm you understand:
 - [ ] Each OS has specific paths for privileged and non-privileged users
 - [ ] Config file is ALWAYS `server.yml` (not .yaml)
 - [ ] Docker uses simplified paths (/config, /data)
-- [ ] All paths follow the {projectorg}/{projectname} pattern
+- [ ] All paths follow the apimgr/search pattern
 
 ---
 
@@ -6116,6 +6921,8 @@ func (req *CreateUserRequest) Parse() (*User, error) {
 
 | Variable | Description |
 |----------|-------------|
+| `NO_COLOR` | Disable ANSI color output when set and non-empty (see PART 8) |
+| `TERM` | Terminal type; `TERM=dumb` disables ALL ANSI escapes and forces CLI mode (see PART 7) |
 | `DOMAIN` | FQDN override (highest priority for hostname resolution) |
 | `MODE` | `production` (default) or `development` |
 | `DATABASE_DRIVER` | `file`, `sqlite` (+ `sqlite2`, `sqlite3`), `libsql` (+ `turso`), `postgres` (+ `pgsql`, `postgresql`), `mysql` (+ `mariadb`), `mssql`, `mongodb` (+ `mongo`) |
@@ -6169,8 +6976,8 @@ func (req *CreateUserRequest) Parse() (*User, error) {
 
 | User Type | Path |
 |-----------|------|
-| Root | `/etc/{projectorg}/{projectname}/server.yml` |
-| Regular | `~/.config/{projectorg}/{projectname}/server.yml` |
+| Root | `/etc/apimgr/search/server.yml` |
+| Regular | `~/.config/apimgr/search/server.yml` |
 
 ### Migration
 
@@ -6217,8 +7024,8 @@ func (req *CreateUserRequest) Parse() (*User, error) {
 
 | Mode | How Started | Port Restriction | Privilege Handling |
 |------|-------------|------------------|-------------------|
-| **Service (escalated)** | `sudo {projectname} --service install` | Any port | Runs as root/admin, binary drops after binding |
-| **User ($USER)** | `{projectname}` | >1024 only | Runs as calling user, no escalation |
+| **Service (escalated)** | `sudo search --service install` | Any port | Runs as root/admin, binary drops after binding |
+| **User ($USER)** | `search` | >1024 only | Runs as calling user, no escalation |
 
 #### Service Installation (One-Time Escalation)
 
@@ -6226,13 +7033,13 @@ func (req *CreateUserRequest) Parse() (*User, error) {
 
 ```bash
 # Unix-like (Linux, macOS, FreeBSD)
-sudo {projectname} --service install
+sudo search --service install
 # Binary creates service file configured to run as root
 # All future service starts run as root automatically
 
 # Windows (run as Administrator)
-{projectname}.exe --service install
-# Binary creates Windows service with Virtual Service Account (NT SERVICE\{projectname})
+search.exe --service install
+# Binary creates Windows service with Virtual Service Account (NT SERVICE\search)
 ```
 
 #### Unix-Like Platforms (Linux, macOS, FreeBSD)
@@ -6242,10 +7049,10 @@ sudo {projectname} --service install
 | Step | Running As | Actions |
 |------|-----------|---------|
 | 1 | **root** | Service manager starts binary |
-| 2 | **root** | Create system user `{projectname}` (if needed) |
+| 2 | **root** | Create system user `search` (if needed) |
 | 3 | **root** | Create directories, set ownership |
 | 4 | **root** | Bind configured ports (any port works) |
-| 5 | **root→user** | **DROP PRIVILEGES** to `{projectname}` user |
+| 5 | **root→user** | **DROP PRIVILEGES** to `search` user |
 | 6 | **user** | Initialize config, database, etc. |
 | 7 | **user** | Start serving requests |
 
@@ -6254,7 +7061,7 @@ Service start (automatic after install):
     ├─ Start as root (service manager)
     ├─ Create user/dirs if needed
     ├─ Bind port 80/443 (root)
-    ├─ Drop to {projectname} user
+    ├─ Drop to search user
     └─ Serve requests (user)
 ```
 
@@ -6264,7 +7071,7 @@ Service start (automatic after install):
 ENTRYPOINT [ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]
 
 # WRONG: Don't do this - prevents privileged port binding
-# USER {projectname}
+# USER search
 ```
 
 #### Windows
@@ -6273,10 +7080,10 @@ ENTRYPOINT [ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]
 
 | Step | Running As | Actions |
 |------|-----------|---------|
-| 1 | **NT SERVICE\\{projectname}** | Service manager starts binary |
-| 2 | **NT SERVICE\\{projectname}** | Create directories (has access via ACL) |
-| 3 | **NT SERVICE\\{projectname}** | Bind configured ports |
-| 4 | **NT SERVICE\\{projectname}** | Initialize and serve requests |
+| 1 | **NT SERVICE\\search** | Service manager starts binary |
+| 2 | **NT SERVICE\\search** | Create directories (has access via ACL) |
+| 3 | **NT SERVICE\\search** | Bind configured ports |
+| 4 | **NT SERVICE\\search** | Initialize and serve requests |
 
 **Note:** VSA is auto-created by Windows when service is installed. No manual user creation needed.
 
@@ -6286,7 +7093,7 @@ ENTRYPOINT [ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]
 
 ```bash
 # No sudo - runs as current user
-{projectname} --port 8080
+search --port 8080
 
 # Port must be >1024 (unprivileged)
 # Paths use user directories (~/.config/, ~/.local/, etc.)
@@ -6503,8 +7310,8 @@ ENTRYPOINT [ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]
    Error: Cannot bind to port 80
 
    Port 80 requires elevated privileges. Options:
-     1. Install as service (requires admin): sudo {projectname} --service install
-     2. Use high port (no admin needed): {projectname} --port 8080
+     1. Install as service (requires admin): sudo search --service install
+     2. Use high port (no admin needed): search --port 8080
    ```
 
 #### Commands Requiring Escalation
@@ -6535,7 +7342,7 @@ ENTRYPOINT [ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]
 | `--maintenance mode` | 🔐 Auth | Requires admin auth OR root | N/A |
 | (normal start) | ❌ No | Adapts paths to current user | N/A |
 
-**Key insight:** After service install, the `{projectname}` user owns all data directories. However, sensitive operations require AUTHORIZATION, not just file access.
+**Key insight:** After service install, the `search` user owns all data directories. However, sensitive operations require AUTHORIZATION, not just file access.
 
 #### Sensitive Operations (🔐 Auth Required)
 
@@ -6550,7 +7357,7 @@ ENTRYPOINT [ "tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh" ]
 **Setup authorization flow:**
 
 ```
-User runs: {projectname} --maintenance setup
+User runs: search --maintenance setup
 
 Binary checks:
 ├─ Is database empty (no admins exist)?
@@ -6562,21 +7369,21 @@ Binary checks:
 └─ NO authorization → Reject with:
    "Setup already completed. To reconfigure:
     1. Use existing admin credentials via WebUI
-    2. Run as root: sudo {projectname} --maintenance setup
+    2. Run as root: sudo search --maintenance setup
     3. Use setup token from server logs (if available)"
 ```
 
 **Restore authorization flow:**
 
 ```
-User runs: {projectname} --maintenance restore backup.tar.gz
+User runs: search --maintenance restore backup.tar.gz
 
 Binary checks:
 ├─ Is database empty (first-run/fresh install)?
 │   └─ YES → Allow restore (nothing to protect)
 ├─ Is user root?
 │   └─ YES → Allow restore (with confirmation prompt)
-├─ Is user the service user ({projectname})?
+├─ Is user the service user (search)?
 │   └─ YES → Require admin credentials:
 │            "This will OVERWRITE all data. Enter admin credentials to confirm."
 │            └─ Valid credentials → Allow restore
@@ -6589,12 +7396,12 @@ Binary checks:
 **Mode change authorization flow:**
 
 ```
-User runs: {projectname} --maintenance mode development
+User runs: search --maintenance mode development
 
 Binary checks:
 ├─ Is user root?
 │   └─ YES → Allow (with warning about security implications)
-├─ Is user the service user ({projectname})?
+├─ Is user the service user (search)?
 │   └─ YES → Require admin credentials
 └─ Random user → Reject
 ```
@@ -6618,9 +7425,9 @@ func needsEscalationForService() bool {
         return !isElevated() && isWindowsServiceInstalled()
     }
     // Unix: check for system service files
-    if fileExists("/etc/systemd/system/{projectname}.service") ||
-       fileExists("/Library/LaunchDaemons/{projectorg}.{projectname}.plist") ||
-       fileExists("/usr/local/etc/rc.d/{projectname}") {
+    if fileExists("/etc/systemd/system/search.service") ||
+       fileExists("/Library/LaunchDaemons/apimgr.search.plist") ||
+       fileExists("/usr/local/etc/rc.d/search") {
         // System service installed - need elevated privileges to manage
         return !isElevated()
     }
@@ -6708,7 +7515,7 @@ func canChangeMode() (bool, string) {
 **Smart escalation behavior:**
 
 ```
-User runs: {projectname} --service --install
+User runs: search --service --install
 
 Binary checks:
 ├─ Already root/admin? → Proceed with system service
@@ -6723,7 +7530,7 @@ Binary checks:
 **Port fallback behavior:**
 
 ```
-User runs: {projectname} --port 80
+User runs: search --port 80
 
 Binary checks:
 ├─ Already root/admin? → Bind port 80, proceed
@@ -6735,35 +7542,35 @@ Binary checks:
 └─ Warn user of actual port in use
 ```
 
-#### The `{projectname}` System User/Group
+#### The `search` System User/Group
 
 **Created automatically during first root/service startup.**
 
 | Property | Value |
 |----------|-------|
-| **Username** | `{projectname}` |
-| **Group** | `{projectname}` |
+| **Username** | `search` |
+| **Group** | `search` |
 | **Shell** | `/usr/sbin/nologin` (no login) |
-| **Home** | `/var/lib/{projectorg}/{projectname}` |
+| **Home** | `/var/lib/apimgr/search` |
 | **UID/GID** | Auto-assigned by system |
 | **Type** | System user (UID < 1000 on Linux) |
 
-**What the `{projectname}` user CAN do:**
+**What the `search` user CAN do:**
 
 | Permission | Details |
 |------------|---------|
-| Read/write config | `/etc/{projectorg}/{projectname}/` |
-| Read/write data | `/var/lib/{projectorg}/{projectname}/` |
-| Read/write cache | `/var/cache/{projectorg}/{projectname}/` |
-| Read/write logs | `/var/log/{projectorg}/{projectname}/` |
-| Read/write backups | `/var/lib/Backups/{projectorg}/{projectname}/` or `/mnt/Backups/...` |
+| Read/write config | `/etc/apimgr/search/` |
+| Read/write data | `/var/lib/apimgr/search/` |
+| Read/write cache | `/var/cache/apimgr/search/` |
+| Read/write logs | `/var/log/apimgr/search/` |
+| Read/write backups | `/var/lib/Backups/apimgr/search/` or `/mnt/Backups/...` |
 | Use bound sockets | Inherited from root before privilege drop |
 | Bind ports >1024 | New sockets after privilege drop |
 | Run scheduled tasks | Backup, cleanup, SSL renewal, etc. |
 | Manage database | SQLite in data dir |
 | Manage SSL certs | In `{config_dir}/ssl/` |
 
-**What the `{projectname}` user CANNOT do:**
+**What the `search` user CANNOT do:**
 
 | Restriction | Reason |
 |-------------|--------|
@@ -6779,19 +7586,19 @@ Binary checks:
 
 ```bash
 # Binary sets these during startup as root
-chown -R {projectname}:{projectname} /etc/{projectorg}/{projectname}/
-chown -R {projectname}:{projectname} /var/lib/{projectorg}/{projectname}/
-chown -R {projectname}:{projectname} /var/cache/{projectorg}/{projectname}/
-chown -R {projectname}:{projectname} /var/log/{projectorg}/{projectname}/
+chown -R search:search /etc/apimgr/search/
+chown -R search:search /var/lib/apimgr/search/
+chown -R search:search /var/cache/apimgr/search/
+chown -R search:search /var/log/apimgr/search/
 
 # Permissions
-chmod 755 /etc/{projectorg}/{projectname}/
-chmod 700 /etc/{projectorg}/{projectname}/security/
-chmod 700 /etc/{projectorg}/{projectname}/ssl/
-chmod 700 /etc/{projectorg}/{projectname}/tor/
-chmod 755 /var/lib/{projectorg}/{projectname}/
-chmod 755 /var/cache/{projectorg}/{projectname}/
-chmod 755 /var/log/{projectorg}/{projectname}/
+chmod 755 /etc/apimgr/search/
+chmod 700 /etc/apimgr/search/security/
+chmod 700 /etc/apimgr/search/ssl/
+chmod 700 /etc/apimgr/search/tor/
+chmod 755 /var/lib/apimgr/search/
+chmod 755 /var/cache/apimgr/search/
+chmod 755 /var/log/apimgr/search/
 ```
 
 **User creation:** See PART 24 for platform-specific user creation commands (Linux `useradd`, macOS `dscl`, FreeBSD `pw`).
@@ -6801,7 +7608,7 @@ chmod 755 /var/log/{projectorg}/{projectname}/
 | Aspect | System Service | User Service |
 |--------|---------------|--------------|
 | **Installed by** | root/admin | Regular user |
-| **Runs as** | root → drops to `{projectname}` | Calling user |
+| **Runs as** | root → drops to `search` | Calling user |
 | **Ports** | Any | >1024 only |
 | **Paths** | `/etc/`, `/var/` | `~/.config/`, `~/.local/` |
 | **Survives logout** | Yes | Depends on `lingering` |
@@ -6899,7 +7706,7 @@ server:
 
   # Branding & SEO - see PART 16 for full details
   branding:
-    title: "{projectname}"
+    title: "search"
     tagline: ""
     description: ""
   seo:
@@ -7498,7 +8305,7 @@ go tool pprof http://localhost:64580/debug/pprof/block
 go tool pprof http://localhost:64580/debug/pprof/mutex
 
 # Execution trace (download and view)
-curl -o trace.out http://localhost:64580/debug/pprof/trace?seconds=5
+curl -q -LSsf -o trace.out http://localhost:64580/debug/pprof/trace?seconds=5
 go tool trace trace.out
 
 # WebUI for profiles
@@ -7548,7 +8355,7 @@ import (
     "runtime"
     "strings"
 
-    "github.com/{projectorg}/{projectname}/src/config"
+    "github.com/apimgr/search/src/config"
 )
 
 var (
@@ -7892,6 +8699,10 @@ func (e *DisplayEnv) autoDetectDisplayMode() DisplayMode {
     if !e.IsTerminal && !e.HasDisplay {
         return DisplayModeHeadless
     }
+    // TERM=dumb: force CLI mode (no TUI, no ANSI escapes)
+    if e.TerminalType == "dumb" {
+        return DisplayModeCLI
+    }
     if e.HasDisplay && !e.IsSSH && !e.IsMosh {
         return DisplayModeGUI
     }
@@ -7901,11 +8712,87 @@ func (e *DisplayEnv) autoDetectDisplayMode() DisplayMode {
     return DisplayModeCLI
 }
 
+// IsDumbTerminal - check if running in dumb terminal (no ANSI support)
+func (e *DisplayEnv) IsDumbTerminal() bool {
+    return e.TerminalType == "dumb"
+}
+
 // Helper methods with clear names
 func (e DisplayEnv) IsAutoDetectDisplayModeGUI() bool      { return e.Mode == DisplayModeGUI }
 func (e DisplayEnv) IsAutoDetectDisplayModeTUI() bool      { return e.Mode == DisplayModeTUI }
 func (e DisplayEnv) IsAutoDetectDisplayModeCLI() bool      { return e.Mode == DisplayModeCLI }
 func (e DisplayEnv) IsAutoDetectDisplayModeHeadless() bool { return e.Mode == DisplayModeHeadless }
+```
+
+### TERM=dumb Handling
+
+**When `TERM=dumb`, the terminal has NO special capabilities. ALL binaries MUST handle this.**
+
+| Feature | Normal Terminal | TERM=dumb |
+|---------|-----------------|-----------|
+| ANSI colors | ✅ Yes | ❌ No |
+| Emojis | ✅ Yes | ❌ No |
+| Cursor movement | ✅ Yes | ❌ No |
+| Clear screen | ✅ Yes | ❌ No |
+| Bold/underline | ✅ Yes | ❌ No |
+| TUI mode | ✅ Yes | ❌ No (force CLI) |
+| Spinners/progress | ✅ Yes | ❌ No (use text) |
+| Box drawing (Unicode) | ✅ Yes | ⚠️ Maybe (ASCII fallback) |
+
+**Behaviors when `TERM=dumb`:**
+
+1. **Force CLI mode** - Never launch TUI, even if interactive
+2. **No ANSI escapes** - No colors, no cursor control, no clearing
+3. **No emojis** - Use text equivalents (`[OK]`, `[ERROR]`, `[WARN]`)
+4. **Simple output** - Plain text, line-by-line
+5. **No spinners** - Use `Processing...` / `Done.` instead
+6. **No progress bars** - Use `50% complete` text instead
+7. **ASCII tables** - Use `+--+` instead of `┌──┐` box drawing
+
+**Implementation:**
+
+```go
+// Check before using any ANSI features (cursor movement, clear screen, etc.)
+// Note: NO_COLOR users typically want plain output, so we respect it here too
+func CanUseANSI(env *DisplayEnv) bool {
+    if env.IsDumbTerminal() {
+        return false
+    }
+    if os.Getenv("NO_COLOR") != "" {
+        return false  // Plain output requested
+    }
+    return env.IsTerminal
+}
+
+// Spinner that falls back gracefully
+func NewSpinner(env *DisplayEnv, message string) Spinner {
+    if env.IsDumbTerminal() {
+        return &TextSpinner{message: message}  // Just prints "Processing..."
+    }
+    return &ANSISpinner{message: message}      // Animated spinner
+}
+
+// Progress that falls back gracefully
+func ShowProgress(env *DisplayEnv, percent int) {
+    if env.IsDumbTerminal() {
+        fmt.Printf("%d%% complete\n", percent)
+        return
+    }
+    // ANSI progress bar with cursor control
+    fmt.Printf("\r[%-50s] %d%%", strings.Repeat("=", percent/2), percent)
+}
+```
+
+**Testing:**
+
+```bash
+# Test dumb terminal behavior
+TERM=dumb search --status
+TERM=dumb search-cli list
+TERM=dumb search-agent status
+
+# Should produce plain text output with no escape codes
+TERM=dumb search --status | cat -v   # No ^[ sequences
 ```
 
 ### Platform-Specific Display Detection
@@ -8070,7 +8957,7 @@ src/
 
 ```go
 // go.mod
-module {projectorg}/{projectname}
+module apimgr/search
 
 go 1.xx  // Use current latest stable version
 
@@ -8196,7 +9083,7 @@ package banner
 
 import (
     "fmt"
-    "{projectorg}/{projectname}/common/terminal"
+    "apimgr/search/common/terminal"
 )
 
 type BannerConfig struct {
@@ -8230,34 +9117,34 @@ func PrintStartupBanner(cfg BannerConfig) {
 
 # PART 8: SERVER BINARY CLI 
 
-**These are the command-line flags for the SERVER binary (`{projectname}`), NOT the client (`{projectname}-cli`).**
+**These are the command-line flags for the SERVER binary (`search`), NOT the client (`search-cli`).**
 
 ## Binary Types
 
 | Binary | Default Name | Purpose | Key Flags |
 |--------|--------------|---------|-----------|
-| **Server** | `{projectname}` | Runs the HTTP server | `--config`, `--data`, `--port`, `--mode` |
-| **Agent** | `{projectname}-agent` | Reports to server | `--server`, `--token`, `--config` |
-| **Client** | `{projectname}-cli` | User interface to server | `--server`, `--token`, `--output` |
+| **Server** | `search` | Runs the HTTP server | `--config`, `--data`, `--port`, `--mode` |
+| **Agent** | `search-agent` | Reports to server | `--server`, `--token`, `--config` |
+| **Client** | `search-cli` | User interface to server | `--server`, `--token`, `--output` |
 
-**Shared flags (ALL binaries):** `--help`, `--version`, `--shell`, `--debug`
+**Shared flags (ALL binaries):** `--help`, `--version`, `--shell`, `--debug`, `--color`
 
 **Binary naming rules (ALL binaries: server, agent, client):**
 
 | Binary | Default Name | User-Agent |
 |--------|--------------|------------|
-| Server | `{projectname}` | `{projectname}/{version}` |
-| Agent | `{projectname}-agent` | `{projectname}-agent/{version}` |
-| Client | `{projectname}-cli` | `{projectname}-cli/{version}` |
+| Server | `search` | `search/{version}` |
+| Agent | `search-agent` | `search-agent/{version}` |
+| Client | `search-cli` | `search-cli/{version}` |
 
 **ALL binaries can be renamed by users. Must show ACTUAL binary name in:**
 - `--help` and `--version` output
 - Error messages showing "run X --help"
 - Any user-facing documentation/instructions
 
-**Hardcode `{projectname}` for internal identifiers (never changes):**
+**Hardcode `search` for internal identifiers (never changes):**
 - User-Agent header (identifies binary type to server)
-- Default paths (`/etc/{projectorg}/{projectname}/`)
+- Default paths (`/etc/apimgr/search/`)
 - Config keys, database tables, API identifiers
 
 **Get actual binary name:**
@@ -8281,6 +9168,117 @@ Default config: /etc/apimgr/jokes/  # Hardcoded project name
 
 **For client and agent flags, see PART 33.**
 
+## NO_COLOR Support (ALL Binaries)
+
+**All binaries (server, client, agent) MUST respect the [NO_COLOR](https://no-color.org/) standard.**
+
+When the `NO_COLOR` environment variable is set and not empty (value doesn't matter), disable ANSI color codes and emojis in terminal output.
+
+| Condition | Colors | Emojis |
+|-----------|--------|--------|
+| `NO_COLOR` unset | Enabled | Enabled |
+| `NO_COLOR=""` (empty) | Enabled | Enabled |
+| `NO_COLOR=1` | **Disabled** | **Disabled** |
+| `NO_COLOR=anything` | **Disabled** | **Disabled** |
+
+**Priority order (highest to lowest):**
+
+| Priority | Source | Example |
+|----------|--------|---------|
+| 1 | CLI flag | `--color=always`, `--color=never` |
+| 2 | Config file | `output.color: false` |
+| 3 | `NO_COLOR` env var | `NO_COLOR=1` |
+| 4 | Auto-detect | TTY check, `TERM` variable |
+
+**Implementation (ALL binaries):**
+
+```go
+// ColorEnabled checks if color output should be used
+func ColorEnabled(forceColor *bool) bool {
+    // 1. CLI flag overrides everything
+    if forceColor != nil {
+        return *forceColor
+    }
+
+    // 2. Config file (if applicable)
+    if cfg := GetConfig(); cfg != nil && cfg.Output.ColorSet {
+        return cfg.Output.Color
+    }
+
+    // 3. NO_COLOR env var (non-empty = disable)
+    if os.Getenv("NO_COLOR") != "" {
+        return false
+    }
+
+    // 4. Auto-detect: TTY + TERM support
+    if !term.IsTerminal(int(os.Stdout.Fd())) {
+        return false
+    }
+    if os.Getenv("TERM") == "dumb" {
+        return false
+    }
+
+    return true
+}
+
+// EmojiEnabled checks if emoji output should be used
+func EmojiEnabled() bool {
+    // 1. Config override (force emojis on)
+    if cfg := GetConfig(); cfg != nil && cfg.Output.EmojiSet && cfg.Output.Emoji {
+        return true
+    }
+
+    // 2. NO_COLOR disables emojis (practical plain output)
+    if os.Getenv("NO_COLOR") != "" {
+        return false
+    }
+
+    // 3. TERM=dumb disables emojis
+    if os.Getenv("TERM") == "dumb" {
+        return false
+    }
+
+    // 4. Default: enabled
+    return true
+}
+```
+
+**Scope:** NO_COLOR disables:
+- ANSI color codes
+- Emojis in terminal output (practical: users wanting plain output)
+
+**NO_COLOR does NOT affect:**
+- Bold/underline/italic text styling
+- Unicode box drawing characters (tables)
+- Output structure or formatting
+
+**Config override:** To keep emojis enabled even when NO_COLOR is set:
+```yaml
+output:
+  emoji: true  # Force emojis on (overrides NO_COLOR for emojis only)
+```
+
+**Note:** For disabling ALL ANSI escapes (not just colors), use `TERM=dumb`. See PART 7 "TERM=dumb Handling".
+
+**Testing:**
+```bash
+# Colors and emojis enabled (default)
+search --status
+
+# Colors and emojis disabled via NO_COLOR
+NO_COLOR=1 search --status
+
+# Colors forced on (overrides NO_COLOR for colors only)
+NO_COLOR=1 search --status --color=always
+
+# Colors forced off (explicit)
+search --status --color=never
+
+# Verify no escape codes or emojis in output
+NO_COLOR=1 search --status | cat -v   # No ^[ sequences
+NO_COLOR=1 search --status | grep -E '✅|❌|⚠️|🚀'  # Should find nothing
+```
+
 **THESE SERVER COMMANDS CANNOT BE CHANGED. This is the complete command set.**
 
 ## Server Binary Commands
@@ -8303,6 +9301,7 @@ Default config: /etc/apimgr/jokes/  # Hardcoded project name
 --service {start,restart,stop,reload,--install,--uninstall,--disable,--help}
 --daemon                     # Daemonize (detach from terminal)
 --debug                      # Enable debug mode (verbose logging, debug endpoints)
+--color {always|never|auto}  # Color output (default: auto, respects NO_COLOR)
 --maintenance {backup,restore,update,mode,setup,--help} [optional-file-or-setting]
 --update [check|yes|branch {stable|beta|daily}|--help]  # Check/perform updates
 --shell {completions,init,--help} [SHELL]  # Shell integration
@@ -8311,11 +9310,11 @@ Default config: /etc/apimgr/jokes/  # Hardcoded project name
 ### Server --help Output
 
 ```bash
-$ {projectname} --help
-{projectname} {projectversion} - {project description}
+$ search --help
+search {projectversion} - {project description}
 
 Usage:
-  {projectname} [flags]
+  search [flags]
 
 Information:
   -h, --help                        Show help (--help for any command shows its help)
@@ -8339,13 +9338,14 @@ Server Configuration:
       --port PORT                   Listen port (default: random 64xxx, 80 in container)
       --daemon                      Run as daemon (detach from terminal)
       --debug                       Enable debug mode
+      --color {always|never|auto}   Color output (default: auto)
 
 Service Management:
       --service CMD                 Service management (--service --help for details)
       --maintenance CMD             Maintenance operations (--maintenance --help for details)
       --update [CMD]                Check/perform updates (--update --help for details)
 
-Run '{projectname} <command> --help' for detailed help on any command.
+Run 'search <command> --help' for detailed help on any command.
 ```
 
 ## Directory Flags
@@ -8354,12 +9354,12 @@ Run '{projectname} <command> --help' for detailed help on any command.
 
 | Flag | Type | Default (Linux root) | Default (Linux user) |
 |------|------|----------------------|----------------------|
-| `--config` | Directory | `/etc/{projectorg}/{projectname}/` | `~/.config/{projectorg}/{projectname}/` |
-| `--data` | Directory | `/var/lib/{projectorg}/{projectname}/` | `~/.local/share/{projectorg}/{projectname}/` |
-| `--cache` | Directory | `/var/cache/{projectorg}/{projectname}/` | `~/.cache/{projectorg}/{projectname}/` |
-| `--log` | Directory | `/var/log/{projectorg}/{projectname}/` | `~/.local/log/{projectorg}/{projectname}/` |
-| `--backup` | Directory | `/mnt/Backups/{projectorg}/{projectname}/` (if writable) | `~/.local/share/Backups/{projectorg}/{projectname}/` |
-| `--pid` | File | `/var/run/{projectorg}/{projectname}.pid` | `~/.local/share/{projectorg}/{projectname}/{projectname}.pid` |
+| `--config` | Directory | `/etc/apimgr/search/` | `~/.config/apimgr/search/` |
+| `--data` | Directory | `/var/lib/apimgr/search/` | `~/.local/share/apimgr/search/` |
+| `--cache` | Directory | `/var/cache/apimgr/search/` | `~/.cache/apimgr/search/` |
+| `--log` | Directory | `/var/log/apimgr/search/` | `~/.local/log/apimgr/search/` |
+| `--backup` | Directory | `/mnt/Backups/apimgr/search/` (if writable) | `~/.local/share/Backups/apimgr/search/` |
+| `--pid` | File | `/var/run/apimgr/search.pid` | `~/.local/share/apimgr/search/search.pid` |
 
 **Note:** `--backup` prefers system backup dir if writable, falls back to user dir. See `GetBackupDir()` in PART 5.
 
@@ -8471,7 +9471,7 @@ func isOurProcess(pid int) bool {
         // On macOS/BSD, use ps command
         return isOurProcessDarwin(pid)
     }
-    return strings.Contains(filepath.Base(exePath), "{projectname}")
+    return strings.Contains(filepath.Base(exePath), "search")
 }
 
 // isOurProcessDarwin checks process on macOS/BSD
@@ -8481,7 +9481,7 @@ func isOurProcessDarwin(pid int) bool {
     if err != nil {
         return false
     }
-    return strings.Contains(string(output), "{projectname}")
+    return strings.Contains(string(output), "search")
 }
 
 // --- pid_windows.go ---
@@ -8520,7 +9520,7 @@ func isOurProcess(pid int) bool {
         return false
     }
     exePath := windows.UTF16ToString(buf[:size])
-    return strings.Contains(strings.ToLower(filepath.Base(exePath)), "{projectname}")
+    return strings.Contains(strings.ToLower(filepath.Base(exePath)), "search")
 }
 
 // WritePIDFile writes current process PID to file
@@ -8633,15 +9633,15 @@ PHASE 5: Server startup (actual server start)
 
 8. IF RUNNING AS ROOT - setup system resources BEFORE dropping privileges:
    a. Check/create system user:
-      ├─ User {projectname} exists → use it
-      └─ User missing → create {projectname}:{projectname} (see PART 25)
+      ├─ User search exists → use it
+      └─ User missing → create search:search (see PART 25)
    b. Create ALL directories (while still root):
       ├─ {config_dir}/ and subdirs (security/, ssl/, tor/)
       ├─ {data_dir}/ and subdirs (db/, tor/, tor/site/)
       ├─ {cache_dir}/
       ├─ {log_dir}/
       └─ {backup_dir}/
-   c. Set ownership: chown -R {projectname}:{projectname} on all dirs
+   c. Set ownership: chown -R search:search on all dirs
    d. Set permissions: 0755 general dirs, 0700 sensitive (security/, ssl/, tor/)
    e. Determine ports (see PART 15 for full port rules):
       ├─ Format 1: --port {port} (single port)
@@ -8651,22 +9651,22 @@ PHASE 5: Server startup (actual server start)
       ├─ Format 2: --port {http},{https} (dual port)
       │   ├─ First port = HTTP
       │   └─ Second port = HTTPS
-      ├─ No --port? → check {PROJECTNAME}_PORT env var (same format)
+      ├─ No --port? → check SEARCH_PORT env var (same format)
       ├─ No env var? → read from config file (server.port)
       └─ No config? → random port in 64000-64999 range (single, HTTP)
    f. Bind ALL privileged ports (< 1024) NOW while still root:
       ├─ For each port < 1024: create and bind socket, store fd
       ├─ If ANY privileged port fails: exit with error
       └─ Unprivileged ports (>= 1024) bound later in step 18
-   g. DROP PRIVILEGES to {projectname} user
+   g. DROP PRIVILEGES to search user
    h. Verify privilege drop succeeded (getuid() != 0)
 
 9. IF RUNNING AS USER (non-root) - setup user directories:
-   ├─ Create {config_dir} (~/.config/{projectorg}/{projectname}/)
-   ├─ Create {data_dir} (~/.local/share/{projectorg}/{projectname}/)
-   ├─ Create {cache_dir} (~/.cache/{projectorg}/{projectname}/)
-   ├─ Create {log_dir} (~/.local/log/{projectorg}/{projectname}/)
-   ├─ Create {backup_dir} (~/.local/share/Backups/{projectorg}/{projectname}/)
+   ├─ Create {config_dir} (~/.config/apimgr/search/)
+   ├─ Create {data_dir} (~/.local/share/apimgr/search/)
+   ├─ Create {cache_dir} (~/.cache/apimgr/search/)
+   ├─ Create {log_dir} (~/.local/log/apimgr/search/)
+   ├─ Create {backup_dir} (~/.local/share/Backups/apimgr/search/)
    ├─ Set permissions: 0700 on all dirs (user-only access)
    └─ Note: port must be >1024 (user mode cannot bind privileged ports)
 
@@ -8675,7 +9675,7 @@ PHASE 5: Server startup (actual server start)
     ├─ Set default log level (info)
     └─ Log "Server starting, version X.Y.Z"
 
-11. Check PID file (root: /var/run/{projectorg}/{projectname}.pid, user: {data_dir}/{projectname}.pid):
+11. Check PID file (root: /var/run/apimgr/search.pid, user: {data_dir}/search.pid):
     ├─ PID file exists AND process running → exit 1 "already running"
     ├─ PID file exists AND process dead → remove stale PID, continue
     └─ No PID file → continue
@@ -8686,7 +9686,7 @@ PHASE 5: Server startup (actual server start)
     ├─ Look for {config_dir}/server.yml
     ├─ Determine port (if not already bound in step 8f):
     │   ├─ --port CLI flag → use specified
-    │   ├─ {PROJECTNAME}_PORT env var → use specified
+    │   ├─ SEARCH_PORT env var → use specified
     │   ├─ Config file server.port → use specified
     │   └─ Default → random 64000-64999
     ├─ If MISSING (first run):
@@ -8698,7 +9698,7 @@ PHASE 5: Server startup (actual server start)
     ├─ If EXISTS:
     │   ├─ Parse YAML configuration
     │   └─ Validate all values (invalid → log WARN, use default)
-    └─ Apply remaining environment variable overrides ({PROJECTNAME}_*)
+    └─ Apply remaining environment variable overrides (SEARCH_*)
 
 14. Reconfigure logging from config:
     ├─ Set log level from server.logging.level
@@ -8835,7 +9835,7 @@ PHASE 5: Server startup (actual server start)
 | Init systems | Parent PID 1 is: `tini`, `dumb-init`, `s6-svscan`, `runsv`, `runsvdir`, `catatonit` |
 | Kubernetes | `KUBERNETES_SERVICE_HOST` env var set |
 | cgroup | `/proc/1/cgroup` contains `docker`, `kubepods`, `lxc` |
-| Self wrapper | Parent process is `{projectname}` (entrypoint wrapper)
+| Self wrapper | Parent process is `search` (entrypoint wrapper)
 
 **Manual Start Priority Order:**
 1. `--daemon` CLI flag (highest)
@@ -8877,7 +9877,7 @@ func isContainer() bool {
     switch parentName {
     case "tini", "dumb-init", "s6-svscan", "runsv", "runsvdir", "catatonit":
         return true
-    case "{projectname}":
+    case "search":
         // Parent is our own binary - likely container entrypoint
         return true
     }
@@ -9124,7 +10124,7 @@ myapp is running (PID 12345)
 **Used for Docker/compose healthcheck:**
 ```yaml
 healthcheck:
-  test: /usr/local/bin/{projectname} --status
+  test: /usr/local/bin/search --status
   interval: 10s
   timeout: 5s
   retries: 3
@@ -10374,38 +11374,103 @@ func adminStatusHandler(w http.ResponseWriter, r *http.Request) {
 
 **Health Check Endpoint (`/healthz`):**
 
-```go
-// GET /healthz - used by load balancers, orchestrators, monitoring
-func healthHandler(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Content-Type", "application/json")
+**See PART 13 for full /healthz response format. Handler must return all dynamic data.**
 
-    status := struct {
-        Status         string   `json:"status"`
-        PendingRestart bool     `json:"pending_restart,omitempty"`
-        RestartReason  []string `json:"restart_reason,omitempty"`
-    }{
-        Status: "ok",
-    }
+```go
+// GET /healthz - full health response (see PART 13 for JSON structure)
+// GET /api/{api_version}/healthz - same response, always JSON
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+    // Content negotiation handled by middleware (PART 14)
+    // This returns the data; middleware formats as HTML/JSON/text
+
+    response := buildHealthResponse()
 
     // Check shutdown state
     if isShuttingDown() {
-        status.Status = "shutting_down"
+        response.Status = "shutting_down"
         w.WriteHeader(http.StatusServiceUnavailable)
-        json.NewEncoder(w).Encode(status)
-        return
+    } else if configManager.PendingRestart() {
+        response.Status = "restart_required"
+        response.PendingRestart = true
+        response.RestartReason = configManager.RestartSettings()
+        w.WriteHeader(http.StatusOK) // Still healthy, just needs restart
+    } else {
+        w.WriteHeader(http.StatusOK)
     }
 
-    // Check pending restart (config changed, needs restart)
-    if configManager.PendingRestart() {
-        status.Status = "restart_required"
-        status.PendingRestart = true
-        status.RestartReason = configManager.RestartSettings()
-        // Still return 200 - service is running, just needs restart
-        // Orchestrators can watch pending_restart field
-    }
+    respondWithFormat(w, r, response) // PART 14 content negotiation
+}
 
-    w.WriteHeader(http.StatusOK)
-    json.NewEncoder(w).Encode(status)
+// buildHealthResponse collects ALL dynamic data for /healthz
+// This is the COMPLETE global structure - extend with app-specific data
+// ALL fields MUST be public-safe (no secrets, no internal IPs, no paths)
+// Frontend displays everything returned here (see PART 13)
+func buildHealthResponse() *HealthResponse {
+    return &HealthResponse{
+        // Project info (from branding config)
+        Project: ProjectInfo{
+            Name:        cfg.Branding.Name,
+            Description: cfg.Branding.Description,
+        },
+
+        // Basic status
+        Status:    getOverallStatus(), // "healthy", "unhealthy", "degraded"
+        Version:   version.Version,
+        Mode:      cfg.Server.Mode, // "production" or "development"
+        Uptime:    formatUptime(startTime),
+        Timestamp: time.Now().UTC(),
+        GoVersion: runtime.Version(),
+
+        // Build info
+        Build: BuildInfo{
+            Commit: version.Commit,
+            Date:   version.Date,
+        },
+
+        // Cluster (dynamic - from cluster manager)
+        Cluster: ClusterInfo{
+            Enabled: cfg.Cluster.Enabled,
+            Status:  clusterManager.Status(),    // "connected", "disconnected"
+            Primary: clusterManager.PrimaryURL(),
+            Nodes:   clusterManager.NodeURLs(),
+            Role:    clusterManager.Role(),      // "primary", "member"
+        },
+
+        // Features (PUBLIC only - do NOT include /metrics)
+        Features: FeaturesInfo{
+            MultiUser:     cfg.Features.MultiUser,
+            Organizations: cfg.Features.Organizations,
+            GeoIP:         cfg.Features.GeoIP.Enabled,
+            Tor: TorInfo{
+                Enabled:  cfg.Features.Tor.Enabled,
+                Running:  torManager.IsRunning(),
+                Status:   torManager.Status(),   // "healthy", "error:..."
+                Hostname: torManager.Hostname(), // "abc123.onion"
+            },
+            // NOTE: Do NOT include Metrics here - internal endpoint
+        },
+
+        // Component checks (ok/error only - no details)
+        Checks: ChecksInfo{
+            Database:  checkDatabase(),  // "ok" or "error"
+            Cache:     checkCache(),
+            Disk:      checkDisk(),
+            Scheduler: checkScheduler(),
+            Cluster:   checkCluster(),
+        },
+
+        // Stats (public-safe aggregates only)
+        Stats: StatsInfo{
+            RequestsTotal: statsCollector.TotalRequests(),
+            Requests24h:   statsCollector.Requests24h(),
+            ActiveConns:   statsCollector.ActiveConnections(),
+            // APP-SPECIFIC: Add your app's stats here
+            // Example: PastesTotal, LinksCreated, MessagesTotal, etc.
+        },
+
+        // APP-SPECIFIC: Add your app's custom fields here
+        // Example: AppSpecific: AppSpecificInfo{ ... }
+    }
 }
 
 // ConfigManager helper methods
@@ -10490,7 +11555,7 @@ $ kill -TERM $(cat /var/run/myapp.pid)
 | (none) | `DATABASE_DIR` | SQLite database directory (defaults to `{data_dir}/db/`, changeable) |
 | (none) | `BACKUP_DIR` | Backup directory (defaults to `{data_dir}/backup/`, changeable) |
 
-**External backup mounts:** In production, `BACKUP_DIR` should typically point to external storage (NAS, separate disk, etc.) rather than staying under `{data_dir}`. Example: `BACKUP_DIR=/mnt/Backups/{projectorg}/{projectname}`. The default `{data_dir}/backup/` is for development/testing only.
+**External backup mounts:** In production, `BACKUP_DIR` should typically point to external storage (NAS, separate disk, etc.) rather than staying under `{data_dir}`. Example: `BACKUP_DIR=/mnt/Backups/apimgr/search`. The default `{data_dir}/backup/` is for development/testing only.
 
 **Implementation:**
 
@@ -10569,10 +11634,10 @@ func isWritable(path string) bool {
 }
 
 // systemBackupDir returns the system-level backup directory
-// Linux: /mnt/Backups/{projectorg}/{projectname}
-// macOS: /Library/Backups/{projectorg}/{projectname}
-// BSD:   /var/backups/{projectorg}/{projectname}
-// Windows: %ProgramData%\Backups\{projectorg}\{projectname}
+// Linux: /mnt/Backups/apimgr/search
+// macOS: /Library/Backups/apimgr/search
+// BSD:   /var/backups/apimgr/search
+// Windows: %ProgramData%\Backups\apimgr\search
 func systemBackupDir() string {
     switch runtime.GOOS {
     case "darwin":
@@ -10587,9 +11652,9 @@ func systemBackupDir() string {
 }
 
 // userBackupDir returns the user-level backup directory
-// Linux/BSD: ~/.local/share/Backups/{projectorg}/{projectname}
-// macOS: ~/Library/Backups/{projectorg}/{projectname}
-// Windows: %LocalAppData%\Backups\{projectorg}\{projectname}
+// Linux/BSD: ~/.local/share/Backups/apimgr/search
+// macOS: ~/Library/Backups/apimgr/search
+// Windows: %LocalAppData%\Backups\apimgr\search
 func userBackupDir() string {
     home, _ := os.UserHomeDir()
     switch runtime.GOOS {
@@ -10607,7 +11672,7 @@ func userBackupDir() string {
 
 ```bash
 # Configurable paths - organized by component
-# APP_NAME is set to {projectname}
+# APP_NAME is set to search
 export CONFIG_DIR="/config/${APP_NAME}"
 export DATA_DIR="/data/${APP_NAME}"
 export CACHE_DIR="/data/${APP_NAME}/cache"
@@ -10616,8 +11681,8 @@ export DATABASE_DIR="/data/db"
 export BACKUP_DIR="/data/backups/${APP_NAME}"
 
 # Tor directories under binary's dirs (binary owns Tor)
-# ${CONFIG_DIR}/tor/ = /config/{projectname}/tor/
-# ${DATA_DIR}/tor/   = /data/{projectname}/tor/
+# ${CONFIG_DIR}/tor/ = /config/search/tor/
+# ${DATA_DIR}/tor/   = /data/search/tor/
 ```
 
 ### Docker Compose Mapping
@@ -10626,13 +11691,13 @@ export BACKUP_DIR="/data/backups/${APP_NAME}"
 
 ```yaml
 services:
-  {projectname}:
-    image: {PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:latest
+  search:
+    image: {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest
     command:
       - --config=/config
       - --data=/data
       - --log=/logs
-      - --pid=/run/{projectname}.pid
+      - --pid=/run/search.pid
       - --port=8080
     volumes:
       - config:/config:ro          # Config (read-only)
@@ -10647,15 +11712,15 @@ services:
 
 ```yaml
 services:
-  {projectname}:
-    image: {PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:latest
+  search:
+    image: {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest
     volumes:
-      - {projectname}-data:/data
+      - search-data:/data
     ports:
       - "8080:8080"
 
 volumes:
-  {projectname}-data:
+  search-data:
 ```
 
 ### Commands Anyone Can Run (No Privileges)
@@ -10951,7 +12016,7 @@ This properly handles complex suffixes like `.co.uk`, `.com.au`, `.org.uk`, etc.
 - `.localhost`, `.test`, `.example`, `.invalid` (RFC 6761)
 - `.local`, `.lan`, `.internal`, `.home`, `.localdomain`
 - `.home.arpa`, `.intranet`, `.corp`, `.private`
-- `{projectname}` - dynamic (e.g., `app.jokes`, `dev.quotes`, `my.api`)
+- `search` - dynamic (e.g., `app.jokes`, `dev.quotes`, `my.api`)
 
 **Overlay Network TLDs (App-Managed, not set in DOMAIN):**
 - `.onion` - Tor hidden services (RFC 7686) - app generates/manages
@@ -11007,7 +12072,7 @@ func IsValidHost(host string, devMode bool, projectName string) bool {
         return true
     }
 
-    // Check dynamic project-specific TLD (e.g., app.jokes, dev.quotes, quotes, jokes, {projectname})
+    // Check dynamic project-specific TLD (e.g., app.jokes, dev.quotes, quotes, jokes, search)
     if projectName != "" && strings.HasSuffix(lower, "."+strings.ToLower(projectName)) {
         // Project TLDs only valid in dev mode
         return devMode
@@ -12681,13 +13746,22 @@ server:
 - Machine-parseable format
 
 **Console output (stdout/stderr) CAN be pretty:**
-- Emojis allowed (e.g., `✅ Server started`, `❌ Error`, `⚠️ Warning`)
-- ANSI colors allowed
+- Emojis allowed (e.g., `✅ Server started`, `❌ Error`, `⚠️ Warning`) - respects `NO_COLOR`
+- ANSI colors allowed - respects `NO_COLOR` env var (see PART 8)
 - Pretty formatting allowed
 - Used for start/stop/restart/status messages
 - User-facing CLI output can be visually appealing
 
-**Rule:** Log files = raw/plain text. Console = pretty is OK.
+**Emoji fallbacks (when `NO_COLOR` set or `TERM=dumb`):**
+
+| With Emojis | Plain Text Fallback |
+|-------------|---------------------|
+| `✅ Server started` | `[OK] Server started` |
+| `❌ Error occurred` | `[ERROR] Error occurred` |
+| `⚠️ Warning: ...` | `[WARN] Warning: ...` |
+| `ℹ️ Info: ...` | `[INFO] Info: ...` |
+
+**Rule:** Log files = raw/plain text. Console = pretty is OK (respecting `NO_COLOR`, `TERM=dumb`, and `--color` flag).
 
 ### Log Rotation
 
@@ -14845,7 +15919,7 @@ server:
     timeout: 5s
 
     # Key prefix to avoid collisions (use unique prefix per app)
-    prefix: "{projectname}:"
+    prefix: "search:"
 
     # Default TTL
     ttl: 1h
@@ -14880,7 +15954,7 @@ server:
   cache:
     type: valkey
     url: ${CACHE_URL}  # valkey://user:pass@valkey.example.com:6379/0
-    prefix: "{projectname}:"
+    prefix: "search:"
 ```
 
 **Using individual fields:**
@@ -14892,7 +15966,7 @@ server:
     port: 6379
     password: ${VALKEY_PASSWORD}
     db: 0
-    prefix: "{projectname}:"
+    prefix: "search:"
 ```
 
 **Valkey/Redis Cluster:**
@@ -14906,7 +15980,7 @@ server:
       - valkey2.example.com:6379
       - valkey3.example.com:6379
     password: ${VALKEY_PASSWORD}
-    prefix: "{projectname}:"
+    prefix: "search:"
 ```
 
 ### Cache Usage in Application
@@ -14950,6 +16024,226 @@ All settings above MUST be configurable via admin panel:
 
 **NO sub-routes** - just `/healthz`, not `/healthz/db` or `/healthz/**`
 
+### Global vs App-Specific
+
+**This template defines the COMPLETE global structure. Projects extend with app-specific data. ALL fields MUST be public-safe.**
+
+| Type | Description | Defined Where |
+|------|-------------|---------------|
+| **Global (this template)** | Complete structure: project, status, version, build, runtime, cluster, features, checks, stats | Below (comprehensive) |
+| **App-specific (extend)** | Additional features, stats, checks relevant to your app | IDEA.md |
+
+**How to extend:**
+
+| What to Add | Where to Add | Example |
+|-------------|--------------|---------|
+| App features | `features.*` | `features.syntax_highlighting: true` |
+| App stats | `stats.*` | `stats.pastes_total: 12345` |
+| App checks | `checks.*` | `checks.storage: "ok"` |
+| Custom section | New top-level field | `app_data: { ... }` |
+
+**Examples by app type:**
+
+| App Type | Extends Features | Extends Stats | Extends Checks |
+|----------|------------------|---------------|----------------|
+| **Paste service** | `syntax_highlighting` | `pastes_total`, `pastes_24h` | `storage` |
+| **URL shortener** | `custom_slugs`, `analytics` | `links_total`, `redirects_24h` | - |
+| **API gateway** | `rate_limiting` | `rate_limited_24h` | `upstream` |
+| **Chat app** | `e2e_encryption` | `messages_24h`, `active_users` | `websocket` |
+
+**Rules:**
+1. Global structure is comprehensive - don't reinvent, just extend
+2. All data MUST be public-safe (see Security section below)
+3. Frontend displays ALL backend fields - keep in sync
+4. App-specific fields follow same patterns (same HTML elements, same order within sections)
+
+### Field Order & Structure
+
+**Backend and frontend MUST use this exact order. Consistency across all projects.**
+
+#### Backend Structure (Go)
+
+**Based on template PARTS: branding (PART 16), modes (PART 6), cluster (PART 10), features (PARTS 20, 32, 34, 35), scheduler (PART 19).**
+
+```go
+// HealthResponse - canonical field order for /healthz
+// All fields required unless marked (omitempty)
+// See individual PARTS for field sources
+type HealthResponse struct {
+    // 1. Project identification (PART 16: branding config)
+    Project ProjectInfo `json:"project"`
+
+    // 2. Overall status
+    Status         string   `json:"status"`                      // "healthy", "unhealthy", "degraded"
+    PendingRestart bool     `json:"pending_restart,omitempty"`   // true if restart needed
+    RestartReason  []string `json:"restart_reason,omitempty"`    // settings that changed
+
+    // 3. Version & build info (PART 7: binary requirements)
+    Version   string    `json:"version"`      // SemVer "1.0.0"
+    GoVersion string    `json:"go_version"`   // "go1.23.0"
+    Build     BuildInfo `json:"build"`
+
+    // 4. Runtime info (PART 6: application modes)
+    Uptime    string    `json:"uptime"`       // human readable "2d 5h 30m"
+    Mode      string    `json:"mode"`         // "production" or "development"
+    Timestamp time.Time `json:"timestamp"`    // current UTC time
+
+    // 5. Cluster info (PART 10: database & cluster)
+    Cluster ClusterInfo `json:"cluster"`
+
+    // 6. Features - PUBLIC only (PARTS 20, 32, 34, 35)
+    Features FeaturesInfo `json:"features"`
+
+    // 7. Component health checks
+    Checks ChecksInfo `json:"checks"`
+
+    // 8. Statistics (public-safe aggregates)
+    Stats StatsInfo `json:"stats"`
+
+    // 9. APP-SPECIFIC: Add custom fields here
+    // AppData AppSpecificInfo `json:"app_data,omitempty"`
+}
+
+// ProjectInfo - from branding config (PART 16)
+type ProjectInfo struct {
+    Name        string `json:"name"`        // branding.title
+    Tagline     string `json:"tagline"`     // branding.tagline (short slogan)
+    Description string `json:"description"` // branding.description (longer)
+}
+
+// BuildInfo - from build-time variables (PART 7)
+type BuildInfo struct {
+    Commit string `json:"commit"` // git short hash (7 chars)
+    Date   string `json:"date"`   // ISO 8601 build timestamp
+}
+
+// ClusterInfo - from cluster manager (PART 10)
+type ClusterInfo struct {
+    Enabled   bool     `json:"enabled"`
+    Status    string   `json:"status,omitempty"`    // "connected", "disconnected"
+    Primary   string   `json:"primary,omitempty"`   // primary node public URL
+    Nodes     []string `json:"nodes,omitempty"`     // all node public URLs
+    NodeCount int      `json:"node_count,omitempty"` // total nodes (healthy + degraded + offline)
+    Role      string   `json:"role,omitempty"`      // "primary" or "member"
+}
+
+// FeaturesInfo - PUBLIC features only (no /metrics - PART 21 is internal)
+// Only shows NON-NEGOTIABLE features.
+// If project uses optional features (PARTS 34, 35, 36), they become
+// non-negotiable FOR THAT PROJECT and show actual enabled/disabled status.
+type FeaturesInfo struct {
+    // PART 32: Tor Hidden Service
+    Tor TorInfo `json:"tor"`
+
+    // PART 20: GeoIP
+    GeoIP bool `json:"geoip"`  // true = enabled, false = disabled
+
+    // --- PROJECT-SPECIFIC: Add when optional features are used ---
+    // When used, show actual status (admin can enable/disable):
+    //
+    // PART 34: MultiUser bool `json:"multi_user"`           // true/false
+    // PART 35: Organizations bool `json:"organizations"`     // true/false
+    // PART 36: CustomDomains bool `json:"custom_domains"`   // true/false
+    //
+    // APP-SPECIFIC: Add your app's features with enabled/disabled status
+}
+
+// TorInfo - from Tor manager (PART 32)
+type TorInfo struct {
+    Enabled  bool   `json:"enabled"`  // Tor binary found and running
+    Running  bool   `json:"running"`  // Hidden service active
+    Status   string `json:"status"`   // "healthy", "starting", "error"
+    Hostname string `json:"hostname"` // "abc123...xyz.onion" (56 chars, v3)
+}
+
+// ChecksInfo - component health (ok/error only - no details)
+type ChecksInfo struct {
+    Database  string `json:"database"`            // PART 10: "ok" or "error"
+    Cache     string `json:"cache"`               // PART 10: "ok" or "error"
+    Disk      string `json:"disk"`                // Disk space check
+    Scheduler string `json:"scheduler"`           // PART 19: "ok" or "error"
+    Cluster   string `json:"cluster,omitempty"`   // PART 10: "ok" or "error" (if enabled)
+    Tor       string `json:"tor,omitempty"`       // PART 32: "ok" or "error" (if enabled)
+    // APP-SPECIFIC: Add your checks here
+    // Example: Storage string `json:"storage"`
+}
+
+// StatsInfo - public-safe aggregate statistics
+type StatsInfo struct {
+    RequestsTotal int64 `json:"requests_total"`      // Total HTTP requests (lifetime)
+    Requests24h   int64 `json:"requests_24h"`        // Requests in last 24 hours
+    ActiveConns   int   `json:"active_connections"`  // Current active connections
+    // APP-SPECIFIC: Add your stats here
+    // Example: PastesTotal int64 `json:"pastes_total"`
+}
+```
+
+**Data Sources:**
+
+| Field | Source | PART |
+|-------|--------|------|
+| `project.name` | `cfg.Branding.Title` | 16 |
+| `project.tagline` | `cfg.Branding.Tagline` | 16 |
+| `project.description` | `cfg.Branding.Description` | 16 |
+| `status` | `getOverallStatus()` | - |
+| `version` | `version.Version` (build var) | 7 |
+| `go_version` | `runtime.Version()` | 7 |
+| `build.commit` | `version.Commit` (build var) | 7 |
+| `build.date` | `version.Date` (build var) | 7 |
+| `uptime` | `formatUptime(startTime)` | - |
+| `mode` | `cfg.Server.Mode` | 6 |
+| `cluster.*` | `clusterManager.*` | 10 |
+| `features.tor.*` | `torManager.*` | 32 |
+| `features.geoip` | `cfg.GeoIP.Enabled` (true/false) | 20 |
+| `features.*` (project-specific) | Show actual status when optional PARTS used | 34, 35, 36 |
+| `checks.database` | `checkDatabase()` | 10 |
+| `checks.cache` | `checkCache()` | 10 |
+| `checks.scheduler` | `checkScheduler()` | 19 |
+| `checks.cluster` | `checkCluster()` | 10 |
+| `checks.tor` | `checkTor()` | 32 |
+| `stats.*` | `statsCollector.*` | - |
+
+#### Frontend Display Order
+
+**Frontend displays sections in same order as backend. Uses PART 16 patterns.**
+
+| Order | Section | Backend Field | HTML Pattern | Display |
+|-------|---------|---------------|--------------|---------|
+| 1 | **Project** | `project.*` | `<header>` + `<h1>` + `<p>` | Name as `<h1>`, tagline as subtitle, description as `<p>` |
+| 2 | **Status** | `status` | `.status-banner.status-ok/error/warning` | Large centered banner with icon |
+| 3 | **Version & Build** | `version`, `go_version`, `build.*` | `.section-card` + `.info-list` | Key-value pairs, version/commit in `<code>` |
+| 4 | **Runtime** | `uptime`, `mode`, `timestamp` | `.section-card` + `.info-list` | Uptime as text, mode as `.badge` |
+| 5 | **Cluster** | `cluster.*` | `.section-card` + `.info-list` + `.node-list` | Status badge, node_count, URLs with copy buttons |
+| 6 | **Features** | `features.*` | `.section-card` + `.feature-list` | Icons per feature, Tor address (56 chars) with copy button |
+| 7 | **Checks** | `checks.*` | `.section-card` + `.table-wrapper` + `.data-table` | Table with `.status-ok`/`.status-error` badges |
+| 8 | **Stats** | `stats.*` | `.section-card` + `.info-list` | Key-value with formatted numbers (commas) |
+
+#### Field Display Rules
+
+| Field Type | HTML Element | Copy Button? | Example |
+|------------|--------------|--------------|---------|
+| Project name | `<h1>` | No | `<h1>📦 My App</h1>` |
+| Project tagline | `<p class="tagline">` | No | `<p class="tagline">The best app ever</p>` |
+| Project description | `<p>` | No | `<p>A brief description</p>` |
+| Status | `.status-banner` | No | `<div class="status-banner status-ok">✅ Healthy</div>` |
+| Version | `<code>` | No | `<code>1.0.0</code>` |
+| Go version | `<code>` | No | `<code>go1.23.0</code>` |
+| Build commit | `<code>` | Optional | `<code>abc1234</code>` |
+| Build date | `<time>` | No | `<time datetime="2024-01-10">Jan 10, 2024</time>` |
+| Uptime | plain text | No | `2d 5h 30m` |
+| Mode | `.badge` | No | `<span class="badge badge-production">Production</span>` |
+| Timestamp | `<time>` | No | `<time datetime="...">Jan 15, 2024 10:30 AM</time>` |
+| Cluster status | `.status` | No | `<span class="status status-ok">✅ Connected</span>` |
+| Cluster node_count | plain text | No | `3 nodes` |
+| Node URLs | `.code-block` | **Yes** | With copy button, horizontal scroll (56 char onion) |
+| Primary URL | `.code-block` | **Yes** | With copy button, horizontal scroll |
+| Tor address | `.code-block` | **Yes** | 56-char v3 onion, copy button, horizontal scroll |
+| Feature enabled | `.feature-enabled` | No | `<li class="feature-enabled">🌍 GeoIP</li>` |
+| Feature disabled | `.feature-disabled` | No | Muted, strikethrough |
+| Check ok | `.status.status-ok` | No | `<span class="status status-ok">✅ OK</span>` |
+| Check error | `.status.status-error` | No | `<span class="status status-error">❌ Error</span>` |
+| Stat number | large text | No | Formatted with commas: `1,234,567` |
+
 ### Security: Public Info Only 
 
 **Healthz is PUBLIC. NEVER expose sensitive data.**
@@ -14977,124 +16271,165 @@ All settings above MUST be configurable via admin panel:
 
 #### HTML (browsers)
 
-**Full HTML page following frontend rules (PART 16).**
+**Follows PART 16 frontend rules. Displays fields in order defined above (see "Field Order & Structure").**
 
-**Required Elements:**
-- Full HTML document with `<head>` and `<body>`
-- Proper page title: "{projectname} - Health Status"
-- Uses site theme (light/dark mode support)
-- Responsive layout
-- Header with navigation (if logged in) or minimal header (if public)
-- Footer with standard links
-
-**Health Information Display:**
-
-**Frontend MUST display ALL data returned by backend, formatted properly.**
-
-| Section | Content | Backend Field |
-|---------|---------|---------------|
-| **Project Info** | 📦 Name, description (from branding config) | `project.name`, `project.description` |
-| **Status Banner** | Large status indicator (✅ Healthy / 🔴 Unhealthy / ⚠️ Degraded) with color | `status` |
-| **Version Info** | ℹ️ Version, 🐹 Go version, 🔨 build commit, ⏱️ uptime | `version`, `go_version`, `build.*`, `uptime` |
-| **Mode** | 🚀 Production/Development | `mode` |
-| **Cluster** | 🔗 Status, 👑 primary, 🖥️ nodes list, 🎭 role | `cluster.*` |
-| **Features** | 🎛️ Enabled features with icons (👥 👤 🏢 🧅 🌍 📊) | `features.*` |
-| **Component Checks** | 🔧 🗄️ Database, 💾 Cache, 💿 Disk, ⏰ Scheduler, 🔗 Cluster | `checks.*` |
-| **Statistics** | 📈 📥 Total requests, 📅 24h requests, 🔌 active connections | `stats.*` |
-| **Last Updated** | 🕐 Timestamp of health check | `timestamp` |
+| Requirement | Details |
+|-------------|---------|
+| Page title | `search - Health Status` |
+| Layout | Standard public layout (header, main.container, footer) |
+| CSS patterns | PART 16 global classes |
+| Field order | Same as backend struct (1-8) |
+| Copy buttons | Required for node URLs, Tor address |
 
 **HTML Structure:**
+
 ```html
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="theme-dark">
 <head>
-  <title>{projectname} - Health Status</title>
+  <title>search - Health Status</title>
   <!-- Standard meta, CSS, theme support -->
 </head>
 <body>
   <header><!-- Standard header --></header>
-  <main class="health-status">
-    <!-- Project Info -->
+  <main class="container">
+    <!-- 1. Project Info -->
     <header class="health-header">
       <h1>📦 {project.name}</h1>
-      <p class="project-description">{project.description}</p>
+      <p class="tagline">{project.tagline}</p>
+      <p>{project.description}</p>
     </header>
 
-    <h2>🏥 System Health</h2>
-
     <!-- Status Banner -->
-    <div class="status-banner status-healthy">
+    <div class="status-banner status-ok">
       <span class="status-icon">✅</span>
       <span class="status-text">All Systems Operational</span>
     </div>
-    <!-- Use 🔴 for unhealthy, ⚠️ for degraded -->
+    <!-- Use .status-ok (healthy), .status-error (unhealthy), .status-warning (degraded) -->
 
     <!-- Version & Build Info -->
-    <section class="health-section">
+    <section class="section-card">
       <h2>ℹ️ Version</h2>
-      <dl class="info-grid">
-        <dt>🏷️ Version</dt><dd>1.0.0</dd>
-        <dt>🐹 Go Version</dt><dd>1.23.0</dd>
-        <dt>🔨 Build</dt><dd>abc1234 (2024-01-10)</dd>
-        <dt>⏱️ Uptime</dt><dd>2d 5h 30m</dd>
-        <dt>🚀 Mode</dt><dd><span class="badge badge-production">Production</span></dd>
+      <dl class="info-list">
+        <dt>🏷️ Version</dt>
+        <dd><code>1.0.0</code></dd>
+
+        <dt>🐹 Go Version</dt>
+        <dd><code>1.23.0</code></dd>
+
+        <dt>🔨 Build</dt>
+        <dd><code>abc1234</code> (2024-01-10)</dd>
+
+        <dt>⏱️ Uptime</dt>
+        <dd>2d 5h 30m</dd>
+
+        <dt>🚀 Mode</dt>
+        <dd><span class="badge badge-production">Production</span></dd>
       </dl>
     </section>
 
     <!-- Cluster Info (if enabled) -->
-    <section class="health-section">
+    <section class="section-card">
       <h2>🔗 Cluster</h2>
-      <dl class="info-grid">
-        <dt>Status</dt><dd><span class="status-ok">✅ Connected</span></dd>
-        <dt>👑 Primary</dt><dd><code>https://node1.example.com</code></dd>
-        <dt>🎭 Role</dt><dd>Member</dd>
+      <dl class="info-list">
+        <dt>Status</dt>
+        <dd><span class="status status-ok">✅ Connected</span></dd>
+
+        <dt>👑 Primary</dt>
+        <dd>
+          <div class="code-block">
+            <code class="code-content">https://node1.example.com</code>
+            <button class="copy-btn" data-copy="https://node1.example.com">
+              <span class="copy-icon">📋</span><span class="copy-text">Copy</span>
+            </button>
+          </div>
+        </dd>
+
+        <dt>🎭 Role</dt>
+        <dd>Member</dd>
       </dl>
+
       <h3>🖥️ Nodes</h3>
       <ul class="node-list">
-        <li><code>https://node1.example.com</code> <span class="badge badge-primary">👑 Primary</span></li>
-        <li><code>https://node2.example.com</code> ✅</li>
-        <li><code>https://node3.example.com</code> ✅</li>
+        <li>
+          <div class="code-block">
+            <code class="code-content">https://node1.example.com</code>
+            <button class="copy-btn" data-copy="https://node1.example.com">
+              <span class="copy-icon">📋</span>
+            </button>
+          </div>
+          <span class="badge badge-primary">👑 Primary</span>
+        </li>
+        <li>
+          <div class="code-block">
+            <code class="code-content">https://node2.example.com</code>
+            <button class="copy-btn" data-copy="https://node2.example.com">
+              <span class="copy-icon">📋</span>
+            </button>
+          </div>
+          <span class="status status-ok">✅</span>
+        </li>
       </ul>
     </section>
 
-    <!-- Features -->
-    <section class="health-section">
+    <!-- 6. Features (NON-NEGOTIABLE only, show actual status) -->
+    <section class="section-card">
       <h2>🎛️ Features</h2>
+      <!-- Only NON-NEGOTIABLE features. Show actual enabled/disabled status. -->
       <ul class="feature-list">
-        <li class="feature-enabled">👥 Multi-User</li>
-        <li class="feature-enabled">🏢 Organizations</li>
-        <li class="feature-enabled">🧅 Tor: <span class="status-ok">✅ healthy</span> <code>abc123xyz456.onion</code></li>
+        <li class="feature-enabled">
+          🧅 Tor: <span class="status status-ok">✅ healthy</span>
+          <div class="code-block">
+            <code class="code-content">abc123xyz456abcdef789xyz456abcdef789xyz456abcdef789xyz.onion</code>
+            <button class="copy-btn" data-copy="abc123xyz456abcdef789xyz456abcdef789xyz456abcdef789xyz.onion">
+              <span class="copy-icon">📋</span><span class="copy-text">Copy</span>
+            </button>
+          </div>
+        </li>
         <li class="feature-enabled">🌍 GeoIP</li>
-        <li class="feature-enabled">📊 Metrics</li>
+        <!-- PROJECT-SPECIFIC: If using optional PARTS, show actual status -->
+        <!-- <li class="feature-enabled">👥 Multi-User</li> -->           <!-- if enabled -->
+        <!-- <li class="feature-disabled">👥 Multi-User</li> -->          <!-- if disabled by admin -->
+        <!-- <li class="feature-enabled">🏢 Organizations</li> -->
+        <!-- <li class="feature-disabled">🏢 Organizations</li> -->       <!-- if disabled by admin -->
       </ul>
     </section>
 
     <!-- Component Checks -->
-    <section class="health-section">
+    <section class="section-card">
       <h2>🔧 Component Status</h2>
-      <table class="checks-table">
-        <thead><tr><th>Component</th><th>Status</th></tr></thead>
-        <tbody>
-          <tr><td>🗄️ Database</td><td class="status-ok">✅ OK</td></tr>
-          <tr><td>💾 Cache</td><td class="status-ok">✅ OK</td></tr>
-          <tr><td>💿 Disk</td><td class="status-ok">✅ OK</td></tr>
-          <tr><td>⏰ Scheduler</td><td class="status-ok">✅ OK</td></tr>
-          <tr><td>🔗 Cluster</td><td class="status-ok">✅ OK</td></tr>
-        </tbody>
-      </table>
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead><tr><th>Component</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>🗄️ Database</td><td><span class="status status-ok">✅ OK</span></td></tr>
+            <tr><td>💾 Cache</td><td><span class="status status-ok">✅ OK</span></td></tr>
+            <tr><td>💿 Disk</td><td><span class="status status-ok">✅ OK</span></td></tr>
+            <tr><td>⏰ Scheduler</td><td><span class="status status-ok">✅ OK</span></td></tr>
+            <tr><td>🔗 Cluster</td><td><span class="status status-ok">✅ OK</span></td></tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
-    <!-- Statistics -->
-    <section class="health-section">
-      <h2>📈 Statistics</h2>
-      <dl class="info-grid stats-grid">
-        <dt>📥 Total Requests</dt><dd>1,234,567</dd>
-        <dt>📅 Requests (24h)</dt><dd>45,678</dd>
-        <dt>🔌 Active Connections</dt><dd>42</dd>
+    <!-- Statistics (Public-safe aggregate stats) -->
+    <section class="section-card">
+      <h2>📈 Server Statistics</h2>
+      <!-- NOTE: Public-safe aggregate stats only.
+           /metrics endpoint (PART 21) is internal/authenticated, not shown here. -->
+      <dl class="info-list stats-grid">
+        <dt>📥 Total Requests</dt>
+        <dd>1,234,567</dd>
+
+        <dt>📅 Requests (24h)</dt>
+        <dd>45,678</dd>
+
+        <dt>🔌 Active Connections</dt>
+        <dd>42</dd>
       </dl>
     </section>
 
-    <!-- Footer -->
+    <!-- Last Updated -->
     <footer class="health-footer">
       <p>Last checked: <time datetime="2024-01-15T10:30:00Z">Jan 15, 2024 10:30 AM</time></p>
       <p class="auto-refresh">Auto-refreshing in <span id="countdown">30</span>s</p>
@@ -15105,99 +16440,44 @@ All settings above MUST be configurable via admin panel:
 </html>
 ```
 
-**Status Styling:**
+**Healthz-specific styles (extends PART 16):**
+
 ```css
-/* Status Banner */
+/* Status Banner (health page specific) */
 .status-banner {
-  padding: 1.5rem;
+  padding: 1rem;
   border-radius: 8px;
   text-align: center;
-  font-size: 1.5rem;
-  margin-bottom: 2rem;
-}
-.status-healthy { background: var(--color-success-bg); color: var(--color-success); }
-.status-unhealthy { background: var(--color-error-bg); color: var(--color-error); }
-.status-degraded { background: var(--color-warning-bg); color: var(--color-warning); }
-
-/* Status Indicators */
-.status-ok { color: var(--color-success); }
-.status-error { color: var(--color-error); }
-.status-warning { color: var(--color-warning); }
-
-/* Sections */
-.health-section {
-  margin-bottom: 2rem;
-  padding: 1rem;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-}
-.health-section h2 {
-  margin-top: 0;
-  border-bottom: 1px solid var(--color-border);
-  padding-bottom: 0.5rem;
-}
-
-/* Info Grid (dl/dt/dd) */
-.info-grid {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0.5rem 1rem;
-}
-.info-grid dt { font-weight: 600; }
-.info-grid dd { margin: 0; }
-
-/* Feature List */
-.feature-list {
-  list-style: none;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-.feature-enabled { color: var(--color-success); }
-.feature-disabled { color: var(--color-muted); }
-
-/* Node List */
-.node-list {
-  list-style: none;
-  padding: 0;
-}
-.node-list li {
-  padding: 0.25rem 0;
-  font-family: monospace;
-}
-
-/* Checks Table */
-.checks-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-.checks-table th, .checks-table td {
-  padding: 0.5rem;
-  border-bottom: 1px solid var(--color-border);
-  text-align: left;
-}
-
-/* Badges */
-.badge {
-  padding: 0.125rem 0.5rem;
-  border-radius: 4px;
-  font-size: 0.875rem;
-}
-.badge-production { background: var(--color-success-bg); color: var(--color-success); }
-.badge-development { background: var(--color-warning-bg); color: var(--color-warning); }
-.badge-primary { background: var(--color-primary-bg); color: var(--color-primary); }
-
-/* Stats */
-.stats-grid dd {
   font-size: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+/* Uses same modifier classes as inline .status: .status-ok, .status-error, .status-warning */
+.status-banner.status-ok { background: var(--color-success-bg); color: var(--color-success); }
+.status-banner.status-error { background: var(--color-error-bg); color: var(--color-error); }
+.status-banner.status-warning { background: var(--color-warning-bg); color: var(--color-warning); }
+
+/* Stats with larger values */
+.stats-grid dd {
+  font-size: 1.1rem;
   font-weight: 600;
 }
 
-/* Auto-refresh */
+/* Auto-refresh indicator */
 .auto-refresh {
   color: var(--color-muted);
   font-size: 0.875rem;
+}
+
+@media (min-width: 768px) {
+  .status-banner {
+    padding: 1.5rem;
+    font-size: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .stats-grid dd {
+    font-size: 1.25rem;
+  }
 }
 ```
 
@@ -15208,18 +16488,27 @@ All settings above MUST be configurable via admin panel:
 
 #### JSON (Accept: application/json)
 
+**Fields in canonical order (see "Field Order & Structure" above). References template PARTS.**
+
+**Note:** Only non-negotiable features shown with actual status (true/false, enabled/disabled). If project uses optional PARTS (34, 35, 36), those become non-negotiable for that project and show their actual enabled/disabled status.
+
 ```json
 {
+  "project": {
+    "name": "My Application",
+    "tagline": "The best app ever",
+    "description": "A brief description of what this application does"
+  },
   "status": "healthy",
   "version": "1.0.0",
-  "mode": "production",
-  "uptime": "2d 5h 30m",
-  "timestamp": "2024-01-15T10:30:00Z",
-  "go_version": "1.23.0",
+  "go_version": "go1.23.0",
   "build": {
     "commit": "abc1234",
     "date": "2024-01-10T10:00:00Z"
   },
+  "uptime": "2d 5h 30m",
+  "mode": "production",
+  "timestamp": "2024-01-15T10:30:00Z",
   "cluster": {
     "enabled": true,
     "status": "connected",
@@ -15229,26 +16518,25 @@ All settings above MUST be configurable via admin panel:
       "https://node2.example.com",
       "https://node3.example.com"
     ],
+    "node_count": 3,
     "role": "member"
   },
   "features": {
-    "multi_user": true,
-    "organizations": true,
     "tor": {
       "enabled": true,
       "running": true,
       "status": "healthy",
-      "hostname": "abc123xyz456.onion"
+      "hostname": "abc123xyz456abcdef789xyz456abcdef789xyz456abcdef789xyz.onion"
     },
-    "geoip": true,
-    "metrics": true
+    "geoip": true
   },
   "checks": {
     "database": "ok",
     "cache": "ok",
     "disk": "ok",
     "scheduler": "ok",
-    "cluster": "ok"
+    "cluster": "ok",
+    "tor": "ok"
   },
   "stats": {
     "requests_total": 1234567,
@@ -15272,6 +16560,7 @@ All settings above MUST be configurable via admin panel:
 | **Email** | SMTP host, admin emails | Phishing/spam target |
 | **Secrets** | Encryption keys, session secrets | Cryptographic breach |
 | **Debug** | Stack traces, detailed errors | Exploitation info |
+| **Internal endpoints** | /metrics status, internal service endpoints | Internal infrastructure info |
 
 **Safe to include:**
 
@@ -15279,7 +16568,7 @@ All settings above MUST be configurable via admin panel:
 |----------|---------------|---------|
 | **Version** | App version, Go version, build info | `1.0.0`, `go1.23.0` |
 | **Status** | Health status, uptime | `healthy`, `2d 5h` |
-| **Features** | Enabled features (bool only) | `multi_user: true` |
+| **Features** | Enabled PUBLIC features only (not /metrics) | `multi_user: true` |
 | **Checks** | Service status (ok/error only) | `database: ok` |
 | **Cluster** | Public node URLs | `https://node1.example.com` |
 | **Stats** | Aggregate counts only | `requests_total: 12345` |
@@ -15289,25 +16578,58 @@ All settings above MUST be configurable via admin panel:
 
 #### Plain Text (Accept: text/plain)
 
+**Fields in canonical order, flattened with dot notation. References template PARTS.**
+
 ```
+# 1. Project (PART 16: branding)
+project.name: My Application
+project.tagline: The best app ever
+project.description: A brief description
+
+# 2. Status
 status: healthy
+
+# 3. Version & Build (PART 7)
 version: 1.0.0
-mode: production
-uptime: 2d 5h 30m
-go_version: 1.23.0
+go_version: go1.23.0
 build.commit: abc1234
-database: ok
-cache: ok
-disk: ok
-scheduler: ok
-cluster: ok
+build.date: 2024-01-10T10:00:00Z
+
+# 4. Runtime (PART 6)
+uptime: 2d 5h 30m
+mode: production
+timestamp: 2024-01-15T10:30:00Z
+
+# 5. Cluster (PART 10)
+cluster.enabled: true
+cluster.status: connected
 cluster.primary: https://node1.example.com
 cluster.nodes: https://node1.example.com, https://node2.example.com, https://node3.example.com
-features: multi_user, organizations, tor, geoip, metrics
+cluster.node_count: 3
+cluster.role: member
+
+# 6. Features - NON-NEGOTIABLE only (show actual status)
 features.tor.enabled: true
 features.tor.running: true
 features.tor.status: healthy
-features.tor.hostname: abc123xyz456.onion
+features.tor.hostname: abc123xyz456abcdef789xyz456abcdef789xyz456abcdef789xyz.onion
+features.geoip: true
+# PROJECT-SPECIFIC: If using optional PARTS, show actual status
+# features.multi_user: true       (or false if admin disabled)
+# features.organizations: false   (disabled by admin)
+
+# 7. Checks
+checks.database: ok
+checks.cache: ok
+checks.disk: ok
+checks.scheduler: ok
+checks.cluster: ok
+checks.tor: ok
+
+# 8. Stats
+stats.requests_total: 1234567
+stats.requests_24h: 45678
+stats.active_connections: 42
 ```
 
 ### /api/{api_version}/healthz (JSON only)
@@ -15348,8 +16670,7 @@ When not in cluster mode:
       "status": "",
       "hostname": ""
     },
-    "geoip": true,
-    "metrics": true
+    "geoip": true
   },
   "checks": {
     "database": "ok",
@@ -15433,7 +16754,7 @@ When not in cluster mode:
 ### --version Output
 
 ```
-{projectname} {projectversion}
+search {projectversion}
 Built: {BUILD_DATE}
 Go: {GO_VERSION}
 OS/Arch: {GOOS}/{GOARCH}
@@ -15960,13 +17281,13 @@ func getAPIResponseFormat(r *http.Request) string {
 **Use cases:**
 
 **API with `.txt` extension:**
-- `curl https://api.example.com/api/{api_version}/joke/random.txt` → Just the joke text
-- `curl https://api.example.com/api/{api_version}/healthz.txt` → "OK" or "ERROR: ..."
+- `curl -q -LSsf https://api.example.com/api/{api_version}/joke/random.txt` → Just the joke text
+- `curl -q -LSsf https://api.example.com/api/{api_version}/healthz.txt` → "OK" or "ERROR: ..."
 - Scripts that need plain output without JSON parsing
 
 **Frontend with smart detection:**
-- `curl https://example.com/joke/random` → Auto-detects CLI, returns text (no .txt needed)
-- `curl -H "Accept: text/plain" https://example.com/users/123` → Plain text
+- `curl -q -LSsf https://example.com/joke/random` → Auto-detects CLI, returns text (no .txt needed)
+- `curl -q -LSsf -H "Accept: text/plain" https://example.com/users/123` → Plain text
 - Browser visit to `/joke/random` → HTML page
 - Command-line tools get text automatically
 
@@ -16071,7 +17392,7 @@ When an HTTP tool (curl, wget, httpie) is detected, the server MUST:
 
 | Type | Examples | Detection | Response | Interactive | JS Support |
 |------|----------|-----------|----------|-------------|------------|
-| **Our Client** | `{projectname}-cli` | `{projectname}-cli/` in User-Agent | JSON (client handles formatting) | **YES** (TUI/GUI) | N/A |
+| **Our Client** | `search-cli` | `search-cli/` in User-Agent | JSON (client handles formatting) | **YES** (TUI/GUI) | N/A |
 | **Text Browsers** | lynx, w3m, links, elinks | User-Agent patterns | HTML **without JavaScript** (no-JS alternative) | **YES** (navigate, click) | **NO** |
 | **HTTP Tools** | curl, wget, httpie | User-Agent patterns | Formatted text (HTML2TextConverter) | **NO** (just dump output) | N/A |
 
@@ -16097,7 +17418,7 @@ When an HTTP tool (curl, wget, httpie) is detected, the server MUST:
 ```go
 // src/common/httputil/detect.go
 
-// isOurCliClient detects our own client binary ({projectname}-cli)
+// isOurCliClient detects our own client binary (search-cli)
 // Client is INTERACTIVE (TUI/GUI) - receives JSON, renders itself
 func isOurCliClient(r *http.Request) bool {
     ua := r.Header.Get("User-Agent")
@@ -16327,7 +17648,7 @@ ID: joke_123
   • API Docs [/docs]
   • Get Another Joke [/jokes/random]
 ────────────────────────────────────────────────────────────────────────────────
-                    Powered by {projectname} • v{version}
+                    Powered by search • v{version}
 ```
 
 **Request Handler Integration:**
@@ -16383,7 +17704,7 @@ func renderNoJSHTML(w http.ResponseWriter, data interface{}) {
 | Client Type | Detection | Response | Interactive | JS Support |
 |-------------|-----------|----------|-------------|------------|
 | Browser (Chrome, Firefox) | User-Agent | HTML + JS | **Yes** | **Yes** |
-| **Our Client** (`{projectname}-cli`) | `isOurCliClient()` | JSON | **Yes** (TUI/GUI) | N/A |
+| **Our Client** (`search-cli`) | `isOurCliClient()` | JSON | **Yes** (TUI/GUI) | N/A |
 | **Text Browsers** (lynx, w3m, links) | `isTextBrowser()` | HTML (no-JS) | **Yes** (navigate, click) | **No** |
 | **HTTP Tools** (curl, wget, httpie) | `isHttpTool()` | Formatted text | **No** (just dump) | N/A |
 | Accept: text/plain | Header | Formatted text | No | N/A |
@@ -17105,7 +18426,7 @@ Before proceeding, confirm you understand:
 
 | Environment | DOMAIN Value | Example |
 |-------------|--------------|---------|
-| **Development** | `{projectname}` | `DOMAIN=jokes` |
+| **Development** | `search` | `DOMAIN=jokes` |
 | **Production** | Valid FQDN | `DOMAIN=api.example.com` |
 
 **Valid Production DOMAIN formats (comma-separated list supported):**
@@ -17311,9 +18632,9 @@ export DOMAIN=myapp.com,www.myapp.com,api.myapp.com
 **Dev TLDs are allowed in development mode but require global IP fallback for remote access.**
 
 **Dynamic Dev TLDs (project name as TLD):**
-- `{projectname}` - e.g., `app.jokes`, `my.quotes`, `dev.api`
-- `{projectname}.local` - e.g., `app.jokes.local`
-- `{projectname}.test` - e.g., `app.jokes.test`
+- `search` - e.g., `app.jokes`, `my.quotes`, `dev.api`
+- `search.local` - e.g., `app.jokes.local`
+- `search.test` - e.g., `app.jokes.test`
 
 **Static Dev TLDs:**
 - `.local`, `.test`, `.example`, `.invalid` (RFC 6761)
@@ -17349,7 +18670,7 @@ func GetDisplayURL(projectName string, port int, isHTTPS bool) string {
 func isDevTLD(host, projectName string) bool {
     lower := strings.ToLower(host)
 
-    // Check dynamic project-specific TLD (e.g., app.jokes, dev.quotes, quotes, jokes, {projectname})
+    // Check dynamic project-specific TLD (e.g., app.jokes, dev.quotes, quotes, jokes, search)
     if projectName != "" && strings.HasSuffix(lower, "."+strings.ToLower(projectName)) {
         return true
     }
@@ -17393,6 +18714,7 @@ func isDevTLD(host, projectName string) bool {
 
 | Terminal Size | Banner Style | Example |
 |---------------|--------------|---------|
+| **NO_COLOR / TERM=dumb** | Plain text only, no emojis | `AppName v1.0.0` |
 | **≥80 cols** | Full ASCII art + icons + URLs | Full branded banner |
 | **60-79 cols** | Icons + text only, no ASCII art | `🚀 AppName v1.0.0` |
 | **40-59 cols** | Minimal text, abbreviated | `AppName 1.0.0 :8080` |
@@ -17414,6 +18736,15 @@ func PrintServerStartupBanner(appName, version, appMode string, urls []string) {
         width = 80 // Default
     }
 
+    // Check for plain output mode (NO_COLOR or TERM=dumb)
+    plainMode := os.Getenv("NO_COLOR") != "" || os.Getenv("TERM") == "dumb"
+
+    if plainMode {
+        // Plain text banner (no emojis, no ASCII art)
+        printServerBannerPlain(appName, version, appMode, urls)
+        return
+    }
+
     switch {
     case width >= 80:
         printServerBannerFull(appName, version, appMode, urls)
@@ -17424,6 +18755,16 @@ func PrintServerStartupBanner(appName, version, appMode string, urls []string) {
     default:
         printServerBannerMicro(appName, urls)
     }
+}
+
+func printServerBannerPlain(appName, version, appMode string, urls []string) {
+    // Plain text - no emojis, no ASCII art
+    fmt.Printf("%s v%s\n", appName, version)
+    fmt.Printf("Mode: %s\n", appMode)
+    for _, url := range urls {
+        fmt.Printf("  %s\n", url)
+    }
+    fmt.Println()
 }
 
 func printServerBannerFull(appName, version, appMode string, urls []string) {
@@ -17660,7 +19001,7 @@ formatURL(host, 8443, true)
 **Example (Production with SSL + Tor on 443):**
 ```
 ╭─────────────────────────────────────────────────────────────╮
-│  🚀 {PROJECTNAME} · 📦 {projectversion}                      │
+│  🚀 SEARCH · 📦 {projectversion}                      │
 ├─────────────────────────────────────────────────────────────┤
 │  🔒 Running in mode: production                             │
 ├─────────────────────────────────────────────────────────────┤
@@ -17675,7 +19016,7 @@ formatURL(host, 8443, true)
 **Example (Production with Tor + I2P on 443):**
 ```
 ╭─────────────────────────────────────────────────────────────╮
-│  🚀 {PROJECTNAME} · 📦 {projectversion}                      │
+│  🚀 SEARCH · 📦 {projectversion}                      │
 ├─────────────────────────────────────────────────────────────┤
 │  🔒 Running in mode: production                             │
 ├─────────────────────────────────────────────────────────────┤
@@ -17691,7 +19032,7 @@ formatURL(host, 8443, true)
 **Example (Production on port 8080):**
 ```
 ╭─────────────────────────────────────────────────────────────╮
-│  🚀 {PROJECTNAME} · 📦 {projectversion}                      │
+│  🚀 SEARCH · 📦 {projectversion}                      │
 ├─────────────────────────────────────────────────────────────┤
 │  🔒 Running in mode: production                             │
 ├─────────────────────────────────────────────────────────────┤
@@ -17705,7 +19046,7 @@ formatURL(host, 8443, true)
 **Example (Development on port 8080):**
 ```
 ╭─────────────────────────────────────────────────────────────╮
-│  🚀 {PROJECTNAME} · 📦 {projectversion}                      │
+│  🚀 SEARCH · 📦 {projectversion}                      │
 ├─────────────────────────────────────────────────────────────┤
 │  🔧 Running in mode: development                            │
 ├─────────────────────────────────────────────────────────────┤
@@ -17719,7 +19060,7 @@ formatURL(host, 8443, true)
 **Example (Development IPv6 on port 8080):**
 ```
 ╭─────────────────────────────────────────────────────────────╮
-│  🚀 {PROJECTNAME} · 📦 {projectversion}                      │
+│  🚀 SEARCH · 📦 {projectversion}                      │
 ├─────────────────────────────────────────────────────────────┤
 │  🔧 Running in mode: development                            │
 ├─────────────────────────────────────────────────────────────┤
@@ -17733,7 +19074,7 @@ formatURL(host, 8443, true)
 **Example (Production on port 80):**
 ```
 ╭─────────────────────────────────────────────────────────────╮
-│  🚀 {PROJECTNAME} · 📦 {projectversion}                      │
+│  🚀 SEARCH · 📦 {projectversion}                      │
 ├─────────────────────────────────────────────────────────────┤
 │  🔒 Running in mode: production                             │
 ├─────────────────────────────────────────────────────────────┤
@@ -17747,7 +19088,7 @@ formatURL(host, 8443, true)
 **Example (Production with debugging enabled):**
 ```
 ╭─────────────────────────────────────────────────────────────╮
-│  🚀 {PROJECTNAME} · 📦 {projectversion}                      │
+│  🚀 SEARCH · 📦 {projectversion}                      │
 ├─────────────────────────────────────────────────────────────┤
 │  🔒 Running in mode: production [debugging]                 │
 ├─────────────────────────────────────────────────────────────┤
@@ -17761,7 +19102,7 @@ formatURL(host, 8443, true)
 **Example (First Run - Setup Required):**
 ```
 ╭─────────────────────────────────────────────────────────────╮
-│  🚀 {PROJECTNAME} · 📦 {projectversion}                      │
+│  🚀 SEARCH · 📦 {projectversion}                      │
 ├─────────────────────────────────────────────────────────────┤
 │  🔧 Running in mode: development                            │
 ├─────────────────────────────────────────────────────────────┤
@@ -18238,16 +19579,16 @@ func detectClientType(r *http.Request) string {
 
 2. **API Endpoints** (programmatic):
    ```bash
-   curl -X POST /api/{api_version}/auth/register -d '{"username":"test","email":"test@example.com"}'
-   curl -X PATCH /api/{api_version}/users -d '{"email":"new@test.com"}'  # Current user
-   curl -X PUT /api/{api_version}/{admin_path}/users/123 -d '{"email":"new@test.com"}'  # Admin
-   curl -X DELETE /api/{api_version}/{admin_path}/users/123  # Admin
+   curl -q -LSsf -X POST /api/{api_version}/auth/register -d '{"username":"test","email":"test@example.com"}'
+   curl -q -LSsf -X PATCH /api/{api_version}/users -d '{"email":"new@test.com"}'  # Current user
+   curl -q -LSsf -X PUT /api/{api_version}/{admin_path}/users/123 -d '{"email":"new@test.com"}'  # Admin
+   curl -q -LSsf -X DELETE /api/{api_version}/{admin_path}/users/123  # Admin
    ```
 
 3. **Frontend Direct** (CLI/scripting):
    ```bash
-   curl -X POST /auth/register -d 'username=test&email=test@example.com'  # Form-encoded
-   curl /{username}  # Returns text (auto-detected) - public profile
+   curl -q -LSsf -X POST /auth/register -d 'username=test&email=test@example.com'  # Form-encoded
+   curl -q -LSsf /{username}  # Returns text (auto-detected) - public profile
    ```
 
 **Rule:** CRUD must work for browsers (HTML forms), APIs (JSON), and CLI (text/form-encoded).
@@ -18258,11 +19599,11 @@ func detectClientType(r *http.Request) string {
 
 ```bash
 # Easy: Test text output (no HTML parsing needed)
-curl /users/123                           # Auto-detects CLI, returns text
-curl -H "Accept: text/plain" /users/123  # Explicitly request text
+curl -q -LSsf /users/123                  # Auto-detects CLI, returns text
+curl -q -LSsf -H "Accept: text/plain" /users/123  # Explicitly request text
 
 # Hard: Testing HTML requires parsing
-curl -H "Accept: text/html" /users/123 | grep "<title>"  # Fragile
+curl -q -LSsf -H "Accept: text/html" /users/123 | grep "<title>"  # Fragile
 ```
 
 **Recommended testing approach:**
@@ -18274,7 +19615,7 @@ curl -H "Accept: text/html" /users/123 | grep "<title>"  # Fragile
 **Test scripts should:**
 ```bash
 # Test frontend returns text for CLI
-RESULT=$(curl -s http://localhost:80/users/123)
+RESULT=$(curl -q -LSsf http://localhost:80/users/123)
 if echo "$RESULT" | grep -q "testuser"; then
     echo "✓ Frontend returns user data"
 else
@@ -18282,56 +19623,89 @@ else
 fi
 
 # Test frontend returns HTML for browser (optional, just check Content-Type)
-CONTENT_TYPE=$(curl -s -H "Accept: text/html" -I http://localhost:80/users/123 | grep -i "content-type")
+CONTENT_TYPE=$(curl -q -LSsfI -H "Accept: text/html" http://localhost:80/users/123 | grep -i "content-type")
 if echo "$CONTENT_TYPE" | grep -q "text/html"; then
     echo "✓ Frontend serves HTML to browsers"
 fi
 ```
 
-## Responsive Layout 
+## Mobile-First Responsive Design
 
-**Content width adapts based on screen size:**
+**ALL frontend CSS MUST be mobile-first: base styles for mobile, media queries for larger screens.**
 
-| Screen Width | Content Width | Margins | Device Category |
-|--------------|---------------|---------|-----------------|
-| ≥720px | 90% | 5% left, 5% right | Desktop/Tablet |
-| <720px | 98% | 1% left, 1% right | Mobile |
+### Core Principle
 
 ```css
-/* Responsive container */
-.container {
-  width: 98%;
-  margin: 0 auto;
-  max-width: 1400px;
+/* CORRECT: Mobile-first */
+.element {
+  /* Base styles = mobile */
+  padding: 0.75rem;
+  font-size: 1rem;
+}
+@media (min-width: 768px) {
+  .element {
+    /* Enhanced for tablet+ */
+    padding: 1.5rem;
+  }
 }
 
-@media (min-width: 720px) {
+/* WRONG: Desktop-first (do NOT do this) */
+.element {
+  padding: 1.5rem;
+}
+@media (max-width: 767px) {
+  .element { padding: 0.75rem; }
+}
+```
+
+### Breakpoints
+
+| Breakpoint | Target | CSS |
+|------------|--------|-----|
+| Base (no query) | Mobile phones (<768px) | Default styles |
+| `min-width: 768px` | Tablets and up | `@media (min-width: 768px)` |
+| `min-width: 1024px` | Desktops and up | `@media (min-width: 1024px)` |
+| `min-width: 1280px` | Large desktops (optional) | `@media (min-width: 1280px)` |
+
+### Container
+
+```css
+/* Mobile-first container */
+.container {
+  width: 100%;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  margin: 0 auto;
+}
+
+@media (min-width: 768px) {
   .container {
     width: 90%;
+    padding-left: 0;
+    padding-right: 0;
+    max-width: 1400px;
   }
 }
 ```
 
-**Responsive Behavior by Element:**
+### Responsive Behavior by Element
 
-| Element | <720px (Mobile) | ≥720px (Desktop) |
-|---------|-----------------|------------------|
-| **Admin Sidebar** | Hidden, hamburger menu toggle | Visible, collapsible |
-| **Public Nav** | Hamburger menu | Horizontal links |
-| **Tables** | Horizontal scroll or card layout | Full table |
-| **Modals** | Full-width (98%) | Centered, max-width 600px |
-| **Forms** | Single column, full-width inputs | Multi-column where appropriate |
-| **Touch Targets** | Minimum 44x44px | Standard sizing |
-| **Font Size** | Base 16px minimum | Base 16px |
+| Element | Mobile (base) | Tablet+ (768px) | Desktop+ (1024px) |
+|---------|---------------|-----------------|-------------------|
+| **Container** | 100% width, 1rem padding | 90% width, centered | max-width: 1400px |
+| **Admin Sidebar** | Hidden, hamburger toggle | Visible, collapsible | Expanded by default |
+| **Public Nav** | Hamburger menu | Horizontal links | Horizontal links |
+| **Tables** | Horizontal scroll | Full table | Full table |
+| **Modals** | Full-width (100% - 1rem) | Centered, max-width 600px | Same |
+| **Forms** | Single column, full-width | Multi-column where appropriate | Same |
+| **Grid layouts** | 1 column | 2 columns | 3-4 columns |
+| **Touch Targets** | Minimum 44x44px | Standard sizing | Standard sizing |
+| **Font Size** | Base 16px minimum | Base 16px | Base 16px |
 
-**Footer Behavior:**
-- Footer is ALWAYS at the bottom of the page content
-- Footer scrolls with content (NOT fixed/sticky)
-- Uses flexbox or grid to push footer down on short pages
-- ALWAYS horizontally centered
+### Footer (Mobile-First)
 
 ```css
-/* Footer always at bottom */
+/* Footer always at bottom - mobile-first */
 body {
   display: flex;
   flex-direction: column;
@@ -18344,8 +19718,599 @@ main {
 
 footer {
   text-align: center;
+  padding: 1rem;
+  font-size: 0.875rem;
+}
+
+@media (min-width: 768px) {
+  footer {
+    padding: 1.5rem;
+  }
 }
 ```
+
+---
+
+## Semantic HTML Elements
+
+**Use correct HTML elements for content type. This ensures accessibility, SEO, and proper styling.**
+
+### When to Use Each Element
+
+| Element | Use For | Example |
+|---------|---------|---------|
+| `<code>` | Inline code, values, identifiers | Usernames, versions, short values |
+| `<pre><code>` | Multi-line code blocks | Configuration, scripts |
+| `<kbd>` | Keyboard input | `Ctrl+C`, `Enter` |
+| `<samp>` | Sample output | Command output, logs |
+| `<var>` | Variables, placeholders | `{username}`, `$PATH` |
+| `<span>` | Inline styling hook | Status badges, icons |
+| `<div>` | Block-level container | Sections, wrappers |
+| `<time>` | Dates and times | Timestamps, durations |
+| `<mark>` | Highlighted text | Search matches |
+| `<abbr>` | Abbreviations | `<abbr title="Application Programming Interface">API</abbr>` |
+
+### Code Elements
+
+#### Inline Code (`<code>`)
+
+**Use for short, inline technical values:**
+
+| Use For | Example HTML | Renders As |
+|---------|--------------|------------|
+| Version numbers | `<code>v1.2.3</code>` | `v1.2.3` |
+| Usernames | `<code>@johndoe</code>` | `@johndoe` |
+| Short commands | `<code>git status</code>` | `git status` |
+| Config values | `<code>true</code>` | `true` |
+| File names | `<code>config.yml</code>` | `config.yml` |
+| Environment vars | `<code>$HOME</code>` | `$HOME` |
+
+```css
+/* Inline code styling */
+code {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.875em;
+  padding: 0.125rem 0.375rem;
+  background: var(--color-code-bg);
+  border-radius: 4px;
+  word-break: break-word;
+}
+```
+
+#### Code Blocks with Copy Button
+
+**For values users need to copy (URLs, tokens, addresses, etc.):**
+
+```html
+<div class="code-block">
+  <code class="code-content">abc123xyz789.onion</code>
+  <button type="button" class="copy-btn" data-copy="abc123xyz789.onion" aria-label="Copy to clipboard">
+    <span class="copy-icon">📋</span>
+    <span class="copy-text">Copy</span>
+  </button>
+</div>
+```
+
+**CSS (Mobile-First):**
+
+```css
+/* Code block with copy button - mobile-first */
+.code-block {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 100%;
+  margin: 0.25rem 0;
+}
+
+.code-content {
+  display: block;
+  flex: 1;
+  min-width: 0; /* Allow shrinking */
+  overflow-x: auto;
+  white-space: nowrap;
+  padding: 0.5rem 0.75rem;
+  background: var(--color-code-bg);
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.875rem;
+  -webkit-overflow-scrolling: touch; /* Smooth scroll on iOS */
+}
+
+.copy-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-bg-secondary);
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.copy-btn:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-hover);
+}
+
+.copy-btn:active,
+.copy-btn.copied {
+  background: var(--color-success-bg);
+  border-color: var(--color-success);
+}
+
+/* Hide "Copy" text on mobile, show only icon */
+.copy-text {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .copy-text {
+    display: inline;
+  }
+}
+```
+
+**JavaScript:**
+
+```javascript
+// Copy button handler
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('.copy-btn');
+  if (!btn) return;
+
+  const text = btn.dataset.copy || btn.previousElementSibling?.textContent;
+  if (!text) return;
+
+  navigator.clipboard.writeText(text).then(() => {
+    // Visual feedback
+    const icon = btn.querySelector('.copy-icon');
+    const originalIcon = icon.textContent;
+    icon.textContent = '✓';
+    btn.classList.add('copied');
+
+    setTimeout(() => {
+      icon.textContent = originalIcon;
+      btn.classList.remove('copied');
+    }, 2000);
+  });
+});
+```
+
+#### When to Use Copy Buttons
+
+| Content Type | Copy Button? | Reason |
+|--------------|--------------|--------|
+| Tor .onion addresses | **Yes** | Long, complex, users need to copy |
+| API tokens | **Yes** | Users need to paste elsewhere |
+| Node URLs | **Yes** | Users may need to copy for config |
+| Git clone URLs | **Yes** | Users copy to terminal |
+| Build commit hash | Optional | May be useful for bug reports |
+| Version numbers | No | Short, rarely copied |
+| Usernames | No | Short, rarely copied |
+| Boolean values | No | Not useful to copy |
+
+#### Multi-line Code Blocks (`<pre><code>`)
+
+**For configuration, scripts, or multi-line output:**
+
+```html
+<div class="code-block-multi">
+  <div class="code-header">
+    <span class="code-lang">yaml</span>
+    <button type="button" class="copy-btn" data-copy-target="config-example">📋 Copy</button>
+  </div>
+  <pre><code id="config-example">server:
+  host: 0.0.0.0
+  port: 8080</code></pre>
+</div>
+```
+
+```css
+/* Multi-line code block - mobile-first */
+.code-block-multi {
+  margin: 1rem 0;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.code-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  background: var(--color-bg-secondary);
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.75rem;
+}
+
+.code-lang {
+  color: var(--color-muted);
+  text-transform: uppercase;
+}
+
+.code-block-multi pre {
+  margin: 0;
+  padding: 0.75rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.code-block-multi code {
+  display: block;
+  padding: 0;
+  background: none;
+  white-space: pre;
+}
+
+@media (min-width: 768px) {
+  .code-header {
+    padding: 0.5rem 1rem;
+  }
+  .code-block-multi pre {
+    padding: 1rem;
+  }
+}
+```
+
+### Status & Badge Elements
+
+**Use `<span>` with semantic classes for status indicators:**
+
+```html
+<!-- Status badges -->
+<span class="status status-ok">✅ Healthy</span>
+<span class="status status-error">❌ Error</span>
+<span class="status status-warning">⚠️ Degraded</span>
+
+<!-- Feature badges -->
+<span class="badge badge-enabled">Enabled</span>
+<span class="badge badge-disabled">Disabled</span>
+
+<!-- Role badges -->
+<span class="badge badge-primary">Primary</span>
+<span class="badge badge-member">Member</span>
+```
+
+```css
+/* Status indicators - mobile-first */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.status-ok { background: var(--color-success-bg); color: var(--color-success); }
+.status-error { background: var(--color-error-bg); color: var(--color-error); }
+.status-warning { background: var(--color-warning-bg); color: var(--color-warning); }
+
+.badge {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+@media (min-width: 768px) {
+  .badge {
+    font-size: 0.875rem;
+  }
+}
+```
+
+### Data Display Patterns
+
+#### Key-Value Lists (Definition Lists)
+
+**Use `<dl>` for labeled data:**
+
+```html
+<dl class="info-list">
+  <dt>🏷️ Version</dt>
+  <dd><code>1.2.3</code></dd>
+
+  <dt>⏱️ Uptime</dt>
+  <dd>2d 5h 30m</dd>
+
+  <dt>🧅 Tor Address</dt>
+  <dd>
+    <div class="code-block">
+      <code class="code-content">abc123xyz789.onion</code>
+      <button class="copy-btn" data-copy="abc123xyz789.onion">📋</button>
+    </div>
+  </dd>
+</dl>
+```
+
+```css
+/* Info list - mobile-first (stacked) */
+.info-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.25rem;
+  margin: 0;
+}
+
+.info-list dt {
+  font-weight: 600;
+  margin-top: 0.75rem;
+}
+
+.info-list dt:first-child {
+  margin-top: 0;
+}
+
+.info-list dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+/* Tablet+: side-by-side */
+@media (min-width: 768px) {
+  .info-list {
+    grid-template-columns: auto 1fr;
+    gap: 0.5rem 1rem;
+  }
+
+  .info-list dt {
+    margin-top: 0;
+  }
+}
+```
+
+#### Tables (Mobile-First)
+
+**Tables get horizontal scroll on mobile:**
+
+```html
+<div class="table-wrapper">
+  <table class="data-table">
+    <thead>
+      <tr><th>Component</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Database</td><td class="status-ok">✅ OK</td></tr>
+    </tbody>
+  </table>
+</div>
+```
+
+```css
+/* Table wrapper for horizontal scroll - mobile-first */
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 1rem 0;
+}
+
+.data-table {
+  width: 100%;
+  min-width: 400px; /* Force scroll on narrow screens */
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.data-table th,
+.data-table td {
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+@media (min-width: 768px) {
+  .data-table {
+    min-width: 0; /* Allow natural width */
+    font-size: 1rem;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 0.75rem;
+    white-space: normal;
+  }
+}
+```
+
+#### Cards/Sections
+
+```css
+/* Section cards - mobile-first */
+.section-card {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg-card);
+}
+
+.section-card h2,
+.section-card h3 {
+  margin-top: 0;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 1rem;
+}
+
+@media (min-width: 768px) {
+  .section-card {
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+  }
+
+  .section-card h2,
+  .section-card h3 {
+    font-size: 1.25rem;
+  }
+}
+```
+
+### Feature Lists
+
+**For listing features/capabilities:**
+
+```html
+<ul class="feature-list">
+  <li class="feature-enabled">👥 Multi-User</li>
+  <li class="feature-enabled">🏢 Organizations</li>
+  <li class="feature-enabled">
+    🧅 Tor:
+    <span class="status status-ok">✅ healthy</span>
+    <div class="code-block">
+      <code class="code-content">abc123xyz789.onion</code>
+      <button class="copy-btn" data-copy="abc123xyz789.onion">📋</button>
+    </div>
+  </li>
+  <li class="feature-disabled">📊 GeoIP</li>
+</ul>
+```
+
+```css
+/* Feature list - mobile-first (stacked) */
+.feature-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.feature-enabled {
+  color: var(--color-text);
+}
+
+.feature-disabled {
+  color: var(--color-muted);
+  text-decoration: line-through;
+}
+
+/* Tablet+: horizontal wrap */
+@media (min-width: 768px) {
+  .feature-list {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+  }
+
+  /* Unless feature has sub-content (like Tor address) */
+  .feature-list li:has(.code-block) {
+    flex-basis: 100%;
+  }
+}
+```
+
+### Node/URL Lists
+
+**For cluster nodes, endpoints, etc.:**
+
+```html
+<ul class="node-list">
+  <li>
+    <div class="code-block">
+      <code class="code-content">https://node1.example.com</code>
+      <button class="copy-btn" data-copy="https://node1.example.com">📋</button>
+    </div>
+    <span class="badge badge-primary">👑 Primary</span>
+  </li>
+  <li>
+    <div class="code-block">
+      <code class="code-content">https://node2.example.com</code>
+      <button class="copy-btn" data-copy="https://node2.example.com">📋</button>
+    </div>
+    <span class="status status-ok">✅</span>
+  </li>
+</ul>
+```
+
+```css
+/* Node list - mobile-first */
+.node-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.node-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.node-list .code-block {
+  flex: 1;
+  min-width: 0;
+}
+```
+
+---
+
+## CSS Variable Reference
+
+**All components use these CSS variables for consistent theming:**
+
+```css
+:root {
+  /* Backgrounds */
+  --color-bg: #1a1a2e;
+  --color-bg-secondary: #16213e;
+  --color-bg-card: #1e1e3f;
+  --color-bg-hover: #2a2a4e;
+  --color-bg-active: #3a3a5e;
+  --color-code-bg: rgba(255, 255, 255, 0.1);
+
+  /* Text */
+  --color-text: #eaeaea;
+  --color-muted: #888;
+
+  /* Borders */
+  --color-border: #333;
+  --color-border-hover: #555;
+
+  /* Status colors */
+  --color-success: #4ade80;
+  --color-success-bg: rgba(74, 222, 128, 0.15);
+  --color-error: #f87171;
+  --color-error-bg: rgba(248, 113, 113, 0.15);
+  --color-warning: #fbbf24;
+  --color-warning-bg: rgba(251, 191, 36, 0.15);
+  --color-primary: #60a5fa;
+  --color-primary-bg: rgba(96, 165, 250, 0.15);
+}
+
+/* Light theme overrides */
+html.theme-light {
+  --color-bg: #ffffff;
+  --color-bg-secondary: #f8f9fa;
+  --color-bg-card: #ffffff;
+  --color-bg-hover: #e9ecef;
+  --color-bg-active: #dee2e6;
+  --color-code-bg: rgba(0, 0, 0, 0.05);
+  --color-text: #212529;
+  --color-muted: #6c757d;
+  --color-border: #dee2e6;
+  --color-border-hover: #adb5bd;
+}
+```
+
+---
 
 ## Technology Stack 
 
@@ -19001,20 +20966,275 @@ dismissAllToasts();
 }
 ```
 
-## PWA Support 
+## PWA Support
 
-**Progressive Web App = Native-like web app (installable, offline, push notifications)**
+**Progressive Web App = Native-like web app (installable, offline, push notifications, GPS)**
+
+**Goal: Indistinguishable from native app** - same UX, capabilities, and performance.
 
 | Feature | Implementation | Notes |
 |---------|----------------|-------|
 | **Manifest** | `/manifest.json` with app metadata | Required for install |
-| **Icons** | Multiple sizes (192x192, 512x512 minimum) | For home screen |
-| **Service Worker** | Cache static assets, handle push | Core of PWA |
+| **Icons** | Multiple sizes including maskable | For all platforms |
+| **Service Worker** | Cache, push, background sync, offline | Core of PWA |
 | **Installable** | Meets PWA install criteria | Add to home screen |
 | **HTTPS** | Required for service workers | Non-negotiable |
 | **Push Notifications** | Web Push API via Service Worker | User opt-in required |
+| **Geolocation** | GPS access via Geolocation API | User permission required |
 | **User Sessions** | Tokens in localStorage/IndexedDB | Persists across restarts |
 | **Background Sync** | Queue actions when offline, sync when online | Seamless offline |
+| **App Updates** | Detect new SW version, prompt user | Keep app current |
+
+### Service Worker Registration
+
+**Register service worker on app load:**
+
+```javascript
+// /static/js/app.js - Service Worker Registration
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', async () => {
+    try {
+      const registration = await navigator.serviceWorker.register('/sw.js', {
+        scope: '/'
+      });
+      console.log('SW registered:', registration.scope);
+
+      // Check for updates
+      registration.addEventListener('updatefound', () => {
+        const newWorker = registration.installing;
+        newWorker.addEventListener('statechange', () => {
+          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            // New version available
+            showUpdateNotification();
+          }
+        });
+      });
+    } catch (error) {
+      console.error('SW registration failed:', error);
+    }
+  });
+}
+```
+
+### Service Worker Lifecycle
+
+**The service worker has three main lifecycle events:**
+
+| Event | When | Purpose |
+|-------|------|---------|
+| **install** | First registration or new version | Pre-cache static assets |
+| **activate** | After install, when no old SW controlling pages | Clean old caches |
+| **fetch** | Every network request from controlled pages | Serve from cache or network |
+
+```javascript
+// /sw.js - Service Worker
+const CACHE_VERSION = 'v1.0.0';
+const CACHE_NAME = `{appname}-cache-${CACHE_VERSION}`;
+
+// Assets to pre-cache on install
+const PRECACHE_ASSETS = [
+  '/',
+  '/static/css/app.css',
+  '/static/js/app.js',
+  '/static/icons/icon-192.png',
+  '/static/icons/icon-512.png',
+  '/offline.html'
+];
+
+// INSTALL - Pre-cache static assets
+self.addEventListener('install', event => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then(cache => cache.addAll(PRECACHE_ASSETS))
+      .then(() => self.skipWaiting()) // Activate immediately
+  );
+});
+
+// ACTIVATE - Clean old caches
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys()
+      .then(keys => Promise.all(
+        keys
+          .filter(key => key.startsWith('{appname}-cache-') && key !== CACHE_NAME)
+          .map(key => caches.delete(key))
+      ))
+      .then(() => self.clients.claim()) // Take control immediately
+  );
+});
+
+// FETCH - Serve from cache or network
+self.addEventListener('fetch', event => {
+  const { request } = event;
+  const url = new URL(request.url);
+
+  // Skip non-GET requests
+  if (request.method !== 'GET') return;
+
+  // Skip API calls (network-only)
+  if (url.pathname.startsWith('/api/')) {
+    return; // Let browser handle normally
+  }
+
+  // Static assets: cache-first
+  if (url.pathname.startsWith('/static/')) {
+    event.respondWith(
+      caches.match(request)
+        .then(cached => cached || fetch(request)
+          .then(response => {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
+            return response;
+          })
+        )
+    );
+    return;
+  }
+
+  // HTML pages: network-first, cache fallback
+  if (request.headers.get('accept')?.includes('text/html')) {
+    event.respondWith(
+      fetch(request)
+        .then(response => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
+          return response;
+        })
+        .catch(() => caches.match(request)
+          .then(cached => cached || caches.match('/offline.html'))
+        )
+    );
+    return;
+  }
+
+  // Default: network-first
+  event.respondWith(
+    fetch(request).catch(() => caches.match(request))
+  );
+});
+```
+
+### Cache Versioning & Updates
+
+**Cache version strategy:**
+
+| Change Type | Action | Example |
+|-------------|--------|---------|
+| **Bug fix** | Increment patch | `v1.0.0` → `v1.0.1` |
+| **New feature** | Increment minor | `v1.0.1` → `v1.1.0` |
+| **Breaking change** | Increment major | `v1.1.0` → `v2.0.0` |
+
+**Cache naming convention:** `{appname}-cache-v{major}.{minor}.{patch}`
+
+**Update flow:**
+```
+1. User visits app
+2. Browser checks for new sw.js
+3. If changed → install event fires
+4. New SW waits until old SW's pages close (or skipWaiting)
+5. activate event fires → clean old caches
+6. New SW controls all pages
+```
+
+**Force update check:**
+```javascript
+// Check for updates every hour when app is active
+setInterval(() => {
+  navigator.serviceWorker.ready.then(reg => reg.update());
+}, 60 * 60 * 1000);
+```
+
+### App Update Notification
+
+**Notify user when new version is available:**
+
+```javascript
+// Show update banner
+function showUpdateNotification() {
+  const banner = document.createElement('div');
+  banner.className = 'update-banner';
+  banner.innerHTML = `
+    <span>A new version is available</span>
+    <button onclick="updateApp()">Update Now</button>
+    <button onclick="this.parentElement.remove()">Later</button>
+  `;
+  document.body.appendChild(banner);
+}
+
+// Apply update
+function updateApp() {
+  navigator.serviceWorker.ready.then(reg => {
+    if (reg.waiting) {
+      reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+    }
+  });
+  // Reload when new SW takes over
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    window.location.reload();
+  });
+}
+```
+
+**In service worker - handle skip waiting message:**
+```javascript
+// sw.js
+self.addEventListener('message', event => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+```
+
+### App Install Prompt
+
+**Capture and control the install prompt:**
+
+```javascript
+let deferredPrompt;
+
+// Capture the install prompt
+window.addEventListener('beforeinstallprompt', event => {
+  event.preventDefault(); // Don't show automatically
+  deferredPrompt = event;
+  showInstallButton(); // Show custom install UI
+});
+
+// Custom install button handler
+function installApp() {
+  if (!deferredPrompt) return;
+
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then(result => {
+    if (result.outcome === 'accepted') {
+      console.log('App installed');
+    }
+    deferredPrompt = null;
+    hideInstallButton();
+  });
+}
+
+// Detect if already installed
+window.addEventListener('appinstalled', () => {
+  console.log('App was installed');
+  hideInstallButton();
+  deferredPrompt = null;
+});
+
+// Check if running as installed PWA
+function isInstalledPWA() {
+  return window.matchMedia('(display-mode: standalone)').matches
+    || window.navigator.standalone === true; // iOS
+}
+```
+
+**Install button visibility rules:**
+
+| Condition | Show Install Button |
+|-----------|---------------------|
+| `beforeinstallprompt` fired | ✅ Yes |
+| Already installed (standalone mode) | ❌ No |
+| iOS Safari (no prompt event) | ✅ Yes (manual instructions) |
+| Desktop browser | ✅ Yes (if supported) |
 
 ### Push Notifications (PWA)
 
@@ -19030,13 +21250,83 @@ dismissAllToasts();
 **User must grant permission** - prompt on first relevant action, not page load.
 
 ```javascript
-// Service Worker - handle push
-self.addEventListener('push', event => {
-  const data = event.data.json();
-  self.registration.showNotification(data.title, {
-    body: data.body,
-    icon: '/static/icons/icon-192.png'
+// Request permission and subscribe
+async function subscribeToPush() {
+  // Check support
+  if (!('PushManager' in window)) {
+    console.log('Push not supported');
+    return null;
+  }
+
+  // Request permission
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') {
+    console.log('Notification permission denied');
+    return null;
+  }
+
+  // Subscribe
+  const registration = await navigator.serviceWorker.ready;
+  const subscription = await registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
   });
+
+  // Send subscription to server
+  await fetch('/api/push/subscribe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(subscription)
+  });
+
+  return subscription;
+}
+
+// Helper: Convert VAPID key
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
+}
+```
+
+**Service Worker - handle push:**
+```javascript
+// sw.js
+self.addEventListener('push', event => {
+  const data = event.data?.json() || {};
+  const options = {
+    body: data.body || 'New notification',
+    icon: '/static/icons/icon-192.png',
+    badge: '/static/icons/badge-72.png',
+    vibrate: [100, 50, 100],
+    data: { url: data.url || '/' },
+    actions: data.actions || []
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(data.title || '{App Name}', options)
+  );
+});
+
+// Handle notification click
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+
+  const url = event.notification.data?.url || '/';
+  event.waitUntil(
+    clients.matchAll({ type: 'window' }).then(windowClients => {
+      // Focus existing window if open
+      for (const client of windowClients) {
+        if (client.url === url && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      // Open new window
+      return clients.openWindow(url);
+    })
+  );
 });
 ```
 
@@ -19044,6 +21334,180 @@ self.addEventListener('push', event => {
 - Enable/disable push notifications
 - VAPID key generation
 - Test push functionality
+
+### Background Sync
+
+**Queue actions when offline, automatically sync when back online:**
+
+```javascript
+// Register sync when offline action fails
+async function saveDataWithSync(data) {
+  try {
+    await fetch('/api/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+  } catch (error) {
+    // Network failed - queue for background sync
+    await saveToIndexedDB('pending-sync', data);
+    const registration = await navigator.serviceWorker.ready;
+    await registration.sync.register('sync-data');
+  }
+}
+```
+
+**Service Worker - handle sync:**
+```javascript
+// sw.js
+self.addEventListener('sync', event => {
+  if (event.tag === 'sync-data') {
+    event.waitUntil(syncPendingData());
+  }
+});
+
+async function syncPendingData() {
+  const db = await openIndexedDB();
+  const pending = await getAllFromStore(db, 'pending-sync');
+
+  for (const item of pending) {
+    try {
+      await fetch('/api/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(item.data)
+      });
+      await deleteFromStore(db, 'pending-sync', item.id);
+    } catch (error) {
+      // Will retry on next sync event
+      throw error;
+    }
+  }
+}
+```
+
+**Sync retry behavior:**
+
+| Attempt | Delay | Notes |
+|---------|-------|-------|
+| 1st | Immediate | When connection restored |
+| 2nd | ~5 minutes | If first fails |
+| 3rd | ~15 minutes | Exponential backoff |
+| Final | ~1 hour | Browser may give up |
+
+### Geolocation (GPS Access)
+
+**Access device GPS like a native app:**
+
+```javascript
+// Check if geolocation is available
+function hasGeolocation() {
+  return 'geolocation' in navigator;
+}
+
+// Get current position (one-time)
+async function getCurrentLocation() {
+  if (!hasGeolocation()) {
+    throw new Error('Geolocation not supported');
+  }
+
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(
+      position => resolve({
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+        altitude: position.coords.altitude,
+        heading: position.coords.heading,
+        speed: position.coords.speed,
+        timestamp: position.timestamp
+      }),
+      error => reject(handleGeolocationError(error)),
+      {
+        enableHighAccuracy: true,  // Use GPS if available
+        timeout: 10000,            // 10 second timeout
+        maximumAge: 60000          // Accept cached position up to 1 minute old
+      }
+    );
+  });
+}
+
+// Watch position (continuous tracking)
+function watchLocation(callback, errorCallback) {
+  if (!hasGeolocation()) {
+    errorCallback(new Error('Geolocation not supported'));
+    return null;
+  }
+
+  return navigator.geolocation.watchPosition(
+    position => callback({
+      latitude: position.coords.latitude,
+      longitude: position.coords.longitude,
+      accuracy: position.coords.accuracy,
+      altitude: position.coords.altitude,
+      heading: position.coords.heading,
+      speed: position.coords.speed,
+      timestamp: position.timestamp
+    }),
+    error => errorCallback(handleGeolocationError(error)),
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0  // Always get fresh position
+    }
+  );
+}
+
+// Stop watching
+function stopWatchingLocation(watchId) {
+  if (watchId !== null) {
+    navigator.geolocation.clearWatch(watchId);
+  }
+}
+
+// Handle errors
+function handleGeolocationError(error) {
+  switch (error.code) {
+    case error.PERMISSION_DENIED:
+      return new Error('Location permission denied');
+    case error.POSITION_UNAVAILABLE:
+      return new Error('Location unavailable');
+    case error.TIMEOUT:
+      return new Error('Location request timed out');
+    default:
+      return new Error('Unknown location error');
+  }
+}
+```
+
+**Geolocation options:**
+
+| Option | Value | Purpose |
+|--------|-------|---------|
+| `enableHighAccuracy` | `true` | Use GPS (slower, battery drain) |
+| `enableHighAccuracy` | `false` | Use network location (faster, less accurate) |
+| `timeout` | milliseconds | How long to wait for position |
+| `maximumAge` | milliseconds | Accept cached position if newer than this |
+
+**Permission UX best practices:**
+
+| ❌ Bad | ✅ Good |
+|--------|---------|
+| Request on page load | Request when user taps "Find nearby" |
+| No explanation | Explain why location is needed first |
+| Silent failure | Show clear error if denied |
+| Always high accuracy | Use low accuracy when approximate is fine |
+
+**Location permission states:**
+```javascript
+// Check permission without prompting
+async function checkLocationPermission() {
+  if (!navigator.permissions) return 'unknown';
+
+  const result = await navigator.permissions.query({ name: 'geolocation' });
+  return result.state; // 'granted', 'denied', or 'prompt'
+}
+```
 
 ### User Sessions in PWA
 
@@ -19062,50 +21526,441 @@ self.addEventListener('push', event => {
 
 **Logout clears all:** localStorage, IndexedDB, service worker cache of user data.
 
-**Offline Behavior:**
+```javascript
+// Complete logout - clear all user data
+async function logout() {
+  // Clear localStorage
+  localStorage.removeItem('auth_token');
+  localStorage.removeItem('user_prefs');
+
+  // Clear IndexedDB
+  const databases = await indexedDB.databases();
+  for (const db of databases) {
+    indexedDB.deleteDatabase(db.name);
+  }
+
+  // Clear service worker cache (user data only)
+  const cacheKeys = await caches.keys();
+  for (const key of cacheKeys) {
+    if (key.includes('user-data')) {
+      await caches.delete(key);
+    }
+  }
+
+  // Unsubscribe from push
+  const registration = await navigator.serviceWorker.ready;
+  const subscription = await registration.pushManager.getSubscription();
+  if (subscription) {
+    await subscription.unsubscribe();
+  }
+
+  // Redirect to login
+  window.location.href = '/login';
+}
+```
+
+### Offline Behavior
 
 | Resource Type | Cache Strategy | Offline Behavior |
 |---------------|----------------|------------------|
 | **Static assets** (CSS, JS, images) | Cache-first | Served from cache |
 | **HTML pages** | Network-first, cache fallback | Show cached version if offline |
-| **API calls** | Network-only | Show offline indicator, queue for retry |
+| **API calls** | Network-only + queue | Show offline indicator, queue for retry |
 | **Fonts** | Cache-first | Served from cache |
+| **User data** | IndexedDB | Full offline access |
 
-**Service Worker Caching:**
-- Cache static assets on install
-- Update cache on service worker activation
-- Maximum cache size: 50MB
-- Cache expiration: 7 days for static assets
-- Never cache: API responses, user-specific data
+**Service Worker Caching Limits:**
 
-**Offline Indicator:**
-- Show banner/toast when offline: "You are offline. Some features may be unavailable."
-- Hide automatically when connection restored
-- Do not block UI - allow browsing cached pages
+| Limit | Value | Notes |
+|-------|-------|-------|
+| Max cache size | 50MB | Browser may evict if exceeded |
+| Cache expiration | 7 days | For static assets |
+| Never cache | API responses | Except explicit offline-first data |
+| Quota check | Before large caches | `navigator.storage.estimate()` |
 
-**manifest.json:**
+**Offline detection:**
+```javascript
+// Check online status
+function isOnline() {
+  return navigator.onLine;
+}
+
+// Listen for connectivity changes
+window.addEventListener('online', () => {
+  hideOfflineIndicator();
+  triggerPendingSync();
+});
+
+window.addEventListener('offline', () => {
+  showOfflineIndicator();
+});
+
+// Offline indicator UI
+function showOfflineIndicator() {
+  const indicator = document.getElementById('offline-indicator');
+  indicator.textContent = 'You are offline. Some features may be unavailable.';
+  indicator.classList.add('visible');
+}
+
+function hideOfflineIndicator() {
+  const indicator = document.getElementById('offline-indicator');
+  indicator.classList.remove('visible');
+}
+```
+
+### Manifest Configuration
+
+**Complete manifest.json:**
 ```json
 {
   "name": "{App Name}",
   "short_name": "{AppName}",
   "description": "{App description}",
-  "start_url": "/",
+  "start_url": "/?source=pwa",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#ffffff",
   "theme_color": "#000000",
+  "categories": ["utilities"],
   "icons": [
-    { "src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+    {
+      "src": "/static/icons/icon-72.png",
+      "sizes": "72x72",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/icons/icon-96.png",
+      "sizes": "96x96",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/icons/icon-128.png",
+      "sizes": "128x128",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/icons/icon-144.png",
+      "sizes": "144x144",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/icons/icon-152.png",
+      "sizes": "152x152",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/icons/icon-384.png",
+      "sizes": "384x384",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/static/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "url": "/dashboard?source=shortcut",
+      "icons": [{ "src": "/static/icons/shortcut-dashboard.png", "sizes": "96x96" }]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/static/screenshots/desktop.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide"
+    },
+    {
+      "src": "/static/screenshots/mobile.png",
+      "sizes": "750x1334",
+      "type": "image/png",
+      "form_factor": "narrow"
+    }
   ]
 }
 ```
 
-**HTML head:**
-```html
-<link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#000000">
-<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+**Manifest fields explained:**
+
+| Field | Purpose | Required |
+|-------|---------|----------|
+| `name` | Full app name (install dialog) | ✅ Yes |
+| `short_name` | Abbreviated name (home screen) | ✅ Yes |
+| `start_url` | URL when launched | ✅ Yes |
+| `scope` | URL scope SW controls | Recommended |
+| `display` | `standalone`, `fullscreen`, `minimal-ui`, `browser` | ✅ Yes |
+| `icons` | App icons (multiple sizes) | ✅ Yes |
+| `theme_color` | Browser toolbar color | Recommended |
+| `background_color` | Splash screen background | Recommended |
+| `orientation` | `any`, `portrait`, `landscape` | Optional |
+| `shortcuts` | Quick actions (right-click/long-press) | Optional |
+| `screenshots` | Install dialog preview | Optional |
+
+### Scope and Start URL
+
+**Understanding PWA scope:**
+
+| Concept | Description |
+|---------|-------------|
+| **scope** | URLs the service worker can control |
+| **start_url** | URL opened when app launches |
+| **Rule** | `start_url` must be within `scope` |
+
 ```
+Example:
+  scope: "/app/"
+  start_url: "/app/dashboard"
+
+  ✅ Controlled: /app/*, /app/settings, /app/users/123
+  ❌ Not controlled: /login, /api/*, /admin/*
+```
+
+**Tracking PWA launches:**
+```javascript
+// start_url: "/?source=pwa"
+// Analytics can track PWA vs browser usage
+if (new URLSearchParams(window.location.search).get('source') === 'pwa') {
+  analytics.track('pwa_launch');
+}
+```
+
+### Maskable Icons
+
+**Maskable icons adapt to different Android launcher shapes:**
+
+| Icon Type | Purpose | Safe Zone |
+|-----------|---------|-----------|
+| **Regular** | Standard icon with transparency | Full canvas |
+| **Maskable** | Adaptive icon (Android) | Inner 80% circle |
+
+**Design rules for maskable icons:**
+- Important content in center 80% (safe zone)
+- Background extends to full canvas
+- No transparency (use solid background)
+- Same icon, different padding
+
+```
+┌─────────────────────┐
+│                     │
+│   ┌───────────┐     │
+│   │           │     │  ← Safe zone (80%)
+│   │   LOGO    │     │
+│   │           │     │
+│   └───────────┘     │
+│                     │
+└─────────────────────┘   ← Full canvas
+```
+
+**Testing maskable icons:** https://maskable.app/editor
+
+### iOS-Specific Considerations
+
+**iOS Safari has PWA limitations:**
+
+| Feature | Android | iOS |
+|---------|---------|-----|
+| Push notifications | ✅ Yes | ✅ Yes (iOS 16.4+) |
+| Background sync | ✅ Yes | ❌ No |
+| `beforeinstallprompt` | ✅ Yes | ❌ No |
+| Persistent storage | ✅ Yes | ⚠️ Limited (7 days without use) |
+| Badging API | ✅ Yes | ❌ No |
+| Web Share Target | ✅ Yes | ❌ No |
+
+**iOS-specific meta tags:**
+```html
+<head>
+  <!-- Standard manifest -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#000000">
+
+  <!-- iOS-specific -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="{AppName}">
+  <link rel="apple-touch-icon" href="/static/icons/icon-180.png">
+
+  <!-- iOS splash screens -->
+  <link rel="apple-touch-startup-image"
+        href="/static/splash/iphone-1179x2556.png"
+        media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)">
+  <link rel="apple-touch-startup-image"
+        href="/static/splash/iphone-1284x2778.png"
+        media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)">
+</head>
+```
+
+**iOS install instructions (no beforeinstallprompt):**
+```javascript
+function showIOSInstallInstructions() {
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isInStandalone = window.navigator.standalone === true;
+
+  if (isIOS && !isInStandalone) {
+    showModal({
+      title: 'Install {App Name}',
+      content: `
+        <ol>
+          <li>Tap the Share button <img src="/static/icons/ios-share.svg" alt="Share"></li>
+          <li>Scroll down and tap "Add to Home Screen"</li>
+          <li>Tap "Add" in the top right</li>
+        </ol>
+      `
+    });
+  }
+}
+```
+
+**iOS storage eviction workaround:**
+```javascript
+// Request persistent storage (iOS may still evict)
+async function requestPersistentStorage() {
+  if (navigator.storage && navigator.storage.persist) {
+    const granted = await navigator.storage.persist();
+    console.log('Persistent storage:', granted ? 'granted' : 'denied');
+  }
+}
+```
+
+### Lighthouse PWA Audit
+
+**Lighthouse checks these PWA criteria:**
+
+| Category | Requirement | How to Pass |
+|----------|-------------|-------------|
+| **Installable** | Valid manifest | All required fields present |
+| **Installable** | Service worker | Registered and controlling |
+| **Installable** | HTTPS | Served over HTTPS |
+| **Installable** | Icons | 192x192 and 512x512 minimum |
+| **Optimized** | Redirects HTTP→HTTPS | Server config |
+| **Optimized** | Splash screen | `theme_color`, `background_color`, icons |
+| **Optimized** | Theme color | `<meta name="theme-color">` and manifest |
+| **Optimized** | Viewport | `<meta name="viewport" content="width=device-width">` |
+| **Optimized** | Content sized | No horizontal scroll at mobile width |
+| **Optimized** | Maskable icon | At least one with `purpose: maskable` |
+
+**Full HTML head for PWA compliance:**
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#000000">
+  <meta name="description" content="{App description}">
+
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="/manifest.json">
+
+  <!-- Icons -->
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/icons/favicon-16.png">
+  <link rel="apple-touch-icon" href="/static/icons/icon-180.png">
+
+  <!-- iOS specific -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="{AppName}">
+
+  <title>{App Name}</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+  <!-- Offline indicator -->
+  <div id="offline-indicator" aria-live="polite"></div>
+
+  <!-- App content -->
+  <div id="app"></div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
+```
+
+**Run Lighthouse audit:**
+1. Chrome DevTools → Lighthouse tab
+2. Select "Progressive Web App" category
+3. Click "Analyze page load"
+4. Fix any failures before deployment
+
+### PWA File Structure
+
+**Required files for full PWA:**
+
+```
+/
+├── manifest.json                 # App manifest
+├── sw.js                         # Service worker
+├── offline.html                  # Offline fallback page
+├── static/
+│   ├── css/
+│   │   └── app.css
+│   ├── js/
+│   │   └── app.js                # Includes SW registration
+│   ├── icons/
+│   │   ├── favicon-16.png
+│   │   ├── favicon-32.png
+│   │   ├── icon-72.png
+│   │   ├── icon-96.png
+│   │   ├── icon-128.png
+│   │   ├── icon-144.png
+│   │   ├── icon-152.png
+│   │   ├── icon-180.png          # Apple touch icon
+│   │   ├── icon-192.png
+│   │   ├── icon-384.png
+│   │   ├── icon-512.png
+│   │   ├── icon-maskable-192.png # Maskable (Android adaptive)
+│   │   ├── icon-maskable-512.png
+│   │   └── badge-72.png          # Notification badge
+│   ├── splash/                   # iOS splash screens
+│   │   ├── iphone-1179x2556.png
+│   │   └── iphone-1284x2778.png
+│   └── screenshots/              # Install dialog previews
+│       ├── desktop.png
+│       └── mobile.png
+└── index.html                    # With all meta tags
+```
+
+### PWA Checklist
+
+| Item | Status | Notes |
+|------|--------|-------|
+| HTTPS enabled | ◻️ | Required for SW |
+| manifest.json valid | ◻️ | All required fields |
+| Service worker registered | ◻️ | Controls all pages |
+| Offline page exists | ◻️ | `/offline.html` |
+| Icons all sizes | ◻️ | 72 to 512px |
+| Maskable icon included | ◻️ | For Android |
+| Apple meta tags | ◻️ | For iOS |
+| Theme color set | ◻️ | Meta + manifest |
+| Viewport meta | ◻️ | Responsive |
+| Install prompt handled | ◻️ | Custom UI |
+| Update notification | ◻️ | New SW prompt |
+| Offline indicator | ◻️ | Connection status |
+| Push notifications | ◻️ | If needed |
+| Background sync | ◻️ | If needed |
+| Geolocation | ◻️ | If needed |
+| Lighthouse score 100 | ◻️ | All audits pass |
 
 ## HTTP Status Codes 
 
@@ -19966,14 +22821,14 @@ partial/
 ```
 Desktop:
 ┌─────────────────────────────────────────────────────────────────┐
-│  {projectname}                                      [User Icon] │  ← Header
+│  search                                      [User Icon] │  ← Header
 ├─────────────────────────────────────────────────────────────────┤
 │  Home  |  [App Section 1]  |  [App Section 2]  |  ...           │  ← Nav
 └─────────────────────────────────────────────────────────────────┘
 
 Mobile:
 ┌─────────────────────────────────────────────────────────────────┐
-│  {projectname}                                      [User Icon] │  ← Header
+│  search                                      [User Icon] │  ← Header
 ├─────────────────────────────────────────────────────────────────┤
 │                                                      [☰ Menu]   │  ← Nav row
 └─────────────────────────────────────────────────────────────────┘
@@ -19988,7 +22843,7 @@ Mobile:
 ```html
 <!-- Header bar: site name + user icon -->
 <header class="header">
-  <a href="/" class="site-brand">{projectname}</a>
+  <a href="/" class="site-brand">search</a>
 
   <!-- User icon (always visible, far right) -->
   <div class="user-menu">
@@ -20517,8 +23372,8 @@ var ThemePaletteLight = ThemePalette{
 
 | Changes (User-Visible) | Does NOT Change (System) |
 |------------------------|--------------------------|
-| Page titles | Directory names (`{projectname}/`) |
-| Browser tab | System username (`{projectname}`) |
+| Page titles | Directory names (`search/`) |
+| Browser tab | System username (`search`) |
 | Header/logo text | Log filenames |
 | Footer branding | Config paths |
 | Email "From" name | Binary name |
@@ -20532,7 +23387,7 @@ var ThemePaletteLight = ThemePalette{
 server:
   branding:
     # Display name (e.g., "Jokes API")
-    title: "{projectname}"
+    title: "search"
     # Short slogan (e.g., "The best jokes API")
     tagline: ""
     # Longer description for SEO/about
@@ -20895,7 +23750,7 @@ func FetchRemoteImage(ctx context.Context, rawURL string, cfg FetchRemoteImageCo
     }
 
     // Set safe headers
-    req.Header.Set("User-Agent", "{projectname}-server/1.0")
+    req.Header.Set("User-Agent", "search-server/1.0")
     req.Header.Set("Accept", strings.Join(cfg.AllowedTypes, ", "))
 
     resp, err := client.Do(req)
@@ -20964,13 +23819,13 @@ if err != nil {
 
 | Field | Default Value |
 |-------|---------------|
-| `title` | `{projectname}` |
+| `title` | `search` |
 | `tagline` | Empty |
 | `description` | Empty |
 | `keywords` | Empty |
 | All others | Empty |
 
-**Rule:** If `title` is empty, fall back to `{projectname}`. Other fields are optional.
+**Rule:** If `title` is empty, fall back to `search`. Other fields are optional.
 
 ## Announcements 
 
@@ -21239,8 +24094,8 @@ When admin edits `custom_html`, show:
 | Variable | Description |
 |----------|-------------|
 | `{currentyear}` | Current year (e.g., 2025) |
-| `{projectname}` | Project name |
-| `{projectorg}` | Organization name |
+| `search` | Project name |
+| `apimgr` | Organization name |
 | `{projectversion}` | Application version |
 | `{builddatetime}` | Build date/time |
 
@@ -21283,14 +24138,14 @@ When admin edits `custom_html`, show:
   <div class="admin-footer-content">
     <!-- Version info -->
     <span class="admin-footer-version">
-      <a href="/{admin_path}/server/info">{projectname} {projectversion}</a>
+      <a href="/{admin_path}/server/info">search {projectversion}</a>
     </span>
 
     <span class="admin-footer-separator">•</span>
 
     <!-- Documentation link -->
     <span class="admin-footer-docs">
-      <a href="https://{projectorg}-{projectname}.readthedocs.io" target="_blank" rel="noopener">
+      <a href="https://{RTD_URL}" target="_blank" rel="noopener">  <!-- Use actual RTD URL -->
         Docs
       </a>
     </span>
@@ -22818,7 +25673,7 @@ func RegisterAdminRoutes(r *mux.Router) {
 ```
 ╔══════════════════════════════════════════════════════════════════════╗
 ║                                                                      ║
-║   {PROJECTNAME} {projectversion}                                     ║
+║   SEARCH {projectversion}                                     ║
 ║                                                                      ║
 ║   Status: Running (first run - setup available)                      ║
 ║                                                                      ║
@@ -23516,7 +26371,7 @@ Admin Panel Header:
 
 | Setting | Control | Default | Restart | Description |
 |---------|---------|---------|---------|-------------|
-| `title` | Text | `{projectname}` | No | App display name |
+| `title` | Text | `search` | No | App display name |
 | `tagline` | Text | (empty) | No | Short slogan |
 | `description` | Textarea | (empty) | No | SEO/about description |
 | `logo` | File | (none) | No | Logo image upload |
@@ -24101,7 +26956,7 @@ The admin panel MUST include a scheduler section with:
 │  Run this command on the target machine:                                       │
 │                                                                             │
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │ curl -sSL https://app.example.com/install-agent | sh -s -- \        │    │
+│  │ curl -q -LSsf https://app.example.com/install-agent | sh -s -- \    │    │
 │  │   --server https://app.example.com \                                │    │
 │  │   --token adm_agt_abc123def456ghi789jkl012mno345pqr678              │    │
 │  └─────────────────────────────────────────────────────────────────────┘    │
@@ -24692,7 +27547,7 @@ IMPORTANT NEXT STEPS
 5. Enable two-factor authentication
 
 Keep your admin credentials secure. If you lose access, use:
-  {projectname} --maintenance setup
+  search --maintenance setup
 ────────────────────────────────────────────────────────────────────────
 
 --
@@ -25829,8 +28684,8 @@ server:
         enabled: true
         # Verify after creation (all checks must pass)
         verify: true
-        # Creates: {projectname}_backup_YYYY-MM-DD.tar.gz[.enc] (full)
-        #          {projectname}-daily.tar.gz[.enc] (incremental)
+        # Creates: search_backup_YYYY-MM-DD.tar.gz[.enc] (full)
+        #          search-daily.tar.gz[.enc] (incremental)
         retention:
           max_backups: 1     # 1-365: daily full backups to keep
           keep_weekly: 0     # 0-52: Sunday backups (0 = disabled)
@@ -25841,7 +28696,7 @@ server:
       backup_hourly:
         schedule: "@hourly"
         enabled: false
-        # Creates: {projectname}-hourly.tar.gz[.enc] (incremental since daily)
+        # Creates: search-hourly.tar.gz[.enc] (incremental since daily)
         # Always 1 file (replaced each hour)
 
       # Every 5 minutes
@@ -26095,11 +28950,11 @@ Execute task
 | Verify | Yes | All checks must pass |
 
 **What backup_daily creates (default: 2 files):**
-- `{projectname}_backup_YYYY-MM-DD.tar.gz[.enc]` - Full backup (yesterday's)
-- `{projectname}-daily.tar.gz[.enc]` - Daily incremental
+- `search_backup_YYYY-MM-DD.tar.gz[.enc]` - Full backup (yesterday's)
+- `search-daily.tar.gz[.enc]` - Daily incremental
 
 **What backup_hourly creates (if enabled: +1 file):**
-- `{projectname}-hourly.tar.gz[.enc]` - Hourly incremental
+- `search-hourly.tar.gz[.enc]` - Hourly incremental
 
 ### API Endpoints
 
@@ -26240,6 +29095,39 @@ All databases from [sapics/ip-location-db](https://github.com/sapics/ip-location
 | Authentication | Optional bearer token |
 | Library | `github.com/prometheus/client_golang` |
 
+## Access Control
+
+**`/metrics` is INTERNAL ONLY. See TERMINOLOGY > Monitoring Endpoints for /healthz vs /metrics distinction.**
+
+| Deployment | Access Method | Recommendation |
+|------------|---------------|----------------|
+| **Single server** | Firewall rules | Block external access to `/metrics` port/path |
+| **Behind reverse proxy** | Proxy config | Do NOT proxy `/metrics` to public |
+| **Kubernetes** | NetworkPolicy | Restrict to monitoring namespace |
+| **Cloud** | Security groups | Allow only from Prometheus IP |
+
+**Authentication options:**
+
+| Method | Config | Use When |
+|--------|--------|----------|
+| **None** | `token: ""` | Firewalled, internal network only |
+| **Bearer token** | `token: "secret123"` | Additional layer, or when firewall not possible |
+
+**Token authentication header:**
+```
+Authorization: Bearer <token>
+```
+
+**Prometheus scrape config with token:**
+```yaml
+scrape_configs:
+  - job_name: 'search'
+    static_configs:
+      - targets: ['app.internal:8080']
+    authorization:
+      credentials: 'your-metrics-token-here'
+```
+
 ## Configuration
 
 ```yaml
@@ -26275,6 +29163,397 @@ server:
 | **System** | CPU, memory, disk, goroutines | System resources |
 | **Business** | Users, sessions, API calls | Application-specific |
 
+## Metric Naming Conventions
+
+**All metrics MUST follow Prometheus naming conventions.**
+
+| Rule | Format | Example |
+|------|--------|---------|
+| **Prefix** | `search_` | `jokes_http_requests_total` |
+| **Snake case** | `word_word_word` | `http_request_duration_seconds` |
+| **Unit suffix** | `_seconds`, `_bytes`, `_total` | `request_duration_seconds` |
+| **Total suffix** | Counters end with `_total` | `http_requests_total` |
+| **Base units** | Seconds (not ms), bytes (not KB) | `duration_seconds`, `size_bytes` |
+
+**Metric types:**
+
+| Type | Use For | Example |
+|------|---------|---------|
+| **Counter** | Cumulative values that only increase | `requests_total`, `errors_total` |
+| **Gauge** | Values that can go up or down | `active_connections`, `temperature` |
+| **Histogram** | Observations bucketed by value | `request_duration_seconds` |
+| **Summary** | Observations with quantiles | `request_duration_quantiles` |
+
+**Label naming:**
+
+| Rule | Good | Bad |
+|------|------|-----|
+| Snake case | `status_code` | `statusCode` |
+| Lowercase | `method` | `Method` |
+| No units in labels | `path` | `path_string` |
+| Low cardinality | `method`, `status` | `user_id`, `request_id` |
+
+**Cardinality warning:** Labels with high cardinality (user IDs, request IDs, timestamps) cause memory bloat. Use path normalization (replace UUIDs/IDs with `:id`).
+
+## Required Metrics
+
+**Every project MUST expose these core metrics at minimum.**
+
+### Required: Application Info
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `search_app_info` | Gauge | `version`, `commit`, `build_date`, `go_version` | Always 1, labels carry info |
+| `search_app_uptime_seconds` | Gauge | - | Seconds since start |
+| `search_app_start_timestamp` | Gauge | - | Unix timestamp of start |
+
+### Required: HTTP Metrics
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `search_http_requests_total` | Counter | `method`, `path`, `status` | Total HTTP requests |
+| `search_http_request_duration_seconds` | Histogram | `method`, `path` | Request latency |
+| `search_http_request_size_bytes` | Histogram | `method`, `path` | Request body size |
+| `search_http_response_size_bytes` | Histogram | `method`, `path` | Response body size |
+| `search_http_active_requests` | Gauge | - | In-flight requests |
+
+### Required: Database Metrics (if using database)
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `search_db_queries_total` | Counter | `operation`, `table` | Total queries |
+| `search_db_query_duration_seconds` | Histogram | `operation`, `table` | Query latency |
+| `search_db_connections_open` | Gauge | - | Open connections |
+| `search_db_connections_in_use` | Gauge | - | Active connections |
+| `search_db_errors_total` | Counter | `operation`, `error_type` | Database errors |
+
+### Required: Authentication Metrics
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `search_auth_attempts_total` | Counter | `method`, `status` | Auth attempts |
+| `search_auth_sessions_active` | Gauge | - | Active sessions |
+
+### Optional: Extended Metrics
+
+| Category | When to Include |
+|----------|-----------------|
+| **Cache metrics** | If using cache (Redis, in-memory) |
+| **Scheduler metrics** | If using background scheduler (PART 19) |
+| **System metrics** | If `include_system: true` in config |
+| **Runtime metrics** | If `include_runtime: true` in config |
+| **Business metrics** | App-specific (users, sessions, etc.) |
+
+## Complete Metrics Reference
+
+**Every metric exported by `/metrics`. All prefixed with `search_`.**
+
+### Application Metrics (REQUIRED)
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `app_info` | Gauge | `version`, `commit`, `build_date`, `go_version` | Always 1, labels carry build info |
+| `app_uptime_seconds` | Gauge | - | Seconds since application start |
+| `app_start_timestamp` | Gauge | - | Unix timestamp when application started |
+
+### HTTP Metrics (REQUIRED)
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `http_requests_total` | Counter | `method`, `path`, `status` | Total HTTP requests processed |
+| `http_request_duration_seconds` | Histogram | `method`, `path` | Request latency distribution |
+| `http_request_size_bytes` | Histogram | `method`, `path` | Request body size distribution |
+| `http_response_size_bytes` | Histogram | `method`, `path` | Response body size distribution |
+| `http_active_requests` | Gauge | - | Number of requests currently being processed |
+
+**HTTP label values:**
+
+| Label | Values | Notes |
+|-------|--------|-------|
+| `method` | `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `OPTIONS`, `HEAD` | HTTP method |
+| `path` | Normalized path | UUIDs/IDs replaced with `:id` |
+| `status` | `200`, `201`, `400`, `401`, `404`, `500`, etc. | HTTP status code |
+
+**Histogram buckets:**
+
+| Metric | Buckets |
+|--------|---------|
+| `http_request_duration_seconds` | 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10 |
+| `http_request_size_bytes` | 100, 1K, 10K, 100K, 1M, 10M |
+| `http_response_size_bytes` | 100, 1K, 10K, 100K, 1M, 10M |
+
+### Database Metrics (REQUIRED if using database)
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `db_queries_total` | Counter | `operation`, `table` | Total database queries |
+| `db_query_duration_seconds` | Histogram | `operation`, `table` | Query latency distribution |
+| `db_connections_open` | Gauge | - | Number of open connections in pool |
+| `db_connections_in_use` | Gauge | - | Number of connections actively in use |
+| `db_errors_total` | Counter | `operation`, `error_type` | Total database errors |
+
+**Database label values:**
+
+| Label | Values | Notes |
+|-------|--------|-------|
+| `operation` | `select`, `insert`, `update`, `delete` | SQL operation type |
+| `table` | Table name (lowercase) | Target table |
+| `error_type` | `connection`, `timeout`, `constraint`, `duplicate`, `other` | Error classification |
+
+**Histogram buckets:**
+
+| Metric | Buckets |
+|--------|---------|
+| `db_query_duration_seconds` | 0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1 |
+
+### Cache Metrics (if using cache)
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `cache_hits_total` | Counter | `cache` | Total cache hits |
+| `cache_misses_total` | Counter | `cache` | Total cache misses |
+| `cache_evictions_total` | Counter | `cache` | Total cache evictions |
+| `cache_size` | Gauge | `cache` | Current number of items in cache |
+| `cache_bytes` | Gauge | `cache` | Current cache size in bytes |
+
+**Cache label values:**
+
+| Label | Values | Notes |
+|-------|--------|-------|
+| `cache` | `sessions`, `users`, `config`, `tokens`, etc. | Cache name/purpose |
+
+### Scheduler Metrics (if using PART 19 scheduler)
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `scheduler_tasks_total` | Counter | `task`, `status` | Total scheduled task executions |
+| `scheduler_task_duration_seconds` | Histogram | `task` | Task execution duration |
+| `scheduler_tasks_running` | Gauge | `task` | Currently running task instances |
+| `scheduler_last_run_timestamp` | Gauge | `task` | Unix timestamp of last task execution |
+
+**Scheduler label values:**
+
+| Label | Values | Notes |
+|-------|--------|-------|
+| `task` | `cleanup`, `backup`, `sync`, `geoip_update`, etc. | Task name |
+| `status` | `success`, `error` | Execution result |
+
+**Histogram buckets:**
+
+| Metric | Buckets |
+|--------|---------|
+| `scheduler_task_duration_seconds` | 0.1, 0.5, 1, 5, 10, 30, 60, 300, 600 |
+
+### Authentication Metrics (REQUIRED)
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `auth_attempts_total` | Counter | `method`, `status` | Total authentication attempts |
+| `auth_sessions_active` | Gauge | - | Number of active sessions |
+
+**Authentication label values:**
+
+| Label | Values | Notes |
+|-------|--------|-------|
+| `method` | `password`, `api_token`, `oidc`, `ldap`, `2fa` | Auth method used |
+| `status` | `success`, `failed`, `blocked` | Attempt result |
+
+### Business Metrics (if using PART 34 multi-user)
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `users_total` | Gauge | - | Total registered users |
+| `users_active` | Gauge | - | Users active in last 24 hours |
+| `api_tokens_active` | Gauge | - | Active API tokens |
+
+### System Metrics (if `include_system: true`)
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `system_cpu_usage_percent` | Gauge | - | Current CPU usage percentage (0-100) |
+| `system_memory_usage_percent` | Gauge | - | Current memory usage percentage (0-100) |
+| `system_memory_used_bytes` | Gauge | - | Memory currently in use |
+| `system_memory_total_bytes` | Gauge | - | Total system memory |
+| `system_disk_usage_percent` | Gauge | `path` | Disk usage percentage for data directory |
+| `system_disk_used_bytes` | Gauge | `path` | Disk space used |
+| `system_disk_total_bytes` | Gauge | `path` | Total disk space |
+
+### Go Runtime Metrics (if `include_runtime: true`)
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `go_goroutines` | Gauge | - | Current number of goroutines |
+| `go_mem_alloc_bytes` | Gauge | - | Bytes allocated and in use (heap) |
+| `go_mem_sys_bytes` | Gauge | - | Total bytes obtained from system |
+| `go_gc_runs_total` | Counter | - | Total garbage collection runs |
+| `go_gc_pause_total_seconds` | Counter | - | Total time spent in GC pauses |
+
+### Cluster Metrics (if using PART 10 clustering)
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `cluster_nodes_total` | Gauge | - | Total nodes in cluster |
+| `cluster_nodes_healthy` | Gauge | - | Healthy nodes in cluster |
+| `cluster_is_primary` | Gauge | - | 1 if this node is primary, 0 otherwise |
+| `cluster_sync_lag_seconds` | Gauge | - | Replication lag from primary |
+| `cluster_elections_total` | Counter | - | Total leader elections |
+
+### Tor Metrics (if using PART 32 Tor)
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `tor_enabled` | Gauge | - | 1 if Tor is enabled, 0 otherwise |
+| `tor_running` | Gauge | - | 1 if Tor process is running, 0 otherwise |
+| `tor_circuit_established` | Gauge | - | 1 if circuit established, 0 otherwise |
+| `tor_requests_total` | Counter | - | Total requests via Tor hidden service |
+
+### Rate Limiting Metrics (if rate limiting enabled)
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `ratelimit_requests_total` | Counter | `limit`, `status` | Total rate-limited requests |
+| `ratelimit_blocked_total` | Counter | `limit` | Requests blocked by rate limiter |
+
+**Rate limiting label values:**
+
+| Label | Values | Notes |
+|-------|--------|-------|
+| `limit` | `global`, `per_ip`, `per_user`, `per_endpoint` | Rate limit type |
+| `status` | `allowed`, `limited` | Request outcome |
+
+## Metrics Output Example
+
+**Sample `/metrics` output (Prometheus text format):**
+
+```
+# HELP search_app_info Application information
+# TYPE search_app_info gauge
+search_app_info{version="1.2.3",commit="abc1234",build_date="2025-01-15",go_version="go1.23"} 1
+
+# HELP search_app_uptime_seconds Application uptime in seconds
+# TYPE search_app_uptime_seconds gauge
+search_app_uptime_seconds 86423.5
+
+# HELP search_app_start_timestamp Application start timestamp
+# TYPE search_app_start_timestamp gauge
+search_app_start_timestamp 1.705312200e+09
+
+# HELP search_http_requests_total Total number of HTTP requests
+# TYPE search_http_requests_total counter
+search_http_requests_total{method="GET",path="/api/v1/users",status="200"} 1523
+search_http_requests_total{method="GET",path="/api/v1/users/:id",status="200"} 892
+search_http_requests_total{method="GET",path="/api/v1/users/:id",status="404"} 23
+search_http_requests_total{method="POST",path="/api/v1/users",status="201"} 42
+search_http_requests_total{method="GET",path="/healthz",status="200"} 8640
+
+# HELP search_http_request_duration_seconds HTTP request duration in seconds
+# TYPE search_http_request_duration_seconds histogram
+search_http_request_duration_seconds_bucket{method="GET",path="/api/v1/users",le="0.001"} 120
+search_http_request_duration_seconds_bucket{method="GET",path="/api/v1/users",le="0.005"} 890
+search_http_request_duration_seconds_bucket{method="GET",path="/api/v1/users",le="0.01"} 1400
+search_http_request_duration_seconds_bucket{method="GET",path="/api/v1/users",le="0.025"} 1500
+search_http_request_duration_seconds_bucket{method="GET",path="/api/v1/users",le="0.05"} 1510
+search_http_request_duration_seconds_bucket{method="GET",path="/api/v1/users",le="0.1"} 1520
+search_http_request_duration_seconds_bucket{method="GET",path="/api/v1/users",le="+Inf"} 1523
+search_http_request_duration_seconds_sum{method="GET",path="/api/v1/users"} 12.456
+search_http_request_duration_seconds_count{method="GET",path="/api/v1/users"} 1523
+
+# HELP search_http_active_requests Number of active HTTP requests
+# TYPE search_http_active_requests gauge
+search_http_active_requests 3
+
+# HELP search_db_connections_open Number of open database connections
+# TYPE search_db_connections_open gauge
+search_db_connections_open 10
+
+# HELP search_db_connections_in_use Number of database connections in use
+# TYPE search_db_connections_in_use gauge
+search_db_connections_in_use 2
+
+# HELP search_cache_hits_total Total number of cache hits
+# TYPE search_cache_hits_total counter
+search_cache_hits_total{cache="sessions"} 8234
+search_cache_hits_total{cache="users"} 1523
+
+# HELP search_cache_misses_total Total number of cache misses
+# TYPE search_cache_misses_total counter
+search_cache_misses_total{cache="sessions"} 156
+search_cache_misses_total{cache="users"} 42
+
+# HELP search_auth_attempts_total Total authentication attempts
+# TYPE search_auth_attempts_total counter
+search_auth_attempts_total{method="password",status="success"} 523
+search_auth_attempts_total{method="password",status="failed"} 12
+search_auth_attempts_total{method="api_token",status="success"} 8923
+
+# HELP search_auth_sessions_active Number of active sessions
+# TYPE search_auth_sessions_active gauge
+search_auth_sessions_active 42
+
+# HELP search_scheduler_tasks_total Total number of scheduled tasks executed
+# TYPE search_scheduler_tasks_total counter
+search_scheduler_tasks_total{task="cleanup",status="success"} 288
+search_scheduler_tasks_total{task="backup",status="success"} 24
+search_scheduler_tasks_total{task="geoip_update",status="success"} 1
+
+# HELP search_scheduler_last_run_timestamp Timestamp of last task run
+# TYPE search_scheduler_last_run_timestamp gauge
+search_scheduler_last_run_timestamp{task="cleanup"} 1.705398600e+09
+search_scheduler_last_run_timestamp{task="backup"} 1.705395000e+09
+
+# HELP search_system_cpu_usage_percent Current CPU usage percentage
+# TYPE search_system_cpu_usage_percent gauge
+search_system_cpu_usage_percent 12.5
+
+# HELP search_system_memory_usage_percent Current memory usage percentage
+# TYPE search_system_memory_usage_percent gauge
+search_system_memory_usage_percent 45.2
+
+# HELP search_system_memory_used_bytes Memory used in bytes
+# TYPE search_system_memory_used_bytes gauge
+search_system_memory_used_bytes 3.865470976e+09
+
+# HELP search_system_memory_total_bytes Total memory in bytes
+# TYPE search_system_memory_total_bytes gauge
+search_system_memory_total_bytes 8.589934592e+09
+
+# HELP search_system_disk_usage_percent Disk usage percentage
+# TYPE search_system_disk_usage_percent gauge
+search_system_disk_usage_percent{path="/var/lib/myorg/myapp"} 62.3
+
+# HELP search_go_goroutines Number of goroutines
+# TYPE search_go_goroutines gauge
+search_go_goroutines 47
+
+# HELP search_go_mem_alloc_bytes Bytes allocated and in use
+# TYPE search_go_mem_alloc_bytes gauge
+search_go_mem_alloc_bytes 2.4576e+07
+
+# HELP search_go_gc_runs_total Total number of GC runs
+# TYPE search_go_gc_runs_total counter
+search_go_gc_runs_total 1523
+
+# HELP search_cluster_nodes_total Total nodes in cluster
+# TYPE search_cluster_nodes_total gauge
+search_cluster_nodes_total 3
+
+# HELP search_cluster_nodes_healthy Healthy nodes in cluster
+# TYPE search_cluster_nodes_healthy gauge
+search_cluster_nodes_healthy 3
+
+# HELP search_cluster_is_primary 1 if this node is primary
+# TYPE search_cluster_is_primary gauge
+search_cluster_is_primary 1
+
+# HELP search_tor_enabled 1 if Tor is enabled
+# TYPE search_tor_enabled gauge
+search_tor_enabled 1
+
+# HELP search_tor_running 1 if Tor process is running
+# TYPE search_tor_running gauge
+search_tor_running 1
+```
+
 ## Metrics Implementation
 
 ### Core Metrics Package
@@ -26292,7 +29571,7 @@ var (
     // HTTP metrics
     HTTPRequestsTotal = promauto.NewCounterVec(
         prometheus.CounterOpts{
-            Name: "{projectname}_http_requests_total",
+            Name: "search_http_requests_total",
             Help: "Total number of HTTP requests",
         },
         []string{"method", "path", "status"},
@@ -26300,7 +29579,7 @@ var (
 
     HTTPRequestDuration = promauto.NewHistogramVec(
         prometheus.HistogramOpts{
-            Name:    "{projectname}_http_request_duration_seconds",
+            Name:    "search_http_request_duration_seconds",
             Help:    "HTTP request duration in seconds",
             Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
         },
@@ -26309,7 +29588,7 @@ var (
 
     HTTPRequestSize = promauto.NewHistogramVec(
         prometheus.HistogramOpts{
-            Name:    "{projectname}_http_request_size_bytes",
+            Name:    "search_http_request_size_bytes",
             Help:    "HTTP request size in bytes",
             Buckets: []float64{100, 1000, 10000, 100000, 1000000, 10000000},
         },
@@ -26318,7 +29597,7 @@ var (
 
     HTTPResponseSize = promauto.NewHistogramVec(
         prometheus.HistogramOpts{
-            Name:    "{projectname}_http_response_size_bytes",
+            Name:    "search_http_response_size_bytes",
             Help:    "HTTP response size in bytes",
             Buckets: []float64{100, 1000, 10000, 100000, 1000000, 10000000},
         },
@@ -26327,7 +29606,7 @@ var (
 
     HTTPActiveRequests = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "{projectname}_http_active_requests",
+            Name: "search_http_active_requests",
             Help: "Number of active HTTP requests",
         },
     )
@@ -26335,7 +29614,7 @@ var (
     // Database metrics
     DBQueriesTotal = promauto.NewCounterVec(
         prometheus.CounterOpts{
-            Name: "{projectname}_db_queries_total",
+            Name: "search_db_queries_total",
             Help: "Total number of database queries",
         },
         []string{"operation", "table"},
@@ -26343,7 +29622,7 @@ var (
 
     DBQueryDuration = promauto.NewHistogramVec(
         prometheus.HistogramOpts{
-            Name:    "{projectname}_db_query_duration_seconds",
+            Name:    "search_db_query_duration_seconds",
             Help:    "Database query duration in seconds",
             Buckets: []float64{0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1},
         },
@@ -26352,21 +29631,21 @@ var (
 
     DBConnectionsOpen = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "{projectname}_db_connections_open",
+            Name: "search_db_connections_open",
             Help: "Number of open database connections",
         },
     )
 
     DBConnectionsInUse = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "{projectname}_db_connections_in_use",
+            Name: "search_db_connections_in_use",
             Help: "Number of database connections in use",
         },
     )
 
     DBErrors = promauto.NewCounterVec(
         prometheus.CounterOpts{
-            Name: "{projectname}_db_errors_total",
+            Name: "search_db_errors_total",
             Help: "Total number of database errors",
         },
         []string{"operation", "error_type"},
@@ -26375,7 +29654,7 @@ var (
     // Cache metrics
     CacheHits = promauto.NewCounterVec(
         prometheus.CounterOpts{
-            Name: "{projectname}_cache_hits_total",
+            Name: "search_cache_hits_total",
             Help: "Total number of cache hits",
         },
         []string{"cache"},
@@ -26383,7 +29662,7 @@ var (
 
     CacheMisses = promauto.NewCounterVec(
         prometheus.CounterOpts{
-            Name: "{projectname}_cache_misses_total",
+            Name: "search_cache_misses_total",
             Help: "Total number of cache misses",
         },
         []string{"cache"},
@@ -26391,7 +29670,7 @@ var (
 
     CacheEvictions = promauto.NewCounterVec(
         prometheus.CounterOpts{
-            Name: "{projectname}_cache_evictions_total",
+            Name: "search_cache_evictions_total",
             Help: "Total number of cache evictions",
         },
         []string{"cache"},
@@ -26399,7 +29678,7 @@ var (
 
     CacheSize = promauto.NewGaugeVec(
         prometheus.GaugeOpts{
-            Name: "{projectname}_cache_size",
+            Name: "search_cache_size",
             Help: "Current cache size (items)",
         },
         []string{"cache"},
@@ -26407,7 +29686,7 @@ var (
 
     CacheBytes = promauto.NewGaugeVec(
         prometheus.GaugeOpts{
-            Name: "{projectname}_cache_bytes",
+            Name: "search_cache_bytes",
             Help: "Current cache size (bytes)",
         },
         []string{"cache"},
@@ -26416,7 +29695,7 @@ var (
     // Scheduler metrics
     SchedulerTasksTotal = promauto.NewCounterVec(
         prometheus.CounterOpts{
-            Name: "{projectname}_scheduler_tasks_total",
+            Name: "search_scheduler_tasks_total",
             Help: "Total number of scheduled tasks executed",
         },
         []string{"task", "status"},
@@ -26424,7 +29703,7 @@ var (
 
     SchedulerTaskDuration = promauto.NewHistogramVec(
         prometheus.HistogramOpts{
-            Name:    "{projectname}_scheduler_task_duration_seconds",
+            Name:    "search_scheduler_task_duration_seconds",
             Help:    "Scheduled task duration in seconds",
             Buckets: []float64{0.1, 0.5, 1, 5, 10, 30, 60, 300, 600},
         },
@@ -26433,7 +29712,7 @@ var (
 
     SchedulerTasksRunning = promauto.NewGaugeVec(
         prometheus.GaugeOpts{
-            Name: "{projectname}_scheduler_tasks_running",
+            Name: "search_scheduler_tasks_running",
             Help: "Number of currently running scheduled tasks",
         },
         []string{"task"},
@@ -26441,7 +29720,7 @@ var (
 
     SchedulerLastRun = promauto.NewGaugeVec(
         prometheus.GaugeOpts{
-            Name: "{projectname}_scheduler_last_run_timestamp",
+            Name: "search_scheduler_last_run_timestamp",
             Help: "Timestamp of last task run",
         },
         []string{"task"},
@@ -26450,7 +29729,7 @@ var (
     // Authentication metrics
     AuthAttempts = promauto.NewCounterVec(
         prometheus.CounterOpts{
-            Name: "{projectname}_auth_attempts_total",
+            Name: "search_auth_attempts_total",
             Help: "Total authentication attempts",
         },
         []string{"method", "status"},
@@ -26458,7 +29737,7 @@ var (
 
     AuthSessionsActive = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "{projectname}_auth_sessions_active",
+            Name: "search_auth_sessions_active",
             Help: "Number of active sessions",
         },
     )
@@ -26466,21 +29745,21 @@ var (
     // Business metrics
     UsersTotal = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "{projectname}_users_total",
+            Name: "search_users_total",
             Help: "Total number of registered users",
         },
     )
 
     UsersActive = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "{projectname}_users_active",
+            Name: "search_users_active",
             Help: "Number of users active in last 24 hours",
         },
     )
 
     APITokensActive = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "{projectname}_api_tokens_active",
+            Name: "search_api_tokens_active",
             Help: "Number of active API tokens",
         },
     )
@@ -26488,7 +29767,7 @@ var (
     // Application info
     AppInfo = promauto.NewGaugeVec(
         prometheus.GaugeOpts{
-            Name: "{projectname}_app_info",
+            Name: "search_app_info",
             Help: "Application information",
         },
         []string{"version", "commit", "build_date", "go_version"},
@@ -26496,14 +29775,14 @@ var (
 
     AppUptime = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "{projectname}_app_uptime_seconds",
+            Name: "search_app_uptime_seconds",
             Help: "Application uptime in seconds",
         },
     )
 
     AppStartTime = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "{projectname}_app_start_timestamp",
+            Name: "search_app_start_timestamp",
             Help: "Application start timestamp",
         },
     )
@@ -26527,7 +29806,7 @@ import (
     "strconv"
     "time"
 
-    "github.com/{projectorg}/{projectname}/src/server/metrics"
+    "github.com/apimgr/search/src/server/metrics"
 )
 
 // metricsMiddleware records HTTP metrics for all requests
@@ -26611,7 +29890,7 @@ import (
     "database/sql"
     "time"
 
-    "github.com/{projectorg}/{projectname}/src/server/metrics"
+    "github.com/apimgr/search/src/server/metrics"
 )
 
 // MetricsDB wraps sql.DB with metrics
@@ -26712,7 +29991,7 @@ package cache
 import (
     "time"
 
-    "github.com/{projectorg}/{projectname}/src/server/metrics"
+    "github.com/apimgr/search/src/server/metrics"
 )
 
 // MetricsCache wraps a cache with metrics
@@ -26765,7 +30044,7 @@ package scheduler
 import (
     "time"
 
-    "github.com/{projectorg}/{projectname}/src/server/metrics"
+    "github.com/apimgr/search/src/server/metrics"
 )
 
 // RecordTaskStart records when a task starts
@@ -26808,35 +30087,35 @@ var (
     // System metrics
     SystemCPUUsage = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "{projectname}_system_cpu_usage_percent",
+            Name: "search_system_cpu_usage_percent",
             Help: "Current CPU usage percentage",
         },
     )
 
     SystemMemoryUsage = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "{projectname}_system_memory_usage_percent",
+            Name: "search_system_memory_usage_percent",
             Help: "Current memory usage percentage",
         },
     )
 
     SystemMemoryUsed = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "{projectname}_system_memory_used_bytes",
+            Name: "search_system_memory_used_bytes",
             Help: "Memory used in bytes",
         },
     )
 
     SystemMemoryTotal = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "{projectname}_system_memory_total_bytes",
+            Name: "search_system_memory_total_bytes",
             Help: "Total memory in bytes",
         },
     )
 
     SystemDiskUsage = promauto.NewGaugeVec(
         prometheus.GaugeOpts{
-            Name: "{projectname}_system_disk_usage_percent",
+            Name: "search_system_disk_usage_percent",
             Help: "Disk usage percentage",
         },
         []string{"path"},
@@ -26844,7 +30123,7 @@ var (
 
     SystemDiskUsed = promauto.NewGaugeVec(
         prometheus.GaugeOpts{
-            Name: "{projectname}_system_disk_used_bytes",
+            Name: "search_system_disk_used_bytes",
             Help: "Disk used in bytes",
         },
         []string{"path"},
@@ -26852,7 +30131,7 @@ var (
 
     SystemDiskTotal = promauto.NewGaugeVec(
         prometheus.GaugeOpts{
-            Name: "{projectname}_system_disk_total_bytes",
+            Name: "search_system_disk_total_bytes",
             Help: "Total disk in bytes",
         },
         []string{"path"},
@@ -26861,35 +30140,35 @@ var (
     // Go runtime metrics
     GoGoroutines = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "{projectname}_go_goroutines",
+            Name: "search_go_goroutines",
             Help: "Number of goroutines",
         },
     )
 
     GoMemAlloc = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "{projectname}_go_mem_alloc_bytes",
+            Name: "search_go_mem_alloc_bytes",
             Help: "Bytes allocated and in use",
         },
     )
 
     GoMemSys = promauto.NewGauge(
         prometheus.GaugeOpts{
-            Name: "{projectname}_go_mem_sys_bytes",
+            Name: "search_go_mem_sys_bytes",
             Help: "Bytes obtained from system",
         },
     )
 
     GoGCRuns = promauto.NewCounter(
         prometheus.CounterOpts{
-            Name: "{projectname}_go_gc_runs_total",
+            Name: "search_go_gc_runs_total",
             Help: "Total number of GC runs",
         },
     )
 
     GoGCPauseTotal = promauto.NewCounter(
         prometheus.CounterOpts{
-            Name: "{projectname}_go_gc_pause_total_seconds",
+            Name: "search_go_gc_pause_total_seconds",
             Help: "Total GC pause time in seconds",
         },
     )
@@ -27037,35 +30316,35 @@ func StartUptimeUpdater() {
 ## Metrics Endpoint Output
 
 ```
-# HELP {projectname}_http_requests_total Total number of HTTP requests
-# TYPE {projectname}_http_requests_total counter
-{projectname}_http_requests_total{method="GET",path="/api/{api_version}/users",status="200"} 1523
-{projectname}_http_requests_total{method="POST",path="/api/{api_version}/users",status="201"} 42
+# HELP search_http_requests_total Total number of HTTP requests
+# TYPE search_http_requests_total counter
+search_http_requests_total{method="GET",path="/api/{api_version}/users",status="200"} 1523
+search_http_requests_total{method="POST",path="/api/{api_version}/users",status="201"} 42
 
-# HELP {projectname}_http_request_duration_seconds HTTP request duration in seconds
-# TYPE {projectname}_http_request_duration_seconds histogram
-{projectname}_http_request_duration_seconds_bucket{method="GET",path="/api/{api_version}/users",le="0.01"} 1400
-{projectname}_http_request_duration_seconds_bucket{method="GET",path="/api/{api_version}/users",le="0.1"} 1520
-{projectname}_http_request_duration_seconds_bucket{method="GET",path="/api/{api_version}/users",le="+Inf"} 1523
-{projectname}_http_request_duration_seconds_sum{method="GET",path="/api/{api_version}/users"} 12.456
-{projectname}_http_request_duration_seconds_count{method="GET",path="/api/{api_version}/users"} 1523
+# HELP search_http_request_duration_seconds HTTP request duration in seconds
+# TYPE search_http_request_duration_seconds histogram
+search_http_request_duration_seconds_bucket{method="GET",path="/api/{api_version}/users",le="0.01"} 1400
+search_http_request_duration_seconds_bucket{method="GET",path="/api/{api_version}/users",le="0.1"} 1520
+search_http_request_duration_seconds_bucket{method="GET",path="/api/{api_version}/users",le="+Inf"} 1523
+search_http_request_duration_seconds_sum{method="GET",path="/api/{api_version}/users"} 12.456
+search_http_request_duration_seconds_count{method="GET",path="/api/{api_version}/users"} 1523
 
-# HELP {projectname}_db_connections_open Number of open database connections
-# TYPE {projectname}_db_connections_open gauge
-{projectname}_db_connections_open 5
+# HELP search_db_connections_open Number of open database connections
+# TYPE search_db_connections_open gauge
+search_db_connections_open 5
 
-# HELP {projectname}_cache_hits_total Total number of cache hits
-# TYPE {projectname}_cache_hits_total counter
-{projectname}_cache_hits_total{cache="sessions"} 8234
-{projectname}_cache_hits_total{cache="users"} 1523
+# HELP search_cache_hits_total Total number of cache hits
+# TYPE search_cache_hits_total counter
+search_cache_hits_total{cache="sessions"} 8234
+search_cache_hits_total{cache="users"} 1523
 
-# HELP {projectname}_app_info Application information
-# TYPE {projectname}_app_info gauge
-{projectname}_app_info{version="1.2.3",commit="abc123",build_date="2025-01-15",go_version="go1.23"} 1
+# HELP search_app_info Application information
+# TYPE search_app_info gauge
+search_app_info{version="1.2.3",commit="abc123",build_date="2025-01-15",go_version="go1.23"} 1
 
-# HELP {projectname}_app_uptime_seconds Application uptime in seconds
-# TYPE {projectname}_app_uptime_seconds gauge
-{projectname}_app_uptime_seconds 86423.5
+# HELP search_app_uptime_seconds Application uptime in seconds
+# TYPE search_app_uptime_seconds gauge
+search_app_uptime_seconds 86423.5
 ```
 
 ## Alerting Rules (Prometheus)
@@ -27073,13 +30352,13 @@ func StartUptimeUpdater() {
 ```yaml
 # alerts.yml - Example Prometheus alerting rules
 groups:
-  - name: {projectname}_alerts
+  - name: search_alerts
     rules:
       # High error rate
       - alert: HighErrorRate
         expr: |
-          sum(rate({projectname}_http_requests_total{status=~"5.."}[5m]))
-          / sum(rate({projectname}_http_requests_total[5m])) > 0.05
+          sum(rate(search_http_requests_total{status=~"5.."}[5m]))
+          / sum(rate(search_http_requests_total[5m])) > 0.05
         for: 5m
         labels:
           severity: critical
@@ -27090,7 +30369,7 @@ groups:
       # High latency
       - alert: HighLatency
         expr: |
-          histogram_quantile(0.95, rate({projectname}_http_request_duration_seconds_bucket[5m])) > 1
+          histogram_quantile(0.95, rate(search_http_request_duration_seconds_bucket[5m])) > 1
         for: 5m
         labels:
           severity: warning
@@ -27101,7 +30380,7 @@ groups:
       # Database connection pool exhausted
       - alert: DBConnectionPoolExhausted
         expr: |
-          {projectname}_db_connections_in_use / {projectname}_db_connections_open > 0.9
+          search_db_connections_in_use / search_db_connections_open > 0.9
         for: 5m
         labels:
           severity: warning
@@ -27110,7 +30389,7 @@ groups:
 
       # High memory usage
       - alert: HighMemoryUsage
-        expr: {projectname}_system_memory_usage_percent > 90
+        expr: search_system_memory_usage_percent > 90
         for: 10m
         labels:
           severity: warning
@@ -27119,7 +30398,7 @@ groups:
 
       # Disk space low
       - alert: DiskSpaceLow
-        expr: {projectname}_system_disk_usage_percent > 85
+        expr: search_system_disk_usage_percent > 85
         for: 5m
         labels:
           severity: warning
@@ -27128,18 +30407,18 @@ groups:
 
       # Application down
       - alert: ApplicationDown
-        expr: up{job="{projectname}"} == 0
+        expr: up{job="search"} == 0
         for: 1m
         labels:
           severity: critical
         annotations:
-          summary: "{projectname} is down"
+          summary: "search is down"
 
       # Goroutine leak
       - alert: GoroutineLeak
         expr: |
-          {projectname}_go_goroutines > 1000
-          and increase({projectname}_go_goroutines[1h]) > 100
+          search_go_goroutines > 1000
+          and increase(search_go_goroutines[1h]) > 100
         for: 30m
         labels:
           severity: warning
@@ -27150,7 +30429,7 @@ groups:
       # Scheduler task failing
       - alert: SchedulerTaskFailing
         expr: |
-          increase({projectname}_scheduler_tasks_total{status="error"}[1h]) > 3
+          increase(search_scheduler_tasks_total{status="error"}[1h]) > 3
         for: 0m
         labels:
           severity: warning
@@ -27162,72 +30441,72 @@ groups:
 
 ```json
 {
-  "title": "{PROJECTNAME} Metrics",
+  "title": "SEARCH Metrics",
   "panels": [
     {
       "title": "Request Rate",
       "type": "graph",
       "targets": [
-        {"expr": "sum(rate({projectname}_http_requests_total[5m]))"}
+        {"expr": "sum(rate(search_http_requests_total[5m]))"}
       ]
     },
     {
       "title": "Error Rate",
       "type": "graph",
       "targets": [
-        {"expr": "sum(rate({projectname}_http_requests_total{status=~\"5..\"}[5m])) / sum(rate({projectname}_http_requests_total[5m]))"}
+        {"expr": "sum(rate(search_http_requests_total{status=~\"5..\"}[5m])) / sum(rate(search_http_requests_total[5m]))"}
       ]
     },
     {
       "title": "Latency (p50, p95, p99)",
       "type": "graph",
       "targets": [
-        {"expr": "histogram_quantile(0.50, rate({projectname}_http_request_duration_seconds_bucket[5m]))", "legendFormat": "p50"},
-        {"expr": "histogram_quantile(0.95, rate({projectname}_http_request_duration_seconds_bucket[5m]))", "legendFormat": "p95"},
-        {"expr": "histogram_quantile(0.99, rate({projectname}_http_request_duration_seconds_bucket[5m]))", "legendFormat": "p99"}
+        {"expr": "histogram_quantile(0.50, rate(search_http_request_duration_seconds_bucket[5m]))", "legendFormat": "p50"},
+        {"expr": "histogram_quantile(0.95, rate(search_http_request_duration_seconds_bucket[5m]))", "legendFormat": "p95"},
+        {"expr": "histogram_quantile(0.99, rate(search_http_request_duration_seconds_bucket[5m]))", "legendFormat": "p99"}
       ]
     },
     {
       "title": "Active Requests",
       "type": "stat",
       "targets": [
-        {"expr": "{projectname}_http_active_requests"}
+        {"expr": "search_http_active_requests"}
       ]
     },
     {
       "title": "Database Connections",
       "type": "graph",
       "targets": [
-        {"expr": "{projectname}_db_connections_open", "legendFormat": "open"},
-        {"expr": "{projectname}_db_connections_in_use", "legendFormat": "in_use"}
+        {"expr": "search_db_connections_open", "legendFormat": "open"},
+        {"expr": "search_db_connections_in_use", "legendFormat": "in_use"}
       ]
     },
     {
       "title": "Cache Hit Rate",
       "type": "graph",
       "targets": [
-        {"expr": "sum(rate({projectname}_cache_hits_total[5m])) / (sum(rate({projectname}_cache_hits_total[5m])) + sum(rate({projectname}_cache_misses_total[5m])))"}
+        {"expr": "sum(rate(search_cache_hits_total[5m])) / (sum(rate(search_cache_hits_total[5m])) + sum(rate(search_cache_misses_total[5m])))"}
       ]
     },
     {
       "title": "Memory Usage",
       "type": "gauge",
       "targets": [
-        {"expr": "{projectname}_system_memory_usage_percent"}
+        {"expr": "search_system_memory_usage_percent"}
       ]
     },
     {
       "title": "Goroutines",
       "type": "graph",
       "targets": [
-        {"expr": "{projectname}_go_goroutines"}
+        {"expr": "search_go_goroutines"}
       ]
     },
     {
       "title": "Uptime",
       "type": "stat",
       "targets": [
-        {"expr": "{projectname}_app_uptime_seconds"}
+        {"expr": "search_app_uptime_seconds"}
       ]
     }
   ]
@@ -27253,7 +30532,7 @@ groups:
 ## Backup Command
 
 ```bash
-{projectname} --maintenance backup [filename]
+search --maintenance backup [filename]
 ```
 
 ### Backup Contents
@@ -27285,7 +30564,7 @@ groups:
 ### Backup Format
 
 - Single `.tar.gz` file (or `.tar.gz.enc` if encrypted)
-- Filename: `{projectname}_backup_YYYY-MM-DD_HHMMSS.tar.gz[.enc]`
+- Filename: `search_backup_YYYY-MM-DD_HHMMSS.tar.gz[.enc]`
 - Includes manifest with version info
 - Encrypted if backup password was set during setup
 
@@ -27388,14 +30667,14 @@ When `server.compliance.enabled: true`:
 
 ```bash
 # If encryption password set during setup:
-{projectname} --maintenance backup
+search --maintenance backup
 # Prompts for password, creates encrypted backup
 
 # Override with explicit password:
-{projectname} --maintenance backup --password "mypassword"
+search --maintenance backup --password "mypassword"
 
 # Restore encrypted backup:
-{projectname} --maintenance restore backup.tar.gz.enc
+search --maintenance restore backup.tar.gz.enc
 # Prompts for password
 ```
 
@@ -27463,9 +30742,9 @@ server:
 **Backup Creation Flow (backup_daily task at 02:00):**
 
 ```
-1. Create full backup: {projectname}_backup_YYYY-MM-DD.tar.gz[.enc]
+1. Create full backup: search_backup_YYYY-MM-DD.tar.gz[.enc]
 2. Verify full backup (all checks must pass)
-3. Create daily incremental: {projectname}-daily.tar.gz[.enc]
+3. Create daily incremental: search-daily.tar.gz[.enc]
 4. Verify daily incremental (all checks must pass)
 5. If ALL verifications pass:
    - Apply retention policy (delete old backups per retention settings)
@@ -27535,9 +30814,9 @@ Every backup is verified **immediately after creation** - backups must be 100% w
 
 | File | Description | Retention |
 |------|-------------|-----------|
-| `{projectname}_backup_YYYY-MM-DD.tar.gz[.enc]` | Full backup (yesterday's data) | Controlled by `max_backups` |
-| `{projectname}-daily.tar.gz[.enc]` | Daily incremental (changes since full) | Always 1 (replaced each run) |
-| `{projectname}-hourly.tar.gz[.enc]` | Hourly incremental (if enabled) | Always 1 (replaced each run) |
+| `search_backup_YYYY-MM-DD.tar.gz[.enc]` | Full backup (yesterday's data) | Controlled by `max_backups` |
+| `search-daily.tar.gz[.enc]` | Daily incremental (changes since full) | Always 1 (replaced each run) |
+| `search-hourly.tar.gz[.enc]` | Hourly incremental (if enabled) | Always 1 (replaced each run) |
 
 ### Retention Configuration
 
@@ -27717,7 +30996,7 @@ on a Sunday counts as daily + weekly + monthly + yearly - uses highest priority)
 ## Restore Command
 
 ```bash
-{projectname} --maintenance restore <backup-file>
+search --maintenance restore <backup-file>
 ```
 
 ### Restore Authorization
@@ -27746,16 +31025,16 @@ on a Sunday counts as daily + weekly + monthly + yearly - uses highest priority)
 
 ```bash
 # Encrypted backup - prompts for password
-{projectname} --maintenance restore backup_2025-01-15.tar.gz.enc
+search --maintenance restore backup_2025-01-15.tar.gz.enc
 Enter backup password: ••••••••••••
 Verifying backup integrity... OK
 Restoring...
 
 # Encrypted backup - password via flag
-{projectname} --maintenance restore backup_2025-01-15.tar.gz.enc --password "mypassword"
+search --maintenance restore backup_2025-01-15.tar.gz.enc --password "mypassword"
 
 # Unencrypted backup - no password needed
-{projectname} --maintenance restore backup_2025-01-15.tar.gz
+search --maintenance restore backup_2025-01-15.tar.gz
 ```
 
 **WebUI Restore:**
@@ -27858,7 +31137,7 @@ Your existing password and settings will be preserved.
 ## Admin Recovery Command
 
 ```bash
-{projectname} --maintenance setup
+search --maintenance setup
 ```
 
 **Purpose:** Resets admin credentials and generates a new setup token. This is the ONLY way for a Server Admin to recover access if they have lost their password, API token, AND recovery keys.
@@ -27898,10 +31177,10 @@ Your existing password and settings will be preserved.
 
 ```bash
 # Stop the service first (recommended)
-{projectname} --service stop
+search --service stop
 
 # Run setup reset
-{projectname} --maintenance setup
+search --maintenance setup
 
 # Output:
 # ╔══════════════════════════════════════════════════════════════════╗
@@ -27914,14 +31193,14 @@ Your existing password and settings will be preserved.
 # ║  │  a1b2c3d4e5f67890abcdef1234567890                          │  ║
 # ║  └────────────────────────────────────────────────────────────┘  ║
 # ║                                                                  ║
-# ║  1. Start the service: {projectname} --service start             ║
+# ║  1. Start the service: search --service start             ║
 # ║  2. Go to: http://{fqdn}:{port}/{admin_path}                     ║
 # ║  3. Enter the setup token above                                  ║
 # ║  4. Create new admin account via setup wizard                    ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
 # Start the service
-{projectname} --service start
+search --service start
 ```
 
 ### Security Considerations
@@ -27956,7 +31235,7 @@ Your existing password and settings will be preserved.
 │  Admin locked out (no password, no token, no recovery keys)     │
 │                           │                                     │
 │                           ▼                                     │
-│  Server admin runs: {projectname} --maintenance setup           │
+│  Server admin runs: search --maintenance setup           │
 │                           │                                     │
 │                           ▼                                     │
 │  Admin credentials cleared, new setup token generated           │
@@ -28016,17 +31295,17 @@ Your existing password and settings will be preserved.
 
 ```bash
 # Check for updates (no privileges required)
-{projectname} --update check
+search --update check
 
 # Perform update (these are equivalent)
-{projectname} --update
-{projectname} --update yes
-{projectname} --maintenance update
+search --update
+search --update yes
+search --maintenance update
 
 # Switch channels
-{projectname} --update branch beta
-{projectname} --update branch daily
-{projectname} --update branch stable
+search --update branch beta
+search --update branch daily
+search --update branch stable
 ```
 
 ## Self-Update Implementation
@@ -28207,10 +31486,10 @@ func CheckForUpdate(ctx context.Context, currentVersion, branch string) (*Releas
     var url string
     switch branch {
     case "stable":
-        url = "https://api.github.com/repos/{projectorg}/{projectname}/releases/latest"
+        url = "https://api.github.com/repos/apimgr/search/releases/latest"
     default:
         // For beta/daily, get all releases and filter
-        url = "https://api.github.com/repos/{projectorg}/{projectname}/releases"
+        url = "https://api.github.com/repos/apimgr/search/releases"
     }
 
     req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -28273,7 +31552,7 @@ func DoUpdate(ctx context.Context, release *Release) error {
     }
 
     // Download to temp file
-    tmpFile, err := os.CreateTemp("", "{projectname}-update-*")
+    tmpFile, err := os.CreateTemp("", "search-update-*")
     if err != nil {
         return fmt.Errorf("failed to create temp file: %w", err)
     }
@@ -28324,7 +31603,7 @@ func DoUpdate(ctx context.Context, release *Release) error {
 
 // getBinaryName returns the expected binary name for this platform
 func getBinaryName() string {
-    name := "{projectname}-" + runtime.GOOS + "-" + runtime.GOARCH
+    name := "search-" + runtime.GOOS + "-" + runtime.GOARCH
     if runtime.GOOS == "windows" {
         name += ".exe"
     }
@@ -28380,11 +31659,11 @@ func restartService() error {
 func restartLinuxService() error {
     // Try systemd first
     if _, err := exec.LookPath("systemctl"); err == nil {
-        cmd := exec.Command("systemctl", "restart", "{projectname}")
+        cmd := exec.Command("systemctl", "restart", "search")
         return cmd.Run()
     }
     // Fall back to generic service command
-    cmd := exec.Command("service", "{projectname}", "restart")
+    cmd := exec.Command("service", "search", "restart")
     return cmd.Run()
 }
 
@@ -28393,7 +31672,7 @@ func restartLinuxService() error {
 // +build darwin
 
 func restartDarwinService() error {
-    label := "{projectorg}.{projectname}"
+    label := "apimgr.search"
     // kickstart -k kills existing and starts fresh
     cmd := exec.Command("launchctl", "kickstart", "-k", "system/"+label)
     return cmd.Run()
@@ -28405,14 +31684,14 @@ func restartDarwinService() error {
 
 func restartWindowsService() error {
     // Stop service
-    stopCmd := exec.Command("sc", "stop", "{projectname}")
+    stopCmd := exec.Command("sc", "stop", "search")
     stopCmd.Run() // Ignore error if not running
 
     // Wait for stop
     time.Sleep(2 * time.Second)
 
     // Start service
-    startCmd := exec.Command("sc", "start", "{projectname}")
+    startCmd := exec.Command("sc", "start", "search")
     return startCmd.Run()
 }
 
@@ -28421,7 +31700,7 @@ func restartWindowsService() error {
 // +build freebsd openbsd netbsd
 
 func restartBSDService() error {
-    cmd := exec.Command("service", "{projectname}", "restart")
+    cmd := exec.Command("service", "search", "restart")
     return cmd.Run()
 }
 ```
@@ -28462,7 +31741,7 @@ func verifyChecksum(filePath, expectedHash string) error {
 
 Application user creation **REQUIRES** privilege escalation. If the user cannot escalate privileges, the application runs as the current user with user-level directories.
 
-**IMPORTANT: See PART 5 "Smart Escalation Logic" (lines ~6059-6094) for the complete escalation flow:**
+**IMPORTANT: See PART 5 "Smart Escalation Logic" (lines ~6668-6703) for the complete escalation flow:**
 - Binary first checks if already root/admin → skips escalation prompt entirely
 - Only prompts if user CAN actually escalate (is in sudoers/wheel/admin group)
 - Never prompts if user cannot escalate → shows informative error instead
@@ -28572,7 +31851,7 @@ ON --service --disable:
 ## Service Help Output
 
 ```bash
-$ {projectname} --service --help
+$ search --service --help
 Service management commands:
 
   start       Start the service
@@ -28594,11 +31873,11 @@ Current status:
 ## Maintenance Help Output
 
 ```bash
-$ {projectname} --maintenance --help
+$ search --maintenance --help
 Maintenance commands:
 
   backup [file]     Create backup of all data
-                    Default: {backup_dir}/{projectname}-{timestamp}.tar.gz
+                    Default: {backup_dir}/search-{timestamp}.tar.gz
 
   restore <file>    Restore from backup file
                     Stops server, restores data, restarts server
@@ -28616,19 +31895,19 @@ Maintenance commands:
                     Creates primary Server Admin, configures server
 
 Examples:
-  {projectname} --maintenance backup
-  {projectname} --maintenance backup /path/to/backup.tar.gz
-  {projectname} --maintenance restore /path/to/backup.tar.gz
-  {projectname} --maintenance update check
-  {projectname} --maintenance update yes
-  {projectname} --maintenance mode development
-  {projectname} --maintenance setup
+  search --maintenance backup
+  search --maintenance backup /path/to/backup.tar.gz
+  search --maintenance restore /path/to/backup.tar.gz
+  search --maintenance update check
+  search --maintenance update yes
+  search --maintenance mode development
+  search --maintenance setup
 ```
 
 ## Shell Help Output
 
 ```bash
-$ {projectname} --shell --help
+$ search --shell --help
 Shell integration commands:
 
   completions [SHELL]   Print shell completion script
@@ -28640,21 +31919,21 @@ Shell integration commands:
 
 Usage:
   # Add to shell profile for persistent completions
-  {projectname} --shell init >> ~/.bashrc      # bash
-  {projectname} --shell init >> ~/.zshrc       # zsh
-  {projectname} --shell init >> ~/.config/fish/config.fish  # fish
+  search --shell init >> ~/.bashrc      # bash
+  search --shell init >> ~/.zshrc       # zsh
+  search --shell init >> ~/.config/fish/config.fish  # fish
 
   # Or eval directly for current session
-  eval "$({projectname} --shell init)"
+  eval "$(search --shell init)"
 
   # Generate completion script only
-  {projectname} --shell completions bash > /etc/bash_completion.d/{projectname}
+  search --shell completions bash > /etc/bash_completion.d/search
 ```
 
 ## Update Help Output
 
 ```bash
-$ {projectname} --update --help
+$ search --update --help
 Update management:
 
   check                 Check for available updates
@@ -28669,9 +31948,9 @@ Update management:
                         daily  - Daily builds (development)
 
 Examples:
-  {projectname} --update check
-  {projectname} --update yes
-  {projectname} --update branch beta
+  search --update check
+  search --update yes
+  search --update branch beta
 
 Current:
   Version:  {projectversion}
@@ -28682,12 +31961,12 @@ Current:
 ## CLI Admin Help Output
 
 ```bash
-$ {projectname}-cli --admin --help
+$ search-cli --admin --help
 Admin CLI - manage users, organizations, and API tokens.
 
 AUTHENTICATION REQUIRED:
   Admin token must be set and valid. Use one of:
-  1. Environment variable: {PROJECTNAME}_TOKEN=adm_xxx...
+  1. Environment variable: SEARCH_TOKEN=adm_xxx...
   2. Flag: --token adm_xxx...
 
   Token must have admin scope (prefix: adm_). User tokens (usr_) will be rejected.
@@ -28724,16 +32003,16 @@ Global Flags:
   --quiet               Suppress non-essential output
 
 Examples:
-  {projectname}-cli --admin user list
-  {projectname}-cli --admin user create newuser
-  {projectname}-cli --admin org create myorg
-  {projectname}-cli --admin token create "CI Token"
+  search-cli --admin user list
+  search-cli --admin user create newuser
+  search-cli --admin org create myorg
+  search-cli --admin token create "CI Token"
 ```
 
 ## CLI Admin User Help Output
 
 ```bash
-$ {projectname}-cli --admin user --help
+$ search-cli --admin user --help
 User management commands:
 
   list                  List all users
@@ -28763,18 +32042,18 @@ User management commands:
                         Disable two-factor authentication for user
 
 Examples:
-  {projectname}-cli --admin user list
-  {projectname}-cli --admin user list --status suspended
-  {projectname}-cli --admin user get johndoe
-  {projectname}-cli --admin user create johndoe --email john@example.com
-  {projectname}-cli --admin user suspend johndoe
-  {projectname}-cli --admin user reset-password johndoe
+  search-cli --admin user list
+  search-cli --admin user list --status suspended
+  search-cli --admin user get johndoe
+  search-cli --admin user create johndoe --email john@example.com
+  search-cli --admin user suspend johndoe
+  search-cli --admin user reset-password johndoe
 ```
 
 ## CLI Admin Org Help Output
 
 ```bash
-$ {projectname}-cli --admin org --help
+$ search-cli --admin org --help
 Organization management commands:
 
   list                  List all organizations
@@ -28803,16 +32082,16 @@ Organization management commands:
     --force             Skip confirmation prompt
 
 Examples:
-  {projectname}-cli --admin org list
-  {projectname}-cli --admin org create myorg --display-name "My Organization"
-  {projectname}-cli --admin org members myorg
-  {projectname}-cli --admin org add-member myorg johndoe --role admin
+  search-cli --admin org list
+  search-cli --admin org create myorg --display-name "My Organization"
+  search-cli --admin org members myorg
+  search-cli --admin org add-member myorg johndoe --role admin
 ```
 
 ## CLI Admin Token Help Output
 
 ```bash
-$ {projectname}-cli --admin token --help
+$ search-cli --admin token --help
 API token management commands:
 
   list                  List all tokens
@@ -28830,21 +32109,21 @@ API token management commands:
     --format FORMAT     Output format (table|json|yaml)
 
 Examples:
-  {projectname}-cli --admin token list
-  {projectname}-cli --admin token create "CI Token" --expires 90d --scopes read,write
-  {projectname}-cli --admin token revoke tk_abc123
-  {projectname}-cli --admin token info tk_abc123
+  search-cli --admin token list
+  search-cli --admin token create "CI Token" --expires 90d --scopes read,write
+  search-cli --admin token revoke tk_abc123
+  search-cli --admin token info tk_abc123
 ```
 
 ## CLI Admin Server Help Output
 
 ```bash
-$ {projectname}-cli --admin server --help
+$ search-cli --admin server --help
 Server admin CLI - server configuration and management.
 
 AUTHENTICATION REQUIRED:
   Server admin token must be set and valid. Use one of:
-  1. Environment variable: {PROJECTNAME}_TOKEN=adm_xxx...
+  1. Environment variable: SEARCH_TOKEN=adm_xxx...
   2. Flag: --token adm_xxx...
 
   Token must have Server Admin scope (prefix: adm_). User tokens (usr_) and
@@ -28873,17 +32152,17 @@ Global Flags:
   --format {table|json|yaml}  Output format (default: table)
 
 Examples:
-  {projectname}-cli --admin server config list
-  {projectname}-cli --admin server config get registration.mode
-  {projectname}-cli --admin server config set registration.mode private
-  {projectname}-cli --admin server admin list
-  {projectname}-cli --admin server stats overview
+  search-cli --admin server config list
+  search-cli --admin server config get registration.mode
+  search-cli --admin server config set registration.mode private
+  search-cli --admin server admin list
+  search-cli --admin server stats overview
 ```
 
 ## CLI Admin Server Config Help Output
 
 ```bash
-$ {projectname}-cli --admin server config --help
+$ search-cli --admin server config --help
 Server configuration commands:
 
   get [key]             Get configuration value
@@ -28910,17 +32189,17 @@ Common Configuration Keys:
   email.from_address    From email address
 
 Examples:
-  {projectname}-cli --admin server config list
-  {projectname}-cli --admin server config get registration.mode
-  {projectname}-cli --admin server config set registration.mode private
-  {projectname}-cli --admin server config set branding.title "My Server"
-  {projectname}-cli --admin server config reset registration.mode
+  search-cli --admin server config list
+  search-cli --admin server config get registration.mode
+  search-cli --admin server config set registration.mode private
+  search-cli --admin server config set branding.title "My Server"
+  search-cli --admin server config reset registration.mode
 ```
 
 ## CLI Admin Server Admin Help Output
 
 ```bash
-$ {projectname}-cli --admin server admin --help
+$ search-cli --admin server admin --help
 Server admin management commands:
 
   list                  List all server admins
@@ -28941,16 +32220,16 @@ Server admin management commands:
 Note: Primary server admin cannot be removed. Use --maintenance setup for recovery.
 
 Examples:
-  {projectname}-cli --admin server admin list
-  {projectname}-cli --admin server admin invite newadmin --email admin@example.com
-  {projectname}-cli --admin server admin remove oldadmin
-  {projectname}-cli --admin server admin reset-password adminuser
+  search-cli --admin server admin list
+  search-cli --admin server admin invite newadmin --email admin@example.com
+  search-cli --admin server admin remove oldadmin
+  search-cli --admin server admin reset-password adminuser
 ```
 
 ## CLI Admin Server Stats Help Output
 
 ```bash
-$ {projectname}-cli --admin server stats --help
+$ search-cli --admin server stats --help
 Server statistics commands:
 
   overview              General server statistics
@@ -28970,24 +32249,24 @@ Flags:
   --period PERIOD       Time period (1h|24h|7d|30d, default: 24h)
 
 Examples:
-  {projectname}-cli --admin server stats overview
-  {projectname}-cli --admin server stats users --period 30d
-  {projectname}-cli --admin server stats storage --format json
-  {projectname}-cli --admin server stats performance
+  search-cli --admin server stats overview
+  search-cli --admin server stats users --period 30d
+  search-cli --admin server stats storage --format json
+  search-cli --admin server stats performance
 ```
 
 ## System User Requirements 
 
 | Requirement | Value |
 |-------------|-------|
-| Username | `{projectname}` |
-| Group | `{projectname}` |
+| Username | `search` |
+| Group | `search` |
 | UID/GID | **Must match** - same value for both UID and GID |
 | UID/GID Range | **200-899** (safe system range, avoids well-known service IDs) |
 | Shell | `/sbin/nologin` or `/usr/sbin/nologin` |
-| Home | Config directory (`/etc/{projectorg}/{projectname}`) or data directory (`/var/lib/{projectorg}/{projectname}`) |
+| Home | Config directory (`/etc/apimgr/search`) or data directory (`/var/lib/apimgr/search`) |
 | Type | System user (no password, no login) |
-| Gecos | `{projectname} service account` |
+| Gecos | `search service account` |
 
 ### UID/GID Selection Logic
 
@@ -29085,14 +32364,14 @@ func findAvailableSystemID() (int, error) {
 **Linux:**
 ```bash
 # Create group with specific GID
-groupadd --system --gid {id} {projectname}
+groupadd --system --gid {id} search
 
 # Create user with matching UID, same primary group
 useradd --system --uid {id} --gid {id} \
-  --home-dir /etc/{projectorg}/{projectname} \
+  --home-dir /etc/apimgr/search \
   --shell /sbin/nologin \
-  --comment "{projectname} service account" \
-  {projectname}
+  --comment "search service account" \
+  search
 ```
 
 ### macOS Service Account
@@ -29103,10 +32382,10 @@ useradd --system --uid {id} --gid {id} \
 |-------|-----------|---------|
 | Start | root | launchd starts binary as root |
 | Bind | root | Bind privileged ports (<1024) |
-| Drop | root→`{projectname}` | Binary drops privileges |
-| Run | `{projectname}` | Serve requests as unprivileged user |
+| Drop | root→`search` | Binary drops privileges |
+| Run | `search` | Serve requests as unprivileged user |
 
-**The `{projectname}` user is created automatically by the binary on first startup.**
+**The `search` user is created automatically by the binary on first startup.**
 
 macOS uses `dscl` (Directory Service Command Line) to create system users. The user is hidden from login screen and has no shell access.
 
@@ -29128,21 +32407,21 @@ Same reserved IDs as Linux apply (see Reserved/Well-Known UIDs table above).
 # Start at 399, work down, skip reserved IDs
 
 # Create group with specific GID
-dscl . -create /Groups/{projectname}
-dscl . -create /Groups/{projectname} PrimaryGroupID {id}
-dscl . -create /Groups/{projectname} Password "*"
+dscl . -create /Groups/search
+dscl . -create /Groups/search PrimaryGroupID {id}
+dscl . -create /Groups/search Password "*"
 
 # Create user with matching UID
-dscl . -create /Users/{projectname}
-dscl . -create /Users/{projectname} UniqueID {id}
-dscl . -create /Users/{projectname} PrimaryGroupID {id}
-dscl . -create /Users/{projectname} UserShell /usr/bin/false
-dscl . -create /Users/{projectname} RealName "{projectname} service account"
-dscl . -create /Users/{projectname} NFSHomeDirectory /usr/local/var/{projectorg}/{projectname}
-dscl . -create /Users/{projectname} Password "*"
+dscl . -create /Users/search
+dscl . -create /Users/search UniqueID {id}
+dscl . -create /Users/search PrimaryGroupID {id}
+dscl . -create /Users/search UserShell /usr/bin/false
+dscl . -create /Users/search RealName "search service account"
+dscl . -create /Users/search NFSHomeDirectory /usr/local/var/apimgr/search
+dscl . -create /Users/search Password "*"
 
 # Hide user from login window
-dscl . -create /Users/{projectname} IsHidden 1
+dscl . -create /Users/search IsHidden 1
 ```
 
 **launchd plist (runs as root, binary drops privileges):**
@@ -29152,14 +32431,14 @@ dscl . -create /Users/{projectname} IsHidden 1
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>{projectorg}.{projectname}</string>
+    <string>apimgr.search</string>
 
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/local/bin/{projectname}</string>
+        <string>/usr/local/bin/search</string>
     </array>
 
-    <!-- No UserName/GroupName - starts as root, binary drops to {projectname} user -->
+    <!-- No UserName/GroupName - starts as root, binary drops to search user -->
 
     <key>RunAtLoad</key>
     <true/>
@@ -29168,10 +32447,10 @@ dscl . -create /Users/{projectname} IsHidden 1
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/var/log/{projectorg}/{projectname}/stdout.log</string>
+    <string>/var/log/apimgr/search/stdout.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/var/log/{projectorg}/{projectname}/stderr.log</string>
+    <string>/var/log/apimgr/search/stderr.log</string>
 </dict>
 </plist>
 ```
@@ -29180,11 +32459,11 @@ dscl . -create /Users/{projectname} IsHidden 1
 
 | Directory | Path | Purpose |
 |-----------|------|---------|
-| Binary | `/usr/local/bin/{projectname}` | Executable |
-| Config | `/usr/local/etc/{projectorg}/{projectname}/` | Configuration files |
-| Data | `/usr/local/var/{projectorg}/{projectname}/` | Application data |
-| Logs | `/usr/local/var/log/{projectorg}/{projectname}/` | Log files |
-| launchd plist | `/Library/LaunchDaemons/{projectorg}.{projectname}.plist` | Service definition |
+| Binary | `/usr/local/bin/search` | Executable |
+| Config | `/usr/local/etc/apimgr/search/` | Configuration files |
+| Data | `/usr/local/var/apimgr/search/` | Application data |
+| Logs | `/usr/local/var/log/apimgr/search/` | Log files |
+| launchd plist | `/Library/LaunchDaemons/apimgr.search.plist` | Service definition |
 
 **Go Implementation (macOS):**
 ```go
@@ -29243,11 +32522,11 @@ func createMacOSServiceUser(name string, id int, homeDir string) error {
 **FreeBSD:**
 ```bash
 # Create user and group with matching ID
-pw groupadd -n {projectname} -g {id}
-pw useradd -n {projectname} -u {id} -g {id} \
-  -d /var/lib/{projectorg}/{projectname} \
+pw groupadd -n search -g {id}
+pw useradd -n search -u {id} -g {id} \
+  -d /var/lib/apimgr/search \
   -s /usr/sbin/nologin \
-  -c "{projectname} service account"
+  -c "search service account"
 ```
 
 ### Windows Service Account
@@ -29267,33 +32546,33 @@ pw useradd -n {projectname} -u {id} -g {id} \
 
 Virtual Service Accounts are automatically managed by Windows, require no password management, and have minimal privileges. They are created automatically when the service is installed.
 
-**Service Account Format:** `NT SERVICE\{projectname}`
+**Service Account Format:** `NT SERVICE\search`
 
 ```powershell
 # Create service with Virtual Service Account (automatic)
-New-Service -Name "{projectname}" `
-  -BinaryPathName "C:\Program Files\{projectorg}\{projectname}\{projectname}.exe" `
-  -DisplayName "{projectname}" `
-  -Description "{projectname} service" `
+New-Service -Name "search" `
+  -BinaryPathName "C:\Program Files\apimgr\search\search.exe" `
+  -DisplayName "search" `
+  -Description "search service" `
   -StartupType Automatic
 
-# Service automatically runs as NT SERVICE\{projectname}
+# Service automatically runs as NT SERVICE\search
 # No user creation needed - Windows manages it
 ```
 
 **Directory Permissions:**
 ```powershell
 # Grant Virtual Service Account access to config/data directories
-$acl = Get-Acl "C:\ProgramData\{projectorg}\{projectname}"
+$acl = Get-Acl "C:\ProgramData\apimgr\search"
 $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
-    "NT SERVICE\{projectname}",
+    "NT SERVICE\search",
     "FullControl",
     "ContainerInherit,ObjectInherit",
     "None",
     "Allow"
 )
 $acl.SetAccessRule($rule)
-Set-Acl "C:\ProgramData\{projectorg}\{projectname}" $acl
+Set-Acl "C:\ProgramData\apimgr\search" $acl
 ```
 
 **Go Implementation (Windows):**
@@ -29314,11 +32593,11 @@ func installWindowsService() error {
     // Create service - runs as Virtual Service Account by default
     // when ServiceStartName is empty or "NT SERVICE\{name}"
     s, err := m.CreateService(
-        "{projectname}",
+        "search",
         exePath,
         mgr.Config{
-            DisplayName:     "{projectname}",
-            Description:     "{projectname} service",
+            DisplayName:     "search",
+            Description:     "search service",
             StartType:       mgr.StartAutomatic,
             // Empty = Virtual Service Account
             ServiceStartName: "",
@@ -29337,17 +32616,17 @@ func installWindowsService() error {
 
 | Directory | Path | Purpose |
 |-----------|------|---------|
-| Binary | `C:\Program Files\{projectorg}\{projectname}\` | Executable |
-| Config | `C:\ProgramData\{projectorg}\{projectname}\config\` | Configuration files |
-| Data | `C:\ProgramData\{projectorg}\{projectname}\data\` | Application data |
-| Logs | `C:\ProgramData\{projectorg}\{projectname}\logs\` | Log files |
+| Binary | `C:\Program Files\apimgr\search\` | Executable |
+| Config | `C:\ProgramData\apimgr\search\config\` | Configuration files |
+| Data | `C:\ProgramData\apimgr\search\data\` | Application data |
+| Logs | `C:\ProgramData\apimgr\search\logs\` | Log files |
 
 ### Home Directory Selection
 
 | Directory | Use When |
 |-----------|----------|
-| Config dir (`/etc/{projectorg}/{projectname}`) | Default - user needs access to config files |
-| Data dir (`/var/lib/{projectorg}/{projectname}`) | When data dir contains user-writable content |
+| Config dir (`/etc/apimgr/search`) | Default - user needs access to config files |
+| Data dir (`/var/lib/apimgr/search`) | When data dir contains user-writable content |
 
 **Note:** Home directory must exist before user creation. Create directories first, then user, then set ownership.
 
@@ -29375,25 +32654,25 @@ func installWindowsService() error {
 
 ## Service Templates
 
-**Unix: Service starts as root, binary drops to `{projectname}` user after port binding.**
-**Windows: Service runs as Virtual Service Account (`NT SERVICE\{projectname}`).**
+**Unix: Service starts as root, binary drops to `search` user after port binding.**
+**Windows: Service runs as Virtual Service Account (`NT SERVICE\search`).**
 
 This allows any port configuration without service file changes.
 
 ### systemd (Linux)
 
-**Installation path:** `/etc/systemd/system/{projectname}.service`
+**Installation path:** `/etc/systemd/system/search.service`
 
 ```ini
 [Unit]
-Description={projectname} service
-Documentation=https://{projectorg}.github.io/{projectname}
+Description=search service
+Documentation=https://apimgr.github.io/search
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/{projectname}
+ExecStart=/usr/local/bin/search
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
@@ -29403,10 +32682,10 @@ StandardError=journal
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=/etc/{projectorg}/{projectname}
-ReadWritePaths=/var/lib/{projectorg}/{projectname}
-ReadWritePaths=/var/cache/{projectorg}/{projectname}
-ReadWritePaths=/var/log/{projectorg}/{projectname}
+ReadWritePaths=/etc/apimgr/search
+ReadWritePaths=/var/lib/apimgr/search
+ReadWritePaths=/var/cache/apimgr/search
+ReadWritePaths=/var/log/apimgr/search
 
 [Install]
 WantedBy=multi-user.target
@@ -29414,10 +32693,10 @@ WantedBy=multi-user.target
 
 ### runit (Linux)
 
-**Installation path:** `/etc/sv/{projectname}/`
+**Installation path:** `/etc/sv/search/`
 
 ```
-/etc/sv/{projectname}/
+/etc/sv/search/
 ├── run           # Main service script
 ├── log/
 │   └── run       # Logging script
@@ -29427,31 +32706,31 @@ WantedBy=multi-user.target
 **run script:**
 ```bash
 #!/bin/sh
-exec /usr/local/bin/{projectname} 2>&1
+exec /usr/local/bin/search 2>&1
 ```
 
 **log/run script:**
 ```bash
 #!/bin/sh
-exec svlogd -tt /var/log/{projectorg}/{projectname}
+exec svlogd -tt /var/log/apimgr/search
 ```
 
 ### rc.d (FreeBSD)
 
-**Installation path:** `/usr/local/etc/rc.d/{projectname}`
+**Installation path:** `/usr/local/etc/rc.d/search`
 
 ```bash
 #!/bin/sh
 
-# PROVIDE: {projectname}
+# PROVIDE: search
 # REQUIRE: NETWORKING
 # KEYWORD: shutdown
 
 . /etc/rc.subr
 
-name="{projectname}"
-rcvar="{projectname}_enable"
-command="/usr/local/bin/{projectname}"
+name="search"
+rcvar="search_enable"
+command="/usr/local/bin/search"
 
 load_rc_config $name
 run_rc_command "$1"
@@ -29459,7 +32738,7 @@ run_rc_command "$1"
 
 ### launchd (macOS)
 
-**Installation path:** `/Library/LaunchDaemons/{projectorg}.{projectname}.plist`
+**Installation path:** `/Library/LaunchDaemons/apimgr.search.plist`
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -29467,19 +32746,19 @@ run_rc_command "$1"
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>{projectorg}.{projectname}</string>
+    <string>apimgr.search</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/local/bin/{projectname}</string>
+        <string>/usr/local/bin/search</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/var/log/{projectorg}/{projectname}/stdout.log</string>
+    <string>/var/log/apimgr/search/stdout.log</string>
     <key>StandardErrorPath</key>
-    <string>/var/log/{projectorg}/{projectname}/stderr.log</string>
+    <string>/var/log/apimgr/search/stderr.log</string>
 </dict>
 </plist>
 ```
@@ -29487,13 +32766,13 @@ run_rc_command "$1"
 **Commands:**
 ```bash
 # Load and start service
-sudo launchctl load /Library/LaunchDaemons/{projectorg}.{projectname}.plist
+sudo launchctl load /Library/LaunchDaemons/apimgr.search.plist
 
 # Unload service
-sudo launchctl unload /Library/LaunchDaemons/{projectorg}.{projectname}.plist
+sudo launchctl unload /Library/LaunchDaemons/apimgr.search.plist
 
 # Check status
-sudo launchctl list | grep {projectname}
+sudo launchctl list | grep search
 ```
 
 ### Windows Service
@@ -29502,7 +32781,7 @@ sudo launchctl list | grep {projectname}
 
 | Account | Description |
 |---------|-------------|
-| `NT SERVICE\{projectname}` | Virtual Service Account - auto-managed by Windows |
+| `NT SERVICE\search` | Virtual Service Account - auto-managed by Windows |
 
 Use `golang.org/x/sys/windows/svc` for Windows service integration:
 
@@ -29512,7 +32791,7 @@ Use `golang.org/x/sys/windows/svc` for Windows service integration:
 import "golang.org/x/sys/windows/svc"
 
 func runAsService() error {
-    return svc.Run("{projectname}", &windowsService{})
+    return svc.Run("search", &windowsService{})
 }
 
 type windowsService struct{}
@@ -29546,7 +32825,7 @@ func (ws *windowsService) Execute(args []string, r <-chan svc.ChangeRequest, s c
 
 | Target | Purpose | Output Location | When to Use |
 |--------|---------|-----------------|-------------|
-| `dev` | Quick development build | `${TMPDIR}/${PROJECTORG}/${PROJECTNAME}-XXXXXX/` | Active coding, quick tests |
+| `dev` | Quick development build | `${TMPDIR}/$APIMGR/$SEARCH-XXXXXX/` | Active coding, quick tests |
 | `local` | Production test build | `binaries/` (with version) | Test prod builds locally |
 | `build` | Full release (all 8 platforms) | `binaries/` | Before release |
 | `test` | Run unit tests | Coverage report | After code changes |
@@ -29642,13 +32921,13 @@ format_version_tag() {
 
 ### Naming Pattern
 
-**Pattern: `{projectname}[-type]-{os}-{arch}[.exe]`**
+**Pattern: `search[-type]-{os}-{arch}[.exe]`**
 
 | Binary | Local Build | Distribution |
 |--------|------------|--------------|
-| **Server** | `{projectname}` | `{projectname}-{os}-{arch}` |
-| **CLI** | `{projectname}-cli` | `{projectname}-cli-{os}-{arch}` |
-| **Agent** | `{projectname}-agent` | `{projectname}-agent-{os}-{arch}` |
+| **Server** | `search` | `search-{os}-{arch}` |
+| **CLI** | `search-cli` | `search-cli-{os}-{arch}` |
+| **Agent** | `search-agent` | `search-agent-{os}-{arch}` |
 
 ### Examples
 
@@ -29662,22 +32941,22 @@ format_version_tag() {
 
 ```
 binaries/
-├── {projectname}                      # Local server binary
-├── {projectname}-cli                  # Local CLI binary (if src/client/ exists)
-├── {projectname}-agent                # Local agent binary (if src/agent/ exists)
-├── {projectname}-linux-amd64          # Server distributions
-├── {projectname}-linux-arm64
-├── {projectname}-darwin-amd64
-├── {projectname}-darwin-arm64
-├── {projectname}-windows-amd64.exe
-├── {projectname}-windows-arm64.exe
-├── {projectname}-freebsd-amd64
-├── {projectname}-freebsd-arm64
-├── {projectname}-cli-linux-amd64      # CLI distributions
-├── {projectname}-cli-linux-arm64
+├── search                      # Local server binary
+├── search-cli                  # Local CLI binary (if src/client/ exists)
+├── search-agent                # Local agent binary (if src/agent/ exists)
+├── search-linux-amd64          # Server distributions
+├── search-linux-arm64
+├── search-darwin-amd64
+├── search-darwin-arm64
+├── search-windows-amd64.exe
+├── search-windows-arm64.exe
+├── search-freebsd-amd64
+├── search-freebsd-arm64
+├── search-cli-linux-amd64      # CLI distributions
+├── search-cli-linux-arm64
 ├── ...
-├── {projectname}-agent-linux-amd64    # Agent distributions
-├── {projectname}-agent-linux-arm64
+├── search-agent-linux-amd64    # Agent distributions
+├── search-agent-linux-arm64
 └── ...
 ```
 
@@ -29685,7 +32964,7 @@ binaries/
 
 | Context | Path |
 |---------|------|
-| Temp build | `$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-XXXXXX")` |
+| Temp build | `$(mktemp -d "${TMPDIR:-/tmp}/$APIMGR/$SEARCH-XXXXXX")` |
 
 **If built with musl → strip binary before release. Final name has NO `-musl` suffix.**
 
@@ -30001,8 +33280,8 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 2. Creates cache directories if needed
 3. Downloads Go modules (cached)
 4. Creates `binaries/` directory
-5. Builds local binary: `binaries/{projectname}`
-6. Builds all platform binaries: `binaries/{projectname}-{os}-{arch}`
+5. Builds local binary: `binaries/search`
+6. Builds all platform binaries: `binaries/search-{os}-{arch}`
 7. Uses `CGO_ENABLED=0` for static binaries
 8. Embeds Version, CommitID, BuildDate via `-ldflags`
 9. All builds via Docker (`golang:alpine`)
@@ -30041,9 +33320,9 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 1. Quick build for local development/testing
 2. Builds local platform only (fastest)
 3. No `-ldflags` (version info not embedded)
-4. Outputs to `{tempdir}/{projectorg}/{projectname}-XXXXXX/` (isolated, org-identifiable)
+4. Outputs to `{tempdir}/apimgr/search-XXXXXX/` (isolated, org-identifiable)
 5. Uses Docker (`golang:alpine`) - keeps local machine clean
-6. Easy cleanup: `rm -rf "${TMPDIR:-/tmp}"/${PROJECTORG}.*/` or auto-deleted on reboot
+6. Easy cleanup: `rm -rf "${TMPDIR:-/tmp}"/$APIMGR.*/` or auto-deleted on reboot
 
 ### `make local`
 
@@ -30058,7 +33337,7 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 
 | Command | Purpose | Output | When to Use |
 |---------|---------|--------|-------------|
-| `make dev` | **Development & Debugging** | `${TMPDIR}/${PROJECTORG}/${PROJECTNAME}-XXXXXX/` | Active coding, quick tests, debugging |
+| `make dev` | **Development & Debugging** | `${TMPDIR}/$APIMGR/$SEARCH-XXXXXX/` | Active coding, quick tests, debugging |
 | `make local` | **Production Testing** | `binaries/` (with version) | Test production builds locally before release |
 | `make build` | **Full Release Build** | `binaries/` (all 8 platforms) | Before tagging release, cross-platform verification |
 | `make test` | **Unit Tests** | Coverage report | After code changes, before commits |
@@ -30078,13 +33357,13 @@ All Docker builds use persistent Go module caching to avoid re-downloading depen
 
 ```bash
 # After make dev, test in Docker with debug tools
-BUILD_DIR=$(ls -td ${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-*/ 2>/dev/null | head -1)
+BUILD_DIR=$(ls -td ${TMPDIR:-/tmp}/$APIMGR/$SEARCH-*/ 2>/dev/null | head -1)
 docker run --rm -it \
   -v "$BUILD_DIR:/app" \
   alpine:latest sh -c "
     apk add --no-cache curl bash file jq
-    /app/${PROJECTNAME} --help
-    /app/${PROJECTNAME} --version
+    /app/$SEARCH --help
+    /app/$SEARCH --version
     # Debug interactively...
   "
 ```
@@ -30170,34 +33449,34 @@ The **only** time binaries are copied is during CI/CD release process, where the
 
 | File | Description |
 |------|-------------|
-| `{projectname}-linux-amd64` | Linux AMD64 server binary |
-| `{projectname}-linux-arm64` | Linux ARM64 server binary |
-| `{projectname}-darwin-amd64` | macOS AMD64 server binary |
-| `{projectname}-darwin-arm64` | macOS ARM64 (Apple Silicon) server binary |
-| `{projectname}-windows-amd64.exe` | Windows AMD64 server binary |
-| `{projectname}-windows-arm64.exe` | Windows ARM64 server binary |
-| `{projectname}-freebsd-amd64` | FreeBSD AMD64 server binary |
-| `{projectname}-freebsd-arm64` | FreeBSD ARM64 server binary |
+| `search-linux-amd64` | Linux AMD64 server binary |
+| `search-linux-arm64` | Linux ARM64 server binary |
+| `search-darwin-amd64` | macOS AMD64 server binary |
+| `search-darwin-arm64` | macOS ARM64 (Apple Silicon) server binary |
+| `search-windows-amd64.exe` | Windows AMD64 server binary |
+| `search-windows-arm64.exe` | Windows ARM64 server binary |
+| `search-freebsd-amd64` | FreeBSD AMD64 server binary |
+| `search-freebsd-arm64` | FreeBSD ARM64 server binary |
 
 ### CLI Binaries (If Project Has CLI)
 
 | File | Description |
 |------|-------------|
-| `{projectname}-cli-linux-amd64` | Linux AMD64 CLI binary |
-| `{projectname}-cli-linux-arm64` | Linux ARM64 CLI binary |
-| `{projectname}-cli-darwin-amd64` | macOS AMD64 CLI binary |
-| `{projectname}-cli-darwin-arm64` | macOS ARM64 (Apple Silicon) CLI binary |
-| `{projectname}-cli-windows-amd64.exe` | Windows AMD64 CLI binary |
-| `{projectname}-cli-windows-arm64.exe` | Windows ARM64 CLI binary |
-| `{projectname}-cli-freebsd-amd64` | FreeBSD AMD64 CLI binary |
-| `{projectname}-cli-freebsd-arm64` | FreeBSD ARM64 CLI binary |
+| `search-cli-linux-amd64` | Linux AMD64 CLI binary |
+| `search-cli-linux-arm64` | Linux ARM64 CLI binary |
+| `search-cli-darwin-amd64` | macOS AMD64 CLI binary |
+| `search-cli-darwin-arm64` | macOS ARM64 (Apple Silicon) CLI binary |
+| `search-cli-windows-amd64.exe` | Windows AMD64 CLI binary |
+| `search-cli-windows-arm64.exe` | Windows ARM64 CLI binary |
+| `search-cli-freebsd-amd64` | FreeBSD AMD64 CLI binary |
+| `search-cli-freebsd-arm64` | FreeBSD ARM64 CLI binary |
 
 ### Metadata Files (Always)
 
 | File | Description | Example Content |
 |------|-------------|-----------------|
 | `version.txt` | Version string only | `1.2.3`, `20251218060432-beta`, `20251218060432` |
-| `{projectname}-{version}-source.tar.gz` | Source code archive | Excludes `.git`, `.github`, `binaries/`, `releases/` |
+| `search-{version}-source.tar.gz` | Source code archive | Excludes `.git`, `.github`, `binaries/`, `releases/` |
 
 ### version.txt Content
 
@@ -30337,7 +33616,7 @@ docker/
 | Meta labels | All OCI labels (see below) |
 | Required packages | git, curl, bash, tini, tor |
 | Tor handling | Installed but **binary controls** (see PART 32) |
-| Binary location | `/usr/local/bin/{projectname}` |
+| Binary location | `/usr/local/bin/search` |
 | Entrypoint script | `/usr/local/bin/entrypoint.sh` |
 | Init system | **tini** |
 | Internal port | **80** |
@@ -30349,21 +33628,21 @@ docker/
 
 | Path | Purpose |
 |------|---------|
-| `/config/{projectname}/` | Binary's {config_dir} (server.yml, etc.) |
-| `/config/{projectname}/security/` | Security databases (geoip, blocklists, cve, trivy) |
-| `/config/{projectname}/tor/` | Tor config (torrc) - binary owns Tor |
+| `/config/search/` | Binary's {config_dir} (server.yml, etc.) |
+| `/config/search/security/` | Security databases (geoip, blocklists, cve, trivy) |
+| `/config/search/tor/` | Tor config (torrc) - binary owns Tor |
 | `/config/{servicename}/` | External service configs (valkey, nginx, etc.) |
-| `/data/{projectname}/` | Binary's {data_dir} |
-| `/data/{projectname}/tor/` | Tor data (hidden service keys) - binary owns Tor |
+| `/data/search/` | Binary's {data_dir} |
+| `/data/search/tor/` | Tor data (hidden service keys) - binary owns Tor |
 | `/data/db/{dbtype}/` | Database data (postgres, valkey, mssql, etc.) |
-| `/data/log/{projectname}/` | App logs (access.log, error.log, tor.log, etc.) |
+| `/data/log/search/` | App logs (access.log, error.log, tor.log, etc.) |
 | `/data/log/{servicename}/` | Service logs (nginx, caddy, etc.) |
-| `/data/backups/{projectname}/` | Backup archives |
+| `/data/backups/search/` | Backup archives |
 | `/data/{servicename}/` | External service data (nginx, apache, etc.) |
-| `/usr/local/bin/{projectname}` | Application binary |
+| `/usr/local/bin/search` | Application binary |
 | `/root/Dockerfile` | Build reference and backup |
 
-**Key principle:** Binary owns Tor completely - Tor dirs are under `{projectname}/`, not separate.
+**Key principle:** Binary owns Tor completely - Tor dirs are under `search/`, not separate.
 
 ### OCI Meta Labels (Required)
 
@@ -30372,11 +33651,11 @@ All Dockerfiles MUST include these labels:
 | Label | Value |
 |-------|-------|
 | `maintainer` | `{maintainer_name} <{maintainer_email}>` |
-| `org.opencontainers.image.vendor` | `{projectorg}` |
-| `org.opencontainers.image.authors` | `{projectorg}` |
-| `org.opencontainers.image.title` | `{projectname}` |
-| `org.opencontainers.image.base.name` | `{projectname}` |
-| `org.opencontainers.image.description` | `{projectname} - standard image (alpine)` or `{projectname} - all-in-one (...)` |
+| `org.opencontainers.image.vendor` | `apimgr` |
+| `org.opencontainers.image.authors` | `apimgr` |
+| `org.opencontainers.image.title` | `search` |
+| `org.opencontainers.image.base.name` | `search` |
+| `org.opencontainers.image.description` | `search - standard image (alpine)` or `search - all-in-one (...)` |
 | `org.opencontainers.image.licenses` | License (e.g., `MIT`) |
 | `org.opencontainers.image.created` | `${BUILD_DATE}` (ARG) |
 | `org.opencontainers.image.version` | `${VERSION}` (ARG) |
@@ -30450,7 +33729,7 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags "-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}' -X 'main.OfficialSite=${OFFICIALSITE}'" \
-    -o /build/binary/{projectname} src
+    -o /build/binary/search src
 
 # =============================================================================
 # Runtime Stage - Minimal Alpine image
@@ -30465,11 +33744,11 @@ ARG LICENSE=MIT
 
 # Static Labels
 LABEL maintainer="{maintainer_name} <{maintainer_email}>" \
-      org.opencontainers.image.vendor="{projectorg}" \
-      org.opencontainers.image.authors="{projectorg}" \
-      org.opencontainers.image.title="{projectname}" \
-      org.opencontainers.image.base.name="{projectname}" \
-      org.opencontainers.image.description="{projectname} - standard image (alpine)" \
+      org.opencontainers.image.vendor="apimgr" \
+      org.opencontainers.image.authors="apimgr" \
+      org.opencontainers.image.title="search" \
+      org.opencontainers.image.base.name="search" \
+      org.opencontainers.image.description="search - standard image (alpine)" \
       org.opencontainers.image.url="{PLATFORM_REPO_URL}" \
       org.opencontainers.image.source="{PLATFORM_REPO_URL}" \
       org.opencontainers.image.documentation="{PLATFORM_REPO_URL}" \
@@ -30497,7 +33776,7 @@ RUN apk add --no-cache \
 # Docker volume mounts auto-create mount points
 
 # Copy binary from builder stage (multi-stage build)
-COPY --from=builder /build/binary/{projectname} /usr/local/bin/{projectname}
+COPY --from=builder /build/binary/search /usr/local/bin/search
 
 # Copy BUILD-TIME overlay (entrypoint.sh) from docker/file_system/ into image
 # Note: This is docker/file_system/ (build context), NOT runtime ./rootfs/ volumes
@@ -30522,7 +33801,7 @@ STOPSIGNAL SIGRTMIN+3
 
 # Health check (long start period for services that need initialization)
 HEALTHCHECK --start-period=10m --interval=5m --timeout=15s --retries=3 \
-    CMD /usr/local/bin/{projectname} --status || exit 1
+    CMD /usr/local/bin/search --status || exit 1
 
 # Use tini as init with signal propagation
 # -p SIGTERM: propagate SIGTERM to child processes
@@ -30563,7 +33842,7 @@ set -e
 # Binary handles: directories, permissions, user/group, Tor, etc.
 # =============================================================================
 
-APP_NAME="{projectname}"
+APP_NAME="search"
 APP_BIN="/usr/local/bin/${APP_NAME}"
 
 # Export environment defaults (binary reads these)
@@ -30664,23 +33943,23 @@ exec $APP_BIN $FLAGS "$@"
 |-------------|-------|
 | `build:` | **NEVER include** |
 | `version:` | **NEVER include** |
-| `name:` | `{projectname}` (top-level) |
-| `container_name:` | `{projectname}-{servicename}` |
+| `name:` | `search` (top-level) |
+| `container_name:` | `search-{servicename}` |
 | Main service name | `server` (not `app`) |
 | `pull_policy:` | `always` |
 | `restart:` | `always` |
 | `x-logging:` | Anchor for consistent logging (see below) |
-| Network | Custom `{projectname}` with `external: false` |
+| Network | Custom `search` with `external: false` |
 | Environment variables | **Hardcode with sane defaults** (NEVER use .env files) |
 | **environment: MODE** | **production** (strict host validation) |
 
 ### Docker Compose Structure 
 
 ```yaml
-# {projectname} - {brief description}
+# search - {brief description}
 # nginx proxy address - http://172.17.0.1:{port}
 
-name: {projectname}
+name: search
 
 x-logging: &default-logging
   options:
@@ -30690,8 +33969,8 @@ x-logging: &default-logging
 
 services:
   server:
-    image: {PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:latest
-    container_name: {projectname}-server
+    image: {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest
+    container_name: search-server
     hostname: ${BASE_HOST_NAME:-$HOSTNAME}
     restart: always
     pull_policy: always
@@ -30707,17 +33986,17 @@ services:
     ports:
       - '172.17.0.1:64580:80'
     healthcheck:
-      test: /usr/local/bin/{projectname} --status
+      test: /usr/local/bin/search --status
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 90s
     networks:
-      - {projectname}
+      - search
 
 networks:
-  {projectname}:
-    name: {projectname}
+  search:
+    name: search
     external: false
 ```
 
@@ -30725,14 +34004,14 @@ networks:
 
 | Field | Value | Description |
 |-------|-------|-------------|
-| `name:` | `{projectname}` | Top-level compose project name |
-| `container_name:` | `{projectname}-{servicename}` | e.g., `jokes-server`, `jokes-db`, `jokes-cache` |
+| `name:` | `search` | Top-level compose project name |
+| `container_name:` | `search-{servicename}` | e.g., `jokes-server`, `jokes-db`, `jokes-cache` |
 | Main service | `server` | Primary application service (not `app`) |
 | `hostname:` | `${BASE_HOST_NAME:-$HOSTNAME}` | Uses env or system hostname |
 | `restart:` | `always` | Always restart on failure |
 | `pull_policy:` | `always` | Always pull latest image |
 | `logging:` | `*default-logging` | Use the logging anchor |
-| `networks:` | `{projectname}` | Isolated network per project |
+| `networks:` | `search` | Isolated network per project |
 
 ### Logging Anchor 
 
@@ -30756,10 +34035,10 @@ services:
 ### Multi-Service Example
 
 ```yaml
-# {projectname} - with Redis cache
+# search - with Redis cache
 # nginx proxy address - http://172.17.0.1:64580
 
-name: {projectname}
+name: search
 
 x-logging: &default-logging
   options:
@@ -30769,8 +34048,8 @@ x-logging: &default-logging
 
 services:
   server:
-    image: ghcr.io/{projectorg}/{projectname}:latest
-    container_name: {projectname}-server
+    image: ghcr.io/apimgr/search:latest
+    container_name: search-server
     hostname: ${BASE_HOST_NAME:-$HOSTNAME}
     restart: always
     pull_policy: always
@@ -30786,7 +34065,7 @@ services:
     ports:
       - '172.17.0.1:64580:80'
     healthcheck:
-      test: /usr/local/bin/{projectname} --status
+      test: /usr/local/bin/search --status
       interval: 10s
       timeout: 5s
       retries: 3
@@ -30795,11 +34074,11 @@ services:
       cache:
         condition: service_healthy
     networks:
-      - {projectname}
+      - search
 
   cache:
     image: redis:alpine
-    container_name: {projectname}-cache
+    container_name: search-cache
     hostname: ${BASE_HOST_NAME:-$HOSTNAME}
     restart: always
     pull_policy: always
@@ -30813,11 +34092,11 @@ services:
       retries: 3
       start_period: 30s
     networks:
-      - {projectname}
+      - search
 
 networks:
-  {projectname}:
-    name: {projectname}
+  search:
+    name: search
     external: false
 ```
 
@@ -30850,7 +34129,7 @@ networks:
 - Uses SQLite (embedded) or embedded key-value store
 - Valkey/Redis runs inside container via supervisor or embedded
 - Service name: `server`
-- Container name: `{projectname}-server`
+- Container name: `search-server`
 - Simpler deployment, single image
 - **Trade-offs:** No horizontal scaling, single point of failure, harder to debug
 
@@ -30866,11 +34145,11 @@ networks:
 **All-in-One docker-compose (`docker/all-in-one.yml`):**
 
 ```yaml
-# {projectname} - All-in-One (app + embedded DB)
+# search - All-in-One (app + embedded DB)
 # nginx proxy address - http://172.17.0.1:64580
 # Usage: docker compose -f all-in-one.yml up -d
 
-name: {projectname}
+name: search
 
 x-logging: &default-logging
   options:
@@ -30880,8 +34159,8 @@ x-logging: &default-logging
 
 services:
   server:
-    image: ghcr.io/{projectorg}/{projectname}-aio:latest
-    container_name: {projectname}-server
+    image: ghcr.io/apimgr/search-aio:latest
+    container_name: search-server
     hostname: ${BASE_HOST_NAME:-$HOSTNAME}
     restart: always
     pull_policy: always
@@ -30897,17 +34176,17 @@ services:
     ports:
       - '172.17.0.1:64580:80'
     healthcheck:
-      test: /usr/local/bin/{projectname} --status
+      test: /usr/local/bin/search --status
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 90s
     networks:
-      - {projectname}
+      - search
 
 networks:
-  {projectname}:
-    name: {projectname}
+  search:
+    name: search
     external: false
 ```
 
@@ -30938,13 +34217,13 @@ networks:
 ```dockerfile
 # All-in-One Dockerfile - includes app + postgresql + valkey + tor
 # Base: debian:latest (stable, broad compatibility)
-# Image name: {PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}-aio:latest
+# Image name: {PLATFORM_CONTAINER_REGISTRY}/apimgr/search-aio:latest
 # PORTS: Only 80 exposed (db/cache are internal-only)
 
 FROM debian:latest
 
 LABEL org.opencontainers.image.source="{PLATFORM_REPO_URL}"
-LABEL org.opencontainers.image.description="{projectname} - all-in-one (debian + postgresql + valkey + tor)"
+LABEL org.opencontainers.image.description="search - all-in-one (debian + postgresql + valkey + tor)"
 LABEL org.opencontainers.image.licenses="MIT"
 
 # Install dependencies (PostgreSQL + Valkey + Tor + Supervisor)
@@ -30960,11 +34239,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Create directories - organized by component
-RUN mkdir -p /config/{projectname} /config/{projectname}/security /config/{projectname}/tor \
+RUN mkdir -p /config/search /config/search/security /config/search/tor \
              /config/valkey /config/postgres \
-             /data/{projectname} /data/{projectname}/tor \
+             /data/search /data/search/tor \
              /data/db/postgres /data/db/valkey \
-             /data/log/{projectname} /data/backups/{projectname} \
+             /data/log/search /data/backups/search \
              /run/postgresql /run/valkey \
     && chown -R postgres:postgres /data/db/postgres /run/postgresql
 
@@ -30972,8 +34251,8 @@ RUN mkdir -p /config/{projectname} /config/{projectname}/security /config/{proje
 COPY docker/file_system/ /
 
 # Copy application binary from builder or pre-built
-COPY {projectname} /usr/local/bin/
-RUN chmod +x /usr/local/bin/{projectname} /usr/local/bin/entrypoint.sh
+COPY search /usr/local/bin/
+RUN chmod +x /usr/local/bin/search /usr/local/bin/entrypoint.sh
 
 # Default environment
 ENV MODE=production \
@@ -30982,8 +34261,8 @@ ENV MODE=production \
     TZ=America/New_York \
     PGDATA=/data/db \
     DB_HOST=/run/postgresql \
-    DB_NAME={projectname} \
-    DB_USER={projectname} \
+    DB_NAME=search \
+    DB_USER=search \
     VALKEY_SOCKET=/run/valkey/valkey.sock
 
 # Only expose app port - db/cache are internal
@@ -31029,7 +34308,7 @@ stdout_logfile=/data/log/tor.log
 stderr_logfile=/data/log/tor.log
 
 [program:app]
-command=/usr/local/bin/{projectname}
+command=/usr/local/bin/search
 autostart=true
 autorestart=true
 priority=100
@@ -31148,9 +34427,9 @@ if [ ! -f /data/db/postgres/PG_VERSION ]; then
     sleep 3
 
     # Create application database and user
-    su - postgres -c "psql -c \"CREATE USER ${DB_USER:-{projectname}} WITH PASSWORD '${DB_PASSWORD:-{projectname}}';\""
-    su - postgres -c "psql -c \"CREATE DATABASE ${DB_NAME:-{projectname}} OWNER ${DB_USER:-{projectname}};\""
-    su - postgres -c "psql -c \"GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME:-{projectname}} TO ${DB_USER:-{projectname}};\""
+    su - postgres -c "psql -c \"CREATE USER ${DB_USER:-search} WITH PASSWORD '${DB_PASSWORD:-search}';\""
+    su - postgres -c "psql -c \"CREATE DATABASE ${DB_NAME:-search} OWNER ${DB_USER:-search};\""
+    su - postgres -c "psql -c \"GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME:-search} TO ${DB_USER:-search};\""
 
     # Stop PostgreSQL (supervisor will start it)
     su - postgres -c "/usr/lib/postgresql/15/bin/pg_ctl -D /data/db/postgres stop"
@@ -31178,9 +34457,9 @@ exec /usr/bin/supervisord -c /etc/supervisor/supervisord.conf
 | `PORT` | `80` | Application port |
 | `DEBUG` | `false` | Debug mode |
 | `TZ` | `America/New_York` | Timezone |
-| `DB_NAME` | `{projectname}` | PostgreSQL database name |
-| `DB_USER` | `{projectname}` | PostgreSQL username |
-| `DB_PASSWORD` | `{projectname}` | PostgreSQL password |
+| `DB_NAME` | `search` | PostgreSQL database name |
+| `DB_USER` | `search` | PostgreSQL username |
+| `DB_PASSWORD` | `search` | PostgreSQL password |
 | `TOR_ENABLED` | `false` | Enable Tor hidden service |
 
 **App Connection Strings (internal):**
@@ -31197,10 +34476,10 @@ valkeyURL := "unix:///run/valkey/valkey.sock"
 
 ```bash
 # Standard image (context is project root)
-docker build -t {PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:latest -f docker/Dockerfile .
+docker build -t {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest -f docker/Dockerfile .
 
 # All-in-one image (context is project root)
-docker build -t {PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}-aio:latest -f docker/Dockerfile.aio .
+docker build -t {PLATFORM_CONTAINER_REGISTRY}/apimgr/search-aio:latest -f docker/Dockerfile.aio .
 ```
 
 **When to use All-in-One:**
@@ -31266,16 +34545,16 @@ $TEMP_DIR/
 
 | Container Path | Contents |
 |----------------|----------|
-| `/config/{projectname}/` | Binary's {config_dir} - server.yml, etc. |
-| `/config/{projectname}/security/` | TLS certs, keys, security DBs |
-| `/config/{projectname}/tor/` | Tor config (torrc) - binary owns Tor |
+| `/config/search/` | Binary's {config_dir} - server.yml, etc. |
+| `/config/search/security/` | TLS certs, keys, security DBs |
+| `/config/search/tor/` | Tor config (torrc) - binary owns Tor |
 | `/config/{servicename}/` | External service configs (valkey, nginx, etc.) |
-| `/data/{projectname}/` | Binary's {data_dir} |
-| `/data/{projectname}/tor/` | Tor data (hidden service keys) - binary owns Tor |
+| `/data/search/` | Binary's {data_dir} |
+| `/data/search/tor/` | Tor data (hidden service keys) - binary owns Tor |
 | `/data/db/{dbtype}/` | Database data (postgres, valkey, sqlite, etc.) |
-| `/data/log/{projectname}/` | App logs (access.log, error.log, tor.log) |
+| `/data/log/search/` | App logs (access.log, error.log, tor.log) |
 | `/data/log/{servicename}/` | Service logs (nginx, caddy, etc.) |
-| `/data/backups/{projectname}/` | Backup files |
+| `/data/backups/search/` | Backup files |
 | `/data/{servicename}/` | External service data (nginx, apache, etc.) |
 
 **Rules:**
@@ -31296,12 +34575,12 @@ $TEMP_DIR/
 5. Data lives in temp dir, isolated from project
 
 ```bash
-# Setup (uses OS temp dir: {ostempdir}/{projectorg}/{projectname}-XXXXXX/)
+# Setup (uses OS temp dir: {ostempdir}/apimgr/search-XXXXXX/)
 # Set PROJECT_ROOT to your actual project location
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"  # Use git top-level
 # Or use absolute path: PROJECT_ROOT="/path/to/your/project"
-mkdir -p "${TMPDIR:-/tmp}/${PROJECTORG}"
-TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-XXXXXX")
+mkdir -p "${TMPDIR:-/tmp}/$APIMGR"
+TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/$APIMGR/$SEARCH-XXXXXX")
 mkdir -p "$TEMP_DIR/rootfs/config" "$TEMP_DIR/rootfs/data"
 
 # Copy docker-compose.yml
@@ -31373,12 +34652,12 @@ rm -rf "$TEMP_DIR"
 Development mode with optional debug. Humans run this manually for local development.
 
 ```yaml
-name: {projectname}-dev
+name: search-dev
 
 services:
-  {projectname}:
-    image: {PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:latest
-    container_name: {projectname}-dev
+  search:
+    image: {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest
+    container_name: search-dev
     restart: unless-stopped
     environment:
       # Development: relaxed security, verbose logging, no caching
@@ -31396,18 +34675,18 @@ services:
       - ./rootfs/config:/config
       - ./rootfs/data:/data
     networks:
-      - {projectname}-dev
+      - search-dev
 
 networks:
-  {projectname}-dev:
-    name: {projectname}-dev
+  search-dev:
+    name: search-dev
     external: false
 ```
 
 **Run:**
 ```bash
-mkdir -p "${TMPDIR:-/tmp}/{projectorg}"
-TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/{projectorg}/{projectname}-XXXXXX")
+mkdir -p "${TMPDIR:-/tmp}/apimgr"
+TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/apimgr/search-XXXXXX")
 mkdir -p "$TEMP_DIR/rootfs/config" "$TEMP_DIR/rootfs/data"
 cp docker/docker-compose.dev.yml "$TEMP_DIR/docker-compose.yml"
 cd "$TEMP_DIR" && docker compose up -d
@@ -31422,12 +34701,12 @@ cd "$TEMP_DIR" && docker compose up -d
 Production has NO debug options. Debug must be set via CLI if needed. Humans deploy this for production use.
 
 ```yaml
-name: {projectname}
+name: search
 
 services:
-  {projectname}:
-    image: {PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:latest
-    container_name: {projectname}
+  search:
+    image: {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest
+    container_name: search
     restart: unless-stopped
     environment:
       # Production: strict security, minimal logging, caching enabled
@@ -31450,18 +34729,18 @@ services:
       - ./rootfs/config:/config:z
       - ./rootfs/data:/data:z
     networks:
-      - {projectname}
+      - search
 
 networks:
-  {projectname}:
-    name: {projectname}
+  search:
+    name: search
     external: false
 ```
 
 **Run:**
 ```bash
-mkdir -p "${TMPDIR:-/tmp}/{projectorg}"
-TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/{projectorg}/{projectname}-XXXXXX")
+mkdir -p "${TMPDIR:-/tmp}/apimgr"
+TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/apimgr/search-XXXXXX")
 mkdir -p "$TEMP_DIR/rootfs/config" "$TEMP_DIR/rootfs/data"
 cp docker/docker-compose.yml "$TEMP_DIR/"
 cd "$TEMP_DIR" && docker compose up -d
@@ -31476,12 +34755,12 @@ cd "$TEMP_DIR" && docker compose up -d
 Debug enabled for test visibility. **MUST be copied to temp directory before use - NEVER run from project directory.**
 
 ```yaml
-name: {projectname}-test
+name: search-test
 
 services:
-  {projectname}:
-    image: {PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:latest
-    container_name: {projectname}-test
+  search:
+    image: {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest
+    container_name: search-test
     restart: "no"
     environment:
       - MODE=development
@@ -31496,18 +34775,18 @@ services:
       - ./rootfs/config:/config
       - ./rootfs/data:/data
     networks:
-      - {projectname}-test
+      - search-test
 
 networks:
-  {projectname}-test:
-    name: {projectname}-test
+  search-test:
+    name: search-test
     external: false
 ```
 
 **AI/Automated Testing Workflow (REQUIRED):**
 ```bash
-mkdir -p "${TMPDIR:-/tmp}/{projectorg}"
-TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/{projectorg}/{projectname}-XXXXXX")
+mkdir -p "${TMPDIR:-/tmp}/apimgr"
+TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/apimgr/search-XXXXXX")
 mkdir -p "$TEMP_DIR/rootfs/config" "$TEMP_DIR/rootfs/data"
 cp docker/docker-compose.test.yml "$TEMP_DIR/docker-compose.yml"
 cd "$TEMP_DIR" && docker compose up --abort-on-container-exit
@@ -31519,12 +34798,12 @@ rm -rf "$TEMP_DIR"  # Cleanup after tests
 **Location:** `docker/docker-compose.yml`
 
 ```yaml
-name: {projectname}
+name: search
 
 services:
-  {projectname}:
-    image: {PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:latest
-    container_name: {projectname}
+  search:
+    image: {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest
+    container_name: search
     restart: unless-stopped
     depends_on:
       - postgres
@@ -31537,9 +34816,9 @@ services:
       # - DOMAIN=myapp.com,www.myapp.com,api.myapp.com
       - DB_HOST=postgres
       - DB_PORT=5432
-      - DB_NAME={projectname}
-      - DB_USER={projectname}
-      - DB_PASS={projectname}
+      - DB_NAME=search
+      - DB_USER=search
+      - DB_PASS=search
     ports:
       # Production: bound to Docker bridge only (reverse proxy handles external)
       - "172.17.0.1:64580:80"
@@ -31547,25 +34826,25 @@ services:
       - ./rootfs/config:/config:z
       - ./rootfs/data:/data:z
     networks:
-      - {projectname}
+      - search
 
   postgres:
     image: postgres:alpine
-    container_name: {projectname}-postgres
+    container_name: search-postgres
     restart: unless-stopped
     environment:
-      - POSTGRES_DB={projectname}
-      - POSTGRES_USER={projectname}
-      - POSTGRES_PASSWORD={projectname}
+      - POSTGRES_DB=search
+      - POSTGRES_USER=search
+      - POSTGRES_PASSWORD=search
       - TZ=America/New_York
     volumes:
       - ./rootfs/data/db/postgres:/var/lib/postgresql/data:z
     networks:
-      - {projectname}
+      - search
 
 networks:
-  {projectname}:
-    name: {projectname}
+  search:
+    name: search
     external: false
 ```
 
@@ -31576,15 +34855,15 @@ networks:
 | Setting | Value |
 |---------|-------|
 | Internal port | **80** (always) |
-| Config dir | `/config/{projectname}/` (binary's {config_dir}) |
-| Security dir | `/config/{projectname}/security/` |
-| Tor config dir | `/config/{projectname}/tor/` (binary owns Tor) |
-| Data dir | `/data/{projectname}/` (binary's {data_dir}) |
-| Tor data dir | `/data/{projectname}/tor/` (binary owns Tor) |
+| Config dir | `/config/search/` (binary's {config_dir}) |
+| Security dir | `/config/search/security/` |
+| Tor config dir | `/config/search/tor/` (binary owns Tor) |
+| Data dir | `/data/search/` (binary's {data_dir}) |
+| Tor data dir | `/data/search/tor/` (binary owns Tor) |
 | Database dir | `/data/db/{dbtype}/` (postgres, valkey, sqlite) |
-| Log dir | `/data/log/{projectname}/` |
-| Backup dir | `/data/backups/{projectname}/` |
-| Binary | `/usr/local/bin/{projectname}` |
+| Log dir | `/data/log/search/` |
+| Backup dir | `/data/backups/search/` |
+| Binary | `/usr/local/bin/search` |
 | HEALTHCHECK | `{binary} --status` |
 
 **Path Mapping (Container vs Local):**
@@ -31593,8 +34872,8 @@ networks:
 |----------------|-----------|---------|
 | `/config` | `./rootfs/config` | Configuration root (organized by component) |
 | `/data` | `./rootfs/data` | Data root (organized by component) |
-| `/config/{projectname}/` | `./rootfs/config/{projectname}/` | Binary's config |
-| `/data/{projectname}/` | `./rootfs/data/{projectname}/` | Binary's data |
+| `/config/search/` | `./rootfs/config/search/` | Binary's config |
+| `/data/search/` | `./rootfs/data/search/` | Binary's data |
 | `/data/db/` | `./rootfs/data/db/` | Database data |
 | `/data/log/` | `./rootfs/data/log/` | Log files |
 
@@ -31606,10 +34885,10 @@ networks:
 |----------|-------------|
 | Auto-detection | Tor starts automatically if `tor` binary is installed |
 | Always enabled | Docker image includes `tor`, so always enabled in containers |
-| Config location | Torrc in `/config/{projectname}/tor/torrc` |
-| Data persistence | Tor keys in `/data/{projectname}/tor/site/` (survives restart) |
+| Config location | Torrc in `/config/search/tor/torrc` |
+| Data persistence | Tor keys in `/data/search/tor/site/` (survives restart) |
 | .onion address | Persists across container restarts via volume mount |
-| Binary owns Tor | Tor dirs under `{projectname}/`, not separate service |
+| Binary owns Tor | Tor dirs under `search/`, not separate service |
 
 ## Container Detection
 
@@ -31632,17 +34911,17 @@ networks:
 
 | Tag | Description | Example |
 |-----|-------------|---------|
-| `{PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:latest` | Latest stable release | `ghcr.io/myorg/myapp:latest` |
-| `{PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:{version}` | Specific version | `ghcr.io/myorg/myapp:1.2.3` |
-| `{PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:{YYMM}` | Year/month tag | `ghcr.io/myorg/myapp:2512` |
-| `{PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:{commit}` | Git commit (7 char) | `ghcr.io/myorg/myapp:abc1234` |
+| `{PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest` | Latest stable release | `ghcr.io/myorg/myapp:latest` |
+| `{PLATFORM_CONTAINER_REGISTRY}/apimgr/search:{version}` | Specific version | `ghcr.io/myorg/myapp:1.2.3` |
+| `{PLATFORM_CONTAINER_REGISTRY}/apimgr/search:{YYMM}` | Year/month tag | `ghcr.io/myorg/myapp:2512` |
+| `{PLATFORM_CONTAINER_REGISTRY}/apimgr/search:{commit}` | Git commit (7 char) | `ghcr.io/myorg/myapp:abc1234` |
 
 ### Development Tags (Local)
 
 | Tag | Description | Example |
 |-----|-------------|---------|
-| `{projectname}:dev` | Local development build | `myapp:dev` |
-| `{projectname}:test` | Local test build | `myapp:test` |
+| `search:dev` | Local development build | `myapp:dev` |
+| `search:test` | Local test build | `myapp:test` |
 
 ### Registry
 
@@ -31653,7 +34932,7 @@ networks:
 
 ### Tag Rules
 
-1. **Release builds** MUST push to `{PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}`
+1. **Release builds** MUST push to `{PLATFORM_CONTAINER_REGISTRY}/apimgr/search`
 2. **Development builds** MUST use local-only tags (no registry prefix)
 3. **NEVER push `:dev` or `:test` tags to production registry**
 4. All release images built for `linux/amd64` AND `linux/arm64`
@@ -31737,7 +35016,7 @@ on:
       - '[0-9]*.[0-9]*.[0-9]*'
 
 env:
-  PROJECTNAME: {projectname}
+  PROJECTNAME: search
 
 jobs:
   build:
@@ -31891,7 +35170,7 @@ on:
       - beta
 
 env:
-  PROJECTNAME: {projectname}
+  PROJECTNAME: search
 
 jobs:
   build:
@@ -32016,7 +35295,7 @@ on:
   workflow_dispatch:
 
 env:
-  PROJECTNAME: {projectname}
+  PROJECTNAME: search
 
 jobs:
   build:
@@ -32184,7 +35463,7 @@ on:
   workflow_dispatch:
 
 env:
-  PROJECTNAME: {projectname}
+  PROJECTNAME: search
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
@@ -32256,8 +35535,8 @@ jobs:
             BUILD_DATE=${{ env.BUILD_DATE }}
             COMMIT_ID=${{ env.COMMIT_ID }}
           labels: |
-            org.opencontainers.image.vendor={projectorg}
-            org.opencontainers.image.authors={projectorg}
+            org.opencontainers.image.vendor=apimgr
+            org.opencontainers.image.authors=apimgr
             org.opencontainers.image.title=${{ env.PROJECTNAME }}
             org.opencontainers.image.base.name=${{ env.PROJECTNAME }}
             org.opencontainers.image.description=${{ env.PROJECTNAME }} - standard image (alpine)
@@ -32269,8 +35548,8 @@ jobs:
             org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.licenses=MIT
           annotations: |
-            manifest:org.opencontainers.image.vendor={projectorg}
-            manifest:org.opencontainers.image.authors={projectorg}
+            manifest:org.opencontainers.image.vendor=apimgr
+            manifest:org.opencontainers.image.authors=apimgr
             manifest:org.opencontainers.image.title=${{ env.PROJECTNAME }}
             manifest:org.opencontainers.image.base.name=${{ env.PROJECTNAME }}
             manifest:org.opencontainers.image.description=${{ env.PROJECTNAME }} - standard image (alpine)
@@ -32351,8 +35630,8 @@ jobs:
             BUILD_DATE=${{ env.BUILD_DATE }}
             COMMIT_ID=${{ env.COMMIT_ID }}
           labels: |
-            org.opencontainers.image.vendor={projectorg}
-            org.opencontainers.image.authors={projectorg}
+            org.opencontainers.image.vendor=apimgr
+            org.opencontainers.image.authors=apimgr
             org.opencontainers.image.title=${{ env.PROJECTNAME }}-aio
             org.opencontainers.image.description=${{ env.PROJECTNAME }} - all-in-one (debian + postgresql + valkey + tor)
             org.opencontainers.image.version=${{ env.VERSION }}
@@ -32363,8 +35642,8 @@ jobs:
             org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.licenses=MIT
           annotations: |
-            manifest:org.opencontainers.image.vendor={projectorg}
-            manifest:org.opencontainers.image.authors={projectorg}
+            manifest:org.opencontainers.image.vendor=apimgr
+            manifest:org.opencontainers.image.authors=apimgr
             manifest:org.opencontainers.image.title=${{ env.PROJECTNAME }}-aio
             manifest:org.opencontainers.image.description=${{ env.PROJECTNAME }} - all-in-one (debian + postgresql + valkey + tor)
             manifest:org.opencontainers.image.version=${{ env.VERSION }}
@@ -32454,7 +35733,7 @@ on:
       - '[0-9]*.[0-9]*.[0-9]*'
 
 env:
-  PROJECTNAME: {projectname}
+  PROJECTNAME: search
 
 jobs:
   build:
@@ -32606,7 +35885,7 @@ on:
       - beta
 
 env:
-  PROJECTNAME: {projectname}
+  PROJECTNAME: search
 
 jobs:
   build:
@@ -32731,7 +36010,7 @@ on:
   workflow_dispatch:
 
 env:
-  PROJECTNAME: {projectname}
+  PROJECTNAME: search
 
 jobs:
   build:
@@ -32878,7 +36157,7 @@ on:
   workflow_dispatch:
 
 env:
-  PROJECTNAME: {projectname}
+  PROJECTNAME: search
   # Registry auto-detected from Gitea instance (works with self-hosted)
   # Format: {gitea-server}/owner/repo -> extracts server for registry
   IMAGE_NAME: ${{ gitea.repository }}
@@ -32965,8 +36244,8 @@ jobs:
             BUILD_DATE=${{ env.BUILD_DATE }}
             COMMIT_ID=${{ env.COMMIT_ID }}
           labels: |
-            org.opencontainers.image.vendor={projectorg}
-            org.opencontainers.image.authors={projectorg}
+            org.opencontainers.image.vendor=apimgr
+            org.opencontainers.image.authors=apimgr
             org.opencontainers.image.title=${{ env.PROJECTNAME }}
             org.opencontainers.image.base.name=${{ env.PROJECTNAME }}
             org.opencontainers.image.description=${{ env.PROJECTNAME }} - standard image (alpine)
@@ -32978,8 +36257,8 @@ jobs:
             org.opencontainers.image.documentation=${{ gitea.server_url }}/${{ gitea.repository }}
             org.opencontainers.image.licenses=MIT
           annotations: |
-            manifest:org.opencontainers.image.vendor={projectorg}
-            manifest:org.opencontainers.image.authors={projectorg}
+            manifest:org.opencontainers.image.vendor=apimgr
+            manifest:org.opencontainers.image.authors=apimgr
             manifest:org.opencontainers.image.title=${{ env.PROJECTNAME }}
             manifest:org.opencontainers.image.base.name=${{ env.PROJECTNAME }}
             manifest:org.opencontainers.image.description=${{ env.PROJECTNAME }} - standard image (alpine)
@@ -33067,8 +36346,8 @@ jobs:
             BUILD_DATE=${{ env.BUILD_DATE }}
             COMMIT_ID=${{ env.COMMIT_ID }}
           labels: |
-            org.opencontainers.image.vendor={projectorg}
-            org.opencontainers.image.authors={projectorg}
+            org.opencontainers.image.vendor=apimgr
+            org.opencontainers.image.authors=apimgr
             org.opencontainers.image.title=${{ env.PROJECTNAME }}-aio
             org.opencontainers.image.description=${{ env.PROJECTNAME }} - all-in-one (debian + postgresql + valkey + tor)
             org.opencontainers.image.version=${{ env.VERSION }}
@@ -33079,8 +36358,8 @@ jobs:
             org.opencontainers.image.documentation=${{ gitea.server_url }}/${{ gitea.repository }}
             org.opencontainers.image.licenses=MIT
           annotations: |
-            manifest:org.opencontainers.image.vendor={projectorg}
-            manifest:org.opencontainers.image.authors={projectorg}
+            manifest:org.opencontainers.image.vendor=apimgr
+            manifest:org.opencontainers.image.authors=apimgr
             manifest:org.opencontainers.image.title=${{ env.PROJECTNAME }}-aio
             manifest:org.opencontainers.image.description=${{ env.PROJECTNAME }} - all-in-one (debian + postgresql + valkey + tor)
             manifest:org.opencontainers.image.version=${{ env.VERSION }}
@@ -33152,12 +36431,12 @@ All `$CI_*` variables are auto-populated by GitLab (works with self-hosted).
 **File:** `.gitlab-ci.yml`
 
 ```yaml
-# GitLab CI/CD Pipeline for {projectname}
+# GitLab CI/CD Pipeline for search
 # Equivalent to GitHub Actions: release.yml, beta.yml, daily.yml, docker.yml
 
 variables:
-  PROJECTNAME: "{projectname}"
-  PROJECTORG: "{projectorg}"
+  PROJECTNAME: "search"
+  PROJECTORG: "apimgr"
   CGO_ENABLED: "0"
   GOOS: linux
   GOARCH: amd64
@@ -33195,12 +36474,12 @@ build:linux-amd64:
     GOOS: linux
     GOARCH: amd64
   script:
-    - go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-linux-amd64 ./src
-    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-linux-amd64 ./src/client; fi
-    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-linux-amd64 ./src/agent; fi
+    - go build -ldflags "${LDFLAGS}" -o $SEARCH-linux-amd64 ./src
+    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-cli-linux-amd64 ./src/client; fi
+    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-agent-linux-amd64 ./src/agent; fi
   artifacts:
     paths:
-      - ${PROJECTNAME}-linux-amd64*
+      - $SEARCH-linux-amd64*
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
@@ -33212,12 +36491,12 @@ build:linux-arm64:
     GOOS: linux
     GOARCH: arm64
   script:
-    - go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-linux-arm64 ./src
-    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-linux-arm64 ./src/client; fi
-    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-linux-arm64 ./src/agent; fi
+    - go build -ldflags "${LDFLAGS}" -o $SEARCH-linux-arm64 ./src
+    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-cli-linux-arm64 ./src/client; fi
+    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-agent-linux-arm64 ./src/agent; fi
   artifacts:
     paths:
-      - ${PROJECTNAME}-linux-arm64*
+      - $SEARCH-linux-arm64*
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
@@ -33229,12 +36508,12 @@ build:darwin-amd64:
     GOOS: darwin
     GOARCH: amd64
   script:
-    - go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-darwin-amd64 ./src
-    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-darwin-amd64 ./src/client; fi
-    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-darwin-amd64 ./src/agent; fi
+    - go build -ldflags "${LDFLAGS}" -o $SEARCH-darwin-amd64 ./src
+    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-cli-darwin-amd64 ./src/client; fi
+    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-agent-darwin-amd64 ./src/agent; fi
   artifacts:
     paths:
-      - ${PROJECTNAME}-darwin-amd64*
+      - $SEARCH-darwin-amd64*
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
@@ -33246,12 +36525,12 @@ build:darwin-arm64:
     GOOS: darwin
     GOARCH: arm64
   script:
-    - go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-darwin-arm64 ./src
-    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-darwin-arm64 ./src/client; fi
-    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-darwin-arm64 ./src/agent; fi
+    - go build -ldflags "${LDFLAGS}" -o $SEARCH-darwin-arm64 ./src
+    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-cli-darwin-arm64 ./src/client; fi
+    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-agent-darwin-arm64 ./src/agent; fi
   artifacts:
     paths:
-      - ${PROJECTNAME}-darwin-arm64*
+      - $SEARCH-darwin-arm64*
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
@@ -33263,12 +36542,12 @@ build:windows-amd64:
     GOOS: windows
     GOARCH: amd64
   script:
-    - go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-windows-amd64.exe ./src
-    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-windows-amd64.exe ./src/client; fi
-    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-windows-amd64.exe ./src/agent; fi
+    - go build -ldflags "${LDFLAGS}" -o $SEARCH-windows-amd64.exe ./src
+    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-cli-windows-amd64.exe ./src/client; fi
+    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-agent-windows-amd64.exe ./src/agent; fi
   artifacts:
     paths:
-      - ${PROJECTNAME}-windows-amd64*.exe
+      - $SEARCH-windows-amd64*.exe
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
@@ -33280,12 +36559,12 @@ build:windows-arm64:
     GOOS: windows
     GOARCH: arm64
   script:
-    - go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-windows-arm64.exe ./src
-    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-windows-arm64.exe ./src/client; fi
-    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-windows-arm64.exe ./src/agent; fi
+    - go build -ldflags "${LDFLAGS}" -o $SEARCH-windows-arm64.exe ./src
+    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-cli-windows-arm64.exe ./src/client; fi
+    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-agent-windows-arm64.exe ./src/agent; fi
   artifacts:
     paths:
-      - ${PROJECTNAME}-windows-arm64*.exe
+      - $SEARCH-windows-arm64*.exe
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
@@ -33297,12 +36576,12 @@ build:freebsd-amd64:
     GOOS: freebsd
     GOARCH: amd64
   script:
-    - go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-freebsd-amd64 ./src
-    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-freebsd-amd64 ./src/client; fi
-    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-freebsd-amd64 ./src/agent; fi
+    - go build -ldflags "${LDFLAGS}" -o $SEARCH-freebsd-amd64 ./src
+    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-cli-freebsd-amd64 ./src/client; fi
+    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-agent-freebsd-amd64 ./src/agent; fi
   artifacts:
     paths:
-      - ${PROJECTNAME}-freebsd-amd64*
+      - $SEARCH-freebsd-amd64*
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
@@ -33314,12 +36593,12 @@ build:freebsd-arm64:
     GOOS: freebsd
     GOARCH: arm64
   script:
-    - go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-freebsd-arm64 ./src
-    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-freebsd-arm64 ./src/client; fi
-    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-freebsd-arm64 ./src/agent; fi
+    - go build -ldflags "${LDFLAGS}" -o $SEARCH-freebsd-arm64 ./src
+    - if [ -d "src/client" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-cli-freebsd-arm64 ./src/client; fi
+    - if [ -d "src/agent" ]; then go build -ldflags "${LDFLAGS}" -o $SEARCH-agent-freebsd-arm64 ./src/agent; fi
   artifacts:
     paths:
-      - ${PROJECTNAME}-freebsd-arm64*
+      - $SEARCH-freebsd-arm64*
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
@@ -33361,29 +36640,29 @@ release:
   artifacts:
     paths:
       - version.txt
-      - ${PROJECTNAME}-*
+      - $SEARCH-*
   release:
     tag_name: $CI_COMMIT_TAG
     name: "Release $CI_COMMIT_TAG"
     description: "Release created by GitLab CI"
     assets:
       links:
-        - name: "${PROJECTNAME}-linux-amd64"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECTNAME}-linux-amd64?job=build:linux-amd64"
-        - name: "${PROJECTNAME}-linux-arm64"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECTNAME}-linux-arm64?job=build:linux-arm64"
-        - name: "${PROJECTNAME}-darwin-amd64"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECTNAME}-darwin-amd64?job=build:darwin-amd64"
-        - name: "${PROJECTNAME}-darwin-arm64"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECTNAME}-darwin-arm64?job=build:darwin-arm64"
-        - name: "${PROJECTNAME}-windows-amd64.exe"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECTNAME}-windows-amd64.exe?job=build:windows-amd64"
-        - name: "${PROJECTNAME}-windows-arm64.exe"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECTNAME}-windows-arm64.exe?job=build:windows-arm64"
-        - name: "${PROJECTNAME}-freebsd-amd64"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECTNAME}-freebsd-amd64?job=build:freebsd-amd64"
-        - name: "${PROJECTNAME}-freebsd-arm64"
-          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/${PROJECTNAME}-freebsd-arm64?job=build:freebsd-arm64"
+        - name: "$SEARCH-linux-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$SEARCH-linux-amd64?job=build:linux-amd64"
+        - name: "$SEARCH-linux-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$SEARCH-linux-arm64?job=build:linux-arm64"
+        - name: "$SEARCH-darwin-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$SEARCH-darwin-amd64?job=build:darwin-amd64"
+        - name: "$SEARCH-darwin-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$SEARCH-darwin-arm64?job=build:darwin-arm64"
+        - name: "$SEARCH-windows-amd64.exe"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$SEARCH-windows-amd64.exe?job=build:windows-amd64"
+        - name: "$SEARCH-windows-arm64.exe"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$SEARCH-windows-arm64.exe?job=build:windows-arm64"
+        - name: "$SEARCH-freebsd-amd64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$SEARCH-freebsd-amd64?job=build:freebsd-amd64"
+        - name: "$SEARCH-freebsd-arm64"
+          url: "${CI_PROJECT_URL}/-/jobs/artifacts/${CI_COMMIT_TAG}/raw/$SEARCH-freebsd-arm64?job=build:freebsd-arm64"
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+/
 
@@ -33402,35 +36681,35 @@ build:beta:
     - export LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}' -X 'main.OfficialSite=${OFFICIALSITE}'"
   script:
     # Build all 8 platforms
-    - GOOS=linux GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-linux-amd64 ./src
-    - GOOS=linux GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-linux-arm64 ./src
-    - GOOS=darwin GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-darwin-amd64 ./src
-    - GOOS=darwin GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-darwin-arm64 ./src
-    - GOOS=windows GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-windows-amd64.exe ./src
-    - GOOS=windows GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-windows-arm64.exe ./src
-    - GOOS=freebsd GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-freebsd-amd64 ./src
-    - GOOS=freebsd GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-freebsd-arm64 ./src
+    - GOOS=linux GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o $SEARCH-linux-amd64 ./src
+    - GOOS=linux GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o $SEARCH-linux-arm64 ./src
+    - GOOS=darwin GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o $SEARCH-darwin-amd64 ./src
+    - GOOS=darwin GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o $SEARCH-darwin-arm64 ./src
+    - GOOS=windows GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o $SEARCH-windows-amd64.exe ./src
+    - GOOS=windows GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o $SEARCH-windows-arm64.exe ./src
+    - GOOS=freebsd GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o $SEARCH-freebsd-amd64 ./src
+    - GOOS=freebsd GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o $SEARCH-freebsd-arm64 ./src
     # Build CLI if exists
-    - if [ -d "src/client" ]; then GOOS=linux GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-linux-amd64 ./src/client; fi
-    - if [ -d "src/client" ]; then GOOS=linux GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-linux-arm64 ./src/client; fi
-    - if [ -d "src/client" ]; then GOOS=darwin GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-darwin-amd64 ./src/client; fi
-    - if [ -d "src/client" ]; then GOOS=darwin GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-darwin-arm64 ./src/client; fi
-    - if [ -d "src/client" ]; then GOOS=windows GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-windows-amd64.exe ./src/client; fi
-    - if [ -d "src/client" ]; then GOOS=windows GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-windows-arm64.exe ./src/client; fi
-    - if [ -d "src/client" ]; then GOOS=freebsd GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-freebsd-amd64 ./src/client; fi
-    - if [ -d "src/client" ]; then GOOS=freebsd GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-freebsd-arm64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=linux GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o $SEARCH-cli-linux-amd64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=linux GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o $SEARCH-cli-linux-arm64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=darwin GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o $SEARCH-cli-darwin-amd64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=darwin GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o $SEARCH-cli-darwin-arm64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=windows GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o $SEARCH-cli-windows-amd64.exe ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=windows GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o $SEARCH-cli-windows-arm64.exe ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=freebsd GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o $SEARCH-cli-freebsd-amd64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=freebsd GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o $SEARCH-cli-freebsd-arm64 ./src/client; fi
     # Build Agent if exists
-    - if [ -d "src/agent" ]; then GOOS=linux GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-linux-amd64 ./src/agent; fi
-    - if [ -d "src/agent" ]; then GOOS=linux GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-linux-arm64 ./src/agent; fi
-    - if [ -d "src/agent" ]; then GOOS=darwin GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-darwin-amd64 ./src/agent; fi
-    - if [ -d "src/agent" ]; then GOOS=darwin GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-darwin-arm64 ./src/agent; fi
-    - if [ -d "src/agent" ]; then GOOS=windows GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-windows-amd64.exe ./src/agent; fi
-    - if [ -d "src/agent" ]; then GOOS=windows GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-windows-arm64.exe ./src/agent; fi
-    - if [ -d "src/agent" ]; then GOOS=freebsd GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-freebsd-amd64 ./src/agent; fi
-    - if [ -d "src/agent" ]; then GOOS=freebsd GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-freebsd-arm64 ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=linux GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o $SEARCH-agent-linux-amd64 ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=linux GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o $SEARCH-agent-linux-arm64 ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=darwin GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o $SEARCH-agent-darwin-amd64 ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=darwin GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o $SEARCH-agent-darwin-arm64 ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=windows GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o $SEARCH-agent-windows-amd64.exe ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=windows GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o $SEARCH-agent-windows-arm64.exe ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=freebsd GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o $SEARCH-agent-freebsd-amd64 ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=freebsd GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o $SEARCH-agent-freebsd-arm64 ./src/agent; fi
   artifacts:
     paths:
-      - ${PROJECTNAME}-*
+      - $SEARCH-*
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_BRANCH == "beta"
@@ -33450,35 +36729,35 @@ build:daily:
     - export LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}' -X 'main.OfficialSite=${OFFICIALSITE}'"
   script:
     # Build all 8 platforms
-    - GOOS=linux GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-linux-amd64 ./src
-    - GOOS=linux GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-linux-arm64 ./src
-    - GOOS=darwin GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-darwin-amd64 ./src
-    - GOOS=darwin GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-darwin-arm64 ./src
-    - GOOS=windows GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-windows-amd64.exe ./src
-    - GOOS=windows GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-windows-arm64.exe ./src
-    - GOOS=freebsd GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-freebsd-amd64 ./src
-    - GOOS=freebsd GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-freebsd-arm64 ./src
+    - GOOS=linux GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o $SEARCH-linux-amd64 ./src
+    - GOOS=linux GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o $SEARCH-linux-arm64 ./src
+    - GOOS=darwin GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o $SEARCH-darwin-amd64 ./src
+    - GOOS=darwin GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o $SEARCH-darwin-arm64 ./src
+    - GOOS=windows GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o $SEARCH-windows-amd64.exe ./src
+    - GOOS=windows GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o $SEARCH-windows-arm64.exe ./src
+    - GOOS=freebsd GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o $SEARCH-freebsd-amd64 ./src
+    - GOOS=freebsd GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o $SEARCH-freebsd-arm64 ./src
     # Build CLI if exists
-    - if [ -d "src/client" ]; then GOOS=linux GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-linux-amd64 ./src/client; fi
-    - if [ -d "src/client" ]; then GOOS=linux GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-linux-arm64 ./src/client; fi
-    - if [ -d "src/client" ]; then GOOS=darwin GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-darwin-amd64 ./src/client; fi
-    - if [ -d "src/client" ]; then GOOS=darwin GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-darwin-arm64 ./src/client; fi
-    - if [ -d "src/client" ]; then GOOS=windows GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-windows-amd64.exe ./src/client; fi
-    - if [ -d "src/client" ]; then GOOS=windows GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-windows-arm64.exe ./src/client; fi
-    - if [ -d "src/client" ]; then GOOS=freebsd GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-freebsd-amd64 ./src/client; fi
-    - if [ -d "src/client" ]; then GOOS=freebsd GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli-freebsd-arm64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=linux GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o $SEARCH-cli-linux-amd64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=linux GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o $SEARCH-cli-linux-arm64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=darwin GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o $SEARCH-cli-darwin-amd64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=darwin GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o $SEARCH-cli-darwin-arm64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=windows GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o $SEARCH-cli-windows-amd64.exe ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=windows GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o $SEARCH-cli-windows-arm64.exe ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=freebsd GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o $SEARCH-cli-freebsd-amd64 ./src/client; fi
+    - if [ -d "src/client" ]; then GOOS=freebsd GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o $SEARCH-cli-freebsd-arm64 ./src/client; fi
     # Build Agent if exists
-    - if [ -d "src/agent" ]; then GOOS=linux GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-linux-amd64 ./src/agent; fi
-    - if [ -d "src/agent" ]; then GOOS=linux GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-linux-arm64 ./src/agent; fi
-    - if [ -d "src/agent" ]; then GOOS=darwin GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-darwin-amd64 ./src/agent; fi
-    - if [ -d "src/agent" ]; then GOOS=darwin GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-darwin-arm64 ./src/agent; fi
-    - if [ -d "src/agent" ]; then GOOS=windows GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-windows-amd64.exe ./src/agent; fi
-    - if [ -d "src/agent" ]; then GOOS=windows GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-windows-arm64.exe ./src/agent; fi
-    - if [ -d "src/agent" ]; then GOOS=freebsd GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-freebsd-amd64 ./src/agent; fi
-    - if [ -d "src/agent" ]; then GOOS=freebsd GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-agent-freebsd-arm64 ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=linux GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o $SEARCH-agent-linux-amd64 ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=linux GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o $SEARCH-agent-linux-arm64 ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=darwin GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o $SEARCH-agent-darwin-amd64 ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=darwin GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o $SEARCH-agent-darwin-arm64 ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=windows GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o $SEARCH-agent-windows-amd64.exe ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=windows GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o $SEARCH-agent-windows-arm64.exe ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=freebsd GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o $SEARCH-agent-freebsd-amd64 ./src/agent; fi
+    - if [ -d "src/agent" ]; then GOOS=freebsd GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o $SEARCH-agent-freebsd-arm64 ./src/agent; fi
   artifacts:
     paths:
-      - ${PROJECTNAME}-*
+      - $SEARCH-*
     expire_in: 1 day
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
@@ -33524,11 +36803,11 @@ docker:build:
         --build-arg VERSION="${VERSION}" \
         --build-arg COMMIT_ID="${CI_COMMIT_SHORT_SHA}" \
         --build-arg BUILD_DATE="${BUILD_DATE}" \
-        --label "org.opencontainers.image.vendor=${PROJECTORG}" \
-        --label "org.opencontainers.image.authors=${PROJECTORG}" \
-        --label "org.opencontainers.image.title=${PROJECTNAME}" \
-        --label "org.opencontainers.image.base.name=${PROJECTNAME}" \
-        --label "org.opencontainers.image.description=${PROJECTNAME} - standard image (alpine)" \
+        --label "org.opencontainers.image.vendor=$APIMGR" \
+        --label "org.opencontainers.image.authors=$APIMGR" \
+        --label "org.opencontainers.image.title=$SEARCH" \
+        --label "org.opencontainers.image.base.name=$SEARCH" \
+        --label "org.opencontainers.image.description=$SEARCH - standard image (alpine)" \
         --label "org.opencontainers.image.licenses=MIT" \
         --label "org.opencontainers.image.version=${VERSION}" \
         --label "org.opencontainers.image.created=${BUILD_DATE}" \
@@ -33536,11 +36815,11 @@ docker:build:
         --label "org.opencontainers.image.url=${CI_PROJECT_URL}" \
         --label "org.opencontainers.image.source=${CI_PROJECT_URL}" \
         --label "org.opencontainers.image.documentation=${CI_PROJECT_URL}" \
-        --annotation "manifest:org.opencontainers.image.vendor=${PROJECTORG}" \
-        --annotation "manifest:org.opencontainers.image.authors=${PROJECTORG}" \
-        --annotation "manifest:org.opencontainers.image.title=${PROJECTNAME}" \
-        --annotation "manifest:org.opencontainers.image.base.name=${PROJECTNAME}" \
-        --annotation "manifest:org.opencontainers.image.description=${PROJECTNAME} - standard image (alpine)" \
+        --annotation "manifest:org.opencontainers.image.vendor=$APIMGR" \
+        --annotation "manifest:org.opencontainers.image.authors=$APIMGR" \
+        --annotation "manifest:org.opencontainers.image.title=$SEARCH" \
+        --annotation "manifest:org.opencontainers.image.base.name=$SEARCH" \
+        --annotation "manifest:org.opencontainers.image.description=$SEARCH - standard image (alpine)" \
         --annotation "manifest:org.opencontainers.image.licenses=MIT" \
         --annotation "manifest:org.opencontainers.image.version=${VERSION}" \
         --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE}" \
@@ -33591,10 +36870,10 @@ docker:build-aio:
         --build-arg VERSION="${VERSION}" \
         --build-arg COMMIT_ID="${CI_COMMIT_SHORT_SHA}" \
         --build-arg BUILD_DATE="${BUILD_DATE}" \
-        --label "org.opencontainers.image.vendor=${PROJECTORG}" \
-        --label "org.opencontainers.image.authors=${PROJECTORG}" \
-        --label "org.opencontainers.image.title=${PROJECTNAME}-aio" \
-        --label "org.opencontainers.image.description=${PROJECTNAME} - all-in-one (debian + postgresql + valkey + tor)" \
+        --label "org.opencontainers.image.vendor=$APIMGR" \
+        --label "org.opencontainers.image.authors=$APIMGR" \
+        --label "org.opencontainers.image.title=$SEARCH-aio" \
+        --label "org.opencontainers.image.description=$SEARCH - all-in-one (debian + postgresql + valkey + tor)" \
         --label "org.opencontainers.image.licenses=MIT" \
         --label "org.opencontainers.image.version=${VERSION}" \
         --label "org.opencontainers.image.created=${BUILD_DATE}" \
@@ -33602,10 +36881,10 @@ docker:build-aio:
         --label "org.opencontainers.image.url=${CI_PROJECT_URL}" \
         --label "org.opencontainers.image.source=${CI_PROJECT_URL}" \
         --label "org.opencontainers.image.documentation=${CI_PROJECT_URL}" \
-        --annotation "manifest:org.opencontainers.image.vendor=${PROJECTORG}" \
-        --annotation "manifest:org.opencontainers.image.authors=${PROJECTORG}" \
-        --annotation "manifest:org.opencontainers.image.title=${PROJECTNAME}-aio" \
-        --annotation "manifest:org.opencontainers.image.description=${PROJECTNAME} - all-in-one (debian + postgresql + valkey + tor)" \
+        --annotation "manifest:org.opencontainers.image.vendor=$APIMGR" \
+        --annotation "manifest:org.opencontainers.image.authors=$APIMGR" \
+        --annotation "manifest:org.opencontainers.image.title=$SEARCH-aio" \
+        --annotation "manifest:org.opencontainers.image.description=$SEARCH - all-in-one (debian + postgresql + valkey + tor)" \
         --annotation "manifest:org.opencontainers.image.licenses=MIT" \
         --annotation "manifest:org.opencontainers.image.version=${VERSION}" \
         --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE}" \
@@ -33703,12 +36982,12 @@ pipeline {
     }
 
     environment {
-        PROJECTNAME = '{projectname}'
-        PROJECTORG = '{projectorg}'
+        PROJECTNAME = 'search'
+        PROJECTORG = 'apimgr'
         BINDIR = 'binaries'
         RELDIR = 'releases'
-        GODIR = "/tmp/${PROJECTORG}/go"
-        GOCACHE = "/tmp/${PROJECTORG}/go/build"
+        GODIR = "/tmp/$APIMGR/go"
+        GOCACHE = "/tmp/$APIMGR/go/build"
 
         // =========================================================================
         // GIT PROVIDER CONFIGURATION
@@ -33718,22 +36997,22 @@ pipeline {
         // ----- GITHUB (default) -----
         GIT_FQDN = 'github.com'
         GIT_TOKEN = credentials('github-token')  // Jenkins credentials ID
-        REGISTRY = "ghcr.io/${PROJECTORG}/${PROJECTNAME}"
+        REGISTRY = "ghcr.io/$APIMGR/$SEARCH"
 
         // ----- GITEA / FORGEJO (self-hosted) -----
         // GIT_FQDN = 'git.example.com'  // Your Gitea/Forgejo domain
         // GIT_TOKEN = credentials('gitea-token')  // Jenkins credentials ID
-        // REGISTRY = "${GIT_FQDN}/${PROJECTORG}/${PROJECTNAME}"
+        // REGISTRY = "${GIT_FQDN}/$APIMGR/$SEARCH"
 
         // ----- GITLAB (gitlab.com or self-hosted) -----
         // GIT_FQDN = 'gitlab.com'  // or your self-hosted GitLab domain
         // GIT_TOKEN = credentials('gitlab-token')  // Jenkins credentials ID
-        // REGISTRY = "registry.${GIT_FQDN}/${PROJECTORG}/${PROJECTNAME}"
+        // REGISTRY = "registry.${GIT_FQDN}/$APIMGR/$SEARCH"
 
         // ----- DOCKER HUB -----
         // GIT_FQDN = 'github.com'  // Git provider (separate from registry)
         // GIT_TOKEN = credentials('github-token')
-        // REGISTRY = "docker.io/${PROJECTORG}/${PROJECTNAME}"
+        // REGISTRY = "docker.io/$APIMGR/$SEARCH"
 
         // =========================================================================
     }
@@ -33788,7 +37067,7 @@ pipeline {
                                 -e GOOS=linux \
                                 -e GOARCH=amd64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-linux-amd64 ./src
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-linux-amd64 ./src
                         '''
                     }
                 }
@@ -33805,7 +37084,7 @@ pipeline {
                                 -e GOOS=linux \
                                 -e GOARCH=arm64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-linux-arm64 ./src
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-linux-arm64 ./src
                         '''
                     }
                 }
@@ -33823,7 +37102,7 @@ pipeline {
                                 -e GOOS=darwin \
                                 -e GOARCH=amd64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-darwin-amd64 ./src
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-darwin-amd64 ./src
                         '''
                     }
                 }
@@ -33840,7 +37119,7 @@ pipeline {
                                 -e GOOS=darwin \
                                 -e GOARCH=arm64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-darwin-arm64 ./src
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-darwin-arm64 ./src
                         '''
                     }
                 }
@@ -33858,7 +37137,7 @@ pipeline {
                                 -e GOOS=windows \
                                 -e GOARCH=amd64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-windows-amd64.exe ./src
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-windows-amd64.exe ./src
                         '''
                     }
                 }
@@ -33875,7 +37154,7 @@ pipeline {
                                 -e GOOS=windows \
                                 -e GOARCH=arm64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-windows-arm64.exe ./src
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-windows-arm64.exe ./src
                         '''
                     }
                 }
@@ -33893,7 +37172,7 @@ pipeline {
                                 -e GOOS=freebsd \
                                 -e GOARCH=amd64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-freebsd-amd64 ./src
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-freebsd-amd64 ./src
                         '''
                     }
                 }
@@ -33910,7 +37189,7 @@ pipeline {
                                 -e GOOS=freebsd \
                                 -e GOARCH=arm64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-freebsd-arm64 ./src
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-freebsd-arm64 ./src
                         '''
                     }
                 }
@@ -33936,7 +37215,7 @@ pipeline {
                                 -e GOOS=linux \
                                 -e GOARCH=amd64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-cli-linux-amd64 ./src/client
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-cli-linux-amd64 ./src/client
                         '''
                     }
                 }
@@ -33953,7 +37232,7 @@ pipeline {
                                 -e GOOS=linux \
                                 -e GOARCH=arm64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-cli-linux-arm64 ./src/client
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-cli-linux-arm64 ./src/client
                         '''
                     }
                 }
@@ -33970,7 +37249,7 @@ pipeline {
                                 -e GOOS=darwin \
                                 -e GOARCH=amd64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-cli-darwin-amd64 ./src/client
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-cli-darwin-amd64 ./src/client
                         '''
                     }
                 }
@@ -33987,7 +37266,7 @@ pipeline {
                                 -e GOOS=darwin \
                                 -e GOARCH=arm64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-cli-darwin-arm64 ./src/client
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-cli-darwin-arm64 ./src/client
                         '''
                     }
                 }
@@ -34004,7 +37283,7 @@ pipeline {
                                 -e GOOS=windows \
                                 -e GOARCH=amd64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-cli-windows-amd64.exe ./src/client
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-cli-windows-amd64.exe ./src/client
                         '''
                     }
                 }
@@ -34021,7 +37300,7 @@ pipeline {
                                 -e GOOS=windows \
                                 -e GOARCH=arm64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-cli-windows-arm64.exe ./src/client
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-cli-windows-arm64.exe ./src/client
                         '''
                     }
                 }
@@ -34038,7 +37317,7 @@ pipeline {
                                 -e GOOS=freebsd \
                                 -e GOARCH=amd64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-cli-freebsd-amd64 ./src/client
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-cli-freebsd-amd64 ./src/client
                         '''
                     }
                 }
@@ -34055,7 +37334,7 @@ pipeline {
                                 -e GOOS=freebsd \
                                 -e GOARCH=arm64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-cli-freebsd-arm64 ./src/client
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-cli-freebsd-arm64 ./src/client
                         '''
                     }
                 }
@@ -34081,7 +37360,7 @@ pipeline {
                                 -e GOOS=linux \
                                 -e GOARCH=amd64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-agent-linux-amd64 ./src/agent
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-agent-linux-amd64 ./src/agent
                         '''
                     }
                 }
@@ -34098,7 +37377,7 @@ pipeline {
                                 -e GOOS=linux \
                                 -e GOARCH=arm64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-agent-linux-arm64 ./src/agent
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-agent-linux-arm64 ./src/agent
                         '''
                     }
                 }
@@ -34115,7 +37394,7 @@ pipeline {
                                 -e GOOS=darwin \
                                 -e GOARCH=amd64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-agent-darwin-amd64 ./src/agent
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-agent-darwin-amd64 ./src/agent
                         '''
                     }
                 }
@@ -34132,7 +37411,7 @@ pipeline {
                                 -e GOOS=darwin \
                                 -e GOARCH=arm64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-agent-darwin-arm64 ./src/agent
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-agent-darwin-arm64 ./src/agent
                         '''
                     }
                 }
@@ -34149,7 +37428,7 @@ pipeline {
                                 -e GOOS=windows \
                                 -e GOARCH=amd64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-agent-windows-amd64.exe ./src/agent
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-agent-windows-amd64.exe ./src/agent
                         '''
                     }
                 }
@@ -34166,7 +37445,7 @@ pipeline {
                                 -e GOOS=windows \
                                 -e GOARCH=arm64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-agent-windows-arm64.exe ./src/agent
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-agent-windows-arm64.exe ./src/agent
                         '''
                     }
                 }
@@ -34183,7 +37462,7 @@ pipeline {
                                 -e GOOS=freebsd \
                                 -e GOARCH=amd64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-agent-freebsd-amd64 ./src/agent
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-agent-freebsd-amd64 ./src/agent
                         '''
                     }
                 }
@@ -34200,7 +37479,7 @@ pipeline {
                                 -e GOOS=freebsd \
                                 -e GOARCH=arm64 \
                                 golang:alpine \
-                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/${PROJECTNAME}-agent-freebsd-arm64 ./src/agent
+                                go build -ldflags "${LDFLAGS}" -o ${BINDIR}/$SEARCH-agent-freebsd-arm64 ./src/agent
                         '''
                     }
                 }
@@ -34232,7 +37511,7 @@ pipeline {
                 sh '''
                     echo "${VERSION}" > ${RELDIR}/version.txt
 
-                    for f in ${BINDIR}/${PROJECTNAME}-*; do
+                    for f in ${BINDIR}/$SEARCH-*; do
                         [ -f "$f" ] || continue
                         cp "$f" ${RELDIR}/
                     done
@@ -34240,7 +37519,7 @@ pipeline {
                     tar --exclude='.git' --exclude='.github' --exclude='.gitea' \
                         --exclude='.forgejo' --exclude='binaries' --exclude='releases' \
                         --exclude='*.tar.gz' \
-                        -czf ${RELDIR}/${PROJECTNAME}-${VERSION}-source.tar.gz .
+                        -czf ${RELDIR}/$SEARCH-${VERSION}-source.tar.gz .
                 '''
                 archiveArtifacts artifacts: 'releases/*', fingerprint: true
             }
@@ -34256,7 +37535,7 @@ pipeline {
                 sh '''
                     echo "${VERSION}" > ${RELDIR}/version.txt
 
-                    for f in ${BINDIR}/${PROJECTNAME}-*; do
+                    for f in ${BINDIR}/$SEARCH-*; do
                         [ -f "$f" ] || continue
                         cp "$f" ${RELDIR}/
                     done
@@ -34275,7 +37554,7 @@ pipeline {
                 sh '''
                     echo "${VERSION}" > ${RELDIR}/version.txt
 
-                    for f in ${BINDIR}/${PROJECTNAME}-*; do
+                    for f in ${BINDIR}/$SEARCH-*; do
                         [ -f "$f" ] || continue
                         cp "$f" ${RELDIR}/
                     done
@@ -34309,42 +37588,42 @@ pipeline {
                     // Login to container registry
                     // Works with: ghcr.io, registry.gitlab.com, gitea/forgejo, docker.io
                     sh """
-                        echo "\${GIT_TOKEN}" | docker login ${REGISTRY.split('/')[0]} -u ${PROJECTORG} --password-stdin
+                        echo "\${GIT_TOKEN}" | docker login ${REGISTRY.split('/')[0]} -u $APIMGR --password-stdin
                     """
 
                     // Build multi-arch with OCI labels and manifest annotations
                     sh """
-                        docker buildx create --name ${PROJECTNAME}-builder --use 2>/dev/null || docker buildx use ${PROJECTNAME}-builder
+                        docker buildx create --name $SEARCH-builder --use 2>/dev/null || docker buildx use $SEARCH-builder
                         docker buildx build \
                             -f docker/Dockerfile \
                             --platform linux/amd64,linux/arm64 \
                             --build-arg VERSION="${VERSION}" \
                             --build-arg COMMIT_ID="${COMMIT_ID}" \
                             --build-arg BUILD_DATE="${BUILD_DATE}" \
-                            --label "org.opencontainers.image.vendor=${PROJECTORG}" \
-                            --label "org.opencontainers.image.authors=${PROJECTORG}" \
-                            --label "org.opencontainers.image.title=${PROJECTNAME}" \
-                            --label "org.opencontainers.image.base.name=${PROJECTNAME}" \
-                            --label "org.opencontainers.image.description=${PROJECTNAME} - standard image (alpine)" \
+                            --label "org.opencontainers.image.vendor=$APIMGR" \
+                            --label "org.opencontainers.image.authors=$APIMGR" \
+                            --label "org.opencontainers.image.title=$SEARCH" \
+                            --label "org.opencontainers.image.base.name=$SEARCH" \
+                            --label "org.opencontainers.image.description=$SEARCH - standard image (alpine)" \
                             --label "org.opencontainers.image.licenses=MIT" \
                             --label "org.opencontainers.image.version=${VERSION}" \
                             --label "org.opencontainers.image.created=${BUILD_DATE}" \
                             --label "org.opencontainers.image.revision=${COMMIT_ID}" \
-                            --label "org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECTORG}/${PROJECTNAME}" \
-                            --label "org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECTORG}/${PROJECTNAME}" \
-                            --label "org.opencontainers.image.documentation=https://${GIT_FQDN}/${PROJECTORG}/${PROJECTNAME}" \
-                            --annotation "manifest:org.opencontainers.image.vendor=${PROJECTORG}" \
-                            --annotation "manifest:org.opencontainers.image.authors=${PROJECTORG}" \
-                            --annotation "manifest:org.opencontainers.image.title=${PROJECTNAME}" \
-                            --annotation "manifest:org.opencontainers.image.base.name=${PROJECTNAME}" \
-                            --annotation "manifest:org.opencontainers.image.description=${PROJECTNAME} - standard image (alpine)" \
+                            --label "org.opencontainers.image.url=https://${GIT_FQDN}/$APIMGR/$SEARCH" \
+                            --label "org.opencontainers.image.source=https://${GIT_FQDN}/$APIMGR/$SEARCH" \
+                            --label "org.opencontainers.image.documentation=https://${GIT_FQDN}/$APIMGR/$SEARCH" \
+                            --annotation "manifest:org.opencontainers.image.vendor=$APIMGR" \
+                            --annotation "manifest:org.opencontainers.image.authors=$APIMGR" \
+                            --annotation "manifest:org.opencontainers.image.title=$SEARCH" \
+                            --annotation "manifest:org.opencontainers.image.base.name=$SEARCH" \
+                            --annotation "manifest:org.opencontainers.image.description=$SEARCH - standard image (alpine)" \
                             --annotation "manifest:org.opencontainers.image.licenses=MIT" \
                             --annotation "manifest:org.opencontainers.image.version=${VERSION}" \
                             --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE}" \
                             --annotation "manifest:org.opencontainers.image.revision=${COMMIT_ID}" \
-                            --annotation "manifest:org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECTORG}/${PROJECTNAME}" \
-                            --annotation "manifest:org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECTORG}/${PROJECTNAME}" \
-                            --annotation "manifest:org.opencontainers.image.documentation=https://${GIT_FQDN}/${PROJECTORG}/${PROJECTNAME}" \
+                            --annotation "manifest:org.opencontainers.image.url=https://${GIT_FQDN}/$APIMGR/$SEARCH" \
+                            --annotation "manifest:org.opencontainers.image.source=https://${GIT_FQDN}/$APIMGR/$SEARCH" \
+                            --annotation "manifest:org.opencontainers.image.documentation=https://${GIT_FQDN}/$APIMGR/$SEARCH" \
                             ${tags} \
                             --push \
                             .
@@ -34379,40 +37658,40 @@ pipeline {
 
                     // Login to container registry
                     sh """
-                        echo "\${GIT_TOKEN}" | docker login ${REGISTRY.split('/')[0]} -u ${PROJECTORG} --password-stdin
+                        echo "\${GIT_TOKEN}" | docker login ${REGISTRY.split('/')[0]} -u $APIMGR --password-stdin
                     """
 
                     // Build multi-arch all-in-one with OCI labels and manifest annotations
                     sh """
-                        docker buildx create --name ${PROJECTNAME}-builder --use 2>/dev/null || docker buildx use ${PROJECTNAME}-builder
+                        docker buildx create --name $SEARCH-builder --use 2>/dev/null || docker buildx use $SEARCH-builder
                         docker buildx build \
                             -f docker/Dockerfile.aio \
                             --platform linux/amd64,linux/arm64 \
                             --build-arg VERSION="${VERSION}" \
                             --build-arg COMMIT_ID="${COMMIT_ID}" \
                             --build-arg BUILD_DATE="${BUILD_DATE}" \
-                            --label "org.opencontainers.image.vendor=${PROJECTORG}" \
-                            --label "org.opencontainers.image.authors=${PROJECTORG}" \
-                            --label "org.opencontainers.image.title=${PROJECTNAME}-aio" \
-                            --label "org.opencontainers.image.description=${PROJECTNAME} - all-in-one (debian + postgresql + valkey + tor)" \
+                            --label "org.opencontainers.image.vendor=$APIMGR" \
+                            --label "org.opencontainers.image.authors=$APIMGR" \
+                            --label "org.opencontainers.image.title=$SEARCH-aio" \
+                            --label "org.opencontainers.image.description=$SEARCH - all-in-one (debian + postgresql + valkey + tor)" \
                             --label "org.opencontainers.image.licenses=MIT" \
                             --label "org.opencontainers.image.version=${VERSION}" \
                             --label "org.opencontainers.image.created=${BUILD_DATE}" \
                             --label "org.opencontainers.image.revision=${COMMIT_ID}" \
-                            --label "org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECTORG}/${PROJECTNAME}" \
-                            --label "org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECTORG}/${PROJECTNAME}" \
-                            --label "org.opencontainers.image.documentation=https://${GIT_FQDN}/${PROJECTORG}/${PROJECTNAME}" \
-                            --annotation "manifest:org.opencontainers.image.vendor=${PROJECTORG}" \
-                            --annotation "manifest:org.opencontainers.image.authors=${PROJECTORG}" \
-                            --annotation "manifest:org.opencontainers.image.title=${PROJECTNAME}-aio" \
-                            --annotation "manifest:org.opencontainers.image.description=${PROJECTNAME} - all-in-one (debian + postgresql + valkey + tor)" \
+                            --label "org.opencontainers.image.url=https://${GIT_FQDN}/$APIMGR/$SEARCH" \
+                            --label "org.opencontainers.image.source=https://${GIT_FQDN}/$APIMGR/$SEARCH" \
+                            --label "org.opencontainers.image.documentation=https://${GIT_FQDN}/$APIMGR/$SEARCH" \
+                            --annotation "manifest:org.opencontainers.image.vendor=$APIMGR" \
+                            --annotation "manifest:org.opencontainers.image.authors=$APIMGR" \
+                            --annotation "manifest:org.opencontainers.image.title=$SEARCH-aio" \
+                            --annotation "manifest:org.opencontainers.image.description=$SEARCH - all-in-one (debian + postgresql + valkey + tor)" \
                             --annotation "manifest:org.opencontainers.image.licenses=MIT" \
                             --annotation "manifest:org.opencontainers.image.version=${VERSION}" \
                             --annotation "manifest:org.opencontainers.image.created=${BUILD_DATE}" \
                             --annotation "manifest:org.opencontainers.image.revision=${COMMIT_ID}" \
-                            --annotation "manifest:org.opencontainers.image.url=https://${GIT_FQDN}/${PROJECTORG}/${PROJECTNAME}" \
-                            --annotation "manifest:org.opencontainers.image.source=https://${GIT_FQDN}/${PROJECTORG}/${PROJECTNAME}" \
-                            --annotation "manifest:org.opencontainers.image.documentation=https://${GIT_FQDN}/${PROJECTORG}/${PROJECTNAME}" \
+                            --annotation "manifest:org.opencontainers.image.url=https://${GIT_FQDN}/$APIMGR/$SEARCH" \
+                            --annotation "manifest:org.opencontainers.image.source=https://${GIT_FQDN}/$APIMGR/$SEARCH" \
+                            --annotation "manifest:org.opencontainers.image.documentation=https://${GIT_FQDN}/$APIMGR/$SEARCH" \
                             ${tags} \
                             --push \
                             .
@@ -34439,7 +37718,7 @@ pipeline {
 | Agent labels | `amd64` and `arm64` MUST be available |
 | Docker | Required on all agents (builds use golang:alpine) |
 | Docker buildx | Required on amd64 agent for multi-arch builds |
-| Go caches | `/tmp/{projectorg}/go-cache` and `/tmp/{projectorg}/go-mod-cache` |
+| Go caches | `/tmp/apimgr/go-cache` and `/tmp/apimgr/go-mod-cache` |
 
 ### Credentials Setup (Jenkins → Credentials → Add Credentials)
 
@@ -34470,17 +37749,17 @@ In the Jenkinsfile, uncomment the appropriate block:
 // ----- GITHUB (default) -----
 GIT_FQDN = 'github.com'
 GIT_TOKEN = credentials('github-token')
-REGISTRY = "ghcr.io/${PROJECTORG}/${PROJECTNAME}"
+REGISTRY = "ghcr.io/$APIMGR/$SEARCH"
 
 // ----- GITEA / FORGEJO (self-hosted) -----
 // GIT_FQDN = 'git.example.com'
 // GIT_TOKEN = credentials('gitea-token')
-// REGISTRY = "${GIT_FQDN}/${PROJECTORG}/${PROJECTNAME}"
+// REGISTRY = "${GIT_FQDN}/$APIMGR/$SEARCH"
 
 // ----- GITLAB (gitlab.com or self-hosted) -----
 // GIT_FQDN = 'gitlab.com'
 // GIT_TOKEN = credentials('gitlab-token')
-// REGISTRY = "registry.${GIT_FQDN}/${PROJECTORG}/${PROJECTNAME}"
+// REGISTRY = "registry.${GIT_FQDN}/$APIMGR/$SEARCH"
 ```
 
 ### Triggers Comparison
@@ -34525,8 +37804,8 @@ Before proceeding, confirm you understand:
 
 | REQUIRED | Example |
 |----------|---------|
-| Temp directory | `/tmp/{projectorg}/{projectname}-XXXXXX/` |
-| Volume mounts | `/tmp/{projectorg}/{projectname}-XXXXXX/rootfs/` |
+| Temp directory | `/tmp/apimgr/search-XXXXXX/` |
+| Volume mounts | `/tmp/apimgr/search-XXXXXX/rootfs/` |
 | Test databases | In temp directory, never project |
 
 **The project directory is for SOURCE CODE ONLY. All runtime/test data goes to the OS temp directory.**
@@ -34557,8 +37836,8 @@ Before proceeding, confirm you understand:
 **AI testing workflow:**
 ```bash
 # 1. Create temp directory (REQUIRED)
-mkdir -p "${TMPDIR:-/tmp}/${PROJECTORG}"
-TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-XXXXXX")
+mkdir -p "${TMPDIR:-/tmp}/$APIMGR"
+TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/$APIMGR/$SEARCH-XXXXXX")
 mkdir -p "$TEMP_DIR/rootfs/config" "$TEMP_DIR/rootfs/data"
 
 # 2. Copy ONLY docker-compose.test.yml to temp dir
@@ -34600,7 +37879,7 @@ Config files are NEVER in the repository. They are generated at RUNTIME:
 | File | Location | Created When |
 |------|----------|--------------|
 | `server.yml` | `{config_dir}/server.yml` (see PART 4) | Server first run |
-| `cli.yml` | `~/.config/{projectorg}/{projectname}/cli.yml` | CLI first run |
+| `cli.yml` | `~/.config/apimgr/search/cli.yml` | CLI first run |
 | Tor config | `{config_dir}/tor/torrc` (see PART 32) | When Tor enabled |
 | Tor data | `{data_dir}/tor/` (see PART 32) | When Tor enabled |
 
@@ -34627,28 +37906,28 @@ Config files are NEVER in the repository. They are generated at RUNTIME:
 
 ## Temporary Directory Structure 
 
-**CRITICAL: NEVER use `/tmp` root directory directly. ALWAYS use `/tmp/{projectorg}/{projectname}-XXXXXX` structure.**
+**CRITICAL: NEVER use `/tmp` root directory directly. ALWAYS use `/tmp/apimgr/search-XXXXXX` structure.**
 
 **FORBIDDEN:**
 - ❌ `/tmp/myfile` - Root tmp directory
-- ❌ `/tmp/{projectname}` - Missing org prefix
+- ❌ `/tmp/search` - Missing org prefix
 - ❌ `mktemp -d` - No org/project structure
 - ❌ `/tmp/test-data` - Generic paths
 
 **REQUIRED:**
-- ✓ `/tmp/{projectorg}/{projectname}-XXXXXX/` - Full structure
+- ✓ `/tmp/apimgr/search-XXXXXX/` - Full structure
 - ✓ `/tmp/cloudops/echoip-aB3xY9/` - Org + project + random
-- ✓ `mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-XXXXXX"` - Proper command
+- ✓ `mktemp -d "${TMPDIR:-/tmp}/$APIMGR/$SEARCH-XXXXXX"` - Proper command
 
 **See "Inferring Variables from Path" section for how to detect `ORG` and `PROJECT`.**
 
 ### Creating Temp Directories
 
-**Always use `{projectorg}/{projectname}-` structure for identifiable temp dirs:**
+**Always use `apimgr/search-` structure for identifiable temp dirs:**
 
 | Language | How to Create Prefixed Temp Dir |
 |----------|--------------------------------|
-| Shell | `mkdir -p "${TMPDIR:-/tmp}/${PROJECTORG}" && mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-XXXXXX"` |
+| Shell | `mkdir -p "${TMPDIR:-/tmp}/$APIMGR" && mktemp -d "${TMPDIR:-/tmp}/$APIMGR/$SEARCH-XXXXXX"` |
 | Go | `os.MkdirAll(filepath.Join(os.TempDir(), projectOrg), 0755); os.MkdirTemp(filepath.Join(os.TempDir(), projectOrg), projectName+"-")` |
 | Python | `os.makedirs(f"{tempfile.gettempdir()}/{project_org}", exist_ok=True); tempfile.mkdtemp(prefix=f"{project_name}-", dir=f"{tempfile.gettempdir()}/{project_org}")` |
 
@@ -34658,9 +37937,9 @@ Config files are NEVER in the repository. They are generated at RUNTIME:
 
 | Purpose | Path Pattern | Example |
 |---------|--------------|---------|
-| Dev/Test runtime | `{tempdir}/{projectorg}/{projectname}-XXXXXX/` | `/tmp/{projectorg}/{projectname}-aB3xY9/` |
-| Config volume | `{tempdir}/{projectorg}/{projectname}-XXXXXX/rootfs/config/` | `/tmp/{projectorg}/{projectname}-aB3xY9/rootfs/config/` |
-| Data volume | `{tempdir}/{projectorg}/{projectname}-XXXXXX/rootfs/data/` | `/tmp/{projectorg}/{projectname}-aB3xY9/rootfs/data/` |
+| Dev/Test runtime | `{tempdir}/apimgr/search-XXXXXX/` | `/tmp/apimgr/search-aB3xY9/` |
+| Config volume | `{tempdir}/apimgr/search-XXXXXX/rootfs/config/` | `/tmp/apimgr/search-aB3xY9/rootfs/config/` |
+| Data volume | `{tempdir}/apimgr/search-XXXXXX/rootfs/data/` | `/tmp/apimgr/search-aB3xY9/rootfs/data/` |
 
 ### OS Temp Directories
 
@@ -34678,44 +37957,44 @@ Config files are NEVER in the repository. They are generated at RUNTIME:
 | **NEVER** | Use project directory for test/runtime data |
 | **NEVER** | Hardcode `/tmp` - use `os.TempDir()` or `mktemp` |
 | **NEVER** | Use bare `mktemp -d` without org prefix |
-| **ALWAYS** | Use `{projectorg}/{projectname}-` structure for all temp dirs |
+| **ALWAYS** | Use `apimgr/search-` structure for all temp dirs |
 | **ALWAYS** | Detect org from git remote or directory path |
 
 ### Cleanup
 
 ```bash
 # Find all temp dirs for this org
-ls -la "${TMPDIR:-/tmp}/${PROJECTORG}/"
+ls -la "${TMPDIR:-/tmp}/$APIMGR/"
 
 # Clean all temp dirs for this org
-rm -rf "${TMPDIR:-/tmp}/${PROJECTORG}/"
+rm -rf "${TMPDIR:-/tmp}/$APIMGR/"
 ```
 
 ### Correct vs Incorrect
 
 | WRONG | RIGHT | Why |
 |-------|-------|-----|
-| `/tmp/` | `/tmp/{projectorg}/{projectname}-XXXXXX/` | NEVER use root tmp |
+| `/tmp/` | `/tmp/apimgr/search-XXXXXX/` | NEVER use root tmp |
 | `/tmp/myfile` | `/tmp/cloudops/echoip-aB3xY9/myfile` | Always use org/project structure |
 | `/tmp/echoip` | `/tmp/cloudops/echoip-kL9mN2/` | Missing org, missing random suffix |
 | `/tmp/test-data/` | `/tmp/devtools/quotesvc-Qw5rT1/test-data/` | Generic path not allowed |
-| `mktemp -d` | `mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-XXXXXX"` | Must include org/project |
+| `mktemp -d` | `mktemp -d "${TMPDIR:-/tmp}/$APIMGR/$SEARCH-XXXXXX"` | Must include org/project |
 | `os.TempDir()` alone | `os.MkdirTemp(filepath.Join(os.TempDir(), projectOrg), projectName+"-")` | Must nest under org |
 | Hardcoded org name | Detect from git remote or path | Auto-detect, never hardcode |
 
-**Rule: ALL temp directories MUST be under `/tmp/{projectorg}/{projectname}-XXXXXX/` - no exceptions.**
+**Rule: ALL temp directories MUST be under `/tmp/apimgr/search-XXXXXX/` - no exceptions.**
 
 ### Summary: Temp Directory Rules
 
 **The ONLY acceptable temp directory pattern:**
 ```
-/tmp/{projectorg}/{projectname}-XXXXXX/
+/tmp/apimgr/search-XXXXXX/
 ```
 
 **Breaking it down:**
 - `/tmp/` or `$TMPDIR` - OS temp directory base
-- `{projectorg}/` - Organization directory (cloudops, acmesoft, etc.)
-- `{projectname}-XXXXXX` - Project directory with random suffix
+- `apimgr/` - Organization directory (cloudops, acmesoft, etc.)
+- `search-XXXXXX` - Project directory with random suffix
 
 **Examples of CORRECT paths:**
 - `/tmp/cloudops/echoip-aB3xY9/` ✓
@@ -34730,7 +38009,7 @@ rm -rf "${TMPDIR:-/tmp}/${PROJECTORG}/"
 
 **Why this structure:**
 - Prevents conflicts between projects
-- Makes cleanup easy (`rm -rf /tmp/{projectorg}/`)
+- Makes cleanup easy (`rm -rf /tmp/apimgr/`)
 - Identifies which project created temp files
 - Prevents pollution of root `/tmp` directory
 - Multiple projects can run simultaneously
@@ -34749,8 +38028,8 @@ rm -rf "${TMPDIR:-/tmp}/${PROJECTORG}/"
 | **NEVER run binaries locally** | All binaries run inside containers, never directly |
 | **NEVER** | Run `go build` directly on local machine |
 | **NEVER** | Run `go test` directly on local machine |
-| **NEVER** | Run `binaries/{projectname}` on local machine |
-| **NEVER** | Run `$BUILD_DIR/{projectname}` on local machine |
+| **NEVER** | Run `binaries/search` on local machine |
+| **NEVER** | Run `$BUILD_DIR/search` on local machine |
 | **ALWAYS** | Build inside container, run inside container |
 
 ### Container Types
@@ -34811,36 +38090,36 @@ rm -rf "${TMPDIR:-/tmp}/${PROJECTORG}/"
 **Frontend Route Testing (ALL routes):**
 ```bash
 # Every frontend route MUST be tested with BOTH:
-curl -H "Accept: text/html" /route          # Returns HTML
-curl -H "Accept: text/plain" /route         # Returns plain text
+curl -q -LSsf -H "Accept: text/html" /route          # Returns HTML
+curl -q -LSsf -H "Accept: text/plain" /route         # Returns plain text
 
 # Example: Test user profile page
-curl -H "Accept: text/html" /users/john     # HTML page
-curl -H "Accept: text/plain" /users/john    # Plain text output
+curl -q -LSsf -H "Accept: text/html" /users/john     # HTML page
+curl -q -LSsf -H "Accept: text/plain" /users/john    # Plain text output
 ```
 
 **Backend/API Route Testing (ALL routes):**
 ```bash
 # Every API route MUST be tested with BOTH:
-curl -H "Accept: application/json" /api/v1/resource    # Returns JSON
-curl -H "Accept: text/plain" /api/v1/resource          # Returns plain text
+curl -q -LSsf -H "Accept: application/json" /api/v1/resource    # Returns JSON
+curl -q -LSsf -H "Accept: text/plain" /api/v1/resource          # Returns plain text
 
 # Example: Test jokes API
-curl -H "Accept: application/json" /api/v1/jokes/random   # JSON response
-curl -H "Accept: text/plain" /api/v1/jokes/random         # Plain text response
+curl -q -LSsf -H "Accept: application/json" /api/v1/jokes/random   # JSON response
+curl -q -LSsf -H "Accept: text/plain" /api/v1/jokes/random         # Plain text response
 ```
 
 **Backend .txt Endpoint Testing (ALL endpoints):**
 ```bash
 # Every *.txt endpoint MUST be tested:
-curl /robots.txt                            # Robots file
-curl /security.txt                          # Security policy
-curl /.well-known/security.txt              # Security policy (well-known)
-curl /api/v1/jokes/random.txt               # API .txt extension
+curl -q -LSsf /robots.txt                            # Robots file
+curl -q -LSsf /security.txt                          # Security policy
+curl -q -LSsf /.well-known/security.txt              # Security policy (well-known)
+curl -q -LSsf /api/v1/jokes/random.txt               # API .txt extension
 
 # ALL API endpoints that support .txt MUST be tested with .txt
-curl /api/v1/users/john.txt                 # User profile as text
-curl /api/v1/weather/Chicago.txt            # Weather as text
+curl -q -LSsf /api/v1/users/john.txt                 # User profile as text
+curl -q -LSsf /api/v1/weather/Chicago.txt            # Weather as text
 ```
 
 **Test Matrix Template:**
@@ -34858,9 +38137,9 @@ frontend_routes=(
 
 for route in "${frontend_routes[@]}"; do
     # Test HTML response
-    curl -sf -H "Accept: text/html" "${BASE_URL}${route}" | grep -q "<!DOCTYPE html" || fail "HTML failed for $route"
+    curl -q -LSsf -H "Accept: text/html" "${BASE_URL}${route}" | grep -q "<!DOCTYPE html" || fail "HTML failed for $route"
     # Test plain text response
-    curl -sf -H "Accept: text/plain" "${BASE_URL}${route}" | head -1 || fail "Plain text failed for $route"
+    curl -q -LSsf -H "Accept: text/plain" "${BASE_URL}${route}" | head -1 || fail "Plain text failed for $route"
 done
 
 # Backend routes - test BOTH application/json and text/plain
@@ -34872,9 +38151,9 @@ api_routes=(
 
 for route in "${api_routes[@]}"; do
     # Test JSON response
-    curl -sf -H "Accept: application/json" "${BASE_URL}${route}" | jq . || fail "JSON failed for $route"
+    curl -q -LSsf -H "Accept: application/json" "${BASE_URL}${route}" | jq . || fail "JSON failed for $route"
     # Test plain text response
-    curl -sf -H "Accept: text/plain" "${BASE_URL}${route}" || fail "Plain text failed for $route"
+    curl -q -LSsf -H "Accept: text/plain" "${BASE_URL}${route}" || fail "Plain text failed for $route"
 done
 
 # Backend .txt endpoints - test ALL of them
@@ -34887,7 +38166,7 @@ txt_endpoints=(
 )
 
 for endpoint in "${txt_endpoints[@]}"; do
-    curl -sf "${BASE_URL}${endpoint}" || fail ".txt failed for $endpoint"
+    curl -q -LSsf "${BASE_URL}${endpoint}" || fail ".txt failed for $endpoint"
 done
 ```
 
@@ -34918,11 +38197,11 @@ PATCH  /api/{api_version}/{admin_path}/users/1      # Update specific user (admi
 DELETE /api/{api_version}/{admin_path}/users/1      # Delete specific user (admin)
 
 # Frontend routes (smart detection) - CLI gets beautiful formatted text via HTML2TextConverter
-curl /users                              # CLI → formatted text (current user)
-browser /users                           # Browser → HTML page (current user)
-curl /{username}                         # CLI → formatted text (public profile)
-curl -H "Accept: text/plain" /{username} # Formatted text (Accept header)
-curl -H "Accept: text/html" /{username}  # HTML (Accept header)
+curl -q -LSsf /users                              # CLI → formatted text (current user)
+browser /users                                    # Browser → HTML page (current user)
+curl -q -LSsf /{username}                         # CLI → formatted text (public profile)
+curl -q -LSsf -H "Accept: text/plain" /{username} # Formatted text (Accept header)
+curl -q -LSsf -H "Accept: text/html" /{username}  # HTML (Accept header)
 ```
 
 **Example: Jokes API (read-only) MUST test:**
@@ -34934,9 +38213,9 @@ GET /api/{api_version}/jokes/programming        # Category filter (JSON)
 GET /api/{api_version}/jokes/search?q=bug       # Search (JSON)
 
 # Frontend endpoints (smart detection) - CLI gets formatted text
-curl /jokes/random                   # CLI → formatted text
-curl /jokes                          # CLI → formatted text list
-curl -H "Accept: text/html" /jokes   # Browser → HTML
+curl -q -LSsf /jokes/random                   # CLI → formatted text
+curl -q -LSsf /jokes                          # CLI → formatted text list
+curl -q -LSsf -H "Accept: text/html" /jokes   # Browser → HTML
 ```
 
 **Example: Weather API (external integration) MUST test:**
@@ -34952,8 +38231,8 @@ GET /api/{api_version}/weather/current/Chicago           # First call (cache mis
 GET /api/{api_version}/weather/current/Chicago           # Second call (cache hit, faster)
 
 # Frontend (smart detection) - CLI gets formatted text
-curl /weather/Chicago                # CLI → formatted text
-curl /weather/forecast/90210         # CLI → formatted text forecast
+curl -q -LSsf /weather/Chicago                # CLI → formatted text
+curl -q -LSsf /weather/forecast/90210         # CLI → formatted text forecast
 ```
 
 **Example: Link Shortener (URL mapping) MUST test:**
@@ -34969,8 +38248,8 @@ GET /abc123                          # Should redirect to destination
 GET /abc123/stats                    # Link statistics (JSON or HTML)
 
 # Frontend (smart detection)
-curl /links                          # User's links list (text)
-curl /links/abc123                   # Link details (text)
+curl -q -LSsf /links                          # User's links list (text)
+curl -q -LSsf /links/abc123                   # Link details (text)
 ```
 
 ### Go Unit Test Requirements
@@ -35230,28 +38509,28 @@ verify_all_endpoints_tested
 
 ```bash
 # 1. Build in Docker (always use Docker for builds)
-mkdir -p "${TMPDIR:-/tmp}/${PROJECTORG}"
-BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-XXXXXX")
+mkdir -p "${TMPDIR:-/tmp}/$APIMGR"
+BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/$APIMGR/$SEARCH-XXXXXX")
 docker run --rm -v $(pwd):/build -w /build -e CGO_ENABLED=0 \
-  golang:alpine go build -o /build/binaries/{projectname} ./src
+  golang:alpine go build -o /build/binaries/search ./src
 
 # 2. Test (prefer Incus, fallback to Docker)
 if command -v incus &>/dev/null; then
   # PREFERRED: Full OS test in Incus (debian + systemd)
   # Use latest Debian stable (currently 12/bookworm)
   echo "Testing with Incus (Debian + systemd)..."
-  incus launch images:debian/12 test-{projectname}
-  incus file push binaries/{projectname} test-{projectname}/usr/local/bin/
-  incus exec test-{projectname} -- chmod +x /usr/local/bin/{projectname}
-  incus exec test-{projectname} -- {projectname} --help
-  incus exec test-{projectname} -- {projectname} --service --install
-  incus exec test-{projectname} -- systemctl status {projectname}
-  incus delete test-{projectname} --force
+  incus launch images:debian/12 test-search
+  incus file push binaries/search test-search/usr/local/bin/
+  incus exec test-search -- chmod +x /usr/local/bin/search
+  incus exec test-search -- search --help
+  incus exec test-search -- search --service --install
+  incus exec test-search -- systemctl status search
+  incus delete test-search --force
 else
   # FALLBACK: Quick test in Docker (alpine, no systemd)
   echo "Incus not available, testing with Docker..."
   docker run --rm -v $(pwd)/binaries:/app alpine:latest \
-    /app/{projectname} --help
+    /app/search --help
 fi
 ```
 
@@ -35310,8 +38589,8 @@ PROJECTNAME=$(basename "$PWD")
 PROJECTORG=$(basename "$(dirname "$PWD")")
 
 # Create temp directory for build
-mkdir -p "${TMPDIR:-/tmp}/${PROJECTORG}"
-BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-XXXXXX")
+mkdir -p "${TMPDIR:-/tmp}/$APIMGR"
+BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/$APIMGR/$SEARCH-XXXXXX")
 trap "rm -rf $BUILD_DIR" EXIT
 
 # Go cache directories (same as Makefile)
@@ -35329,18 +38608,18 @@ GO_DOCKER="docker run --rm \
   golang:alpine"
 
 echo "Building server binary in Docker..."
-$GO_DOCKER go build -o "$BUILD_DIR/${PROJECTNAME}" ./src
+$GO_DOCKER go build -o "$BUILD_DIR/$SEARCH" ./src
 
 # Build client if exists
 if [ -d "src/client" ]; then
     echo "Building client in Docker..."
-    $GO_DOCKER go build -o "$BUILD_DIR/${PROJECTNAME}-cli" ./src/client
+    $GO_DOCKER go build -o "$BUILD_DIR/$SEARCH-cli" ./src/client
 fi
 
 # Build agent if exists
 if [ -d "src/agent" ]; then
     echo "Building agent in Docker..."
-    $GO_DOCKER go build -o "$BUILD_DIR/${PROJECTNAME}-agent" ./src/agent
+    $GO_DOCKER go build -o "$BUILD_DIR/$SEARCH-agent" ./src/agent
 fi
 
 echo "Testing in Docker (Alpine)..."
@@ -35352,22 +38631,22 @@ docker run --rm \
     # Install required tools for testing
     apk add --no-cache curl bash file jq >/dev/null
 
-    chmod +x /app/${PROJECTNAME}
-    [ -f /app/${PROJECTNAME}-cli ] && chmod +x /app/${PROJECTNAME}-cli
-    [ -f /app/${PROJECTNAME}-agent ] && chmod +x /app/${PROJECTNAME}-agent
+    chmod +x /app/$SEARCH
+    [ -f /app/$SEARCH-cli ] && chmod +x /app/$SEARCH-cli
+    [ -f /app/$SEARCH-agent ] && chmod +x /app/$SEARCH-agent
 
     echo '=== Version Check ==='
-    /app/${PROJECTNAME} --version
+    /app/$SEARCH --version
 
     echo '=== Help Check ==='
-    /app/${PROJECTNAME} --help
+    /app/$SEARCH --help
 
     echo '=== Binary Info ==='
-    ls -lh /app/${PROJECTNAME}
-    file /app/${PROJECTNAME}
+    ls -lh /app/$SEARCH
+    file /app/$SEARCH
 
     echo '=== Starting Server for API Tests ==='
-    /app/${PROJECTNAME} --port 64580 > /tmp/server.log 2>&1 &
+    /app/$SEARCH --port 64580 > /tmp/server.log 2>&1 &
     SERVER_PID=\$!
     sleep 3
     # Show setup token if present (for debugging)
@@ -35375,46 +38654,46 @@ docker run --rm \
 
     echo '=== API Endpoint Tests ==='
     # Test JSON response (default)
-    curl -f http://localhost:64580/api/{api_version}/healthz || echo 'FAILED: /api/{api_version}/healthz'
+    curl -q -LSsf http://localhost:64580/api/{api_version}/healthz || echo 'FAILED: /api/{api_version}/healthz'
 
     # Test .txt extension (plain text)
-    curl -f http://localhost:64580/api/{api_version}/healthz.txt || echo 'FAILED: /api/{api_version}/healthz.txt'
+    curl -q -LSsf http://localhost:64580/api/{api_version}/healthz.txt || echo 'FAILED: /api/{api_version}/healthz.txt'
 
     # Test Accept header: application/json
-    curl -f -H 'Accept: application/json' http://localhost:64580/healthz || echo 'FAILED: Accept JSON'
+    curl -q -LSsf -H 'Accept: application/json' http://localhost:64580/healthz || echo 'FAILED: Accept JSON'
 
     # Test Accept header: text/plain
-    curl -f -H 'Accept: text/plain' http://localhost:64580/healthz || echo 'FAILED: Accept text/plain'
+    curl -q -LSsf -H 'Accept: text/plain' http://localhost:64580/healthz || echo 'FAILED: Accept text/plain'
 
     echo '=== Project-Specific Endpoint Tests ==='
     # MUST test ALL endpoints from IDEA.md - both API and frontend
     # Test FULL CRUD if project has CRUD operations
     #
     # Example for jokes API (API routes with .txt extension):
-    #   curl -f http://localhost:64580/api/{api_version}/jokes/random || echo 'FAILED: API JSON'
-    #   curl -f http://localhost:64580/api/{api_version}/jokes/random.txt || echo 'FAILED: API .txt'
-    #   curl -f -H 'Accept: text/plain' http://localhost:64580/api/{api_version}/jokes/random || echo 'FAILED: API Accept text'
+    #   curl -q -LSsf http://localhost:64580/api/{api_version}/jokes/random || echo 'FAILED: API JSON'
+    #   curl -q -LSsf http://localhost:64580/api/{api_version}/jokes/random.txt || echo 'FAILED: API .txt'
+    #   curl -q -LSsf -H 'Accept: text/plain' http://localhost:64580/api/{api_version}/jokes/random || echo 'FAILED: API Accept text'
     #
     # Example for jokes frontend (smart detection, no .txt - test with text for simplicity):
-    #   JOKE=\$(curl -s http://localhost:64580/jokes/random)  # CLI auto-detects text
+    #   JOKE=\$(curl -q -LSsf http://localhost:64580/jokes/random)  # CLI auto-detects text
     #   if echo "\$JOKE" | grep -q "Why"; then echo '✓ Frontend text works'; else echo 'FAILED: Frontend text'; fi
     #   # Optional: verify HTML is served to browsers
-    #   curl -f -s -I -H 'Accept: text/html' http://localhost:64580/jokes/random | grep -q 'text/html' || echo 'FAILED: Frontend HTML'
+    #   curl -q -LSsfI -H 'Accept: text/html' http://localhost:64580/jokes/random | grep -q 'text/html' || echo 'FAILED: Frontend HTML'
     #
     # Example for user CRUD (full test suite):
     #   # API - Current user
-    #   curl -f http://localhost:64580/api/{api_version}/users || echo 'FAILED: GET current user API'
-    #   curl -f -X PATCH -H 'Content-Type: application/json' -d '{\"email\":\"new@test.com\"}' http://localhost:64580/api/{api_version}/users || echo 'FAILED: UPDATE current user API'
+    #   curl -q -LSsf http://localhost:64580/api/{api_version}/users || echo 'FAILED: GET current user API'
+    #   curl -q -LSsf -X PATCH -H 'Content-Type: application/json' -d '{\"email\":\"new@test.com\"}' http://localhost:64580/api/{api_version}/users || echo 'FAILED: UPDATE current user API'
     #   # API - Public profile (by username)
-    #   curl -f http://localhost:64580/api/{api_version}/users/testuser || echo 'FAILED: READ public profile API JSON'
-    #   curl -f http://localhost:64580/api/{api_version}/users/testuser.txt || echo 'FAILED: READ public profile API .txt'
+    #   curl -q -LSsf http://localhost:64580/api/{api_version}/users/testuser || echo 'FAILED: READ public profile API JSON'
+    #   curl -q -LSsf http://localhost:64580/api/{api_version}/users/testuser.txt || echo 'FAILED: READ public profile API .txt'
     #   # API - Admin routes (by ID)
-    #   curl -f http://localhost:64580/api/{api_version}/{admin_path}/users || echo 'FAILED: LIST users admin API'
-    #   curl -f http://localhost:64580/api/{api_version}/{admin_path}/users/1 || echo 'FAILED: READ user admin API'
-    #   curl -f -X DELETE http://localhost:64580/api/{api_version}/{admin_path}/users/1 || echo 'FAILED: DELETE user admin API'
+    #   curl -q -LSsf http://localhost:64580/api/{api_version}/{admin_path}/users || echo 'FAILED: LIST users admin API'
+    #   curl -q -LSsf http://localhost:64580/api/{api_version}/{admin_path}/users/1 || echo 'FAILED: READ user admin API'
+    #   curl -q -LSsf -X DELETE http://localhost:64580/api/{api_version}/{admin_path}/users/1 || echo 'FAILED: DELETE user admin API'
     #   # Frontend (smart detection - test with text for simplicity)
-    #   USERS=\$(curl -s http://localhost:64580/users)  # CLI auto-detects text (current user)
-    #   USER=\$(curl -s http://localhost:64580/testuser)  # CLI auto-detects text (public profile)
+    #   USERS=\$(curl -q -LSsf http://localhost:64580/users)  # CLI auto-detects text (current user)
+    #   USER=\$(curl -q -LSsf http://localhost:64580/testuser)  # CLI auto-detects text (public profile)
     #
     # Test ALL project-specific endpoints defined in IDEA.md
 
@@ -35426,14 +38705,14 @@ docker run --rm \
         echo \"Setup token found: \${SETUP_TOKEN:0:8}...\"
 
         # Create admin account
-        curl -sf -X POST \\
+        curl -q -LSsf -X POST \\
             -H \"X-Setup-Token: \$SETUP_TOKEN\" \\
             -H \"Content-Type: application/json\" \\
             -d '{\"username\":\"testadmin\",\"password\":\"TestPass123!\"}' \\
             http://localhost:64580/api/{api_version}/{admin_path}/setup || echo 'Admin setup failed (may already exist)'
 
         # Login and get session
-        SESSION=\$(curl -sf -X POST \\
+        SESSION=\$(curl -q -LSsf -X POST \\
             -H \"Content-Type: application/json\" \\
             -d '{\"username\":\"testadmin\",\"password\":\"TestPass123!\"}' \\
             http://localhost:64580/api/{api_version}/{admin_path}/login | grep -oP '\"session_token\":\\s*\"\\K[^\"]+' || echo '')
@@ -35442,7 +38721,7 @@ docker run --rm \
             echo '✓ Admin login successful'
 
             # Generate API token for CLI/Agent testing
-            API_TOKEN=\$(curl -sf -X POST \\
+            API_TOKEN=\$(curl -q -LSsf -X POST \\
                 -H \"Authorization: Bearer \$SESSION\" \\
                 http://localhost:64580/api/{api_version}/{admin_path}/profile/token | grep -oP '\"token\":\\s*\"\\K[^\"]+' || echo '')
 
@@ -35460,7 +38739,7 @@ docker run --rm \
 
     echo '=== Binary Rename Tests ==='
     # Test that binaries show ACTUAL name in --help/--version (not hardcoded)
-    cp /app/${PROJECTNAME} /app/renamed-server
+    cp /app/$SEARCH /app/renamed-server
     chmod +x /app/renamed-server
     if /app/renamed-server --help 2>&1 | grep -q 'renamed-server'; then
         echo '✓ Server binary rename works (--help shows actual name)'
@@ -35469,12 +38748,12 @@ docker run --rm \
     fi
 
     echo '=== Client Tests (if exists) ==='
-    if [ -f /app/${PROJECTNAME}-cli ]; then
-        /app/${PROJECTNAME}-cli --version || echo 'FAILED: CLI --version'
-        /app/${PROJECTNAME}-cli --help || echo 'FAILED: CLI --help'
+    if [ -f /app/$SEARCH-cli ]; then
+        /app/$SEARCH-cli --version || echo 'FAILED: CLI --version'
+        /app/$SEARCH-cli --help || echo 'FAILED: CLI --help'
 
         # Test binary rename
-        cp /app/${PROJECTNAME}-cli /app/renamed-cli
+        cp /app/$SEARCH-cli /app/renamed-cli
         chmod +x /app/renamed-cli
         if /app/renamed-cli --help 2>&1 | grep -q 'renamed-cli'; then
             echo '✓ CLI binary rename works'
@@ -35486,24 +38765,24 @@ docker run --rm \
         echo '--- CLI Full Functionality Tests ---'
         if [ -n \"\${API_TOKEN:-}\" ]; then
             # Test with API token
-            /app/${PROJECTNAME}-cli --server http://localhost:64580 --token \"\$API_TOKEN\" status || echo 'CLI status failed'
+            /app/$SEARCH-cli --server http://localhost:64580 --token \"\$API_TOKEN\" status || echo 'CLI status failed'
             # Project-specific CLI commands go here (IDEA.md)
-            # Example: /app/${PROJECTNAME}-cli --server http://localhost:64580 --token \"\$API_TOKEN\" list
+            # Example: /app/$SEARCH-cli --server http://localhost:64580 --token \"\$API_TOKEN\" list
         else
             # Test without token (anonymous if allowed)
-            /app/${PROJECTNAME}-cli --server http://localhost:64580 status || echo 'CLI status (no token) failed or not applicable'
+            /app/$SEARCH-cli --server http://localhost:64580 status || echo 'CLI status (no token) failed or not applicable'
         fi
     else
         echo 'client not built - skipping'
     fi
 
     echo '=== Agent Tests (if exists) ==='
-    if [ -f /app/${PROJECTNAME}-agent ]; then
-        /app/${PROJECTNAME}-agent --version || echo 'FAILED: Agent --version'
-        /app/${PROJECTNAME}-agent --help || echo 'FAILED: Agent --help'
+    if [ -f /app/$SEARCH-agent ]; then
+        /app/$SEARCH-agent --version || echo 'FAILED: Agent --version'
+        /app/$SEARCH-agent --help || echo 'FAILED: Agent --help'
 
         # Test binary rename
-        cp /app/${PROJECTNAME}-agent /app/renamed-agent
+        cp /app/$SEARCH-agent /app/renamed-agent
         chmod +x /app/renamed-agent
         if /app/renamed-agent --help 2>&1 | grep -q 'renamed-agent'; then
             echo '✓ Agent binary rename works'
@@ -35515,7 +38794,7 @@ docker run --rm \
         echo '--- Agent Full Functionality Tests ---'
         if [ -n \"\${API_TOKEN:-}\" ]; then
             # Test agent registration/status with API token
-            /app/${PROJECTNAME}-agent --server http://localhost:64580 --token \"\$API_TOKEN\" status || echo 'Agent status failed'
+            /app/$SEARCH-agent --server http://localhost:64580 --token \"\$API_TOKEN\" status || echo 'Agent status failed'
             # Project-specific agent commands go here (IDEA.md)
         else
             echo 'Agent tests skipped (no API token)'
@@ -35551,14 +38830,14 @@ fi
 # Detect project info
 PROJECTNAME=$(basename "$PWD")
 PROJECTORG=$(basename "$(dirname "$PWD")")
-CONTAINER_NAME="test-${PROJECTNAME}-$$"
+CONTAINER_NAME="test-$SEARCH-$$"
 
 # Incus image - use latest Debian stable (update when new stable releases)
 INCUS_IMAGE="images:debian/12"
 
 # Create temp directory for build
-mkdir -p "${TMPDIR:-/tmp}/${PROJECTORG}"
-BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-XXXXXX")
+mkdir -p "${TMPDIR:-/tmp}/$APIMGR"
+BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/$APIMGR/$SEARCH-XXXXXX")
 trap "rm -rf $BUILD_DIR; incus delete $CONTAINER_NAME --force 2>/dev/null || true" EXIT
 
 # Go cache directories (same as Makefile)
@@ -35576,18 +38855,18 @@ GO_DOCKER="docker run --rm \
   golang:alpine"
 
 echo "Building server binary in Docker..."
-$GO_DOCKER go build -o "$BUILD_DIR/${PROJECTNAME}" ./src
+$GO_DOCKER go build -o "$BUILD_DIR/$SEARCH" ./src
 
 # Build client if exists
 if [ -d "src/client" ]; then
     echo "Building client in Docker..."
-    $GO_DOCKER go build -o "$BUILD_DIR/${PROJECTNAME}-cli" ./src/client
+    $GO_DOCKER go build -o "$BUILD_DIR/$SEARCH-cli" ./src/client
 fi
 
 # Build agent if exists
 if [ -d "src/agent" ]; then
     echo "Building agent in Docker..."
-    $GO_DOCKER go build -o "$BUILD_DIR/${PROJECTNAME}-agent" ./src/agent
+    $GO_DOCKER go build -o "$BUILD_DIR/$SEARCH-agent" ./src/agent
 fi
 
 echo "Launching Incus container (Debian + systemd)..."
@@ -35597,19 +38876,19 @@ incus launch "$INCUS_IMAGE" "$CONTAINER_NAME"
 sleep 2
 
 echo "Copying binaries to container..."
-incus file push "$BUILD_DIR/${PROJECTNAME}" "$CONTAINER_NAME/usr/local/bin/"
-incus exec "$CONTAINER_NAME" -- chmod +x "/usr/local/bin/${PROJECTNAME}"
+incus file push "$BUILD_DIR/$SEARCH" "$CONTAINER_NAME/usr/local/bin/"
+incus exec "$CONTAINER_NAME" -- chmod +x "/usr/local/bin/$SEARCH"
 
 # Copy client if built
-if [ -f "$BUILD_DIR/${PROJECTNAME}-cli" ]; then
-    incus file push "$BUILD_DIR/${PROJECTNAME}-cli" "$CONTAINER_NAME/usr/local/bin/"
-    incus exec "$CONTAINER_NAME" -- chmod +x "/usr/local/bin/${PROJECTNAME}-cli"
+if [ -f "$BUILD_DIR/$SEARCH-cli" ]; then
+    incus file push "$BUILD_DIR/$SEARCH-cli" "$CONTAINER_NAME/usr/local/bin/"
+    incus exec "$CONTAINER_NAME" -- chmod +x "/usr/local/bin/$SEARCH-cli"
 fi
 
 # Copy agent if built
-if [ -f "$BUILD_DIR/${PROJECTNAME}-agent" ]; then
-    incus file push "$BUILD_DIR/${PROJECTNAME}-agent" "$CONTAINER_NAME/usr/local/bin/"
-    incus exec "$CONTAINER_NAME" -- chmod +x "/usr/local/bin/${PROJECTNAME}-agent"
+if [ -f "$BUILD_DIR/$SEARCH-agent" ]; then
+    incus file push "$BUILD_DIR/$SEARCH-agent" "$CONTAINER_NAME/usr/local/bin/"
+    incus exec "$CONTAINER_NAME" -- chmod +x "/usr/local/bin/$SEARCH-agent"
 fi
 
 # Ensure curl is available for testing
@@ -35620,87 +38899,87 @@ incus exec "$CONTAINER_NAME" -- bash -c "
     set -e
 
     echo '=== Version Check ==='
-    ${PROJECTNAME} --version
+    $SEARCH --version
 
     echo '=== Help Check ==='
-    ${PROJECTNAME} --help
+    $SEARCH --help
 
     echo '=== Binary Info ==='
-    ls -lh /usr/local/bin/${PROJECTNAME}
-    file /usr/local/bin/${PROJECTNAME}
+    ls -lh /usr/local/bin/$SEARCH
+    file /usr/local/bin/$SEARCH
 
     echo '=== Service Install Test ==='
-    ${PROJECTNAME} --service --install
+    $SEARCH --service --install
 
     echo '=== Service Status ==='
-    systemctl status ${PROJECTNAME} || true
+    systemctl status $SEARCH || true
 
     echo '=== Service Start Test ==='
-    systemctl start ${PROJECTNAME}
+    systemctl start $SEARCH
     sleep 2
-    systemctl status ${PROJECTNAME}
+    systemctl status $SEARCH
 
     echo '=== API Endpoint Tests ==='
     # Test JSON response (default)
-    curl -f http://localhost:80/api/{api_version}/healthz || echo 'FAILED: /api/{api_version}/healthz'
+    curl -q -LSsf http://localhost:80/api/{api_version}/healthz || echo 'FAILED: /api/{api_version}/healthz'
 
     # Test .txt extension (plain text)
-    curl -f http://localhost:80/api/{api_version}/healthz.txt || echo 'FAILED: /api/{api_version}/healthz.txt'
+    curl -q -LSsf http://localhost:80/api/{api_version}/healthz.txt || echo 'FAILED: /api/{api_version}/healthz.txt'
 
     # Test Accept header: application/json
-    curl -f -H 'Accept: application/json' http://localhost:80/healthz || echo 'FAILED: Accept JSON'
+    curl -q -LSsf -H 'Accept: application/json' http://localhost:80/healthz || echo 'FAILED: Accept JSON'
 
     # Test Accept header: text/plain
-    curl -f -H 'Accept: text/plain' http://localhost:80/healthz || echo 'FAILED: Accept text/plain'
+    curl -q -LSsf -H 'Accept: text/plain' http://localhost:80/healthz || echo 'FAILED: Accept text/plain'
 
     echo '=== Project-Specific Endpoint Tests ==='
     # MUST test ALL endpoints from IDEA.md - both API and frontend
     # Test FULL CRUD if project has CRUD operations
     #
     # Example for jokes API (API routes with .txt extension):
-    #   curl -f http://localhost:80/api/{api_version}/jokes/random || echo 'FAILED: API JSON'
-    #   curl -f http://localhost:80/api/{api_version}/jokes/random.txt || echo 'FAILED: API .txt'
-    #   curl -f -H 'Accept: text/plain' http://localhost:80/api/{api_version}/jokes/random || echo 'FAILED: API Accept text'
+    #   curl -q -LSsf http://localhost:80/api/{api_version}/jokes/random || echo 'FAILED: API JSON'
+    #   curl -q -LSsf http://localhost:80/api/{api_version}/jokes/random.txt || echo 'FAILED: API .txt'
+    #   curl -q -LSsf -H 'Accept: text/plain' http://localhost:80/api/{api_version}/jokes/random || echo 'FAILED: API Accept text'
     #
     # Example for jokes frontend (smart detection, no .txt - test with text for simplicity):
-    #   JOKE=\$(curl -s http://localhost:80/jokes/random)  # CLI auto-detects text
+    #   JOKE=\$(curl -q -LSsf http://localhost:80/jokes/random)  # CLI auto-detects text
     #   if echo "\$JOKE" | grep -q "Why"; then echo '✓ Frontend text works'; else echo 'FAILED: Frontend text'; fi
     #   # Optional: verify HTML is served to browsers
-    #   curl -f -s -I -H 'Accept: text/html' http://localhost:80/jokes/random | grep -q 'text/html' || echo 'FAILED: Frontend HTML'
+    #   curl -q -LSsfI -H 'Accept: text/html' http://localhost:80/jokes/random | grep -q 'text/html' || echo 'FAILED: Frontend HTML'
     #
     # Example for user CRUD (full test suite):
     #   # API - Current user
-    #   curl -f http://localhost:80/api/{api_version}/users || echo 'FAILED: GET current user API'
-    #   curl -f -X PATCH -H 'Content-Type: application/json' -d '{\"email\":\"new@test.com\"}' http://localhost:80/api/{api_version}/users || echo 'FAILED: UPDATE current user API'
+    #   curl -q -LSsf http://localhost:80/api/{api_version}/users || echo 'FAILED: GET current user API'
+    #   curl -q -LSsf -X PATCH -H 'Content-Type: application/json' -d '{\"email\":\"new@test.com\"}' http://localhost:80/api/{api_version}/users || echo 'FAILED: UPDATE current user API'
     #   # API - Public profile (by username)
-    #   curl -f http://localhost:80/api/{api_version}/users/testuser || echo 'FAILED: READ public profile API JSON'
-    #   curl -f http://localhost:80/api/{api_version}/users/testuser.txt || echo 'FAILED: READ public profile API .txt'
+    #   curl -q -LSsf http://localhost:80/api/{api_version}/users/testuser || echo 'FAILED: READ public profile API JSON'
+    #   curl -q -LSsf http://localhost:80/api/{api_version}/users/testuser.txt || echo 'FAILED: READ public profile API .txt'
     #   # API - Admin routes (by ID)
-    #   curl -f http://localhost:80/api/{api_version}/{admin_path}/users || echo 'FAILED: LIST users admin API'
-    #   curl -f http://localhost:80/api/{api_version}/{admin_path}/users/1 || echo 'FAILED: READ user admin API'
-    #   curl -f -X DELETE http://localhost:80/api/{api_version}/{admin_path}/users/1 || echo 'FAILED: DELETE user admin API'
+    #   curl -q -LSsf http://localhost:80/api/{api_version}/{admin_path}/users || echo 'FAILED: LIST users admin API'
+    #   curl -q -LSsf http://localhost:80/api/{api_version}/{admin_path}/users/1 || echo 'FAILED: READ user admin API'
+    #   curl -q -LSsf -X DELETE http://localhost:80/api/{api_version}/{admin_path}/users/1 || echo 'FAILED: DELETE user admin API'
     #   # Frontend (smart detection - test with text for simplicity)
-    #   USERS=\$(curl -s http://localhost:80/users)  # CLI auto-detects text (current user)
-    #   USER=\$(curl -s http://localhost:80/testuser)  # CLI auto-detects text (public profile)
+    #   USERS=\$(curl -q -LSsf http://localhost:80/users)  # CLI auto-detects text (current user)
+    #   USER=\$(curl -q -LSsf http://localhost:80/testuser)  # CLI auto-detects text (public profile)
     #
     # Test ALL project-specific endpoints defined in IDEA.md
 
     echo '=== Admin Setup & API Token Creation ==='
     # Get setup token from journal
-    SETUP_TOKEN=\$(journalctl -u ${PROJECTNAME} --no-pager 2>/dev/null | grep -oP 'Setup Token.*:\\s*\\K[a-f0-9]+' | head -1 || echo '')
+    SETUP_TOKEN=\$(journalctl -u $SEARCH --no-pager 2>/dev/null | grep -oP 'Setup Token.*:\\s*\\K[a-f0-9]+' | head -1 || echo '')
 
     if [ -n \"\$SETUP_TOKEN\" ]; then
         echo \"Setup token found: \${SETUP_TOKEN:0:8}...\"
 
         # Create admin account
-        curl -sf -X POST \\
+        curl -q -LSsf -X POST \\
             -H \"X-Setup-Token: \$SETUP_TOKEN\" \\
             -H \"Content-Type: application/json\" \\
             -d '{\"username\":\"testadmin\",\"password\":\"TestPass123!\"}' \\
             http://localhost:80/api/{api_version}/{admin_path}/setup || echo 'Admin setup failed (may already exist)'
 
         # Login and get session
-        SESSION=\$(curl -sf -X POST \\
+        SESSION=\$(curl -q -LSsf -X POST \\
             -H \"Content-Type: application/json\" \\
             -d '{\"username\":\"testadmin\",\"password\":\"TestPass123!\"}' \\
             http://localhost:80/api/{api_version}/{admin_path}/login | grep -oP '\"session_token\":\\s*\"\\K[^\"]+' || echo '')
@@ -35709,7 +38988,7 @@ incus exec "$CONTAINER_NAME" -- bash -c "
             echo '✓ Admin login successful'
 
             # Generate API token for CLI/Agent testing
-            API_TOKEN=\$(curl -sf -X POST \\
+            API_TOKEN=\$(curl -q -LSsf -X POST \\
                 -H \"Authorization: Bearer \$SESSION\" \\
                 http://localhost:80/api/{api_version}/{admin_path}/profile/token | grep -oP '\"token\":\\s*\"\\K[^\"]+' || echo '')
 
@@ -35727,7 +39006,7 @@ incus exec "$CONTAINER_NAME" -- bash -c "
 
     echo '=== Binary Rename Tests ==='
     # Test that binaries show ACTUAL name in --help/--version (not hardcoded)
-    cp /usr/local/bin/${PROJECTNAME} /tmp/renamed-server
+    cp /usr/local/bin/$SEARCH /tmp/renamed-server
     chmod +x /tmp/renamed-server
     if /tmp/renamed-server --help 2>&1 | grep -q 'renamed-server'; then
         echo '✓ Server binary rename works (--help shows actual name)'
@@ -35736,12 +39015,12 @@ incus exec "$CONTAINER_NAME" -- bash -c "
     fi
 
     echo '=== Client Tests (if exists) ==='
-    if [ -f /usr/local/bin/${PROJECTNAME}-cli ]; then
-        ${PROJECTNAME}-cli --version || echo 'FAILED: CLI --version'
-        ${PROJECTNAME}-cli --help || echo 'FAILED: CLI --help'
+    if [ -f /usr/local/bin/$SEARCH-cli ]; then
+        $SEARCH-cli --version || echo 'FAILED: CLI --version'
+        $SEARCH-cli --help || echo 'FAILED: CLI --help'
 
         # Test binary rename
-        cp /usr/local/bin/${PROJECTNAME}-cli /tmp/renamed-cli
+        cp /usr/local/bin/$SEARCH-cli /tmp/renamed-cli
         chmod +x /tmp/renamed-cli
         if /tmp/renamed-cli --help 2>&1 | grep -q 'renamed-cli'; then
             echo '✓ CLI binary rename works'
@@ -35753,23 +39032,23 @@ incus exec "$CONTAINER_NAME" -- bash -c "
         echo '--- CLI Full Functionality Tests ---'
         if [ -n \"\${API_TOKEN:-}\" ]; then
             # Test with API token
-            ${PROJECTNAME}-cli --server http://localhost:80 --token \"\$API_TOKEN\" status || echo 'CLI status failed'
+            $SEARCH-cli --server http://localhost:80 --token \"\$API_TOKEN\" status || echo 'CLI status failed'
             # Project-specific CLI commands go here (IDEA.md)
         else
             # Test without token (anonymous if allowed)
-            ${PROJECTNAME}-cli --server http://localhost:80 status || echo 'CLI status (no token) failed or not applicable'
+            $SEARCH-cli --server http://localhost:80 status || echo 'CLI status (no token) failed or not applicable'
         fi
     else
         echo 'client not installed - skipping'
     fi
 
     echo '=== Agent Tests (if exists) ==='
-    if [ -f /usr/local/bin/${PROJECTNAME}-agent ]; then
-        ${PROJECTNAME}-agent --version || echo 'FAILED: Agent --version'
-        ${PROJECTNAME}-agent --help || echo 'FAILED: Agent --help'
+    if [ -f /usr/local/bin/$SEARCH-agent ]; then
+        $SEARCH-agent --version || echo 'FAILED: Agent --version'
+        $SEARCH-agent --help || echo 'FAILED: Agent --help'
 
         # Test binary rename
-        cp /usr/local/bin/${PROJECTNAME}-agent /tmp/renamed-agent
+        cp /usr/local/bin/$SEARCH-agent /tmp/renamed-agent
         chmod +x /tmp/renamed-agent
         if /tmp/renamed-agent --help 2>&1 | grep -q 'renamed-agent'; then
             echo '✓ Agent binary rename works'
@@ -35781,7 +39060,7 @@ incus exec "$CONTAINER_NAME" -- bash -c "
         echo '--- Agent Full Functionality Tests ---'
         if [ -n \"\${API_TOKEN:-}\" ]; then
             # Test agent registration/status with API token
-            ${PROJECTNAME}-agent --server http://localhost:80 --token \"\$API_TOKEN\" status || echo 'Agent status failed'
+            $SEARCH-agent --server http://localhost:80 --token \"\$API_TOKEN\" status || echo 'Agent status failed'
             # Project-specific agent commands go here (IDEA.md)
         else
             echo 'Agent tests skipped (no API token)'
@@ -35791,7 +39070,7 @@ incus exec "$CONTAINER_NAME" -- bash -c "
     fi
 
     echo '=== Service Stop Test ==='
-    systemctl stop ${PROJECTNAME}
+    systemctl stop $SEARCH
 
     echo '=== All tests passed ==='
 "
@@ -35857,14 +39136,14 @@ See PART 33: "Shell Completions (Built-in)" for full implementation details.
 
 ```bash
 # Generate and install completions (prints to stdout, user redirects)
-{projectname} --shell completions bash > /etc/bash_completion.d/{projectname}
-{projectname}-cli --shell completions bash > /etc/bash_completion.d/{projectname}-cli
-{projectname}-agent --shell completions bash > /etc/bash_completion.d/{projectname}-agent
+search --shell completions bash > /etc/bash_completion.d/search
+search-cli --shell completions bash > /etc/bash_completion.d/search-cli
+search-agent --shell completions bash > /etc/bash_completion.d/search-agent
 
 # Or use eval in shell rc file
-eval "$({projectname} --shell init)"
-eval "$({projectname}-cli --shell init)"
-eval "$({projectname}-agent --shell init)"
+eval "$(search --shell init)"
+eval "$(search-cli --shell init)"
+eval "$(search-agent --shell init)"
 ```
 
 | Advantage | Description |
@@ -35890,13 +39169,14 @@ set -euo pipefail
 echo '=== Admin Authentication Tests ==='
 
 # Start server normally (authentication required)
-/app/${PROJECTNAME} --port 64580 &
+/app/$SEARCH --port 64580 &
 SERVER_PID=$!
 sleep 3
 
 # 1. Test that unauthenticated access is REJECTED
 echo "Testing unauthenticated access is blocked..."
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:64580/{admin_path})
+# Note: Use -q -LSs (no -f) when capturing HTTP status codes, since -f exits on 4xx/5xx
+HTTP_CODE=$(curl -q -LSs -o /dev/null -w "%{http_code}" http://localhost:64580/{admin_path})
 if [ "$HTTP_CODE" = "302" ] || [ "$HTTP_CODE" = "401" ]; then
     echo "✓ Unauthenticated access properly rejected"
 else
@@ -35906,7 +39186,7 @@ else
 fi
 
 # 2. Get setup token from server logs (using proper temp dir structure)
-SETUP_TOKEN=$(grep -oP 'Setup Token.*:\s*\K[a-f0-9]+' "${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}/server.log" | head -1)
+SETUP_TOKEN=$(grep -oP 'Setup Token.*:\s*\K[a-f0-9]+' "${TMPDIR:-/tmp}/$APIMGR/$SEARCH/server.log" | head -1)
 
 if [ -z "$SETUP_TOKEN" ]; then
     echo "✗ FAILED: No setup token found in logs"
@@ -35918,7 +39198,7 @@ echo "✓ Setup token found: ${SETUP_TOKEN:0:8}..."
 
 # 3. Test admin routes WITH authentication (setup token)
 echo "Testing admin access with setup token..."
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+HTTP_CODE=$(curl -q -LSs -o /dev/null -w "%{http_code}" \
     -H "X-Setup-Token: $SETUP_TOKEN" \
     http://localhost:64580/{admin_path})
 
@@ -35932,7 +39212,7 @@ fi
 
 # 4. Complete setup wizard (create admin account)
 echo "Creating admin account via API..."
-curl -s -X POST \
+curl -q -LSsf -X POST \
     -H "X-Setup-Token: $SETUP_TOKEN" \
     -H "Content-Type: application/json" \
     -d '{"username":"testadmin","password":"TestPass123!"}' \
@@ -35940,7 +39220,7 @@ curl -s -X POST \
 
 # 5. Test login with created admin
 echo "Testing admin login..."
-SESSION=$(curl -s -X POST \
+SESSION=$(curl -q -LSsf -X POST \
     -H "Content-Type: application/json" \
     -d '{"username":"testadmin","password":"TestPass123!"}' \
     http://localhost:64580/api/{api_version}/{admin_path}/login | jq -r '.session_token')
@@ -35955,14 +39235,15 @@ echo "✓ Admin login successful"
 
 # 6. Test admin routes with valid session
 echo "Testing admin routes with session..."
-curl -s -H "Authorization: Bearer $SESSION" \
+curl -q -LSsf -H "Authorization: Bearer $SESSION" \
     http://localhost:64580/api/{api_version}/{admin_path}/users > /dev/null
 
 echo "✓ Admin routes work with authentication"
 
 # 7. Test that invalid credentials are rejected
 echo "Testing invalid credentials are rejected..."
-INVALID=$(curl -s -X POST \
+# Use -q -LSs (no -f) when checking for expected 4xx response
+INVALID=$(curl -q -LSs -X POST \
     -H "Content-Type: application/json" \
     -d '{"username":"testadmin","password":"wrongpassword"}' \
     -w "%{http_code}" \
@@ -36049,7 +39330,7 @@ func AdminAuthMiddleware(next http.Handler) http.Handler {
 # Set project path to YOUR actual project location (examples shown below)
 # Use git top-level if in a git repo: PROJECT_PATH="$(git rev-parse --show-toplevel)"
 # Or use absolute path to your project directory
-PROJECT_PATH="/root/Projects/github/apimgr/{projectname}"  # Example 1
+PROJECT_PATH="/root/Projects/github/apimgr/search"  # Example 1
 # PROJECT_PATH="~/Documents/myproject"                     # Example 2
 # PROJECT_PATH="~/myproject"                               # Example 3
 # PROJECT_PATH="/workspace/dev/myproject"                  # Example 4
@@ -36068,7 +39349,7 @@ GO_DOCKER="docker run --rm \
   -e CGO_ENABLED=0"
 
 # Build (outputs to binaries/ which can be mounted into test containers)
-$GO_DOCKER golang:alpine go build -o /build/binaries/{projectname} ./src
+$GO_DOCKER golang:alpine go build -o /build/binaries/search ./src
 
 # Run tests
 $GO_DOCKER golang:alpine go test ./...
@@ -36113,20 +39394,20 @@ docker run --rm \
   -v $GOCACHE:/root/.cache/go-build \
   -v $GODIR:/go \
   -w /build -e CGO_ENABLED=0 \
-  golang:alpine go build -o /build/binaries/{projectname} ./src
+  golang:alpine go build -o /build/binaries/search ./src
 
 # Test in Docker (quick) - install tools first
 docker run --rm -v $(pwd)/binaries:/app alpine:latest sh -c "
   apk add --no-cache curl bash file jq >/dev/null
-  /app/{projectname} --help
+  /app/search --help
 "
 
 # Test in Incus (full OS with systemd) - PREFERRED
 # Use latest Debian stable (currently 12/bookworm)
-incus launch images:debian/12 test-{projectname}
-incus file push binaries/{projectname} test-{projectname}/usr/local/bin/
-incus exec test-{projectname} -- {projectname} --help
-incus delete test-{projectname} --force
+incus launch images:debian/12 test-search
+incus file push binaries/search test-search/usr/local/bin/
+incus exec test-search -- search --help
+incus delete test-search --force
 ```
 
 ### Testing with Config/Data
@@ -36138,8 +39419,8 @@ GOCACHE="${HOME}/.local/share/go/build"
 mkdir -p "$GODIR" "$GOCACHE"
 
 # Create prefixed temp dir for test data
-mkdir -p "${TMPDIR:-/tmp}/${PROJECTORG}"
-TEST_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-XXXXXX")
+mkdir -p "${TMPDIR:-/tmp}/$APIMGR"
+TEST_DIR=$(mktemp -d "${TMPDIR:-/tmp}/$APIMGR/$SEARCH-XXXXXX")
 mkdir -p $TEST_DIR/{config,data,logs}
 
 # Build to binaries/ (with caching)
@@ -36148,20 +39429,20 @@ docker run --rm \
   -v $GOCACHE:/root/.cache/go-build \
   -v $GODIR:/go \
   -w /build -e CGO_ENABLED=0 \
-  golang:alpine go build -o /build/binaries/{projectname} ./src
+  golang:alpine go build -o /build/binaries/search ./src
 
 # Quick test in Docker (install tools first)
 docker run --rm -v $(pwd)/binaries:/app alpine:latest sh -c "
   apk add --no-cache curl bash file jq >/dev/null
-  /app/{projectname} --help
-  /app/{projectname} --version
+  /app/search --help
+  /app/search --version
 "
 
 # Full test with config/data in Docker
 docker run --rm \
   -v $(pwd)/binaries:/app \
   -v $TEST_DIR:/test \
-  alpine:latest /app/{projectname} \
+  alpine:latest /app/search \
     --config /test/config \
     --data /test/data \
     --log /test/logs
@@ -36176,29 +39457,29 @@ rm -rf $TEST_DIR
 
 ```bash
 # Create prefixed temp dir
-mkdir -p "${TMPDIR:-/tmp}/${PROJECTORG}"
-TEST_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-XXXXXX")
+mkdir -p "${TMPDIR:-/tmp}/$APIMGR"
+TEST_DIR=$(mktemp -d "${TMPDIR:-/tmp}/$APIMGR/$SEARCH-XXXXXX")
 mkdir -p $TEST_DIR/{config,data,logs}
 
 # Build
 docker run --rm -v $(pwd):/build -w /build -e CGO_ENABLED=0 \
-  golang:alpine go build -o /build/binaries/{projectname} ./src
+  golang:alpine go build -o /build/binaries/search ./src
 
 # Launch Incus container (use latest Debian stable)
-incus launch images:debian/12 test-{projectname}
+incus launch images:debian/12 test-search
 
 # Push binary and test data
-incus file push binaries/{projectname} test-{projectname}/usr/local/bin/
-incus exec test-{projectname} -- mkdir -p /etc/{projectorg}/{projectname} /var/lib/{projectorg}/{projectname}
+incus file push binaries/search test-search/usr/local/bin/
+incus exec test-search -- mkdir -p /etc/apimgr/search /var/lib/apimgr/search
 
 # Test
-incus exec test-{projectname} -- {projectname} --help
-incus exec test-{projectname} -- {projectname} --version
-incus exec test-{projectname} -- {projectname} --service --install
-incus exec test-{projectname} -- systemctl status {projectname}
+incus exec test-search -- search --help
+incus exec test-search -- search --version
+incus exec test-search -- search --service --install
+incus exec test-search -- systemctl status search
 
 # Cleanup
-incus delete test-{projectname} --force
+incus delete test-search --force
 rm -rf $TEST_DIR
 ```
 
@@ -36243,11 +39524,11 @@ rm -rf $TEST_DIR
 
 **Kill Process Flow:**
 ```
-1. pgrep -la {projectname}           # List matching processes
+1. pgrep -la search           # List matching processes
 2. Verify the PID is correct          # CHECK before killing
 3. kill {pid}                         # Graceful termination (SIGTERM)
 4. sleep 5                            # Wait for graceful shutdown
-5. pgrep -la {projectname}           # Check if still running
+5. pgrep -la search           # Check if still running
 6. kill -9 {pid}                      # Force kill ONLY if still running
 ```
 
@@ -36255,23 +39536,23 @@ rm -rf $TEST_DIR
 
 | Rule | Description |
 |------|-------------|
-| **ONLY this project** | Only stop/remove containers named `{projectname}` |
+| **ONLY this project** | Only stop/remove containers named `search` |
 | **NEVER other containers** | Even if they look related or unused |
-| **NEVER images not ours** | Only remove `{projectorg}/{projectname}:*` images |
+| **NEVER images not ours** | Only remove `apimgr/search:*` images |
 | **NEVER base images** | Never remove `golang`, `alpine`, `ubuntu`, etc. |
 | **NEVER volumes** | Unless explicitly part of this project |
 
 **Docker Cleanup Flow:**
 ```
-1. docker ps -a --filter name={projectname}     # List ONLY this project's containers
-2. Verify output shows ONLY {projectname}       # CHECK before removing
-3. docker stop {projectname}                    # Stop gracefully
-4. docker rm {projectname}                      # Remove container
+1. docker ps -a --filter name=search     # List ONLY this project's containers
+2. Verify output shows ONLY search       # CHECK before removing
+3. docker stop search                    # Stop gracefully
+4. docker rm search                      # Remove container
 
 # For images:
-1. docker images {projectorg}/{projectname}     # List ONLY this project's images
+1. docker images apimgr/search     # List ONLY this project's images
 2. Verify output shows ONLY our images          # CHECK before removing
-3. docker rmi {projectorg}/{projectname}:tag    # Remove SPECIFIC tag
+3. docker rmi apimgr/search:tag    # Remove SPECIFIC tag
 ```
 
 ### Allowed Commands (Project-Scoped ONLY)
@@ -36279,10 +39560,10 @@ rm -rf $TEST_DIR
 | Command | Description |
 |---------|-------------|
 | `kill {specific-pid}` | Kill exact PID only (after verification) |
-| `pkill -x {projectname}` | Exact binary name match only |
-| `docker stop {projectname}` | Stop specific container by name |
-| `docker rm {projectname}` | Remove specific container by name |
-| `docker rmi {projectorg}/{projectname}:tag` | Remove specific image:tag |
+| `pkill -x search` | Exact binary name match only |
+| `docker stop search` | Stop specific container by name |
+| `docker rm search` | Remove specific container by name |
+| `docker rmi apimgr/search:tag` | Remove specific image:tag |
 | `rm -rf $BUILD_DIR` | Remove temp build dir (from mktemp) |
 | `rm -rf $TEST_DIR` | Remove temp test dir (from mktemp) |
 
@@ -36305,10 +39586,10 @@ rm -rf $TEST_DIR
 | Temp build dir | `rm -rf $BUILD_DIR` (saved from mktemp) |
 | Temp test dir | `rm -rf $TEST_DIR` (saved from mktemp) |
 | All mktemp dirs | Cleaned automatically on reboot |
-| Project binaries | `rm -rf binaries/{projectname}*` |
-| Project releases | `rm -rf releases/{projectname}*` |
+| Project binaries | `rm -rf binaries/search*` |
+| Project releases | `rm -rf releases/search*` |
 
-**Note:** Always use `mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-XXXXXX"` and save the path to a variable for cleanup. Temp dirs are auto-cleaned on reboot.
+**Note:** Always use `mktemp -d "${TMPDIR:-/tmp}/$APIMGR/$SEARCH-XXXXXX"` and save the path to a variable for cleanup. Temp dirs are auto-cleaned on reboot.
 
 ### NEVER Delete Without Confirmation
 
@@ -36352,8 +39633,21 @@ Documentation uses MkDocs Material theme with dark/light/auto switching.
 | Theme | MkDocs Material (follows PART 16 theme rules) |
 | Theme files | `docs/stylesheets/dark.css`, `docs/stylesheets/light.css` |
 | Hosting | ReadTheDocs |
-| URL format | `https://{projectorg}-{projectname}.readthedocs.io` |
 | Source directory | `docs/` (ONLY ReadTheDocs files) |
+
+**ReadTheDocs URL Formats (use whichever matches your RTD project):**
+
+| Format | URL Pattern | RTD Project Name |
+|--------|-------------|------------------|
+| **Org-Project** | `https://apimgr-search.readthedocs.io` | `apimgr-search` |
+| **Project Only** | `https://search.readthedocs.io` | `search` |
+| **Custom Domain** | `https://{custom_rtd_address}` | Configured in RTD settings |
+
+**How to determine which format:**
+1. Check your ReadTheDocs project dashboard for the actual URL
+2. Organization accounts typically use `apimgr-search`
+3. Standalone projects may use just `search`
+4. Custom domains require RTD paid plan or manual DNS setup
 
 ## Required Files
 
@@ -36382,12 +39676,16 @@ Documentation uses MkDocs Material theme with dark/light/auto switching.
 ## mkdocs.yml Template 
 
 ```yaml
-site_name: {PROJECTNAME}
-site_url: https://{projectorg}-{projectname}.readthedocs.io
+site_name: SEARCH
+# site_url: Use whichever RTD URL format matches your project:
+#   https://apimgr-search.readthedocs.io  (org-project)
+#   https://search.readthedocs.io               (project only)
+#   https://{custom_rtd_address}                       (custom domain)
+site_url: https://{RTD_URL}
 site_description: "{Project description}"
-site_author: {projectorg}
+site_author: apimgr
 
-repo_name: {projectorg}/{projectname}
+repo_name: apimgr/search
 repo_url: {PLATFORM_REPO_URL}
 edit_uri: edit/main/docs/  # Adjust path format for GitLab/Gitea if needed
 
@@ -36466,8 +39764,8 @@ markdown_extensions:
   - pymdownx.keys
   - pymdownx.magiclink:
       repo_url_shorthand: true
-      user: {projectorg}
-      repo: {projectname}
+      user: apimgr
+      repo: search
   - pymdownx.mark
   - pymdownx.smartsymbols
   - pymdownx.superfences:
@@ -36812,7 +40110,7 @@ pymdown-extensions>=10.0
 ### docs/index.md
 
 ```markdown
-# {PROJECTNAME}
+# SEARCH
 
 {Brief project description}
 
@@ -36820,10 +40118,10 @@ pymdown-extensions>=10.0
 
 ```bash
 # Docker
-docker run -p 64580:80 {PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:latest
+docker run -p 64580:80 {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest
 
 # Binary
-./{projectname}-linux-amd64 --config server.yml
+./search-linux-amd64 --config server.yml
 ```
 
 ## Features
@@ -36843,7 +40141,7 @@ docker run -p 64580:80 {PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:
 ## Links
 
 - [Repository]({PLATFORM_REPO_URL})
-- [Live Demo](https://{projectname}.{projectorg}.us) (if applicable)
+- [Live Demo](https://search.apimgr.us) (if applicable)
 - [API Documentation](/openapi) (Swagger UI)
 - [GraphQL Playground](/graphql)
 
@@ -36861,10 +40159,10 @@ MIT - See [LICENSE.md]({PLATFORM_REPO_URL}/blob/main/LICENSE.md)
 
 ```bash
 docker run -d \
-  --name {projectname} \
+  --name search \
   -p 64580:80 \
-  -v {projectname}-data:/data \
-  {PLATFORM_CONTAINER_REGISTRY}/{projectorg}/{projectname}:latest
+  -v search-data:/data \
+  {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest
 ```
 
 ## Binary
@@ -36873,17 +40171,17 @@ Download from [releases]({PLATFORM_REPO_URL}/releases):
 
 ```bash
 # Linux AMD64
-wget {PLATFORM_RELEASE_URL}/{projectname}-linux-amd64
-chmod +x {projectname}-linux-amd64
-./{projectname}-linux-amd64
+wget {PLATFORM_RELEASE_URL}/search-linux-amd64
+chmod +x search-linux-amd64
+./search-linux-amd64
 ```
 
 ## Systemd Service
 
 ```bash
-sudo ./{projectname} --service install
-sudo systemctl start {projectname}
-sudo systemctl enable {projectname}
+sudo ./search --service install
+sudo systemctl start search
+sudo systemctl enable search
 ```
 
 ## Configuration
@@ -36898,7 +40196,7 @@ See [Configuration](configuration.md) for all options.
 
 ## Config File
 
-Default location: `/etc/{projectorg}/{projectname}/server.yml`
+Default location: `/etc/apimgr/search/server.yml`
 
 ```yaml
 server:
@@ -36917,8 +40215,8 @@ database:
 All settings can be overridden via environment:
 
 ```bash
-{PROJECTNAME}_SERVER_PORT=8080
-{PROJECTNAME}_DATABASE_TYPE=postgres
+SEARCH_SERVER_PORT=8080
+SEARCH_DATABASE_TYPE=postgres
 ```
 
 ## Admin Panel
@@ -36997,14 +40295,14 @@ Programmatic access via `/api/{api_version}/{admin_path}/` with bearer token aut
 
 ```bash
 git clone {PLATFORM_REPO_URL}
-cd {projectname}
+cd search
 make build
 ```
 
 ## Run Locally
 
 ```bash
-./binaries/{projectname} --config server.yml --debug
+./binaries/search --config server.yml --debug
 ```
 
 ## Testing
@@ -37844,13 +41142,13 @@ This prevents conflicts with any existing Tor installation on the system.
 
 | Server Started As | Server Runs As | Tor Runs As |
 |-------------------|----------------|-------------|
-| `root` | `{projectname}` (after drop) | `{projectname}` |
-| `{projectname}` | `{projectname}` | `{projectname}` |
+| `root` | `search` (after drop) | `search` |
+| `search` | `search` | `search` |
 | Regular user | Regular user | Regular user |
 
 **Process:**
 1. Server starts (possibly as root for port binding)
-2. Server drops privileges to `{projectname}` user (if started as root)
+2. Server drops privileges to `search` user (if started as root)
 3. Server starts Tor process **as the current (dropped) user**
 4. Tor inherits user context from server process
 
@@ -38645,11 +41943,11 @@ No impact on binary size - Tor is external. Application binary remains small and
 
 | Environment | {config_dir} | {data_dir} | {log_dir} |
 |-------------|--------------|------------|-----------|
-| Docker | `/config/{projectname}/` | `/data/{projectname}/` | `/data/log/{projectname}/` |
-| Linux root | `/etc/{projectorg}/{projectname}/` | `/var/lib/{projectorg}/{projectname}/` | `/var/log/{projectorg}/{projectname}/` |
-| Linux user | `~/.config/{projectorg}/{projectname}/` | `~/.local/share/{projectorg}/{projectname}/` | `~/.local/log/{projectorg}/{projectname}/` |
-| macOS | `~/Library/Application Support/{projectorg}/{projectname}/` | Same as config | `~/Library/Logs/{projectorg}/{projectname}/` |
-| Windows | `%AppData%\{projectorg}\{projectname}\` | Same as config | `%AppData%\{projectorg}\{projectname}\log\` |
+| Docker | `/config/search/` | `/data/search/` | `/data/log/search/` |
+| Linux root | `/etc/apimgr/search/` | `/var/lib/apimgr/search/` | `/var/log/apimgr/search/` |
+| Linux user | `~/.config/apimgr/search/` | `~/.local/share/apimgr/search/` | `~/.local/log/apimgr/search/` |
+| macOS | `~/Library/Application Support/apimgr/search/` | Same as config | `~/Library/Logs/apimgr/search/` |
+| Windows | `%AppData%\apimgr\search\` | Same as config | `%AppData%\apimgr\search\log\` |
 
 **Tor directories are ALWAYS `{config_dir}/tor/`, `{data_dir}/tor/`, `{log_dir}/tor.log` - never hardcoded paths.**
 
@@ -39265,11 +42563,11 @@ When a project includes a client, it provides a terminal-based interface for int
 
 | Attribute | Value |
 |-----------|-------|
-| Default binary name | `{projectname}-cli` |
+| Default binary name | `search-cli` |
 | Versioning | Same as main application |
 | Build | Part of same Makefile (`make build` produces both binaries) |
-| Config location (Unix) | `~/.config/{projectorg}/{projectname}/cli.yml` |
-| Config location (Windows) | `%APPDATA%\{projectorg}\{projectname}\cli.yml` |
+| Config location (Unix) | `~/.config/apimgr/search/cli.yml` |
+| Config location (Windows) | `%APPDATA%\apimgr\search\cli.yml` |
 
 ## Binary Naming Rules 
 
@@ -39277,18 +42575,18 @@ When a project includes a client, it provides a terminal-based interface for int
 
 | Rule | Display | Internal |
 |------|---------|----------|
-| Binary name | ACTUAL name (`filepath.Base(os.Args[0])`) | Hardcoded `{projectname}` |
+| Binary name | ACTUAL name (`filepath.Base(os.Args[0])`) | Hardcoded `search` |
 | `--help` output | Shows actual binary name | - |
 | `--version` output | Shows actual binary name | - |
-| User-Agent | - | `{projectname}-cli/{version}` (hardcoded) |
-| Config paths | - | `/etc/{projectorg}/{projectname}/` (hardcoded) |
+| User-Agent | - | `search-cli/{version}` (hardcoded) |
+| Config paths | - | `/etc/apimgr/search/` (hardcoded) |
 
 ```go
 // Display: use actual binary name
 binaryName := filepath.Base(os.Args[0])
 
 // Internal: hardcoded project name (compiled via -ldflags)
-const projectName = "{projectname}"
+const projectName = "search"
 userAgent := fmt.Sprintf("%s-cli/%s", projectName, version)
 ```
 
@@ -39304,9 +42602,9 @@ userAgent := fmt.Sprintf("%s-cli/%s", projectName, version)
 **Token sources (priority order):**
 1. `--token` flag (explicit)
 2. `--token-file` flag (file path)
-3. Environment variable: `{PROJECTNAME}_TOKEN`
+3. Environment variable: `SEARCH_TOKEN`
 4. Config file: `cli.yml` → `token: xxx`
-5. Token file: `{config_dir}/token` (Unix: `~/.config/{projectorg}/{projectname}/token`, Windows: `%APPDATA%\{projectorg}\{projectname}\token`)
+5. Token file: `{config_dir}/token` (Unix: `~/.config/apimgr/search/token`, Windows: `%APPDATA%\apimgr\search\token`)
 
 **Token format:** See PART 11 "API Token Security" for token format and validation.
 
@@ -39340,14 +42638,14 @@ func getToken(flags *Flags) (string, error) {
 **Usage:**
 ```bash
 # Explicit token
-{projectname}-cli --token "usr_abc123..." list
+search-cli --token "usr_abc123..." list
 
 # From environment
-export {PROJECTNAME}_TOKEN="usr_abc123..."
-{projectname}-cli list
+export SEARCH_TOKEN="usr_abc123..."
+search-cli list
 
 # Store token (interactive login)
-{projectname}-cli login
+search-cli login
 # Saves to {config_dir}/token (see platform-specific paths above)
 ```
 
@@ -39452,17 +42750,17 @@ func ValidateAccess(ctx context.Context, token *Token, target string, action str
 
 ```bash
 # Default: use token owner's personal context (no --user flag)
-{projectname}-cli list                    # GET /api/{api_version}/users/{resource} (current user)
+search-cli list                    # GET /api/{api_version}/users/{resource} (current user)
 
 # Explicit user context (view another user's public resources)
-{projectname}-cli --user @alice list      # GET /api/{api_version}/users/alice/{resource}
+search-cli --user @alice list      # GET /api/{api_version}/users/alice/{resource}
 
 # Org context (user must have org access)
-{projectname}-cli --user +acme-corp list  # GET /api/{api_version}/orgs/acme-corp/{resource}
+search-cli --user +acme-corp list  # GET /api/{api_version}/orgs/acme-corp/{resource}
 
 # Auto-detect: CLI determines if name is user or org
-{projectname}-cli --user alice list       # GET /api/{api_version}/users/alice/{resource} (if user)
-{projectname}-cli --user acme-corp list   # GET /api/{api_version}/orgs/acme-corp/{resource} (if org)
+search-cli --user alice list       # GET /api/{api_version}/users/alice/{resource} (if user)
+search-cli --user acme-corp list   # GET /api/{api_version}/orgs/acme-corp/{resource} (if org)
 ```
 
 **Note:** `{resource}` is the project-specific resource type (e.g., `repos`, `pastes`, `links`). See IDEA.md for your project's resources.
@@ -39480,7 +42778,7 @@ func ValidateAccess(ctx context.Context, token *Token, target string, action str
 
 ```bash
 # CLI translates --user to URL-scoped route
-{projectname}-cli --user acme-corp list
+search-cli --user acme-corp list
 
 # Becomes:
 GET /api/{api_version}/orgs/acme-corp/{resource}
@@ -39525,23 +42823,23 @@ CLI receives --user flag
 
 ```bash
 # Token: alice (no org access)
-{projectname}-cli list                    # Uses alice's context (only option)
-{projectname}-cli --user alice list       # Same (redundant but valid)
-{projectname}-cli --user acme-corp list   # ERROR: no access to acme-corp
+search-cli list                    # Uses alice's context (only option)
+search-cli --user alice list       # Same (redundant but valid)
+search-cli --user acme-corp list   # ERROR: no access to acme-corp
 
 # Token: scoped to acme-corp only (org-specific token)
-{projectname}-cli list                    # Uses acme-corp context (only option)
-{projectname}-cli --user acme-corp list   # Same (redundant but valid)
-{projectname}-cli --user @me list         # ERROR: token not scoped to user
+search-cli list                    # Uses acme-corp context (only option)
+search-cli --user acme-corp list   # Same (redundant but valid)
+search-cli --user @me list         # ERROR: token not scoped to user
 
 # Token: alice + acme-corp (user has one org)
-{projectname}-cli list                    # Uses alice's context (default = user)
-{projectname}-cli --user acme-corp list   # Uses acme-corp context
+search-cli list                    # Uses alice's context (default = user)
+search-cli --user acme-corp list   # Uses acme-corp context
 
 # Token: alice + acme-corp + dev-team (user has multiple orgs)
-{projectname}-cli list                    # Uses alice's context (default = user)
-{projectname}-cli --user acme-corp list   # Uses acme-corp context
-{projectname}-cli --user dev-team list    # Uses dev-team context
+search-cli list                    # Uses alice's context (default = user)
+search-cli --user acme-corp list   # Uses acme-corp context
+search-cli --user dev-team list    # Uses dev-team context
 ```
 
 **Server-side scope detection:**
@@ -39625,11 +42923,11 @@ func SaveIfEmptyOrInvalid(current, flagValue string, validate func(string) bool)
 **Example:**
 ```bash
 # First run: no server configured
-{projectname}-cli --server https://api.example.com list
+search-cli --server https://api.example.com list
 # → Saves to cli.yml (was empty)
 
 # Second run: server already configured
-{projectname}-cli --server https://staging.example.com list
+search-cli --server https://staging.example.com list
 # → Uses staging for THIS command, but cli.yml still has api.example.com
 
 # To permanently change: edit cli.yml directly
@@ -39651,7 +42949,7 @@ func SaveIfEmptyOrInvalid(current, flagValue string, validate func(string) bool)
 
 ```bash
 # @me always means token owner
-{projectname}-cli --user @me list    # Always personal context
+search-cli --user @me list    # Always personal context
 ```
 
 ## Modes
@@ -39707,25 +43005,25 @@ display:
 
 **Exit-immediately flags (NEVER launch TUI):**
 ```bash
-{projectname}-cli -h                    # Print help, exit
-{projectname}-cli --help                # Print help, exit
-{projectname}-cli -v                    # Print version, exit
-{projectname}-cli --version             # Print version, exit
+search-cli -h                    # Print help, exit
+search-cli --help                # Print help, exit
+search-cli -v                    # Print version, exit
+search-cli --version             # Print version, exit
 ```
 
 **Config flags (still launch TUI):**
 ```bash
-{projectname}-cli                                    # TUI mode
-{projectname}-cli --config dev                       # TUI mode (with dev.yml)
-{projectname}-cli --server https://example.com       # TUI mode (with server)
-{projectname}-cli --token abc123                     # TUI mode (with token)
+search-cli                                    # TUI mode
+search-cli --config dev                       # TUI mode (with dev.yml)
+search-cli --server https://example.com       # TUI mode (with server)
+search-cli --token abc123                     # TUI mode (with token)
 ```
 
 **Command/args (CLI mode):**
 ```bash
-{projectname}-cli list                               # CLI mode
-{projectname}-cli golang tutorials                   # CLI mode (search)
-{projectname}-cli notes.txt                          # CLI mode (paste file)
+search-cli list                               # CLI mode
+search-cli golang tutorials                   # CLI mode (search)
+search-cli notes.txt                          # CLI mode (paste file)
 ```
 
 ```go
@@ -39831,7 +43129,7 @@ if env.IsAutoDetectDisplayModeGUI() {
 
 **Agent connection string example (provided by server admin panel):**
 ```
-{projectname}-agent --connect "https://api.example.com?token=agt_xxx&name=office-pc"
+search-agent --connect "https://api.example.com?token=agt_xxx&name=office-pc"
 ```
 
 ### CLI: Full TUI/GUI App with Setup Wizard
@@ -39895,14 +43193,14 @@ Why CLI needs a setup wizard:
 ### CLI First-Run Flow
 
 ```
-User double-clicks {projectname}-cli:
+User double-clicks search-cli:
 
 1. SETUP WIZARD (GUI or TUI based on environment)
    ┌─────────────────────────────────────────────────────────────┐
-   │  {PROJECTNAME} CLI Setup                                [X] │
+   │  SEARCH CLI Setup                                [X] │
    ├─────────────────────────────────────────────────────────────┤
    │                                                             │
-   │  Connect to a {projectname} server:                         │
+   │  Connect to a search server:                         │
    │                                                             │
    │  Server URL:                                                │
    │  [https://                                           ] [?]  │
@@ -39978,7 +43276,7 @@ func selectSetupMode() SetupMode {
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  {PROJECTNAME} Setup                                    [X] │
+│  SEARCH Setup                                    [X] │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
 │  Welcome! Let's configure your server.                      │
@@ -39999,7 +43297,7 @@ func selectSetupMode() SetupMode {
 
 ```
 ╔══════════════════════════════════════════════════════════════════════╗
-║                      {PROJECTNAME} CLI SETUP                          ║
+║                      SEARCH CLI SETUP                          ║
 ╠══════════════════════════════════════════════════════════════════════╣
 ║                                                                      ║
 ║   No server configured. Let's set one up!                            ║
@@ -40016,7 +43314,7 @@ func selectSetupMode() SetupMode {
 **CLI Setup Wizard Flow:**
 
 ```
-User double-clicks {projectname}-cli:
+User double-clicks search-cli:
 
 1. Check for config file (cli.yml)
    ├─ Config exists with valid server URL?
@@ -40040,7 +43338,7 @@ User double-clicks {projectname}-cli:
 ```
 Agent is configured via server-provided connection string:
 
-{projectname}-agent --connect "https://api.example.com?token=agt_xxx&name=office-pc"
+search-agent --connect "https://api.example.com?token=agt_xxx&name=office-pc"
 
 First run without connection string:
 - Show error: "No connection configured. Use --connect flag with server-provided URL."
@@ -40168,11 +43466,11 @@ import (
 )
 
 func launchGTKGui(config *Config) error {
-    app := gtk.NewApplication("{projectorg}.{projectname}.cli", gio.ApplicationFlagsNone)
+    app := gtk.NewApplication("apimgr.search.cli", gio.ApplicationFlagsNone)
 
     app.ConnectActivate(func() {
         win := gtk.NewApplicationWindow(app)
-        win.SetTitle("{PROJECTNAME} CLI")
+        win.SetTitle("SEARCH CLI")
         win.SetDefaultSize(800, 600)
 
         // Build UI from config
@@ -40222,7 +43520,7 @@ import "C"
 import "unsafe"
 
 func launchCocoaGui(config *Config) error {
-    title := C.CString("{PROJECTNAME} CLI")
+    title := C.CString("SEARCH CLI")
     defer C.free(unsafe.Pointer(title))
 
     C.launchCocoaApp(title, 800, 600)
@@ -40241,7 +43539,7 @@ func launchCocoaGui(config *Config) error {
 //         styleMask:(NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |
 //                    NSWindowStyleMaskResizable | NSWindowStyleMaskMiniaturizable)
 //         backing:NSBackingStoreBuffered defer:NO];
-//     [self.window setTitle:@"{PROJECTNAME} CLI"];
+//     [self.window setTitle:@"SEARCH CLI"];
 //     [self.window center];
 //     [self.window makeKeyAndOrderFront:nil];
 // }
@@ -40283,8 +43581,8 @@ const (
 )
 
 func launchWin32Gui(config *Config) error {
-    className := windows.StringToUTF16Ptr("{projectname}_cli_window")
-    windowName := windows.StringToUTF16Ptr("{PROJECTNAME} CLI")
+    className := windows.StringToUTF16Ptr("search_cli_window")
+    windowName := windows.StringToUTF16Ptr("SEARCH CLI")
 
     // Register window class
     var wc WNDCLASSEXW
@@ -40570,7 +43868,7 @@ func calculateGUILayout(width, height int, dpi float64) Layout {
 // src/client/tui/layout.go
 package tui
 
-import "{projectorg}/{projectname}/common/terminal"
+import "apimgr/search/common/terminal"
 
 // LayoutConfig provides TUI-specific layout settings based on SizeMode
 type LayoutConfig struct {
@@ -40857,10 +44155,10 @@ When command arguments are provided:
 
 ```bash
 # Standard CLI output (your project)
-{projectname}-cli create --file notes.txt --expire 24h
-{projectname}-cli get abc123 --output json
-{projectname}-cli list --limit 10
-{projectname}-cli search --query "keyword"
+search-cli create --file notes.txt --expire 24h
+search-cli get abc123 --output json
+search-cli list --limit 10
+search-cli search --query "keyword"
 ```
 
 ### TUI Mode (Automatic)
@@ -40869,7 +44167,7 @@ When launched with no arguments in an interactive terminal:
 
 ```bash
 # Launch TUI (no arguments needed)
-{projectname}-cli              # Opens TUI automatically
+search-cli              # Opens TUI automatically
 
 # TUI provides:
 # - Interactive menus
@@ -40900,23 +44198,23 @@ The client uses the same user directory structure as the server in user mode. Th
 
 | Directory | Path | Purpose |
 |-----------|------|---------|
-| Config | `~/.config/{projectorg}/{projectname}/` | Configuration files |
-| Config File | `~/.config/{projectorg}/{projectname}/cli.yml` | CLI configuration |
-| Data | `~/.local/share/{projectorg}/{projectname}/` | Persistent data |
-| Cache | `~/.cache/{projectorg}/{projectname}/` | Temporary/cached data |
-| Logs | `~/.local/log/{projectorg}/{projectname}/` | Log files |
-| Log File | `~/.local/log/{projectorg}/{projectname}/cli.log` | CLI log output |
+| Config | `~/.config/apimgr/search/` | Configuration files |
+| Config File | `~/.config/apimgr/search/cli.yml` | CLI configuration |
+| Data | `~/.local/share/apimgr/search/` | Persistent data |
+| Cache | `~/.cache/apimgr/search/` | Temporary/cached data |
+| Logs | `~/.local/log/apimgr/search/` | Log files |
+| Log File | `~/.local/log/apimgr/search/cli.log` | CLI log output |
 
 #### Windows
 
 | Directory | Path | Purpose |
 |-----------|------|---------|
-| Config | `%APPDATA%\{projectorg}\{projectname}\` | Configuration files |
-| Config File | `%APPDATA%\{projectorg}\{projectname}\cli.yml` | CLI configuration |
-| Data | `%LOCALAPPDATA%\{projectorg}\{projectname}\data\` | Persistent data |
-| Cache | `%LOCALAPPDATA%\{projectorg}\{projectname}\cache\` | Temporary/cached data |
-| Logs | `%LOCALAPPDATA%\{projectorg}\{projectname}\log\` | Log files |
-| Log File | `%LOCALAPPDATA%\{projectorg}\{projectname}\log\cli.log` | CLI log output |
+| Config | `%APPDATA%\apimgr\search\` | Configuration files |
+| Config File | `%APPDATA%\apimgr\search\cli.yml` | CLI configuration |
+| Data | `%LOCALAPPDATA%\apimgr\search\data\` | Persistent data |
+| Cache | `%LOCALAPPDATA%\apimgr\search\cache\` | Temporary/cached data |
+| Logs | `%LOCALAPPDATA%\apimgr\search\log\` | Log files |
+| Log File | `%LOCALAPPDATA%\apimgr\search\log\cli.log` | CLI log output |
 
 #### Directory Usage
 
@@ -40928,9 +44226,9 @@ The client uses the same user directory structure as the server in user mode. Th
 | Logs | `cli.log`, debug logs | Optional |
 
 **NEVER use OS system directories:**
-- `/etc/{projectorg}/{projectname}/` (Linux system config)
-- `/var/lib/{projectorg}/{projectname}/` (Linux system data)
-- `/var/log/{projectorg}/{projectname}/` (Linux system logs)
+- `/etc/apimgr/search/` (Linux system config)
+- `/var/lib/apimgr/search/` (Linux system data)
+- `/var/log/apimgr/search/` (Linux system logs)
 - `C:\ProgramData\` (Windows system data)
 - Any directory requiring elevated privileges
 
@@ -40942,10 +44240,10 @@ On every startup, the CLI MUST:
 
 1. **Ensure directories exist** (create if missing):
    ```
-   ├─ {config_dir}/           (~/.config/{projectorg}/{projectname}/)
-   ├─ {data_dir}/             (~/.local/share/{projectorg}/{projectname}/)
-   ├─ {cache_dir}/            (~/.cache/{projectorg}/{projectname}/)
-   └─ {log_dir}/              (~/.local/log/{projectorg}/{projectname}/)
+   ├─ {config_dir}/           (~/.config/apimgr/search/)
+   ├─ {data_dir}/             (~/.local/share/apimgr/search/)
+   ├─ {cache_dir}/            (~/.cache/apimgr/search/)
+   └─ {log_dir}/              (~/.local/log/apimgr/search/)
    ```
 
 2. **Set correct permissions** (user-only access):
@@ -41054,8 +44352,8 @@ import (
 )
 
 const (
-	projectOrg  = "{projectorg}"
-	projectName = "{projectname}"
+	projectOrg  = "apimgr"
+	projectName = "search"
 )
 
 // ConfigDir returns the CLI config directory
@@ -41182,9 +44480,9 @@ func resolveYamlExtension(path string) string {
 **Example usage:**
 ```bash
 # Use different configs for different environments
-{projectname}-cli --config dev list              # Uses ~/.config/.../dev.yml
-{projectname}-cli --config staging list          # Uses ~/.config/.../staging.yml
-{projectname}-cli --config ~/work/prod.yml list  # Uses absolute path
+search-cli --config dev list              # Uses ~/.config/.../dev.yml
+search-cli --config staging list          # Uses ~/.config/.../staging.yml
+search-cli --config ~/work/prod.yml list  # Uses absolute path
 
 # Config profiles allow different servers/tokens without flags
 # dev.yml:   server: https://dev.example.com, token: dev-token
@@ -41196,7 +44494,7 @@ func resolveYamlExtension(path string) string {
 **EVERYTHING must be configurable via cli.yml. Sane defaults match server where applicable.**
 
 ```yaml
-# ~/.config/{projectorg}/{projectname}/cli.yml
+# ~/.config/apimgr/search/cli.yml
 # client configuration - ALL options with defaults
 
 # Server connection
@@ -41261,18 +44559,18 @@ defaults:
 | Priority | Source | Example |
 |----------|--------|---------|
 | 1 | CLI flag | `--format json` |
-| 2 | Environment variable | `{PROJECTNAME}_FORMAT=json` |
+| 2 | Environment variable | `SEARCH_FORMAT=json` |
 | 3 | Config file | `output.format: json` |
 | 4 | Compiled default | `table` |
 
 **Environment variable mapping:**
 ```bash
-# Pattern: {PROJECTNAME}_{SECTION}_{KEY} or {PROJECTNAME}_{KEY}
-{PROJECTNAME}_SERVER_PRIMARY="https://example.com"
-{PROJECTNAME}_SERVER_TIMEOUT=60
-{PROJECTNAME}_TOKEN="usr_abc123..."
-{PROJECTNAME}_OUTPUT_FORMAT="json"
-{PROJECTNAME}_DEBUG=true
+# Pattern: SEARCH_{SECTION}_{KEY} or SEARCH_{KEY}
+SEARCH_SERVER_PRIMARY="https://example.com"
+SEARCH_SERVER_TIMEOUT=60
+SEARCH_TOKEN="usr_abc123..."
+SEARCH_OUTPUT_FORMAT="json"
+SEARCH_DEBUG=true
 ```
 
 ### CLI Cluster Failover 
@@ -41351,23 +44649,23 @@ func saveIfEmpty(current, newValue string, validate func(string) bool) (string, 
 **Error when no server configured (projects without official site):**
 
 ```bash
-$ {projectname}-cli list
+$ search-cli list
 Error: no server configured
 
 To configure a server, run:
-  {projectname}-cli --server https://your-server.example.com list
+  search-cli --server https://your-server.example.com list
 
 This will save the server address for future commands.
-Or edit ~/.config/{projectorg}/{projectname}/cli.yml directly.
+Or edit ~/.config/apimgr/search/cli.yml directly.
 ```
 
 **Projects with official site show default in help:**
 
 ```bash
-$ {projectname}-cli --help
+$ search-cli --help
 ...
 Flags:
-      --server string    Server address (default: https://{projectname}.example.com)
+      --server string    Server address (default: https://search.example.com)
 ...
 ```
 
@@ -41378,7 +44676,7 @@ Flags:
 - CLI/Agent: Default `--server` URL (so users don't need to specify)
 
 **What official site does NOT affect:**
-- Docker labels (use `{projectorg}`, `{projectname}`, `{fqdn}`)
+- Docker labels (use `apimgr`, `search`, `{fqdn}`)
 - Documentation structure or content
 - Build artifacts or binary metadata
 - Any runtime behavior (just a compiled default)
@@ -41404,12 +44702,13 @@ Enter choice [1-4]:
 
 ## Standard Flags 
 
-### Universal Flags (ALL CLIs)
+### Universal Flags (ALL Binaries)
 
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--help` | `-h` | Show help |
 | `--version` | `-v` | Show version |
+| `--color {always\|never\|auto}` | — | Color output (default: auto, respects `NO_COLOR`) |
 
 **Only `-h` and `-v` have short forms. Everything else is long-form only.**
 
@@ -41425,11 +44724,11 @@ See PART 5: Boolean Handling for the complete implementation.
 
 **Usage in flags:**
 ```bash
-{projectname}-cli --public                    # Boolean flag (true)
-{projectname}-cli --public=yes                # Explicit truthy
-{projectname}-cli --public=no                 # Explicit falsey
-{projectname}-cli --expire=0                  # Falsey = no expiration
-{projectname}-cli --expire=disabled           # Falsey = no expiration
+search-cli --public                    # Boolean flag (true)
+search-cli --public=yes                # Explicit truthy
+search-cli --public=no                 # Explicit falsey
+search-cli --expire=0                  # Falsey = no expiration
+search-cli --expire=disabled           # Falsey = no expiration
 ```
 
 **Config file (cli.yml):**
@@ -41462,10 +44761,11 @@ server:
 
 **Examples:**
 ```bash
---public=yes   OR  --public yes
---expire=24h   OR  --expire 24h
---limit=10     OR  --limit 10
---output=json  OR  --output json
+--public=yes    OR  --public yes
+--expire=24h    OR  --expire 24h
+--limit=10      OR  --limit 10
+--output=json   OR  --output json
+--color=always  OR  --color always
 ```
 
 ### Project-Specific Flags (by service type)
@@ -41473,29 +44773,29 @@ server:
 **Search/Query CLI (minimal flags):**
 ```bash
 # Args ARE the search - no flags needed for basic use
-{projectname}-cli golang tutorials           # Search
-{projectname}-cli --limit 10 golang          # With limit
-{projectname}-cli --output json golang       # JSON output
+search-cli golang tutorials           # Search
+search-cli --limit 10 golang          # With limit
+search-cli --output json golang       # JSON output
 ```
 
 **Pastebin/Content CLI:**
 ```bash
 # Smart detection handles input, flags for metadata
-{projectname}-cli notes.txt                          # File (detected), uses defaults
-{projectname}-cli notes.txt --public yes             # Public paste
-{projectname}-cli notes.txt --public no              # Private (requires auth)
-{projectname}-cli notes.txt --public unlisted        # Unlisted (default)
-{projectname}-cli notes.txt --expire 24h             # Expiration
-{projectname}-cli notes.txt --syntax python          # Syntax highlight
-{projectname}-cli notes.txt --author "John"          # Author name
+search-cli notes.txt                          # File (detected), uses defaults
+search-cli notes.txt --public yes             # Public paste
+search-cli notes.txt --public no              # Private (requires auth)
+search-cli notes.txt --public unlisted        # Unlisted (default)
+search-cli notes.txt --expire 24h             # Expiration
+search-cli notes.txt --syntax python          # Syntax highlight
+search-cli notes.txt --author "John"          # Author name
 ```
 
 **API/Data CLI:**
 ```bash
 # Resource-specific flags
-{projectname}-cli get abc123                         # Get by ID
-{projectname}-cli list --limit 20 --offset 0         # Pagination
-{projectname}-cli delete abc123 --force              # Dangerous ops need confirm
+search-cli get abc123                         # Get by ID
+search-cli list --limit 20 --offset 0         # Pagination
+search-cli delete abc123 --force              # Dangerous ops need confirm
 ```
 
 ### Flag Defaults from Config 
@@ -41514,7 +44814,7 @@ defaults:
 
 **Precedence (highest to lowest):**
 1. Command-line flag (`--public yes`)
-2. Environment variable (`{PROJECTNAME}_PUBLIC=yes`)
+2. Environment variable (`SEARCH_PUBLIC=yes`)
 3. Config file (`defaults.public: yes`)
 4. Hardcoded default
 
@@ -41542,12 +44842,12 @@ defaults:
 **`--shell init` is just a convenience wrapper:**
 ```bash
 # These are equivalent:
-eval "$({projectname} --shell init)"
-eval "$({projectname} --shell init bash)"      # if $SHELL=/bin/bash
+eval "$(search --shell init)"
+eval "$(search --shell init bash)"      # if $SHELL=/bin/bash
 
 # init outputs the eval command, completions outputs the script:
-{projectname} --shell init        # → source <({projectname} --shell completions bash)
-{projectname} --shell completions # → (actual completion script)
+search --shell init        # → source <(search --shell completions bash)
+search --shell completions # → (actual completion script)
 ```
 
 **Supported shells:**
@@ -41571,28 +44871,28 @@ eval "$({projectname} --shell init bash)"      # if $SHELL=/bin/bash
 **Usage examples:**
 ```bash
 # Explicit shell specification
-{projectname} --shell completions bash > ~/.local/share/bash-completion/completions/{projectname}
-{projectname}-cli --shell completions zsh > ~/.zsh/completions/_{projectname}-cli
-{projectname}-agent --shell completions fish > ~/.config/fish/completions/{projectname}-agent.fish
-{projectname} --shell completions powershell > ~/Documents/PowerShell/completions/{projectname}.ps1
+search --shell completions bash > ~/.local/share/bash-completion/completions/search
+search-cli --shell completions zsh > ~/.zsh/completions/_search-cli
+search-agent --shell completions fish > ~/.config/fish/completions/search-agent.fish
+search --shell completions powershell > ~/Documents/PowerShell/completions/search.ps1
 
 # Auto-detect shell (omit SHELL argument)
-{projectname} --shell completions > ~/completions/{projectname}
-{projectname}-cli --shell init                    # auto-detect, print init
-eval "$({projectname} --shell init)"              # auto-detect in eval
+search --shell completions > ~/completions/search
+search-cli --shell init                    # auto-detect, print init
+eval "$(search --shell init)"              # auto-detect in eval
 
 # Specific shell init
-eval "$({projectname}-cli --shell init bash)"
-eval "$({projectname}-agent --shell init zsh)"
-{projectname} --shell init fish | source
+eval "$(search-cli --shell init bash)"
+eval "$(search-agent --shell init zsh)"
+search --shell init fish | source
 ```
 
 **Add to shell rc file:**
 ```bash
 # ~/.bashrc, ~/.zshrc, ~/.config/fish/config.fish, etc.
-eval "$({projectname} --shell init)"        # server (auto-detect)
-eval "$({projectname}-cli --shell init)"    # client (auto-detect)
-eval "$({projectname}-agent --shell init)"  # agent (auto-detect)
+eval "$(search --shell init)"        # server (auto-detect)
+eval "$(search-cli --shell init)"    # client (auto-detect)
+eval "$(search-agent --shell init)"  # agent (auto-detect)
 ```
 
 **Why built-in (not separate files):**
@@ -41678,12 +44978,12 @@ func printInit(shell, binaryName string) {
 ### --help Output
 
 ```bash
-$ {projectname}-cli --help
-{projectname}-cli {projectversion} - CLI for {projectname}
+$ search-cli --help
+search-cli {projectversion} - CLI for search
 
 Usage:
-  {projectname}-cli [args] [flags]
-  {projectname}-cli                    # TUI mode (no args)
+  search-cli [args] [flags]
+  search-cli                    # TUI mode (no args)
 
 Flags:
   -h, --help                        Show help
@@ -41698,6 +44998,7 @@ Flags:
       --user NAME                   Target user or org (auto-detect, @user, +org)
       --config NAME                 Config profile name (default: cli.yml)
       --debug                       Debug output
+      --color {always|never|auto}   Color output (default: auto)
 
 Administration (requires admin token):
       --admin CMD                   Admin operations (--admin --help for details)
@@ -41708,13 +45009,13 @@ Administration (requires admin token):
 Shells: bash, zsh, fish, sh, dash, ksh, powershell, pwsh
 
 Run without arguments for interactive TUI mode.
-Run '{projectname}-cli <command> --help' for detailed help on any command.
+Run 'search-cli <command> --help' for detailed help on any command.
 ```
 
 **If user renames binary:**
 ```bash
 $ mypaste --help
-mypaste {projectversion} - client for {projectname} API   # Shows actual binary name
+mypaste {projectversion} - client for search API   # Shows actual binary name
 
 Usage:
   mypaste [command] [flags]                     # Shows actual binary name
@@ -41726,8 +45027,8 @@ Usage:
 **MUST match server `--version` format. Shows ACTUAL binary name:**
 
 ```bash
-$ {projectname}-cli --version
-{projectname}-cli {projectversion} ({COMMIT_SHA}) built {BUILD_DATE}
+$ search-cli --version
+search-cli {projectversion} ({COMMIT_SHA}) built {BUILD_DATE}
 
 # If renamed:
 $ mypaste --version
@@ -41768,11 +45069,11 @@ Example commands (project-dependent):
 **Token Storage:**
 - Stored in `cli.yml` under `server.token`
 - `--token` flag saves to cli.yml only if not already set (same as `--server`)
-- Environment variable: `{PROJECTNAME}_CLI_TOKEN` (does NOT save to config)
+- Environment variable: `SEARCH_CLI_TOKEN` (does NOT save to config)
 
 **Priority (highest to lowest):**
 1. `--token` flag (saves only if config empty/invalid)
-2. `{PROJECTNAME}_CLI_TOKEN` environment variable
+2. `SEARCH_CLI_TOKEN` environment variable
 3. `server.token` in cli.yml
 
 ## HTTP Client Identity 
@@ -41798,16 +45099,16 @@ Example commands (project-dependent):
 ### User-Agent Format
 
 ```
-{projectname}-cli/{version}
+search-cli/{version}
 ```
 
 **Examples (User-Agent uses compiled project name, not binary name):**
 
 | Binary Name | User-Agent Header |
 |-------------|-------------------|
-| `{projectname}-cli` | `{projectname}-cli/1.2.3` |
-| `mypaste` (renamed by user) | `{projectname}-cli/1.2.3` |
-| `pb` (renamed by user) | `{projectname}-cli/1.2.3` |
+| `search-cli` | `search-cli/1.2.3` |
+| `mypaste` (renamed by user) | `search-cli/1.2.3` |
+| `pb` (renamed by user) | `search-cli/1.2.3` |
 
 ### Implementation
 
@@ -41835,7 +45136,7 @@ func GetBinaryName() string {
 **Build command (CI/CD injects version from git tag):**
 ```bash
 # VERSION comes from git tag (see PART 26/28 for version handling)
-go build -ldflags "-X main.ProjectName={projectname} -X main.Version=${VERSION}" -o {projectname}-cli ./src/client
+go build -ldflags "-X main.ProjectName=search -X main.Version=${VERSION}" -o search-cli ./src/client
 ```
 
 ### Server-Side Client Detection
@@ -41981,7 +45282,7 @@ package api
 
 import (
     "net/http"
-    "github.com/{projectorg}/{projectname}/common/urlutil"
+    "github.com/apimgr/search/common/urlutil"
 )
 
 type APIClient struct {
@@ -42056,7 +45357,7 @@ func (c *APIClient) doAPIRequest(method, apiURL string, body io.Reader) (*APIRes
 ### JSON
 
 ```bash
-$ {projectname}-cli get abc123 --output json
+$ search-cli get abc123 --output json
 {
   "id": "abc123",
   "content": "Hello world example code snippet",
@@ -42068,7 +45369,7 @@ $ {projectname}-cli get abc123 --output json
 ### Table
 
 ```bash
-$ {projectname}-cli list --output table
+$ search-cli list --output table
 ┌──────────┬─────────────────────────────────────────────┬──────────┬─────────────┐
 │ ID       │ Content                                     │ Language │ Expires     │
 ├──────────┼─────────────────────────────────────────────┼──────────┼─────────────┤
@@ -42081,7 +45382,7 @@ $ {projectname}-cli list --output table
 ### Plain
 
 ```bash
-$ {projectname}-cli get abc123 --output plain
+$ search-cli get abc123 --output plain
 Hello world example code snippet
 ```
 
@@ -42096,18 +45397,18 @@ Each project defines its own commands based on its API.
 **Search/Query Services:**
 ```bash
 # Bare args = search term (no --query flag needed)
-{projectname}-cli golang tutorials        # Search for "golang tutorials"
-{projectname}-cli "exact phrase"          # Quoted = exact match
-{projectname}-cli --limit 5 golang        # Flags before search term OK
+search-cli golang tutorials        # Search for "golang tutorials"
+search-cli "exact phrase"          # Quoted = exact match
+search-cli --limit 5 golang        # Flags before search term OK
 ```
 
 **Content/Paste Services:**
 ```bash
 # Detection order: stdin → file → directory → text
-echo "hello" | {projectname}-cli          # stdin detected → paste stdin
-{projectname}-cli notes.txt               # File exists → paste file content
-{projectname}-cli /path/to/dir            # Directory → error or list
-{projectname}-cli "some text here"        # Not file → paste as text
+echo "hello" | search-cli          # stdin detected → paste stdin
+search-cli notes.txt               # File exists → paste file content
+search-cli /path/to/dir            # Directory → error or list
+search-cli "some text here"        # Not file → paste as text
 ```
 
 **Detection Logic:**
@@ -42151,8 +45452,8 @@ func detectInput(args []string) (content string, source string) {
 
 **Explicit flags still work (override detection):**
 ```bash
-{projectname}-cli --file notes.txt        # Force file mode
-{projectname}-cli --text "notes.txt"      # Force text mode (not file)
+search-cli --file notes.txt        # Force file mode
+search-cli --text "notes.txt"      # Force text mode (not file)
 ```
 
 ## Build Integration
@@ -42164,15 +45465,15 @@ func detectInput(args []string) (content string, source string) {
 ```bash
 # Quick dev build (server + CLI + agent if exist)
 make dev
-# Output: ${TMPDIR}/${PROJECTORG}/${PROJECTNAME}-XXXXXX/{projectname}, {projectname}-cli, {projectname}-agent
+# Output: ${TMPDIR}/$APIMGR/$SEARCH-XXXXXX/search, search-cli, search-agent
 
 # Production test build
 make local
-# Output: binaries/{projectname}, binaries/{projectname}-cli (with version)
+# Output: binaries/search, binaries/search-cli (with version)
 
 # Full release (all 8 platforms)
 make build
-# Output: binaries/{projectname}-{os}-{arch}, binaries/{projectname}-cli-{os}-{arch}
+# Output: binaries/search-{os}-{arch}, binaries/search-cli-{os}-{arch}
 ```
 
 ### CI/CD (Direct go build - NOT Makefile)
@@ -42180,13 +45481,13 @@ make build
 ```bash
 # CI/CD uses actions/setup-go@v5, NOT Docker containers
 # See PART 28: CI/CD WORKFLOWS for complete examples
-go build -ldflags "${LDFLAGS}" -o ${PROJECTNAME}-cli ./src/client
+go build -ldflags "${LDFLAGS}" -o $SEARCH-cli ./src/client
 ```
 
 ### Directory Structure
 
 ```
-{projectname}/
+search/
 ├── src/                    # Server application
 │   ├── main.go
 │   ├── config/
@@ -42262,7 +45563,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 client uses `common/terminal` from PART 7:
 ```go
 // CLI uses common/terminal package (defined in PART 7)
-import "{projectorg}/{projectname}/common/terminal"
+import "apimgr/search/common/terminal"
 
 func (m SizeMode) MaxTableColumns() int {
     switch m {
@@ -42537,19 +45838,19 @@ stty rows 10 cols 40
 
 ```bash
 # Connection error
-$ {projectname}-cli list
-Error: cannot connect to server at https://{projectname}.example.com
+$ search-cli list
+Error: cannot connect to server at https://search.example.com
   Check your network connection and server address.
   Use --server to specify a different server.
 
 # Auth error
-$ {projectname}-cli admin users --token invalid
+$ search-cli admin users --token invalid
 Error: authentication failed
   Your API token is invalid or expired.
   Update server.token in cli.yml or use --token flag.
 
 # Not found
-$ {projectname}-cli get abc123
+$ search-cli get abc123
 Error: resource not found: abc123
 ```
 
@@ -42558,10 +45859,10 @@ Error: resource not found: abc123
 When server is reachable, `--version` can show extended info:
 
 ```bash
-$ {projectname}-cli --version
-{projectname}-cli {projectversion} ({COMMIT_SHA}) built {BUILD_DATE}
+$ search-cli --version
+search-cli {projectversion} ({COMMIT_SHA}) built {BUILD_DATE}
 
-Server: https://{projectname}.example.com
+Server: https://search.example.com
 Server Version: {projectversion} (compatible)
 
 Build Info:
@@ -42903,7 +46204,7 @@ Answer these questions for your specific project:
 
 | Attribute | Value |
 |-----------|-------|
-| Binary naming | `{projectname}-agent-{os}-{arch}` |
+| Binary naming | `search-agent-{os}-{arch}` |
 | Examples | `monitor-agent-linux-amd64`, `monitor-agent-windows-arm64` |
 | Versioning | Same as server and client |
 | Build | Part of same Makefile (`make build` builds all if `src/agent/` exists) |
@@ -42966,6 +46267,16 @@ web-server-01 → monitor.example.com
 Connected
 ```
 
+**Plain banner (NO_COLOR / TERM=dumb):**
+```
+monitor-agent v1.0.0
+Mode: production
+Server: https://monitor.example.com
+Hostname: web-server-01
+Tags: production, web-tier
+[OK] Connected to server
+```
+
 ### Agent Flags 
 
 **Same flag style as server binary, EXCEPT no `--port` or `--address` (agents don't serve web).**
@@ -43000,6 +46311,7 @@ Connected
 # Runtime
 --mode {production|development}  # Force mode (auto-detected by default)
 --debug                       # Enable debug logging (implies development features)
+--color {always|never|auto}   # Color output (default: auto, respects NO_COLOR)
 
 # Commands (subcommands like server)
 status                        # Show agent status
@@ -43016,12 +46328,12 @@ register                      # Interactive registration with server
 ### Agent --help Output
 
 ```bash
-$ {projectname}-agent --help
-{projectname}-agent {projectversion} - Agent for {projectname}
+$ search-agent --help
+search-agent {projectversion} - Agent for search
 
 Usage:
-  {projectname}-agent [flags]
-  {projectname}-agent [command]
+  search-agent [flags]
+  search-agent [command]
 
 Commands:
   status                        Show agent status
@@ -43043,6 +46355,7 @@ Flags:
 
       --mode {production|development}  Application mode
       --debug                       Enable debug mode
+      --color {always|never|auto}   Color output (default: auto)
       --status                      Show agent health
 
       --service CMD                 Service management (install|uninstall|start|stop|restart)
@@ -43057,10 +46370,10 @@ Shells: bash, zsh, fish, sh, dash, ksh, powershell, pwsh
 
 ```bash
 # Default: run agent (foreground)
-{projectname}-agent
+search-agent
 
 # Status: show current agent status
-{projectname}-agent status
+search-agent status
   Agent: monitor-agent v1.0.0
   Hostname: web-server-01
   Server: https://monitor.example.com
@@ -43069,14 +46382,14 @@ Shells: bash, zsh, fish, sh, dash, ksh, powershell, pwsh
   Next Report: 2025-01-15 10:31:00
 
 # Test: verify server connection
-{projectname}-agent test
+search-agent test
   Testing connection to https://monitor.example.com...
   ✅ Connection successful
   ✅ Authentication valid
   ✅ Agent registered
 
 # Connect: one-liner from server panel (preferred)
-{projectname}-agent --server https://monitor.example.com --token adm_agt_abc123def456...
+search-agent --server https://monitor.example.com --token adm_agt_abc123def456...
   Connecting to https://monitor.example.com...
   ✅ Connection successful
   ✅ Token validated
@@ -43089,11 +46402,11 @@ Shells: bash, zsh, fish, sh, dash, ksh, powershell, pwsh
   Agent is now sending data to server for admin scope.
 
 # Service management
-{projectname}-agent --service install   # Install as system service
-{projectname}-agent --service start     # Start service
-{projectname}-agent --service stop      # Stop service
-{projectname}-agent --service status    # Show service status
-{projectname}-agent --service uninstall # Remove service
+search-agent --service install   # Install as system service
+search-agent --service start     # Start service
+search-agent --service stop      # Stop service
+search-agent --service status    # Show service status
+search-agent --service uninstall # Remove service
 ```
 
 ### Agent Setup Process 
@@ -43111,7 +46424,7 @@ Shells: bash, zsh, fish, sh, dash, ksh, powershell, pwsh
 │                                                             │
 │  2. On Target Machine (one command)                            │
 │     └─→ Paste and run the one-liner:                        │
-│         {projectname}-agent --server {url} --token {token}  │
+│         search-agent --server {url} --token {token}  │
 │     └─→ Agent connects, registers, saves config             │
 │     └─→ Server shows notification: "{name} has connected"   │
 │                                                             │
@@ -43208,8 +46521,8 @@ func GenerateAgentToken(scope AgentScope) string {
 **File: `{config_dir}/agent.yml`** (same directory as server.yml)
 
 ```yaml
-# /etc/{projectorg}/{projectname}/agent.yml (root)
-# ~/.config/{projectorg}/{projectname}/agent.yml (user)
+# /etc/apimgr/search/agent.yml (root)
+# ~/.config/apimgr/search/agent.yml (user)
 # Agent configuration - ALL options with defaults
 
 # Server connection
@@ -43266,18 +46579,18 @@ mode: ""                           # production, development (empty = auto-detec
 | Priority | Source | Example |
 |----------|--------|---------|
 | 1 | CLI flag | `--server https://...` |
-| 2 | Environment variable | `{PROJECTNAME}_AGENT_SERVER=https://...` |
+| 2 | Environment variable | `SEARCH_AGENT_SERVER=https://...` |
 | 3 | Config file | `server.primary: https://...` |
 | 4 | Compiled default | (none for server, must be configured) |
 
 **Environment variable mapping:**
 ```bash
-# Pattern: {PROJECTNAME}_AGENT_{KEY} or {PROJECTNAME}_{KEY}
-{PROJECTNAME}_AGENT_SERVER_PRIMARY="https://example.com"
-{PROJECTNAME}_AGENT_TOKEN="adm_agt_abc123..."
-{PROJECTNAME}_AGENT_HOSTNAME="web-server-01"
-{PROJECTNAME}_AGENT_COLLECTION_INTERVAL=30
-{PROJECTNAME}_DEBUG=true
+# Pattern: SEARCH_AGENT_{KEY} or SEARCH_{KEY}
+SEARCH_AGENT_SERVER_PRIMARY="https://example.com"
+SEARCH_AGENT_TOKEN="adm_agt_abc123..."
+SEARCH_AGENT_HOSTNAME="web-server-01"
+SEARCH_AGENT_COLLECTION_INTERVAL=30
+SEARCH_DEBUG=true
 ```
 
 ### Agent Cluster Failover 
@@ -43352,10 +46665,10 @@ mode: ""                           # production, development (empty = auto-detec
 | **Execution context** | User context | System context |
 | **Runs as** | Current user | root/Administrator |
 | **Config base path** | `~/` (user home) | `/` (system root) |
-| **Config directory** | `~/.config/{projectorg}/{projectname}/` | `/etc/{projectorg}/{projectname}/` |
-| **Data directory** | `~/.local/share/{projectorg}/{projectname}/` | `/var/lib/{projectorg}/{projectname}/` |
-| **Log directory** | `~/.local/log/{projectorg}/{projectname}/` | `/var/log/{projectorg}/{projectname}/` |
-| **Cache directory** | `~/.cache/{projectorg}/{projectname}/` | `/var/cache/{projectorg}/{projectname}/` |
+| **Config directory** | `~/.config/apimgr/search/` | `/etc/apimgr/search/` |
+| **Data directory** | `~/.local/share/apimgr/search/` | `/var/lib/apimgr/search/` |
+| **Log directory** | `~/.local/log/apimgr/search/` | `/var/log/apimgr/search/` |
+| **Cache directory** | `~/.cache/apimgr/search/` | `/var/cache/apimgr/search/` |
 | **Privilege level** | Normal user | Elevated (root/admin) |
 | **System access** | User files only | Full system access |
 
@@ -43370,24 +46683,24 @@ mode: ""                           # production, development (empty = auto-detec
 
 ```bash
 # Client (user context - runs as "alice")
-~/.config/{projectorg}/{projectname}/cli.yml        # Alice's config
-~/.local/share/{projectorg}/{projectname}/          # Alice's data
-~/.local/log/{projectorg}/{projectname}/cli.log     # Alice's logs
+~/.config/apimgr/search/cli.yml        # Alice's config
+~/.local/share/apimgr/search/          # Alice's data
+~/.local/log/apimgr/search/cli.log     # Alice's logs
 
 # Agent (system context - runs as root)
-/etc/{projectorg}/{projectname}/agent.yml           # System config
-/var/lib/{projectorg}/{projectname}/                # System data
-/var/log/{projectorg}/{projectname}/agent.log       # System logs
+/etc/apimgr/search/agent.yml           # System config
+/var/lib/apimgr/search/                # System data
+/var/log/apimgr/search/agent.log       # System logs
 ```
 
 **Platform-Specific Paths:**
 
 | Platform | Client Config | Agent Config |
 |----------|-------------------|--------------|
-| **Linux** | `~/.config/{projectorg}/{projectname}/` | `/etc/{projectorg}/{projectname}/` |
-| **macOS** | `~/Library/Application Support/{projectorg}/{projectname}/` | `/Library/Application Support/{projectorg}/{projectname}/` |
-| **Windows** | `%APPDATA%\{projectorg}\{projectname}\` | `%PROGRAMDATA%\{projectorg}\{projectname}\` |
-| **FreeBSD** | `~/.config/{projectorg}/{projectname}/` | `/usr/local/etc/{projectorg}/{projectname}/` |
+| **Linux** | `~/.config/apimgr/search/` | `/etc/apimgr/search/` |
+| **macOS** | `~/Library/Application Support/apimgr/search/` | `/Library/Application Support/apimgr/search/` |
+| **Windows** | `%APPDATA%\apimgr\search\` | `%PROGRAMDATA%\apimgr\search\` |
+| **FreeBSD** | `~/.config/apimgr/search/` | `/usr/local/etc/apimgr/search/` |
 
 ### Purpose Matching 
 
@@ -43402,7 +46715,7 @@ All three binaries are built for the SAME project and work together as a system:
 │                                                                            │
 │  ┌─────────────────────┐                                                   │
 │  │       SERVER        │  Central server - serves API, WebUI, manages data│
-│  │    {projectname}    │  Runs as service/daemon                           │
+│  │    search    │  Runs as service/daemon                           │
 │  └──────────┬──────────┘                                                   │
 │             │                                                              │
 │             │ API                                                          │
@@ -43411,11 +46724,11 @@ All three binaries are built for the SAME project and work together as a system:
 │       │           │                                                        │
 │       ▼           ▼                                                        │
 │  ┌─────────────────────┐     ┌─────────────────────────┐                   │
-│  │ {projectname} CLIENT │     │         AGENT           │                   │
-│  │  {projectname}-cli  │     │  {projectname}-agent    │                   │
+│  │ search CLIENT │     │         AGENT           │                   │
+│  │  search-cli  │     │  search-agent    │                   │
 │  └─────────────────────┘     └─────────────────────────┘                   │
 │                                                                            │
-│  {projectname} CLIENT:                AGENT:                                   │
+│  search CLIENT:                AGENT:                                   │
 │  • Full remote admin              • Purpose-specific daemon                │
 │  • TUI/CLI/GUI modes              • Headless, no admin                     │
 │  • User context (~/)              • System context (/)                     │
@@ -43515,11 +46828,11 @@ SERVER STARTUP                          AGENT STARTUP
 
 **Admin flags (Client only):**
 ```bash
-{projectname}-cli --admin users list          # List all users
-{projectname}-cli --admin users create ...    # Create user
-{projectname}-cli --admin server status       # Server status
-{projectname}-cli --admin server config       # View/edit config
-{projectname}-cli --admin backup create       # Create backup
+search-cli --admin users list          # List all users
+search-cli --admin users create ...    # Create user
+search-cli --admin server status       # Server status
+search-cli --admin server config       # View/edit config
+search-cli --admin backup create       # Create backup
 ```
 
 ### Agent = Purpose-Specific Worker 
@@ -43621,18 +46934,18 @@ src/
 
 ```
 binaries/
-├── {projectname}                         # Local server binary - for testing
-├── {projectname}-cli                     # Local CLI binary (if src/client/ exists)
-├── {projectname}-agent                   # Local agent binary (if src/agent/ exists)
-├── {projectname}-linux-amd64             # Server
-├── {projectname}-linux-arm64
-├── {projectname}-cli-linux-amd64         # CLI (if src/client/ exists)
-├── {projectname}-cli-linux-arm64
-├── {projectname}-agent-linux-amd64       # Agent (if src/agent/ exists)
-├── {projectname}-agent-linux-arm64
-├── {projectname}-agent-windows-amd64.exe
-├── {projectname}-agent-darwin-amd64
-└── {projectname}-agent-darwin-arm64
+├── search                         # Local server binary - for testing
+├── search-cli                     # Local CLI binary (if src/client/ exists)
+├── search-agent                   # Local agent binary (if src/agent/ exists)
+├── search-linux-amd64             # Server
+├── search-linux-arm64
+├── search-cli-linux-amd64         # CLI (if src/client/ exists)
+├── search-cli-linux-arm64
+├── search-agent-linux-amd64       # Agent (if src/agent/ exists)
+├── search-agent-linux-arm64
+├── search-agent-windows-amd64.exe
+├── search-agent-darwin-amd64
+└── search-agent-darwin-arm64
 ```
 
 **See PART 26 (Makefile) for full build details.**
@@ -44076,7 +47389,7 @@ var UsernameBlocklist = []string{
     "webmaster", "hostmaster", "abuse", "spam", "junk", "trash",
 
     // Project-specific (dynamic)
-    "{projectname}", "{projectorg}",
+    "search", "apimgr",
 }
 ```
 
@@ -44687,11 +48000,11 @@ The Server Admin (administrator with access to the server/binary) has ONE recove
 
 | Scenario | Recovery Method |
 |----------|-----------------|
-| Admin forgot password | `{projectname} --maintenance setup` |
-| Admin lost API token | `{projectname} --maintenance setup` |
-| Admin lost recovery keys | `{projectname} --maintenance setup` |
-| Admin lost 2FA + no recovery keys | `{projectname} --maintenance setup` |
-| Admin lost everything | `{projectname} --maintenance setup` |
+| Admin forgot password | `search --maintenance setup` |
+| Admin lost API token | `search --maintenance setup` |
+| Admin lost recovery keys | `search --maintenance setup` |
+| Admin lost 2FA + no recovery keys | `search --maintenance setup` |
+| Admin lost everything | `search --maintenance setup` |
 
 **This requires:**
 - Console/SSH access to the server to run the binary
@@ -45728,7 +49041,7 @@ Both CLI and agent binaries automatically call `/api/autodiscover` when connecti
 
 ```bash
 # Manual check (for debugging)
-curl https://api.example.com/api/autodiscover
+curl -q -LSsf https://api.example.com/api/autodiscover
 ```
 
 **Note:** This endpoint is NOT versioned (`/api/autodiscover` not `/api/{api_version}/autodiscover`) because clients need it BEFORE they know the API version.
@@ -48976,7 +52289,7 @@ IDEA.md must follow this structure:
 ## IDEA.md Template
 
 ```markdown
-# {projectname}
+# search
 
 ## Project Description
 
@@ -49299,7 +52612,7 @@ A weather aggregation API that fetches data from external providers, caches it, 
 | `go build` locally | `make dev` or `make local` or `make build` |
 | `go test` locally | `make test` (includes coverage enforcement) |
 | `go mod tidy` locally | Handled by `make build/local/dev` automatically |
-| `./binaries/{projectname}` locally | Run binary inside Docker/Incus container |
+| `./binaries/search` locally | Run binary inside Docker/Incus container |
 | Go installed locally | Use Makefile targets (they use Docker internally) |
 
 **GODIR (Go Module Cache):**
@@ -49313,14 +52626,14 @@ GOCACHE := $(HOME)/.local/share/go/build  # Local machine path for build cache
 | NEVER | ALWAYS |
 |-------|--------|
 | `docker compose up` in project dir | Use temp directory workflow |
-| Runtime data in project directory | `/tmp/{projectorg}/{projectname}-XXXXXX/` |
-| `mktemp -d` (bare) | `mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-XXXXXX"` |
-| `/tmp/myfile` | `/tmp/{projectorg}/{projectname}-XXXXXX/myfile` |
+| Runtime data in project directory | `/tmp/apimgr/search-XXXXXX/` |
+| `mktemp -d` (bare) | `mktemp -d "${TMPDIR:-/tmp}/$APIMGR/$SEARCH-XXXXXX"` |
+| `/tmp/myfile` | `/tmp/apimgr/search-XXXXXX/myfile` |
 
 ```bash
 # Temp dir workflow
-mkdir -p "${TMPDIR:-/tmp}/${PROJECTORG}"
-TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/${PROJECTORG}/${PROJECTNAME}-XXXXXX")
+mkdir -p "${TMPDIR:-/tmp}/$APIMGR"
+TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/$APIMGR/$SEARCH-XXXXXX")
 mkdir -p "$TEMP_DIR/rootfs/config" "$TEMP_DIR/rootfs/data"
 cp docker/docker-compose.test.yml "$TEMP_DIR/docker-compose.yml"
 cd "$TEMP_DIR" && docker compose up -d
@@ -49368,7 +52681,7 @@ make docker # Build Docker image
 |------|------------------|------------|
 | Config | `/tmp/{org}/{proj}-XXX/rootfs/config/` | `/etc/{org}/{proj}/` (Linux) |
 | Data | `/tmp/{org}/{proj}-XXX/rootfs/data/` | `/var/lib/{org}/{proj}/` (Linux) |
-| Binary | `binaries/{projectname}` | `/usr/local/bin/{projectname}` |
+| Binary | `binaries/search` | `/usr/local/bin/search` |
 
 ---
 
@@ -49405,12 +52718,12 @@ make docker # Build Docker image
 - [ ] BSD paths: Same as Linux
 - [ ] Docker paths: `/config/`, `/data/`
 - [ ] Root vs user path detection works
-- [ ] All path functions use `{projectorg}/{projectname}` structure
+- [ ] All path functions use `apimgr/search` structure
 
 **PART 5: Configuration**
 - [ ] Config file: `server.yml` (not .yaml, not .json)
 - [ ] Hierarchy: CLI flags > env vars > file > defaults
-- [ ] Environment prefix: `{PROJECTNAME}_`
+- [ ] Environment prefix: `SEARCH_`
 - [ ] Boolean values: true/false, yes/no, 1/0, on/off all work
 - [ ] All config values have sane defaults
 - [ ] Unknown config keys are ERRORS, not ignored
@@ -49609,8 +52922,8 @@ make docker # Build Docker image
 - [ ] Backup includes: database, config, uploads
 - [ ] Restore is atomic (all or nothing)
 - [ ] **Backup verification after creation** (checksum, decrypt, extract, DB integrity)
-- [ ] **Daily incremental** `{projectname}-daily.tar.gz[.enc]` always valid
-- [ ] **Hourly incremental** `{projectname}-hourly.tar.gz[.enc]` (if enabled)
+- [ ] **Daily incremental** `search-daily.tar.gz[.enc]` always valid
+- [ ] **Hourly incremental** `search-hourly.tar.gz[.enc]` (if enabled)
 - [ ] **Cluster mode**: each node maintains own valid backups (max_backups per node)
 
 ### Phase 8: Maintenance (PARTS 23-26)
@@ -49748,12 +53061,12 @@ make docker # Build Docker image
 **PART 33: Client & Agent**
 
 *Client (REQUIRED for all projects):*
-- [ ] Binary: `{projectname}-cli`
+- [ ] Binary: `search-cli`
 - [ ] `src/client/` directory exists
 - [ ] Same version as server
 - [ ] CLI mode (standard commands)
 - [ ] TUI mode (interactive)
-- [ ] Config: `~/.config/{projectorg}/{projectname}/cli.yml`
+- [ ] Config: `~/.config/apimgr/search/cli.yml`
 - [ ] Theme matching server (dark default)
 - [ ] Shell completions (bash, zsh, fish, powershell)
 - [ ] All server API operations accessible via CLI
@@ -49764,12 +53077,12 @@ make docker # Build Docker image
   - [ ] Automatic failover to next node if primary fails
 
 *Agent (only for monitoring/remote management projects):*
-- [ ] Binary: `{projectname}-agent`
+- [ ] Binary: `search-agent`
 - [ ] `src/agent/` directory exists
 - [ ] Runs directly on system, NOT in container
 - [ ] Same version as server
 - [ ] Systemd/launchd/Windows service support
-- [ ] Config: `/etc/{projectorg}/{projectname}/agent.yml`
+- [ ] Config: `/etc/apimgr/search/agent.yml`
 - [ ] Connects to central server
 - [ ] Same flags as server EXCEPT no `--port`/`--address` (agents don't serve HTTP)
 - [ ] Communication pattern documented:
@@ -49981,7 +53294,7 @@ make docker # Build Docker image
 ### Client Type Detection & Response 
 
 **Three Types of CLI Tools:**
-- [ ] **Our Client** (`{projectname}-cli`) - INTERACTIVE, receives JSON, renders own TUI/GUI
+- [ ] **Our Client** (`search-cli`) - INTERACTIVE, receives JSON, renders own TUI/GUI
 - [ ] **Text Browsers** (lynx, w3m, links, elinks) - INTERACTIVE, receive no-JS HTML via `renderNoJSHTML()`, NO JavaScript
 - [ ] **HTTP Tools** (curl, wget, httpie) - NON-INTERACTIVE, receive formatted text via `HTML2TextConverter()`
 
@@ -50386,7 +53699,7 @@ Before starting integration:
 ## Example TODO.AI.md for Integration
 
 ```markdown
-# Integration Tasks for {projectname}
+# Integration Tasks for search
 
 ## Critical (P0) - Do First
 
@@ -50463,15 +53776,15 @@ When bootstrapping a new project from this specification:
 ### Phase 1: Project Initialization
 
 1. **Confirm project details:**
-   - Project name: `{projectname}`
-   - Organization: `{projectorg}`
+   - Project name: `search`
+   - Organization: `apimgr`
    - Description: What does this project do?
    - Primary purpose: What problem does it solve?
 
 2. **Create directory structure:**
    ```bash
-   mkdir -p {projectname}
-   cd {projectname}
+   mkdir -p search
+   cd search
 
    # Create all required directories
    mkdir -p src/{config,server,swagger,graphql,mode,paths,ssl,scheduler,service,admin}
@@ -50534,7 +53847,7 @@ When bootstrapping a new project from this specification:
 
 1. **Initialize Go module:**
    ```bash
-   go mod init github.com/{projectorg}/{projectname}
+   go mod init github.com/apimgr/search
    ```
 
 2. **Create src/main.go** - Minimal entry point

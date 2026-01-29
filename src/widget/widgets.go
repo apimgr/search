@@ -84,9 +84,19 @@ type Manager struct {
 
 // NewManager creates a new widget manager
 func NewManager(cfg *config.WidgetsConfig) *Manager {
+	return newManager(cfg, NewCache())
+}
+
+// newManagerForTest creates a new widget manager for testing (no cleanup goroutine)
+func newManagerForTest(cfg *config.WidgetsConfig) *Manager {
+	return newManager(cfg, newCacheNoCleanup())
+}
+
+// newManager is the internal constructor
+func newManager(cfg *config.WidgetsConfig, cache *Cache) *Manager {
 	m := &Manager{
 		config:   cfg,
-		cache:    NewCache(),
+		cache:    cache,
 		fetchers: make(map[WidgetType]Fetcher),
 		widgets:  make(map[WidgetType]*Widget),
 	}
@@ -258,5 +268,12 @@ func (m *Manager) IsWidgetEnabled(widgetType WidgetType) bool {
 	default:
 		// Tool and user widgets are always available if widgets are enabled
 		return true
+	}
+}
+
+// Close closes the manager and its internal cache
+func (m *Manager) Close() {
+	if m.cache != nil {
+		m.cache.Close()
 	}
 }

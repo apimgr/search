@@ -129,8 +129,12 @@ func TestGetServerAddressEmpty(t *testing.T) {
 
 func TestTestTokenSuccess(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.HealthResponse{
-			Status: "healthy",
+		// Per AI.md PART 14: Wrapped response format {"ok": true, "data": {...}}
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"ok": true,
+			"data": api.HealthResponse{
+				Status: "healthy",
+			},
 		})
 	}))
 	defer testServer.Close()
@@ -240,9 +244,10 @@ func TestRunLoginWithUnexpectedTokenPrefix(t *testing.T) {
 
 func TestRunLoginWithServerVerification(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.HealthResponse{
+		// Per AI.md PART 14: Wrapped response format
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "data": api.HealthResponse{
 			Status: "healthy",
-		})
+		}})
 	}))
 	defer testServer.Close()
 

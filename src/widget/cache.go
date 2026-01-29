@@ -15,18 +15,38 @@ type CacheItem struct {
 type Cache struct {
 	mu    sync.RWMutex
 	items map[string]*CacheItem
+	stop  chan struct{}
 }
 
 // NewCache creates a new cache instance
 func NewCache() *Cache {
 	c := &Cache{
 		items: make(map[string]*CacheItem),
+		stop:  make(chan struct{}),
 	}
 
 	// Start cleanup goroutine
 	go c.cleanup()
 
 	return c
+}
+
+// Close stops the cleanup goroutine
+func (c *Cache) Close() {
+	select {
+	case <-c.stop:
+		// Already closed
+	default:
+		close(c.stop)
+	}
+}
+
+// newCacheNoCleanup creates a cache without starting the cleanup goroutine (for testing)
+func newCacheNoCleanup() *Cache {
+	return &Cache{
+		items: make(map[string]*CacheItem),
+		stop:  make(chan struct{}),
+	}
 }
 
 // Get retrieves an item from the cache
@@ -79,8 +99,13 @@ func (c *Cache) cleanup() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		c.removeExpired()
+	for {
+		select {
+		case <-ticker.C:
+			c.removeExpired()
+		case <-c.stop:
+			return
+		}
 	}
 }
 

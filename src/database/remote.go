@@ -141,8 +141,8 @@ func (rdb *RemoteDB) Close() error {
 	rdb.mu.Lock()
 	defer rdb.mu.Unlock()
 
+	rdb.ready = false
 	if rdb.db != nil {
-		rdb.ready = false
 		return rdb.db.Close()
 	}
 	return nil

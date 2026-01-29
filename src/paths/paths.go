@@ -21,10 +21,13 @@ type Paths struct {
 	DBDir       string
 }
 
+// goos is used for testing - allows overriding runtime.GOOS
+var goos = runtime.GOOS
+
 // Get returns OS-specific paths based on OS and privilege level
 // Per AI.md PART 4 OS-SPECIFIC PATHS (NON-NEGOTIABLE)
 func Get(projectOrg, projectName string, privileged bool) *Paths {
-	switch runtime.GOOS {
+	switch goos {
 	case "linux":
 		return getLinuxPaths(projectOrg, projectName, privileged)
 	case "darwin":
@@ -209,7 +212,7 @@ func getWindowsPaths(org, name string, privileged bool) *Paths {
 
 // IsPrivileged returns true if running with elevated privileges
 func IsPrivileged() bool {
-	switch runtime.GOOS {
+	switch goos {
 	case "windows":
 		// On Windows, check if running as administrator
 		// This is simplified - proper check would use Windows API

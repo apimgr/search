@@ -397,6 +397,8 @@ func New(cfg *config.Config) *Server {
 	// Set database for admin session persistence per AI.md PART 17
 	if dbMgr != nil {
 		s.adminHandler.SetDatabase(dbMgr.ServerDB())
+		// Set admin service for multi-admin support per AI.md PART 17
+		s.adminHandler.SetAdminService(admin.NewAdminService(dbMgr.ServerDB()))
 	}
 
 	// Configure admin handler with registry and reload callback
@@ -727,12 +729,17 @@ func (s *Server) setupRoutes() http.Handler {
 	mux.HandleFunc("/server/privacy", s.handlePrivacy)
 	mux.HandleFunc("/server/contact", s.handleContact)
 	mux.HandleFunc("/server/help", s.handleHelp)
+	mux.HandleFunc("/server/terms", s.handleTerms)
 
 	// robots.txt, sitemap.xml, and security.txt (both locations per RFC 9116)
-	mux.HandleFunc("/robots.txt", s.handleRobots)
+	mux.HandleFunc("/robots.txt", s.handleRobotsTxt)
 	mux.HandleFunc("/sitemap.xml", s.handleSitemap)
-	mux.HandleFunc("/security.txt", s.handleSecurityTxt)
-	mux.HandleFunc("/.well-known/security.txt", s.handleSecurityTxt)
+	mux.HandleFunc("/security.txt", s.handleSecurityTxtEnhanced)
+	mux.HandleFunc("/.well-known/security.txt", s.handleSecurityTxtEnhanced)
+
+	// Well-known URIs per RFC 8615
+	// Password change redirect per AI.md PART 11
+	mux.HandleFunc("/.well-known/change-password", s.handleWellKnownChangePassword)
 
 	// OpenSearch
 	if s.config.Search.OpenSearch.Enabled {
@@ -831,82 +838,6 @@ func (s *Server) setupRoutes() http.Handler {
 	return handler
 }
 
-// handleRobots serves robots.txt per AI.md spec
-func (s *Server) handleRobots(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=86400") // Cache for 1 day
-
-	web := s.config.Server.Web
-
-	// Build robots.txt
-	fmt.Fprintln(w, "# robots.txt - Search Engine Crawling Rules")
-	fmt.Fprintln(w, "#", s.config.Server.Title)
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "User-agent: *")
-
-	// Allow paths (default: /, /api)
-	allowPaths := web.Robots.Allow
-	if len(allowPaths) == 0 {
-		allowPaths = []string{"/", "/api"}
-	}
-	for _, path := range allowPaths {
-		fmt.Fprintln(w, "Allow:", path)
-	}
-
-	// Deny paths (default: /admin)
-	denyPaths := web.Robots.Deny
-	if len(denyPaths) == 0 {
-		denyPaths = []string{"/admin"}
-	}
-	for _, path := range denyPaths {
-		fmt.Fprintln(w, "Disallow:", path)
-	}
-
-	// Add sitemap URL per AI.md spec
-	fmt.Fprintln(w)
-	baseURL := s.getBaseURL(r)
-	fmt.Fprintln(w, "Sitemap:", baseURL+"/sitemap.xml")
-}
-
-// handleSecurityTxt serves security.txt per RFC 9116 and AI.md spec
-// Required fields: Contact, Expires
-func (s *Server) handleSecurityTxt(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=86400") // Cache for 1 day
-
-	security := s.config.Server.Web.Security
-
-	// Contact (REQUIRED per RFC 9116)
-	// Must be a URI (mailto:, https://, or tel:)
-	contact := security.Contact
-	if contact == "" && s.config.Server.Admin.Email != "" {
-		contact = s.config.Server.Admin.Email
-	}
-	if contact != "" {
-		// Ensure mailto: prefix for email addresses
-		if strings.Contains(contact, "@") && !strings.HasPrefix(contact, "mailto:") {
-			contact = "mailto:" + contact
-		}
-		fmt.Fprintln(w, "Contact:", contact)
-	} else {
-		// Fallback to fqdn-based email
-		fqdn := s.getBaseURL(r)
-		fqdn = strings.TrimPrefix(fqdn, "https://")
-		fqdn = strings.TrimPrefix(fqdn, "http://")
-		fmt.Fprintln(w, "Contact: mailto:security@"+fqdn)
-	}
-
-	// Expires (REQUIRED per RFC 9116)
-	// Must be in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)
-	expires := security.Expires
-	if expires == "" {
-		// Default: 1 year from now (auto-renewed yearly)
-		expiryTime := time.Now().AddDate(1, 0, 0)
-		expires = expiryTime.UTC().Format(time.RFC3339)
-	}
-	fmt.Fprintln(w, "Expires:", expires)
-}
-
 // handleSitemap serves sitemap.xml per AI.md spec
 func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
@@ -932,6 +863,7 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 		{"/server/about", "0.5", "monthly"},
 		{"/server/privacy", "0.3", "monthly"},
 		{"/server/help", "0.5", "monthly"},
+		{"/server/terms", "0.3", "monthly"},
 		{"/openapi", "0.4", "weekly"},
 		{"/graphql", "0.4", "weekly"},
 		{"/healthz", "0.2", "always"},

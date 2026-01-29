@@ -144,6 +144,16 @@ func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleTerms renders the terms of service page
+func (s *Server) handleTerms(w http.ResponseWriter, r *http.Request) {
+	data := NewPageData(s.config, "Terms of Service", "terms")
+	data.CSRFToken = s.getCSRFToken(r)
+
+	if err := s.renderer.Render(w, "terms", data); err != nil {
+		s.handleError(w, r, http.StatusInternalServerError, "Template Error", err.Error())
+	}
+}
+
 // handleHealthz handles the health check endpoint with content negotiation
 // Per AI.md spec: supports HTML, JSON, and plain text responses
 func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
@@ -477,8 +487,16 @@ func (s *Server) respondHealthHTML(w http.ResponseWriter, r *http.Request, healt
 	}
 }
 
-// handleNotFound renders a 404 error page
+// handleNotFound renders a 404 error page or JSON response for API routes
+// Per AI.md PART 13/14: API errors return JSON with NOT_FOUND code
 func (s *Server) handleNotFound(w http.ResponseWriter, r *http.Request) {
+	// Return JSON for API routes per AI.md PART 14
+	if strings.HasPrefix(r.URL.Path, "/api/") {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"ok":false,"error":"NOT_FOUND","message":"Resource not found"}`))
+		return
+	}
 	s.handleError(w, r, http.StatusNotFound, "Page Not Found", "The page you're looking for doesn't exist.")
 }
 

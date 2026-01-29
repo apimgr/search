@@ -183,6 +183,12 @@ type ServerConfig struct {
 
 	// Maintenance mode - when enabled, shows maintenance page to all users
 	MaintenanceMode bool `yaml:"maintenance_mode"`
+
+	// Backup configuration per AI.md PART 22
+	Backup BackupConfig `yaml:"backup"`
+
+	// Compliance configuration per AI.md PART 22
+	Compliance ComplianceConfig `yaml:"compliance"`
 }
 
 // SSLConfig represents SSL/TLS configuration
@@ -623,6 +629,10 @@ type PagesConfig struct {
 		Enabled bool   `yaml:"enabled"`
 		Content string `yaml:"content"`
 	} `yaml:"help"`
+	Terms struct {
+		Enabled bool   `yaml:"enabled"`
+		Content string `yaml:"content"`
+	} `yaml:"terms"`
 }
 
 // WebConfig represents web settings (robots.txt, security.txt, announcements)
@@ -800,6 +810,37 @@ type MetricsConfig struct {
 	Token           string    `yaml:"token"`            // Bearer token for authentication (empty = no auth)
 	DurationBuckets []float64 `yaml:"duration_buckets"` // Histogram buckets for request duration (seconds)
 	SizeBuckets     []float64 `yaml:"size_buckets"`     // Histogram buckets for request size (bytes)
+}
+
+// BackupConfig represents backup configuration
+// Per AI.md PART 22: Backup & Restore configuration
+type BackupConfig struct {
+	// Encryption configuration
+	Encryption BackupEncryptionConfig `yaml:"encryption"`
+	// Retention policy
+	Retention BackupRetentionConfig `yaml:"retention"`
+}
+
+// BackupEncryptionConfig represents backup encryption settings
+// Per AI.md PART 22: Password is NEVER stored - derived on-demand
+type BackupEncryptionConfig struct {
+	Enabled bool   `yaml:"enabled"` // true if password was set during setup
+	Hint    string `yaml:"hint"`    // Optional password hint (stored, NOT the password)
+}
+
+// BackupRetentionConfig represents backup retention policy
+// Per AI.md PART 22: Retention settings
+type BackupRetentionConfig struct {
+	MaxBackups  int `yaml:"max_backups"`  // Daily full backups to keep (default: 1)
+	KeepWeekly  int `yaml:"keep_weekly"`  // Weekly backups (Sunday) to keep (0 = disabled)
+	KeepMonthly int `yaml:"keep_monthly"` // Monthly backups (1st) to keep (0 = disabled)
+	KeepYearly  int `yaml:"keep_yearly"`  // Yearly backups (Jan 1st) to keep (0 = disabled)
+}
+
+// ComplianceConfig represents compliance mode configuration
+// Per AI.md PART 22: When enabled, backup encryption is REQUIRED
+type ComplianceConfig struct {
+	Enabled bool `yaml:"enabled"` // HIPAA, SOC2, etc. compliance mode
 }
 
 // ImageProxyConfig represents image proxy configuration

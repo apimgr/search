@@ -94,6 +94,12 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 
 	// Instant Answers
 	mux.HandleFunc("/api/v1/instant", h.handleInstantAnswer)
+
+	// Server info pages (per AI.md PART 16)
+	mux.HandleFunc("/api/v1/server/about", h.handleServerAbout)
+	mux.HandleFunc("/api/v1/server/privacy", h.handleServerPrivacy)
+	mux.HandleFunc("/api/v1/server/help", h.handleServerHelp)
+	mux.HandleFunc("/api/v1/server/terms", h.handleServerTerms)
 }
 
 // Response types
@@ -223,17 +229,22 @@ type SearchRequest struct {
 	Language   string `json:"language,omitempty"`
 }
 
-// SearchResponse represents search API response
+// Pagination represents standard pagination info per AI.md PART 14
+type Pagination struct {
+	Page  int `json:"page"`
+	Limit int `json:"limit"`
+	Total int `json:"total"`
+	Pages int `json:"pages"`
+}
+
+// SearchResponse represents search API response per AI.md PART 14 pagination format
 type SearchResponse struct {
-	Query        string        `json:"query"`
-	Category     string        `json:"category"`
-	Results      []SearchResult `json:"results"`
-	TotalResults int           `json:"total_results"`
-	Page         int           `json:"page"`
-	Limit        int           `json:"limit"`
-	HasMore      bool          `json:"has_more"`
-	SearchTime   float64       `json:"search_time_ms"`
-	Engines      []string      `json:"engines_used"`
+	Query      string         `json:"query"`
+	Category   string         `json:"category"`
+	Results    []SearchResult `json:"results"`
+	Pagination Pagination     `json:"pagination"`
+	SearchTime float64        `json:"search_time_ms"`
+	Engines    []string       `json:"engines_used"`
 }
 
 // SearchResult represents a single search result
@@ -508,18 +519,26 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	// Calculate total pages per AI.md PART 14 pagination format
+	totalPages := results.TotalResults / req.Limit
+	if results.TotalResults%req.Limit > 0 {
+		totalPages++
+	}
+
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
 		OK: true,
 		Data: SearchResponse{
-			Query:        req.Query,
-			Category:     req.Category,
-			Results:      apiResults,
-			TotalResults: results.TotalResults,
-			Page:         req.Page,
-			Limit:        req.Limit,
-			HasMore:      len(results.Results) > req.Limit,
-			SearchTime:   float64(time.Since(start).Microseconds()) / 1000,
-			Engines:      results.Engines,
+			Query:    req.Query,
+			Category: req.Category,
+			Results:  apiResults,
+			Pagination: Pagination{
+				Page:  req.Page,
+				Limit: req.Limit,
+				Total: results.TotalResults,
+				Pages: totalPages,
+			},
+			SearchTime: float64(time.Since(start).Microseconds()) / 1000,
+			Engines:    results.Engines,
 		},
 		Meta: &APIMeta{
 			Version:     APIVersion,
@@ -1123,5 +1142,261 @@ func (h *Handler) handleRelatedSearches(w http.ResponseWriter, r *http.Request) 
 			Version:     APIVersion,
 			ProcessTime: float64(time.Since(start).Microseconds()) / 1000,
 		},
+	})
+}
+
+// ServerPageResponse represents server info page API response
+// Per AI.md PART 16: Server info pages return structured JSON
+type ServerPageResponse struct {
+	Title       string            `json:"title"`
+	Description string            `json:"description,omitempty"`
+	Content     string            `json:"content,omitempty"`
+	Sections    []PageSection     `json:"sections,omitempty"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
+}
+
+// PageSection represents a section of a server info page
+type PageSection struct {
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	Content string `json:"content"`
+}
+
+// handleServerAbout handles GET /api/v1/server/about
+// Per AI.md PART 16: Returns about page info as JSON
+func (h *Handler) handleServerAbout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", "Only GET is supported")
+		return
+	}
+
+	appName := h.config.Server.Branding.AppName
+	if appName == "" {
+		appName = h.config.Server.Title
+	}
+
+	sections := []PageSection{
+		{
+			ID:      "description",
+			Title:   "What is " + appName + "?",
+			Content: appName + " is a privacy-respecting metasearch engine that aggregates results from multiple search engines without tracking you.",
+		},
+		{
+			ID:      "features",
+			Title:   "Features",
+			Content: "Privacy First: No tracking, no profiling, no filter bubbles. Multiple Sources: Get results from various search engines. Fast & Lightweight: No JavaScript required, minimal bandwidth usage.",
+		},
+	}
+
+	metadata := map[string]string{
+		"version":    config.Version,
+		"build_date": config.BuildDate,
+		"commit":     config.CommitID,
+	}
+
+	// Add Tor address if available
+	if h.config.Server.Tor.Enabled {
+		metadata["tor_enabled"] = "true"
+	}
+
+	h.jsonResponse(w, http.StatusOK, &APIResponse{
+		OK: true,
+		Data: ServerPageResponse{
+			Title:       "About " + appName,
+			Description: h.config.Server.Description,
+			Content:     h.config.Server.Pages.About.Content,
+			Sections:    sections,
+			Metadata:    metadata,
+		},
+		Meta: &APIMeta{Version: APIVersion},
+	})
+}
+
+// handleServerPrivacy handles GET /api/v1/server/privacy
+// Per AI.md PART 16: Returns privacy policy as JSON
+func (h *Handler) handleServerPrivacy(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", "Only GET is supported")
+		return
+	}
+
+	appName := h.config.Server.Branding.AppName
+	if appName == "" {
+		appName = h.config.Server.Title
+	}
+
+	sections := []PageSection{
+		{
+			ID:      "data_collection",
+			Title:   "Data Collection",
+			Content: appName + " is designed with privacy as a core principle. We minimize data collection to what is strictly necessary for the service to function. Search queries are sent to upstream search engines but are not stored on our servers. We do not log IP addresses or use them for tracking.",
+		},
+		{
+			ID:      "data_usage",
+			Title:   "Data Usage",
+			Content: "Any data that is temporarily processed is used only to forward your search query to upstream search engines, aggregate and display results to you, and remember your preferences (theme, language).",
+		},
+		{
+			ID:      "data_retention",
+			Title:   "Data Retention",
+			Content: "We do not retain search queries or personal data. Session data is temporary and is deleted when you close your browser or your session expires.",
+		},
+		{
+			ID:      "cookies",
+			Title:   "Cookies",
+			Content: "We use only essential cookies for session management and preference storage. We do not use tracking cookies, analytics cookies, or advertising cookies.",
+		},
+		{
+			ID:      "third_parties",
+			Title:   "Third Parties",
+			Content: "Your search queries are forwarded to upstream search engines to retrieve results. We do not share any other data with third parties.",
+		},
+		{
+			ID:      "your_rights",
+			Title:   "Your Rights",
+			Content: "Since we don't store personal data, there is no data to access, modify, or delete. Your privacy is protected by design.",
+		},
+	}
+
+	h.jsonResponse(w, http.StatusOK, &APIResponse{
+		OK: true,
+		Data: ServerPageResponse{
+			Title:       "Privacy Policy",
+			Description: "Privacy policy for " + appName,
+			Content:     h.config.Server.Pages.Privacy.Content,
+			Sections:    sections,
+		},
+		Meta: &APIMeta{Version: APIVersion},
+	})
+}
+
+// handleServerHelp handles GET /api/v1/server/help
+// Per AI.md PART 16: Returns help documentation as JSON
+func (h *Handler) handleServerHelp(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", "Only GET is supported")
+		return
+	}
+
+	appName := h.config.Server.Branding.AppName
+	if appName == "" {
+		appName = h.config.Server.Title
+	}
+
+	sections := []PageSection{
+		{
+			ID:      "getting_started",
+			Title:   "Getting Started",
+			Content: appName + " is a privacy-respecting search engine. Simply type your query in the search box and press Enter or click the search button.",
+		},
+		{
+			ID:      "categories",
+			Title:   "Search Categories",
+			Content: "Use the category tabs to filter your search results: All (general web search), Images (search for images), Videos (search for videos), News (search news articles), Maps (search for locations).",
+		},
+		{
+			ID:      "search_tips",
+			Title:   "Search Tips",
+			Content: "Use specific keywords for better results. Put phrases in quotes for exact matches. Use minus to exclude words (e.g., apple -fruit). Search within a site using site:example.com.",
+		},
+		{
+			ID:      "keyboard_shortcuts",
+			Title:   "Keyboard Shortcuts",
+			Content: "/ - Focus search box. Escape - Clear search / Close dialogs. t - Toggle theme (dark/light).",
+		},
+		{
+			ID:      "api_documentation",
+			Title:   "API Documentation",
+			Content: "This application provides a full REST API with interactive documentation at /openapi.",
+		},
+	}
+
+	h.jsonResponse(w, http.StatusOK, &APIResponse{
+		OK: true,
+		Data: ServerPageResponse{
+			Title:       "Help & Documentation",
+			Description: "Help and documentation for " + appName,
+			Content:     h.config.Server.Pages.Help.Content,
+			Sections:    sections,
+		},
+		Meta: &APIMeta{Version: APIVersion},
+	})
+}
+
+// handleServerTerms handles GET /api/v1/server/terms
+// Per AI.md PART 16: Returns terms of service as JSON
+func (h *Handler) handleServerTerms(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", "Only GET is supported")
+		return
+	}
+
+	appName := h.config.Server.Branding.AppName
+	if appName == "" {
+		appName = h.config.Server.Title
+	}
+
+	sections := []PageSection{
+		{
+			ID:      "acceptance",
+			Title:   "1. Acceptance of Terms",
+			Content: "By accessing or using " + appName + " (\"the Service\"), you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use the Service.",
+		},
+		{
+			ID:      "description",
+			Title:   "2. Description of Service",
+			Content: appName + " is a privacy-respecting metasearch engine that aggregates results from multiple search engines. The Service is provided \"as is\" without warranty of any kind.",
+		},
+		{
+			ID:      "user_conduct",
+			Title:   "3. User Conduct",
+			Content: "You agree not to: Use the Service for any unlawful purpose. Attempt to gain unauthorized access to the Service or its systems. Interfere with or disrupt the Service. Use automated means to access the Service in a manner that exceeds reasonable use.",
+		},
+		{
+			ID:      "privacy",
+			Title:   "4. Privacy",
+			Content: "Your use of the Service is also governed by our Privacy Policy. We are committed to protecting your privacy and minimizing data collection.",
+		},
+		{
+			ID:      "intellectual_property",
+			Title:   "5. Intellectual Property",
+			Content: "The Service and its original content, features, and functionality are owned by the operators of " + appName + ". Search results displayed are the property of their respective owners.",
+		},
+		{
+			ID:      "third_party_content",
+			Title:   "6. Third-Party Content",
+			Content: "The Service aggregates results from third-party search engines. We do not control or endorse the content returned by these search engines.",
+		},
+		{
+			ID:      "disclaimer",
+			Title:   "7. Disclaimer of Warranties",
+			Content: "THE SERVICE IS PROVIDED \"AS IS\" AND \"AS AVAILABLE\" WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED.",
+		},
+		{
+			ID:      "liability",
+			Title:   "8. Limitation of Liability",
+			Content: "IN NO EVENT SHALL THE OPERATORS BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES ARISING OUT OF OR RELATED TO YOUR USE OF THE SERVICE.",
+		},
+		{
+			ID:      "modifications",
+			Title:   "9. Modifications to Service",
+			Content: "We reserve the right to modify, suspend, or discontinue the Service at any time without notice.",
+		},
+		{
+			ID:      "changes",
+			Title:   "10. Changes to Terms",
+			Content: "We may update these Terms of Service from time to time. Your continued use of the Service after changes constitutes acceptance of the new terms.",
+		},
+	}
+
+	h.jsonResponse(w, http.StatusOK, &APIResponse{
+		OK: true,
+		Data: ServerPageResponse{
+			Title:       "Terms of Service",
+			Description: "Terms of service for " + appName,
+			Content:     h.config.Server.Pages.Terms.Content,
+			Sections:    sections,
+		},
+		Meta: &APIMeta{Version: APIVersion},
 	})
 }

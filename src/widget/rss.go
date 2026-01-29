@@ -83,17 +83,31 @@ func (f *RSSFetcher) Fetch(ctx context.Context, params map[string]string) (*Widg
 		maxItems = 10
 	}
 
+	// Filter out empty feeds first
+	nonEmptyFeeds := make([]string, 0, len(feeds))
+	for _, feedURL := range feeds {
+		if feedURL != "" {
+			nonEmptyFeeds = append(nonEmptyFeeds, feedURL)
+		}
+	}
+
+	// If no valid feeds, return empty result
+	if len(nonEmptyFeeds) == 0 {
+		return &WidgetData{
+			Type:      WidgetRSS,
+			Data:      &RSSData{Items: []RSSItemData{}},
+			UpdatedAt: time.Now(),
+		}, nil
+	}
+
 	// Fetch all feeds concurrently
 	type fetchResult struct {
 		items []RSSItemData
 		err   error
 	}
 
-	results := make(chan fetchResult, len(feeds))
-	for _, feedURL := range feeds {
-		if feedURL == "" {
-			continue
-		}
+	results := make(chan fetchResult, len(nonEmptyFeeds))
+	for _, feedURL := range nonEmptyFeeds {
 		go func(url string) {
 			items, err := f.fetchSingleFeed(ctx, url)
 			results <- fetchResult{items: items, err: err}
@@ -102,7 +116,7 @@ func (f *RSSFetcher) Fetch(ctx context.Context, params map[string]string) (*Widg
 
 	// Collect results
 	var allItems []RSSItemData
-	for range feeds {
+	for range nonEmptyFeeds {
 		result := <-results
 		if result.err == nil {
 			allItems = append(allItems, result.items...)

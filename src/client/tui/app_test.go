@@ -100,7 +100,7 @@ func TestModelStruct(t *testing.T) {
 
 func TestSearchResultMsg(t *testing.T) {
 	results := []api.SearchResult{
-		{ID: "1", Title: "Test", URL: "https://example.com"},
+		{Title: "Test", URL: "https://example.com"},
 	}
 
 	msg := searchResultMsg{
@@ -213,7 +213,7 @@ func TestModelUpdateEnterWithQuery(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(api.SearchResponse{
 			Results: []api.SearchResult{
-				{ID: "1", Title: "Result", URL: "https://example.com"},
+				{Title: "Result", URL: "https://example.com"},
 			},
 		})
 	}))
@@ -253,7 +253,7 @@ func TestModelUpdateEsc(t *testing.T) {
 	client := &api.Client{}
 	m := initialModel(client)
 	m.input.SetValue("test")
-	m.results = []api.SearchResult{{ID: "1"}}
+	m.results = []api.SearchResult{{Title: "Test"}}
 	m.err = &testError{msg: "test error"}
 
 	msg := tea.KeyMsg{Type: tea.KeyEsc}
@@ -295,7 +295,7 @@ func TestModelUpdateSearchResult(t *testing.T) {
 	m.height = 24
 
 	results := []api.SearchResult{
-		{ID: "1", Title: "Test", URL: "https://example.com"},
+		{Title: "Test", URL: "https://example.com"},
 	}
 
 	msg := searchResultMsg{results: results, err: nil}
@@ -333,11 +333,20 @@ func TestModelUpdateSearchResultWithError(t *testing.T) {
 
 func TestModelDoSearchSuccess(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.SearchResponse{
-			Results: []api.SearchResult{
-				{ID: "1", Title: "Test Result", URL: "https://example.com", Snippet: "Test snippet"},
+		// Per AI.md PART 14: Wrapped response format {"ok": true, "data": {...}}
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"ok": true,
+			"data": api.SearchResponse{
+				Results: []api.SearchResult{
+					{Title: "Test Result", URL: "https://example.com", Description: "Test snippet"},
+				},
+				Pagination: api.SearchPagination{
+					Page:  1,
+					Limit: 20,
+					Total: 1,
+					Pages: 1,
+				},
 			},
-			TotalCount: 1,
 		})
 	}))
 	defer testServer.Close()
@@ -413,8 +422,8 @@ func TestModelRenderResultsWithData(t *testing.T) {
 	client := &api.Client{}
 	m := initialModel(client)
 	m.results = []api.SearchResult{
-		{ID: "1", Title: "Test Result 1", URL: "https://example1.com", Snippet: "First result snippet"},
-		{ID: "2", Title: "Test Result 2", URL: "https://example2.com", Snippet: ""},
+		{Title: "Test Result 1", URL: "https://example1.com", Description: "First result snippet"},
+		{Title: "Test Result 2", URL: "https://example2.com", Description: ""},
 	}
 
 	result := m.renderResults()
@@ -428,7 +437,7 @@ func TestModelRenderResultsNoSnippet(t *testing.T) {
 	client := &api.Client{}
 	m := initialModel(client)
 	m.results = []api.SearchResult{
-		{ID: "1", Title: "No Snippet", URL: "https://example.com", Snippet: ""},
+		{Title: "No Snippet", URL: "https://example.com", Description: ""},
 	}
 
 	result := m.renderResults()
@@ -473,7 +482,7 @@ func TestModelViewWithResults(t *testing.T) {
 	m.width = 80
 	m.height = 24
 	m.results = []api.SearchResult{
-		{ID: "1", Title: "Test", URL: "https://example.com"},
+		{Title: "Test", URL: "https://example.com"},
 	}
 
 	view := m.View()
@@ -513,11 +522,11 @@ func TestModelRenderResultsMultiple(t *testing.T) {
 	client := &api.Client{}
 	m := initialModel(client)
 	m.results = []api.SearchResult{
-		{ID: "1", Title: "Result One", URL: "https://one.example.com", Snippet: "First snippet"},
-		{ID: "2", Title: "Result Two", URL: "https://two.example.com", Snippet: "Second snippet"},
-		{ID: "3", Title: "Result Three", URL: "https://three.example.com", Snippet: "Third snippet"},
-		{ID: "4", Title: "Result Four", URL: "https://four.example.com", Snippet: "Fourth snippet"},
-		{ID: "5", Title: "Result Five", URL: "https://five.example.com", Snippet: "Fifth snippet"},
+		{Title: "Result One", URL: "https://one.example.com", Description: "First snippet"},
+		{Title: "Result Two", URL: "https://two.example.com", Description: "Second snippet"},
+		{Title: "Result Three", URL: "https://three.example.com", Description: "Third snippet"},
+		{Title: "Result Four", URL: "https://four.example.com", Description: "Fourth snippet"},
+		{Title: "Result Five", URL: "https://five.example.com", Description: "Fifth snippet"},
 	}
 
 	result := m.renderResults()
@@ -605,7 +614,7 @@ func TestModelStateTransitions(t *testing.T) {
 	}
 
 	// Receive results
-	resultMsg := searchResultMsg{results: []api.SearchResult{{ID: "1"}}, err: nil}
+	resultMsg := searchResultMsg{results: []api.SearchResult{{Title: "Test"}}, err: nil}
 	newModel, _ = m.Update(resultMsg)
 	m = newModel.(model)
 

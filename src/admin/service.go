@@ -449,7 +449,7 @@ func (s *AdminService) ValidateInvite(ctx context.Context, token string) (*Admin
 	tokenHashHex := hex.EncodeToString(tokenHash[:])
 
 	row := s.db.QueryRow(ctx, `
-		SELECT id, token_hash, username, created_by, expires_at, used_at, used_by, created_at
+		SELECT id, username, created_by, expires_at, used_at, used_by, created_at
 		FROM admin_invites
 		WHERE token_hash = ? AND used_at IS NULL AND expires_at > datetime('now')
 	`, tokenHashHex)
@@ -460,7 +460,7 @@ func (s *AdminService) ValidateInvite(ctx context.Context, token string) (*Admin
 	var usedBy sql.NullInt64
 
 	err := row.Scan(
-		&invite.ID, nil, &username, &invite.CreatedBy, &invite.ExpiresAt,
+		&invite.ID, &username, &invite.CreatedBy, &invite.ExpiresAt,
 		&usedAt, &usedBy, &invite.CreatedAt,
 	)
 	if err != nil {
@@ -573,7 +573,8 @@ func (s *AdminService) CreateSetupToken(ctx context.Context) (string, error) {
 	_, _ = s.db.Exec(ctx, "DELETE FROM setup_token")
 
 	// Create new setup token (expires in 1 hour)
-	expiresAt := time.Now().Add(1 * time.Hour)
+	// Use RFC3339 format for consistent datetime comparison with SQLite
+	expiresAt := time.Now().UTC().Add(1 * time.Hour).Format(time.RFC3339)
 	_, err := s.db.Exec(ctx, `
 		INSERT INTO setup_token (id, token_hash, expires_at) VALUES (1, ?, ?)
 	`, tokenHashHex, expiresAt)
@@ -589,10 +590,12 @@ func (s *AdminService) ValidateSetupToken(ctx context.Context, token string) (bo
 	tokenHash := sha256.Sum256([]byte(token))
 	tokenHashHex := hex.EncodeToString(tokenHash[:])
 
+	// Compare using current UTC time in RFC3339 format
+	now := time.Now().UTC().Format(time.RFC3339)
 	row := s.db.QueryRow(ctx, `
 		SELECT 1 FROM setup_token
-		WHERE token_hash = ? AND used_at IS NULL AND expires_at > datetime('now')
-	`, tokenHashHex)
+		WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?
+	`, tokenHashHex, now)
 
 	var exists int
 	err := row.Scan(&exists)

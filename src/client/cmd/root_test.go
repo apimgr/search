@@ -475,14 +475,21 @@ func TestBackgroundAutodiscoverWithNodes(t *testing.T) {
 func TestRunSearchSuccess(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/search" {
-			json.NewEncoder(w).Encode(api.SearchResponse{
-				Results: []api.SearchResult{
-					{ID: "1", Title: "Test", URL: "https://example.com", Score: 0.9},
+			// Per AI.md PART 14: Wrapped response format {"ok": true, "data": {...}}
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"ok": true,
+				"data": api.SearchResponse{
+					Results: []api.SearchResult{
+						{Title: "Test", URL: "https://example.com", Score: 0.9},
+					},
+					Query: "test",
+					Pagination: api.SearchPagination{
+						Page:  1,
+						Limit: 10,
+						Total: 1,
+						Pages: 1,
+					},
 				},
-				TotalCount: 1,
-				Query:      "test",
-				Page:       1,
-				PerPage:    10,
 			})
 		} else {
 			json.NewEncoder(w).Encode(map[string]interface{}{})
@@ -507,9 +514,18 @@ func TestRunSearchSuccess(t *testing.T) {
 
 func TestRunSearchJSONOutput(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.SearchResponse{
-			Results:    []api.SearchResult{},
-			TotalCount: 0,
+		// Per AI.md PART 14: Wrapped response format {"ok": true, "data": {...}}
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"ok": true,
+			"data": api.SearchResponse{
+				Results: []api.SearchResult{},
+				Pagination: api.SearchPagination{
+					Page:  1,
+					Limit: 10,
+					Total: 0,
+					Pages: 0,
+				},
+			},
 		})
 	}))
 	defer testServer.Close()
@@ -529,11 +545,20 @@ func TestRunSearchJSONOutput(t *testing.T) {
 
 func TestRunSearchTableOutput(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.SearchResponse{
-			Results: []api.SearchResult{
-				{ID: "1", Title: "Very Long Title That Should Be Truncated Because It Exceeds Fifty Characters", URL: "https://example.com", Score: 0.5},
+		// Per AI.md PART 14: Wrapped response format {"ok": true, "data": {...}}
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"ok": true,
+			"data": api.SearchResponse{
+				Results: []api.SearchResult{
+					{Title: "Very Long Title That Should Be Truncated Because It Exceeds Fifty Characters", URL: "https://example.com", Score: 0.5},
+				},
+				Pagination: api.SearchPagination{
+					Page:  1,
+					Limit: 10,
+					Total: 1,
+					Pages: 1,
+				},
 			},
-			TotalCount: 1,
 		})
 	}))
 	defer testServer.Close()
@@ -553,7 +578,11 @@ func TestRunSearchTableOutput(t *testing.T) {
 
 func TestRunSearchInitializesClient(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.SearchResponse{})
+		// Per AI.md PART 14: Wrapped response format {"ok": true, "data": {...}}
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"ok":   true,
+			"data": api.SearchResponse{},
+		})
 	}))
 	defer testServer.Close()
 

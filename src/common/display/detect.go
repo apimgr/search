@@ -7,6 +7,13 @@ import (
 	"golang.org/x/term"
 )
 
+// Package-level function variables for testing
+// These can be replaced in tests to mock system calls
+var (
+	isTerminalFunc = term.IsTerminal
+	getSizeFunc    = term.GetSize
+)
+
 // DisplayType represents the type of display available
 type DisplayType string
 
@@ -48,9 +55,9 @@ func Detect() Env {
 	}
 
 	// Terminal detection
-	env.IsTerminal = term.IsTerminal(int(os.Stdout.Fd()))
+	env.IsTerminal = isTerminalFunc(int(os.Stdout.Fd()))
 	if env.IsTerminal {
-		cols, rows, err := term.GetSize(int(os.Stdout.Fd()))
+		cols, rows, err := getSizeFunc(int(os.Stdout.Fd()))
 		if err == nil {
 			env.Cols = cols
 			env.Rows = rows

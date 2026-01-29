@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"bufio"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
@@ -14,6 +15,12 @@ import (
 	"time"
 
 	"github.com/oklog/ulid/v2"
+)
+
+// Testable variables for error path testing
+var (
+	osHostname = os.Hostname
+	osExit     = os.Exit
 )
 
 // LogType represents different log types
@@ -388,7 +395,7 @@ func orDash(s string) string {
 
 // getHostname returns the system hostname
 func getHostname() string {
-	hostname, err := os.Hostname()
+	hostname, err := osHostname()
 	if err != nil {
 		return "unknown"
 	}
@@ -818,7 +825,7 @@ func (l *ServerLogger) Fatal(msg string, fields ...map[string]interface{}) {
 		f = fields[0]
 	}
 	l.log(LevelFatal, msg, f)
-	os.Exit(1)
+	osExit(1)
 }
 
 // Rotate rotates the server log file
@@ -1531,6 +1538,891 @@ func (l *AuditLogger) Close() error {
 		return l.file.Close()
 	}
 	return nil
+}
+
+// ============================================================
+// Audit Query and Export Functions per AI.md PART 11
+// ============================================================
+
+// AuditQueryOptions defines filtering options for querying audit logs
+type AuditQueryOptions struct {
+	// Filter by category (authentication, admin, configuration, etc.)
+	Category AuditCategory
+	// Filter by event type (admin.login, user.created, etc.)
+	Event AuditAction
+	// Filter by actor username
+	ActorUsername string
+	// Filter by actor IP
+	ActorIP string
+	// Filter by target type
+	TargetType string
+	// Filter by target name
+	TargetName string
+	// Filter by result (success/failure)
+	Result string
+	// Filter by severity
+	Severity AuditSeverity
+	// Start time for range query (inclusive)
+	StartTime time.Time
+	// End time for range query (inclusive)
+	EndTime time.Time
+	// Maximum number of entries to return (0 = unlimited)
+	Limit int
+	// Number of entries to skip (for pagination)
+	Offset int
+}
+
+// AuditQueryResult contains the results of an audit log query
+type AuditQueryResult struct {
+	// Total number of matching entries (before limit/offset)
+	Total int `json:"total"`
+	// Number of entries returned
+	Count int `json:"count"`
+	// The audit entries
+	Entries []AuditEntry `json:"entries"`
+	// Query duration in milliseconds
+	DurationMs int64 `json:"duration_ms"`
+}
+
+// AuditExportFormat defines the export format
+type AuditExportFormat string
+
+const (
+	AuditExportJSON AuditExportFormat = "json"
+	AuditExportCSV  AuditExportFormat = "csv"
+)
+
+// QueryAuditLogs queries audit logs with filtering options
+// Reads the audit log file and returns matching entries
+func (l *AuditLogger) QueryAuditLogs(opts AuditQueryOptions) (*AuditQueryResult, error) {
+	start := time.Now()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	// Open the log file for reading
+	file, err := os.Open(l.path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &AuditQueryResult{
+				Total:      0,
+				Count:      0,
+				Entries:    []AuditEntry{},
+				DurationMs: time.Since(start).Milliseconds(),
+			}, nil
+		}
+		return nil, fmt.Errorf("failed to open audit log: %w", err)
+	}
+	defer file.Close()
+
+	var allMatching []AuditEntry
+	scanner := NewLineScanner(file)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" {
+			continue
+		}
+
+		var entry AuditEntry
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			continue
+		}
+
+		if matchesAuditFilter(entry, opts) {
+			allMatching = append(allMatching, entry)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error reading audit log: %w", err)
+	}
+
+	// Sort by time descending (newest first)
+	sort.Slice(allMatching, func(i, j int) bool {
+		return allMatching[i].Time.After(allMatching[j].Time)
+	})
+
+	total := len(allMatching)
+
+	// Apply offset
+	if opts.Offset > 0 && opts.Offset < len(allMatching) {
+		allMatching = allMatching[opts.Offset:]
+	} else if opts.Offset >= len(allMatching) {
+		allMatching = []AuditEntry{}
+	}
+
+	// Apply limit
+	if opts.Limit > 0 && opts.Limit < len(allMatching) {
+		allMatching = allMatching[:opts.Limit]
+	}
+
+	return &AuditQueryResult{
+		Total:      total,
+		Count:      len(allMatching),
+		Entries:    allMatching,
+		DurationMs: time.Since(start).Milliseconds(),
+	}, nil
+}
+
+// matchesAuditFilter checks if an entry matches the query options
+func matchesAuditFilter(entry AuditEntry, opts AuditQueryOptions) bool {
+	// Filter by category
+	if opts.Category != "" && entry.Category != opts.Category {
+		return false
+	}
+
+	// Filter by event
+	if opts.Event != "" && entry.Event != opts.Event {
+		return false
+	}
+
+	// Filter by actor username
+	if opts.ActorUsername != "" && entry.Actor.Username != opts.ActorUsername {
+		return false
+	}
+
+	// Filter by actor IP
+	if opts.ActorIP != "" && entry.Actor.IP != opts.ActorIP {
+		return false
+	}
+
+	// Filter by target type
+	if opts.TargetType != "" {
+		if entry.Target == nil || entry.Target.Type != opts.TargetType {
+			return false
+		}
+	}
+
+	// Filter by target name
+	if opts.TargetName != "" {
+		if entry.Target == nil || entry.Target.Name != opts.TargetName {
+			return false
+		}
+	}
+
+	// Filter by result
+	if opts.Result != "" && entry.Result != opts.Result {
+		return false
+	}
+
+	// Filter by severity
+	if opts.Severity != "" && entry.Severity != opts.Severity {
+		return false
+	}
+
+	// Filter by start time
+	if !opts.StartTime.IsZero() && entry.Time.Before(opts.StartTime) {
+		return false
+	}
+
+	// Filter by end time
+	if !opts.EndTime.IsZero() && entry.Time.After(opts.EndTime) {
+		return false
+	}
+
+	return true
+}
+
+// ExportAuditLogs exports audit logs to the specified format
+func (l *AuditLogger) ExportAuditLogs(opts AuditQueryOptions, format AuditExportFormat, w io.Writer) error {
+	result, err := l.QueryAuditLogs(opts)
+	if err != nil {
+		return err
+	}
+
+	switch format {
+	case AuditExportJSON:
+		return exportAuditJSON(result.Entries, w)
+	case AuditExportCSV:
+		return exportAuditCSV(result.Entries, w)
+	default:
+		return fmt.Errorf("unsupported export format: %s", format)
+	}
+}
+
+// exportAuditJSON exports audit entries to JSON format
+func exportAuditJSON(entries []AuditEntry, w io.Writer) error {
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(entries)
+}
+
+// exportAuditCSV exports audit entries to CSV format
+func exportAuditCSV(entries []AuditEntry, w io.Writer) error {
+	// Write CSV header
+	header := "id,time,event,category,severity,actor_username,actor_ip,target_type,target_name,result,reason\n"
+	if _, err := w.Write([]byte(header)); err != nil {
+		return err
+	}
+
+	for _, e := range entries {
+		targetType := ""
+		targetName := ""
+		if e.Target != nil {
+			targetType = e.Target.Type
+			targetName = e.Target.Name
+		}
+
+		line := fmt.Sprintf("%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n",
+			csvEscape(e.ID),
+			e.Time.Format(time.RFC3339),
+			csvEscape(string(e.Event)),
+			csvEscape(string(e.Category)),
+			csvEscape(string(e.Severity)),
+			csvEscape(e.Actor.Username),
+			csvEscape(e.Actor.IP),
+			csvEscape(targetType),
+			csvEscape(targetName),
+			csvEscape(e.Result),
+			csvEscape(e.Reason),
+		)
+		if _, err := w.Write([]byte(line)); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// csvEscape escapes a string for CSV output
+func csvEscape(s string) string {
+	if strings.ContainsAny(s, ",\"\n\r") {
+		return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
+	}
+	return s
+}
+
+// LineScanner wraps bufio.Scanner for reading lines
+type LineScanner struct {
+	scanner *bufio.Scanner
+}
+
+// NewLineScanner creates a new line scanner
+func NewLineScanner(r io.Reader) *LineScanner {
+	scanner := bufio.NewScanner(r)
+	// Increase buffer size for potentially long JSON lines
+	buf := make([]byte, 64*1024)
+	scanner.Buffer(buf, 1024*1024)
+	return &LineScanner{scanner: scanner}
+}
+
+// Scan advances the scanner
+func (s *LineScanner) Scan() bool {
+	return s.scanner.Scan()
+}
+
+// Text returns the current line
+func (s *LineScanner) Text() string {
+	return s.scanner.Text()
+}
+
+// Err returns any scanning error
+func (s *LineScanner) Err() error {
+	return s.scanner.Err()
+}
+
+// ============================================================
+// Additional Audit Logging Helper Methods per AI.md PART 11
+// ============================================================
+
+// LogEvent logs a generic audit event with full control over all fields
+func (l *AuditLogger) LogEvent(event AuditAction, category AuditCategory, severity AuditSeverity, actor AuditActor, target *AuditTarget, result string, details map[string]interface{}, reason string) {
+	l.Log(AuditEntry{
+		Event:    event,
+		Category: category,
+		Severity: severity,
+		Actor:    actor,
+		Target:   target,
+		Result:   result,
+		Details:  details,
+		Reason:   reason,
+	})
+}
+
+// LogLoginFailed logs a failed login attempt
+func (l *AuditLogger) LogLoginFailed(user, ip, reason string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionLoginFailed,
+		Category: AuditCategoryAuth,
+		Severity: AuditSeverityWarning,
+		Actor:    AuditActor{Username: user, IP: ip},
+		Result:   "failure",
+		Reason:   reason,
+	})
+}
+
+// LogAdminCreated logs admin account creation
+func (l *AuditLogger) LogAdminCreated(actor, ip, newAdmin string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionAdminCreated,
+		Category: AuditCategoryAdmin,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Username: actor, IP: ip},
+		Target:   &AuditTarget{Type: "admin", Name: newAdmin},
+		Result:   "success",
+	})
+}
+
+// LogAdminDeleted logs admin account deletion
+func (l *AuditLogger) LogAdminDeleted(actor, ip, deletedAdmin string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionAdminDeleted,
+		Category: AuditCategoryAdmin,
+		Severity: AuditSeverityCritical,
+		Actor:    AuditActor{Username: actor, IP: ip},
+		Target:   &AuditTarget{Type: "admin", Name: deletedAdmin},
+		Result:   "success",
+	})
+}
+
+// LogPasswordChanged logs password change
+func (l *AuditLogger) LogPasswordChanged(user, ip string, selfChange bool) {
+	target := &AuditTarget{Type: "user", Name: user}
+	if !selfChange {
+		target = &AuditTarget{Type: "admin", Name: user}
+	}
+	l.Log(AuditEntry{
+		Event:    AuditActionPasswordChanged,
+		Category: AuditCategorySecurity,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Username: user, IP: ip},
+		Target:   target,
+		Result:   "success",
+		Details:  map[string]interface{}{"self_change": selfChange},
+	})
+}
+
+// LogTokenRegenerated logs API token regeneration
+func (l *AuditLogger) LogTokenRegenerated(user, ip, tokenName string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionTokenRegenerated,
+		Category: AuditCategoryTokens,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Username: user, IP: ip},
+		Target:   &AuditTarget{Type: "token", Name: tokenName},
+		Result:   "success",
+	})
+}
+
+// LogSessionExpired logs session expiration
+func (l *AuditLogger) LogSessionExpired(user, ip, sessionID string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionSessionExpired,
+		Category: AuditCategoryAuth,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Username: user, IP: ip},
+		Target:   &AuditTarget{Type: "session", ID: sessionID},
+		Result:   "success",
+	})
+}
+
+// LogSessionRevoked logs session revocation
+func (l *AuditLogger) LogSessionRevoked(actor, ip, targetUser, sessionID string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionSessionRevoked,
+		Category: AuditCategoryAuth,
+		Severity: AuditSeverityWarning,
+		Actor:    AuditActor{Username: actor, IP: ip},
+		Target:   &AuditTarget{Type: "session", ID: sessionID, Name: targetUser},
+		Result:   "success",
+	})
+}
+
+// LogUserSuspended logs user suspension
+func (l *AuditLogger) LogUserSuspended(actor, ip, targetUser, reason string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionUserSuspended,
+		Category: AuditCategoryUser,
+		Severity: AuditSeverityWarning,
+		Actor:    AuditActor{Username: actor, IP: ip},
+		Target:   &AuditTarget{Type: "user", Name: targetUser},
+		Result:   "success",
+		Reason:   reason,
+	})
+}
+
+// LogUserUnsuspended logs user unsuspension
+func (l *AuditLogger) LogUserUnsuspended(actor, ip, targetUser string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionUserUnsuspended,
+		Category: AuditCategoryUser,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Username: actor, IP: ip},
+		Target:   &AuditTarget{Type: "user", Name: targetUser},
+		Result:   "success",
+	})
+}
+
+// LogUserRoleChanged logs user role change
+func (l *AuditLogger) LogUserRoleChanged(actor, ip, targetUser, oldRole, newRole string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionUserRoleChanged,
+		Category: AuditCategoryUser,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Username: actor, IP: ip},
+		Target:   &AuditTarget{Type: "user", Name: targetUser},
+		Result:   "success",
+		Details:  map[string]interface{}{"old_role": oldRole, "new_role": newRole},
+	})
+}
+
+// LogIPBlocked logs IP blocking
+func (l *AuditLogger) LogIPBlocked(actor, ip, blockedIP, reason string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionIPBlocked,
+		Category: AuditCategorySecurity,
+		Severity: AuditSeverityWarning,
+		Actor:    AuditActor{Username: actor, IP: ip},
+		Target:   &AuditTarget{Type: "ip", Name: blockedIP},
+		Result:   "success",
+		Reason:   reason,
+	})
+}
+
+// LogIPUnblocked logs IP unblocking
+func (l *AuditLogger) LogIPUnblocked(actor, ip, unblockedIP string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionIPUnblocked,
+		Category: AuditCategorySecurity,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Username: actor, IP: ip},
+		Target:   &AuditTarget{Type: "ip", Name: unblockedIP},
+		Result:   "success",
+	})
+}
+
+// LogRateLimitExceeded logs rate limit exceeded
+func (l *AuditLogger) LogRateLimitExceeded(ip, path string, limit int) {
+	l.Log(AuditEntry{
+		Event:    AuditActionRateLimitExceeded,
+		Category: AuditCategorySecurity,
+		Severity: AuditSeverityWarning,
+		Actor:    AuditActor{IP: ip},
+		Target:   &AuditTarget{Type: "endpoint", Name: path},
+		Result:   "blocked",
+		Details:  map[string]interface{}{"limit": limit},
+	})
+}
+
+// LogBruteForceDetected logs brute force detection
+func (l *AuditLogger) LogBruteForceDetected(ip, path string, attempts int) {
+	l.Log(AuditEntry{
+		Event:    AuditActionBruteForceDetected,
+		Category: AuditCategorySecurity,
+		Severity: AuditSeverityCritical,
+		Actor:    AuditActor{IP: ip},
+		Target:   &AuditTarget{Type: "endpoint", Name: path},
+		Result:   "detected",
+		Details:  map[string]interface{}{"attempts": attempts},
+	})
+}
+
+// LogCSRFFailure logs CSRF token failure
+func (l *AuditLogger) LogCSRFFailure(ip, path string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionCSRFFailure,
+		Category: AuditCategorySecurity,
+		Severity: AuditSeverityWarning,
+		Actor:    AuditActor{IP: ip},
+		Target:   &AuditTarget{Type: "endpoint", Name: path},
+		Result:   "failure",
+	})
+}
+
+// LogInvalidToken logs invalid token usage
+func (l *AuditLogger) LogInvalidToken(ip, path, tokenType string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionInvalidToken,
+		Category: AuditCategorySecurity,
+		Severity: AuditSeverityWarning,
+		Actor:    AuditActor{IP: ip},
+		Target:   &AuditTarget{Type: "endpoint", Name: path},
+		Result:   "failure",
+		Details:  map[string]interface{}{"token_type": tokenType},
+	})
+}
+
+// LogBackupDelete logs backup deletion
+func (l *AuditLogger) LogBackupDelete(actor, ip, filename string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionBackupDelete,
+		Category: AuditCategoryData,
+		Severity: AuditSeverityWarning,
+		Actor:    AuditActor{Username: actor, IP: ip},
+		Target:   &AuditTarget{Type: "backup", Name: filename},
+		Result:   "success",
+	})
+}
+
+// LogBackupFailed logs backup failure
+func (l *AuditLogger) LogBackupFailed(actor, ip, reason string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionBackupFailed,
+		Category: AuditCategoryData,
+		Severity: AuditSeverityError,
+		Actor:    AuditActor{Username: actor, IP: ip},
+		Result:   "failure",
+		Reason:   reason,
+	})
+}
+
+// LogServerStarted logs server startup
+func (l *AuditLogger) LogServerStarted(version, nodeID string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionServerStarted,
+		Category: AuditCategorySystem,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Type: "system", Username: "system"},
+		Result:   "success",
+		Details:  map[string]interface{}{"version": version},
+		NodeID:   nodeID,
+	})
+}
+
+// LogServerStopped logs server shutdown
+func (l *AuditLogger) LogServerStopped(reason, nodeID string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionServerStopped,
+		Category: AuditCategorySystem,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Type: "system", Username: "system"},
+		Result:   "success",
+		Reason:   reason,
+		NodeID:   nodeID,
+	})
+}
+
+// LogMaintenanceEntered logs entering maintenance mode
+func (l *AuditLogger) LogMaintenanceEntered(actor, ip, reason string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionMaintenanceEntered,
+		Category: AuditCategorySystem,
+		Severity: AuditSeverityWarning,
+		Actor:    AuditActor{Username: actor, IP: ip},
+		Result:   "success",
+		Reason:   reason,
+	})
+}
+
+// LogMaintenanceExited logs exiting maintenance mode
+func (l *AuditLogger) LogMaintenanceExited(actor, ip string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionMaintenanceExited,
+		Category: AuditCategorySystem,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Username: actor, IP: ip},
+		Result:   "success",
+	})
+}
+
+// LogConfigUpdated logs configuration update with specific field
+func (l *AuditLogger) LogConfigUpdated(actor, ip, configSection, field string, oldValue, newValue interface{}) {
+	l.Log(AuditEntry{
+		Event:    AuditActionConfigChange,
+		Category: AuditCategoryConfig,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Username: actor, IP: ip},
+		Target:   &AuditTarget{Type: "config", Name: configSection + "." + field},
+		Result:   "success",
+		Details:  map[string]interface{}{"field": field, "old_value": oldValue, "new_value": newValue},
+	})
+}
+
+// LogSMTPUpdated logs SMTP configuration update
+func (l *AuditLogger) LogSMTPUpdated(actor, ip string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionConfigSMTPUpdated,
+		Category: AuditCategoryConfig,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Username: actor, IP: ip},
+		Target:   &AuditTarget{Type: "config", Name: "smtp"},
+		Result:   "success",
+	})
+}
+
+// LogSSLUpdated logs SSL configuration update
+func (l *AuditLogger) LogSSLUpdated(actor, ip, domain string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionConfigSSLUpdated,
+		Category: AuditCategoryConfig,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Username: actor, IP: ip},
+		Target:   &AuditTarget{Type: "ssl", Name: domain},
+		Result:   "success",
+	})
+}
+
+// LogClusterNodeJoined logs node joining cluster
+func (l *AuditLogger) LogClusterNodeJoined(nodeID, nodeAddress string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionClusterNodeJoined,
+		Category: AuditCategoryCluster,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Type: "system", Username: "system"},
+		Target:   &AuditTarget{Type: "node", ID: nodeID, Name: nodeAddress},
+		Result:   "success",
+		NodeID:   nodeID,
+	})
+}
+
+// LogClusterNodeRemoved logs node removal from cluster
+func (l *AuditLogger) LogClusterNodeRemoved(actor, ip, nodeID, reason string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionClusterNodeRemoved,
+		Category: AuditCategoryCluster,
+		Severity: AuditSeverityWarning,
+		Actor:    AuditActor{Username: actor, IP: ip},
+		Target:   &AuditTarget{Type: "node", ID: nodeID},
+		Result:   "success",
+		Reason:   reason,
+	})
+}
+
+// LogClusterNodeFailed logs node failure in cluster
+func (l *AuditLogger) LogClusterNodeFailed(nodeID, reason string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionClusterNodeFailed,
+		Category: AuditCategoryCluster,
+		Severity: AuditSeverityCritical,
+		Actor:    AuditActor{Type: "system", Username: "system"},
+		Target:   &AuditTarget{Type: "node", ID: nodeID},
+		Result:   "failure",
+		Reason:   reason,
+	})
+}
+
+// LogSchedulerTaskFailed logs scheduler task failure
+func (l *AuditLogger) LogSchedulerTaskFailed(taskName, reason string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionSchedulerTaskFail,
+		Category: AuditCategorySystem,
+		Severity: AuditSeverityError,
+		Actor:    AuditActor{Type: "system", Username: "scheduler"},
+		Target:   &AuditTarget{Type: "task", Name: taskName},
+		Result:   "failure",
+		Reason:   reason,
+	})
+}
+
+// LogSchedulerTaskManualRun logs manual scheduler task execution
+func (l *AuditLogger) LogSchedulerTaskManualRun(actor, ip, taskName string, success bool) {
+	severity := AuditSeverityInfo
+	if !success {
+		severity = AuditSeverityError
+	}
+	l.Log(AuditEntry{
+		Event:    AuditActionSchedulerTaskRun,
+		Category: AuditCategorySystem,
+		Severity: severity,
+		Actor:    AuditActor{Username: actor, IP: ip},
+		Target:   &AuditTarget{Type: "task", Name: taskName},
+		Result:   resultFromBool(success),
+	})
+}
+
+// ============================================================
+// Audit Log Retention and Cleanup per AI.md PART 11
+// ============================================================
+
+// AuditRetentionPolicy defines the retention policy for audit logs
+type AuditRetentionPolicy struct {
+	// Maximum age of audit entries (0 = no limit)
+	MaxAge time.Duration
+	// Maximum number of entries to keep (0 = no limit)
+	MaxEntries int
+	// Keep critical events regardless of age
+	PreserveCritical bool
+}
+
+// DefaultAuditRetentionPolicy returns the default retention policy
+// 90 days retention, no entry limit, preserve critical events
+func DefaultAuditRetentionPolicy() AuditRetentionPolicy {
+	return AuditRetentionPolicy{
+		MaxAge:           90 * 24 * time.Hour,
+		MaxEntries:       0,
+		PreserveCritical: true,
+	}
+}
+
+// CleanupAuditLogs removes old audit entries based on retention policy
+// Returns the number of entries removed
+func (l *AuditLogger) CleanupAuditLogs(policy AuditRetentionPolicy) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	// Read all entries
+	file, err := os.Open(l.path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("failed to open audit log: %w", err)
+	}
+
+	var entries []AuditEntry
+	scanner := NewLineScanner(file)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" {
+			continue
+		}
+
+		var entry AuditEntry
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			continue
+		}
+		entries = append(entries, entry)
+	}
+	file.Close()
+
+	if err := scanner.Err(); err != nil {
+		return 0, fmt.Errorf("error reading audit log: %w", err)
+	}
+
+	cutoff := time.Now().Add(-policy.MaxAge)
+	var keepEntries []AuditEntry
+
+	for _, e := range entries {
+		keep := false
+
+		// Keep if within retention period
+		if policy.MaxAge == 0 || e.Time.After(cutoff) {
+			keep = true
+		}
+
+		// Keep critical events if policy says so
+		if policy.PreserveCritical && e.Severity == AuditSeverityCritical {
+			keep = true
+		}
+
+		if keep {
+			keepEntries = append(keepEntries, e)
+		}
+	}
+
+	// Sort by time (oldest first for proper log ordering)
+	sort.Slice(keepEntries, func(i, j int) bool {
+		return keepEntries[i].Time.Before(keepEntries[j].Time)
+	})
+
+	// Apply max entries limit (keep newest, but always preserve critical if policy says so)
+	if policy.MaxEntries > 0 && len(keepEntries) > policy.MaxEntries {
+		if policy.PreserveCritical {
+			// Separate critical entries from non-critical
+			var criticalEntries, nonCriticalEntries []AuditEntry
+			for _, e := range keepEntries {
+				if e.Severity == AuditSeverityCritical {
+					criticalEntries = append(criticalEntries, e)
+				} else {
+					nonCriticalEntries = append(nonCriticalEntries, e)
+				}
+			}
+			// Keep all critical plus as many non-critical as possible up to limit
+			remaining := policy.MaxEntries - len(criticalEntries)
+			if remaining <= 0 {
+				// No room for non-critical entries, keep only critical
+				nonCriticalEntries = nil
+			} else if len(nonCriticalEntries) > remaining {
+				// Keep only the newest non-critical entries up to remaining
+				nonCriticalEntries = nonCriticalEntries[len(nonCriticalEntries)-remaining:]
+			}
+			keepEntries = append(criticalEntries, nonCriticalEntries...)
+			// Re-sort by time
+			sort.Slice(keepEntries, func(i, j int) bool {
+				return keepEntries[i].Time.Before(keepEntries[j].Time)
+			})
+		} else {
+			keepEntries = keepEntries[len(keepEntries)-policy.MaxEntries:]
+		}
+	}
+
+	removed := len(entries) - len(keepEntries)
+
+	// Close current file before rewriting
+	if l.file != nil {
+		l.file.Close()
+	}
+
+	// Rewrite the file with kept entries
+	file, err = os.Create(l.path)
+	if err != nil {
+		return 0, fmt.Errorf("failed to rewrite audit log: %w", err)
+	}
+
+	for _, e := range keepEntries {
+		data, _ := json.Marshal(e)
+		file.WriteString(string(data) + "\n")
+	}
+	file.Close()
+
+	// Reopen for appending
+	l.openFile()
+
+	return removed, nil
+}
+
+// GetAuditStats returns statistics about the audit log
+func (l *AuditLogger) GetAuditStats() (*AuditStats, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	stats := &AuditStats{
+		ByCategory: make(map[AuditCategory]int),
+		BySeverity: make(map[AuditSeverity]int),
+		ByResult:   make(map[string]int),
+	}
+
+	file, err := os.Open(l.path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return stats, nil
+		}
+		return nil, fmt.Errorf("failed to open audit log: %w", err)
+	}
+	defer file.Close()
+
+	scanner := NewLineScanner(file)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" {
+			continue
+		}
+
+		var entry AuditEntry
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			continue
+		}
+
+		stats.TotalEntries++
+		stats.ByCategory[entry.Category]++
+		stats.BySeverity[entry.Severity]++
+		stats.ByResult[entry.Result]++
+
+		if stats.OldestEntry.IsZero() || entry.Time.Before(stats.OldestEntry) {
+			stats.OldestEntry = entry.Time
+		}
+		if entry.Time.After(stats.NewestEntry) {
+			stats.NewestEntry = entry.Time
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error reading audit log: %w", err)
+	}
+
+	return stats, nil
+}
+
+// AuditStats contains audit log statistics
+type AuditStats struct {
+	TotalEntries int                      `json:"total_entries"`
+	OldestEntry  time.Time                `json:"oldest_entry"`
+	NewestEntry  time.Time                `json:"newest_entry"`
+	ByCategory   map[AuditCategory]int    `json:"by_category"`
+	BySeverity   map[AuditSeverity]int    `json:"by_severity"`
+	ByResult     map[string]int           `json:"by_result"`
 }
 
 // ============================================================

@@ -307,25 +307,33 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/admin/server/ssl", h.requireAuth(h.handleServerSSL))
 
 	// Network settings - /admin/server/network/* per AI.md PART 17
+	mux.HandleFunc("/admin/server/network", h.requireAuth(h.handleServerNetwork))
 	mux.HandleFunc("/admin/server/network/tor", h.requireAuth(h.handleServerTor))
 	mux.HandleFunc("/admin/server/network/geoip", h.requireAuth(h.handleServerGeoIP))
+	mux.HandleFunc("/admin/server/network/blocklists", h.requireAuth(h.handleBlocklists))
 
 	// Security settings - /admin/server/security/* per AI.md PART 17
 	mux.HandleFunc("/admin/server/security", h.requireAuth(h.handleServerSecurity))
 	mux.HandleFunc("/admin/server/security/auth", h.requireAuth(h.handleServerAuth))
 	mux.HandleFunc("/admin/server/security/tokens", h.requireAuth(h.handleTokens))
 	mux.HandleFunc("/admin/server/security/firewall", h.requireAuth(h.handleServerFirewall))
+	mux.HandleFunc("/admin/server/security/ratelimit", h.requireAuth(h.handleRateLimiting))
 
 	// User management - /admin/server/users/* per AI.md PART 17
 	mux.HandleFunc("/admin/server/users", h.requireAuth(h.handleUsers))
 	mux.HandleFunc("/admin/server/users/admins", h.requireAuth(h.handleAdmins))
 	mux.HandleFunc("/admin/server/users/admins/invite", h.requireAuth(h.handleAdminInvite))
+	mux.HandleFunc("/admin/server/users/invites", h.requireAuth(h.handleUserInvites))
 
 	// Cluster/Node management - /admin/server/cluster/* per AI.md PART 17
 	mux.HandleFunc("/admin/server/cluster", h.requireAuth(h.handleCluster))
 	mux.HandleFunc("/admin/server/cluster/nodes", h.requireAuth(h.handleNodes))
 	mux.HandleFunc("/admin/server/cluster/nodes/token", h.requireAuth(h.handleNodesToken))
 	mux.HandleFunc("/admin/server/cluster/nodes/leave", h.requireAuth(h.handleNodesLeave))
+	mux.HandleFunc("/admin/server/cluster/add", h.requireAuth(h.handleClusterAddNode))
+
+	// Help - per AI.md PART 17: /admin/help (valid root-level route)
+	mux.HandleFunc("/admin/help", h.requireAuth(h.handleHelpRoot))
 
 	// API routes (bearer token auth) - per AI.md PART 17: /api/v1/admin/server/*
 	mux.HandleFunc("/api/v1/admin/status", h.requireAPIAuth(h.apiStatus))
@@ -334,6 +342,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/admin/server/security/tokens", h.requireAPIAuth(h.apiTokens))
 	mux.HandleFunc("/api/v1/admin/server/reload", h.requireAPIAuth(h.apiReload))
 	mux.HandleFunc("/api/v1/admin/server/backup", h.requireAPIAuth(h.apiBackups))
+	mux.HandleFunc("/api/v1/admin/server/backup/restore", h.requireAPIAuth(h.apiBackupRestore))
+	mux.HandleFunc("/api/v1/admin/server/backup/download/", h.requireAPIAuth(h.apiBackupDownload))
+	mux.HandleFunc("/api/v1/admin/server/backup/verify", h.requireAPIAuth(h.apiBackupVerify))
 	mux.HandleFunc("/api/v1/admin/server/logs", h.requireAPIAuth(h.apiLogs))
 	mux.HandleFunc("/api/v1/admin/server/scheduler", h.requireAPIAuth(h.apiScheduler))
 	mux.HandleFunc("/api/v1/admin/email/test", h.requireAPIAuth(h.apiEmailTest))
@@ -1249,6 +1260,46 @@ func (h *Handler) processServerSSLUpdate(w http.ResponseWriter, r *http.Request)
 	h.saveAndReload(w, r, "/admin/server/ssl")
 }
 
+// handleServerNetwork renders the network settings overview page
+// Per AI.md PART 17: Parent page for /admin/server/network/*
+func (h *Handler) handleServerNetwork(w http.ResponseWriter, r *http.Request) {
+	// Get Tor status if available
+	torStatus := map[string]interface{}{
+		"enabled": false,
+		"running": false,
+		"address": "",
+	}
+	if h.tor != nil {
+		torStatus["enabled"] = true
+		torStatus["running"] = h.tor.IsRunning()
+		torStatus["address"] = h.tor.GetOnionAddress()
+	}
+
+	// Get GeoIP status
+	geoipStatus := map[string]interface{}{
+		"enabled":        h.config.Server.GeoIP.Enabled,
+		"country":        h.config.Server.GeoIP.Country,
+		"city":           h.config.Server.GeoIP.City,
+		"asn":            h.config.Server.GeoIP.ASN,
+		"deny_countries": len(h.config.Server.GeoIP.DenyCountries),
+	}
+
+	data := &AdminPageData{
+		Title:   "Network Settings",
+		Page:    "admin-server-network",
+		Config:  h.config,
+		Error:   r.URL.Query().Get("error"),
+		Success: r.URL.Query().Get("success"),
+		Extra: map[string]interface{}{
+			"TorStatus":   torStatus,
+			"GeoIPStatus": geoipStatus,
+		},
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	h.renderAdminPage(w, "server-network", data)
+}
+
 // handleServerTor renders the Tor settings page
 func (h *Handler) handleServerTor(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
@@ -1465,31 +1516,227 @@ func (h *Handler) processServerMetricsUpdate(w http.ResponseWriter, r *http.Requ
 }
 
 // handleServerBackup renders the backup management page
+// Per AI.md PART 22: Backup & Restore admin panel functionality
 func (h *Handler) handleServerBackup(w http.ResponseWriter, r *http.Request) {
+	bm := backup.NewManager()
+
 	if r.Method == http.MethodPost {
 		action := r.FormValue("action")
 		switch action {
 		case "create":
-			// Trigger backup creation
-			http.Redirect(w, r, "/admin/server/backup?success=Backup+created+successfully", http.StatusSeeOther)
+			h.processBackupCreate(w, r, bm)
 			return
 		case "restore":
-			// Handle restore (would need file upload)
-			http.Redirect(w, r, "/admin/server/backup?success=Restore+initiated", http.StatusSeeOther)
+			h.processBackupRestore(w, r, bm)
+			return
+		case "delete":
+			h.processBackupDelete(w, r, bm)
+			return
+		case "verify":
+			h.processBackupVerify(w, r, bm)
+			return
+		case "set_password":
+			h.processBackupSetPassword(w, r)
 			return
 		}
 	}
 
-	data := &AdminPageData{
-		Title:   "Backup & Restore",
-		Page:    "admin-server-backup",
-		Config:  h.config,
-		Error:   r.URL.Query().Get("error"),
-		Success: r.URL.Query().Get("success"),
+	// Get list of backups
+	backups, err := bm.List()
+	if err != nil {
+		log.Printf("[Admin] Failed to list backups: %v", err)
+	}
+
+	// Build backup data for template
+	type BackupPageData struct {
+		*AdminPageData
+		Backups           []backup.BackupInfo
+		EncryptionEnabled bool
+		ComplianceMode    bool
+	}
+
+	data := &BackupPageData{
+		AdminPageData: &AdminPageData{
+			Title:   "Backup & Restore",
+			Page:    "admin-server-backup",
+			Config:  h.config,
+			Error:   r.URL.Query().Get("error"),
+			Success: r.URL.Query().Get("success"),
+		},
+		Backups:           backups,
+		EncryptionEnabled: h.config.Server.Backup.Encryption.Enabled,
+		ComplianceMode:    h.config.Server.Compliance.Enabled,
+	}
+
+	// Store extra backup data for template access
+	data.AdminPageData.Extra = map[string]interface{}{
+		"Backups":           data.Backups,
+		"EncryptionEnabled": data.EncryptionEnabled,
+		"ComplianceMode":    data.ComplianceMode,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "server-backup", data)
+	h.renderAdminPage(w, "server-backup", data.AdminPageData)
+}
+
+// processBackupCreate handles backup creation from the admin panel
+// Per AI.md PART 22: Create backup with optional encryption
+func (h *Handler) processBackupCreate(w http.ResponseWriter, r *http.Request, bm *backup.Manager) {
+	password := r.FormValue("password")
+	encrypt := r.FormValue("encrypt") == "on" || h.config.Server.Backup.Encryption.Enabled
+
+	// Per AI.md PART 22: Compliance mode requires encryption
+	if h.config.Server.Compliance.Enabled && password == "" {
+		http.Redirect(w, r, "/admin/server/backup?error=Compliance+mode+requires+encryption+password", http.StatusSeeOther)
+		return
+	}
+
+	var backupPath string
+	var verifyResult *backup.VerificationResult
+	var err error
+
+	if encrypt && password != "" {
+		bm.SetPassword(password)
+		backupPath, verifyResult, err = bm.CreateEncryptedAndVerify("")
+	} else {
+		backupPath, verifyResult, err = bm.CreateAndVerify("")
+	}
+
+	if err != nil {
+		log.Printf("[Admin] Backup creation failed: %v", err)
+		http.Redirect(w, r, "/admin/server/backup?error=Backup+creation+failed:+"+err.Error(), http.StatusSeeOther)
+		return
+	}
+
+	if verifyResult != nil && !verifyResult.AllPassed {
+		http.Redirect(w, r, "/admin/server/backup?error=Backup+verification+failed", http.StatusSeeOther)
+		return
+	}
+
+	log.Printf("[Admin] Backup created successfully: %s", filepath.Base(backupPath))
+	http.Redirect(w, r, "/admin/server/backup?success=Backup+created+successfully:+"+filepath.Base(backupPath), http.StatusSeeOther)
+}
+
+// processBackupRestore handles restore from the admin panel
+// Per AI.md PART 22: Restore with password handling for encrypted backups
+func (h *Handler) processBackupRestore(w http.ResponseWriter, r *http.Request, bm *backup.Manager) {
+	filename := r.FormValue("filename")
+	password := r.FormValue("password")
+
+	if filename == "" {
+		http.Redirect(w, r, "/admin/server/backup?error=No+backup+file+selected", http.StatusSeeOther)
+		return
+	}
+
+	backupPath := filepath.Join(config.GetBackupDir(), filename)
+
+	// Check if backup is encrypted
+	if backup.IsEncrypted(backupPath) {
+		if password == "" {
+			http.Redirect(w, r, "/admin/server/backup?error=Password+required+for+encrypted+backup", http.StatusSeeOther)
+			return
+		}
+		bm.SetPassword(password)
+		if err := bm.RestoreEncrypted(backupPath); err != nil {
+			log.Printf("[Admin] Restore failed: %v", err)
+			http.Redirect(w, r, "/admin/server/backup?error=Restore+failed:+"+err.Error(), http.StatusSeeOther)
+			return
+		}
+	} else {
+		if err := bm.Restore(backupPath); err != nil {
+			log.Printf("[Admin] Restore failed: %v", err)
+			http.Redirect(w, r, "/admin/server/backup?error=Restore+failed:+"+err.Error(), http.StatusSeeOther)
+			return
+		}
+	}
+
+	log.Printf("[Admin] Restore completed from: %s", filename)
+
+	// Trigger config reload
+	if h.reloadCallback != nil {
+		if err := h.reloadCallback(); err != nil {
+			log.Printf("[Admin] Failed to reload after restore: %v", err)
+		}
+	}
+
+	http.Redirect(w, r, "/admin/server/backup?success=Restore+completed+successfully", http.StatusSeeOther)
+}
+
+// processBackupDelete handles backup deletion from the admin panel
+func (h *Handler) processBackupDelete(w http.ResponseWriter, r *http.Request, bm *backup.Manager) {
+	filename := r.FormValue("filename")
+	if filename == "" {
+		http.Redirect(w, r, "/admin/server/backup?error=No+backup+file+specified", http.StatusSeeOther)
+		return
+	}
+
+	if err := bm.Delete(filename); err != nil {
+		log.Printf("[Admin] Failed to delete backup: %v", err)
+		http.Redirect(w, r, "/admin/server/backup?error=Failed+to+delete+backup:+"+err.Error(), http.StatusSeeOther)
+		return
+	}
+
+	log.Printf("[Admin] Backup deleted: %s", filename)
+	http.Redirect(w, r, "/admin/server/backup?success=Backup+deleted+successfully", http.StatusSeeOther)
+}
+
+// processBackupVerify handles backup verification from the admin panel
+// Per AI.md PART 22: Backup verification is NON-NEGOTIABLE
+func (h *Handler) processBackupVerify(w http.ResponseWriter, r *http.Request, bm *backup.Manager) {
+	filename := r.FormValue("filename")
+	password := r.FormValue("password")
+
+	if filename == "" {
+		http.Redirect(w, r, "/admin/server/backup?error=No+backup+file+specified", http.StatusSeeOther)
+		return
+	}
+
+	backupPath := filepath.Join(config.GetBackupDir(), filename)
+
+	// Set password if backup is encrypted
+	if backup.IsEncrypted(backupPath) && password != "" {
+		bm.SetPassword(password)
+	}
+
+	result, err := bm.VerifyBackup(backupPath)
+	if err != nil {
+		http.Redirect(w, r, "/admin/server/backup?error=Verification+error:+"+err.Error(), http.StatusSeeOther)
+		return
+	}
+
+	if result.AllPassed {
+		http.Redirect(w, r, "/admin/server/backup?success=Backup+verified+successfully:+all+checks+passed", http.StatusSeeOther)
+	} else {
+		errMsg := "Verification+failed"
+		if len(result.Errors) > 0 {
+			errMsg = "Verification+failed:+" + result.Errors[0]
+		}
+		http.Redirect(w, r, "/admin/server/backup?error="+errMsg, http.StatusSeeOther)
+	}
+}
+
+// processBackupSetPassword handles setting the backup encryption password
+// Per AI.md PART 22: Password is NEVER stored - derived on-demand
+func (h *Handler) processBackupSetPassword(w http.ResponseWriter, r *http.Request) {
+	password := r.FormValue("password")
+	confirmPassword := r.FormValue("confirm_password")
+	hint := r.FormValue("hint")
+
+	if password == "" {
+		http.Redirect(w, r, "/admin/server/backup?error=Password+cannot+be+empty", http.StatusSeeOther)
+		return
+	}
+
+	if password != confirmPassword {
+		http.Redirect(w, r, "/admin/server/backup?error=Passwords+do+not+match", http.StatusSeeOther)
+		return
+	}
+
+	// Enable encryption in config
+	h.config.Server.Backup.Encryption.Enabled = true
+	h.config.Server.Backup.Encryption.Hint = hint
+
+	h.saveAndReload(w, r, "/admin/server/backup")
 }
 
 // handleServerMaintenance renders the maintenance mode page
@@ -1639,30 +1886,53 @@ func (h *Handler) saveAndReload(w http.ResponseWriter, r *http.Request, redirect
 // ============================================================
 
 // apiBackups handles backup management API
+// Per AI.md PART 22: Backup API with encryption support
 func (h *Handler) apiBackups(w http.ResponseWriter, r *http.Request) {
 	bm := backup.NewManager()
 
 	switch r.Method {
 	case http.MethodGet:
-		// List backups
+		// List backups with metadata
 		backups, err := bm.List()
 		if err != nil {
 			h.jsonError(w, fmt.Sprintf("Failed to list backups: %v", err), http.StatusInternalServerError)
 			return
 		}
 		h.jsonResponse(w, map[string]interface{}{
-			"backups": backups,
-			"total":   len(backups),
+			"backups":            backups,
+			"total":              len(backups),
+			"encryption_enabled": h.config.Server.Backup.Encryption.Enabled,
+			"compliance_mode":    h.config.Server.Compliance.Enabled,
 		}, http.StatusOK)
 
 	case http.MethodPost:
-		// Create backup
+		// Create backup with optional encryption
+		// Per AI.md PART 22: password field required if encryption enabled
 		var req struct {
 			Filename string `json:"filename"`
+			Password string `json:"password"`
+			Encrypt  bool   `json:"encrypt"`
 		}
 		json.NewDecoder(r.Body).Decode(&req)
 
-		backupPath, err := bm.Create(req.Filename)
+		// Per AI.md PART 22: Compliance mode requires encryption
+		if h.config.Server.Compliance.Enabled && req.Password == "" {
+			h.jsonError(w, "Compliance mode requires encryption password", http.StatusBadRequest)
+			return
+		}
+
+		var backupPath string
+		var verifyResult *backup.VerificationResult
+		var err error
+
+		encrypt := req.Encrypt || h.config.Server.Backup.Encryption.Enabled
+		if encrypt && req.Password != "" {
+			bm.SetPassword(req.Password)
+			backupPath, verifyResult, err = bm.CreateEncryptedAndVerify(req.Filename)
+		} else {
+			backupPath, verifyResult, err = bm.CreateAndVerify(req.Filename)
+		}
+
 		if err != nil {
 			h.jsonError(w, fmt.Sprintf("Backup failed: %v", err), http.StatusInternalServerError)
 			return
@@ -1670,9 +1940,11 @@ func (h *Handler) apiBackups(w http.ResponseWriter, r *http.Request) {
 
 		metadata, _ := bm.GetMetadata(backupPath)
 		h.jsonResponse(w, map[string]interface{}{
-			"path":     backupPath,
-			"filename": filepath.Base(backupPath),
-			"metadata": metadata,
+			"path":         backupPath,
+			"filename":     filepath.Base(backupPath),
+			"metadata":     metadata,
+			"encrypted":    encrypt && req.Password != "",
+			"verification": verifyResult,
 		}, http.StatusCreated)
 
 	case http.MethodDelete:
@@ -1692,6 +1964,205 @@ func (h *Handler) apiBackups(w http.ResponseWriter, r *http.Request) {
 	default:
 		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// apiBackupRestore handles backup restore API
+// Per AI.md PART 22: POST /api/v1/admin/server/backup/restore
+func (h *Handler) apiBackupRestore(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		BackupFile string `json:"backup_file"`
+		Password   string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.jsonError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.BackupFile == "" {
+		h.jsonError(w, "backup_file is required", http.StatusBadRequest)
+		return
+	}
+
+	bm := backup.NewManager()
+	backupPath := filepath.Join(config.GetBackupDir(), req.BackupFile)
+
+	// Per AI.md PART 22: Encrypted backup requires password
+	if backup.IsEncrypted(backupPath) {
+		if req.Password == "" {
+			h.jsonResponse(w, map[string]interface{}{
+				"error":   "password_required",
+				"message": "Encrypted backup requires password",
+			}, http.StatusBadRequest)
+			return
+		}
+		bm.SetPassword(req.Password)
+
+		// Verify backup before restore
+		verifyResult, err := bm.VerifyBackup(backupPath)
+		if err != nil {
+			h.jsonError(w, fmt.Sprintf("Backup verification failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+		if !verifyResult.AllPassed {
+			h.jsonResponse(w, map[string]interface{}{
+				"error":        "verification_failed",
+				"message":      "Backup verification failed",
+				"verification": verifyResult,
+			}, http.StatusBadRequest)
+			return
+		}
+
+		if err := bm.RestoreEncrypted(backupPath); err != nil {
+			h.jsonError(w, fmt.Sprintf("Restore failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		// Verify backup before restore
+		verifyResult, err := bm.VerifyBackup(backupPath)
+		if err != nil {
+			h.jsonError(w, fmt.Sprintf("Backup verification failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+		if !verifyResult.AllPassed {
+			h.jsonResponse(w, map[string]interface{}{
+				"error":        "verification_failed",
+				"message":      "Backup verification failed",
+				"verification": verifyResult,
+			}, http.StatusBadRequest)
+			return
+		}
+
+		if err := bm.Restore(backupPath); err != nil {
+			h.jsonError(w, fmt.Sprintf("Restore failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Trigger config reload
+	if h.reloadCallback != nil {
+		if err := h.reloadCallback(); err != nil {
+			log.Printf("[Admin] Failed to reload after restore: %v", err)
+		}
+	}
+
+	h.jsonResponse(w, map[string]interface{}{
+		"status":  "restored",
+		"file":    req.BackupFile,
+		"message": "Restore completed successfully. Server may require restart.",
+	}, http.StatusOK)
+}
+
+// apiBackupDownload handles backup file download
+// Per AI.md PART 22: GET /api/v1/admin/server/backup/download/{filename}
+func (h *Handler) apiBackupDownload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Extract filename from path
+	prefix := "/api/v1/admin/server/backup/download/"
+	filename := strings.TrimPrefix(r.URL.Path, prefix)
+	if filename == "" {
+		h.jsonError(w, "Filename required", http.StatusBadRequest)
+		return
+	}
+
+	// Security: sanitize filename to prevent path traversal
+	filename = filepath.Base(filename)
+	backupPath := filepath.Join(config.GetBackupDir(), filename)
+
+	// Verify file exists and is in backup directory
+	if !strings.HasPrefix(backupPath, config.GetBackupDir()) {
+		h.jsonError(w, "Invalid backup path", http.StatusBadRequest)
+		return
+	}
+
+	info, err := os.Stat(backupPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			h.jsonError(w, "Backup file not found", http.StatusNotFound)
+		} else {
+			h.jsonError(w, fmt.Sprintf("Failed to access backup: %v", err), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Open file for reading
+	file, err := os.Open(backupPath)
+	if err != nil {
+		h.jsonError(w, fmt.Sprintf("Failed to open backup: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer file.Close()
+
+	// Set appropriate headers for download
+	w.Header().Set("Content-Type", "application/gzip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", info.Size()))
+
+	// Stream file to response
+	io.Copy(w, file)
+}
+
+// apiBackupVerify handles backup verification API
+// Per AI.md PART 22: Backup verification is NON-NEGOTIABLE
+func (h *Handler) apiBackupVerify(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Filename string `json:"filename"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.jsonError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Filename == "" {
+		h.jsonError(w, "filename is required", http.StatusBadRequest)
+		return
+	}
+
+	bm := backup.NewManager()
+	backupPath := filepath.Join(config.GetBackupDir(), req.Filename)
+
+	// Set password if backup is encrypted
+	if backup.IsEncrypted(backupPath) {
+		if req.Password == "" {
+			h.jsonResponse(w, map[string]interface{}{
+				"error":   "password_required",
+				"message": "Encrypted backup requires password for verification",
+			}, http.StatusBadRequest)
+			return
+		}
+		bm.SetPassword(req.Password)
+	}
+
+	result, err := bm.VerifyBackup(backupPath)
+	if err != nil {
+		h.jsonError(w, fmt.Sprintf("Verification error: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	status := http.StatusOK
+	if !result.AllPassed {
+		status = http.StatusUnprocessableEntity
+	}
+
+	h.jsonResponse(w, map[string]interface{}{
+		"filename":     req.Filename,
+		"verified":     result.AllPassed,
+		"verification": result,
+	}, status)
 }
 
 // apiLogs handles log viewing API
@@ -3021,4 +3492,83 @@ func (h *Handler) apiBangs(w http.ResponseWriter, r *http.Request) {
 	default:
 		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// ============================================================
+// Missing Admin Panel Handlers per AI.md PART 17
+// ============================================================
+
+// handleRateLimiting handles rate limiting configuration page
+// Per AI.md PART 17: /admin/server/security/ratelimit
+func (h *Handler) handleRateLimiting(w http.ResponseWriter, r *http.Request) {
+	data := &AdminPageData{
+		Title:  "Rate Limiting",
+		Page:   "admin-ratelimit",
+		Config: h.config,
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	h.renderAdminPage(w, "ratelimit", data)
+}
+
+// handleBlocklists handles IP/domain blocklist management page
+// Per AI.md PART 17: /admin/server/network/blocklists
+func (h *Handler) handleBlocklists(w http.ResponseWriter, r *http.Request) {
+	data := &AdminPageData{
+		Title:  "Blocklists",
+		Page:   "admin-blocklists",
+		Config: h.config,
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	h.renderAdminPage(w, "blocklists", data)
+}
+
+// handleUserInvites handles user invite management page
+// Per AI.md PART 17 & PART 34: /admin/server/users/invites
+func (h *Handler) handleUserInvites(w http.ResponseWriter, r *http.Request) {
+	data := &AdminPageData{
+		Title:  "User Invites",
+		Page:   "admin-user-invites",
+		Config: h.config,
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	h.renderAdminPage(w, "user-invites", data)
+}
+
+// handleClusterAddNode handles the add node to cluster page
+// Per AI.md PART 17: /admin/server/cluster/add
+func (h *Handler) handleClusterAddNode(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	data := &AdminPageData{
+		Title:  "Add Cluster Node",
+		Page:   "admin-cluster-add",
+		Config: h.config,
+		Extra:  make(map[string]interface{}),
+	}
+
+	// Get join token if cluster is enabled
+	if h.cluster != nil && h.cluster.IsClusterMode() && h.cluster.IsPrimary() {
+		token, err := h.cluster.GenerateJoinToken(ctx)
+		if err == nil {
+			data.Extra["join_token"] = token
+			data.Extra["node_id"] = h.cluster.NodeID()
+			data.Extra["hostname"] = h.cluster.Hostname()
+			data.Extra["is_primary"] = h.cluster.IsPrimary()
+		}
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	h.renderAdminPage(w, "cluster-add", data)
+}
+
+// handleHelpRoot handles help page at /admin/help
+// Per AI.md PART 17 sidebar: Help should be at /admin/help
+func (h *Handler) handleHelpRoot(w http.ResponseWriter, r *http.Request) {
+	data := &AdminPageData{
+		Title:  "Help & Documentation",
+		Page:   "admin-help",
+		Config: h.config,
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	h.renderAdminPage(w, "help", data)
 }

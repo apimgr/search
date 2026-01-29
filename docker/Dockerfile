@@ -54,13 +54,15 @@ LABEL org.opencontainers.image.licenses="${LICENSE}" \
       org.opencontainers.image.schema-version="${VERSION}" \
       org.opencontainers.image.revision="${COMMIT_ID}"
 
-# Install required packages (git, curl, bash, tini, tor - per AI.md PART 27)
+# Install required packages per AI.md PART 27 (git, curl, bash, tini, tor)
+# Plus tzdata for scheduler timezone support per AI.md PART 19 (default: America/New_York)
 RUN apk add --no-cache \
     git \
     curl \
     bash \
     tini \
-    tor
+    tor \
+    tzdata
 
 # NO directory creation - binary handles ALL setup based on env vars
 # This allows users to override CONFIG_DIR, DATA_DIR, etc.
@@ -70,8 +72,8 @@ RUN apk add --no-cache \
 # Copy binary from builder stage (multi-stage build)
 COPY --from=builder /app /usr/local/bin/search
 
-# Copy entrypoint script from ./docker/rootfs/
-COPY docker/rootfs/ /
+# Copy entrypoint script from ./docker/file_system/
+COPY docker/file_system/ /
 
 # Copy Dockerfile to image (for reference and backup)
 COPY docker/Dockerfile /root/Dockerfile

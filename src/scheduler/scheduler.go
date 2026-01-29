@@ -14,6 +14,9 @@ import (
 	"time"
 )
 
+// defaultTimezone is the default timezone for the scheduler (allows testing)
+var defaultTimezone = "America/New_York"
+
 // TaskID represents a unique task identifier
 type TaskID string
 
@@ -147,7 +150,7 @@ func New(db *sql.DB, nodeID string) *Scheduler {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Default to America/New_York per spec
-	tz, err := time.LoadLocation("America/New_York")
+	tz, err := time.LoadLocation(defaultTimezone)
 	if err != nil {
 		tz = time.Local
 	}
@@ -808,15 +811,21 @@ func (s *Scheduler) catchUpMissedTasks() {
 }
 
 // runStartupTasks runs tasks marked with RunOnStart
+// Per AI.md PART 19 line 28760-28761: Tasks execute "in order of original scheduled time"
 func (s *Scheduler) runStartupTasks() {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-
+	startupTasks := make([]*Task, 0)
 	for _, task := range s.tasks {
 		if task.Enabled && task.RunOnStart {
-			log.Printf("[Scheduler] Running startup task: %s", task.ID)
-			go s.runTask(task)
+			startupTasks = append(startupTasks, task)
 		}
+	}
+	s.mu.RUnlock()
+
+	// Run startup tasks sequentially per spec (in order of original scheduled time)
+	for _, task := range startupTasks {
+		log.Printf("[Scheduler] Running startup task: %s", task.ID)
+		s.runTask(task)
 	}
 }
 

@@ -147,8 +147,8 @@ func (m model) renderResults() string {
 		sb.WriteString("\n")
 		sb.WriteString(urlStyle.Render("   " + r.URL))
 		sb.WriteString("\n")
-		if r.Snippet != "" {
-			sb.WriteString(helpStyle.Render("   " + r.Snippet))
+		if r.Description != "" {
+			sb.WriteString(helpStyle.Render("   " + r.Description))
 			sb.WriteString("\n")
 		}
 		sb.WriteString("\n")

@@ -13,6 +13,10 @@ import (
 	"time"
 )
 
+// findProcessFunc is the function used to find processes
+// This is a variable to allow testing with mock implementations
+var findProcessFunc = os.FindProcess
+
 // setupSignals configures graceful shutdown (Unix)
 // Per AI.md PART 7: Unix signals table
 func setupSignals(cfg ShutdownConfig) {
@@ -57,7 +61,7 @@ func setupSignals(cfg ShutdownConfig) {
 func stopChildProcesses(pids []int, timeout time.Duration) {
 	// Send SIGTERM to all children (graceful)
 	for _, pid := range pids {
-		process, err := os.FindProcess(pid)
+		process, err := findProcessFunc(pid)
 		if err != nil {
 			log.Printf("Failed to find process %d: %v", pid, err)
 			continue
@@ -72,7 +76,7 @@ func stopChildProcesses(pids []int, timeout time.Duration) {
 	// Wait with timeout, then SIGKILL survivors
 	deadline := time.Now().Add(timeout)
 	for _, pid := range pids {
-		process, err := os.FindProcess(pid)
+		process, err := findProcessFunc(pid)
 		if err != nil {
 			continue
 		}
@@ -98,7 +102,7 @@ func stopChildProcesses(pids []int, timeout time.Duration) {
 // KillProcess sends signal to process (Unix)
 // Per AI.md PART 7: killProcess helper
 func KillProcess(pid int, graceful bool) error {
-	process, err := os.FindProcess(pid)
+	process, err := findProcessFunc(pid)
 	if err != nil {
 		return err
 	}

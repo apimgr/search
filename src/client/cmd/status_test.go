@@ -52,7 +52,8 @@ func TestStatusCommandRegistered(t *testing.T) {
 func TestRunStatusHealthy(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/healthz" {
-			json.NewEncoder(w).Encode(api.HealthResponse{
+			// Per AI.md PART 14: Wrapped response format
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "data": api.HealthResponse{
 				Status:  "healthy",
 				Version: "1.0.0",
 				Uptime:  "24h",
@@ -60,7 +61,7 @@ func TestRunStatusHealthy(t *testing.T) {
 					"database": "ok",
 					"cache":    "ok",
 				},
-			})
+			}})
 		} else {
 			json.NewEncoder(w).Encode(map[string]interface{}{})
 		}
@@ -86,10 +87,11 @@ func TestRunStatusHealthy(t *testing.T) {
 
 func TestRunStatusHealthyJSON(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.HealthResponse{
+		// Per AI.md PART 14: Wrapped response format
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "data": api.HealthResponse{
 			Status:  "ok",
 			Version: "2.0.0",
-		})
+		}})
 	}))
 	defer testServer.Close()
 
@@ -110,11 +112,12 @@ func TestRunStatusHealthyJSON(t *testing.T) {
 
 func TestRunStatusWithUptime(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.HealthResponse{
+		// Per AI.md PART 14: Wrapped response format
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "data": api.HealthResponse{
 			Status:  "healthy",
 			Version: "1.0.0",
 			Uptime:  "72h30m",
-		})
+		}})
 	}))
 	defer testServer.Close()
 
@@ -135,7 +138,8 @@ func TestRunStatusWithUptime(t *testing.T) {
 
 func TestRunStatusWithChecks(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.HealthResponse{
+		// Per AI.md PART 14: Wrapped response format
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "data": api.HealthResponse{
 			Status:  "healthy",
 			Version: "1.0.0",
 			Checks: map[string]string{
@@ -143,7 +147,7 @@ func TestRunStatusWithChecks(t *testing.T) {
 				"cache":    "healthy",
 				"search":   "healthy",
 			},
-		})
+		}})
 	}))
 	defer testServer.Close()
 
@@ -164,10 +168,11 @@ func TestRunStatusWithChecks(t *testing.T) {
 
 func TestRunStatusNoVersion(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.HealthResponse{
+		// Per AI.md PART 14: Wrapped response format
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "data": api.HealthResponse{
 			Status: "ok",
 			// No version
-		})
+		}})
 	}))
 	defer testServer.Close()
 
@@ -188,11 +193,12 @@ func TestRunStatusNoVersion(t *testing.T) {
 
 func TestRunStatusNoUptime(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.HealthResponse{
+		// Per AI.md PART 14: Wrapped response format
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "data": api.HealthResponse{
 			Status:  "healthy",
 			Version: "1.0.0",
 			// No uptime
-		})
+		}})
 	}))
 	defer testServer.Close()
 
@@ -213,11 +219,12 @@ func TestRunStatusNoUptime(t *testing.T) {
 
 func TestRunStatusNoChecks(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.HealthResponse{
+		// Per AI.md PART 14: Wrapped response format
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "data": api.HealthResponse{
 			Status:  "healthy",
 			Version: "1.0.0",
 			// No checks
-		})
+		}})
 	}))
 	defer testServer.Close()
 
@@ -252,10 +259,11 @@ func TestRunStatusInitClientError(t *testing.T) {
 
 func TestStatusCmdRunE(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.HealthResponse{
+		// Per AI.md PART 14: Wrapped response format
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "data": api.HealthResponse{
 			Status:  "healthy",
 			Version: "1.0.0",
-		})
+		}})
 	}))
 	defer testServer.Close()
 
@@ -278,7 +286,8 @@ func TestStatusCmdRunE(t *testing.T) {
 
 func TestRunStatusOutputFormats(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.HealthResponse{
+		// Per AI.md PART 14: Wrapped response format
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "data": api.HealthResponse{
 			Status:    "healthy",
 			Version:   "1.0.0",
 			Uptime:    "1h",
@@ -286,7 +295,7 @@ func TestRunStatusOutputFormats(t *testing.T) {
 			Checks: map[string]string{
 				"db": "ok",
 			},
-		})
+		}})
 	}))
 	defer testServer.Close()
 
@@ -315,9 +324,10 @@ func TestRunStatusOutputFormats(t *testing.T) {
 
 func TestRunStatusResponseTime(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.HealthResponse{
+		// Per AI.md PART 14: Wrapped response format
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "data": api.HealthResponse{
 			Status: "healthy",
-		})
+		}})
 	}))
 	defer testServer.Close()
 
@@ -341,9 +351,10 @@ func TestRunStatusResponseTime(t *testing.T) {
 
 func TestRunStatusOkStatus(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.HealthResponse{
+		// Per AI.md PART 14: Wrapped response format
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "data": api.HealthResponse{
 			Status: "ok",
-		})
+		}})
 	}))
 	defer testServer.Close()
 
@@ -364,9 +375,10 @@ func TestRunStatusOkStatus(t *testing.T) {
 
 func TestRunStatusHealthyStatus(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.HealthResponse{
+		// Per AI.md PART 14: Wrapped response format
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "data": api.HealthResponse{
 			Status: "healthy",
-		})
+		}})
 	}))
 	defer testServer.Close()
 
@@ -389,9 +401,10 @@ func TestRunStatusHealthyStatus(t *testing.T) {
 
 func TestRunStatusExistingClient(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.HealthResponse{
+		// Per AI.md PART 14: Wrapped response format
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "data": api.HealthResponse{
 			Status: "healthy",
-		})
+		}})
 	}))
 	defer testServer.Close()
 
@@ -414,7 +427,8 @@ func TestRunStatusExistingClient(t *testing.T) {
 
 func TestRunStatusMultipleChecks(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.HealthResponse{
+		// Per AI.md PART 14: Wrapped response format
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "data": api.HealthResponse{
 			Status:  "healthy",
 			Version: "1.0.0",
 			Checks: map[string]string{
@@ -426,7 +440,7 @@ func TestRunStatusMultipleChecks(t *testing.T) {
 				"scheduler":   "running",
 				"auth":        "enabled",
 			},
-		})
+		}})
 	}))
 	defer testServer.Close()
 
@@ -449,14 +463,15 @@ func TestRunStatusMultipleChecks(t *testing.T) {
 
 func TestRunStatusJSONOutput(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(api.HealthResponse{
+		// Per AI.md PART 14: Wrapped response format
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "data": api.HealthResponse{
 			Status:  "healthy",
 			Version: "1.0.0",
 			Uptime:  "1h30m",
 			Checks: map[string]string{
 				"db": "ok",
 			},
-		})
+		}})
 	}))
 	defer testServer.Close()
 

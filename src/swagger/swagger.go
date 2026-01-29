@@ -350,10 +350,9 @@ func extractHost(url string) string {
 	url = strings.TrimPrefix(url, "http://")
 	url = strings.TrimPrefix(url, "https://")
 	parts := strings.Split(url, "/")
-	if len(parts) > 0 {
-		return strings.Split(parts[0], ":")[0]
-	}
-	return "localhost"
+	// strings.Split always returns at least one element (even for empty string)
+	// so parts[0] is always safe to access
+	return strings.Split(parts[0], ":")[0]
 }
 
 // getTheme gets the current theme from cookie or defaults to dark

@@ -7,9 +7,12 @@ import (
 	"strings"
 )
 
+// goos is the operating system for detection (allows testing)
+var goos = runtime.GOOS
+
 // DetectSystemDark attempts to detect if the system prefers dark mode
 func DetectSystemDark() bool {
-	switch runtime.GOOS {
+	switch goos {
 	case "darwin":
 		return detectMacOSDark()
 	case "linux":

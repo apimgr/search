@@ -1,0 +1,83 @@
+{{define "content"}}
+<div class="static-page terms-page">
+    <h1>Terms of Service</h1>
+
+    {{if .Config.Server.Pages.Terms.Content}}
+    <div class="page-content markdown">
+        {{.Config.Server.Pages.Terms.Content | safe}}
+    </div>
+    {{else}}
+    <div class="page-content">
+        <p class="last-updated">Last updated: {{.BuildDate}}</p>
+
+        <section class="terms-section">
+            <h2>1. Acceptance of Terms</h2>
+            <p>By accessing or using {{.Config.Server.Branding.AppName}} ("the Service"), you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use the Service.</p>
+        </section>
+
+        <section class="terms-section">
+            <h2>2. Description of Service</h2>
+            <p>{{.Config.Server.Branding.AppName}} is a privacy-respecting metasearch engine that aggregates results from multiple search engines. The Service is provided "as is" without warranty of any kind.</p>
+        </section>
+
+        <section class="terms-section">
+            <h2>3. User Conduct</h2>
+            <p>You agree not to:</p>
+            <ul>
+                <li>Use the Service for any unlawful purpose</li>
+                <li>Attempt to gain unauthorized access to the Service or its systems</li>
+                <li>Interfere with or disrupt the Service</li>
+                <li>Use automated means to access the Service in a manner that exceeds reasonable use</li>
+                <li>Attempt to reverse engineer, decompile, or extract source code from the Service</li>
+            </ul>
+        </section>
+
+        <section class="terms-section">
+            <h2>4. Privacy</h2>
+            <p>Your use of the Service is also governed by our <a href="/server/privacy">Privacy Policy</a>. We are committed to protecting your privacy and minimizing data collection.</p>
+        </section>
+
+        <section class="terms-section">
+            <h2>5. Intellectual Property</h2>
+            <p>The Service and its original content, features, and functionality are owned by the operators of {{.Config.Server.Branding.AppName}} and are protected by applicable intellectual property laws.</p>
+            <p>Search results displayed are the property of their respective owners and are subject to their own terms and conditions.</p>
+        </section>
+
+        <section class="terms-section">
+            <h2>6. Third-Party Content</h2>
+            <p>The Service aggregates results from third-party search engines. We do not control or endorse the content returned by these search engines. Your use of third-party content is at your own risk.</p>
+        </section>
+
+        <section class="terms-section">
+            <h2>7. Disclaimer of Warranties</h2>
+            <p>THE SERVICE IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED. WE DO NOT WARRANT THAT:</p>
+            <ul>
+                <li>The Service will be uninterrupted or error-free</li>
+                <li>Search results will be accurate, complete, or current</li>
+                <li>Any defects will be corrected</li>
+            </ul>
+        </section>
+
+        <section class="terms-section">
+            <h2>8. Limitation of Liability</h2>
+            <p>IN NO EVENT SHALL THE OPERATORS OF {{.Config.Server.Branding.AppName}} BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES ARISING OUT OF OR RELATED TO YOUR USE OF THE SERVICE.</p>
+        </section>
+
+        <section class="terms-section">
+            <h2>9. Modifications to Service</h2>
+            <p>We reserve the right to modify, suspend, or discontinue the Service at any time without notice. We shall not be liable to you or any third party for any modification, suspension, or discontinuation.</p>
+        </section>
+
+        <section class="terms-section">
+            <h2>10. Changes to Terms</h2>
+            <p>We may update these Terms of Service from time to time. We will notify users of any material changes by updating the "Last updated" date. Your continued use of the Service after changes constitutes acceptance of the new terms.</p>
+        </section>
+
+        <section class="terms-section">
+            <h2>11. Contact</h2>
+            <p>If you have questions about these Terms of Service, please <a href="/server/contact">contact us</a>.</p>
+        </section>
+    </div>
+    {{end}}
+</div>
+{{end}}

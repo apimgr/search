@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	cryptorand "crypto/rand"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -390,5 +391,5 @@ var cryptoRandRead = func(b []byte) (int, error) {
 type cryptoReader struct{}
 
 func (cryptoReader) Read(b []byte) (int, error) {
-	return len(b), nil
+	return cryptorand.Read(b)
 }

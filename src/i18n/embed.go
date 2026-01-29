@@ -10,8 +10,14 @@ var localesFS embed.FS
 // DefaultManager creates a new i18n manager with embedded translations
 // Uses the default supported languages and loads from embedded locales
 func DefaultManager() (*Manager, error) {
-	m := NewManager("en", DefaultSupportedLanguages())
-	if err := m.LoadFromFS(localesFS, "locales"); err != nil {
+	return newManagerFromFS(localesFS, "locales", "en", DefaultSupportedLanguages())
+}
+
+// newManagerFromFS creates a new i18n manager from the given filesystem
+// This is an internal function used by DefaultManager and for testing
+func newManagerFromFS(fs embed.FS, dir, defaultLang string, supported []string) (*Manager, error) {
+	m := NewManager(defaultLang, supported)
+	if err := m.LoadFromFS(fs, dir); err != nil {
 		return nil, err
 	}
 	return m, nil

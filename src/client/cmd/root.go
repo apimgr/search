@@ -109,7 +109,7 @@ func runSearch(query string) error {
 			fmt.Fprintf(w, "%s\t%s\t%.2f\n", title, r.URL, r.Score)
 		}
 		w.Flush()
-		fmt.Printf("\nTotal: %d results\n", result.TotalCount)
+		fmt.Printf("\nTotal: %d results (page %d of %d)\n", result.Pagination.Total, result.Pagination.Page, result.Pagination.Pages)
 	}
 	return nil
 }

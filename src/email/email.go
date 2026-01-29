@@ -10,6 +10,20 @@ import (
 	"time"
 )
 
+// Testable variables for dependency injection in tests
+var (
+	// netDialTimeout allows tests to mock net.DialTimeout
+	netDialTimeout = net.DialTimeout
+	// tlsDial allows tests to mock tls.Dial
+	tlsDial = tls.Dial
+	// smtpNewClient allows tests to mock smtp.NewClient
+	smtpNewClient = smtp.NewClient
+	// netInterfaces allows tests to mock net.Interfaces
+	netInterfaces = net.Interfaces
+	// tlsDialWithDialer allows tests to mock tls.DialWithDialer
+	tlsDialWithDialer = tls.DialWithDialer
+)
+
 // Config holds email configuration
 // Per AI.md PART 18: Nested SMTP and From blocks
 type Config struct {
@@ -169,9 +183,9 @@ func (ml *Mailer) sendMail(recipients []string, message []byte) error {
 		tlsConfig := &tls.Config{
 			ServerName: ml.config.SMTP.Host,
 		}
-		conn, err = tls.Dial("tcp", addr, tlsConfig)
+		conn, err = tlsDial("tcp", addr, tlsConfig)
 	} else {
-		conn, err = net.DialTimeout("tcp", addr, 30*time.Second)
+		conn, err = netDialTimeout("tcp", addr, 30*time.Second)
 	}
 
 	if err != nil {
@@ -179,7 +193,7 @@ func (ml *Mailer) sendMail(recipients []string, message []byte) error {
 	}
 	defer conn.Close()
 
-	client, err := smtp.NewClient(conn, ml.config.SMTP.Host)
+	client, err := smtpNewClient(conn, ml.config.SMTP.Host)
 	if err != nil {
 		return fmt.Errorf("failed to create SMTP client: %w", err)
 	}
@@ -307,6 +321,10 @@ func (ml *Mailer) TestConnection() error {
 		return fmt.Errorf("email is not enabled")
 	}
 
+	if ml.config.SMTP.Host == "" {
+		return fmt.Errorf("SMTP host is not configured")
+	}
+
 	addr := net.JoinHostPort(ml.config.SMTP.Host, fmt.Sprintf("%d", ml.config.SMTP.Port))
 
 	// Per AI.md PART 18: TLS mode handling
@@ -321,9 +339,9 @@ func (ml *Mailer) TestConnection() error {
 		tlsConfig := &tls.Config{
 			ServerName: ml.config.SMTP.Host,
 		}
-		conn, err = tls.Dial("tcp", addr, tlsConfig)
+		conn, err = tlsDial("tcp", addr, tlsConfig)
 	} else {
-		conn, err = net.DialTimeout("tcp", addr, 10*time.Second)
+		conn, err = netDialTimeout("tcp", addr, 10*time.Second)
 	}
 
 	if err != nil {
@@ -331,7 +349,7 @@ func (ml *Mailer) TestConnection() error {
 	}
 	defer conn.Close()
 
-	client, err := smtp.NewClient(conn, ml.config.SMTP.Host)
+	client, err := smtpNewClient(conn, ml.config.SMTP.Host)
 	if err != nil {
 		return fmt.Errorf("SMTP client creation failed: %w", err)
 	}
@@ -412,7 +430,7 @@ func DetectSMTP() *DetectedSMTP {
 // getDefaultGateway attempts to get the default gateway IP
 func getDefaultGateway() string {
 	// Get default route interface
-	interfaces, err := net.Interfaces()
+	interfaces, err := netInterfaces()
 	if err != nil {
 		return ""
 	}
@@ -456,9 +474,9 @@ func tryDetectSMTP(host string, port int, useTLS bool) *DetectedSMTP {
 			ServerName:         host,
 			InsecureSkipVerify: true,
 		}
-		conn, err = tls.DialWithDialer(&net.Dialer{Timeout: 2 * time.Second}, "tcp", addr, tlsConfig)
+		conn, err = tlsDialWithDialer(&net.Dialer{Timeout: 2 * time.Second}, "tcp", addr, tlsConfig)
 	} else {
-		conn, err = net.DialTimeout("tcp", addr, 2*time.Second)
+		conn, err = netDialTimeout("tcp", addr, 2*time.Second)
 	}
 
 	if err != nil {
@@ -466,7 +484,7 @@ func tryDetectSMTP(host string, port int, useTLS bool) *DetectedSMTP {
 	}
 	defer conn.Close()
 
-	client, err := smtp.NewClient(conn, host)
+	client, err := smtpNewClient(conn, host)
 	if err != nil {
 		return nil
 	}

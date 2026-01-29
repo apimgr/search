@@ -32,7 +32,7 @@ RUN mkdir -p /config/search /config/search/security /config/search/tor \
     && chown -R postgres:postgres /data/db/postgres /run/postgresql /data/log/postgres
 
 # Copy configs and entrypoint
-COPY docker/rootfs/ /
+COPY docker/file_system/ /
 
 # Copy application binary from builder or pre-built
 COPY search /usr/local/bin/

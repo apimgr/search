@@ -200,15 +200,13 @@ func (sr *SearchResults) ToJSON(w io.Writer, pretty bool) error {
 }
 
 // ToCSV exports results as CSV
+// Uses idiomatic csv.Writer pattern: write all data, then check for accumulated errors
 func (sr *SearchResults) ToCSV(w io.Writer) error {
 	writer := csv.NewWriter(w)
-	defer writer.Flush()
 
 	// Header
 	header := []string{"Title", "URL", "Content", "Engine", "Category", "Domain", "Author", "Published", "Score"}
-	if err := writer.Write(header); err != nil {
-		return err
-	}
+	writer.Write(header)
 
 	// Data rows
 	for _, r := range sr.Results {
@@ -228,12 +226,12 @@ func (sr *SearchResults) ToCSV(w io.Writer) error {
 			published,
 			fmt.Sprintf("%.2f", r.Score),
 		}
-		if err := writer.Write(row); err != nil {
-			return err
-		}
+		writer.Write(row)
 	}
 
-	return nil
+	// Flush and return any accumulated error
+	writer.Flush()
+	return writer.Error()
 }
 
 // RSSFeed represents an RSS 2.0 feed

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -137,8 +138,14 @@ func (pm *PreferencesManager) GetFromCookie(r *http.Request) *UserPreferences {
 		return DefaultPreferences()
 	}
 
+	// URL-decode the cookie value
+	decoded, err := url.QueryUnescape(cookie.Value)
+	if err != nil {
+		return DefaultPreferences()
+	}
+
 	var prefs UserPreferences
-	if err := json.Unmarshal([]byte(cookie.Value), &prefs); err != nil {
+	if err := json.Unmarshal([]byte(decoded), &prefs); err != nil {
 		return DefaultPreferences()
 	}
 
@@ -152,9 +159,10 @@ func (pm *PreferencesManager) SetCookie(w http.ResponseWriter, prefs *UserPrefer
 		return err
 	}
 
+	// URL-encode the JSON to avoid issues with special characters in cookie values
 	http.SetCookie(w, &http.Cookie{
 		Name:     pm.cookieName,
-		Value:    string(prefsJSON),
+		Value:    url.QueryEscape(string(prefsJSON)),
 		Path:     "/",
 		MaxAge:   365 * 24 * 60 * 60, // 1 year
 		HttpOnly: true,

@@ -8,9 +8,15 @@ import (
 	"runtime"
 )
 
+// Package-level function variables for testing
+var (
+	getPpidFunc = os.Getppid
+	getGOOSFunc = func() string { return runtime.GOOS }
+)
+
 // detectPlatformDisplay detects display availability on Unix-like systems
 func (e *Env) detectPlatformDisplay() {
-	switch runtime.GOOS {
+	switch getGOOSFunc() {
 	case "darwin":
 		e.detectMacOSDisplay()
 	default:
@@ -28,7 +34,7 @@ func (e *Env) detectMacOSDisplay() {
 	}
 
 	// Check if running as a LaunchDaemon (system service)
-	if os.Getenv("XPC_SERVICE_NAME") != "" && os.Getppid() == 1 {
+	if os.Getenv("XPC_SERVICE_NAME") != "" && getPpidFunc() == 1 {
 		e.HasDisplay = false
 		e.DisplayType = DisplayTypeNone
 		return

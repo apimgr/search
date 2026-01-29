@@ -68,24 +68,22 @@ func TestClientStruct(t *testing.T) {
 
 func TestSearchResultStruct(t *testing.T) {
 	result := SearchResult{
-		ID:      "123",
-		Title:   "Test Title",
-		URL:     "https://example.com",
-		Snippet: "Test snippet",
-		Score:   0.95,
+		Title:       "Test Title",
+		URL:         "https://example.com",
+		Description: "Test description",
+		Engine:      "google",
+		Score:       0.95,
+		Category:    "general",
 	}
 
-	if result.ID != "123" {
-		t.Errorf("ID = %q", result.ID)
-	}
 	if result.Title != "Test Title" {
 		t.Errorf("Title = %q", result.Title)
 	}
 	if result.URL != "https://example.com" {
 		t.Errorf("URL = %q", result.URL)
 	}
-	if result.Snippet != "Test snippet" {
-		t.Errorf("Snippet = %q", result.Snippet)
+	if result.Description != "Test description" {
+		t.Errorf("Description = %q", result.Description)
 	}
 	if result.Score != 0.95 {
 		t.Errorf("Score = %f", result.Score)
@@ -94,11 +92,12 @@ func TestSearchResultStruct(t *testing.T) {
 
 func TestSearchResultJSON(t *testing.T) {
 	result := SearchResult{
-		ID:      "123",
-		Title:   "Test",
-		URL:     "https://example.com",
-		Snippet: "Snippet",
-		Score:   0.5,
+		Title:       "Test",
+		URL:         "https://example.com",
+		Description: "Description",
+		Engine:      "google",
+		Score:       0.5,
+		Category:    "general",
 	}
 
 	data, err := json.Marshal(result)
@@ -111,39 +110,45 @@ func TestSearchResultJSON(t *testing.T) {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
 
-	if decoded.ID != result.ID {
-		t.Errorf("decoded.ID = %q, want %q", decoded.ID, result.ID)
+	if decoded.Title != result.Title {
+		t.Errorf("decoded.Title = %q, want %q", decoded.Title, result.Title)
 	}
 }
 
-// Tests for SearchResponse struct
+// Tests for SearchResponse struct per AI.md PART 14 pagination format
 
 func TestSearchResponseStruct(t *testing.T) {
 	response := SearchResponse{
+		Query:    "test query",
+		Category: "general",
 		Results: []SearchResult{
-			{ID: "1", Title: "Result 1"},
-			{ID: "2", Title: "Result 2"},
+			{Title: "Result 1", URL: "https://example.com/1"},
+			{Title: "Result 2", URL: "https://example.com/2"},
 		},
-		TotalCount: 100,
-		Query:      "test query",
-		Page:       1,
-		PerPage:    10,
+		Pagination: SearchPagination{
+			Page:  1,
+			Limit: 10,
+			Total: 100,
+			Pages: 10,
+		},
+		SearchTime: 100.5,
+		Engines:    []string{"google"},
 	}
 
 	if len(response.Results) != 2 {
 		t.Errorf("Results length = %d", len(response.Results))
 	}
-	if response.TotalCount != 100 {
-		t.Errorf("TotalCount = %d", response.TotalCount)
+	if response.Pagination.Total != 100 {
+		t.Errorf("Pagination.Total = %d", response.Pagination.Total)
 	}
 	if response.Query != "test query" {
 		t.Errorf("Query = %q", response.Query)
 	}
-	if response.Page != 1 {
-		t.Errorf("Page = %d", response.Page)
+	if response.Pagination.Page != 1 {
+		t.Errorf("Pagination.Page = %d", response.Pagination.Page)
 	}
-	if response.PerPage != 10 {
-		t.Errorf("PerPage = %d", response.PerPage)
+	if response.Pagination.Limit != 10 {
+		t.Errorf("Pagination.Limit = %d", response.Pagination.Limit)
 	}
 }
 
@@ -300,7 +305,7 @@ func TestGetClusterNodesNil(t *testing.T) {
 // Tests for Search
 
 func TestSearch(t *testing.T) {
-	// Create test server
+	// Create test server that returns wrapped API response per AI.md
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/search" {
 			t.Errorf("Expected path /api/v1/search, got %s", r.URL.Path)
@@ -309,16 +314,9 @@ func TestSearch(t *testing.T) {
 			t.Errorf("Expected q=test+query, got %s", r.URL.Query().Get("q"))
 		}
 
-		response := SearchResponse{
-			Results: []SearchResult{
-				{ID: "1", Title: "Result 1", URL: "https://example.com/1"},
-			},
-			TotalCount: 1,
-			Query:      "test query",
-			Page:       1,
-			PerPage:    10,
-		}
-		json.NewEncoder(w).Encode(response)
+		// Return wrapped response per AI.md API format
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"ok":true,"data":{"query":"test query","category":"general","results":[{"title":"Result 1","url":"https://example.com/1","description":"","engine":"google","score":0.9}],"pagination":{"page":1,"limit":10,"total":1,"pages":1},"search_time_ms":100,"engines_used":["google"]}}`))
 	}))
 	defer server.Close()
 
@@ -358,9 +356,13 @@ func TestHealth(t *testing.T) {
 			t.Errorf("Expected path /api/v1/healthz, got %s", r.URL.Path)
 		}
 
-		response := HealthResponse{
-			Status:  "healthy",
-			Version: "1.0.0",
+		// Per AI.md PART 14: Wrapped response format {"ok": true, "data": {...}}
+		response := map[string]interface{}{
+			"ok": true,
+			"data": HealthResponse{
+				Status:  "healthy",
+				Version: "1.0.0",
+			},
 		}
 		json.NewEncoder(w).Encode(response)
 	}))
@@ -384,9 +386,13 @@ func TestHealth(t *testing.T) {
 
 func TestGetVersion(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		response := HealthResponse{
-			Status:  "healthy",
-			Version: "2.0.0",
+		// Per AI.md PART 14: Wrapped response format {"ok": true, "data": {...}}
+		response := map[string]interface{}{
+			"ok": true,
+			"data": HealthResponse{
+				Status:  "healthy",
+				Version: "2.0.0",
+			},
 		}
 		json.NewEncoder(w).Encode(response)
 	}))
@@ -844,9 +850,13 @@ func TestHealthConnectionError(t *testing.T) {
 // Test GetVersion with empty version in response
 func TestGetVersionEmptyVersion(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		response := HealthResponse{
-			Status:  "healthy",
-			Version: "",
+		// Per AI.md PART 14: Wrapped response format {"ok": true, "data": {...}}
+		response := map[string]interface{}{
+			"ok": true,
+			"data": HealthResponse{
+				Status:  "healthy",
+				Version: "",
+			},
 		}
 		json.NewEncoder(w).Encode(response)
 	}))
@@ -892,39 +902,47 @@ func TestDoRequestToServerNoToken(t *testing.T) {
 }
 
 // Test search with different pagination values
+// Per AI.md PART 14: Pagination format {page, limit, total, pages}
 func TestSearchPagination(t *testing.T) {
 	tests := []struct {
-		name    string
-		page    int
-		perPage int
+		name  string
+		page  int
+		limit int
 	}{
 		{"first page", 1, 10},
 		{"second page", 2, 10},
-		{"large per page", 1, 100},
+		{"large limit", 1, 100},
 		{"zero values", 0, 0},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				response := SearchResponse{
-					Results:    []SearchResult{},
-					TotalCount: 0,
-					Query:      "test",
-					Page:       tt.page,
-					PerPage:    tt.perPage,
+				// Per AI.md PART 14: Wrapped response format {"ok": true, "data": {...}}
+				response := map[string]interface{}{
+					"ok": true,
+					"data": SearchResponse{
+						Results: []SearchResult{},
+						Query:   "test",
+						Pagination: SearchPagination{
+							Page:  tt.page,
+							Limit: tt.limit,
+							Total: 0,
+							Pages: 0,
+						},
+					},
 				}
 				json.NewEncoder(w).Encode(response)
 			}))
 			defer server.Close()
 
 			client := NewClient(server.URL, "", 30)
-			result, err := client.Search("test", tt.page, tt.perPage)
+			result, err := client.Search("test", tt.page, tt.limit)
 			if err != nil {
 				t.Fatalf("Search() error = %v", err)
 			}
-			if result.Page != tt.page {
-				t.Errorf("Page = %d, want %d", result.Page, tt.page)
+			if result.Pagination.Page != tt.page {
+				t.Errorf("Pagination.Page = %d, want %d", result.Pagination.Page, tt.page)
 			}
 		})
 	}
@@ -966,15 +984,19 @@ func TestAutodiscoverResponseJSON(t *testing.T) {
 }
 
 // Test SearchResponse JSON serialization
+// Per AI.md PART 14: Pagination format {page, limit, total, pages}
 func TestSearchResponseJSON(t *testing.T) {
 	response := SearchResponse{
 		Results: []SearchResult{
-			{ID: "1", Title: "Result 1", URL: "https://example.com/1", Snippet: "snippet", Score: 0.9},
+			{Title: "Result 1", URL: "https://example.com/1", Description: "snippet", Score: 0.9},
 		},
-		TotalCount: 1,
-		Query:      "test",
-		Page:       1,
-		PerPage:    10,
+		Query: "test",
+		Pagination: SearchPagination{
+			Page:  1,
+			Limit: 10,
+			Total: 1,
+			Pages: 1,
+		},
 	}
 
 	data, err := json.Marshal(response)
@@ -987,8 +1009,8 @@ func TestSearchResponseJSON(t *testing.T) {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
 
-	if decoded.TotalCount != response.TotalCount {
-		t.Errorf("TotalCount = %d, want %d", decoded.TotalCount, response.TotalCount)
+	if decoded.Pagination.Total != response.Pagination.Total {
+		t.Errorf("Pagination.Total = %d, want %d", decoded.Pagination.Total, response.Pagination.Total)
 	}
 	if len(decoded.Results) != 1 {
 		t.Errorf("Results length = %d, want 1", len(decoded.Results))

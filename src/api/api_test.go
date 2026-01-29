@@ -967,15 +967,17 @@ func TestHealthResponseSerialization(t *testing.T) {
 
 func TestSearchResponseSerialization(t *testing.T) {
 	resp := SearchResponse{
-		Query:        "test",
-		Category:     "general",
-		Results:      []SearchResult{{Title: "Test", URL: "https://example.com"}},
-		TotalResults: 1,
-		Page:         1,
-		Limit:        20,
-		HasMore:      false,
-		SearchTime:   100.5,
-		Engines:      []string{"google"},
+		Query:    "test",
+		Category: "general",
+		Results:  []SearchResult{{Title: "Test", URL: "https://example.com"}},
+		Pagination: Pagination{
+			Page:  1,
+			Limit: 20,
+			Total: 1,
+			Pages: 1,
+		},
+		SearchTime: 100.5,
+		Engines:    []string{"google"},
 	}
 
 	data, err := json.Marshal(resp)

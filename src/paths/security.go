@@ -8,6 +8,9 @@ import (
 	"strings"
 )
 
+// absFunc is a variable that can be overridden in tests for filepath.Abs
+var absFunc = filepath.Abs
+
 // Path security errors per AI.md PART 5
 var (
 	ErrInvalidPath   = errors.New("invalid path")
@@ -108,12 +111,12 @@ func SafeFilePath(baseDir, userPath string) (string, error) {
 	fullPath := filepath.Join(baseDir, safe)
 
 	// Resolve to absolute
-	absPath, err := filepath.Abs(fullPath)
+	absPath, err := absFunc(fullPath)
 	if err != nil {
 		return "", err
 	}
 
-	absBase, err := filepath.Abs(baseDir)
+	absBase, err := absFunc(baseDir)
 	if err != nil {
 		return "", err
 	}

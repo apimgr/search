@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 	"time"
@@ -14,6 +15,10 @@ import (
 
 	"golang.org/x/crypto/argon2"
 )
+
+// randReader is the random reader used for generating secure values
+// It can be replaced in tests to inject errors
+var randReader io.Reader = rand.Reader
 
 // User represents a registered user
 // Per AI.md PART 31: Account email vs Notification email
@@ -344,7 +349,7 @@ const (
 func HashPassword(password string) (string, error) {
 	// Generate random salt
 	salt := make([]byte, argon2SaltLen)
-	if _, err := rand.Read(salt); err != nil {
+	if _, err := io.ReadFull(randReader, salt); err != nil {
 		return "", err
 	}
 
@@ -402,7 +407,7 @@ func CheckPassword(password, encodedHash string) bool {
 // GenerateToken generates a secure random token
 func GenerateToken(length int) (string, error) {
 	bytes := make([]byte, length)
-	if _, err := rand.Read(bytes); err != nil {
+	if _, err := io.ReadFull(randReader, bytes); err != nil {
 		return "", err
 	}
 	return hex.EncodeToString(bytes), nil

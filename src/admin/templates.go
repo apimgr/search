@@ -97,11 +97,11 @@ func (h *Handler) renderAdminPage(w http.ResponseWriter, page string, data *Admi
                 <li><a href="/admin/server/settings" class="%s"><span class="nav-icon">🖥️</span> General</a></li>
                 <li><a href="/admin/server/branding" class="%s"><span class="nav-icon">🎨</span> Branding</a></li>
                 <li><a href="/admin/server/ssl" class="%s"><span class="nav-icon">🔒</span> SSL/TLS</a></li>
-                <li><a href="/admin/server/tor" class="%s"><span class="nav-icon">🧅</span> Tor</a></li>
-                <li><a href="/admin/server/web" class="%s"><span class="nav-icon">🌐</span> Web Server</a></li>
+                <li><a href="/admin/server/network" class="%s"><span class="nav-icon">🌐</span> Network</a></li>
+                <li><a href="/admin/server/security" class="%s"><span class="nav-icon">🛡️</span> Security</a></li>
+                <li><a href="/admin/server/web" class="%s"><span class="nav-icon">🌍</span> Web Server</a></li>
                 <li><a href="/admin/server/email" class="%s"><span class="nav-icon">📧</span> Email</a></li>
                 <li><a href="/admin/server/announcements" class="%s"><span class="nav-icon">📢</span> Announcements</a></li>
-                <li><a href="/admin/server/geoip" class="%s"><span class="nav-icon">🌍</span> GeoIP</a></li>
                 <li><a href="/admin/server/metrics" class="%s"><span class="nav-icon">📈</span> Metrics</a></li>
                 <li><a href="/admin/scheduler" class="%s"><span class="nav-icon">⏰</span> Scheduler</a></li>
                 <li><a href="/" target="_blank"><span class="nav-icon">👁️</span> View Site</a></li>
@@ -127,11 +127,11 @@ func (h *Handler) renderAdminPage(w http.ResponseWriter, page string, data *Admi
 		activeClass(page, "server-settings"),
 		activeClass(page, "server-branding"),
 		activeClass(page, "server-ssl"),
-		activeClass(page, "server-tor"),
+		activeClass(page, "server-network"),
+		activeClass(page, "server-security"),
 		activeClass(page, "server-web"),
 		activeClass(page, "server-email"),
 		activeClass(page, "server-announcements"),
-		activeClass(page, "server-geoip"),
 		activeClass(page, "server-metrics"),
 		activeClass(page, "scheduler"),
 		data.Title,
@@ -155,6 +155,8 @@ func (h *Handler) renderAdminPage(w http.ResponseWriter, page string, data *Admi
 		h.renderServerBrandingContent(w, data)
 	case "server-ssl":
 		h.renderServerSSLContent(w, data)
+	case "server-network":
+		h.renderServerNetworkContent(w, data)
 	case "server-tor":
 		h.renderServerTorContent(w, data)
 	case "server-web":
@@ -206,6 +208,18 @@ func activeClass(current, page string) string {
 		return "active"
 	}
 	return ""
+}
+
+// formatFlashMessages formats error and success flash messages for display
+func formatFlashMessages(errorMsg, successMsg string) string {
+	var result string
+	if errorMsg != "" {
+		result += fmt.Sprintf(`<div class="flash-message flash-error">%s</div>`, errorMsg)
+	}
+	if successMsg != "" {
+		result += fmt.Sprintf(`<div class="flash-message flash-success">%s</div>`, successMsg)
+	}
+	return result
 }
 
 func (h *Handler) renderDashboardContent(w http.ResponseWriter, data *AdminPageData) {
@@ -940,6 +954,79 @@ func selectedBool(b bool) string {
 		return "selected"
 	}
 	return ""
+}
+
+// renderServerNetworkContent renders the network settings overview page
+// Per AI.md PART 17: Network settings overview with links to Tor and GeoIP
+func (h *Handler) renderServerNetworkContent(w http.ResponseWriter, data *AdminPageData) {
+	// Get status from Extra data
+	torStatus := data.Extra["TorStatus"].(map[string]interface{})
+	geoipStatus := data.Extra["GeoIPStatus"].(map[string]interface{})
+
+	// Tor status display
+	torRunning := torStatus["running"].(bool)
+	torEnabled := torStatus["enabled"].(bool)
+	torStatusText := "Disabled"
+	torStatusClass := "disabled"
+	if torEnabled {
+		torStatusText = "Available"
+		torStatusClass = "warning"
+		if torRunning {
+			torStatusText = "Running"
+			torStatusClass = "enabled"
+		}
+	}
+
+	// GeoIP status display
+	geoipEnabled := geoipStatus["enabled"].(bool)
+	geoipStatusText := "Disabled"
+	geoipStatusClass := "disabled"
+	if geoipEnabled {
+		geoipStatusText = "Enabled"
+		geoipStatusClass = "enabled"
+	}
+
+	fmt.Fprintf(w, `
+            <div class="admin-content">
+                %s
+                <p class="desc-text">Configure network-related settings including Tor hidden service and GeoIP filtering.</p>
+
+                <div class="settings-grid">
+                    <div class="settings-card">
+                        <div class="card-header">
+                            <h3>Tor Hidden Service</h3>
+                            <span class="status-badge %s">%s</span>
+                        </div>
+                        <p>Enable access via Tor for privacy-conscious users. Provides a .onion address for anonymous access.</p>
+                        <div class="card-footer">
+                            <a href="/admin/server/network/tor" class="btn">Configure Tor</a>
+                        </div>
+                    </div>
+
+                    <div class="settings-card">
+                        <div class="card-header">
+                            <h3>GeoIP Filtering</h3>
+                            <span class="status-badge %s">%s</span>
+                        </div>
+                        <p>Block or allow access based on geographic location. Uses MaxMind-compatible MMDB databases.</p>
+                        <div class="card-footer">
+                            <a href="/admin/server/network/geoip" class="btn">Configure GeoIP</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <style>
+                .settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 20px; }
+                .settings-card { background: var(--bg-secondary); border-radius: 8px; padding: 20px; border: 1px solid var(--border-color); }
+                .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+                .card-header h3 { margin: 0; }
+                .card-footer { margin-top: 15px; }
+            </style>`,
+		formatFlashMessages(data.Error, data.Success),
+		torStatusClass, torStatusText,
+		geoipStatusClass, geoipStatusText,
+	)
 }
 
 func (h *Handler) renderServerTorContent(w http.ResponseWriter, data *AdminPageData) {

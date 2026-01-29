@@ -232,6 +232,15 @@ func (m *Manager) SupportedLanguages() []Language {
 	return result
 }
 
+// SupportedLanguageCodes returns the list of supported language codes
+// Used for security.txt Preferred-Languages field per RFC 9116
+func (m *Manager) SupportedLanguageCodes() []string {
+	// Return a copy to prevent external modification
+	result := make([]string, len(m.supported))
+	copy(result, m.supported)
+	return result
+}
+
 // DefaultLanguage returns the default language code
 func (m *Manager) DefaultLanguage() string {
 	return m.defaultLang
