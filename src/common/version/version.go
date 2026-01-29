@@ -8,6 +8,10 @@ import (
 	"strings"
 )
 
+// BrowserUserAgent is the standard User-Agent string for browser-like HTTP requests.
+// Windows 11 Edge - consistent across all engines for privacy and compatibility.
+const BrowserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+
 // Build-time variables - set via ldflags
 var (
 	// Version is the semantic version (e.g., "1.0.0")

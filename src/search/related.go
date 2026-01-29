@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/apimgr/search/src/common/version"
 )
 
 // RelatedSearches provides related search suggestions
@@ -135,7 +137,7 @@ func (rs *RelatedSearches) fetchDuckDuckGo(ctx context.Context, query string) []
 	if err != nil {
 		return nil
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	req.Header.Set("User-Agent", version.BrowserUserAgent)
 
 	resp, err := rs.httpClient.Do(req)
 	if err != nil {
@@ -168,7 +170,7 @@ func (rs *RelatedSearches) fetchGoogle(ctx context.Context, query string) []stri
 	if err != nil {
 		return nil
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	req.Header.Set("User-Agent", version.BrowserUserAgent)
 
 	resp, err := rs.httpClient.Do(req)
 	if err != nil {

@@ -67,7 +67,7 @@ func (e *DuckDuckGo) searchGeneral(ctx context.Context, query *model.Query) ([]m
 		return nil, err
 	}
 
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0")
+	req.Header.Set("User-Agent", UserAgent)
 
 	resp, err := e.client.Do(req)
 	if err != nil {
@@ -218,7 +218,7 @@ func (e *DuckDuckGo) searchImages(ctx context.Context, query *model.Query) ([]mo
 		return nil, err
 	}
 
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	req.Header.Set("User-Agent", UserAgent)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Referer", "https://duckduckgo.com/")
 
@@ -285,7 +285,7 @@ func (e *DuckDuckGo) getVQDToken(ctx context.Context, query string) (string, err
 		return "", err
 	}
 
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	req.Header.Set("User-Agent", UserAgent)
 
 	resp, err := e.client.Do(req)
 	if err != nil {
@@ -382,7 +382,7 @@ func (e *DuckDuckGo) searchVideos(ctx context.Context, query *model.Query) ([]mo
 		return nil, err
 	}
 
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	req.Header.Set("User-Agent", UserAgent)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Referer", "https://duckduckgo.com/")
 
@@ -478,7 +478,7 @@ func (e *DuckDuckGo) searchNews(ctx context.Context, query *model.Query) ([]mode
 		return nil, err
 	}
 
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	req.Header.Set("User-Agent", UserAgent)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Referer", "https://duckduckgo.com/")
 

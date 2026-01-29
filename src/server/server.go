@@ -17,6 +17,7 @@ import (
 	"github.com/apimgr/search/src/api"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/database"
+	"github.com/apimgr/search/src/direct"
 	"github.com/apimgr/search/src/email"
 	"github.com/apimgr/search/src/geoip"
 	"github.com/apimgr/search/src/i18n"
@@ -55,6 +56,7 @@ type Server struct {
 	logManager     *logging.Manager
 	tlsManager     *searchtls.Manager
 	instantManager *instant.Manager
+	directManager  *direct.Manager
 	geoipLookup    *geoip.Lookup
 	mailer         *email.Mailer
 	scheduler      *scheduler.Scheduler
@@ -247,6 +249,9 @@ func New(cfg *config.Config) *Server {
 	// Create instant answer manager
 	instantMgr := instant.NewManager()
 
+	// Create direct answer manager (full-page results per IDEA.md)
+	directMgr := direct.NewManager()
+
 	// Create email mailer
 	// Per AI.md PART 18: Email is auto-enabled if SMTP is configured
 	var mailer *email.Mailer
@@ -378,6 +383,7 @@ func New(cfg *config.Config) *Server {
 		logManager:      logMgr,
 		tlsManager:      tlsMgr,
 		instantManager:  instantMgr,
+		directManager:   directMgr,
 		geoipLookup:     geoLookup,
 		mailer:          mailer,
 		// scheduler is initialized below after Server creation
@@ -438,6 +444,9 @@ func New(cfg *config.Config) *Server {
 
 	// Set instant answer manager on API handler
 	s.apiHandler.SetInstantManager(instantMgr)
+
+	// Set direct answer manager on API handler
+	s.apiHandler.SetDirectManager(directMgr)
 
 	// Set related searches provider on API handler
 	relatedSearches := search.NewRelatedSearches()
@@ -721,6 +730,9 @@ func (s *Server) setupRoutes() http.Handler {
 	// Search
 	mux.HandleFunc("/search", s.handleSearch)
 
+	// Direct answers (full-page results for type:term queries per IDEA.md)
+	mux.HandleFunc("/direct/", s.handleDirect)
+
 	// Autocomplete (per AI.md PART 36 line 28280)
 	mux.HandleFunc("/autocomplete", s.handleAutocomplete)
 
@@ -918,6 +930,17 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Check for direct answer queries (type:term syntax per IDEA.md)
+	// These are full-page results, not search results
+	if s.directManager != nil {
+		answerType, term := s.directManager.Parse(queryStr)
+		if answerType != "" {
+			// Redirect to direct answer page
+			http.Redirect(w, r, "/direct/"+string(answerType)+"/"+url.PathEscape(term), http.StatusFound)
+			return
+		}
+	}
+
 	// Create context with timeout
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
@@ -961,6 +984,192 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.renderSearchResultsWithInstant(w, queryStr, results, category, instantAnswer)
+}
+
+// handleDirect handles direct answer requests
+// URL format: /direct/{type}/{term}
+func (s *Server) handleDirect(w http.ResponseWriter, r *http.Request) {
+	// Only allow GET requests
+	if r.Method != http.MethodGet {
+		s.handleError(w, r, http.StatusMethodNotAllowed, "Method Not Allowed", "Only GET requests are allowed.")
+		return
+	}
+
+	// Parse path: /direct/{type}/{term}
+	path := strings.TrimPrefix(r.URL.Path, "/direct/")
+	parts := strings.SplitN(path, "/", 2)
+	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
+		s.handleError(w, r, http.StatusBadRequest, "Invalid Request", "Please specify a direct answer type and term. Example: /direct/tldr/git")
+		return
+	}
+
+	answerType := direct.AnswerType(parts[0])
+	term, err := url.PathUnescape(parts[1])
+	if err != nil {
+		term = parts[1]
+	}
+	term = strings.TrimSpace(term)
+
+	if term == "" {
+		s.handleError(w, r, http.StatusBadRequest, "Invalid Request", "Please specify a term to look up.")
+		return
+	}
+
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	// Process the direct answer
+	answer, err := s.directManager.ProcessType(ctx, answerType, term)
+	if err != nil {
+		s.handleError(w, r, http.StatusInternalServerError, "Direct Answer Error", "An error occurred while processing your request: "+err.Error())
+		return
+	}
+
+	// Render the direct answer page
+	s.renderDirectAnswer(w, r, answer)
+}
+
+// renderDirectAnswer renders a direct answer page
+func (s *Server) renderDirectAnswer(w http.ResponseWriter, r *http.Request, answer *direct.Answer) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	// Set cache headers based on answer type
+	if cacheTTL := direct.CacheDurations[answer.Type]; cacheTTL > 0 {
+		w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", int(cacheTTL.Seconds())))
+	} else {
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	}
+
+	// Build the page data
+	data := &DirectAnswerPageData{
+		PageData: PageData{
+			Title:       answer.Title,
+			Description: answer.Description,
+			Page:        "direct",
+			Theme:       "dark",
+			Config:      s.config,
+			Query:       fmt.Sprintf("%s:%s", answer.Type, answer.Term),
+		},
+		Answer: answer,
+	}
+
+	// Try to render with template
+	if err := s.renderer.Render(w, "direct", data); err != nil {
+		// Fallback to inline rendering
+		s.renderDirectAnswerFallback(w, answer)
+	}
+}
+
+// DirectAnswerPageData contains data for rendering a direct answer page
+type DirectAnswerPageData struct {
+	PageData
+	Answer *direct.Answer
+}
+
+// renderDirectAnswerFallback renders a direct answer without templates
+func (s *Server) renderDirectAnswerFallback(w http.ResponseWriter, answer *direct.Answer) {
+	baseURL := s.config.Server.BaseURL
+	if baseURL == "" {
+		baseURL = ""
+	}
+	appName := s.config.Server.Branding.AppName
+	if appName == "" {
+		appName = "Search"
+	}
+
+	// Build minimal HTML5 page
+	fmt.Fprint(w, `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>`)
+	fmt.Fprint(w, html.EscapeString(answer.Title))
+	fmt.Fprint(w, ` - `)
+	fmt.Fprint(w, html.EscapeString(appName))
+	fmt.Fprint(w, `</title>
+<style>
+:root{--bg:#0f0f0f;--fg:#e0e0e0;--accent:#4a9eff;--surface:#1a1a1a;--border:#2a2a2a;--code-bg:#1e1e1e}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--fg);line-height:1.6;min-height:100vh}
+.container{max-width:900px;margin:0 auto;padding:20px}
+header{border-bottom:1px solid var(--border);padding-bottom:15px;margin-bottom:20px}
+header h1{font-size:1.5rem;color:var(--accent)}
+header .meta{font-size:0.875rem;color:#888;margin-top:5px}
+.answer-type{display:inline-block;background:var(--accent);color:#000;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:600;margin-right:10px}
+.content{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:20px}
+.content pre{background:var(--code-bg);padding:15px;border-radius:4px;overflow-x:auto;font-family:"SF Mono",Consolas,monospace;font-size:0.875rem}
+.content code{font-family:"SF Mono",Consolas,monospace;font-size:0.875rem}
+.content h2{color:var(--accent);margin:20px 0 10px;font-size:1.1rem}
+.content h3{color:var(--fg);margin:15px 0 8px;font-size:1rem}
+.content p{margin:10px 0}
+.content ul,.content ol{margin:10px 0;padding-left:25px}
+.content li{margin:5px 0}
+.content table{width:100%;border-collapse:collapse;margin:15px 0}
+.content th,.content td{border:1px solid var(--border);padding:8px 12px;text-align:left}
+.content th{background:var(--code-bg)}
+.source{font-size:0.875rem;color:#888;padding-top:15px;border-top:1px solid var(--border)}
+.source a{color:var(--accent);text-decoration:none}
+.source a:hover{text-decoration:underline}
+.error{background:#331111;border-color:#662222;color:#ff6b6b}
+footer{text-align:center;padding:20px;font-size:0.75rem;color:#666}
+footer a{color:var(--accent);text-decoration:none}
+@media(max-width:600px){.container{padding:15px}.content{padding:15px}}
+</style>
+</head>
+<body>
+<div class="container">
+<header>
+<h1><span class="answer-type">`)
+	fmt.Fprint(w, html.EscapeString(string(answer.Type)))
+	fmt.Fprint(w, `</span>`)
+	fmt.Fprint(w, html.EscapeString(answer.Title))
+	fmt.Fprint(w, `</h1>
+<div class="meta">`)
+	if answer.Description != "" {
+		fmt.Fprint(w, html.EscapeString(answer.Description))
+	}
+	fmt.Fprint(w, `</div>
+</header>
+<main>
+<div class="content`)
+	if answer.Error != "" {
+		fmt.Fprint(w, ` error`)
+	}
+	fmt.Fprint(w, `">`)
+	// Content is already HTML formatted by handlers
+	fmt.Fprint(w, answer.Content)
+	fmt.Fprint(w, `</div>`)
+	if answer.Source != "" || answer.SourceURL != "" {
+		fmt.Fprint(w, `<div class="source">Source: `)
+		if answer.SourceURL != "" {
+			fmt.Fprint(w, `<a href="`)
+			fmt.Fprint(w, html.EscapeString(answer.SourceURL))
+			fmt.Fprint(w, `" rel="noopener noreferrer">`)
+			if answer.Source != "" {
+				fmt.Fprint(w, html.EscapeString(answer.Source))
+			} else {
+				fmt.Fprint(w, html.EscapeString(answer.SourceURL))
+			}
+			fmt.Fprint(w, `</a>`)
+		} else {
+			fmt.Fprint(w, html.EscapeString(answer.Source))
+		}
+		fmt.Fprint(w, `</div>`)
+	}
+	fmt.Fprint(w, `
+</main>
+<footer>
+<a href="`)
+	fmt.Fprint(w, baseURL)
+	fmt.Fprint(w, `/">`)
+	fmt.Fprint(w, html.EscapeString(appName))
+	fmt.Fprint(w, `</a> &middot; Direct Answer
+</footer>
+</div>
+</body>
+</html>`)
 }
 
 // renderSearchError renders an error page

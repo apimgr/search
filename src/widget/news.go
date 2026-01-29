@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/version"
 	"github.com/apimgr/search/src/config"
 )
 
@@ -157,7 +158,7 @@ func (f *NewsFetcher) fetchFeed(ctx context.Context, feedURL string) ([]NewsItem
 		return nil, err
 	}
 
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0")
+	req.Header.Set("User-Agent", version.BrowserUserAgent)
 	req.Header.Set("Accept", "application/rss+xml, application/atom+xml, application/xml, text/xml")
 
 	resp, err := f.client.Do(req)

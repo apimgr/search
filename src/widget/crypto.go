@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/version"
 	"github.com/apimgr/search/src/config"
 )
 
@@ -108,7 +109,7 @@ func (f *CryptoFetcher) Fetch(ctx context.Context, params map[string]string) (*W
 	}
 
 	// Set user agent to avoid rate limiting
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0")
+	req.Header.Set("User-Agent", version.BrowserUserAgent)
 
 	resp, err := f.client.Do(req)
 	if err != nil {

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/version"
 	"github.com/apimgr/search/src/config"
 )
 
@@ -147,7 +148,7 @@ func (f *RSSFetcher) fetchSingleFeed(ctx context.Context, feedURL string) ([]RSS
 		return nil, err
 	}
 
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0")
+	req.Header.Set("User-Agent", version.BrowserUserAgent)
 	req.Header.Set("Accept", "application/rss+xml, application/atom+xml, application/xml, text/xml")
 
 	resp, err := f.client.Do(req)
@@ -170,7 +171,7 @@ func (f *RSSFetcher) fetchSingleFeed(ctx context.Context, feedURL string) ([]RSS
 	// Retry and try Atom format
 	resp.Body.Close()
 	req, _ = http.NewRequestWithContext(ctx, "GET", feedURL, nil)
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0")
+	req.Header.Set("User-Agent", version.BrowserUserAgent)
 	resp, err = f.client.Do(req)
 	if err != nil {
 		return nil, err

@@ -795,6 +795,778 @@ headers:https://cloudflare.com
 
 ---
 
+#### directory:{term}
+**Purpose**: Search open directory indexes (servers with directory listing enabled)
+**Triggers**: `directory:music mp3`, `directory:linux iso`, `directory: ebooks pdf`
+```
+directory:beatles mp3
+directory:ubuntu iso
+directory:programming pdf
+directory:movies mkv
+```
+**How it works**:
+Automatically constructs complex search query:
+```
+intitle:"index of" OR intitle:"directory of" {term}
+"parent directory" OR "last modified"
+-html -htm -php -asp -aspx -jsp
+{file_extension if detected}
+```
+**Displays**:
+- List of discovered open directories
+- URL with clickable path
+- File listing preview (scraped if accessible):
+  - Filename
+  - File size
+  - Last modified date
+  - Direct download link
+- Directory metadata (server type, estimated file count)
+- Filter controls:
+  - File type (audio/video/documents/archives/images)
+  - Minimum file size
+  - Date range
+**Sources**: Google, Bing, DuckDuckGo (aggregated, deduplicated)
+**Features**:
+- Smart file extension detection: `directory:music` assumes audio files
+- Site restriction: `directory:site:edu textbook pdf`
+- Exclude terms: `directory:linux iso -ubuntu -mint`
+- Size hints: `directory:movie 1080p` (implies large files)
+- Direct scraping of accessible directories for file listings
+- "Scan directory" button to enumerate files from a result
+
+**Common use cases**:
+| Query | Finds |
+|-------|-------|
+| `directory:mp3 album` | Music directories |
+| `directory:pdf book` | Ebook/document directories |
+| `directory:iso linux` | Linux ISO mirrors |
+| `directory:mkv movie` | Video file directories |
+| `directory:apk android` | Android APK repositories |
+| `directory:rom nintendo` | ROM/emulator file directories |
+
+**Privacy note**: Results link to public servers with open directory listing.
+Files are not hosted by search - only indexed.
+
+---
+
+#### cheat:{command}
+**Purpose**: Detailed command cheatsheets from cheat.sh
+**Triggers**: `cheat:tar`, `cheat:curl`, `cheat: git`
+```
+cheat:rsync
+cheat:find
+cheat:awk
+```
+**Displays**:
+- Command with detailed examples (more than tldr)
+- Multiple use cases with explanations
+- Related commands
+- Community-contributed examples
+- Copy button for each example
+**Source**: cheat.sh API
+**Difference from tldr**: More verbose, community examples, covers edge cases
+
+---
+
+#### http:{code}
+**Purpose**: HTTP status code explanation
+**Triggers**: `http:404`, `http:503`, `http: 418`
+```
+http:200
+http:301
+http:429
+http:502
+```
+**Displays**:
+- Status code and official name
+- Category (1xx/2xx/3xx/4xx/5xx)
+- Detailed explanation
+- Common causes
+- How to fix (for errors)
+- Related status codes
+- RFC reference
+**Source**: Built-in database (RFC 9110)
+
+---
+
+#### port:{number}
+**Purpose**: Port number to service mapping
+**Triggers**: `port:22`, `port:443`, `port: 8080`
+```
+port:80
+port:3306
+port:5432
+port:6379
+```
+**Displays**:
+- Port number and protocol (TCP/UDP)
+- Service name
+- Description
+- Common software using this port
+- Security notes (if applicable)
+- IANA registration status
+- Alternative ports for the service
+**Source**: IANA port registry + common knowledge database
+
+---
+
+#### cron:{expression}
+**Purpose**: Cron expression explainer and validator
+**Triggers**: `cron:*/5 * * * *`, `cron:0 2 * * 0`
+```
+cron:0 0 * * *
+cron:*/15 * * * *
+cron:0 9-17 * * 1-5
+```
+**Displays**:
+- Human-readable explanation
+- Next 5 scheduled run times
+- Visual breakdown of each field
+- Field editor (interactive)
+- Common presets (hourly, daily, weekly, monthly)
+- Timezone selector
+**Source**: Built-in parser
+**Features**: Validates expression, warns about common mistakes
+
+---
+
+#### chmod:{permissions}
+**Purpose**: Unix permission calculator
+**Triggers**: `chmod:755`, `chmod:rwxr-xr-x`, `chmod: 644`
+```
+chmod:777
+chmod:600
+chmod:rwx------
+chmod:u+x,g+r
+```
+**Displays**:
+- Numeric notation (octal)
+- Symbolic notation (rwx)
+- Visual permission grid (owner/group/other × read/write/execute)
+- Interactive toggle to modify
+- Explanation of what each permission means
+- Common use cases for this permission set
+- Security warnings (e.g., 777 is dangerous)
+**Source**: Built-in calculator
+
+---
+
+#### regex:{pattern}
+**Purpose**: Regular expression tester and explainer
+**Triggers**: `regex:^[a-z]+$`, `regex:\d{3}-\d{4}`
+```
+regex:^[\w.-]+@[\w.-]+\.\w+$
+regex:\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b
+regex:(?<=@)\w+
+```
+**Displays**:
+- Pattern breakdown (visual tree)
+- Explanation of each component
+- Test input field with live highlighting
+- Match results with groups
+- Common regex library differences (PCRE, RE2, JS)
+- Optimization suggestions
+**Source**: Built-in parser + regex101-style engine
+**Features**: Supports test strings, shows capture groups
+
+---
+
+#### jwt:{token}
+**Purpose**: JWT (JSON Web Token) decoder
+**Triggers**: `jwt:eyJhbG...`
+```
+jwt:eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U
+```
+**Displays**:
+- Header (algorithm, type) - decoded JSON
+- Payload (claims) - decoded JSON with timestamps converted
+- Signature (verification status if secret provided)
+- Expiration status (valid/expired)
+- Standard claims explained (iat, exp, sub, iss, aud)
+- Copy buttons for each section
+**Source**: Built-in decoder
+**Security**: Never logs tokens, decoding is client-side only
+
+---
+
+#### timestamp:{value}
+**Purpose**: Unix timestamp converter
+**Triggers**: `timestamp:1704067200`, `timestamp:2024-01-01`
+```
+timestamp:now
+timestamp:1700000000
+timestamp:2025-06-15T14:30:00Z
+```
+**Displays**:
+- Unix timestamp (seconds)
+- Unix timestamp (milliseconds)
+- ISO 8601 format
+- RFC 2822 format
+- Human readable (multiple formats)
+- Relative time (X days ago / in X days)
+- Multiple timezone conversions
+**Source**: Built-in converter
+**Features**: Bidirectional (timestamp ↔ date), timezone selector
+
+---
+
+#### asn:{number}
+**Purpose**: Autonomous System Number lookup
+**Triggers**: `asn:15169`, `asn:AS13335`, `asn: 32934`
+```
+asn:15169
+asn:13335
+asn:32934
+```
+**Displays**:
+- ASN number and name
+- Organization/company
+- Country of registration
+- IP prefixes announced (IPv4 and IPv6)
+- Number of IPs
+- Upstream/downstream peers
+- Looking glass links
+- Historical changes
+**Source**: RIPE NCC / BGPView / ipinfo.io
+
+---
+
+#### subnet:{cidr}
+**Purpose**: Subnet/CIDR calculator
+**Triggers**: `subnet:192.168.1.0/24`, `subnet:10.0.0.0/8`
+```
+subnet:192.168.1.0/24
+subnet:10.0.0.0/16
+subnet:172.16.0.0/12
+```
+**Displays**:
+- Network address
+- Broadcast address
+- First/last usable host
+- Total hosts
+- Subnet mask (decimal and binary)
+- Wildcard mask
+- CIDR notation
+- Binary representation
+- Subnetting table (split into smaller subnets)
+- Supernetting (combine into larger)
+**Source**: Built-in calculator
+**Features**: IPv4 and IPv6 support
+
+---
+
+#### robots:{domain}
+**Purpose**: Fetch and display robots.txt
+**Triggers**: `robots:google.com`, `robots:github.com`
+```
+robots:example.com
+robots:reddit.com
+```
+**Displays**:
+- Full robots.txt content (syntax highlighted)
+- Parsed rules by user-agent
+- Disallowed paths
+- Allowed paths
+- Sitemap references
+- Crawl-delay directives
+- Analysis: what's blocked, what's allowed
+- Warnings about common issues
+**Source**: Direct fetch from domain/robots.txt
+
+---
+
+#### sitemap:{domain}
+**Purpose**: Fetch and parse sitemap.xml
+**Triggers**: `sitemap:example.com`, `sitemap:blog.example.com`
+```
+sitemap:github.com
+sitemap:news.ycombinator.com
+```
+**Displays**:
+- Sitemap index (if multiple sitemaps)
+- URL list with last modified dates
+- URL count and structure analysis
+- Frequency/priority if specified
+- Tree view of site structure
+- Export options (CSV, JSON)
+- Filter by path pattern
+**Source**: Direct fetch from domain/sitemap.xml (and robots.txt sitemap references)
+
+---
+
+#### tech:{domain}
+**Purpose**: Technology stack detection
+**Triggers**: `tech:github.com`, `tech:stripe.com`
+```
+tech:netflix.com
+tech:shopify.com
+tech:cloudflare.com
+```
+**Displays**:
+- Web server (nginx, Apache, etc.)
+- Programming language/framework
+- CMS/Platform (WordPress, Shopify, etc.)
+- JavaScript libraries/frameworks
+- Analytics tools
+- CDN provider
+- SSL certificate issuer
+- Hosting provider
+- Security headers present
+**Source**: HTTP headers + HTML analysis + Wappalyzer-style detection
+**Features**: Confidence scores, detection method shown
+
+---
+
+#### feed:{domain}
+**Purpose**: Discover RSS/Atom feeds on a website
+**Triggers**: `feed:example.com`, `feed:blog.example.com`
+```
+feed:bbc.com
+feed:techcrunch.com
+feed:reddit.com/r/programming
+```
+**Displays**:
+- List of discovered feeds (RSS, Atom, JSON Feed)
+- Feed title and description
+- Last update time
+- Entry count
+- Subscribe links (various readers)
+- Feed preview (latest 5 items)
+- Auto-discovery method used
+**Source**: HTML link tags, common paths (/feed, /rss, /atom.xml), robots.txt
+
+---
+
+#### expand:{url}
+**Purpose**: Expand shortened URLs and reveal destination
+**Triggers**: `expand:bit.ly/abc123`, `expand:t.co/xyz`
+```
+expand:bit.ly/3xKpQr5
+expand:tinyurl.com/example
+expand:t.co/abc123
+```
+**Displays**:
+- Original short URL
+- Final destination URL
+- Redirect chain (all hops)
+- Each redirect's status code
+- Final page title and description
+- Screenshot preview (optional)
+- Safety warning if suspicious
+**Source**: Direct HTTP follow with redirect capture
+**Supported shorteners**: bit.ly, t.co, tinyurl, goo.gl, ow.ly, is.gd, and any HTTP redirect
+
+---
+
+#### safe:{url}
+**Purpose**: URL safety and reputation check
+**Triggers**: `safe:suspicious-site.com`, `safe:example.com`
+```
+safe:google.com
+safe:some-unknown-site.xyz
+```
+**Displays**:
+- Overall safety rating (Safe/Suspicious/Malicious)
+- Google Safe Browsing status
+- Domain age
+- SSL certificate validity
+- WHOIS privacy (hidden owner = flag)
+- Known blacklist presence
+- Redirect chain analysis
+- Phishing indicators
+- Related malicious domains
+**Source**: Google Safe Browsing API, domain reputation databases, SSL check
+**Privacy**: Only domain is checked, not full URLs with parameters
+
+---
+
+#### html:{text}
+**Purpose**: HTML entity encode/decode
+**Triggers**: `html:encode <script>`, `html:decode &lt;script&gt;`
+```
+html:encode <div class="test">Hello & Goodbye</div>
+html:decode &lt;p&gt;Test &amp; Demo&lt;/p&gt;
+html:&copy; &rarr; &mdash;
+```
+**Displays**:
+- Encoded/decoded result
+- Character-by-character breakdown
+- Named entities vs numeric entities
+- Copy button
+- Bidirectional converter (input either format)
+**Source**: Built-in encoder
+**Features**: Named entities (&amp;), decimal (&#38;), hex (&#x26;)
+
+---
+
+#### unicode:{char}
+**Purpose**: Unicode character information
+**Triggers**: `unicode:U+1F600`, `unicode:😀`, `unicode:A`
+```
+unicode:U+1F600
+unicode:😀
+unicode:\u0041
+unicode:SNOWMAN
+```
+**Displays**:
+- Character rendered large
+- Code point (U+XXXX)
+- UTF-8 bytes (hex)
+- UTF-16 encoding
+- HTML entity
+- Name and category
+- Block/script
+- Related characters
+- Copy in various formats
+**Source**: Unicode database (built-in)
+
+---
+
+#### emoji:{name}
+**Purpose**: Emoji search and information
+**Triggers**: `emoji:smile`, `emoji:heart`, `emoji:flag`
+```
+emoji:thumbs up
+emoji:fire
+emoji:country flag
+emoji:cat
+```
+**Displays**:
+- Matching emojis with names
+- Unicode code points
+- Shortcodes (:smile:, :+1:)
+- Copy buttons
+- Categories (smileys, animals, flags, etc.)
+- Skin tone variants (if applicable)
+- Platform rendering differences
+- Recently added emojis labeled
+**Source**: Unicode CLDR + emoji-data
+
+---
+
+#### escape:{text}
+**Purpose**: String escaper for various languages/formats
+**Triggers**: `escape:json "hello\nworld"`, `escape:sql O'Brien`
+```
+escape:json {"key": "value with \"quotes\""}
+escape:sql It's a test
+escape:html <script>alert('xss')</script>
+escape:url hello world?foo=bar
+escape:regex file.txt
+escape:shell $HOME/*.txt
+```
+**Displays**:
+- Escaped output for multiple languages simultaneously:
+  - JSON
+  - SQL (MySQL, PostgreSQL, SQLite)
+  - HTML
+  - URL (percent encoding)
+  - Regex
+  - Shell (bash)
+  - JavaScript
+  - Python
+  - C/C++
+- Copy button for each
+- Unescape mode available
+**Source**: Built-in escapers
+
+---
+
+#### json:{data}
+**Purpose**: JSON formatter, validator, and tools
+**Triggers**: `json:{"key":"value"}`, `json:validate {...}`
+```
+json:{"name":"test","values":[1,2,3]}
+json:minify { "spaced" : "json" }
+json:validate {"test":}
+```
+**Displays**:
+- Formatted/pretty-printed JSON (syntax highlighted)
+- Collapsible tree view
+- Validation errors with line numbers
+- Minified version
+- JSON path navigator
+- Type annotations
+- Size (bytes, keys, depth)
+**Modes**:
+- `json:` or `json:format` - Pretty print
+- `json:minify` - Compress
+- `json:validate` - Check validity
+- `json:tree` - Tree view
+**Source**: Built-in parser
+
+---
+
+#### yaml:{data}
+**Purpose**: YAML formatter, validator, and converter
+**Triggers**: `yaml:key: value`, `yaml:to-json {...}`
+```
+yaml:name: test
+  items:
+    - one
+    - two
+yaml:to-json key: value
+yaml:from-json {"key": "value"}
+```
+**Displays**:
+- Formatted YAML (syntax highlighted)
+- JSON equivalent
+- Validation errors
+- Type detection
+- Anchor/alias resolution
+**Modes**:
+- `yaml:` - Format/validate
+- `yaml:to-json` - Convert to JSON
+- `yaml:from-json` - Convert JSON to YAML
+**Source**: Built-in parser
+
+---
+
+#### diff:{texts}
+**Purpose**: Text/code comparison tool
+**Triggers**: `diff:old|||new` (triple pipe separator)
+```
+diff:hello world|||hello there
+diff:function old()|||function new()
+```
+**Displays**:
+- Side-by-side comparison
+- Unified diff format
+- Inline highlighting of changes
+- Line numbers
+- Added/removed/changed statistics
+- Word-level diff option
+- Ignore whitespace option
+- Copy diff output
+**Source**: Built-in diff algorithm
+**Features**: Syntax highlighting for code, multiple diff formats
+
+---
+
+#### beautify:{code}
+**Purpose**: Code beautifier/formatter
+**Triggers**: `beautify:js {...}`, `beautify:css {...}`
+```
+beautify:js function test(){return{a:1,b:2}}
+beautify:css .class{color:red;margin:0}
+beautify:html <div><p>test</p></div>
+beautify:sql SELECT * FROM users WHERE id=1
+```
+**Displays**:
+- Formatted code (syntax highlighted)
+- Indentation options (2/4 spaces, tabs)
+- Style options per language
+- Minified version toggle
+- Copy button
+- Line count before/after
+**Supported languages**:
+- JavaScript/TypeScript
+- CSS/SCSS/LESS
+- HTML/XML
+- SQL
+- JSON (redirects to json:)
+- PHP
+- Python (via autopep8 rules)
+**Source**: Built-in formatters
+
+---
+
+#### case:{text}
+**Purpose**: Text case converter
+**Triggers**: `case:hello world`, `case:camel hello world`
+```
+case:Hello World
+case:upper hello world
+case:snake Hello World
+case:camel hello-world
+```
+**Displays all conversions simultaneously**:
+- UPPERCASE
+- lowercase
+- Title Case
+- Sentence case
+- camelCase
+- PascalCase
+- snake_case
+- kebab-case
+- SCREAMING_SNAKE_CASE
+- dot.case
+- Copy button for each
+**Source**: Built-in converter
+
+---
+
+#### slug:{text}
+**Purpose**: URL slug generator
+**Triggers**: `slug:Hello World!`, `slug:Café & Résumé`
+```
+slug:Hello, World! How are you?
+slug:Über die Brücke
+slug:日本語テスト
+```
+**Displays**:
+- Generated slug (hello-world-how-are-you)
+- Character replacements shown
+- Options:
+  - Separator (- or _)
+  - Lowercase only
+  - Max length
+  - Transliteration (ü→u, é→e)
+  - CJK romanization
+- Multiple slug styles
+- Copy button
+**Source**: Built-in generator
+
+---
+
+#### lorem:{count}
+**Purpose**: Lorem ipsum placeholder text generator
+**Triggers**: `lorem:3`, `lorem:5 paragraphs`, `lorem:100 words`
+```
+lorem:3
+lorem:5 paragraphs
+lorem:100 words
+lorem:50 sentences
+```
+**Displays**:
+- Generated lorem ipsum text
+- Word/character/paragraph count
+- Options:
+  - Paragraphs (default)
+  - Sentences
+  - Words
+  - Characters
+  - Start with "Lorem ipsum..." toggle
+- Alternative generators:
+  - Hipster ipsum
+  - Bacon ipsum
+  - Tech ipsum
+- Copy button
+**Source**: Built-in generator
+
+---
+
+#### word:{text}
+**Purpose**: Word, character, and text statistics
+**Triggers**: `word:The quick brown fox`
+```
+word:The quick brown fox jumps over the lazy dog.
+word:This is a longer piece of text to analyze...
+```
+**Displays**:
+- Character count (with/without spaces)
+- Word count
+- Sentence count
+- Paragraph count
+- Line count
+- Average word length
+- Reading time estimate
+- Speaking time estimate
+- Most frequent words
+- Unique words percentage
+- Text input area for live counting
+**Source**: Built-in analyzer
+
+---
+
+#### useragent:{string}
+**Purpose**: Parse and explain user agent strings
+**Triggers**: `useragent:Mozilla/5.0...`
+```
+useragent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+useragent:my (detect current browser)
+```
+**Displays**:
+- Browser name and version
+- Rendering engine
+- Operating system and version
+- Device type (desktop/mobile/tablet)
+- Architecture (x64, ARM)
+- Bot detection
+- Parsed components breakdown
+- Raw string analysis
+- Known UA database match
+**Source**: Built-in parser + UA database
+**Features**: `useragent:my` shows current browser's UA
+
+---
+
+#### mime:{type}
+**Purpose**: MIME type information and lookup
+**Triggers**: `mime:application/json`, `mime:pdf`, `mime:.mp4`
+```
+mime:application/json
+mime:image/png
+mime:pdf
+mime:.docx
+```
+**Displays**:
+- Full MIME type
+- File extensions associated
+- Type category (text, image, audio, video, application)
+- Description
+- Common software that uses it
+- Binary vs text
+- Compressible flag
+- IANA registration status
+- Related MIME types
+**Source**: IANA media types registry
+**Features**: Lookup by MIME type, extension, or common name
+
+---
+
+#### license:{name}
+**Purpose**: Software license information and text
+**Triggers**: `license:MIT`, `license:GPL-3.0`, `license:Apache`
+```
+license:MIT
+license:GPL-3.0
+license:Apache-2.0
+license:BSD-3-Clause
+license:ISC
+```
+**Displays**:
+- License name and SPDX identifier
+- Full license text
+- Summary (permissions, conditions, limitations)
+- OSI approved status
+- Copyleft/permissive classification
+- Compatibility with other licenses
+- Use cases (when to use this license)
+- Copy button for full text
+- Template with placeholders filled
+**Source**: SPDX license list + choosealicense.com data
+
+---
+
+#### country:{code}
+**Purpose**: Country information lookup
+**Triggers**: `country:US`, `country:Japan`, `country:DE`
+```
+country:US
+country:United States
+country:JP
+country:276
+```
+**Displays**:
+- Country name (official and common)
+- Flag emoji and SVG
+- ISO codes (alpha-2, alpha-3, numeric)
+- Capital city
+- Region and subregion
+- Population
+- Area (km²)
+- Currency (code, name, symbol)
+- Languages (official)
+- Calling code
+- TLD (top-level domain)
+- Timezone(s)
+- Driving side
+- Map preview
+**Source**: REST Countries API / built-in database
+
+---
+
 ### Direct Answer Behavior
 
 **Query Processing Order:**

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/direct"
 	"github.com/apimgr/search/src/instant"
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
@@ -33,6 +34,7 @@ type Handler struct {
 	aggregator      *search.Aggregator
 	widgetManager   *widget.Manager
 	instantManager  *instant.Manager
+	directManager   *direct.Manager
 	relatedSearches *search.RelatedSearches
 	startTime       time.Time
 }
@@ -55,6 +57,11 @@ func (h *Handler) SetWidgetManager(wm *widget.Manager) {
 // SetInstantManager sets the instant answer manager for the API handler
 func (h *Handler) SetInstantManager(im *instant.Manager) {
 	h.instantManager = im
+}
+
+// SetDirectManager sets the direct answer manager for the API handler
+func (h *Handler) SetDirectManager(dm *direct.Manager) {
+	h.directManager = dm
 }
 
 // SetRelatedSearches sets the related searches provider for the API handler
@@ -94,6 +101,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 
 	// Instant Answers
 	mux.HandleFunc("/api/v1/instant", h.handleInstantAnswer)
+
+	// Direct Answers (full-page results per IDEA.md)
+	mux.HandleFunc("/api/v1/direct/", h.handleDirectAnswer)
 
 	// Server info pages (per AI.md PART 16)
 	mux.HandleFunc("/api/v1/server/about", h.handleServerAbout)
@@ -585,7 +595,7 @@ func (h *Handler) fetchAutocompleteSuggestions(ctx context.Context, query string
 		return []string{}
 	}
 
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0")
+	req.Header.Set("User-Agent", engines.UserAgent)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -1069,6 +1079,121 @@ func (h *Handler) handleInstantAnswer(w http.ResponseWriter, r *http.Request) {
 			Data:    answer.Data,
 			Source:  answer.Source,
 			Found:   true,
+		},
+		Meta: &APIMeta{
+			Version:     APIVersion,
+			ProcessTime: float64(time.Since(start).Microseconds()) / 1000,
+		},
+	})
+}
+
+// DirectAnswerResponse represents direct answer API response
+type DirectAnswerResponse struct {
+	Type        string                 `json:"type"`
+	Term        string                 `json:"term"`
+	Title       string                 `json:"title"`
+	Description string                 `json:"description,omitempty"`
+	Content     string                 `json:"content"`
+	Data        map[string]interface{} `json:"data,omitempty"`
+	Source      string                 `json:"source,omitempty"`
+	SourceURL   string                 `json:"source_url,omitempty"`
+	CacheTTL    int                    `json:"cache_ttl_seconds,omitempty"`
+	Error       string                 `json:"error,omitempty"`
+	Found       bool                   `json:"found"`
+}
+
+// handleDirectAnswer handles /api/v1/direct/{type}/{term} requests
+func (h *Handler) handleDirectAnswer(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+
+	// Only allow GET requests
+	if r.Method != http.MethodGet {
+		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", "Only GET requests are supported")
+		return
+	}
+
+	// Parse path: /api/v1/direct/{type}/{term}
+	path := strings.TrimPrefix(r.URL.Path, "/api/v1/direct/")
+	parts := strings.SplitN(path, "/", 2)
+	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
+		h.errorResponse(w, http.StatusBadRequest, "Invalid request", "URL format: /api/v1/direct/{type}/{term}")
+		return
+	}
+
+	answerType := direct.AnswerType(parts[0])
+	term, err := url.PathUnescape(parts[1])
+	if err != nil {
+		term = parts[1]
+	}
+	term = strings.TrimSpace(term)
+
+	if term == "" {
+		h.errorResponse(w, http.StatusBadRequest, "Invalid request", "Term is required")
+		return
+	}
+
+	if h.directManager == nil {
+		h.jsonResponse(w, http.StatusOK, &APIResponse{
+			OK: true,
+			Data: DirectAnswerResponse{
+				Type:  string(answerType),
+				Term:  term,
+				Found: false,
+				Error: "Direct answers not available",
+			},
+			Meta: &APIMeta{
+				Version:     APIVersion,
+				ProcessTime: float64(time.Since(start).Microseconds()) / 1000,
+			},
+		})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	answer, err := h.directManager.ProcessType(ctx, answerType, term)
+	if err != nil {
+		h.errorResponse(w, http.StatusInternalServerError, "Failed to process direct answer", err.Error())
+		return
+	}
+
+	if answer == nil {
+		h.jsonResponse(w, http.StatusOK, &APIResponse{
+			OK: true,
+			Data: DirectAnswerResponse{
+				Type:  string(answerType),
+				Term:  term,
+				Found: false,
+			},
+			Meta: &APIMeta{
+				Version:     APIVersion,
+				ProcessTime: float64(time.Since(start).Microseconds()) / 1000,
+			},
+		})
+		return
+	}
+
+	// Calculate cache TTL in seconds
+	cacheTTL := 0
+	if ttl := direct.CacheDurations[answerType]; ttl > 0 {
+		cacheTTL = int(ttl.Seconds())
+	}
+
+	h.jsonResponse(w, http.StatusOK, &APIResponse{
+		OK: true,
+		Data: DirectAnswerResponse{
+			Type:        string(answer.Type),
+			Term:        answer.Term,
+			Title:       answer.Title,
+			Description: answer.Description,
+			Content:     answer.Content,
+			Data:        answer.Data,
+			Source:      answer.Source,
+			SourceURL:   answer.SourceURL,
+			CacheTTL:    cacheTTL,
+			Error:       answer.Error,
+			Found:       answer.Error == "",
 		},
 		Meta: &APIMeta{
 			Version:     APIVersion,

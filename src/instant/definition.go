@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/apimgr/search/src/common/version"
 )
 
 // DefinitionHandler handles word definitions
@@ -69,7 +71,7 @@ func (h *DefinitionHandler) Handle(ctx context.Context, query string) (*Answer, 
 		return nil, err
 	}
 
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0")
+	req.Header.Set("User-Agent", version.BrowserUserAgent)
 
 	resp, err := h.client.Do(req)
 	if err != nil {

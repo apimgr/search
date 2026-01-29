@@ -1,0 +1,2 @@
+server:
+    primary: http://127.0.0.1:42621

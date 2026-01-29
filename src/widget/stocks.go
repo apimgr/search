@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/version"
 	"github.com/apimgr/search/src/config"
 )
 
@@ -118,7 +119,7 @@ func (f *StocksFetcher) fetchQuotes(ctx context.Context, symbols []string) ([]St
 	}
 
 	// Set headers to appear as browser
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0")
+	req.Header.Set("User-Agent", version.BrowserUserAgent)
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := f.client.Do(req)
