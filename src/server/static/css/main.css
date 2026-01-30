@@ -787,10 +787,13 @@ html.theme-light .theme-icon-dark {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
+    max-width: 100%;
+    overflow: hidden;
 }
 
 .tor-icon {
     font-size: 1.1rem;
+    flex-shrink: 0;
 }
 
 .onion-link {
@@ -798,11 +801,30 @@ html.theme-light .theme-icon-dark {
     font-size: 0.85rem;
     color: var(--accent-primary);
     word-break: break-all;
+    overflow-wrap: anywhere;
+    min-width: 0;
 }
 
 .onion-link:hover {
     color: var(--accent-secondary);
     text-decoration: underline;
+}
+
+/* Mobile: stack tor address vertically and truncate with ellipsis */
+@media (max-width: 480px) {
+    .tor-address {
+        flex-direction: column;
+        padding: 0.5rem 0.75rem;
+        text-align: center;
+    }
+
+    .onion-link {
+        font-size: 0.7rem;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
 }
 
 /* Search Results Page */
