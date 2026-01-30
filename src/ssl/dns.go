@@ -1,4 +1,4 @@
-package tls
+package ssl
 
 import (
 	"crypto/aes"

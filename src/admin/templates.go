@@ -6,9 +6,8 @@ import (
 	"strings"
 	"time"
 
-	tlspkg "github.com/apimgr/search/src/tls"
-
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/ssl"
 )
 
 // renderAdminLogin renders the admin login page
@@ -752,7 +751,7 @@ func (h *Handler) renderServerBrandingContent(w http.ResponseWriter, data *Admin
 
 func (h *Handler) renderServerSSLContent(w http.ResponseWriter, data *AdminPageData) {
 	// Get DNS providers from Extra data
-	dnsProviders, _ := data.Extra["DNSProviders"].([]tlspkg.DNSProviderInfo)
+	dnsProviders, _ := data.Extra["DNSProviders"].([]ssl.DNSProviderInfo)
 	currentProvider, _ := data.Extra["CurrentDNSProvider"].(string)
 	dns01Configured, _ := data.Extra["DNS01Configured"].(bool)
 	dns01ValidatedAt, _ := data.Extra["DNS01ValidatedAt"].(string)

@@ -29,7 +29,7 @@ import (
 	"github.com/apimgr/search/src/search/bangs"
 	"github.com/apimgr/search/src/search/engines"
 	"github.com/apimgr/search/src/service"
-	searchtls "github.com/apimgr/search/src/tls"
+	"github.com/apimgr/search/src/ssl"
 	"github.com/apimgr/search/src/user"
 	"github.com/apimgr/search/src/widget"
 )
@@ -54,7 +54,7 @@ type Server struct {
 	bangManager    *bangs.Manager
 	widgetManager  *widget.Manager
 	logManager     *logging.Manager
-	tlsManager     *searchtls.Manager
+	tlsManager     *ssl.Manager
 	instantManager *instant.Manager
 	directManager  *direct.Manager
 	geoipLookup    *geoip.Lookup
@@ -180,10 +180,10 @@ func New(cfg *config.Config) *Server {
 	}
 
 	// Create TLS manager if SSL is enabled
-	var tlsMgr *searchtls.Manager
+	var tlsMgr *ssl.Manager
 	if cfg.Server.SSL.Enabled {
 		dataDir := config.GetDataDir()
-		tlsMgr = searchtls.NewManager(&cfg.Server.SSL, dataDir)
+		tlsMgr = ssl.NewManager(&cfg.Server.SSL, dataDir)
 	}
 
 	// Create GeoIP lookup if enabled (uses MMDB from sapics/ip-location-db)
@@ -606,7 +606,7 @@ func (s *Server) startSinglePortMode(mux http.Handler, port int) error {
 		// Start HTTP->HTTPS redirect server on port 80 if configured
 		if s.config.Server.SSL.AutoTLS {
 			redirectAddr := fmt.Sprintf("%s:80", s.config.Server.Address)
-			s.redirectServer = searchtls.StartHTTPSRedirect(redirectAddr, s.config.Server.Port)
+			s.redirectServer = ssl.StartHTTPSRedirect(redirectAddr, s.config.Server.Port)
 		}
 
 		// Start HTTPS server

@@ -20,7 +20,7 @@ import (
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/database"
 	"github.com/apimgr/search/src/email"
-	tlspkg "github.com/apimgr/search/src/tls"
+	"github.com/apimgr/search/src/ssl"
 	"gopkg.in/yaml.v3"
 )
 
@@ -1194,7 +1194,7 @@ func (h *Handler) handleServerSSL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get DNS providers list for template
-	dnsProviders := tlspkg.DNSProviders()
+	dnsProviders := ssl.DNSProviders()
 
 	data := &AdminPageData{
 		Title:   "SSL/TLS",
@@ -1234,7 +1234,7 @@ func (h *Handler) processServerSSLUpdate(w http.ResponseWriter, r *http.Request)
 	if dnsProvider != "" && h.config.Server.SSL.LetsEncrypt.Challenge == "dns-01" {
 		// Collect provider credentials from form
 		credentials := make(map[string]string)
-		providerInfo := tlspkg.GetProviderByID(dnsProvider)
+		providerInfo := ssl.GetProviderByID(dnsProvider)
 		if providerInfo != nil {
 			for _, field := range providerInfo.Fields {
 				val := r.FormValue("dns_" + field.Name)
@@ -1246,14 +1246,14 @@ func (h *Handler) processServerSSLUpdate(w http.ResponseWriter, r *http.Request)
 
 		// Encrypt and store credentials if any were provided
 		if len(credentials) > 0 {
-			encrypted, err := tlspkg.EncryptCredentials(credentials, h.config.Server.SecretKey)
+			encrypted, err := ssl.EncryptCredentials(credentials, h.config.Server.SecretKey)
 			if err != nil {
 				http.Redirect(w, r, "/admin/server/ssl?error=Failed+to+encrypt+credentials", http.StatusSeeOther)
 				return
 			}
 			h.config.Server.SSL.DNS01.Provider = dnsProvider
 			h.config.Server.SSL.DNS01.CredentialsEncrypted = encrypted
-			h.config.Server.SSL.DNS01.ValidatedAt = tlspkg.ValidatedAtNow()
+			h.config.Server.SSL.DNS01.ValidatedAt = ssl.ValidatedAtNow()
 		}
 	}
 
