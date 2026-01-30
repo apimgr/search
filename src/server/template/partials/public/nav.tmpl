@@ -1,6 +1,10 @@
 {{define "nav"}}
-<nav class="nav" id="nav-menu">
-    {{/* Desktop: inline links | Mobile: hamburger only */}}
+<!-- Nav bar: separate row below header (CSS-only mobile menu per AI.md PART 16) -->
+<nav class="nav">
+    <!-- Hidden checkbox controls menu state - NO JavaScript -->
+    <input type="checkbox" id="nav-toggle" class="nav-checkbox" hidden>
+
+    <!-- Desktop: inline links | Mobile: hamburger only -->
     <div class="nav-links">
         <a href="/" class="nav-link{{if eq .Page "home"}} active{{end}}">Home</a>
         {{/* Search header form for non-home pages */}}
@@ -27,23 +31,24 @@
         </button>
     </div>
 
-    {{/* Mobile: hamburger menu toggle (far right of nav row) */}}
-    <button class="nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="nav-panel">
+    <!-- Mobile: hamburger toggle (checkbox label) - NO JavaScript -->
+    <label for="nav-toggle" class="nav-toggle" aria-label="Toggle navigation">
         <span></span>
         <span></span>
         <span></span>
-    </button>
+    </label>
+
+    <!-- Slide-in panel for mobile -->
+    <div class="nav-panel">
+        <label for="nav-toggle" class="nav-close" aria-label="Close menu">&times;</label>
+        <a href="/" class="nav-panel-link{{if eq .Page "home"}} active{{end}}">Home</a>
+        <button class="theme-toggle nav-panel-theme" aria-label="Toggle theme">
+            <span class="theme-icon-dark">☀️ Light Mode</span>
+            <span class="theme-icon-light">🌙 Dark Mode</span>
+        </button>
+    </div>
+
+    <!-- Overlay - clicking label unchecks checkbox, closing menu (NO JavaScript) -->
+    <label for="nav-toggle" class="nav-overlay"></label>
 </nav>
-
-{{/* Slide-in panel for mobile (hidden by default) */}}
-<div class="nav-panel" id="nav-panel">
-    <a href="/" class="nav-panel-link{{if eq .Page "home"}} active{{end}}">Home</a>
-    <button class="theme-toggle nav-panel-theme" aria-label="Toggle theme">
-        <span class="theme-icon-dark">☀️ Light Mode</span>
-        <span class="theme-icon-light">🌙 Dark Mode</span>
-    </button>
-</div>
-
-{{/* Overlay for mobile menu (click to close) */}}
-<div class="nav-overlay" id="nav-overlay"></div>
 {{end}}

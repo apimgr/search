@@ -18,6 +18,9 @@ const (
 	AnswerTypeConvert    AnswerType = "convert"
 	AnswerTypeTime       AnswerType = "time"
 	AnswerTypeDate       AnswerType = "date"
+	AnswerTypeCalendar   AnswerType = "calendar"
+	AnswerTypeTimezone   AnswerType = "timezone"
+	AnswerTypeStopwatch  AnswerType = "stopwatch"
 	AnswerTypeIP         AnswerType = "ip"
 	AnswerTypeHash       AnswerType = "hash"
 	AnswerTypeBase64     AnswerType = "base64"
@@ -26,6 +29,36 @@ const (
 	AnswerTypeUUID       AnswerType = "uuid"
 	AnswerTypeRandom     AnswerType = "random"
 	AnswerTypePassword   AnswerType = "password"
+	AnswerTypeQR         AnswerType = "qr"
+	AnswerTypeASCII      AnswerType = "ascii"
+	AnswerTypeCase       AnswerType = "case"
+	AnswerTypeSlug       AnswerType = "slug"
+	AnswerTypeJSON       AnswerType = "json"
+	AnswerTypeYAML       AnswerType = "yaml"
+	AnswerTypeEscape     AnswerType = "escape"
+	AnswerTypeASN        AnswerType = "asn"
+	AnswerTypeWHOIS      AnswerType = "whois"
+	AnswerTypeDNS        AnswerType = "dns"
+	AnswerTypeBeautify   AnswerType = "beautify"
+
+	// Direct answer types (type:query pattern)
+	AnswerTypeTLDR      AnswerType = "tldr"
+	AnswerTypeHTTPCode  AnswerType = "httpcode"
+	AnswerTypePort      AnswerType = "port"
+	AnswerTypeCron      AnswerType = "cron"
+	AnswerTypeChmod     AnswerType = "chmod"
+	AnswerTypeTimestamp AnswerType = "timestamp"
+	AnswerTypeSubnet    AnswerType = "subnet"
+	AnswerTypeJWT       AnswerType = "jwt"
+
+	// Web analysis types
+	AnswerTypeFeed       AnswerType = "feed"
+	AnswerTypeTech       AnswerType = "tech"
+	AnswerTypeSitemap    AnswerType = "sitemap"
+	AnswerTypeSafe       AnswerType = "safe"
+	AnswerTypeEmoji      AnswerType = "emoji"
+	AnswerTypeHTMLEntity AnswerType = "htmlentity"
+	AnswerTypeUnicode    AnswerType = "unicode"
 )
 
 // Answer represents an instant answer result
@@ -71,6 +104,9 @@ func NewManager() *Manager {
 	m.Register(NewMathHandler())
 	m.Register(NewConvertHandler())
 	m.Register(NewTimeHandler())
+	m.Register(NewCalendarHandler())
+	m.Register(NewTimezoneHandler())
+	m.Register(NewStopwatchHandler())
 	m.Register(NewHashHandler())
 	m.Register(NewBase64Handler())
 	m.Register(NewURLHandler())
@@ -79,6 +115,53 @@ func NewManager() *Manager {
 	m.Register(NewRandomHandler())
 	m.Register(NewPasswordHandler())
 	m.Register(NewIPHandler())
+	m.Register(NewQRHandler())
+	m.Register(NewASCIIHandler())
+	m.Register(NewCaseHandler())
+	m.Register(NewSlugHandler())
+	m.Register(NewJSONHandler())
+	m.Register(NewYAMLHandler())
+	m.Register(NewEscapeHandler())
+	m.Register(NewBeautifyHandler())
+
+	// Network and security handlers
+	m.Register(NewCertHandler())
+	m.Register(NewHeadersHandler())
+	m.Register(NewRobotsHandler())
+	m.Register(NewExpandHandler())
+	m.Register(NewResolveHandler())
+
+	// Direct answer handlers (type:query pattern)
+	m.Register(NewTLDRHandler())
+	m.Register(NewWHOISHandler())
+	m.Register(NewDNSHandler())
+	m.Register(NewASNHandler())
+	m.Register(NewHTTPCodeHandler())
+	m.Register(NewPortHandler())
+	m.Register(NewCronHandler())
+	m.Register(NewChmodHandler())
+	m.Register(NewTimestampHandler())
+	m.Register(NewSubnetHandler())
+	m.Register(NewJWTHandler())
+
+	// Web analysis handlers
+	m.Register(NewFeedHandler())
+	m.Register(NewTechHandler())
+	m.Register(NewSitemapHandler())
+	m.Register(NewSafeHandler())
+
+	// Developer-focused direct answer handlers
+	m.Register(NewRegexHandler())
+	m.Register(NewCVEHandler())
+	m.Register(NewRFCHandler())
+	m.Register(NewPkgHandler())
+	m.Register(NewManHandler())
+	m.Register(NewCheatHandler())
+
+	// Character and encoding handlers
+	m.Register(NewEmojiHandler())
+	m.Register(NewUnicodeHandler())
+	m.Register(NewHTMLEntityHandler())
 
 	return m
 }

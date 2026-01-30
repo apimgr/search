@@ -213,7 +213,7 @@ func (s *Server) handlePreferences(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := NewPageData(s.config, "Preferences", "preferences")
+	data := s.newPageData("Preferences", "preferences")
 	data.CSRFToken = s.getCSRFToken(r)
 
 	// Get all available bangs for display

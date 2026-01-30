@@ -2106,11 +2106,11 @@ Primary engines with their own indexes - no proxies or metasearch:
 | Yandex | web, images | HTML scraping | Russian index (optional) |
 | Baidu | web, images | HTML scraping | Chinese index (optional) |
 
-**Not included** (proxies/metasearch - we go direct):
-- Startpage (Google proxy)
-- Yahoo (Bing-powered)
+**Not included** (metasearch only - we go direct):
 - Ecosia (Bing-powered)
 - SearXNG (metasearch)
+
+**Note**: Startpage and Yahoo ARE implemented - they provide alternative access paths.
 
 ### Specialized Engines
 | Engine | Category | Notes |

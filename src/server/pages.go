@@ -24,7 +24,7 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := NewPageData(s.config, "", "home")
+	data := s.newPageData("", "home")
 	data.CSRFToken = s.getCSRFToken(r)
 
 	// Add widget data if widgets are enabled
@@ -42,13 +42,8 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 
 // handleAbout renders the about page
 func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
-	data := NewPageData(s.config, "About", "about")
+	data := s.newPageData("About", "about")
 	data.CSRFToken = s.getCSRFToken(r)
-
-	// Get Tor address if running (auto-enabled per AI.md PART 32)
-	if s.torService != nil && s.torService.IsRunning() {
-		data.TorAddress = s.torService.GetOnionAddress()
-	}
 
 	if err := s.renderer.Render(w, "about", data); err != nil {
 		s.handleError(w, r, http.StatusInternalServerError, "Template Error", err.Error())
@@ -57,7 +52,7 @@ func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
 
 // handlePrivacy renders the privacy page
 func (s *Server) handlePrivacy(w http.ResponseWriter, r *http.Request) {
-	data := NewPageData(s.config, "Privacy Policy", "privacy")
+	data := s.newPageData("Privacy Policy", "privacy")
 	data.CSRFToken = s.getCSRFToken(r)
 
 	if err := s.renderer.Render(w, "privacy", data); err != nil {
@@ -76,16 +71,12 @@ func (s *Server) handleContact(w http.ResponseWriter, r *http.Request) {
 	rand.Read(captchaIDBytes)
 	captchaID := base64.URLEncoding.EncodeToString(captchaIDBytes)
 
+	// Use newPageData for TorAddress support per AI.md PART 32
+	baseData := s.newPageData("Contact", "contact")
+	baseData.CSRFToken = s.getCSRFToken(r)
+
 	data := &ContactPageData{
-		PageData: PageData{
-			Title:       "Contact",
-			Description: s.config.Server.Description,
-			Page:        "contact",
-			Theme:       "dark",
-			Config:      s.config,
-			CSRFToken:   s.getCSRFToken(r),
-			BuildDate:   time.Now().Format(time.RFC3339),
-		},
+		PageData:  *baseData,
 		CaptchaA:  int(captchaA.Int64()) + 1,
 		CaptchaB:  int(captchaB.Int64()) + 1,
 		CaptchaID: captchaID,
@@ -136,7 +127,7 @@ func (s *Server) handleContactSubmit(w http.ResponseWriter, r *http.Request) {
 
 // handleHelp renders the help page
 func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
-	data := NewPageData(s.config, "Help", "help")
+	data := s.newPageData("Help", "help")
 	data.CSRFToken = s.getCSRFToken(r)
 
 	if err := s.renderer.Render(w, "help", data); err != nil {
@@ -146,7 +137,7 @@ func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
 
 // handleTerms renders the terms of service page
 func (s *Server) handleTerms(w http.ResponseWriter, r *http.Request) {
-	data := NewPageData(s.config, "Terms of Service", "terms")
+	data := s.newPageData("Terms of Service", "terms")
 	data.CSRFToken = s.getCSRFToken(r)
 
 	if err := s.renderer.Render(w, "terms", data); err != nil {
@@ -470,16 +461,12 @@ func (s *Server) respondHealthText(w http.ResponseWriter, health *HealthInfo) {
 
 // respondHealthHTML responds with HTML health page
 func (s *Server) respondHealthHTML(w http.ResponseWriter, r *http.Request, health *HealthInfo) {
+	// Use newPageData for TorAddress support per AI.md PART 32
+	baseData := s.newPageData("Health", "healthz")
+
 	data := &HealthPageData{
-		PageData: PageData{
-			Title:       "Health",
-			Description: s.config.Server.Description,
-			Page:        "healthz",
-			Theme:       "dark",
-			Config:      s.config,
-			BuildDate:   time.Now().Format(time.RFC3339),
-		},
-		Health: health,
+		PageData: *baseData,
+		Health:   health,
 	}
 
 	if err := s.renderer.Render(w, "healthz", data); err != nil {
@@ -504,15 +491,11 @@ func (s *Server) handleNotFound(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleError(w http.ResponseWriter, r *http.Request, code int, title, message string) {
 	w.WriteHeader(code)
 
+	// Use newPageData for TorAddress support per AI.md PART 32
+	baseData := s.newPageData(title, "error")
+
 	data := &ErrorPageData{
-		PageData: PageData{
-			Title:       title,
-			Description: s.config.Server.Description,
-			Page:        "error",
-			Theme:       "dark",
-			Config:      s.config,
-			BuildDate:   time.Now().Format(time.RFC3339),
-		},
+		PageData:     *baseData,
 		ErrorCode:    code,
 		ErrorTitle:   title,
 		ErrorMessage: message,

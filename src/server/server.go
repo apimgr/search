@@ -684,6 +684,17 @@ func (s *Server) UpdateConfig(cfg *config.Config) {
 	log.Println("[Server] Configuration updated")
 }
 
+// newPageData creates PageData with TorAddress automatically set
+// Per AI.md PART 32: Tor address should be available on all pages when running
+func (s *Server) newPageData(title, page string) *PageData {
+	data := NewPageData(s.config, title, page)
+	// Set TorAddress if Tor service is running
+	if s.torService != nil && s.torService.IsRunning() {
+		data.TorAddress = s.torService.GetOnionAddress()
+	}
+	return data
+}
+
 // createPIDFile creates a PID file with stale PID detection
 // Per AI.md PART 8: Stale PID detection is REQUIRED
 func (s *Server) createPIDFile() error {
@@ -1041,17 +1052,14 @@ func (s *Server) renderDirectAnswer(w http.ResponseWriter, r *http.Request, answ
 		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	}
 
-	// Build the page data
+	// Use newPageData for TorAddress support per AI.md PART 32
+	baseData := s.newPageData(answer.Title, "direct")
+	baseData.Description = answer.Description
+	baseData.Query = fmt.Sprintf("%s:%s", answer.Type, answer.Term)
+
 	data := &DirectAnswerPageData{
-		PageData: PageData{
-			Title:       answer.Title,
-			Description: answer.Description,
-			Page:        "direct",
-			Theme:       "dark",
-			Config:      s.config,
-			Query:       fmt.Sprintf("%s:%s", answer.Type, answer.Term),
-		},
-		Answer: answer,
+		PageData: *baseData,
+		Answer:   answer,
 	}
 
 	// Try to render with template
@@ -1174,15 +1182,13 @@ footer a{color:var(--accent);text-decoration:none}
 
 // renderSearchError renders an error page
 func (s *Server) renderSearchError(w http.ResponseWriter, query string, err error) {
+	// Use newPageData for TorAddress support per AI.md PART 32
+	baseData := s.newPageData("Search Error", "error")
+	baseData.Description = "An error occurred while searching"
+	baseData.Query = query
+
 	data := &ErrorPageData{
-		PageData: PageData{
-			Title:       "Search Error",
-			Description: "An error occurred while searching",
-			Page:        "error",
-			Theme:       "dark",
-			Config:      s.config,
-			Query:       query,
-		},
+		PageData:     *baseData,
 		ErrorCode:    http.StatusInternalServerError,
 		ErrorTitle:   "Search Error",
 		ErrorMessage: err.Error(),
@@ -1201,16 +1207,14 @@ func (s *Server) renderSearchResults(w http.ResponseWriter, query string, result
 
 // renderSearchResultsWithInstant renders search results with optional instant answer
 func (s *Server) renderSearchResultsWithInstant(w http.ResponseWriter, query string, results *model.SearchResults, category string, instantAnswer *instant.Answer) {
+	// Use newPageData for TorAddress support per AI.md PART 32
+	baseData := s.newPageData(query, "search")
+	baseData.Description = fmt.Sprintf("Search results for: %s", query)
+	baseData.Query = query
+	baseData.Category = category
+
 	data := &SearchPageData{
-		PageData: PageData{
-			Title:       query,
-			Description: fmt.Sprintf("Search results for: %s", query),
-			Page:        "search",
-			Theme:       "dark",
-			Config:      s.config,
-			Query:       query,
-			Category:    category,
-		},
+		PageData:      *baseData,
 		Query:         query,
 		Category:      category,
 		Results:       results.Results,

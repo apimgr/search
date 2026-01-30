@@ -2,6 +2,7 @@ package server
 
 import (
 	"embed"
+	"fmt"
 	"html/template"
 	"io"
 	"io/fs"
@@ -95,6 +96,8 @@ func NewTemplateRenderer(cfg *config.Config) *TemplateRenderer {
 		"urlquery": func(s string) string {
 			return url.QueryEscape(s)
 		},
+		"formatVideoDuration": formatVideoDuration,
+		"formatViewCount": formatViewCount,
 	}
 
 	tr.loadTemplates()
@@ -424,4 +427,47 @@ func NewPageData(cfg *config.Config, title, page string) *PageData {
 	}
 
 	return pd
+}
+
+// formatVideoDuration formats seconds to MM:SS or H:MM:SS format for video durations
+func formatVideoDuration(seconds int) string {
+	if seconds <= 0 {
+		return ""
+	}
+	h := seconds / 3600
+	m := (seconds % 3600) / 60
+	s := seconds % 60
+	if h > 0 {
+		return fmt.Sprintf("%d:%02d:%02d", h, m, s)
+	}
+	return fmt.Sprintf("%d:%02d", m, s)
+}
+
+// formatViewCount formats large numbers with K, M, B suffixes
+func formatViewCount(count int64) string {
+	if count <= 0 {
+		return ""
+	}
+	if count >= 1000000000 {
+		v := float64(count) / 1000000000
+		if v >= 10 {
+			return fmt.Sprintf("%.0fB", v)
+		}
+		return strings.TrimSuffix(fmt.Sprintf("%.1fB", v), ".0B") + ""
+	}
+	if count >= 1000000 {
+		v := float64(count) / 1000000
+		if v >= 10 {
+			return fmt.Sprintf("%.0fM", v)
+		}
+		return strings.TrimSuffix(fmt.Sprintf("%.1fM", v), ".0M") + ""
+	}
+	if count >= 1000 {
+		v := float64(count) / 1000
+		if v >= 10 {
+			return fmt.Sprintf("%.0fK", v)
+		}
+		return strings.TrimSuffix(fmt.Sprintf("%.1fK", v), ".0K") + ""
+	}
+	return fmt.Sprintf("%d", count)
 }

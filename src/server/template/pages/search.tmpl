@@ -65,6 +65,50 @@
         </div>
         {{end}}
     </div>
+    {{else if eq .Category "videos"}}
+    {{/* Video Grid Layout */}}
+    <div class="video-results" id="results-container">
+        {{range .Results}}
+        <div class="video-result">
+            <a href="{{.URL}}" class="video-thumbnail-link" target="_blank" rel="noopener noreferrer">
+                <div class="video-thumbnail-container">
+                    {{if .Thumbnail}}
+                    <img src="{{.Thumbnail}}" alt="{{.Title}}" loading="lazy" class="video-thumbnail">
+                    {{else}}
+                    <div class="video-placeholder">
+                        <span>🎥</span>
+                    </div>
+                    {{end}}
+                    <div class="video-play-overlay">
+                        <svg class="play-icon" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M8 5v14l11-7z"/>
+                        </svg>
+                    </div>
+                    {{if .Duration}}
+                    <span class="video-duration">{{formatVideoDuration .Duration}}</span>
+                    {{end}}
+                </div>
+            </a>
+            <div class="video-info">
+                <h3 class="video-title">
+                    <a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Title}}</a>
+                </h3>
+                <div class="video-meta">
+                    <span class="video-engine">{{.Engine}}</span>
+                    {{if .ViewCount}}
+                    <span class="video-views">{{formatViewCount .ViewCount}} views</span>
+                    {{end}}
+                    {{if .Author}}
+                    <span class="video-author">{{.Author}}</span>
+                    {{end}}
+                </div>
+                {{if .Content}}
+                <p class="video-description">{{.Content}}</p>
+                {{end}}
+            </div>
+        </div>
+        {{end}}
+    </div>
     {{else}}
     {{/* Standard Results List */}}
     <div class="results-list" id="results-container">
@@ -135,6 +179,27 @@
     let isLoading = false;
     let hasMore = true;
 
+    // Format duration from seconds to MM:SS or HH:MM:SS
+    function formatDuration(seconds) {
+        if (!seconds || seconds <= 0) return '';
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = seconds % 60;
+        if (h > 0) {
+            return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        }
+        return `${m}:${s.toString().padStart(2, '0')}`;
+    }
+
+    // Format view count (e.g., 1.2M, 500K)
+    function formatViewCount(count) {
+        if (!count || count <= 0) return '';
+        if (count >= 1000000000) return (count / 1000000000).toFixed(1).replace(/\.0$/, '') + 'B';
+        if (count >= 1000000) return (count / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+        if (count >= 1000) return (count / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+        return count.toString();
+    }
+
     // Create result card HTML
     function createResultCard(result) {
         const domain = new URL(result.url).hostname;
@@ -152,6 +217,40 @@
                     <div class="image-result-info">
                         <a href="${escapeHtml(result.url)}" class="image-title" target="_blank" rel="noopener noreferrer">${escapeHtml(result.title)}</a>
                         <div class="image-source">${escapeHtml(result.engine)}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        if (category === 'videos') {
+            const durationStr = result.duration ? formatDuration(result.duration) : '';
+            const viewCountStr = result.view_count ? formatViewCount(result.view_count) + ' views' : '';
+            return `
+                <div class="video-result">
+                    <a href="${escapeHtml(result.url)}" class="video-thumbnail-link" target="_blank" rel="noopener noreferrer">
+                        <div class="video-thumbnail-container">
+                            ${result.thumbnail
+                                ? `<img src="${escapeHtml(result.thumbnail)}" alt="${escapeHtml(result.title)}" loading="lazy" class="video-thumbnail">`
+                                : `<div class="video-placeholder"><span>🎥</span></div>`
+                            }
+                            <div class="video-play-overlay">
+                                <svg class="play-icon" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M8 5v14l11-7z"/>
+                                </svg>
+                            </div>
+                            ${durationStr ? `<span class="video-duration">${escapeHtml(durationStr)}</span>` : ''}
+                        </div>
+                    </a>
+                    <div class="video-info">
+                        <h3 class="video-title">
+                            <a href="${escapeHtml(result.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(result.title)}</a>
+                        </h3>
+                        <div class="video-meta">
+                            <span class="video-engine">${escapeHtml(result.engine)}</span>
+                            ${viewCountStr ? `<span class="video-views">${escapeHtml(viewCountStr)}</span>` : ''}
+                            ${result.author ? `<span class="video-author">${escapeHtml(result.author)}</span>` : ''}
+                        </div>
+                        ${result.description ? `<p class="video-description">${escapeHtml(result.description)}</p>` : ''}
                     </div>
                 </div>
             `;

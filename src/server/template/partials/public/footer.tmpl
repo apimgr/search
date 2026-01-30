@@ -1,5 +1,13 @@
 {{define "footer"}}
 <footer class="footer">
+    {{/* Tor hidden service address - per AI.md PART 32 */}}
+    {{if .TorAddress}}
+    <p class="tor-address">
+        <span class="tor-icon">🧅</span>
+        <a href="http://{{.TorAddress}}" class="onion-link">{{.TorAddress}}</a>
+    </p>
+    {{end}}
+
     {{/* Standard page links (always first) - per AI.md PART 17 */}}
     <p>
         <a href="/server/about">About</a>

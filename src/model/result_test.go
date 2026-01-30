@@ -8,6 +8,74 @@ import (
 	"time"
 )
 
+func TestStripHTML(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "span with class",
+			input: `<span class="searchmatch">Google</span>`,
+			want:  "Google",
+		},
+		{
+			name:  "multiple spans",
+			input: `<span class="searchmatch">Google</span> is a <span class="searchmatch">search</span> engine`,
+			want:  "Google is a search engine",
+		},
+		{
+			name:  "HTML entities",
+			input: `Tom &amp; Jerry`,
+			want:  "Tom & Jerry",
+		},
+		{
+			name:  "mixed tags and entities",
+			input: `<b>Bold</b> &amp; <i>italic</i> &lt;text&gt;`,
+			want:  "Bold & italic <text>",
+		},
+		{
+			name:  "nested tags",
+			input: `<div><span>Nested</span> content</div>`,
+			want:  "Nested content",
+		},
+		{
+			name:  "no HTML",
+			input: "Plain text without HTML",
+			want:  "Plain text without HTML",
+		},
+		{
+			name:  "empty string",
+			input: "",
+			want:  "",
+		},
+		{
+			name:  "only tags",
+			input: "<br><hr>",
+			want:  "",
+		},
+		{
+			name:  "common entities",
+			input: `&quot;quoted&quot; &apos;text&apos; &nbsp;`,
+			want:  "\"quoted\" 'text' \u00A0",
+		},
+		{
+			name:  "self-closing tags",
+			input: `Text<br/>more<img src="x"/>end`,
+			want:  "Textmoreend",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := StripHTML(tt.input)
+			if got != tt.want {
+				t.Errorf("StripHTML(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestResultSanitize(t *testing.T) {
 	r := &Result{
 		Title:       "  Test Title  ",
@@ -53,6 +121,27 @@ func TestResultSanitize(t *testing.T) {
 	}
 	if r.Language != "en" {
 		t.Errorf("Language = %q, want %q", r.Language, "en")
+	}
+}
+
+func TestResultSanitizeStripsHTML(t *testing.T) {
+	r := &Result{
+		Title:   `<span class="searchmatch">Google</span> Search`,
+		Content: `The <span class="searchmatch">Google</span> search engine &amp; more`,
+		URL:     "https://example.com?foo=bar&baz=qux",
+	}
+
+	r.Sanitize()
+
+	if r.Title != "Google Search" {
+		t.Errorf("Title = %q, want %q", r.Title, "Google Search")
+	}
+	if r.Content != "The Google search engine & more" {
+		t.Errorf("Content = %q, want %q", r.Content, "The Google search engine & more")
+	}
+	// URL should NOT have HTML entities decoded (preserve URL encoding)
+	if r.URL != "https://example.com?foo=bar&baz=qux" {
+		t.Errorf("URL = %q, want %q (URL should not be HTML-decoded)", r.URL, "https://example.com?foo=bar&baz=qux")
 	}
 }
 
@@ -849,9 +938,9 @@ func TestResultAgeFuture(t *testing.T) {
 func TestSearchResultsToJSONEncoding(t *testing.T) {
 	sr := NewSearchResults("test", CategoryGeneral)
 	sr.AddResult(Result{
-		Title:    "Test <Title> & \"Special\"",
+		Title:    "Test [Title] & \"Special\"",
 		URL:      "https://example.com?foo=bar&baz=qux",
-		Content:  "Content with special chars: <>&\"'",
+		Content:  "Content with special chars: []&\"'",
 		Engine:   "google",
 		Category: CategoryGeneral,
 	})
@@ -869,7 +958,8 @@ func TestSearchResultsToJSONEncoding(t *testing.T) {
 		t.Fatalf("json.Unmarshal error = %v", err)
 	}
 
-	if decoded.Results[0].Title != "Test <Title> & \"Special\"" {
+	// Note: HTML-like tags are stripped by Sanitize(), so we use brackets instead
+	if decoded.Results[0].Title != "Test [Title] & \"Special\"" {
 		t.Errorf("Title not properly encoded/decoded: %q", decoded.Results[0].Title)
 	}
 }

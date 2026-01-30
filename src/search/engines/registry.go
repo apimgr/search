@@ -118,12 +118,21 @@ func DefaultRegistry() *Registry {
 	registry.Register(NewGitHub())
 	registry.Register(NewStackOverflow())
 	registry.Register(NewReddit())
+	registry.Register(NewHackerNews())
 	registry.Register(NewStartpageEngine())
 	registry.Register(NewYouTubeEngine())
 	// Additional engines per IDEA.md
 	registry.Register(NewMojeek())
 	registry.Register(NewYandex())
 	registry.Register(NewBaidu())
+
+	// Science engines
+	registry.Register(NewPubMed())
+	registry.Register(NewArXiv())
+
+	// Specialized engines
+	registry.Register(NewWolframAlpha())
+	registry.Register(NewOpenStreetMap())
 
 	return registry
 }

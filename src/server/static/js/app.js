@@ -49,37 +49,19 @@
     }
 
     // ========================================================================
-    // MOBILE NAVIGATION
+    // MOBILE NAVIGATION - CSS-only per AI.md PART 16
     // ========================================================================
+    // Navigation is handled purely via CSS checkbox hack (no JavaScript needed)
+    // The checkbox #nav-toggle controls menu state via :checked pseudo-class
+    // Kept as no-ops for backward compatibility if anything calls these
     function toggleNav() {
-        const header = document.querySelector('.site-header');
-        const navLinks = document.querySelector('.nav-links');
-        const navToggle = document.querySelector('.nav-toggle');
-        if (header && navLinks) {
-            header.classList.toggle('nav-open');
-            navLinks.classList.toggle('active');
-            // Update ARIA state for accessibility
-            if (navToggle) {
-                const isOpen = header.classList.contains('nav-open');
-                navToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-            }
-        }
+        // CSS-only: checkbox handles state via label click
     }
 
     function closeNav() {
-        const header = document.querySelector('.site-header');
-        const navLinks = document.querySelector('.nav-links');
-        const navToggle = document.querySelector('.nav-toggle');
-        if (header) {
-            header.classList.remove('nav-open');
-        }
-        if (navLinks) {
-            navLinks.classList.remove('active');
-        }
-        // Update ARIA state for accessibility
-        if (navToggle) {
-            navToggle.setAttribute('aria-expanded', 'false');
-        }
+        // CSS-only: uncheck the checkbox to close
+        const checkbox = document.getElementById('nav-toggle');
+        if (checkbox) checkbox.checked = false;
     }
 
     // ========================================================================
@@ -354,24 +336,321 @@
     // ========================================================================
     // SEARCH AUTOCOMPLETE
     // ========================================================================
+
+    // Built-in bangs list (subset for quick suggestions)
+    var BUILTIN_BANGS = [
+        { shortcut: 'g', name: 'Google', category: 'general' },
+        { shortcut: 'ddg', name: 'DuckDuckGo', category: 'general' },
+        { shortcut: 'b', name: 'Bing', category: 'general' },
+        { shortcut: 'sp', name: 'Startpage', category: 'general' },
+        { shortcut: 'br', name: 'Brave Search', category: 'general' },
+        { shortcut: 'gi', name: 'Google Images', category: 'images' },
+        { shortcut: 'bi', name: 'Bing Images', category: 'images' },
+        { shortcut: 'yt', name: 'YouTube', category: 'video' },
+        { shortcut: 'gm', name: 'Google Maps', category: 'maps' },
+        { shortcut: 'osm', name: 'OpenStreetMap', category: 'maps' },
+        { shortcut: 'gn', name: 'Google News', category: 'news' },
+        { shortcut: 'w', name: 'Wikipedia', category: 'knowledge' },
+        { shortcut: 'wa', name: 'Wolfram Alpha', category: 'knowledge' },
+        { shortcut: 'tw', name: 'Twitter/X', category: 'social' },
+        { shortcut: 'rd', name: 'Reddit', category: 'social' },
+        { shortcut: 'hn', name: 'Hacker News', category: 'social' },
+        { shortcut: 'gh', name: 'GitHub', category: 'code' },
+        { shortcut: 'gl', name: 'GitLab', category: 'code' },
+        { shortcut: 'so', name: 'Stack Overflow', category: 'code' },
+        { shortcut: 'npm', name: 'npm', category: 'code' },
+        { shortcut: 'pypi', name: 'PyPI', category: 'code' },
+        { shortcut: 'gopkg', name: 'Go Packages', category: 'code' },
+        { shortcut: 'mdn', name: 'MDN Web Docs', category: 'code' },
+        { shortcut: 'docker', name: 'Docker Hub', category: 'code' },
+        { shortcut: 'az', name: 'Amazon', category: 'shopping' },
+        { shortcut: 'eb', name: 'eBay', category: 'shopping' },
+        { shortcut: 'spot', name: 'Spotify', category: 'music' },
+        { shortcut: 'sc', name: 'SoundCloud', category: 'music' },
+        { shortcut: 'scholar', name: 'Google Scholar', category: 'science' },
+        { shortcut: 'arxiv', name: 'arXiv', category: 'science' },
+        { shortcut: 'gt', name: 'Google Translate', category: 'translate' },
+        { shortcut: 'deepl', name: 'DeepL', category: 'translate' },
+        { shortcut: 'imdb', name: 'IMDb', category: 'misc' },
+        { shortcut: 'archive', name: 'Internet Archive', category: 'files' }
+    ];
+
     function initSearchAutocomplete() {
-        const searchInputs = document.querySelectorAll('.search-input, .header-search-input');
+        var searchInputs = document.querySelectorAll('.search-input, .header-search-input, .nav-search-input');
 
         searchInputs.forEach(function(input) {
-            let debounceTimer;
-            input.addEventListener('input', function() {
-                clearTimeout(debounceTimer);
-                debounceTimer = setTimeout(function() {
-                    // Autocomplete logic placeholder
-                }, 300);
+            setupAutocomplete(input);
+        });
+    }
+
+    function setupAutocomplete(input) {
+        var debounceTimer = null;
+        var selectedIndex = -1;
+        var suggestions = [];
+        var dropdown = null;
+        var abortController = null;
+
+        // Create dropdown element
+        function createDropdown() {
+            if (dropdown) return dropdown;
+
+            dropdown = document.createElement('div');
+            dropdown.className = 'autocomplete-dropdown';
+            dropdown.setAttribute('role', 'listbox');
+            dropdown.setAttribute('aria-label', 'Search suggestions');
+            dropdown.style.display = 'none';
+
+            // Position dropdown relative to input's parent container
+            var container = input.closest('.search-box') || input.parentElement;
+            if (container) {
+                container.style.position = 'relative';
+                container.appendChild(dropdown);
+            } else {
+                input.parentElement.style.position = 'relative';
+                input.parentElement.appendChild(dropdown);
+            }
+
+            return dropdown;
+        }
+
+        // Show dropdown with suggestions
+        function showDropdown(items) {
+            if (!dropdown) createDropdown();
+            suggestions = items;
+            selectedIndex = -1;
+
+            if (items.length === 0) {
+                hideDropdown();
+                return;
+            }
+
+            dropdown.innerHTML = items.map(function(item, index) {
+                if (item.type === 'bang') {
+                    return '<div class="autocomplete-item autocomplete-bang" data-index="' + index + '" role="option" aria-selected="false">' +
+                        '<span class="autocomplete-bang-shortcut">!' + escapeHtml(item.shortcut) + '</span>' +
+                        '<span class="autocomplete-bang-name">' + escapeHtml(item.name) + '</span>' +
+                        '<span class="autocomplete-bang-category">' + escapeHtml(item.category) + '</span>' +
+                    '</div>';
+                } else {
+                    return '<div class="autocomplete-item" data-index="' + index + '" role="option" aria-selected="false">' +
+                        '<svg class="autocomplete-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>' +
+                        '<span class="autocomplete-text">' + escapeHtml(item.text) + '</span>' +
+                    '</div>';
+                }
+            }).join('');
+
+            dropdown.style.display = 'block';
+
+            // Add click handlers
+            dropdown.querySelectorAll('.autocomplete-item').forEach(function(item) {
+                item.addEventListener('mousedown', function(e) {
+                    e.preventDefault();
+                    selectSuggestion(parseInt(this.dataset.index, 10));
+                });
+                item.addEventListener('mouseover', function() {
+                    updateSelection(parseInt(this.dataset.index, 10));
+                });
             });
 
-            input.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape') {
-                    this.value = '';
-                    this.focus();
+            // Announce to screen readers
+            announce(items.length + ' suggestions available');
+        }
+
+        // Hide dropdown
+        function hideDropdown() {
+            if (dropdown) {
+                dropdown.style.display = 'none';
+                dropdown.innerHTML = '';
+            }
+            suggestions = [];
+            selectedIndex = -1;
+        }
+
+        // Update visual selection
+        function updateSelection(index) {
+            if (!dropdown) return;
+
+            var items = dropdown.querySelectorAll('.autocomplete-item');
+            items.forEach(function(item, i) {
+                if (i === index) {
+                    item.classList.add('selected');
+                    item.setAttribute('aria-selected', 'true');
+                } else {
+                    item.classList.remove('selected');
+                    item.setAttribute('aria-selected', 'false');
                 }
             });
+            selectedIndex = index;
+        }
+
+        // Select a suggestion
+        function selectSuggestion(index) {
+            if (index < 0 || index >= suggestions.length) return;
+
+            var item = suggestions[index];
+            if (item.type === 'bang') {
+                // For bangs, keep the bang syntax and add a space
+                input.value = '!' + item.shortcut + ' ';
+            } else {
+                input.value = item.text;
+            }
+
+            hideDropdown();
+            input.focus();
+
+            // If not a bang, submit the form
+            if (item.type !== 'bang') {
+                var form = input.closest('form');
+                if (form) {
+                    form.submit();
+                }
+            }
+        }
+
+        // Fetch suggestions from API
+        function fetchSuggestions(query) {
+            // Cancel previous request
+            if (abortController) {
+                abortController.abort();
+            }
+
+            // Check for bang query
+            if (query.startsWith('!')) {
+                var bangQuery = query.slice(1).toLowerCase();
+                var bangSuggestions = filterBangs(bangQuery);
+                showDropdown(bangSuggestions);
+                return;
+            }
+
+            // Skip very short queries
+            if (query.length < 2) {
+                hideDropdown();
+                return;
+            }
+
+            // Create new abort controller
+            abortController = new AbortController();
+
+            // Fetch from autocomplete API
+            fetch('/autocomplete?q=' + encodeURIComponent(query), {
+                signal: abortController.signal
+            })
+            .then(function(response) {
+                if (!response.ok) throw new Error('Network error');
+                return response.json();
+            })
+            .then(function(data) {
+                // Handle API response format: {"ok": true, "data": [...]}
+                var results = [];
+                if (data && data.ok && Array.isArray(data.data)) {
+                    results = data.data.map(function(text) {
+                        return { type: 'suggestion', text: text };
+                    });
+                } else if (Array.isArray(data)) {
+                    // Fallback for simple array response
+                    results = data.map(function(text) {
+                        return { type: 'suggestion', text: text };
+                    });
+                }
+                showDropdown(results);
+            })
+            .catch(function(err) {
+                if (err.name !== 'AbortError') {
+                    hideDropdown();
+                }
+            });
+        }
+
+        // Filter bangs based on query
+        function filterBangs(query) {
+            if (!query) {
+                // Show popular bangs when just "!" is typed
+                return BUILTIN_BANGS.slice(0, 10).map(function(b) {
+                    return { type: 'bang', shortcut: b.shortcut, name: b.name, category: b.category };
+                });
+            }
+
+            var filtered = BUILTIN_BANGS.filter(function(b) {
+                return b.shortcut.toLowerCase().startsWith(query) ||
+                       b.name.toLowerCase().includes(query);
+            });
+
+            return filtered.slice(0, 10).map(function(b) {
+                return { type: 'bang', shortcut: b.shortcut, name: b.name, category: b.category };
+            });
+        }
+
+        // Input event handler
+        input.addEventListener('input', function() {
+            clearTimeout(debounceTimer);
+            var query = this.value.trim();
+
+            if (!query) {
+                hideDropdown();
+                return;
+            }
+
+            debounceTimer = setTimeout(function() {
+                fetchSuggestions(query);
+            }, 300);
+        });
+
+        // Keyboard navigation
+        input.addEventListener('keydown', function(e) {
+            // Handle autocomplete navigation
+            if (dropdown && dropdown.style.display !== 'none') {
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    var newIndexDown = selectedIndex < suggestions.length - 1 ? selectedIndex + 1 : 0;
+                    updateSelection(newIndexDown);
+                    return;
+                }
+
+                if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    var newIndexUp = selectedIndex > 0 ? selectedIndex - 1 : suggestions.length - 1;
+                    updateSelection(newIndexUp);
+                    return;
+                }
+
+                if (e.key === 'Enter' && selectedIndex >= 0) {
+                    e.preventDefault();
+                    selectSuggestion(selectedIndex);
+                    return;
+                }
+
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    hideDropdown();
+                    return;
+                }
+
+                if (e.key === 'Tab') {
+                    hideDropdown();
+                    return;
+                }
+            }
+
+            // Original escape handler for clearing input when dropdown is not visible
+            if (e.key === 'Escape' && (!dropdown || dropdown.style.display === 'none')) {
+                this.value = '';
+                this.focus();
+            }
+        });
+
+        // Hide dropdown on blur (with delay for click handling)
+        input.addEventListener('blur', function() {
+            setTimeout(function() {
+                hideDropdown();
+            }, 200);
+        });
+
+        // Show dropdown on focus if there's a value
+        input.addEventListener('focus', function() {
+            var query = this.value.trim();
+            if (query && query.length >= 2) {
+                fetchSuggestions(query);
+            }
         });
     }
 
@@ -1037,17 +1316,8 @@
                 return;
             }
 
-            // Nav toggle
-            if (target.matches('.nav-toggle') || target.closest('.nav-toggle')) {
-                toggleNav();
-                return;
-            }
-
-            // Nav overlay (close nav)
-            if (target.matches('.nav-overlay')) {
-                closeNav();
-                return;
-            }
+            // Nav toggle and overlay - CSS-only per AI.md PART 16
+            // The checkbox hack handles state via label clicks, no JS needed
 
             // Cookie consent accept
             if (target.matches('.cookie-consent-accept')) {
@@ -1414,10 +1684,16 @@
         try {
             const response = await fetch(url);
             const result = await response.json();
-            if (result.success) {
-                return result.data;
+            if (result.ok) {
+                // Widget data structure: { type, data, error, updated_at }
+                // If there's an error in the widget data, return it for the renderer to handle
+                if (result.data.error) {
+                    return { error: result.data.error };
+                }
+                // Return the actual widget data (e.g., weather data, stocks data, etc.)
+                return result.data.data;
             }
-            throw new Error(result.error?.message || 'Unknown error');
+            throw new Error(result.message || 'Unknown error');
         } catch (e) {
             console.error('Failed to fetch ' + widgetType + ' widget:', e);
             return null;
@@ -2115,6 +2391,148 @@
                     self.convert();
                 }
             });
+
+            // Widget drag and drop
+            self.initDragAndDrop();
+        },
+
+        // Drag and drop state
+        dragState: {
+            dragging: null,
+            placeholder: null
+        },
+
+        initDragAndDrop: function() {
+            var self = this;
+            var grid = document.getElementById('widget-grid');
+            if (!grid) return;
+
+            // Dragstart - when user starts dragging a widget
+            grid.addEventListener('dragstart', function(e) {
+                var widget = e.target.closest('.widget');
+                if (!widget) return;
+
+                self.dragState.dragging = widget;
+                widget.classList.add('widget-dragging');
+
+                // Set drag data
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', widget.dataset.widget);
+
+                // Create placeholder
+                self.dragState.placeholder = document.createElement('div');
+                self.dragState.placeholder.className = 'widget-placeholder-drop';
+
+                // Delay adding placeholder to avoid visual glitch
+                setTimeout(function() {
+                    if (self.dragState.dragging) {
+                        widget.classList.add('widget-dragging-active');
+                    }
+                }, 0);
+            });
+
+            // Dragover - while dragging over the grid
+            grid.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+
+                var dragging = self.dragState.dragging;
+                if (!dragging) return;
+
+                var afterElement = self.getDragAfterElement(grid, e.clientY);
+                var placeholder = self.dragState.placeholder;
+
+                if (afterElement == null) {
+                    if (placeholder.parentNode !== grid) {
+                        grid.appendChild(placeholder);
+                    }
+                } else if (afterElement !== dragging && afterElement !== placeholder) {
+                    grid.insertBefore(placeholder, afterElement);
+                }
+            });
+
+            // Dragenter - visual feedback when entering a drop zone
+            grid.addEventListener('dragenter', function(e) {
+                e.preventDefault();
+            });
+
+            // Dragleave - when leaving the grid
+            grid.addEventListener('dragleave', function(e) {
+                // Only handle if leaving the grid entirely
+                if (!grid.contains(e.relatedTarget)) {
+                    if (self.dragState.placeholder && self.dragState.placeholder.parentNode) {
+                        self.dragState.placeholder.remove();
+                    }
+                }
+            });
+
+            // Drop - when widget is dropped
+            grid.addEventListener('drop', function(e) {
+                e.preventDefault();
+                var dragging = self.dragState.dragging;
+                var placeholder = self.dragState.placeholder;
+
+                if (!dragging) return;
+
+                // Insert the widget at the placeholder position
+                if (placeholder && placeholder.parentNode === grid) {
+                    grid.insertBefore(dragging, placeholder);
+                    placeholder.remove();
+                }
+
+                // Get new order and save
+                self.saveWidgetOrder();
+            });
+
+            // Dragend - cleanup when drag ends (whether dropped or cancelled)
+            grid.addEventListener('dragend', function(e) {
+                var dragging = self.dragState.dragging;
+                if (dragging) {
+                    dragging.classList.remove('widget-dragging', 'widget-dragging-active');
+                }
+
+                if (self.dragState.placeholder && self.dragState.placeholder.parentNode) {
+                    self.dragState.placeholder.remove();
+                }
+
+                self.dragState.dragging = null;
+                self.dragState.placeholder = null;
+            });
+        },
+
+        // Helper to find the element after which we should insert
+        getDragAfterElement: function(container, y) {
+            var draggableElements = Array.from(container.querySelectorAll('.widget:not(.widget-dragging-active)'));
+
+            return draggableElements.reduce(function(closest, child) {
+                var box = child.getBoundingClientRect();
+                var offset = y - box.top - box.height / 2;
+
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset: offset, element: child };
+                } else {
+                    return closest;
+                }
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        },
+
+        // Save the current widget order based on DOM position
+        saveWidgetOrder: function() {
+            var grid = document.getElementById('widget-grid');
+            if (!grid) return;
+
+            var widgets = grid.querySelectorAll('.widget');
+            var order = [];
+
+            widgets.forEach(function(widget) {
+                if (widget.dataset.widget) {
+                    order.push(widget.dataset.widget);
+                }
+            });
+
+            if (order.length > 0) {
+                saveEnabledWidgets(order);
+            }
         },
 
         renderWidgetGrid: function(enabledWidgets) {
@@ -2134,6 +2552,7 @@
                 var div = document.createElement('div');
                 div.className = 'widget widget-' + widgetType;
                 div.dataset.widget = widgetType;
+                div.draggable = true;
                 div.innerHTML =
                     '<div class="widget-header">' +
                         '<span class="widget-title">' + widget.name + '</span>' +

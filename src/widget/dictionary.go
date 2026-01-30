@@ -16,12 +16,12 @@ type DictionaryFetcher struct {
 
 // DictionaryData represents dictionary lookup result
 type DictionaryData struct {
-	Word        string                  `json:"word"`
-	Phonetic    string                  `json:"phonetic,omitempty"`
-	Audio       string                  `json:"audio,omitempty"`
-	Meanings    []DictionaryMeaning     `json:"meanings"`
-	Synonyms    []string                `json:"synonyms,omitempty"`
-	Antonyms    []string                `json:"antonyms,omitempty"`
+	Word     string              `json:"word"`
+	Phonetic string              `json:"phonetic,omitempty"`
+	Audio    string              `json:"audio,omitempty"`
+	Meanings []DictionaryMeaning `json:"meanings"`
+	Synonyms []string            `json:"synonyms,omitempty"`
+	Antonyms []string            `json:"antonyms,omitempty"`
 }
 
 // DictionaryMeaning represents a word meaning
@@ -35,6 +35,7 @@ type DictionaryDefinition struct {
 	Definition string   `json:"definition"`
 	Example    string   `json:"example,omitempty"`
 	Synonyms   []string `json:"synonyms,omitempty"`
+	Antonyms   []string `json:"antonyms,omitempty"`
 }
 
 // NewDictionaryFetcher creates a new dictionary fetcher
@@ -91,6 +92,7 @@ func (f *DictionaryFetcher) Fetch(ctx context.Context, params map[string]string)
 				Definition string   `json:"definition"`
 				Example    string   `json:"example"`
 				Synonyms   []string `json:"synonyms"`
+				Antonyms   []string `json:"antonyms"`
 			} `json:"definitions"`
 			Synonyms []string `json:"synonyms"`
 			Antonyms []string `json:"antonyms"`
@@ -115,10 +117,19 @@ func (f *DictionaryFetcher) Fetch(ctx context.Context, params map[string]string)
 		Phonetic: result.Phonetic,
 	}
 
-	// Get audio URL
+	// Get phonetic text and audio URL from phonetics array
+	// The top-level phonetic field may be empty, so check phonetics array as fallback
 	for _, p := range result.Phonetics {
-		if p.Audio != "" {
+		// Use phonetic text from array if top-level is empty
+		if data.Phonetic == "" && p.Text != "" {
+			data.Phonetic = p.Text
+		}
+		// Get audio URL (prefer ones with audio)
+		if data.Audio == "" && p.Audio != "" {
 			data.Audio = p.Audio
+		}
+		// If we have both, we're done
+		if data.Phonetic != "" && data.Audio != "" {
 			break
 		}
 	}
@@ -133,6 +144,7 @@ func (f *DictionaryFetcher) Fetch(ctx context.Context, params map[string]string)
 				Definition: d.Definition,
 				Example:    d.Example,
 				Synonyms:   d.Synonyms,
+				Antonyms:   d.Antonyms,
 			})
 		}
 		data.Meanings = append(data.Meanings, meaning)

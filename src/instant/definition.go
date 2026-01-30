@@ -26,6 +26,7 @@ func NewDefinitionHandler() *DefinitionHandler {
 		patterns: []*regexp.Regexp{
 			regexp.MustCompile(`(?i)^define[:\s]+(.+)$`),
 			regexp.MustCompile(`(?i)^definition[:\s]+(.+)$`),
+			regexp.MustCompile(`(?i)^meaning\s+of\s+(.+)$`),
 			regexp.MustCompile(`(?i)^what\s+is\s+(.+)\??$`),
 			regexp.MustCompile(`(?i)^what\s+does\s+(.+)\s+mean\??$`),
 		},

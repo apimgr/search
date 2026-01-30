@@ -5,10 +5,26 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"html"
 	"io"
+	"regexp"
 	"strings"
 	"time"
 )
+
+// htmlTagPattern matches HTML tags including their attributes
+var htmlTagPattern = regexp.MustCompile(`<[^>]*>`)
+
+// StripHTML removes HTML tags from text and decodes HTML entities.
+// For example, `<span class="searchmatch">Google</span>` becomes "Google"
+// and `&amp;` becomes "&".
+func StripHTML(s string) string {
+	// Remove HTML tags
+	s = htmlTagPattern.ReplaceAllString(s, "")
+	// Decode HTML entities
+	s = html.UnescapeString(s)
+	return s
+}
 
 // Result represents a single search result from an engine
 type Result struct {
@@ -48,12 +64,16 @@ type Result struct {
 	Metadata map[string]interface{} `json:"metadata,omitempty" xml:"-"`
 }
 
-// Sanitize strips leading and trailing whitespace from all text fields
+// Sanitize strips leading and trailing whitespace from all text fields,
+// removes HTML tags, and decodes HTML entities from content fields.
 // Per AI.md: All search results must have whitespace trimmed
 func (r *Result) Sanitize() {
-	r.Title = strings.TrimSpace(r.Title)
+	// Strip HTML tags and decode entities from content fields, then trim whitespace
+	r.Title = strings.TrimSpace(StripHTML(r.Title))
+	r.Content = strings.TrimSpace(StripHTML(r.Content))
+
+	// URL should not have HTML stripped (preserve URL encoding)
 	r.URL = strings.TrimSpace(r.URL)
-	r.Content = strings.TrimSpace(r.Content)
 	r.Engine = strings.TrimSpace(r.Engine)
 	r.Thumbnail = strings.TrimSpace(r.Thumbnail)
 	r.Author = strings.TrimSpace(r.Author)

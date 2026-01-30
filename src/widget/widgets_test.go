@@ -1834,8 +1834,89 @@ func TestWikipediaFetcherFetchNoQuery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Fetch() error = %v", err)
 	}
-	if result.Error != "query parameter required" {
-		t.Errorf("Error = %q, want %q", result.Error, "query parameter required")
+	if result.Error != "topic parameter required" {
+		t.Errorf("Error = %q, want %q", result.Error, "topic parameter required")
+	}
+}
+
+func TestWikipediaFetcherFetchWithTopic(t *testing.T) {
+	f := NewWikipediaFetcher()
+	ctx := context.Background()
+
+	// Test that "topic" parameter is accepted
+	result, err := f.Fetch(ctx, map[string]string{"topic": "Test"})
+	if err != nil {
+		t.Logf("Fetch() returned error (expected if no network): %v", err)
+	}
+	if result != nil && result.Type != WidgetWikipedia {
+		t.Errorf("Type = %v, want %v", result.Type, WidgetWikipedia)
+	}
+}
+
+func TestWikipediaFetcherParseQuery(t *testing.T) {
+	f := NewWikipediaFetcher()
+
+	testCases := []struct {
+		input    string
+		expected string
+	}{
+		{"wiki python programming", "python programming"},
+		{"wikipedia quantum computing", "quantum computing"},
+		{"who is marie curie", "marie curie"},
+		{"who was albert einstein", "albert einstein"},
+		{"what is quantum computing", "quantum computing"},
+		{"what are black holes", "black holes"},
+		{"define photosynthesis", "photosynthesis"},
+		{"tell me about the moon", "the moon"},
+		{"search for climate change", "climate change"},
+		{"look up artificial intelligence", "artificial intelligence"},
+		{"python programming?", "python programming"},
+		{"  spaces around  ", "spaces around"},
+		{"Normal Query", "Normal Query"},
+	}
+
+	for _, tc := range testCases {
+		result := f.parseQuery(tc.input)
+		if result != tc.expected {
+			t.Errorf("parseQuery(%q) = %q, want %q", tc.input, result, tc.expected)
+		}
+	}
+}
+
+func TestRelatedArticleStruct(t *testing.T) {
+	article := RelatedArticle{
+		Title:   "Related Article",
+		URL:     "https://en.wikipedia.org/wiki/Related_Article",
+		Extract: "Brief extract",
+	}
+
+	if article.Title != "Related Article" {
+		t.Errorf("Title = %q", article.Title)
+	}
+	if article.URL != "https://en.wikipedia.org/wiki/Related_Article" {
+		t.Errorf("URL = %q", article.URL)
+	}
+}
+
+func TestWikipediaDataWithRelatedArticles(t *testing.T) {
+	data := WikipediaData{
+		Title:       "Test Article",
+		Extract:     "This is the article extract.",
+		Description: "A test article",
+		Thumbnail:   "https://example.com/thumb.jpg",
+		URL:         "https://en.wikipedia.org/wiki/Test",
+		Language:    "en",
+		RelatedArticles: []RelatedArticle{
+			{Title: "Related 1", URL: "https://en.wikipedia.org/wiki/Related_1"},
+			{Title: "Related 2", URL: "https://en.wikipedia.org/wiki/Related_2"},
+		},
+	}
+
+	if len(data.RelatedArticles) != 2 {
+		t.Errorf("RelatedArticles length = %d, want 2", len(data.RelatedArticles))
+	}
+	if data.RelatedArticles[0].Title != "Related 1" {
+		t.Errorf("RelatedArticles[0].Title = %q", data.RelatedArticles[0].Title)
 	}
 }
 
@@ -2138,12 +2219,21 @@ func TestNutritionDataStruct(t *testing.T) {
 	data := NutritionData{
 		Name:        "Apple",
 		BrandName:   "Generic",
-		ServingSize: "1 medium (182g)",
-		Nutrients: []NutrientInfo{
-			{Name: "Calories", Amount: 95, Unit: "kcal"},
-			{Name: "Total Fat", Amount: 0.3, Unit: "g"},
+		ServingSize: "100g",
+		Calories:    52,
+		Macros: MacroNutrients{
+			Protein:       0.3,
+			Carbohydrates: 14,
+			Fat:           0.2,
+			Fiber:         2.4,
+			Sugar:         10,
+		},
+		Micros: []NutrientInfo{
+			{Name: "Vitamin C", Amount: 4.6, Unit: "mg"},
+			{Name: "Potassium", Amount: 107, Unit: "mg"},
 		},
 		Category: "Fruits",
+		Source:   "USDA FoodData Central",
 	}
 
 	if data.Name != "Apple" {
@@ -2152,8 +2242,114 @@ func TestNutritionDataStruct(t *testing.T) {
 	if data.BrandName != "Generic" {
 		t.Errorf("BrandName = %q", data.BrandName)
 	}
-	if len(data.Nutrients) != 2 {
-		t.Errorf("Nutrients length = %d", len(data.Nutrients))
+	if data.Calories != 52 {
+		t.Errorf("Calories = %v, want 52", data.Calories)
+	}
+	if data.Macros.Protein != 0.3 {
+		t.Errorf("Macros.Protein = %v, want 0.3", data.Macros.Protein)
+	}
+	if len(data.Micros) != 2 {
+		t.Errorf("Micros length = %d, want 2", len(data.Micros))
+	}
+}
+
+func TestServingSizeStruct(t *testing.T) {
+	serving := ServingSize{
+		Description: "1 medium",
+		Grams:       182,
+		Calories:    95,
+	}
+
+	if serving.Description != "1 medium" {
+		t.Errorf("Description = %q", serving.Description)
+	}
+	if serving.Grams != 182 {
+		t.Errorf("Grams = %v", serving.Grams)
+	}
+	if serving.Calories != 95 {
+		t.Errorf("Calories = %v", serving.Calories)
+	}
+}
+
+func TestMacroNutrientsStruct(t *testing.T) {
+	macros := MacroNutrients{
+		Protein:       25,
+		Carbohydrates: 30,
+		Fat:           10,
+		Fiber:         5,
+		Sugar:         2,
+		SaturatedFat:  3,
+	}
+
+	if macros.Protein != 25 {
+		t.Errorf("Protein = %v", macros.Protein)
+	}
+	if macros.Carbohydrates != 30 {
+		t.Errorf("Carbohydrates = %v", macros.Carbohydrates)
+	}
+	if macros.Fat != 10 {
+		t.Errorf("Fat = %v", macros.Fat)
+	}
+}
+
+func TestExtractFoodItem(t *testing.T) {
+	tests := []struct {
+		query string
+		want  string
+	}{
+		{"calories in banana", "banana"},
+		{"calorie in apple", "apple"},
+		{"banana calories", "banana"},
+		{"apple nutrition", "apple"},
+		{"chicken breast nutrition facts", "chicken breast"},
+		{"nutrition facts chicken breast", "chicken breast"},
+		{"nutrition info banana", "banana"},
+		{"nutrition of apple", "apple"},
+		{"nutrition for orange", "orange"},
+		{"how many calories in banana", "banana"},
+		{"how many calories does an egg have", "an egg"},
+		{"macros for chicken breast", "chicken breast"},
+		{"protein in chicken", "chicken"},
+		{"carbs in rice", "rice"},
+		{"fat in avocado", "avocado"},
+		// Direct food name (no pattern match)
+		{"banana", "banana"},
+		{"chicken breast", "chicken breast"},
+	}
+
+	for _, tt := range tests {
+		got := ExtractFoodItem(tt.query)
+		if got != tt.want {
+			t.Errorf("ExtractFoodItem(%q) = %q, want %q", tt.query, got, tt.want)
+		}
+	}
+}
+
+func TestIsNutritionQuery(t *testing.T) {
+	tests := []struct {
+		query string
+		want  bool
+	}{
+		{"calories in banana", true},
+		{"banana calories", true},
+		{"apple nutrition", true},
+		{"nutrition facts chicken breast", true},
+		{"how many calories in pizza", true},
+		{"macros for chicken", true},
+		{"protein in chicken", true},
+		{"carbs in rice", true},
+		{"fat in avocado", true},
+		// Non-nutrition queries
+		{"weather today", false},
+		{"banana recipes", false},
+		{"buy apples online", false},
+	}
+
+	for _, tt := range tests {
+		got := IsNutritionQuery(tt.query)
+		if got != tt.want {
+			t.Errorf("IsNutritionQuery(%q) = %v, want %v", tt.query, got, tt.want)
+		}
 	}
 }
 
@@ -2183,8 +2379,23 @@ func TestNutritionFetcherFetchNoQuery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Fetch() error = %v", err)
 	}
-	if result.Error != "query parameter required" {
-		t.Errorf("Error = %q, want %q", result.Error, "query parameter required")
+	if result.Error != "food item required (use 'query' or 'food' parameter)" {
+		t.Errorf("Error = %q, want %q", result.Error, "food item required (use 'query' or 'food' parameter)")
+	}
+}
+
+func TestNutritionFetcherFetchWithFoodParam(t *testing.T) {
+	f := NewNutritionFetcher("")
+	ctx := context.Background()
+
+	// Test that 'food' param is accepted as alternative to 'query'
+	result, err := f.Fetch(ctx, map[string]string{"food": "banana"})
+	if err != nil {
+		t.Fatalf("Fetch() error = %v", err)
+	}
+	// Should not error about missing query
+	if result.Error == "food item required (use 'query' or 'food' parameter)" {
+		t.Errorf("Fetch with 'food' param should not error about missing query")
 	}
 }
 
