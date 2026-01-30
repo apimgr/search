@@ -34,7 +34,7 @@
             <dt>🏷️ Version</dt><dd>{{version}}</dd>
             <dt>🐹 Go Version</dt><dd>{{.Health.GoVersion}}</dd>
             {{if .Health.Build}}
-            <dt>🔨 Build</dt><dd>{{.Health.Build.CommitID}} ({{.Health.Build.BuildDate}})</dd>
+            <dt>🔨 Build</dt><dd>{{.Health.Build.Commit}} ({{.Health.Build.Date}})</dd>
             {{end}}
             <dt>⏱️ Uptime</dt><dd>{{.Health.Uptime}}</dd>
             <dt>🚀 Mode</dt>
@@ -94,8 +94,8 @@
             <li class="feature-enabled">🧅 Tor:
                 {{if .Health.Features.Tor.Running}}
                 <span class="status-ok">✅ healthy</span>
-                {{if .Health.Features.Tor.Address}}
-                <code>{{.Health.Features.Tor.Address}}</code>
+                {{if .Health.Features.Tor.Hostname}}
+                <code>{{.Health.Features.Tor.Hostname}}</code>
                 {{end}}
                 {{else}}
                 <span class="status-error">❌ stopped</span>
