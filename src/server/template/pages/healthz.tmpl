@@ -1,172 +1,244 @@
 {{define "content"}}
 {{/* Per AI.md PART 13: Health Check HTML Response */}}
-<main class="health-status">
-    {{/* Project Info */}}
+<div class="health-page">
+    {{/* Project Header */}}
     <header class="health-header">
-        <h1>📦 {{.Config.Server.Title}}</h1>
-        <p class="project-description">{{.Config.Server.Description}}</p>
+        <h1>{{.Config.Server.Title}}</h1>
+        {{if .Config.Server.Branding.Tagline}}
+        <p class="tagline">{{.Config.Server.Branding.Tagline}}</p>
+        {{end}}
+        <p class="description">{{.Config.Server.Description}}</p>
     </header>
 
-    <h2>🏥 System Health</h2>
-
     {{/* Status Banner */}}
-    {{if eq .Health.Status "healthy"}}
-    <div class="status-banner status-healthy">
-        <span class="status-icon">✅</span>
+    <div class="status-banner {{if eq .Health.Status "healthy"}}status-healthy{{else if eq .Health.Status "degraded"}}status-degraded{{else}}status-unhealthy{{end}}">
+        {{if eq .Health.Status "healthy"}}
+        <span class="status-icon">✓</span>
         <span class="status-text">All Systems Operational</span>
-    </div>
-    {{else if eq .Health.Status "degraded"}}
-    <div class="status-banner status-degraded">
-        <span class="status-icon">⚠️</span>
+        {{else if eq .Health.Status "degraded"}}
+        <span class="status-icon">!</span>
         <span class="status-text">Degraded Performance</span>
-    </div>
-    {{else}}
-    <div class="status-banner status-unhealthy">
-        <span class="status-icon">🔴</span>
+        {{else}}
+        <span class="status-icon">✕</span>
         <span class="status-text">System Unhealthy</span>
-    </div>
-    {{end}}
-
-    {{/* Version & Build Info */}}
-    <section class="health-section">
-        <h2>ℹ️ Version</h2>
-        <dl class="info-grid">
-            <dt>🏷️ Version</dt><dd>{{version}}</dd>
-            <dt>🐹 Go Version</dt><dd>{{.Health.GoVersion}}</dd>
-            {{if .Health.Build}}
-            <dt>🔨 Build</dt><dd>{{.Health.Build.Commit}} ({{.Health.Build.Date}})</dd>
-            {{end}}
-            <dt>⏱️ Uptime</dt><dd>{{.Health.Uptime}}</dd>
-            <dt>🚀 Mode</dt>
-            <dd>
-                {{if eq .Health.Mode "production"}}
-                <span class="badge badge-production">Production</span>
-                {{else}}
-                <span class="badge badge-development">Development</span>
-                {{end}}
-            </dd>
-        </dl>
-    </section>
-
-    {{/* Cluster Info (if enabled) */}}
-    {{if .Health.Cluster}}
-    {{if .Health.Cluster.Enabled}}
-    <section class="health-section">
-        <h2>🔗 Cluster</h2>
-        <dl class="info-grid">
-            <dt>Status</dt>
-            <dd>
-                {{if eq .Health.Cluster.Status "connected"}}
-                <span class="status-ok">✅ Connected</span>
-                {{else}}
-                <span class="status-error">❌ Disconnected</span>
-                {{end}}
-            </dd>
-            {{if .Health.Cluster.Primary}}
-            <dt>👑 Primary</dt><dd><code>{{.Health.Cluster.Primary}}</code></dd>
-            {{end}}
-            <dt>🎭 Role</dt><dd>{{.Health.Cluster.Role}}</dd>
-        </dl>
-        {{if .Health.Cluster.Nodes}}
-        <h3>🖥️ Nodes</h3>
-        <ul class="node-list">
-            {{range .Health.Cluster.Nodes}}
-            <li><code>{{.}}</code> ✅</li>
-            {{end}}
-        </ul>
         {{end}}
-    </section>
-    {{end}}
-    {{end}}
+    </div>
 
-    {{/* Features */}}
-    <section class="health-section">
-        <h2>🎛️ Features</h2>
-        <ul class="feature-list">
-            {{if .Health.Features.MultiUser}}
-            <li class="feature-enabled">👥 Multi-User</li>
-            {{end}}
-            {{if .Health.Features.Organizations}}
-            <li class="feature-enabled">🏢 Organizations</li>
-            {{end}}
-            {{if .Health.Features.Tor}}
-            {{if .Health.Features.Tor.Enabled}}
-            <li class="feature-enabled">🧅 Tor:
-                {{if .Health.Features.Tor.Running}}
-                <span class="status-ok">✅ healthy</span>
-                {{if .Health.Features.Tor.Hostname}}
-                <code>{{.Health.Features.Tor.Hostname}}</code>
+    <div class="health-grid">
+        {{/* Version & Build */}}
+        <section class="health-card">
+            <h2>Version & Build</h2>
+            <dl class="health-info">
+                <div class="info-row">
+                    <dt>Version</dt>
+                    <dd><code>{{version}}</code></dd>
+                </div>
+                <div class="info-row">
+                    <dt>Go Version</dt>
+                    <dd><code>{{.Health.GoVersion}}</code></dd>
+                </div>
+                {{if .Health.Build}}
+                <div class="info-row">
+                    <dt>Commit</dt>
+                    <dd><code>{{.Health.Build.Commit}}</code></dd>
+                </div>
+                <div class="info-row">
+                    <dt>Build Date</dt>
+                    <dd>{{.Health.Build.Date}}</dd>
+                </div>
                 {{end}}
-                {{else}}
-                <span class="status-error">❌ stopped</span>
-                {{end}}
-            </li>
-            {{end}}
-            {{end}}
-            {{if .Health.Features.GeoIP}}
-            <li class="feature-enabled">🌍 GeoIP</li>
-            {{end}}
-            {{if .Health.Features.Metrics}}
-            <li class="feature-enabled">📊 Metrics</li>
-            {{end}}
-        </ul>
-    </section>
+            </dl>
+        </section>
 
-    {{/* Component Checks */}}
-    {{if .Health.Checks}}
-    <section class="health-section">
-        <h2>🔧 Component Status</h2>
-        <table class="checks-table">
-            <thead><tr><th>Component</th><th>Status</th></tr></thead>
-            <tbody>
-                {{range $service, $status := .Health.Checks}}
-                <tr>
-                    <td>
-                        {{if eq $service "database"}}🗄️ Database
-                        {{else if eq $service "cache"}}💾 Cache
-                        {{else if eq $service "disk"}}💿 Disk
-                        {{else if eq $service "scheduler"}}⏰ Scheduler
-                        {{else if eq $service "cluster"}}🔗 Cluster
-                        {{else}}{{$service}}
+        {{/* Runtime */}}
+        <section class="health-card">
+            <h2>Runtime</h2>
+            <dl class="health-info">
+                <div class="info-row">
+                    <dt>Uptime</dt>
+                    <dd>{{.Health.Uptime}}</dd>
+                </div>
+                <div class="info-row">
+                    <dt>Mode</dt>
+                    <dd>
+                        {{if eq .Health.Mode "production"}}
+                        <span class="badge badge-production">Production</span>
+                        {{else}}
+                        <span class="badge badge-development">Development</span>
                         {{end}}
-                    </td>
-                    <td class="{{if eq $status "ok"}}status-ok{{else}}status-error{{end}}">
-                        {{if eq $status "ok"}}✅ OK{{else}}❌ Error{{end}}
-                    </td>
-                </tr>
-                {{end}}
-            </tbody>
-        </table>
-    </section>
-    {{end}}
+                    </dd>
+                </div>
+                <div class="info-row">
+                    <dt>Last Check</dt>
+                    <dd><time datetime="{{.Health.Timestamp}}">{{.Health.Timestamp}}</time></dd>
+                </div>
+            </dl>
+        </section>
 
-    {{/* Statistics */}}
-    {{if .Health.Stats}}
-    <section class="health-section">
-        <h2>📈 Statistics</h2>
-        <dl class="info-grid stats-grid">
-            <dt>📥 Total Requests</dt><dd>{{.Health.Stats.RequestsTotal}}</dd>
-            <dt>📅 Requests (24h)</dt><dd>{{.Health.Stats.Requests24h}}</dd>
-            <dt>🔌 Active Connections</dt><dd>{{.Health.Stats.ActiveConnections}}</dd>
-        </dl>
-    </section>
-    {{end}}
+        {{/* Component Status */}}
+        {{if .Health.Checks}}
+        <section class="health-card">
+            <h2>Components</h2>
+            <ul class="component-list">
+                {{range $name, $status := .Health.Checks}}
+                <li class="component-item {{if eq $status "ok"}}component-ok{{else}}component-error{{end}}">
+                    <span class="component-icon">{{if eq $status "ok"}}✓{{else}}✕{{end}}</span>
+                    <span class="component-name">
+                        {{if eq $name "database"}}Database
+                        {{else if eq $name "cache"}}Cache
+                        {{else if eq $name "disk"}}Disk Space
+                        {{else if eq $name "scheduler"}}Scheduler
+                        {{else if eq $name "cluster"}}Cluster
+                        {{else if eq $name "tor"}}Tor
+                        {{else}}{{$name}}{{end}}
+                    </span>
+                    <span class="component-status">{{if eq $status "ok"}}Operational{{else}}Error{{end}}</span>
+                </li>
+                {{end}}
+            </ul>
+        </section>
+        {{end}}
+
+        {{/* Features */}}
+        <section class="health-card">
+            <h2>Features</h2>
+            <ul class="feature-list">
+                {{if .Health.Features.Tor}}
+                {{if .Health.Features.Tor.Enabled}}
+                <li class="feature-item feature-enabled">
+                    <span class="feature-icon">🧅</span>
+                    <span class="feature-name">Tor Hidden Service</span>
+                    {{if .Health.Features.Tor.Running}}
+                    <span class="feature-status status-ok">Active</span>
+                    {{else}}
+                    <span class="feature-status status-warning">Starting</span>
+                    {{end}}
+                </li>
+                {{if .Health.Features.Tor.Hostname}}
+                <li class="feature-detail">
+                    <code class="onion-addr">{{.Health.Features.Tor.Hostname}}</code>
+                </li>
+                {{end}}
+                {{end}}
+                {{end}}
+
+                {{if .Health.Features.GeoIP}}
+                <li class="feature-item feature-enabled">
+                    <span class="feature-icon">🌍</span>
+                    <span class="feature-name">GeoIP</span>
+                    <span class="feature-status status-ok">Enabled</span>
+                </li>
+                {{end}}
+
+                {{if .Health.Features.MultiUser}}
+                <li class="feature-item feature-enabled">
+                    <span class="feature-icon">👥</span>
+                    <span class="feature-name">Multi-User</span>
+                    <span class="feature-status status-ok">Enabled</span>
+                </li>
+                {{end}}
+
+                {{if .Health.Features.Organizations}}
+                <li class="feature-item feature-enabled">
+                    <span class="feature-icon">🏢</span>
+                    <span class="feature-name">Organizations</span>
+                    <span class="feature-status status-ok">Enabled</span>
+                </li>
+                {{end}}
+
+                {{if .Health.Features.Metrics}}
+                <li class="feature-item feature-enabled">
+                    <span class="feature-icon">📊</span>
+                    <span class="feature-name">Metrics</span>
+                    <span class="feature-status status-ok">Enabled</span>
+                </li>
+                {{end}}
+            </ul>
+        </section>
+
+        {{/* Cluster Info */}}
+        {{if .Health.Cluster}}
+        {{if .Health.Cluster.Enabled}}
+        <section class="health-card">
+            <h2>Cluster</h2>
+            <dl class="health-info">
+                <div class="info-row">
+                    <dt>Status</dt>
+                    <dd>
+                        {{if eq .Health.Cluster.Status "connected"}}
+                        <span class="badge badge-success">Connected</span>
+                        {{else}}
+                        <span class="badge badge-error">Disconnected</span>
+                        {{end}}
+                    </dd>
+                </div>
+                <div class="info-row">
+                    <dt>Role</dt>
+                    <dd>
+                        {{if eq .Health.Cluster.Role "primary"}}
+                        <span class="badge badge-primary">Primary</span>
+                        {{else}}
+                        <span class="badge">Member</span>
+                        {{end}}
+                    </dd>
+                </div>
+                {{if .Health.Cluster.Primary}}
+                <div class="info-row">
+                    <dt>Primary</dt>
+                    <dd><code>{{.Health.Cluster.Primary}}</code></dd>
+                </div>
+                {{end}}
+                {{if .Health.Cluster.NodeCount}}
+                <div class="info-row">
+                    <dt>Nodes</dt>
+                    <dd>{{.Health.Cluster.NodeCount}}</dd>
+                </div>
+                {{end}}
+            </dl>
+        </section>
+        {{end}}
+        {{end}}
+
+        {{/* Statistics */}}
+        {{if .Health.Stats}}
+        <section class="health-card">
+            <h2>Statistics</h2>
+            <dl class="health-info stats-info">
+                <div class="info-row">
+                    <dt>Total Requests</dt>
+                    <dd>{{.Health.Stats.RequestsTotal}}</dd>
+                </div>
+                <div class="info-row">
+                    <dt>Requests (24h)</dt>
+                    <dd>{{.Health.Stats.Requests24h}}</dd>
+                </div>
+                <div class="info-row">
+                    <dt>Active Connections</dt>
+                    <dd>{{.Health.Stats.ActiveConnections}}</dd>
+                </div>
+            </dl>
+        </section>
+        {{end}}
+    </div>
 
     {{/* Footer */}}
     <footer class="health-footer">
-        <p>🕐 Last checked: <time datetime="{{.Health.Timestamp}}">{{.Health.Timestamp}}</time></p>
-        <p class="auto-refresh">Auto-refreshing in <span id="countdown">30</span>s</p>
+        <p>Last updated: <time datetime="{{.Health.Timestamp}}">{{.Health.Timestamp}}</time></p>
+        <p class="auto-refresh">
+            <span class="refresh-indicator"></span>
+            Auto-refresh in <span id="countdown">30</span>s
+        </p>
     </footer>
-</main>
+</div>
 
 <script>
-// Auto-refresh countdown
+// Auto-refresh countdown - progressively enhanced
 (function() {
-    let seconds = 30;
-    const countdown = document.getElementById('countdown');
+    var seconds = 30;
+    var countdown = document.getElementById('countdown');
     if (!countdown) return;
 
-    const timer = setInterval(function() {
+    var timer = setInterval(function() {
         seconds--;
         countdown.textContent = seconds;
         if (seconds <= 0) {

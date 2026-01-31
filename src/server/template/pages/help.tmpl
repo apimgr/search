@@ -1,6 +1,9 @@
 {{define "content"}}
 <div class="static-page help-page">
-    <h1>Help & Documentation</h1>
+    <header class="help-header">
+        <h1>Help & Documentation</h1>
+        <p class="subtitle">Learn how to get the most out of {{.Config.Server.Branding.AppName}}</p>
+    </header>
 
     {{if .Config.Server.Pages.Help.Content}}
     <div class="page-content markdown">
@@ -8,45 +11,268 @@
     </div>
     {{else}}
     <div class="page-content">
-        <section class="help-section">
+        {{/* Table of Contents */}}
+        <nav class="help-toc">
+            <h2>Contents</h2>
+            <ul>
+                <li><a href="#getting-started">Getting Started</a></li>
+                <li><a href="#search-categories">Search Categories</a></li>
+                <li><a href="#bang-commands">Bang Commands</a></li>
+                <li><a href="#direct-answers">Direct Answers</a></li>
+                <li><a href="#search-operators">Search Operators</a></li>
+                <li><a href="#keyboard-shortcuts">Keyboard Shortcuts</a></li>
+                <li><a href="#api-docs">API Documentation</a></li>
+                <li><a href="#privacy">Privacy Features</a></li>
+                <li><a href="#faq">FAQ</a></li>
+            </ul>
+        </nav>
+
+        {{/* Getting Started */}}
+        <section id="getting-started" class="help-section">
             <h2>Getting Started</h2>
-            <p>{{.Config.Server.Branding.AppName}} is a privacy-respecting search engine. Simply type your query in the search box and press Enter or click the search button.</p>
+            <p>{{.Config.Server.Branding.AppName}} is a privacy-respecting metasearch engine. Simply type your query in the search box and press <kbd>Enter</kbd> or click the search button.</p>
+            <p>Unlike traditional search engines, we don't track you, store your search history, or create a profile about you.</p>
         </section>
 
-        <section class="help-section">
+        {{/* Search Categories */}}
+        <section id="search-categories" class="help-section">
             <h2>Search Categories</h2>
-            <p>Use the category tabs to filter your search results:</p>
-            <ul>
-                <li><strong>All:</strong> General web search</li>
-                <li><strong>Images:</strong> Search for images</li>
-                <li><strong>Videos:</strong> Search for videos</li>
-                <li><strong>News:</strong> Search news articles</li>
-                <li><strong>Maps:</strong> Search for locations</li>
-            </ul>
+            <p>Use the category tabs to filter your results:</p>
+            <div class="category-grid">
+                <div class="category-item">
+                    <span class="category-icon">🌐</span>
+                    <strong>General</strong>
+                    <p>Web pages and articles</p>
+                </div>
+                <div class="category-item">
+                    <span class="category-icon">🖼️</span>
+                    <strong>Images</strong>
+                    <p>Photos and graphics</p>
+                </div>
+                <div class="category-item">
+                    <span class="category-icon">🎬</span>
+                    <strong>Videos</strong>
+                    <p>Video content</p>
+                </div>
+                <div class="category-item">
+                    <span class="category-icon">📰</span>
+                    <strong>News</strong>
+                    <p>Recent news articles</p>
+                </div>
+                <div class="category-item">
+                    <span class="category-icon">🗺️</span>
+                    <strong>Maps</strong>
+                    <p>Locations and directions</p>
+                </div>
+                <div class="category-item">
+                    <span class="category-icon">📚</span>
+                    <strong>Science</strong>
+                    <p>Academic papers (arXiv, PubMed)</p>
+                </div>
+            </div>
         </section>
 
-        <section class="help-section">
-            <h2>Search Tips</h2>
-            <ul>
-                <li>Use specific keywords for better results</li>
-                <li>Put phrases in quotes for exact matches: <code>"exact phrase"</code></li>
-                <li>Use minus to exclude words: <code>apple -fruit</code></li>
-                <li>Search within a site: <code>site:example.com query</code></li>
+        {{/* Bang Commands */}}
+        <section id="bang-commands" class="help-section">
+            <h2>Bang Commands</h2>
+            <p>Bang commands let you search other sites directly. Start your query with a bang (!) followed by the site shortcut.</p>
+
+            <h3>Popular Bangs</h3>
+            <div class="bang-grid">
+                <div class="bang-item"><code>!g</code> Google</div>
+                <div class="bang-item"><code>!ddg</code> DuckDuckGo</div>
+                <div class="bang-item"><code>!b</code> Bing</div>
+                <div class="bang-item"><code>!w</code> Wikipedia</div>
+                <div class="bang-item"><code>!yt</code> YouTube</div>
+                <div class="bang-item"><code>!gh</code> GitHub</div>
+                <div class="bang-item"><code>!so</code> Stack Overflow</div>
+                <div class="bang-item"><code>!r</code> Reddit</div>
+                <div class="bang-item"><code>!tw</code> Twitter/X</div>
+                <div class="bang-item"><code>!amz</code> Amazon</div>
+                <div class="bang-item"><code>!ebay</code> eBay</div>
+                <div class="bang-item"><code>!maps</code> Google Maps</div>
+            </div>
+
+            <h3>Examples</h3>
+            <ul class="example-list">
+                <li><code>!g python tutorial</code> - Search Google for "python tutorial"</li>
+                <li><code>!w artificial intelligence</code> - Go to Wikipedia article</li>
+                <li><code>!yt funny cats</code> - Search YouTube</li>
             </ul>
+            <p><a href="/preferences">View all available bangs</a></p>
         </section>
 
-        <section class="help-section">
-            <h2>Keyboard Shortcuts</h2>
-            <table class="shortcuts-table">
+        {{/* Direct Answers */}}
+        <section id="direct-answers" class="help-section">
+            <h2>Direct Answers</h2>
+            <p>Get instant results for specific queries using these operators:</p>
+
+            <h3>Network & Security</h3>
+            <div class="operator-grid">
+                <div class="operator-item">
+                    <code>ip:8.8.8.8</code>
+                    <span>IP geolocation lookup</span>
+                </div>
+                <div class="operator-item">
+                    <code>dns:example.com</code>
+                    <span>DNS records lookup</span>
+                </div>
+                <div class="operator-item">
+                    <code>whois:example.com</code>
+                    <span>Domain WHOIS info</span>
+                </div>
+                <div class="operator-item">
+                    <code>ssl:example.com</code>
+                    <span>SSL certificate info</span>
+                </div>
+                <div class="operator-item">
+                    <code>headers:example.com</code>
+                    <span>HTTP headers</span>
+                </div>
+                <div class="operator-item">
+                    <code>asn:AS15169</code>
+                    <span>ASN information</span>
+                </div>
+            </div>
+
+            <h3>Encoding & Conversion</h3>
+            <div class="operator-grid">
+                <div class="operator-item">
+                    <code>base64:hello</code>
+                    <span>Base64 encode/decode</span>
+                </div>
+                <div class="operator-item">
+                    <code>url:hello world</code>
+                    <span>URL encode/decode</span>
+                </div>
+                <div class="operator-item">
+                    <code>hash:hello</code>
+                    <span>Hash (MD5, SHA)</span>
+                </div>
+                <div class="operator-item">
+                    <code>qr:hello</code>
+                    <span>Generate QR code</span>
+                </div>
+                <div class="operator-item">
+                    <code>uuid:</code>
+                    <span>Generate UUID</span>
+                </div>
+                <div class="operator-item">
+                    <code>jwt:token</code>
+                    <span>Decode JWT</span>
+                </div>
+            </div>
+
+            <h3>Developer Tools</h3>
+            <div class="operator-grid">
+                <div class="operator-item">
+                    <code>json:{"key":"val"}</code>
+                    <span>Format JSON</span>
+                </div>
+                <div class="operator-item">
+                    <code>regex:pattern</code>
+                    <span>Test regex</span>
+                </div>
+                <div class="operator-item">
+                    <code>color:#ff5500</code>
+                    <span>Color info</span>
+                </div>
+                <div class="operator-item">
+                    <code>unix:1234567890</code>
+                    <span>Unix timestamp</span>
+                </div>
+                <div class="operator-item">
+                    <code>cron:* * * * *</code>
+                    <span>Explain cron</span>
+                </div>
+                <div class="operator-item">
+                    <code>ua:</code>
+                    <span>User agent info</span>
+                </div>
+            </div>
+
+            <h3>Reference</h3>
+            <div class="operator-grid">
+                <div class="operator-item">
+                    <code>rfc:2616</code>
+                    <span>RFC document</span>
+                </div>
+                <div class="operator-item">
+                    <code>man:grep</code>
+                    <span>Man page</span>
+                </div>
+                <div class="operator-item">
+                    <code>http:404</code>
+                    <span>HTTP status code</span>
+                </div>
+                <div class="operator-item">
+                    <code>mime:pdf</code>
+                    <span>MIME type</span>
+                </div>
+                <div class="operator-item">
+                    <code>port:443</code>
+                    <span>Port info</span>
+                </div>
+                <div class="operator-item">
+                    <code>unicode:U+1F600</code>
+                    <span>Unicode character</span>
+                </div>
+            </div>
+        </section>
+
+        {{/* Search Operators */}}
+        <section id="search-operators" class="help-section">
+            <h2>Search Operators</h2>
+            <p>Refine your searches with these operators:</p>
+            <table class="operators-table">
                 <thead>
-                    <tr>
-                        <th>Shortcut</th>
-                        <th>Action</th>
-                    </tr>
+                    <tr><th>Operator</th><th>Example</th><th>Description</th></tr>
                 </thead>
                 <tbody>
                     <tr>
-                        <td><kbd>/</kbd></td>
+                        <td><code>"..."</code></td>
+                        <td><code>"exact phrase"</code></td>
+                        <td>Search for exact phrase</td>
+                    </tr>
+                    <tr>
+                        <td><code>-</code></td>
+                        <td><code>apple -fruit</code></td>
+                        <td>Exclude word from results</td>
+                    </tr>
+                    <tr>
+                        <td><code>site:</code></td>
+                        <td><code>site:example.com query</code></td>
+                        <td>Search within a specific site</td>
+                    </tr>
+                    <tr>
+                        <td><code>filetype:</code></td>
+                        <td><code>filetype:pdf report</code></td>
+                        <td>Find specific file types</td>
+                    </tr>
+                    <tr>
+                        <td><code>intitle:</code></td>
+                        <td><code>intitle:guide</code></td>
+                        <td>Find word in page title</td>
+                    </tr>
+                    <tr>
+                        <td><code>inurl:</code></td>
+                        <td><code>inurl:blog</code></td>
+                        <td>Find word in URL</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        {{/* Keyboard Shortcuts */}}
+        <section id="keyboard-shortcuts" class="help-section">
+            <h2>Keyboard Shortcuts</h2>
+            <table class="shortcuts-table">
+                <thead>
+                    <tr><th>Shortcut</th><th>Action</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><kbd>/</kbd> or <kbd>s</kbd></td>
                         <td>Focus search box</td>
                     </tr>
                     <tr>
@@ -57,47 +283,82 @@
                         <td><kbd>t</kbd></td>
                         <td>Toggle theme (dark/light)</td>
                     </tr>
+                    <tr>
+                        <td><kbd>?</kbd></td>
+                        <td>Show keyboard shortcuts</td>
+                    </tr>
+                    <tr>
+                        <td><kbd>j</kbd> / <kbd>k</kbd></td>
+                        <td>Navigate results (down/up)</td>
+                    </tr>
+                    <tr>
+                        <td><kbd>Enter</kbd></td>
+                        <td>Open selected result</td>
+                    </tr>
                 </tbody>
             </table>
         </section>
 
-        <section class="help-section api-docs">
+        {{/* API Documentation */}}
+        <section id="api-docs" class="help-section api-docs">
             <h2>API Documentation</h2>
-            <p>This application provides a full REST API with interactive documentation.</p>
-            <ul>
-                <li><a href="/openapi">OpenAPI</a> - Interactive REST API explorer</li>
-            </ul>
+            <p>This application provides full REST and GraphQL APIs with interactive documentation.</p>
+            <div class="api-links">
+                <a href="/openapi" class="api-link-card">
+                    <h3>OpenAPI / Swagger</h3>
+                    <p>Interactive REST API explorer with try-it-out functionality</p>
+                </a>
+                <a href="/graphql" class="api-link-card">
+                    <h3>GraphQL Playground</h3>
+                    <p>Interactive GraphQL explorer with schema documentation</p>
+                </a>
+            </div>
         </section>
 
-        <section class="help-section">
+        {{/* Privacy Features */}}
+        <section id="privacy" class="help-section">
             <h2>Privacy Features</h2>
-            <ul>
-                <li>No tracking or profiling</li>
-                <li>No search history stored</li>
-                <li>Tor hidden service available</li>
-                <li>Minimal cookies (only for preferences)</li>
+            <ul class="privacy-list">
+                <li><strong>No tracking:</strong> We don't track your searches or create user profiles</li>
+                <li><strong>No search history:</strong> Your searches are not stored on our servers</li>
+                <li><strong>Tor support:</strong> Access via Tor hidden service for maximum anonymity</li>
+                <li><strong>Minimal cookies:</strong> Only essential cookies for preferences (no analytics)</li>
+                <li><strong>No JavaScript required:</strong> Core search works without JavaScript</li>
+                <li><strong>Open source:</strong> Full source code available for audit</li>
             </ul>
         </section>
 
-        <section class="help-section">
-            <h2>FAQ</h2>
-            <details>
-                <summary>Why are some results different from other search engines?</summary>
-                <p>We aggregate results from multiple sources and don't personalize based on your history, so results may differ from what you see on other search engines.</p>
-            </details>
-            <details>
-                <summary>How can I access via Tor?</summary>
-                <p>Install Tor Browser and use our .onion address (available on the <a href="/server/about">About page</a>).</p>
-            </details>
-            <details>
-                <summary>Can I self-host this?</summary>
-                <p>Yes! This is open source software. Check our <a href="https://github.com/apimgr/search" target="_blank" rel="noopener">GitHub repository</a> for installation instructions.</p>
-            </details>
+        {{/* FAQ */}}
+        <section id="faq" class="help-section">
+            <h2>Frequently Asked Questions</h2>
+            <div class="faq-list">
+                <details>
+                    <summary>Why are results different from Google?</summary>
+                    <p>We aggregate results from multiple sources without personalization. Results aren't filtered based on your history, location, or profile, so they may differ from what you see on personalized search engines.</p>
+                </details>
+                <details>
+                    <summary>How do I access via Tor?</summary>
+                    <p>Install <a href="https://www.torproject.org/download/" target="_blank" rel="noopener">Tor Browser</a> and use our .onion address (shown on the <a href="/server/about">About page</a> when Tor is enabled).</p>
+                </details>
+                <details>
+                    <summary>Can I self-host this?</summary>
+                    <p>Yes! This is free and open source software. Check our <a href="https://github.com/apimgr/search" target="_blank" rel="noopener">GitHub repository</a> for installation instructions.</p>
+                </details>
+                <details>
+                    <summary>What search engines do you use?</summary>
+                    <p>We aggregate results from multiple sources including DuckDuckGo, Brave Search, Wikipedia, and specialized engines for images, videos, and news.</p>
+                </details>
+                <details>
+                    <summary>How do instant answers work?</summary>
+                    <p>Instant answers are generated locally for common queries like calculations, conversions, and definitions. They don't require external API calls.</p>
+                </details>
+            </div>
         </section>
 
+        {{/* Need Help */}}
         <section class="help-section">
             <h2>Need More Help?</h2>
-            <p><a href="/server/contact">Contact us</a> if you have questions or need assistance.</p>
+            <p>If you have questions or need assistance, please <a href="/server/contact">contact us</a>.</p>
         </section>
     </div>
     {{end}}
