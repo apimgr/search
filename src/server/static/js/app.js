@@ -2768,14 +2768,30 @@
             if (display) display.value = '';
         },
         calcEquals: function() {
+            var display = document.getElementById('calc-display');
+            if (!display) return;
+
+            // Don't evaluate empty expression
+            var expr = this.calcExpression.replace(/[^0-9+\-*/.()]/g, '');
+            if (!expr || expr.trim() === '') {
+                return;
+            }
+
             try {
-                var result = Function('"use strict"; return (' + this.calcExpression.replace(/[^0-9+\-*/.()]/g, '') + ')')();
-                var display = document.getElementById('calc-display');
-                if (display) display.value = result;
-                this.calcExpression = String(result);
+                var result = Function('"use strict"; return (' + expr + ')')();
+                // Handle invalid results
+                if (result === undefined || result === null || isNaN(result)) {
+                    display.value = 'Error';
+                    this.calcExpression = '';
+                } else if (!isFinite(result)) {
+                    display.value = result > 0 ? 'Infinity' : '-Infinity';
+                    this.calcExpression = '';
+                } else {
+                    display.value = result;
+                    this.calcExpression = String(result);
+                }
             } catch (e) {
-                var display = document.getElementById('calc-display');
-                if (display) display.value = 'Error';
+                display.value = 'Error';
                 this.calcExpression = '';
             }
         },

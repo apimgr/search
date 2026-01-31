@@ -242,33 +242,16 @@ func (m *Manager) GetConfig() *config.WidgetsConfig {
 }
 
 // IsEnabled returns whether widgets are enabled
+// Widgets are always enabled - users control via localStorage
 func (m *Manager) IsEnabled() bool {
-	return m.config != nil && m.config.Enabled
+	return true
 }
 
 // IsWidgetEnabled checks if a specific widget type is enabled
+// All widgets are always enabled - users control via localStorage
+// Data widgets that require API keys will return appropriate errors from their fetchers
 func (m *Manager) IsWidgetEnabled(widgetType WidgetType) bool {
-	if !m.IsEnabled() {
-		return false
-	}
-
-	switch widgetType {
-	case WidgetWeather:
-		return m.config.Weather.Enabled
-	case WidgetNews:
-		return m.config.News.Enabled
-	case WidgetStocks:
-		return m.config.Stocks.Enabled
-	case WidgetCrypto:
-		return m.config.Crypto.Enabled
-	case WidgetSports:
-		return m.config.Sports.Enabled
-	case WidgetRSS:
-		return m.config.RSS.Enabled
-	default:
-		// Tool and user widgets are always available if widgets are enabled
-		return true
-	}
+	return true
 }
 
 // Close closes the manager and its internal cache

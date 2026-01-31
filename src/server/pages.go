@@ -27,11 +27,15 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	data := s.newPageData("", "home")
 	data.CSRFToken = s.getCSRFToken(r)
 
-	// Add widget data if widgets are enabled
-	if s.widgetManager != nil && s.widgetManager.IsEnabled() {
-		data.WidgetsEnabled = true
-		// Convert default widgets to JSON array string for JavaScript
-		defaults := s.widgetManager.GetDefaultWidgets()
+	// Widgets are always available - users control via localStorage
+	// Per user preference: no server-side gating, all widgets user-controlled
+	data.WidgetsEnabled = true
+	// Default widgets for new users (stored in localStorage after first visit)
+	defaults := []string{"clock", "calculator", "quicklinks", "notes"}
+	if s.widgetManager != nil {
+		defaults = s.widgetManager.GetDefaultWidgets()
+	}
+	if len(defaults) > 0 {
 		data.DefaultWidgets = fmt.Sprintf(`["%s"]`, strings.Join(defaults, `","`))
 	}
 

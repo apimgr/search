@@ -231,26 +231,27 @@ func TestManagerGetConfig(t *testing.T) {
 }
 
 func TestManagerIsEnabled(t *testing.T) {
-	// Enabled
+	// Widgets are always enabled - users control via localStorage
 	m := NewManager(&config.WidgetsConfig{Enabled: true})
 	if !m.IsEnabled() {
 		t.Error("IsEnabled() should return true")
 	}
 
-	// Disabled
+	// Even with Enabled: false, widgets are available (user-controlled)
 	m2 := NewManager(&config.WidgetsConfig{Enabled: false})
-	if m2.IsEnabled() {
-		t.Error("IsEnabled() should return false")
+	if !m2.IsEnabled() {
+		t.Error("IsEnabled() should always return true (user-controlled)")
 	}
 
-	// Nil config
+	// Nil config - still enabled
 	m3 := NewManager(nil)
-	if m3.IsEnabled() {
-		t.Error("IsEnabled() should return false for nil config")
+	if !m3.IsEnabled() {
+		t.Error("IsEnabled() should always return true (user-controlled)")
 	}
 }
 
 func TestManagerIsWidgetEnabled(t *testing.T) {
+	// All widgets are always enabled - users control via localStorage
 	cfg := &config.WidgetsConfig{
 		Enabled: true,
 		Weather: config.WeatherWidgetConfig{Enabled: true},
@@ -262,14 +263,15 @@ func TestManagerIsWidgetEnabled(t *testing.T) {
 	}
 	m := NewManager(cfg)
 
+	// All widgets are always enabled - users control via localStorage
 	tests := []struct {
 		wt   WidgetType
 		want bool
 	}{
 		{WidgetWeather, true},
-		{WidgetNews, false},
+		{WidgetNews, true},       // All widgets enabled (user-controlled)
 		{WidgetStocks, true},
-		{WidgetCrypto, false},
+		{WidgetCrypto, true},     // All widgets enabled (user-controlled)
 		{WidgetSports, true},
 		{WidgetRSS, true},
 		{WidgetClock, true},      // Tool widgets always enabled
@@ -287,15 +289,17 @@ func TestManagerIsWidgetEnabled(t *testing.T) {
 	}
 }
 
-func TestManagerIsWidgetEnabledDisabled(t *testing.T) {
+func TestManagerIsWidgetEnabledAlwaysTrue(t *testing.T) {
+	// Even with Enabled: false in config, all widgets are always available
+	// Users control their widgets via localStorage
 	m := NewManager(&config.WidgetsConfig{Enabled: false})
 
-	// All widgets should be disabled when widgets are disabled
-	if m.IsWidgetEnabled(WidgetWeather) {
-		t.Error("IsWidgetEnabled() should return false when widgets are disabled")
+	// All widgets should still be enabled (user-controlled)
+	if !m.IsWidgetEnabled(WidgetWeather) {
+		t.Error("IsWidgetEnabled() should always return true (user-controlled)")
 	}
-	if m.IsWidgetEnabled(WidgetClock) {
-		t.Error("IsWidgetEnabled() should return false when widgets are disabled")
+	if !m.IsWidgetEnabled(WidgetClock) {
+		t.Error("IsWidgetEnabled() should always return true (user-controlled)")
 	}
 }
 

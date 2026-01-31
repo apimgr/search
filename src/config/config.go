@@ -412,11 +412,48 @@ type LogsConfig struct {
 // TorConfig represents Tor configuration
 // Per AI.md PART 32: "Auto-enabled if tor binary is installed - no enable flag needed"
 type TorConfig struct {
-	Enabled           bool   `yaml:"-"` // Computed at runtime, NOT configurable
-	Binary            string `yaml:"binary"`
-	DataDir           string `yaml:"data_dir"`
-	OnionAddress      string `yaml:"-"` // Set at runtime when Tor starts
-	HiddenServicePort int    `yaml:"hidden_service_port"`
+	// Runtime state - NOT configurable
+	Enabled      bool   `yaml:"-"` // Computed at runtime when Tor binary is found
+	OnionAddress string `yaml:"-"` // Set at runtime when Tor starts
+
+	// Binary path (empty = auto-detect)
+	Binary string `yaml:"binary"`
+
+	// --- Outbound Network Settings ---
+	// Use Tor network for outbound connections (server-wide default)
+	UseNetwork bool `yaml:"use_network"`
+	// Allow users to set their own Tor network preference
+	AllowUserPreference bool `yaml:"allow_user_preference"`
+
+	// --- Performance Settings ---
+	// Maximum circuits to keep open (1-128, default 32)
+	MaxCircuits int `yaml:"max_circuits"`
+	// Circuit timeout in seconds (10-300, default 60)
+	CircuitTimeout int `yaml:"circuit_timeout"`
+	// Bootstrap timeout in seconds (30-600, default 180)
+	BootstrapTimeout int `yaml:"bootstrap_timeout"`
+
+	// --- Security Settings ---
+	// Scrub sensitive info from Tor logs (default true)
+	SafeLogging bool `yaml:"safe_logging"`
+	// Maximum concurrent streams per circuit (10-500, default 100)
+	MaxStreamsPerCircuit int `yaml:"max_streams_per_circuit"`
+	// Close circuit when stream limit exceeded (default true)
+	CloseCircuitOnStreamLimit bool `yaml:"close_circuit_on_stream_limit"`
+
+	// --- Bandwidth Settings ---
+	// Maximum bandwidth rate per second (e.g., "1 MB", "500 KB")
+	BandwidthRate string `yaml:"bandwidth_rate"`
+	// Maximum bandwidth burst per second (e.g., "2 MB", "1 MB")
+	BandwidthBurst string `yaml:"bandwidth_burst"`
+	// Maximum monthly bandwidth (e.g., "100 GB", "50 GB", "unlimited")
+	MaxMonthlyBandwidth string `yaml:"max_monthly_bandwidth"`
+
+	// --- Hidden Service Settings ---
+	// Number of introduction points (3-10, default 3)
+	NumIntroPoints int `yaml:"num_intro_points"`
+	// Virtual port for hidden service (1-65535, default 80)
+	HiddenServicePort int `yaml:"hidden_service_port"`
 }
 
 // EmailConfig represents email/SMTP configuration
@@ -1190,7 +1227,18 @@ func DefaultConfig() *Config {
 			Tor: TorConfig{
 				// Per AI.md PART 32: Enabled is auto-detected at runtime
 				// Binary path auto-detected if empty
-				HiddenServicePort: 80,
+				AllowUserPreference:       true,
+				MaxCircuits:               32,
+				CircuitTimeout:            60,
+				BootstrapTimeout:          180,
+				SafeLogging:               true,
+				MaxStreamsPerCircuit:      100,
+				CloseCircuitOnStreamLimit: true,
+				BandwidthRate:             "1 MB",
+				BandwidthBurst:            "2 MB",
+				MaxMonthlyBandwidth:       "100 GB",
+				NumIntroPoints:            3,
+				HiddenServicePort:         80,
 			},
 			Email: EmailConfig{
 				// Per AI.md PART 18: Enabled is auto-set based on SMTP availability

@@ -8,14 +8,16 @@ import (
 )
 
 // handleWidgets returns list of available widgets
+// Widgets are always enabled - users control via localStorage
 func (h *Handler) handleWidgets(w http.ResponseWriter, r *http.Request) {
 	if h.widgetManager == nil {
+		// Return basic widgets even without manager
 		h.jsonResponse(w, http.StatusOK, &APIResponse{
 			OK: true,
 			Data: map[string]interface{}{
-				"enabled":  false,
+				"enabled":  true,
 				"widgets":  []interface{}{},
-				"defaults": []string{},
+				"defaults": []string{"clock", "calculator", "quicklinks", "notes"},
 			},
 			Meta: &APIMeta{Version: APIVersion},
 		})
@@ -51,7 +53,14 @@ func (h *Handler) handleWidgets(w http.ResponseWriter, r *http.Request) {
 // handleWidgetData fetches data for a specific widget
 func (h *Handler) handleWidgetData(w http.ResponseWriter, r *http.Request) {
 	if h.widgetManager == nil {
-		h.errorResponse(w, http.StatusServiceUnavailable, "Widgets not enabled", "")
+		// Return empty data - tool widgets work client-side, data widgets need manager
+		h.jsonResponse(w, http.StatusOK, &APIResponse{
+			OK: true,
+			Data: &widget.WidgetData{
+				Error: "Widget data not available - configure in widget settings",
+			},
+			Meta: &APIMeta{Version: APIVersion},
+		})
 		return
 	}
 
