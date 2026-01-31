@@ -1501,14 +1501,16 @@ func TestSportsFetcherImplementsFetcher(t *testing.T) {
 }
 
 func TestSportsDataStruct(t *testing.T) {
+	homeScore := 24
+	awayScore := 21
 	data := SportsData{
 		Games: []GameData{
 			{
 				League:    "NFL",
 				HomeTeam:  "Patriots",
 				AwayTeam:  "Bills",
-				HomeScore: 24,
-				AwayScore: 21,
+				HomeScore: &homeScore,
+				AwayScore: &awayScore,
 				Status:    "final",
 			},
 		},
@@ -1523,12 +1525,14 @@ func TestSportsDataStruct(t *testing.T) {
 }
 
 func TestGameDataStruct(t *testing.T) {
+	homeScore := 110
+	awayScore := 105
 	game := GameData{
 		League:    "NBA",
 		HomeTeam:  "Lakers",
 		AwayTeam:  "Celtics",
-		HomeScore: 110,
-		AwayScore: 105,
+		HomeScore: &homeScore,
+		AwayScore: &awayScore,
 		Status:    "live",
 		StartTime: "7:30 PM ET",
 	}
@@ -1542,8 +1546,8 @@ func TestGameDataStruct(t *testing.T) {
 	if game.Status != "live" {
 		t.Errorf("Status = %q", game.Status)
 	}
-	if game.HomeScore != 110 {
-		t.Errorf("HomeScore = %d", game.HomeScore)
+	if game.HomeScore == nil || *game.HomeScore != 110 {
+		t.Errorf("HomeScore mismatch")
 	}
 }
 
@@ -2191,8 +2195,8 @@ func TestNewNutritionFetcher(t *testing.T) {
 	if f.httpClient == nil {
 		t.Error("NutritionFetcher.httpClient should not be nil")
 	}
-	if f.apiKey != "test-api-key" {
-		t.Errorf("apiKey = %q, want %q", f.apiKey, "test-api-key")
+	if f.usdaAPIKey != "test-api-key" {
+		t.Errorf("usdaAPIKey = %q, want %q", f.usdaAPIKey, "test-api-key")
 	}
 }
 

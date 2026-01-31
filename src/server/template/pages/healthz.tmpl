@@ -1,33 +1,38 @@
 {{define "content"}}
 {{/* Per AI.md PART 13: Health Check HTML Response */}}
 <div class="health-page">
-    {{/* Project Header */}}
+    {{/* Project Header - per AI.md PART 13 */}}
     <header class="health-header">
-        <h1>{{.Config.Server.Title}}</h1>
-        {{if .Config.Server.Branding.Tagline}}
-        <p class="tagline">{{.Config.Server.Branding.Tagline}}</p>
+        {{if .Health.Project}}
+        <h1>📦 {{.Health.Project.Name}}</h1>
+        {{if .Health.Project.Tagline}}
+        <p class="tagline">{{.Health.Project.Tagline}}</p>
         {{end}}
+        <p class="description">{{.Health.Project.Description}}</p>
+        {{else}}
+        <h1>📦 {{.Config.Server.Title}}</h1>
         <p class="description">{{.Config.Server.Description}}</p>
+        {{end}}
     </header>
 
-    {{/* Status Banner */}}
-    <div class="status-banner {{if eq .Health.Status "healthy"}}status-healthy{{else if eq .Health.Status "degraded"}}status-degraded{{else}}status-unhealthy{{end}}">
+    {{/* Status Banner - per AI.md PART 13 */}}
+    <div class="status-banner {{if eq .Health.Status "healthy"}}status-ok{{else if eq .Health.Status "degraded"}}status-warning{{else}}status-error{{end}}">
         {{if eq .Health.Status "healthy"}}
-        <span class="status-icon">✓</span>
+        <span class="status-icon">✅</span>
         <span class="status-text">All Systems Operational</span>
         {{else if eq .Health.Status "degraded"}}
-        <span class="status-icon">!</span>
+        <span class="status-icon">⚠️</span>
         <span class="status-text">Degraded Performance</span>
         {{else}}
-        <span class="status-icon">✕</span>
+        <span class="status-icon">❌</span>
         <span class="status-text">System Unhealthy</span>
         {{end}}
     </div>
 
     <div class="health-grid">
-        {{/* Version & Build */}}
-        <section class="health-card">
-            <h2>Version & Build</h2>
+        {{/* Version & Build per AI.md PART 13 */}}
+        <section class="section-card">
+            <h2>ℹ️ Version</h2>
             <dl class="health-info">
                 <div class="info-row">
                     <dt>Version</dt>
@@ -50,9 +55,9 @@
             </dl>
         </section>
 
-        {{/* Runtime */}}
-        <section class="health-card">
-            <h2>Runtime</h2>
+        {{/* Runtime per AI.md PART 13 */}}
+        <section class="section-card">
+            <h2>⏱️ Runtime</h2>
             <dl class="health-info">
                 <div class="info-row">
                     <dt>Uptime</dt>
@@ -75,10 +80,10 @@
             </dl>
         </section>
 
-        {{/* Component Status */}}
+        {{/* Component Status per AI.md PART 13 */}}
         {{if .Health.Checks}}
-        <section class="health-card">
-            <h2>Components</h2>
+        <section class="section-card">
+            <h2>🔧 Component Status</h2>
             <ul class="component-list">
                 {{range $name, $status := .Health.Checks}}
                 <li class="component-item {{if eq $status "ok"}}component-ok{{else}}component-error{{end}}">
@@ -99,9 +104,9 @@
         </section>
         {{end}}
 
-        {{/* Features */}}
-        <section class="health-card">
-            <h2>Features</h2>
+        {{/* Features per AI.md PART 13 */}}
+        <section class="section-card">
+            <h2>🎛️ Features</h2>
             <ul class="feature-list">
                 {{if .Health.Features.Tor}}
                 {{if .Health.Features.Tor.Enabled}}
@@ -156,11 +161,11 @@
             </ul>
         </section>
 
-        {{/* Cluster Info */}}
+        {{/* Cluster Info per AI.md PART 13 */}}
         {{if .Health.Cluster}}
         {{if .Health.Cluster.Enabled}}
-        <section class="health-card">
-            <h2>Cluster</h2>
+        <section class="section-card">
+            <h2>🔗 Cluster</h2>
             <dl class="health-info">
                 <div class="info-row">
                     <dt>Status</dt>
@@ -199,10 +204,10 @@
         {{end}}
         {{end}}
 
-        {{/* Statistics */}}
+        {{/* Statistics per AI.md PART 13 */}}
         {{if .Health.Stats}}
-        <section class="health-card">
-            <h2>Statistics</h2>
+        <section class="section-card">
+            <h2>📈 Server Statistics</h2>
             <dl class="health-info stats-info">
                 <div class="info-row">
                     <dt>Total Requests</dt>

@@ -738,7 +738,7 @@ func (h *Handler) renderServerBrandingContent(w http.ResponseWriter, data *Admin
                 </form>
             </div>`,
 		data.CSRFToken,
-		h.config.Server.Branding.AppName,
+		h.config.Server.Branding.Title,
 		h.config.Server.Branding.LogoURL,
 		h.config.Server.Branding.FaviconURL,
 		h.config.Server.Branding.FooterText,

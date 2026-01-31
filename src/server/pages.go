@@ -222,10 +222,11 @@ func (s *Server) buildHealthInfo() *HealthInfo {
 	}
 
 	health := &HealthInfo{
-		// Per AI.md PART 13: project.name and project.description from branding
+		// Per AI.md PART 13: project fields from cfg.Branding per spec line 16324-16326
 		Project: &ProjectInfo{
-			Name:        s.config.Server.Branding.AppName,
-			Description: s.config.Server.Description,
+			Name:        s.config.Server.Branding.Title,
+			Tagline:     s.config.Server.Branding.Tagline,
+			Description: s.config.Server.Branding.Description,
 		},
 		Status:    "healthy",
 		Version:   getVersion(),

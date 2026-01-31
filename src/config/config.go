@@ -227,12 +227,15 @@ type AdminConfig struct {
 }
 
 // BrandingConfig represents branding configuration
+// Per AI.md PART 13/16: branding fields for healthz project info
 type BrandingConfig struct {
-	AppName     string `yaml:"app_name"`
-	LogoURL     string `yaml:"logo_url"`
-	FaviconURL  string `yaml:"favicon_url"`
-	FooterText  string `yaml:"footer_text"`
-	Theme       string `yaml:"theme"`
+	Title        string `yaml:"title"`         // Per PART 13: project.name source
+	Tagline      string `yaml:"tagline"`       // Per PART 13: project.tagline source
+	Description  string `yaml:"description"`   // Per PART 13: project.description source
+	LogoURL      string `yaml:"logo_url"`
+	FaviconURL   string `yaml:"favicon_url"`
+	FooterText   string `yaml:"footer_text"`
+	Theme        string `yaml:"theme"`
 	PrimaryColor string `yaml:"primary_color"`
 }
 
@@ -1075,7 +1078,9 @@ func DefaultConfig() *Config {
 				Email:    "",
 			},
 			Branding: BrandingConfig{
-				AppName:      "Scour",
+				Title:        "Scour",
+				Tagline:      "Privacy-respecting metasearch",
+				Description:  "A privacy-respecting metasearch engine",
 				Theme:        "dark",
 				PrimaryColor: "#bd93f9",
 			},

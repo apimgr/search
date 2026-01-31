@@ -1164,8 +1164,8 @@ func (h *Handler) processServerBrandingUpdate(w http.ResponseWriter, r *http.Req
 	}
 
 	// Trim all text inputs per AI.md
-	if appName := strings.TrimSpace(r.FormValue("app_name")); appName != "" {
-		h.config.Server.Branding.AppName = appName
+	if title := strings.TrimSpace(r.FormValue("title")); title != "" {
+		h.config.Server.Branding.Title = title
 	}
 	if theme := strings.TrimSpace(r.FormValue("theme")); theme != "" {
 		h.config.Server.Branding.Theme = theme

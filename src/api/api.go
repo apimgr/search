@@ -134,34 +134,68 @@ type APIMeta struct {
 }
 
 // HealthResponse represents health check response per AI.md PART 13
+// All fields use canonical order from spec (line 16208-16244)
 type HealthResponse struct {
-	Status         string            `json:"status"`
-	Version        string            `json:"version"`
-	GoVersion      string            `json:"go_version"`
-	Mode           string            `json:"mode"`
-	Uptime         string            `json:"uptime"`
-	Timestamp      string            `json:"timestamp"`
-	Build          *BuildInfo        `json:"build,omitempty"`
-	Node           *NodeInfo         `json:"node,omitempty"`
-	Cluster        *ClusterInfo      `json:"cluster,omitempty"`
-	Features       map[string]bool   `json:"features,omitempty"`
-	Checks         map[string]string `json:"checks"`
-	Stats          *HealthStats      `json:"stats,omitempty"`
-	PendingRestart bool              `json:"pending_restart,omitempty"`
-	RestartReason  []string          `json:"restart_reason,omitempty"`
+	// 1. Project identification (PART 16: branding config)
+	Project ProjectInfo `json:"project"`
+
+	// 2. Overall status
+	Status         string   `json:"status"`                    // "healthy", "unhealthy", "degraded"
+	PendingRestart bool     `json:"pending_restart,omitempty"` // true if restart needed
+	RestartReason  []string `json:"restart_reason,omitempty"`  // settings that changed
+
+	// 3. Version & build info (PART 7: binary requirements)
+	Version   string    `json:"version"`    // SemVer "1.0.0"
+	GoVersion string    `json:"go_version"` // "go1.23.0"
+	Build     BuildInfo `json:"build"`
+
+	// 4. Runtime info (PART 6: application modes)
+	Uptime    string `json:"uptime"`    // human readable "2d 5h 30m"
+	Mode      string `json:"mode"`      // "production" or "development"
+	Timestamp string `json:"timestamp"` // current UTC time ISO 8601
+
+	// 5. Cluster info (PART 10: database & cluster)
+	Cluster ClusterInfo `json:"cluster"`
+
+	// 6. Features - PUBLIC only (PARTS 20, 32, 34, 35)
+	Features FeaturesInfo `json:"features"`
+
+	// 7. Component health checks (per spec line 16298-16308)
+	Checks ChecksInfo `json:"checks"`
+
+	// 8. Statistics (public-safe aggregates)
+	Stats StatsInfo `json:"stats"`
+}
+
+// ProjectInfo represents project identification per AI.md PART 13
+type ProjectInfo struct {
+	Name        string `json:"name"`        // branding.app_name
+	Tagline     string `json:"tagline"`     // branding.tagline (short slogan)
+	Description string `json:"description"` // server.description (longer)
 }
 
 // BuildInfo represents build information per AI.md PART 13
+// Note: Fields are "commit" and "date" per spec, not "commit_id" and "build_date"
 type BuildInfo struct {
-	CommitID  string `json:"commit_id"`
-	BuildDate string `json:"build_date"`
+	Commit string `json:"commit"` // git short hash (7 chars)
+	Date   string `json:"date"`   // ISO 8601 build timestamp
 }
 
-// HealthStats represents health statistics per AI.md PART 13
-type HealthStats struct {
-	RequestsTotal     int64 `json:"requests_total"`
-	Requests24h       int64 `json:"requests_24h"`
-	ActiveConnections int   `json:"active_connections"`
+// StatsInfo represents health statistics per AI.md PART 13 (line 16310-16317)
+type StatsInfo struct {
+	RequestsTotal int64 `json:"requests_total"`     // Total HTTP requests (lifetime)
+	Requests24h   int64 `json:"requests_24h"`       // Requests in last 24 hours
+	ActiveConns   int   `json:"active_connections"` // Current active connections
+}
+
+// ChecksInfo represents component health per AI.md PART 13 (line 16298-16308)
+type ChecksInfo struct {
+	Database  string `json:"database"`          // PART 10: "ok" or "error"
+	Cache     string `json:"cache"`             // PART 10: "ok" or "error"
+	Disk      string `json:"disk"`              // Disk space check
+	Scheduler string `json:"scheduler"`         // PART 19: "ok" or "error"
+	Cluster   string `json:"cluster,omitempty"` // PART 10: "ok" or "error" (if enabled)
+	Tor       string `json:"tor,omitempty"`     // PART 32: "ok" or "error" (if enabled)
 }
 
 // NodeInfo represents node information for cluster mode
@@ -170,12 +204,30 @@ type NodeInfo struct {
 	Hostname string `json:"hostname"`
 }
 
-// ClusterInfo represents cluster status
+// ClusterInfo represents cluster status per AI.md PART 13
 type ClusterInfo struct {
-	Enabled bool   `json:"enabled"`
-	Status  string `json:"status"`
-	Nodes   int    `json:"nodes"`
-	Role    string `json:"role,omitempty"`
+	Enabled   bool     `json:"enabled"`
+	Status    string   `json:"status,omitempty"`     // "connected", "disconnected"
+	Primary   string   `json:"primary,omitempty"`    // primary node public URL
+	Nodes     []string `json:"nodes,omitempty"`      // all node public URLs
+	NodeCount int      `json:"node_count,omitempty"` // total nodes
+	Role      string   `json:"role,omitempty"`       // "primary" or "member"
+}
+
+// FeaturesInfo represents feature status per AI.md PART 13 (line 16269-16288)
+type FeaturesInfo struct {
+	Tor           TorInfo `json:"tor"`                     // PART 32: Tor Hidden Service
+	GeoIP         bool    `json:"geoip"`                   // PART 20: GeoIP enabled
+	MultiUser     bool    `json:"multi_user,omitempty"`    // PART 34: Multi-user mode
+	Organizations bool    `json:"organizations,omitempty"` // PART 35: Organizations
+}
+
+// TorInfo represents Tor status per AI.md PART 13 (line 16290-16296)
+type TorInfo struct {
+	Enabled  bool   `json:"enabled"`  // Tor binary found and config enabled
+	Running  bool   `json:"running"`  // Hidden service active
+	Status   string `json:"status"`   // "healthy", "starting", "error"
+	Hostname string `json:"hostname"` // "abc123...xyz.onion" (56 chars, v3)
 }
 
 // AutodiscoverResponse represents /api/autodiscover response
@@ -292,16 +344,16 @@ type CategoryInfo struct {
 // Handler methods
 
 func (h *Handler) handleHealthz(w http.ResponseWriter, r *http.Request) {
-	hostname, _ := getHostname()
-
-	// Build checks map per AI.md PART 13
-	checks := make(map[string]string)
-	checks["search"] = "ok"
-	checks["database"] = "ok"     // Embedded SQLite always ok
-	checks["cache"] = "disabled"  // Valkey/Redis not yet implemented
-	checks["disk"] = h.checkDiskHealth()
-	checks["scheduler"] = "ok"    // Scheduler is always running per spec
-	checks["cluster"] = "disabled"
+	// Tor status per AI.md PART 13
+	torEnabled := h.config.Server.Tor.Enabled
+	torRunning := false // Will be updated when Tor service is available
+	torStatus := ""
+	torHostname := ""
+	torCheck := ""
+	if torEnabled {
+		torStatus = "unavailable"
+		torCheck = "unavailable"
+	}
 
 	// Determine overall status
 	status := "healthy"
@@ -311,40 +363,62 @@ func (h *Handler) handleHealthz(w http.ResponseWriter, r *http.Request) {
 		status = "maintenance"
 	}
 
+	// Per AI.md PART 13: canonical field order (spec lines 16208-16244)
 	health := HealthResponse{
-		Status:    status,
+		// 1. Project identification from cfg.Branding per spec
+		Project: ProjectInfo{
+			Name:        h.config.Server.Branding.Title,
+			Tagline:     h.config.Server.Branding.Tagline,
+			Description: h.config.Server.Branding.Description,
+		},
+		// 2. Status
+		Status: status,
+		// 3. Version & build
 		Version:   config.Version,
 		GoVersion: runtime.Version(),
-		Mode:      h.config.Server.Mode,
+		Build: BuildInfo{
+			Commit: config.CommitID,
+			Date:   config.BuildDate,
+		},
+		// 4. Runtime
 		Uptime:    h.formatDuration(time.Since(h.startTime)),
+		Mode:      h.config.Server.Mode,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
-		Build: &BuildInfo{
-			CommitID:  config.CommitID,
-			BuildDate: config.BuildDate,
+		// 5. Cluster
+		Cluster: ClusterInfo{
+			Enabled:   false,
+			Status:    "",
+			Primary:   "",
+			Nodes:     []string{},
+			NodeCount: 1,
+			Role:      "",
 		},
-		Node: &NodeInfo{
-			ID:       "standalone",
-			Hostname: hostname,
+		// 6. Features per AI.md PART 13
+		Features: FeaturesInfo{
+			Tor: TorInfo{
+				Enabled:  torEnabled,
+				Running:  torRunning,
+				Status:   torStatus,
+				Hostname: torHostname,
+			},
+			GeoIP:         h.config.Server.GeoIP.Enabled,
+			MultiUser:     h.config.Server.Users.Enabled,
+			Organizations: false,
 		},
-		Cluster: &ClusterInfo{
-			Enabled: false,
-			Status:  "disabled",
-			Nodes:   1,
+		// 7. Checks per spec line 16298-16308
+		Checks: ChecksInfo{
+			Database:  "ok",
+			Cache:     "disabled",
+			Disk:      h.checkDiskHealth(),
+			Scheduler: "ok",
+			Cluster:   "",
+			Tor:       torCheck,
 		},
-		// Per AI.md PART 13: features (multi_user, organizations, tor, geoip, metrics)
-		Features: map[string]bool{
-			"multi_user":    h.config.Server.Users.Enabled,
-			"organizations": false,
-			"tor":           h.config.Server.Tor.Enabled,
-			"geoip":         h.config.Server.GeoIP.Enabled,
-			"metrics":       h.config.Server.Metrics.Enabled,
-		},
-		Checks: checks,
-		// Per AI.md PART 13: stats (requests_total, requests_24h, active_connections)
-		Stats: &HealthStats{
-			RequestsTotal:     h.getRequestsTotal(),
-			Requests24h:       h.getRequests24h(),
-			ActiveConnections: h.getActiveConnections(),
+		// 8. Stats
+		Stats: StatsInfo{
+			RequestsTotal: h.getRequestsTotal(),
+			Requests24h:   h.getRequests24h(),
+			ActiveConns:   h.getActiveConnections(),
 		},
 	}
 
@@ -1295,7 +1369,7 @@ func (h *Handler) handleServerAbout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	appName := h.config.Server.Branding.AppName
+	appName := h.config.Server.Branding.Title
 	if appName == "" {
 		appName = h.config.Server.Title
 	}
@@ -1345,7 +1419,7 @@ func (h *Handler) handleServerPrivacy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	appName := h.config.Server.Branding.AppName
+	appName := h.config.Server.Branding.Title
 	if appName == "" {
 		appName = h.config.Server.Title
 	}
@@ -1403,7 +1477,7 @@ func (h *Handler) handleServerHelp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	appName := h.config.Server.Branding.AppName
+	appName := h.config.Server.Branding.Title
 	if appName == "" {
 		appName = h.config.Server.Title
 	}
@@ -1456,7 +1530,7 @@ func (h *Handler) handleServerTerms(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	appName := h.config.Server.Branding.AppName
+	appName := h.config.Server.Branding.Title
 	if appName == "" {
 		appName = h.config.Server.Title
 	}

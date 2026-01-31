@@ -4,7 +4,7 @@
         {{if .Config.Server.Branding.LogoURL}}
         <img src="{{.Config.Server.Branding.LogoURL}}" alt="{{.Config.Server.Title}}" class="home-logo-img">
         {{else}}
-        <h1 class="home-logo">🔍 {{default "Search" .Config.Server.Branding.AppName}}</h1>
+        <h1 class="home-logo">🔍 {{default "Search" .Config.Server.Branding.Title}}</h1>
         {{end}}
         <p class="home-tagline">{{.Config.Server.Description}}</p>
     </div>

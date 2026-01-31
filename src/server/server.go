@@ -272,7 +272,7 @@ func New(cfg *config.Config) *Server {
 		fromName := cfg.Server.Email.From.Name
 		if fromName == "" {
 			// Per AI.md PART 18: Default from name is app title
-			fromName = cfg.Server.Branding.AppName
+			fromName = cfg.Server.Branding.Title
 			if fromName == "" {
 				fromName = "Search"
 			}
@@ -1081,7 +1081,7 @@ func (s *Server) renderDirectAnswerFallback(w http.ResponseWriter, answer *direc
 	if baseURL == "" {
 		baseURL = ""
 	}
-	appName := s.config.Server.Branding.AppName
+	appName := s.config.Server.Branding.Title
 	if appName == "" {
 		appName = "Search"
 	}

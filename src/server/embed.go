@@ -284,8 +284,9 @@ type HealthInfo struct {
 
 // ProjectInfo represents project information for healthz per AI.md PART 13
 type ProjectInfo struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	Name        string `json:"name"`        // branding.app_name or server.title
+	Tagline     string `json:"tagline"`     // branding.tagline (short slogan)
+	Description string `json:"description"` // server.description (longer)
 }
 
 // BuildInfo represents build information per AI.md PART 13
@@ -327,11 +328,12 @@ type NodeInfo struct {
 
 // ClusterInfo represents cluster status per AI.md PART 13
 type ClusterInfo struct {
-	Enabled bool     `json:"enabled"`
-	Status  string   `json:"status,omitempty"`
-	Primary string   `json:"primary"`
-	Nodes   []string `json:"nodes"`
-	Role    string   `json:"role,omitempty"`
+	Enabled   bool     `json:"enabled"`
+	Status    string   `json:"status,omitempty"`    // "connected", "disconnected"
+	Primary   string   `json:"primary,omitempty"`   // primary node public URL
+	Nodes     []string `json:"nodes,omitempty"`     // all node public URLs
+	NodeCount int      `json:"node_count,omitempty"` // total nodes
+	Role      string   `json:"role,omitempty"`      // "primary" or "member"
 }
 
 // MaintenanceInfo represents maintenance mode status

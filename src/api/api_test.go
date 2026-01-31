@@ -947,7 +947,12 @@ func TestHealthResponseSerialization(t *testing.T) {
 		Mode:      "production",
 		Uptime:    "1h 30m",
 		Timestamp: "2024-01-01T00:00:00Z",
-		Checks:    map[string]string{"search": "ok"},
+		Checks: ChecksInfo{
+			Database:  "ok",
+			Cache:     "ok",
+			Disk:      "ok",
+			Scheduler: "ok",
+		},
 	}
 
 	data, err := json.Marshal(health)
@@ -1644,8 +1649,8 @@ func TestCategoryInfoSerialization(t *testing.T) {
 
 func TestBuildInfoSerialization(t *testing.T) {
 	build := BuildInfo{
-		CommitID:  "abc123def456",
-		BuildDate: "2024-01-15T10:00:00Z",
+		Commit: "abc123d",
+		Date:   "2024-01-15T10:00:00Z",
 	}
 
 	data, err := json.Marshal(build)
@@ -1658,31 +1663,31 @@ func TestBuildInfoSerialization(t *testing.T) {
 		t.Fatalf("Failed to unmarshal BuildInfo: %v", err)
 	}
 
-	if unmarshaled.CommitID != build.CommitID {
-		t.Errorf("CommitID mismatch: got %q, want %q", unmarshaled.CommitID, build.CommitID)
+	if unmarshaled.Commit != build.Commit {
+		t.Errorf("Commit mismatch: got %q, want %q", unmarshaled.Commit, build.Commit)
 	}
-	if unmarshaled.BuildDate != build.BuildDate {
-		t.Errorf("BuildDate mismatch: got %q, want %q", unmarshaled.BuildDate, build.BuildDate)
+	if unmarshaled.Date != build.Date {
+		t.Errorf("Date mismatch: got %q, want %q", unmarshaled.Date, build.Date)
 	}
 }
 
-// Tests for HealthStats serialization
+// Tests for StatsInfo serialization
 
-func TestHealthStatsSerialization(t *testing.T) {
-	stats := HealthStats{
-		RequestsTotal:     100000,
-		Requests24h:       5000,
-		ActiveConnections: 42,
+func TestStatsInfoSerialization(t *testing.T) {
+	stats := StatsInfo{
+		RequestsTotal: 100000,
+		Requests24h:   5000,
+		ActiveConns:   42,
 	}
 
 	data, err := json.Marshal(stats)
 	if err != nil {
-		t.Fatalf("Failed to marshal HealthStats: %v", err)
+		t.Fatalf("Failed to marshal StatsInfo: %v", err)
 	}
 
-	var unmarshaled HealthStats
+	var unmarshaled StatsInfo
 	if err := json.Unmarshal(data, &unmarshaled); err != nil {
-		t.Fatalf("Failed to unmarshal HealthStats: %v", err)
+		t.Fatalf("Failed to unmarshal StatsInfo: %v", err)
 	}
 
 	if unmarshaled.RequestsTotal != stats.RequestsTotal {
@@ -1691,8 +1696,8 @@ func TestHealthStatsSerialization(t *testing.T) {
 	if unmarshaled.Requests24h != stats.Requests24h {
 		t.Errorf("Requests24h mismatch: got %d, want %d", unmarshaled.Requests24h, stats.Requests24h)
 	}
-	if unmarshaled.ActiveConnections != stats.ActiveConnections {
-		t.Errorf("ActiveConnections mismatch: got %d, want %d", unmarshaled.ActiveConnections, stats.ActiveConnections)
+	if unmarshaled.ActiveConns != stats.ActiveConns {
+		t.Errorf("ActiveConns mismatch: got %d, want %d", unmarshaled.ActiveConns, stats.ActiveConns)
 	}
 }
 
@@ -1726,10 +1731,12 @@ func TestNodeInfoSerialization(t *testing.T) {
 
 func TestClusterInfoSerialization(t *testing.T) {
 	cluster := ClusterInfo{
-		Enabled: true,
-		Status:  "healthy",
-		Nodes:   3,
-		Role:    "primary",
+		Enabled:   true,
+		Status:    "connected",
+		Primary:   "node1.example.com",
+		Nodes:     []string{"node1.example.com", "node2.example.com", "node3.example.com"},
+		NodeCount: 3,
+		Role:      "primary",
 	}
 
 	data, err := json.Marshal(cluster)
@@ -1748,8 +1755,11 @@ func TestClusterInfoSerialization(t *testing.T) {
 	if unmarshaled.Status != cluster.Status {
 		t.Errorf("Status mismatch: got %q, want %q", unmarshaled.Status, cluster.Status)
 	}
-	if unmarshaled.Nodes != cluster.Nodes {
-		t.Errorf("Nodes mismatch: got %d, want %d", unmarshaled.Nodes, cluster.Nodes)
+	if unmarshaled.NodeCount != cluster.NodeCount {
+		t.Errorf("NodeCount mismatch: got %d, want %d", unmarshaled.NodeCount, cluster.NodeCount)
+	}
+	if len(unmarshaled.Nodes) != len(cluster.Nodes) {
+		t.Errorf("Nodes length mismatch: got %d, want %d", len(unmarshaled.Nodes), len(cluster.Nodes))
 	}
 	if unmarshaled.Role != cluster.Role {
 		t.Errorf("Role mismatch: got %q, want %q", unmarshaled.Role, cluster.Role)
