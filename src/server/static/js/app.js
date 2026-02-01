@@ -531,8 +531,8 @@
             // Create new abort controller
             abortController = new AbortController();
 
-            // Fetch from autocomplete API
-            fetch('/autocomplete?q=' + encodeURIComponent(query), {
+            // Fetch from autocomplete API - per AI.md PART 14: use origin prefix
+            fetch(window.location.origin + '/autocomplete?q=' + encodeURIComponent(query), {
                 signal: abortController.signal
             })
             .then(function(response) {
@@ -3656,8 +3656,8 @@
     }
 
     function fetchRelatedSearches(query) {
-        // Try API first
-        fetch('/api/v1/search/related?q=' + encodeURIComponent(query) + '&limit=8')
+        // Try API first - per AI.md PART 14: use origin prefix
+        fetch(window.location.origin + '/api/v1/search/related?q=' + encodeURIComponent(query) + '&limit=8')
             .then(function(response) {
                 if (!response.ok) throw new Error('API not available');
                 return response.json();

@@ -17,7 +17,6 @@ import (
 	"github.com/apimgr/search/src/config"
 	"github.com/cretz/bine/control"
 	"github.com/cretz/bine/tor"
-	"github.com/cretz/bine/torutil/ed25519"
 )
 
 // findTorBinary finds the Tor binary using config, PATH, or common locations
@@ -115,28 +114,42 @@ func (t *TorService) ensureTorDirs() error {
 // getTorConfig generates torrc content per AI.md PART 32
 // NOTE: Hidden service is created via control.AddOnion(), NOT torrc
 // The torrc only configures Tor daemon settings
-func (t *TorService) getTorConfig(controlSocket string) string {
+//
+// PORT DETECTION: All ports use runtime detection via "auto" - never saved/hardcoded
+// - SocksPort: Controlled via torrc (auto or 0), NoAutoSocksPort=true in StartConf
+// - ControlPort: Platform-specific (Unix socket vs TCP)
+//
+// NEVER uses default Tor ports (9050, 9051) - uses Unix sockets or auto high ports
+func (t *TorService) getTorConfig() string {
 	cfg := &t.config.Server.Tor
 
-	// Platform-specific control connection
-	// NEVER use default ports 9050/9051 - use Unix socket or auto
+	// Platform-specific control connection per AI.md PART 32
+	// NEVER use default port 9051 - use socket (Unix) or runtime port (Windows)
 	var controlConfig string
 	if runtime.GOOS == "windows" {
 		// Windows: Unix sockets NOT SUPPORTED, use localhost TCP
-		// "auto" = Tor picks available high port at runtime
+		// "auto" = Tor picks available high port at runtime (never saved)
 		controlConfig = "ControlPort 127.0.0.1:auto"
 	} else {
 		// Unix/macOS/BSD: Use Unix socket (no TCP port at all)
-		controlConfig = fmt.Sprintf("ControlPort 0\nControlSocket %s", controlSocket)
+		// Use "ControlPort unix:/path" format - single directive for Unix socket
+		// Note: Cannot use separate ControlPort 0 + ControlSocket as Tor writes
+		// both to controlport file which confuses bine's parser
+		controlSocket := filepath.Join(t.dataDir, "control.sock")
+		controlConfig = fmt.Sprintf("ControlPort unix:%s", controlSocket)
 	}
 
-	// SocksPort: enabled for outbound connections, disabled for hidden service only
+	// SocksPort per AI.md PART 32:
+	// - "SocksPort auto" if outbound enabled (UseNetwork or AllowUserPreference)
+	// - "SocksPort 0" if outbound disabled (hidden service only)
+	// NOTE: We use NoAutoSocksPort=true in StartConf so bine doesn't add conflicting args
 	var socksConfig string
 	if cfg.UseNetwork || cfg.AllowUserPreference {
 		// Enable SOCKS for outbound - "auto" picks high port at runtime
 		socksConfig = "SocksPort auto"
 	} else {
-		socksConfig = "SocksPort 0" // Disabled - hidden service only
+		// Disabled - hidden service only
+		socksConfig = "SocksPort 0"
 	}
 
 	// SafeLogging
@@ -173,8 +186,10 @@ AccountingMax %s`, cfg.MaxMonthlyBandwidth)
 # NEVER uses default port 9050 - runtime detection only
 %s
 
-# Platform-specific control connection
-# NEVER uses default port 9051 - uses socket (Unix) or runtime port (Windows)
+# Platform-specific control connection per AI.md PART 32:
+# - Unix/macOS/BSD: Unix socket (no TCP port exposure)
+# - Windows: TCP on 127.0.0.1:auto (Unix sockets not supported)
+# NEVER uses default ports 9050/9051
 %s
 
 # Security Hardening
@@ -238,27 +253,21 @@ func (t *TorService) Start() error {
 
 	// Paths
 	torrcPath := filepath.Join(t.configDir, "torrc")
-	controlSocket := filepath.Join(t.dataDir, "control.sock")
 	keyPath := filepath.Join(t.dataDir, "site", "hs_ed25519_secret_key")
 
 	// Generate and write torrc
-	torrcContent := t.getTorConfig(controlSocket)
+	torrcContent := t.getTorConfig()
 	if err := os.WriteFile(torrcPath, []byte(torrcContent), 0600); err != nil {
 		return fmt.Errorf("failed to write torrc: %w", err)
 	}
 
-	// Build platform-specific StartConf
+	// Build StartConf per AI.md PART 32
+	// NoAutoSocksPort = true: We control SocksPort via torrc, bine won't add conflicting args
 	conf := &tor.StartConf{
 		ExePath:         torBinary,
 		TorrcFile:       torrcPath,
 		DataDir:         t.dataDir,
-		NoAutoSocksPort: true, // Let torrc control SocksPort
-	}
-
-	// Platform-specific control connection
-	if runtime.GOOS != "windows" {
-		// Unix/macOS/BSD: Use Unix socket (more secure)
-		conf.ControlSocket = controlSocket
+		NoAutoSocksPort: true, // SocksPort controlled by torrc, not bine command line
 	}
 
 	// Enable debug output in development mode
@@ -291,11 +300,17 @@ func (t *TorService) Start() error {
 	}
 
 	// Load or generate ED25519 key for persistent .onion address
-	var key ed25519.PrivateKey
-	if keyData, err := os.ReadFile(keyPath); err == nil && len(keyData) == 64 {
-		// Load existing key for persistent address
-		key = ed25519.PrivateKey(keyData)
-		log.Println("[Tor] Loaded existing hidden service key")
+	// Load existing key for persistent .onion address
+	// Key is stored as base64 string (the format returned by Key.Blob())
+	var existingKey control.Key
+	if keyData, err := os.ReadFile(keyPath); err == nil && len(keyData) > 0 {
+		keyBlob := strings.TrimSpace(string(keyData))
+		if k, err := control.ED25519KeyFromBlob(keyBlob); err == nil {
+			existingKey = k
+			log.Println("[Tor] Loaded existing hidden service key")
+		} else {
+			log.Printf("[Tor] Warning: failed to parse hidden service key: %v", err)
+		}
 	}
 
 	// Create hidden service via ADD_ONION control command
@@ -312,9 +327,9 @@ func (t *TorService) Start() error {
 		},
 	}
 
-	if key != nil {
+	if existingKey != nil {
 		// Use existing key for persistent .onion address
-		addOnionReq.Key = control.ED25519KeyFromBlob(key)
+		addOnionReq.Key = existingKey
 	} else {
 		// Generate new ED25519-V3 key (v3 onion address)
 		addOnionReq.Key = control.GenKey(control.KeyAlgoED25519V3)
@@ -328,9 +343,11 @@ func (t *TorService) Start() error {
 	}
 
 	// Save key for persistent address (if newly generated)
-	if key == nil && resp.Key != nil {
+	// Key.Blob() returns base64 string which we save directly
+	if existingKey == nil && resp.Key != nil {
 		if err := os.MkdirAll(filepath.Dir(keyPath), 0700); err == nil {
-			if err := os.WriteFile(keyPath, resp.Key.Blob(), 0600); err != nil {
+			keyBlob := resp.Key.Blob()
+			if err := os.WriteFile(keyPath, []byte(keyBlob), 0600); err != nil {
 				log.Printf("[Tor] Warning: failed to save hidden service key: %v", err)
 			} else {
 				log.Println("[Tor] Saved new hidden service key")
@@ -475,9 +492,10 @@ func (t *TorService) RegenerateAddress() (string, error) {
 		return "", fmt.Errorf("failed to create new hidden service: %w", err)
 	}
 
-	// Save new key
+	// Save new key (Key.Blob() returns base64 string)
 	if resp.Key != nil {
-		if err := os.WriteFile(keyPath, resp.Key.Blob(), 0600); err != nil {
+		keyBlob := resp.Key.Blob()
+		if err := os.WriteFile(keyPath, []byte(keyBlob), 0600); err != nil {
 			log.Printf("[Tor] Warning: failed to save new key: %v", err)
 		}
 	}
