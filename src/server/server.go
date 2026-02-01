@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"html"
+	"html/template"
 	"log"
 	"net/http"
 	"net/url"
@@ -150,8 +151,8 @@ func New(cfg *config.Config) *Server {
 	csrf := NewCSRFMiddleware(cfg)
 	csrf.SetLogManager(logMgr)
 
-	// Create template renderer
-	renderer := NewTemplateRenderer(cfg)
+	// Create template renderer (i18n funcs set later after i18n manager init)
+	renderer := NewTemplateRenderer(cfg, nil)
 
 	// Create API handler
 	apiHandler := api.NewHandler(cfg, registry, aggregator)
@@ -413,7 +414,11 @@ func New(cfg *config.Config) *Server {
 		log.Println("[Server] Configuration reload triggered")
 		// Re-render templates in development mode
 		if cfg.IsDevelopment() {
-			s.renderer = NewTemplateRenderer(cfg)
+			var i18nFuncs template.FuncMap
+			if s.i18nManager != nil {
+				i18nFuncs = s.i18nManager.TemplateFuncs("en")
+			}
+			s.renderer = NewTemplateRenderer(cfg, i18nFuncs)
 		}
 		return nil
 	})

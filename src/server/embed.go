@@ -16,7 +16,7 @@ import (
 	"github.com/apimgr/search/src/config"
 )
 
-//go:embed template/layouts/*.tmpl template/partials/*.tmpl template/pages/*.tmpl static/*
+//go:embed template/layouts/*.tmpl template/partials/*.tmpl template/partials/admin/*.tmpl template/partials/public/*.tmpl template/components/*.tmpl template/pages/*.tmpl template/pages/auth/*.tmpl template/pages/user/*.tmpl static/*
 var EmbeddedFS embed.FS
 
 // TemplateRenderer handles template rendering
@@ -29,7 +29,9 @@ type TemplateRenderer struct {
 }
 
 // NewTemplateRenderer creates a new template renderer
-func NewTemplateRenderer(cfg *config.Config) *TemplateRenderer {
+// i18nFuncs provides translation functions (t, lang, isRTL, dir, languages)
+// If nil, a fallback t function that returns the key is used
+func NewTemplateRenderer(cfg *config.Config, i18nFuncs template.FuncMap) *TemplateRenderer {
 	tr := &TemplateRenderer{
 		templates: make(map[string]*template.Template),
 		config:    cfg,
@@ -37,6 +39,39 @@ func NewTemplateRenderer(cfg *config.Config) *TemplateRenderer {
 	}
 
 	tr.funcMap = template.FuncMap{
+		// i18n functions - use provided funcs or fallback
+		"t": func(key string, args ...interface{}) string {
+			if i18nFuncs != nil {
+				if tFunc, ok := i18nFuncs["t"].(func(string, ...interface{}) string); ok {
+					return tFunc(key, args...)
+				}
+			}
+			return key // Fallback: return key as-is
+		},
+		"lang": func() string {
+			if i18nFuncs != nil {
+				if f, ok := i18nFuncs["lang"].(func() string); ok {
+					return f()
+				}
+			}
+			return "en"
+		},
+		"isRTL": func() bool {
+			if i18nFuncs != nil {
+				if f, ok := i18nFuncs["isRTL"].(func() bool); ok {
+					return f()
+				}
+			}
+			return false
+		},
+		"dir": func() string {
+			if i18nFuncs != nil {
+				if f, ok := i18nFuncs["dir"].(func() string); ok {
+					return f()
+				}
+			}
+			return "ltr"
+		},
 		"safe":     func(s string) template.HTML { return template.HTML(s) },
 		"safeHTML": func(s string) template.HTML { return template.HTML(s) },
 		"safeURL":  func(s string) template.URL { return template.URL(s) },
@@ -115,56 +150,83 @@ func (tr *TemplateRenderer) loadTemplates() error {
 		return err
 	}
 
-	// Load all partials
+	// Load all partials (including subdirectories like partials/public/)
 	partials := make(map[string]string)
-	partialsDir, err := fs.ReadDir(EmbeddedFS, "template/partials")
-	if err == nil {
-		for _, entry := range partialsDir {
-			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".tmpl") {
-				content, err := fs.ReadFile(EmbeddedFS, "template/partials/"+entry.Name())
-				if err != nil {
-					continue
-				}
-				name := strings.TrimSuffix(entry.Name(), ".tmpl")
-				partials[name] = string(content)
-			}
-		}
-	}
+	tr.loadPartialsRecursive("template/partials", partials)
 
-	// Load all page templates
-	pagesDir, err := fs.ReadDir(EmbeddedFS, "template/pages")
-	if err != nil {
-		return err
-	}
-
-	for _, entry := range pagesDir {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".tmpl") {
-			continue
-		}
-
-		pageContent, err := fs.ReadFile(EmbeddedFS, "template/pages/"+entry.Name())
-		if err != nil {
-			continue
-		}
-
-		name := strings.TrimSuffix(entry.Name(), ".tmpl")
-
-		// Combine layout + partials + page
-		combined := string(layoutContent)
-		for _, partialContent := range partials {
-			combined += "\n" + partialContent
-		}
-		combined += "\n" + string(pageContent)
-
-		tmpl, err := template.New(name).Funcs(tr.funcMap).Parse(combined)
-		if err != nil {
-			continue
-		}
-
-		tr.templates[name] = tmpl
-	}
+	// Load all page templates (including subdirectories like pages/auth/, pages/user/)
+	tr.loadPagesRecursive("template/pages", "", string(layoutContent), partials)
 
 	return nil
+}
+
+// loadPartialsRecursive recursively loads partials from a directory
+func (tr *TemplateRenderer) loadPartialsRecursive(dir string, partials map[string]string) {
+	entries, err := fs.ReadDir(EmbeddedFS, dir)
+	if err != nil {
+		return
+	}
+
+	for _, entry := range entries {
+		path := dir + "/" + entry.Name()
+		if entry.IsDir() {
+			// Recurse into subdirectory
+			tr.loadPartialsRecursive(path, partials)
+		} else if strings.HasSuffix(entry.Name(), ".tmpl") {
+			content, err := fs.ReadFile(EmbeddedFS, path)
+			if err != nil {
+				continue
+			}
+			name := strings.TrimSuffix(entry.Name(), ".tmpl")
+			partials[name] = string(content)
+		}
+	}
+}
+
+// loadPagesRecursive recursively loads page templates from a directory
+func (tr *TemplateRenderer) loadPagesRecursive(dir, prefix, layoutContent string, partials map[string]string) {
+	entries, err := fs.ReadDir(EmbeddedFS, dir)
+	if err != nil {
+		return
+	}
+
+	for _, entry := range entries {
+		path := dir + "/" + entry.Name()
+		if entry.IsDir() {
+			// Recurse into subdirectory with updated prefix
+			subPrefix := entry.Name()
+			if prefix != "" {
+				subPrefix = prefix + "/" + entry.Name()
+			}
+			tr.loadPagesRecursive(path, subPrefix, layoutContent, partials)
+		} else if strings.HasSuffix(entry.Name(), ".tmpl") {
+			pageContent, err := fs.ReadFile(EmbeddedFS, path)
+			if err != nil {
+				continue
+			}
+
+			// Build template name with path prefix (e.g., "auth/login")
+			baseName := strings.TrimSuffix(entry.Name(), ".tmpl")
+			name := baseName
+			if prefix != "" {
+				name = prefix + "/" + baseName
+			}
+
+			// Combine layout + partials + page
+			combined := layoutContent
+			for _, partialContent := range partials {
+				combined += "\n" + partialContent
+			}
+			combined += "\n" + string(pageContent)
+
+			tmpl, err := template.New(name).Funcs(tr.funcMap).Parse(combined)
+			if err != nil {
+				continue
+			}
+
+			tr.templates[name] = tmpl
+		}
+	}
 }
 
 // Render renders a template with the given data
