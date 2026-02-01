@@ -321,6 +321,9 @@ func (t *TorService) Start() error {
 		virtualPort = 80
 	}
 
+	// Create public hidden service - no client authorization required
+	// Per AI.md PART 32: Service is accessible to anyone with the .onion address
+	// Not setting Flags or ClientAuthV3 = public service (no auth/login)
 	addOnionReq := &control.AddOnionRequest{
 		Ports: []*control.KeyVal{
 			control.NewKeyVal(fmt.Sprintf("%d", virtualPort), fmt.Sprintf("127.0.0.1:%d", serverPort)),
