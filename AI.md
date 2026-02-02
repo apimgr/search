@@ -776,47 +776,188 @@ Quick reference: Accept `yes/no`, `true/false`, `1/0`, `on/off`, `enable/disable
 
 **Claude Code Rules (.claude/rules/):**
 
-When Claude Code starts, it should create `.claude/rules/` with these cheatsheet files. Each file groups related topics and references the relevant PARTs in AI.md:
+Claude Code creates `.claude/rules/` on first session (see PART 0: Session Initialization). Each file groups related topics and references the relevant PARTs in AI.md:
 
-| File | PARTs | Topics Covered |
-|------|-------|----------------|
-| `ai-rules.md` | 0, 1 | AI behavior rules, critical rules, compliance |
-| `project-rules.md` | 2, 3, 4 | License/attribution, project structure, OS-specific paths |
-| `config-rules.md` | 5, 6, 12 | Configuration handling, application modes, server settings |
-| `binary-rules.md` | 7, 8, 33 | Binary requirements, server CLI, client/agent |
-| `backend-rules.md` | 9, 10, 11 | Error handling/caching, database/cluster, security/logging |
-| `api-rules.md` | 13, 14, 15 | Health/versioning, API structure/routes, SSL/TLS |
-| `frontend-rules.md` | 16, 17 | Web frontend (HTML/CSS/JS), admin panel |
-| `features-rules.md` | 18, 19, 20, 21, 22, 23 | Email, scheduler, GeoIP, metrics, backup, update |
-| `service-rules.md` | 24, 25 | Privilege escalation, service management (systemd/launchd/etc.) |
-| `makefile-rules.md` | 26 | Makefile (local dev/tests/debug only - NOT used in CI/CD) |
-| `docker-rules.md` | 27 | Docker/containers, Dockerfile, docker-compose |
-| `cicd-rules.md` | 28 | CI/CD workflows (GitHub/GitLab/Gitea Actions) |
-| `testing-rules.md` | 29, 30, 31 | Testing/development, documentation, i18n/a11y |
-| `optional-rules.md` | 32, 34, 35, 36 | Tor hidden service, multi-user, organizations, custom domains |
+| File | PARTs | Topics (from PART titles) |
+|------|-------|---------------------------|
+| `ai-rules.md` | 0, 1 | AI Assistant Rules, Critical Rules |
+| `project-rules.md` | 2, 3, 4 | License & Attribution, Project Structure, OS-Specific Paths |
+| `config-rules.md` | 5, 6, 12 | Configuration, Application Modes, Server Configuration |
+| `binary-rules.md` | 7, 8, 33 | Binary Requirements, Server Binary CLI, Client & Agent |
+| `backend-rules.md` | 9, 10, 11, 32 | Error Handling & Caching, Database & Cluster, Security & Logging, Tor Hidden Service |
+| `api-rules.md` | 13, 14, 15 | Health & Versioning, API Structure, SSL/TLS & Let's Encrypt |
+| `frontend-rules.md` | 16, 17 | Web Frontend, Admin Panel |
+| `features-rules.md` | 18-23 | Email & Notifications, Scheduler, GeoIP, Metrics, Backup & Restore, Update Command |
+| `service-rules.md` | 24, 25 | Privilege Escalation & Service, Service Support |
+| `makefile-rules.md` | 26 | Makefile (local dev only, NOT CI/CD) |
+| `docker-rules.md` | 27 | Docker |
+| `cicd-rules.md` | 28 | CI/CD Workflows |
+| `testing-rules.md` | 29, 30, 31 | Testing & Development, ReadTheDocs Documentation, I18N & A11Y |
+| `optional-rules.md` | 34-36 | Multi-User, Organizations, Custom Domains (all OPTIONAL) |
 
-**Note:** PART 37 (IDEA.md Reference) and FINAL (Compliance Checklist) are reference-only, not rule files.
+**Note:** PART 37 (IDEA.md Reference) and FINAL (Compliance Checklist) are reference-only, not rule files. Only PARTs 34-36 are truly optional (marked "OPTIONAL - NON-NEGOTIABLE WHEN IMPLEMENTED" in spec). PART 32 (Tor Hidden Service) is REQUIRED - auto-enabled when Tor binary is found.
+
+**Rules File Features:**
+- All `.md` files in `rules/` are automatically discovered recursively
+- Supports subdirectories for organization (e.g., `rules/frontend/react.md`)
+- Supports symlinks for sharing rules across projects
+- Supports YAML frontmatter for conditional/path-specific rules
+
+**Conditional Rules with YAML Frontmatter:**
+
+Rules can be limited to specific file paths using YAML frontmatter:
+
+```markdown
+---
+paths:
+  - "src/api/**/*.go"
+  - "src/handlers/**/*.go"
+---
+
+# API Handler Rules
+- All API handlers must validate input
+- Use proper error codes from PART 9
+```
+
+| Frontmatter Field | Description |
+|-------------------|-------------|
+| `paths` | Array of glob patterns - rule only applies when working with matching files |
+
+**Example Rules File Content (ai-rules.md):**
+
+```markdown
+# AI Rules (PART 0, 1)
+
+⚠️ **These rules are NON-NEGOTIABLE. Violations are bugs.** ⚠️
+
+## CRITICAL - NEVER DO
+- ❌ Guess or assume - READ THE SPEC or ASK
+- ❌ Implement without reading relevant PART first
+- ❌ Modify AI.md PART content (read-only spec)
+- ❌ Skip reading PART 0 and 1 at conversation start
+- ❌ Add features not in spec without asking
+- ❌ Use "I think" or "probably" - KNOW from spec or ASK
+- ❌ Ask multiple plain-text questions in separate messages - use AskUserQuestion wizard instead
+
+## REQUIRED - ALWAYS DO
+- ✅ Read AI.md PART 0, 1 at start of EVERY conversation
+- ✅ Read relevant PART before implementing ANY feature
+- ✅ Search AI.md before asking questions (answer is likely there)
+- ✅ Follow spec EXACTLY - no "improvements" without approval
+- ✅ Update IDEA.md when features change
+- ✅ Keep all docs in sync with code
+- ✅ When unsure, ASK - never guess or assume
+- ✅ Use AskUserQuestion wizard - one question at a time, options + custom input
+
+## KEY DECISIONS (pre-answered)
+| Question | Answer | Reference |
+|----------|--------|-----------|
+| What password hash? | Argon2id (NEVER bcrypt) | PART 11 |
+| Where is Dockerfile? | `docker/Dockerfile` (NEVER root) | PART 27 |
+| CGO enabled? | NEVER (CGO_ENABLED=0 always) | PART 7 |
+| Premium features? | NEVER (all features free) | PART 1 |
+| External cron? | NEVER (built-in scheduler) | PART 19 |
+| Client-side rendering? | NEVER (server-side Go templates) | PART 16 |
+
+## TERMINOLOGY
+| Term | Meaning |
+|------|---------|
+| server | Main binary `search` - runs as service |
+| client | CLI binary `search-cli` - REQUIRED |
+| agent | Optional binary `search-agent` |
+| Server Admin | App administrator (NOT OS root) |
+| Regular User | End-user (PART 34, optional feature) |
+
+## COMPLIANCE CHECK
+Before completing ANY task:
+- [ ] Read relevant PART(s) in AI.md
+- [ ] Implementation matches spec EXACTLY
+- [ ] No guessing - all decisions from spec
+- [ ] Docs updated if code changed
+
+---
+**Full details: AI.md PART 0, PART 1**
+```
+
+**Example Rules File Content (frontend-rules.md):**
+
+```markdown
+# Frontend Rules (PART 16, 17)
+
+⚠️ **Server does the work. Client displays the result.** ⚠️
+
+## CRITICAL - NEVER DO
+- ❌ Client-side rendering (React, Vue, Angular, etc.)
+- ❌ Require JavaScript for core functionality
+- ❌ Client-side routing (SPA)
+- ❌ Business logic in JavaScript
+- ❌ Let long strings break mobile layout
+- ❌ Desktop-first CSS (use mobile-first)
+- ❌ Inline CSS or JavaScript
+- ❌ JavaScript alerts (use toast notifications)
+
+## REQUIRED - ALWAYS DO
+- ✅ Server-side rendering (Go templates)
+- ✅ Progressive enhancement (works without JS)
+- ✅ Mobile-first responsive CSS
+- ✅ CSS `word-break: break-all` for long strings (IPv6, .onion, tokens)
+- ✅ Full admin panel with ALL settings
+- ✅ WCAG 2.1 AA accessibility
+- ✅ Touch targets minimum 44x44px
+
+## SERVER VS CLIENT
+| Task | Where | Why |
+|------|-------|-----|
+| Data validation | SERVER | Server is authoritative |
+| HTML rendering | SERVER | Works without JS |
+| Business logic | SERVER | Security, consistency |
+| Formatting | SERVER | Consistent output |
+| Theme toggle | Client JS | Instant UX feedback |
+| Copy to clipboard | Client JS | Browser API required |
+| Form feedback | Client JS | UX enhancement only |
+
+## LONG STRINGS (REQUIRED CSS)
+```css
+.long-string, .ip-address, .onion-address, .api-token, .hash {
+  word-break: break-all;
+  overflow-wrap: break-word;
+  font-family: monospace;
+}
+```
+
+Apply to: IPv6, Tor .onion, API tokens, hashes, UUIDs, Base64
+
+## BREAKPOINTS (mobile-first)
+| Target | CSS |
+|--------|-----|
+| Mobile (base) | No media query |
+| Tablet+ | `@media (min-width: 768px)` |
+| Desktop+ | `@media (min-width: 1024px)` |
+
+---
+**Full details: AI.md PART 16, PART 17**
+```
 
 **Cursor Rules (.cursor/rules/):**
 
 Cursor uses `.mdc` files. Create the same logical groupings:
 
-| File | PARTs | Topics Covered |
-|------|-------|----------------|
-| `ai-rules.mdc` | 0, 1 | AI behavior rules, critical rules, compliance |
-| `project-rules.mdc` | 2, 3, 4 | License/attribution, project structure, OS-specific paths |
-| `config-rules.mdc` | 5, 6, 12 | Configuration handling, application modes, server settings |
-| `binary-rules.mdc` | 7, 8, 33 | Binary requirements, server CLI, client/agent |
-| `backend-rules.mdc` | 9, 10, 11 | Error handling/caching, database/cluster, security/logging |
-| `api-rules.mdc` | 13, 14, 15 | Health/versioning, API structure/routes, SSL/TLS |
-| `frontend-rules.mdc` | 16, 17 | Web frontend (HTML/CSS/JS), admin panel |
-| `features-rules.mdc` | 18, 19, 20, 21, 22, 23 | Email, scheduler, GeoIP, metrics, backup, update |
-| `service-rules.mdc` | 24, 25 | Privilege escalation, service management |
-| `makefile-rules.mdc` | 26 | Makefile (local dev/tests/debug only) |
-| `docker-rules.mdc` | 27 | Docker/containers, Dockerfile, docker-compose |
-| `cicd-rules.mdc` | 28 | CI/CD workflows (GitHub/GitLab/Gitea Actions) |
-| `testing-rules.mdc` | 29, 30, 31 | Testing/development, documentation, i18n/a11y |
-| `optional-rules.mdc` | 32, 34, 35, 36 | Tor, multi-user, organizations, custom domains |
+| File | PARTs | Topics (from PART titles) |
+|------|-------|---------------------------|
+| `ai-rules.mdc` | 0, 1 | AI Assistant Rules, Critical Rules |
+| `project-rules.mdc` | 2, 3, 4 | License & Attribution, Project Structure, OS-Specific Paths |
+| `config-rules.mdc` | 5, 6, 12 | Configuration, Application Modes, Server Configuration |
+| `binary-rules.mdc` | 7, 8, 33 | Binary Requirements, Server Binary CLI, Client & Agent |
+| `backend-rules.mdc` | 9, 10, 11, 32 | Error Handling & Caching, Database & Cluster, Security & Logging, Tor Hidden Service |
+| `api-rules.mdc` | 13, 14, 15 | Health & Versioning, API Structure, SSL/TLS & Let's Encrypt |
+| `frontend-rules.mdc` | 16, 17 | Web Frontend, Admin Panel |
+| `features-rules.mdc` | 18-23 | Email & Notifications, Scheduler, GeoIP, Metrics, Backup & Restore, Update Command |
+| `service-rules.mdc` | 24, 25 | Privilege Escalation & Service, Service Support |
+| `makefile-rules.mdc` | 26 | Makefile (local dev only, NOT CI/CD) |
+| `docker-rules.mdc` | 27 | Docker |
+| `cicd-rules.mdc` | 28 | CI/CD Workflows |
+| `testing-rules.mdc` | 29, 30, 31 | Testing & Development, ReadTheDocs Documentation, I18N & A11Y |
+| `optional-rules.mdc` | 34-36 | Multi-User, Organizations, Custom Domains (all OPTIONAL) |
 
 **Aider Rules (.aider/):**
 
@@ -856,18 +997,46 @@ Fallback for other AI tools. Create `.ai/rules/` with `.md` files using same gro
 
 Each AI tool directory MUST have a project memory file containing critical rules that should ALWAYS be loaded:
 
-| Tool | File |
-|------|------|
-| Claude Code | `.claude/CLAUDE.md` |
-| Cursor | `.cursor/CURSOR.md` |
-| Windsurf | `.windsurf/WINDSURF.md` |
-| Aider | `.aider/AIDER.md` |
-| Generic | `.ai/AI.md` |
+| Tool | Primary Location | Alternate Location | Local Override (gitignored) |
+|------|------------------|--------------------|-----------------------------|
+| Claude Code | `CLAUDE.md` (project root) | `.claude/CLAUDE.md` | `CLAUDE.local.md` (project root) |
+| Cursor | `.cursor/CURSOR.md` | - | - |
+| Windsurf | `.windsurf/WINDSURF.md` | - | - |
+| Aider | `.aider/AIDER.md` | - | - |
+| Generic | `.ai/AI.md` | - | - |
+
+**Claude Code Note:** Claude prefers `CLAUDE.md` at project root (discovered recursively). `.claude/CLAUDE.md` is an alternate location. Personal preferences go in `CLAUDE.local.md` (auto-gitignored).
 
 **Required Content Structure (~50-100 lines max):**
 
 ```markdown
 # SEARCH - AI Quick Reference
+
+⚠️ **THIS FILE IS AUTO-LOADED EVERY CONVERSATION. FOLLOW IT EXACTLY.** ⚠️
+
+## FIRST TURN - MANDATORY
+
+On EVERY new conversation or after "context compacted" message:
+1. **READ** `AI.md` PART 0 and PART 1 before doing ANYTHING
+2. **READ** the relevant `.claude/rules/*.md` for your current task
+3. **NEVER** assume or guess - verify against AI.md before implementing
+
+**If you haven't read AI.md this session → STOP → Read it NOW.**
+
+## Asking Questions
+
+- **Never guess** - if unsure, ASK the user
+- **Question mark = question** - when user ends with `?`, answer/clarify, don't execute
+- **Use AskUserQuestion wizard** - presents one question at a time with options + "Other" for custom input + Submit/Cancel; layout varies by context (yes/no, multi-select, with descriptions); less overwhelming than plain text questions
+
+## Before ANY Code Change
+
+1. Have I read the relevant PART in AI.md? (If no → read it)
+2. Does this follow the spec EXACTLY? (If unsure → check spec)
+3. Am I guessing or do I KNOW from the spec? (If guessing → read spec)
+4. Would this pass the compliance checklist? (AI.md FINAL section)
+
+**WHEN IN DOUBT: READ THE SPEC. DO NOT GUESS.**
 
 ## Binary Terminology
 - **server** = `search` (main binary, runs as service)
@@ -890,17 +1059,32 @@ Each AI tool directory MUST have a project memory file containing critical rules
 - **Managed Node** = EXTERNAL resource app controls/monitors (Docker hosts, etc.)
 - Most apps only have cluster nodes
 
-## NEVER Do (Top 10)
+## NEVER Do (Top 15) - VIOLATIONS ARE BUGS
 1. Use bcrypt → Use Argon2id
 2. Put Dockerfile in root → `docker/Dockerfile`
 3. Use CGO → CGO_ENABLED=0 always
 4. Hardcode dev values → Detect at runtime
 5. Use external cron → Internal scheduler (PART 19)
 6. Store passwords plaintext → Argon2id (tokens use SHA-256)
-7. Create premium tiers → All features free
-8. Use Makefile in CI/CD → Explicit commands
-9. Guess or assume → Read spec or ask
-10. Skip platforms → Build all 8
+7. Create premium tiers → All features free, no paywalls
+8. Use Makefile in CI/CD → Explicit commands only
+9. Guess or assume → Read spec or ask user
+10. Skip platforms → Build all 8 (linux/darwin/windows × amd64/arm64)
+11. Client-side rendering (React/Vue) → Server-side Go templates
+12. Require JavaScript for core features → Progressive enhancement only
+13. Let long strings break mobile → Use word-break CSS
+14. Skip validation → Server validates EVERYTHING
+15. Implement without reading spec → Read relevant PART first
+
+## ALWAYS Do - NON-NEGOTIABLE
+1. Read AI.md before implementing ANY feature
+2. Server-side processing (server does the work, client displays)
+3. Mobile-first responsive CSS
+4. All features work without JavaScript
+5. Tor hidden service support (auto-enabled if Tor found)
+6. Built-in scheduler, GeoIP, metrics, email, backup, update
+7. Full admin panel with ALL settings
+8. Client binary for ALL projects
 
 ## File Locations
 - Config: `{config_dir}/server.yml`
@@ -910,13 +1094,16 @@ Each AI tool directory MUST have a project memory file containing critical rules
 - Docker: `docker/`
 
 ## Where to Find Details
-- AI behavior: `rules/ai-rules.md` (PART 0, 1)
-- Project structure: `rules/project-rules.md` (PART 2, 3, 4)
-- Frontend/WebUI: `rules/frontend-rules.md` (PART 16, 17)
-- Full spec: `AI.md` (~48k lines)
+- AI behavior: `.claude/rules/ai-rules.md` (PART 0, 1)
+- Project structure: `.claude/rules/project-rules.md` (PART 2, 3, 4)
+- Frontend/WebUI: `.claude/rules/frontend-rules.md` (PART 16, 17)
+- Full spec: `AI.md` (~55k lines) ← **SOURCE OF TRUTH**
 
 ## Current Project State
-[AI should update this section with current implementation status]
+[AI updates this section as work progresses]
+- Last read AI.md: [date/time]
+- Current task: [description]
+- Relevant PARTs: [list]
 ```
 
 **Rules:**
@@ -925,9 +1112,98 @@ Each AI tool directory MUST have a project memory file containing critical rules
 - Points to rules/ files and AI.md for details
 - "Current Project State" section updated by AI as work progresses
 
-**Claude Code Settings (.claude/settings.local.json):**
+**AI Enforcement - Surviving Context Compaction:**
 
-Project-specific Claude Code permissions and configuration. This file is gitignored and overrides/extends global `~/.claude/settings.json`.
+CLAUDE.md and rules files are loaded at every conversation start, but AI may still drift from spec during long conversations or after context compaction. These mechanisms ensure compliance:
+
+**1. First Turn Behavior (add to CLAUDE.md):**
+
+```markdown
+## FIRST TURN - READ THIS
+
+On EVERY new conversation or after context compaction:
+1. Read `AI.md` PART 0 and PART 1 (critical rules)
+2. Read the relevant `.claude/rules/*.md` files for current task
+3. NEVER assume - always verify against spec before implementing
+
+If you haven't read AI.md this session, STOP and read it now.
+```
+
+**2. Rules File Content Template:**
+
+Each `.claude/rules/*.md` file should contain:
+
+```markdown
+# {Topic} Rules (PART X, Y, Z)
+
+## CRITICAL - NEVER DO
+- [List of prohibited actions from these PARTs]
+
+## REQUIRED - ALWAYS DO
+- [List of mandatory requirements from these PARTs]
+
+## KEY DECISIONS (pre-answered)
+| Question | Answer | Spec Reference |
+|----------|--------|----------------|
+| [Common question] | [Definitive answer] | PART X, Section Y |
+
+## TERMINOLOGY
+| Term | Meaning |
+|------|---------|
+| [Term] | [Definition from spec] |
+
+## QUICK REFERENCE
+[Condensed rules table or checklist]
+
+---
+**Full details: AI.md PART X, Y, Z**
+```
+
+**3. Context Compaction Survival:**
+
+| What Survives | How | Content |
+|---------------|-----|---------|
+| CLAUDE.md | Auto-loaded every turn | Critical rules, terminology, NEVER/ALWAYS lists |
+| rules/*.md | Auto-loaded every turn | Detailed rules per topic |
+| AI.md | Must be read by AI | Full specification (source of truth) |
+
+**Key principle:** Put the most critical rules in CLAUDE.md and rules files (auto-loaded). These survive context compaction. AI.md is the full spec but must be explicitly read.
+
+**4. Enforcement Language:**
+
+Use strong, unambiguous language in CLAUDE.md and rules files:
+
+| Weak (avoid) | Strong (use) |
+|--------------|--------------|
+| "Try to..." | "MUST" / "ALWAYS" |
+| "Prefer..." | "REQUIRED" / "NEVER" |
+| "Consider..." | "Non-negotiable" |
+| "You might want to..." | "Failure to do this is a bug" |
+
+**5. Self-Check Prompt (add to CLAUDE.md):**
+
+```markdown
+## Before ANY Code Change
+
+Ask yourself:
+1. Have I read the relevant PART in AI.md?
+2. Does this follow the spec EXACTLY?
+3. Am I guessing or do I KNOW from the spec?
+4. Would this pass the compliance checklist?
+
+If unsure: READ THE SPEC. Do not guess.
+```
+
+**Claude Code Settings (.claude/settings.json and .claude/settings.local.json):**
+
+Project-specific Claude Code permissions and configuration:
+
+| File | Purpose | Version Controlled |
+|------|---------|-------------------|
+| `.claude/settings.json` | Shared team settings | Yes (commit to repo) |
+| `.claude/settings.local.json` | Personal local overrides | No (auto-gitignored) |
+
+Both files use the same structure. Settings are merged: `settings.local.json` overrides `settings.json`, which overrides global `~/.claude/settings.json`.
 
 **File Structure:**
 
@@ -1109,6 +1385,58 @@ Project-specific Claude Code permissions and configuration. This file is gitigno
 - The `env` section sets environment variables for ALL Bash commands in the session
 - Settings are merged: project settings extend/override global `~/.claude/settings.json`
 
+**Claude Code MCP Configuration (.claude/.mcp.json):**
+
+Model Context Protocol server configurations for the project. This file defines MCP servers that Claude Code can use.
+
+```json
+{
+  "mcpServers": {
+    "server-name": {
+      "command": "command-to-run",
+      "args": ["arg1", "arg2"],
+      "env": {
+        "ENV_VAR": "value"
+      }
+    }
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `mcpServers` | Object containing named server configurations |
+| `command` | Executable to run for the MCP server |
+| `args` | Array of command-line arguments |
+| `env` | Environment variables for the server process |
+
+**Claude Code Project Agents (.claude/agents/):**
+
+Project-level subagents for specialized tasks. Each agent is a markdown file defining its behavior.
+
+```
+.claude/agents/
+├── test-runner.md      # Agent for running tests
+├── code-reviewer.md    # Agent for code reviews
+└── doc-generator.md    # Agent for documentation
+```
+
+**Agent File Structure:**
+
+```markdown
+---
+name: Test Runner
+description: Runs project tests and reports results
+tools:
+  - Bash
+  - Read
+---
+
+# Test Runner Agent
+
+Instructions for how this agent should behave...
+```
+
 ### Allowed Root Directories (Exhaustive List)
 
 | Directory | Required | Purpose | Gitignored |
@@ -1130,6 +1458,28 @@ Project-specific Claude Code permissions and configuration. This file is gitigno
 | `rootfs/` | Auto | Runtime volume data | **Yes** |
 
 **RULE: If a directory doesn't appear in this list, it MUST NOT exist - ask before creating.**
+
+### Allowed Root Files (Exhaustive List)
+
+| File | Required | Purpose | Gitignored |
+|------|:--------:|---------|:----------:|
+| `AI.md` | ✓ | Project specification (source of truth) | No |
+| `IDEA.md` | ✓ | Project plan and features | No |
+| `CLAUDE.md` | ✓ | Claude Code project memory (primary location) | No |
+| `CLAUDE.local.md` | - | Personal Claude Code preferences | **Yes** |
+| `README.md` | ✓ | Project documentation | No |
+| `LICENSE` | ✓ | MIT license | No |
+| `LICENSE.md` | ✓ | Third-party license attributions | No |
+| `go.mod` | ✓ | Go module definition | No |
+| `go.sum` | ✓ | Go module checksums | No |
+| `Makefile` | ✓ | Local development only | No |
+| `mkdocs.yml` | ✓ | MkDocs configuration | No |
+| `.gitignore` | ✓ | Git ignore patterns | No |
+| `.dockerignore` | ✓ | Docker ignore patterns | No |
+| `.gitattributes` | ✓ | Git attributes | No |
+| `.editorconfig` | - | Editor configuration | No |
+
+**RULE: If a root file doesn't appear in this list, it MUST NOT exist - ask before creating.**
 
 ### GitHub-Specific Files (`.github/` directory)
 
@@ -1296,8 +1646,11 @@ This distinction exists for clarity. When referring to OS-level resources that b
 
 | Term | Definition |
 |------|------------|
-| **Setup Wizard** | First-run configuration flow - server has web-based wizard (`/{admin_path}/server/setup`) to create Primary Admin; client has TUI/GUI wizard to configure server connection |
-| **Setup Token** | One-time 32-char hex token generated on server first-run, displayed in console, required to access server's web-based setup wizard |
+| **Server Web Setup** | Web-based setup flow at `/{admin_path}/server/setup` (HTML pages served by server, accessed in browser) - creates Primary Admin, customizes branding |
+| **CLI Setup Wizard** | Built-in TUI/GUI wizard in CLI binary - prompts for server URL, tests connection, saves config (CLI is the ONLY binary with a built-in wizard) |
+| **Setup Token** | One-time 32-char hex token generated on server first-run, displayed in console, required to access server's web-based setup |
+
+**Key distinction:** Server serves web pages for setup (browser-based). CLI has a built-in interactive wizard (TUI/GUI). Agent has no wizard (uses connection string).
 
 ## Other Terms
 
@@ -1368,16 +1721,16 @@ This distinction exists for clarity. When referring to OS-level resources that b
 
 ## How to Read This Large File
 
-**AI.md is ~2.0MB and ~54,100 lines. You CANNOT read it all at once. Follow these procedures.**
+**AI.md is ~2.0MB and ~55,000 lines. You CANNOT read it all at once. Follow these procedures.**
 
 ### File Size Reality
 
 | Constraint | Value |
 |------------|-------|
 | File size | ~2.0MB |
-| Line count | ~54,200 lines |
+| Line count | ~55,000 lines |
 | Read limit | ~500 lines per read |
-| Full reads needed | ~108 reads (impractical) |
+| Full reads needed | ~110 reads (impractical) |
 
 **Use the PART index to find relevant sections, then read each section COMPLETELY.**
 
@@ -1387,45 +1740,45 @@ This distinction exists for clarity. When referring to OS-level resources that b
 
 | PART | Line | Topic | When to Read |
 |------|------|-------|--------------|
-| 0 | ~1522 | AI Assistant Rules | **ALWAYS READ FIRST**, **AI Behavior Rules** |
-| 1 | ~3221 | Critical Rules | **ALWAYS READ FIRST** |
-| 2 | ~4468 | License & Attribution | License requirements |
-| 3 | ~4802 | Project Structure | Setting up new project, **CI/CD badge detection** |
-| 4 | ~5752 | OS-Specific Paths | Path handling |
-| 5 | ~5937 | Configuration | Config file work, **Path Security**, **Privileged Ports**, **Escalation** |
-| 6 | ~7847 | Application Modes | Mode handling, debug endpoints |
-| 7 | ~8455 | Binary Requirements | Binary building, **Display detection**, **TERM=dumb**, **NO_COLOR** |
-| 8 | ~9118 | Server Binary CLI | CLI flags/commands, **NO_COLOR Support**, **--color flag** |
-| 9 | ~12277 | Error Handling & Caching | Error/cache patterns |
-| 10 | ~12654 | Database & Cluster | Database work |
-| 11 | ~13069 | Security & Logging | Security features, **Scoped Agent Tokens**, **Context Detection** |
-| 12 | ~14961 | Server Configuration | Server settings |
-| 13 | ~16021 | Health & Versioning | Health endpoints |
-| 14 | ~16772 | API Structure | REST/GraphQL/Route Compliance, **Non-Interactive Text Output** |
-| 15 | ~18364 | SSL/TLS & Let's Encrypt | SSL certificates |
-| 16 | ~19237 | Web Frontend | Frontend/UI, **Sitemap**, **Site Verification**, **Branding/SEO** |
-| 17 | ~25173 | Admin Panel | Admin UI, **Server Admin**, **Scoped Agents API** |
-| 18 | ~27213 | Email & Notifications | Email/SMTP, **SMTP Auto-Detection** |
-| 19 | ~28533 | Scheduler | Background tasks, **NO external schedulers**, **Backup tasks** |
-| 20 | ~29018 | GeoIP | GeoIP features |
-| 21 | ~29091 | Metrics | Prometheus metrics, **INTERNAL only** |
-| 22 | ~30536 | Backup & Restore | Backup features, **Compliance encryption**, **Cluster backups** |
-| 23 | ~31265 | Update Command | Update feature |
-| 24 | ~31744 | Privilege Escalation & Service | Service/privilege work |
-| 25 | ~32642 | Service Support | Systemd/runit/rc.d/launchd templates |
-| 26 | ~32826 | Makefile | Local dev/tests/debug only, **NOT used in CI/CD** |
-| 27 | ~33581 | Docker | Docker/containers, **NEVER copy/symlink binaries** |
-| 28 | ~35074 | CI/CD Workflows | GitHub/GitLab/Gitea Actions |
-| 29 | ~37928 | Testing & Development | Testing/dev workflow, **AI Docker Compose Rules**, **Content Negotiation Testing** |
-| 30 | ~39749 | ReadTheDocs Documentation | Documentation |
-| 31 | ~40479 | I18N & A11Y | Internationalization |
-| 32 | ~40900 | Tor Hidden Service | Tor support, **binary controls Tor** |
-| 33 | ~42679 | Client & Agent | Client **REQUIRED**, Agent optional - CLI/TUI/GUI, **Scoped Agent Tokens**, **Smart Context**, **First-Run Wizard** |
-| 34 | ~47088 | Multi-User | **OPTIONAL** - Regular User accounts/registration, vanity URLs |
-| 35 | ~50740 | Organizations | **OPTIONAL** - multi-user orgs, vanity URLs |
-| 36 | ~51381 | Custom Domains | **OPTIONAL** - user/org branded domains |
-| 37 | ~52404 | IDEA.md Reference | **Examples only** - NEVER modify |
-| FINAL | ~52658 | Compliance Checklist | Final verification, **AI Quick Reference Rules** |
+| 0 | ~1875 | AI Assistant Rules | **ALWAYS READ FIRST**, **AI Behavior Rules** |
+| 1 | ~3574 | Critical Rules | **ALWAYS READ FIRST** |
+| 2 | ~4821 | License & Attribution | License requirements |
+| 3 | ~5155 | Project Structure | Setting up new project, **CI/CD badge detection** |
+| 4 | ~6115 | OS-Specific Paths | Path handling |
+| 5 | ~6300 | Configuration | Config file work, **Path Security**, **Privileged Ports**, **Escalation** |
+| 6 | ~8210 | Application Modes | Mode handling, debug endpoints |
+| 7 | ~8818 | Binary Requirements | Binary building, **Display detection**, **TERM=dumb**, **NO_COLOR** |
+| 8 | ~9481 | Server Binary CLI | CLI flags/commands, **NO_COLOR Support**, **--color flag** |
+| 9 | ~12642 | Error Handling & Caching | Error/cache patterns |
+| 10 | ~13019 | Database & Cluster | Database work |
+| 11 | ~13565 | Security & Logging | Security features, **Scoped Agent Tokens**, **Context Detection** |
+| 12 | ~15457 | Server Configuration | Server settings |
+| 13 | ~16517 | Health & Versioning | Health endpoints |
+| 14 | ~17268 | API Structure | REST/GraphQL/Route Compliance, **Non-Interactive Text Output** |
+| 15 | ~18901 | SSL/TLS & Let's Encrypt | SSL certificates |
+| 16 | ~19774 | Web Frontend | Frontend/UI, **Sitemap**, **Site Verification**, **Branding/SEO** |
+| 17 | ~25755 | Admin Panel | Admin UI, **Server Admin**, **Scoped Agents API** |
+| 18 | ~27795 | Email & Notifications | Email/SMTP, **SMTP Auto-Detection** |
+| 19 | ~29115 | Scheduler | Background tasks, **NO external schedulers**, **Backup tasks** |
+| 20 | ~29600 | GeoIP | GeoIP features |
+| 21 | ~29673 | Metrics | Prometheus metrics, **INTERNAL only** |
+| 22 | ~31118 | Backup & Restore | Backup features, **Compliance encryption**, **Cluster backups** |
+| 23 | ~31847 | Update Command | Update feature |
+| 24 | ~32326 | Privilege Escalation & Service | Service/privilege work |
+| 25 | ~33224 | Service Support | Systemd/runit/rc.d/launchd templates |
+| 26 | ~33408 | Makefile | Local dev/tests/debug only, **NOT used in CI/CD** |
+| 27 | ~34163 | Docker | Docker/containers, **NEVER copy/symlink binaries** |
+| 28 | ~35662 | CI/CD Workflows | GitHub/GitLab/Gitea Actions |
+| 29 | ~38516 | Testing & Development | Testing/dev workflow, **AI Docker Compose Rules**, **Content Negotiation Testing** |
+| 30 | ~40337 | ReadTheDocs Documentation | Documentation |
+| 31 | ~41067 | I18N & A11Y | Internationalization |
+| 32 | ~41488 | Tor Hidden Service | Tor support, **binary controls Tor** |
+| 33 | ~43267 | Client & Agent | Client **REQUIRED**, Agent optional - CLI/TUI/GUI, **Scoped Agent Tokens**, **Smart Context**, **First-Run Wizard** |
+| 34 | ~47682 | Multi-User | **OPTIONAL** - Regular User accounts/registration, vanity URLs |
+| 35 | ~51334 | Organizations | **OPTIONAL** - multi-user orgs, vanity URLs |
+| 36 | ~51975 | Custom Domains | **OPTIONAL** - user/org branded domains |
+| 37 | ~52998 | IDEA.md Reference | **Examples only** - NEVER modify |
+| FINAL | ~53252 | Compliance Checklist | Final verification, **AI Quick Reference Rules** |
 
 **When Implementing OPTIONAL PARTs (34-36, Agent from 33):**
 1. Change PART title from `OPTIONAL` → `NON-NEGOTIABLE` in AI.md
@@ -1708,6 +2061,52 @@ Before I proceed, can you confirm [specific question]?
 5. When you see "See PART X": jump, read, return to original location
 6. Every 3-5 changes: verify against spec (are you drifting?)
 ```
+
+### Session Initialization (First Read)
+
+**On first session with a project containing AI.md, MUST perform these steps:**
+
+```
+1. Read AI.md PART 0 and PART 1 completely
+2. Check if .claude/rules/ directory exists
+3. If missing or outdated: CREATE/UPDATE all rule files (see table below)
+4. If TODO.AI.md exists: read and check for needed updates
+5. Commit all COMMIT, NEVER, and MUST rules to memory
+```
+
+**Rule Files to Create/Update:**
+
+| File | PARTs | Content Source |
+|------|-------|----------------|
+| `.claude/rules/ai-rules.md` | 0, 1 | AI Assistant Rules, Critical Rules |
+| `.claude/rules/project-rules.md` | 2, 3, 4 | License & Attribution, Project Structure, OS-Specific Paths |
+| `.claude/rules/config-rules.md` | 5, 6, 12 | Configuration, Application Modes, Server Configuration |
+| `.claude/rules/binary-rules.md` | 7, 8, 33 | Binary Requirements, Server Binary CLI, Client & Agent |
+| `.claude/rules/backend-rules.md` | 9, 10, 11, 32 | Error Handling & Caching, Database & Cluster, Security & Logging, Tor Hidden Service |
+| `.claude/rules/api-rules.md` | 13, 14, 15 | Health & Versioning, API Structure, SSL/TLS & Let's Encrypt |
+| `.claude/rules/frontend-rules.md` | 16, 17 | Web Frontend, Admin Panel |
+| `.claude/rules/features-rules.md` | 18-23 | Email & Notifications, Scheduler, GeoIP, Metrics, Backup & Restore, Update Command |
+| `.claude/rules/service-rules.md` | 24, 25 | Privilege Escalation & Service, Service Support |
+| `.claude/rules/makefile-rules.md` | 26 | Makefile (local dev only, NOT CI/CD) |
+| `.claude/rules/docker-rules.md` | 27 | Docker |
+| `.claude/rules/cicd-rules.md` | 28 | CI/CD Workflows |
+| `.claude/rules/testing-rules.md` | 29, 30, 31 | Testing & Development, ReadTheDocs Documentation, I18N & A11Y |
+| `.claude/rules/optional-rules.md` | 34-36 | Multi-User, Organizations, Custom Domains (all OPTIONAL) |
+
+**Each rule file MUST contain:**
+1. Header with PART numbers: `# {Topic} Rules (PART X, Y, Z)`
+2. Warning: `⚠️ **These rules are NON-NEGOTIABLE. Violations are bugs.** ⚠️`
+3. CRITICAL - NEVER DO section (from relevant PARTs)
+4. CRITICAL - ALWAYS DO section (from relevant PARTs)
+5. Key rules summary (extracted from PART content)
+6. Reference: `For complete details, see AI.md PART X, Y, Z`
+
+**Trigger Conditions:**
+- `.claude/rules/` directory does not exist → Create all files
+- AI.md has been modified more recently than rule files → Update all files
+- User explicitly requests regeneration → Update all files
+
+**This is NOT optional.** The rule files enable efficient context loading without re-reading the entire AI.md every session.
 
 ### Task → PART Reference
 
@@ -2845,7 +3244,7 @@ Enter choice [a-d]:
 - Include "Other" option when appropriate
 - Show valid range: `[1-4]` or `[a-d]`
 - Put recommended option first with "(recommended)" suffix
-- **Multiple questions: Present as wizard (one question at a time)** - don't overwhelm user with all questions at once during planning
+- **Use AskUserQuestion wizard** - one question at a time, options + "Other" input, Submit/Cancel; context-appropriate layout (yes/no, multi-select, with descriptions)
 
 ## Migration Success Criteria
 
@@ -4941,23 +5340,30 @@ PROJECTORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(
 │       ├── beta.yml        # Beta releases
 │       ├── daily.yml       # Daily builds
 │       └── docker.yml      # Docker images
+├── CLAUDE.md               # Project memory - critical rules (REQUIRED, primary location)
+├── CLAUDE.local.md         # Personal project preferences (gitignored)
 ├── .claude/                # Claude Code configuration
-│   ├── rules/              # Auto-loaded cheatsheet files (REQUIRED)
-│   │   ├── ai-rules.md         # PART 0, 1: AI behavior, critical rules
-│   │   ├── project-rules.md    # PART 2, 3, 4: License, structure, paths
-│   │   ├── config-rules.md     # PART 5, 6, 12: Config, modes, server settings
-│   │   ├── binary-rules.md     # PART 7, 8, 33: Binary, CLI, client/agent
-│   │   ├── backend-rules.md    # PART 9, 10, 11: Errors, database, security
-│   │   ├── api-rules.md        # PART 13, 14, 15: Health, API, SSL/TLS
-│   │   ├── frontend-rules.md   # PART 16, 17: WebUI, admin panel
-│   │   ├── features-rules.md   # PART 18-23: Email, scheduler, GeoIP, metrics, backup, update
-│   │   ├── service-rules.md    # PART 24, 25: Privilege, service management
-│   │   ├── makefile-rules.md   # PART 26: Makefile (local dev only)
-│   │   ├── docker-rules.md     # PART 27: Docker/containers
-│   │   ├── cicd-rules.md       # PART 28: CI/CD workflows
-│   │   ├── testing-rules.md    # PART 29, 30, 31: Testing, docs, i18n
-│   │   └── optional-rules.md   # PART 32, 34-36: Tor, multi-user, orgs, domains
-│   └── CLAUDE.md           # Project memory - critical rules (REQUIRED)
+│   ├── CLAUDE.md           # Project memory (alternate location)
+│   ├── settings.json       # Shared team settings (version controlled)
+│   ├── settings.local.json # Personal local settings (gitignored)
+│   ├── .mcp.json           # MCP server configurations
+│   ├── agents/             # Project-level subagents (optional)
+│   │   └── *.md            # Agent definition files
+│   └── rules/              # Auto-loaded cheatsheet files (REQUIRED)
+│       ├── ai-rules.md         # PART 0, 1: AI Assistant Rules, Critical Rules
+│       ├── project-rules.md    # PART 2, 3, 4: License & Attribution, Project Structure, OS-Specific Paths
+│       ├── config-rules.md     # PART 5, 6, 12: Configuration, Application Modes, Server Configuration
+│       ├── binary-rules.md     # PART 7, 8, 33: Binary Requirements, Server Binary CLI, Client & Agent
+│       ├── backend-rules.md    # PART 9, 10, 11, 32: Error Handling & Caching, Database & Cluster, Security & Logging, Tor Hidden Service
+│       ├── api-rules.md        # PART 13, 14, 15: Health & Versioning, API Structure, SSL/TLS & Let's Encrypt
+│       ├── frontend-rules.md   # PART 16, 17: Web Frontend, Admin Panel
+│       ├── features-rules.md   # PART 18-23: Email, Scheduler, GeoIP, Metrics, Backup, Update
+│       ├── service-rules.md    # PART 24, 25: Privilege Escalation & Service, Service Support
+│       ├── makefile-rules.md   # PART 26: Makefile (local dev only, NOT CI/CD)
+│       ├── docker-rules.md     # PART 27: Docker
+│       ├── cicd-rules.md       # PART 28: CI/CD Workflows
+│       ├── testing-rules.md    # PART 29, 30, 31: Testing & Development, ReadTheDocs Documentation, I18N & A11Y
+│       └── optional-rules.md   # PART 34-36: Multi-User, Organizations, Custom Domains (all OPTIONAL)
 ├── .cursor/                # Cursor AI configuration (optional)
 │   ├── rules/              # Same groupings as .claude/rules/ but .mdc extension
 │   │   ├── ai-rules.mdc
@@ -5162,6 +5568,9 @@ rootfs/
 .aider/
 .ai/
 .windsurf/
+
+# Claude Code personal files (always gitignored)
+CLAUDE.local.md
 ```
 
 ### .dockerignore (REQUIRED)
@@ -15749,7 +16158,7 @@ server:
         **How we protect your data:**
 
         - All data is stored on our servers (not third-party cloud services unless specified)
-        - Passwords are hashed using industry-standard algorithms (bcrypt/argon2)
+        - Passwords are hashed using Argon2id (industry-standard, memory-hard algorithm)
         - All connections are encrypted (HTTPS/TLS)
         - Regular security audits and updates
         - Access controls and audit logging for admin actions
@@ -16991,6 +17400,47 @@ OS/Arch: {GOOS}/{GOARCH}
 | **No dead ends** | Every action has a result (success message, error, redirect) |
 
 **Frontend MUST work without JavaScript for core functionality (progressive enhancement).**
+
+### Server-Side Processing Philosophy
+
+**The server does the work. The client displays the result.**
+
+This is a server application, not a client-side SPA. The server should handle as much processing as possible. Client-side JavaScript is only for enhancement, not core functionality.
+
+| Processing Type | Where | Rationale |
+|-----------------|-------|-----------|
+| Data validation | **Server** (primary), client (UX only) | Server is authoritative; client validation is convenience |
+| Data transformation | **Server** | Server has full context, client shouldn't need to transform |
+| Business logic | **Server** | Never in client - security and consistency |
+| Formatting (dates, numbers) | **Server** | Consistent output, works without JS |
+| Pagination/sorting | **Server** | Database handles efficiently |
+| Search/filtering | **Server** | Database indexes, security |
+| HTML rendering | **Server** | Go templates, works everywhere |
+| State management | **Server** (sessions) | Client just displays current state |
+
+**Client-side JavaScript is ONLY for:**
+
+| Use Case | Why Client-Side |
+|----------|-----------------|
+| Form validation feedback | Immediate UX, but server re-validates |
+| Theme toggle (light/dark) | Instant visual feedback |
+| Copy to clipboard | Browser API required |
+| Auto-refresh/polling | Real-time updates without reload |
+| Modal/dropdown interactions | Pure UX enhancement |
+| Keyboard shortcuts | Convenience feature |
+| Progressive enhancement | Make things nicer, not functional |
+
+**NEVER do these client-side:**
+
+| Anti-Pattern | Why Wrong |
+|--------------|-----------|
+| Client-side routing (SPA) | Breaks back button, accessibility, SEO |
+| Client-side rendering (React/Vue) | Server can render faster, works without JS |
+| Client-side data fetching for initial load | Server already has the data |
+| Business logic in JavaScript | Security risk, inconsistent behavior |
+| Required JavaScript for core features | Breaks text browsers, accessibility |
+
+**Rule: If it works without JavaScript, ship it. Add JavaScript only to enhance.**
 
 ### Route Audit Checklist
 
@@ -19840,6 +20290,59 @@ fi
 | **Grid layouts** | 1 column | 2 columns | 3-4 columns |
 | **Touch Targets** | Minimum 44x44px | Standard sizing | Standard sizing |
 | **Font Size** | Base 16px minimum | Base 16px | Base 16px |
+
+### Long Strings (IPv6, Tor, Tokens, Hashes)
+
+**Long unbreakable strings WILL break mobile layouts if not handled properly.**
+
+| String Type | Example Length | Example |
+|-------------|----------------|---------|
+| IPv6 address | 39 chars | `2001:0db8:85a3:0000:0000:8a2e:0370:7334` |
+| Tor v3 .onion | 62 chars | `duckduckgogg42xjoc72x3sjasowoarfbgcmvfimaftt6twagswzczad.onion` |
+| API token | 32-64 chars | `tok_EXAMPLE1234567890abcdefghij...` |
+| SHA-256 hash | 64 chars | `e3b0c44298fc1c149afbf4c8996fb924...` |
+| UUID | 36 chars | `550e8400-e29b-41d4-a716-446655440000` |
+| Base64 data | Variable | Long encoded strings |
+
+**Required CSS for ALL elements that may contain long strings:**
+
+```css
+/* Apply to elements containing: IPs, URLs, hashes, tokens, codes */
+.long-string,
+.ip-address,
+.onion-address,
+.api-token,
+.hash,
+.uuid,
+.monospace-data {
+  /* Break long strings to prevent overflow */
+  word-break: break-all;
+  overflow-wrap: break-word;
+
+  /* Ensure monospace for readability */
+  font-family: monospace;
+
+  /* Optional: smaller font on mobile */
+  font-size: 0.875rem;
+}
+
+/* Alternative: horizontal scroll for code blocks */
+.code-block {
+  overflow-x: auto;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+}
+```
+
+**Where to apply:**
+
+| Context | CSS Class | Behavior |
+|---------|-----------|----------|
+| Inline display (tables, lists) | `.long-string` | Word-break to wrap |
+| Code blocks | `.code-block` | Horizontal scroll |
+| Copy-friendly fields | `.monospace-data` | Word-break + select all |
+
+**NEVER let long strings overflow their container or break mobile layouts.**
 
 ### Footer (Mobile-First)
 
@@ -23048,48 +23551,45 @@ Mobile:
 - Detect dynamically on load and resize
 - Don't show hamburger if not needed
 
-**CSS-Only Mobile Menu (NO JavaScript):**
+**CSS-Only Mobile Menu (NO JavaScript) - Mobile-First:**
 ```css
-/* Mobile slide-in menu using checkbox hack */
-@media (max-width: 768px) {
-  /* Hide hamburger on desktop, show on mobile */
-  .nav-toggle { display: block; cursor: pointer; }
-  .nav-links { display: none; }
+/* Base: Mobile styles (no media query) */
+.nav-toggle { display: block; cursor: pointer; }
+.nav-links { display: none; }
 
-  /* Slide-in panel */
-  .nav-panel {
-    position: fixed;
-    top: 0;
-    right: -280px;           /* Hidden off-screen right */
-    width: 280px;
-    height: 100vh;
-    background: var(--bg-color);
-    transition: right 0.3s ease;
-    z-index: 1001;
-  }
-
-  /* Overlay (hidden by default) */
-  .nav-overlay {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    z-index: 1000;
-    cursor: pointer;
-  }
-
-  /* When checkbox is checked: show menu and overlay */
-  .nav-checkbox:checked ~ .nav-panel {
-    right: 0;                /* Slide in from right */
-  }
-
-  .nav-checkbox:checked ~ .nav-overlay {
-    display: block;
-  }
+/* Slide-in panel (mobile) */
+.nav-panel {
+  position: fixed;
+  top: 0;
+  right: -280px;           /* Hidden off-screen right */
+  width: 280px;
+  height: 100vh;
+  background: var(--bg-color);
+  transition: right 0.3s ease;
+  z-index: 1001;
 }
 
-@media (min-width: 769px) {
-  /* Desktop: show inline links, hide hamburger */
+/* Overlay (hidden by default) */
+.nav-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  cursor: pointer;
+}
+
+/* When checkbox is checked: show menu and overlay */
+.nav-checkbox:checked ~ .nav-panel {
+  right: 0;                /* Slide in from right */
+}
+
+.nav-checkbox:checked ~ .nav-overlay {
+  display: block;
+}
+
+/* Desktop: show inline links, hide hamburger */
+@media (min-width: 768px) {
   .nav-toggle, .nav-panel, .nav-overlay { display: none; }
   .nav-links { display: flex; }
 }
@@ -24627,13 +25127,15 @@ initCCPA();
   z-index: 9999;
 }
 
+/* Base: Mobile styles - stacked, centered */
 .cookie-banner-content {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 0.875rem 1.5rem;
+  padding: 1.25rem 1rem;
   max-width: 100%;
-  gap: 2rem;
+  gap: 1rem;
 }
 
 .cookie-message {
@@ -24655,13 +25157,14 @@ initCCPA();
   display: flex;
   gap: 0.75rem;
   flex-shrink: 0;
+  justify-content: center;
 }
 
 .cookie-banner .btn-decline {
   background: transparent;
   border: none;
   color: #ffffff;
-  padding: 0.5rem 1.25rem;
+  padding: 0.625rem 1.5rem;
   cursor: pointer;
   font-size: 0.9rem;
 }
@@ -24674,7 +25177,7 @@ initCCPA();
   background: #ffffff;
   border: none;
   color: #7c5295;
-  padding: 0.5rem 1.25rem;
+  padding: 0.625rem 1.5rem;
   cursor: pointer;
   font-size: 0.9rem;
   border-radius: 2px;
@@ -24684,25 +25187,17 @@ initCCPA();
   opacity: 0.95;
 }
 
-/* Mobile - stack vertically, center everything */
-@media (max-width: 600px) {
+/* Desktop: side-by-side layout */
+@media (min-width: 601px) {
   .cookie-banner-content {
-    flex-direction: column;
-    padding: 1.25rem 1rem;
-    gap: 1rem;
-  }
-
-  .cookie-message {
-    text-align: center;
-  }
-
-  .cookie-buttons {
-    justify-content: center;
+    flex-direction: row;
+    padding: 0.875rem 1.5rem;
+    gap: 2rem;
   }
 
   .cookie-banner .btn-decline,
   .cookie-banner .btn-accept {
-    padding: 0.625rem 1.5rem;
+    padding: 0.5rem 1.25rem;
   }
 }
 </style>
@@ -25857,7 +26352,7 @@ func RegisterAdminRoutes(r *mux.Router) {
 **What Setup Wizard Provides:**
 - Custom admin username/password (instead of generated)
 - Customize app name/branding
-- Configure optional features (Tor, SSL, multi-user)
+- Configure optional features (SSL, multi-user) - Note: Tor is auto-enabled if binary found, not configurable
 - Receive API token for programmatic access
 
 ### Setup Flow
@@ -43393,9 +43888,15 @@ if env.IsAutoDetectDisplayModeGUI() {
 | **Container** | Log output only |
 | **Headless/daemon** | Log to file |
 
-**No setup wizard for Server or Agent.** They just run:
-- **Server**: Configured via WebUI at `/{admin_path}` (see PART 17)
+**No built-in TUI/GUI wizard for Server or Agent binaries.** They just run:
+- **Server**: Has web-based setup at `/{admin_path}/server/setup` (accessed via browser, see PART 17)
 - **Agent**: Configured via connection string from server admin panel
+
+**Note:** "Setup wizard" has two meanings:
+1. **Server's web-based setup** - HTML pages served by server, accessed in browser at `/{admin_path}/server/setup`
+2. **CLI's built-in TUI/GUI wizard** - interactive wizard built into CLI binary itself
+
+Only CLI has a built-in wizard. Server serves web pages for setup.
 
 **Agent connection string example (provided by server admin panel):**
 ```
@@ -47063,7 +47564,7 @@ The Agent is essentially the Server's "little sibling" - same professional struc
 |--------|--------|-------|
 | **Listens for connections** | ✅ Yes (`--port`, `--address`) | ❌ No |
 | **Connects to parent server** | ❌ No (IS the server) | ✅ Yes (`--server`, `--token`) |
-| **Setup wizard** | ✅ Yes (`--setup-token`) | ❌ No (registers with server) |
+| **Setup** | ✅ Web-based (`--setup-token` for access) | ❌ No (registers with server via connection string) |
 | **Admin operations** | N/A (IS the server) | ❌ No (Client's job) |
 | **WebUI** | ✅ Yes | ❌ No (headless) |
 | **Database** | ✅ `server.db` | ✅ `agent.db` (if needed) |
@@ -52865,14 +53366,17 @@ A weather aggregation API that fetches data from external providers, caches it, 
 
 ### When Starting Work
 
-1. Read AI.md completely - this is the ONLY project specification
-2. Read TODO.AI.md for current tasks (if exists)
-3. Identify the specific task/section
-4. Check for cross-references to other sections
-5. Ask clarifying questions BEFORE implementing
-6. Implement exactly as specified
-7. Verify consistency with related sections
-8. Update TODO.AI.md when tasks complete
+1. **FIRST:** Read AI.md PART 0 and PART 1 (critical rules) - MANDATORY every conversation
+2. Read the relevant `.claude/rules/*.md` files for your current task
+3. Read TODO.AI.md for current tasks (if exists)
+4. Identify the specific PART(s) for your task
+5. Check for cross-references to other sections
+6. Ask clarifying questions BEFORE implementing
+7. Implement exactly as specified
+8. Verify consistency with related sections
+9. Update TODO.AI.md when tasks complete
+
+**After context compaction:** Re-read PART 0, 1 and relevant rules files before continuing.
 
 ### Quick Reference - Critical Rules
 
@@ -53132,6 +53636,10 @@ make docker # Build Docker image
 - [ ] Keyboard navigation works
 - [ ] Screen reader compatible
 - [ ] Color contrast meets AA standards (both themes)
+- [ ] Server-side rendering (Go templates) - NO client-side rendering (React/Vue)
+- [ ] Core functionality works WITHOUT JavaScript (progressive enhancement)
+- [ ] Long strings have `word-break: break-all` CSS (IPv6, .onion, tokens, hashes)
+- [ ] Touch targets minimum 44x44px on mobile
 
 ### Phase 6: Admin & Email (PARTS 17-18)
 

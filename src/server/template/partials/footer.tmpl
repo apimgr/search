@@ -1,10 +1,14 @@
 {{define "footer"}}
 <footer class="footer">
-    {{/* Tor hidden service address - per AI.md PART 32 */}}
-    {{if .TorAddress}}
+    {{/* Tor hidden service - per AI.md PART 32 (always show if enabled) */}}
+    {{if .TorEnabled}}
     <p class="tor-address">
         <span class="tor-icon">🧅</span>
+        {{if .TorAddress}}
         <a href="http://{{.TorAddress}}" class="onion-link">{{.TorAddress}}</a>
+        {{else}}
+        <span class="tor-status">Tor: {{.TorStatus}}</span>
+        {{end}}
     </p>
     {{end}}
 
@@ -23,15 +27,13 @@
 
     {{/* Application branding - per AI.md PART 17 */}}
     <p>
-        <a href="https://github.com/apimgr/search" target="_blank" rel="noopener">Search</a>
-        <span>•</span>
-        <span>Made with ❤️</span>
+        <a href="https://github.com/apimgr/search" target="_blank" rel="noopener">Made with</a> ❤️
         <span>•</span>
         <span>{{version}}</span>
     </p>
 
     <br />
 
-    <a href="/healthz">{{.BuildDate}}</a>
+    <a href="/healthz">Last update: {{.BuildDate}}</a>
 </footer>
 {{end}}

@@ -2136,13 +2136,3 @@ Primary engines with their own indexes - no proxies or metasearch:
 | Timezone | Built-in Go stdlib | Static |
 | Calculator | Built-in | Static |
 
----
-
-## Future Considerations
-
-- **AI Summary**: Optional AI-powered result summaries (local models only)
-- **Federated Instances**: Connect multiple search instances
-- **Result Voting**: Community-driven result quality feedback
-- **Personal Index**: Index bookmarks/notes for personal search
-- **Browser Extension**: Quick search from any page
-- **Mobile Apps**: Native iOS/Android apps

@@ -288,7 +288,9 @@ type PageData struct {
 	Category       string
 	BuildDate      string
 	Announcements  []Announcement // Active announcements
-	TorAddress     string
+	TorEnabled     bool   // Tor hidden service enabled (binary found)
+	TorStatus      string // Tor status: "connected", "connecting", "disabled"
+	TorAddress     string // .onion address (when connected)
 	WidgetsEnabled bool
 	DefaultWidgets string // JSON array of default widget types
 	CookieConsent  *CookieConsentData

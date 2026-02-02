@@ -1,11 +1,37 @@
-{{/* Admin Panel Footer */}}
-{{/* Per AI.md PART 18: Admin Panel Layout */}}
-<footer class="footer">
-    <p>
-        <a href="/admin/server/info">{{version}}</a>
-        <span>•</span>
-        <a href="https://github.com/apimgr/search" target="_blank" rel="noopener">Documentation</a>
-        <span>•</span>
-        <a href="/admin/server/status">Status</a>
-    </p>
+{{/* Admin Panel Footer - per AI.md PART 17 */}}
+<footer class="admin-footer">
+    <div class="admin-footer-content">
+        {{/* Version info */}}
+        <span class="admin-footer-version">
+            <a href="/admin/server/info">search {{version}}</a>
+        </span>
+
+        <span class="admin-footer-separator">•</span>
+
+        {{/* Documentation link */}}
+        <span class="admin-footer-docs">
+            <a href="https://github.com/apimgr/search" target="_blank" rel="noopener">Docs</a>
+        </span>
+
+        <span class="admin-footer-separator">•</span>
+
+        {{/* Server status indicator */}}
+        <span class="admin-footer-status">
+            {{if .ServerStatus}}
+                {{if .ServerStatus.Healthy}}
+                <span class="status-indicator status-ok" title="All systems operational">●</span>
+                <span>Healthy</span>
+                {{else if .ServerStatus.Degraded}}
+                <span class="status-indicator status-warning" title="Some issues detected">●</span>
+                <span>Degraded</span>
+                {{else}}
+                <span class="status-indicator status-error" title="System issues">●</span>
+                <span>Issues</span>
+                {{end}}
+            {{else}}
+            <span class="status-indicator status-ok" title="All systems operational">●</span>
+            <span>Healthy</span>
+            {{end}}
+        </span>
+    </div>
 </footer>

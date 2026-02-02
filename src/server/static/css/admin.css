@@ -741,3 +741,53 @@
         grid-template-columns: 1fr;
     }
 }
+
+/* ==========================================================================
+   Admin Footer - per AI.md PART 17
+   ========================================================================== */
+
+.admin-footer {
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-color);
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: 0.875rem;
+    color: var(--text-muted);
+}
+
+.admin-footer-content {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: var(--spacing-sm);
+    flex-wrap: wrap;
+}
+
+.admin-footer-separator {
+    color: var(--text-muted);
+}
+
+.admin-footer a {
+    color: var(--text-muted);
+    text-decoration: none;
+}
+
+.admin-footer a:hover {
+    color: var(--accent-primary);
+}
+
+.status-indicator {
+    font-size: 0.75rem;
+    margin-right: 0.25rem;
+}
+
+.status-indicator.status-ok {
+    color: var(--success-color, #28a745);
+}
+
+.status-indicator.status-warning {
+    color: var(--warning-color, #ffc107);
+}
+
+.status-indicator.status-error {
+    color: var(--danger-color, #dc3545);
+}

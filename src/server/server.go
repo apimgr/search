@@ -689,13 +689,23 @@ func (s *Server) UpdateConfig(cfg *config.Config) {
 	log.Println("[Server] Configuration updated")
 }
 
-// newPageData creates PageData with TorAddress automatically set
-// Per AI.md PART 32: Tor address should be available on all pages when running
+// newPageData creates PageData with Tor status automatically set
+// Per AI.md PART 32: Tor section shown if enabled (always, not just when connected)
 func (s *Server) newPageData(title, page string) *PageData {
 	data := NewPageData(s.config, title, page)
-	// Set TorAddress if Tor service is running
-	if s.torService != nil && s.torService.IsRunning() {
-		data.TorAddress = s.torService.GetOnionAddress()
+	// Set Tor status per AI.md PART 32
+	if s.torService != nil {
+		data.TorEnabled = true
+		if s.torService.IsRunning() {
+			data.TorAddress = s.torService.GetOnionAddress()
+			if data.TorAddress != "" {
+				data.TorStatus = "connected"
+			} else {
+				data.TorStatus = "connecting..."
+			}
+		} else {
+			data.TorStatus = "starting..."
+		}
 	}
 	return data
 }
