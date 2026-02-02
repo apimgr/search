@@ -1341,12 +1341,33 @@
                 return;
             }
 
-            // Copy button
+            // Copy button (legacy .btn-copy)
             if (target.matches('.btn-copy') || target.closest('.btn-copy')) {
                 const btn = target.closest('.btn-copy') || target;
                 const elementId = btn.dataset.copyTarget;
                 if (elementId) {
                     copyToClipboard(elementId, btn);
+                }
+                return;
+            }
+
+            // Copy button with data-copy attribute - per AI.md PART 16
+            if (target.matches('.copy-btn') || target.closest('.copy-btn')) {
+                const btn = target.closest('.copy-btn') || target;
+                const text = btn.dataset.copy || (btn.previousElementSibling ? btn.previousElementSibling.textContent : null);
+                if (text) {
+                    navigator.clipboard.writeText(text).then(function() {
+                        const icon = btn.querySelector('.copy-icon');
+                        if (icon) {
+                            const originalIcon = icon.textContent;
+                            icon.textContent = '✓';
+                            btn.classList.add('copied');
+                            setTimeout(function() {
+                                icon.textContent = originalIcon;
+                                btn.classList.remove('copied');
+                            }, 2000);
+                        }
+                    });
                 }
                 return;
             }
@@ -1379,7 +1400,7 @@
             }
 
             // Close nav on outside click
-            const header = document.querySelector('.site-header');
+            const header = document.querySelector('.header');
             if (header && header.classList.contains('nav-open')) {
                 if (!target.closest('.nav-links') && !target.closest('.nav-toggle')) {
                     closeNav();

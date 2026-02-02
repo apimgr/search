@@ -121,7 +121,13 @@
                 </li>
                 {{if .Health.Features.Tor.Hostname}}
                 <li class="feature-detail">
-                    <code class="onion-addr">{{.Health.Features.Tor.Hostname}}</code>
+                    <div class="code-block">
+                        <code class="code-content onion-address">{{.Health.Features.Tor.Hostname}}</code>
+                        <button type="button" class="copy-btn" data-copy="{{.Health.Features.Tor.Hostname}}" aria-label="Copy to clipboard">
+                            <span class="copy-icon">📋</span>
+                            <span class="copy-text">Copy</span>
+                        </button>
+                    </div>
                 </li>
                 {{end}}
                 {{end}}

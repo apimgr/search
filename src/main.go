@@ -1622,6 +1622,12 @@ func storeSetupToken(dbPath, token string) error {
 	hash := sha256.Sum256([]byte(token))
 	tokenHash := hex.EncodeToString(hash[:])
 
+	// Ensure directory exists
+	dbDir := filepath.Dir(dbPath)
+	if err := os.MkdirAll(dbDir, 0755); err != nil {
+		return fmt.Errorf("failed to create database directory: %w", err)
+	}
+
 	// Open database
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {

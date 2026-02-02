@@ -102,16 +102,10 @@ a:hover {
     text-decoration: underline;
 }
 
-/* Header */
-.site-header {
+/* Header - per AI.md PART 16: NO position: sticky/fixed on header/nav/footer */
+.header {
     background-color: var(--bg-secondary);
     border-bottom: 1px solid var(--border-color);
-    position: sticky;
-    top: 0;
-    z-index: 100;
-}
-
-.nav-container {
     max-width: 1200px;
     margin: 0 auto;
     padding: 0.75rem 1rem;
@@ -120,6 +114,23 @@ a:hover {
     gap: 1rem;
 }
 
+/* Site brand - per AI.md PART 16 */
+.site-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--accent-primary);
+    font-weight: 700;
+    font-size: 1.25rem;
+    text-decoration: none;
+}
+
+.site-brand:hover {
+    color: var(--accent-primary);
+    text-decoration: none;
+}
+
+/* Legacy .logo class for backwards compatibility */
 .logo {
     display: flex;
     align-items: center;
@@ -142,6 +153,66 @@ a:hover {
 .logo-img {
     height: 32px;
     width: auto;
+}
+
+/* User menu (always visible, far right) - per AI.md PART 16 */
+.user-menu {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-left: auto;
+}
+
+.user-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    color: var(--text-secondary);
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.user-icon:hover {
+    background-color: var(--bg-tertiary);
+    color: var(--accent-primary);
+    text-decoration: none;
+}
+
+.user-icon svg {
+    width: 20px;
+    height: 20px;
+}
+
+/* Legacy header-actions for backwards compatibility */
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-left: auto;
+}
+
+.header-icon-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    color: var(--text-secondary);
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.header-icon-link:hover {
+    background-color: var(--bg-tertiary);
+    color: var(--accent-primary);
+    text-decoration: none;
+}
+
+.header-icon-link svg {
+    width: 20px;
+    height: 20px;
 }
 
 .header-search {
@@ -706,8 +777,7 @@ html.theme-light .theme-icon-dark {
 }
 
 /* Footer - per AI.md PART 17 */
-.footer,
-.site-footer {
+.footer {
     background-color: var(--bg-secondary);
     border-top: 1px solid var(--border-color);
     padding: 1.5rem 1rem;
@@ -776,6 +846,90 @@ html.theme-light .theme-icon-dark {
 .footer-version {
     margin-top: 0.5rem;
     font-size: 0.75rem;
+}
+
+/* Code block with copy button - per AI.md PART 16 */
+.code-block {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    max-width: 100%;
+    margin: 0.25rem 0;
+}
+
+.code-content {
+    display: block;
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+    white-space: nowrap;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.875rem;
+    -webkit-overflow-scrolling: touch;
+}
+
+.copy-btn {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-secondary);
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition: background-color 0.2s, border-color 0.2s;
+    color: var(--text-secondary);
+}
+
+.copy-btn:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--accent-primary);
+}
+
+.copy-btn:active,
+.copy-btn.copied {
+    background: var(--success-bg);
+    border-color: var(--success);
+}
+
+.copy-text {
+    display: none;
+}
+
+@media (min-width: 768px) {
+    .copy-text {
+        display: inline;
+    }
+}
+
+/* Tor access section in footer - per AI.md PART 32 */
+.tor-access {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.tor-icon {
+    font-size: 1.25rem;
+}
+
+.tor-status {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+/* Long string handling - per AI.md PART 16 */
+.onion-address {
+    word-break: break-all;
+    overflow-wrap: break-word;
+    font-family: monospace;
 }
 
 /* Tor hidden service address in footer - per AI.md PART 32 */
@@ -1561,7 +1715,7 @@ html.theme-light .theme-icon-dark {
 
 /* Mobile Responsive */
 @media (max-width: 768px) {
-    .nav-container {
+    .header {
         flex-wrap: wrap;
     }
 
@@ -1732,8 +1886,8 @@ html.theme-light .theme-icon-dark {
 /* Print styles - Per AI.md PART 14: Print-friendly styles */
 @media print {
     /* Hide non-essential elements */
-    .site-header,
-    .site-footer,
+    .header,
+    .footer,
     .nav-toggle,
     .nav-panel,
     .nav-overlay,

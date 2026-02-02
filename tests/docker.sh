@@ -50,7 +50,8 @@ docker run --rm \
     set -e
 
     # Install required tools for testing
-    apk add --no-cache curl bash file jq >/dev/null
+    # Per AI.md PART 27: tor is a required package (auto-enabled when found)
+    apk add --no-cache curl bash file jq tor >/dev/null
 
     chmod +x /app/${PROJECTNAME}
     [ -f /app/${PROJECTNAME}-cli ] && chmod +x /app/${PROJECTNAME}-cli
@@ -109,7 +110,8 @@ docker run --rm \
 
     echo '=== Admin Setup & API Token Creation ==='
     # Get setup token from server output (captured during startup)
-    SETUP_TOKEN=\$(cat /tmp/server.log 2>/dev/null | grep -oP 'Setup Token.*:\\s*\\K[a-f0-9]+' | head -1 || echo '')
+    # Use sed instead of grep -oP for POSIX/BusyBox compatibility
+    SETUP_TOKEN=\$(cat /tmp/server.log 2>/dev/null | sed -n 's/.*Setup Token[^:]*: *\\([a-f0-9]*\\).*/\\1/p' | head -1 || echo '')
 
     if [ -n \"\$SETUP_TOKEN\" ]; then
         echo \"Setup token found: \${SETUP_TOKEN:0:8}...\"
@@ -122,18 +124,20 @@ docker run --rm \
             http://localhost:64580/api/v1/admin/setup || echo 'Admin setup failed (may already exist)'
 
         # Login and get session
+        # Use jq for JSON parsing (POSIX/BusyBox compatible)
         SESSION=\$(curl -sf -X POST \\
             -H \"Content-Type: application/json\" \\
             -d '{\"username\":\"testadmin\",\"password\":\"TestPass123!\"}' \\
-            http://localhost:64580/api/v1/admin/login | grep -oP '\"session_token\":\\s*\"\\K[^\"]+' || echo '')
+            http://localhost:64580/api/v1/admin/login | jq -r '.session_token // empty' || echo '')
 
         if [ -n \"\$SESSION\" ]; then
             echo '✓ Admin login successful'
 
             # Generate API token for CLI/Agent testing
+            # Use jq for JSON parsing (POSIX/BusyBox compatible)
             API_TOKEN=\$(curl -sf -X POST \\
                 -H \"Authorization: Bearer \$SESSION\" \\
-                http://localhost:64580/api/v1/admin/profile/token | grep -oP '\"token\":\\s*\"\\K[^\"]+' || echo '')
+                http://localhost:64580/api/v1/admin/profile/token | jq -r '.token // empty' || echo '')
 
             if [ -n \"\$API_TOKEN\" ]; then
                 echo \"✓ API token created: \${API_TOKEN:0:12}...\"

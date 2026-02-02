@@ -1123,10 +1123,10 @@ func DefaultConfig() *Config {
 			},
 			RateLimit: RateLimitConfig{
 				Enabled:           true,
-				RequestsPerMinute: 300,
-				RequestsPerHour:   6000,
-				RequestsPerDay:    50000,
-				BurstSize:         30,
+				RequestsPerMinute: 1000,
+				RequestsPerHour:   20000,
+				RequestsPerDay:    100000,
+				BurstSize:         100,
 				ByIP:              true,
 				ByUser:            false,
 				Whitelist:         []string{"127.0.0.1", "::1"},
@@ -2120,12 +2120,12 @@ func (c *Config) ValidateAndApplyDefaults() []ValidationWarning {
 			warnings = append(warnings, ValidationWarning{
 				Field:   "server.rate_limit.requests_per_minute",
 				Message: "Invalid rate limit, using default",
-				Default: 300,
+				Default: 1000,
 			})
-			c.Server.RateLimit.RequestsPerMinute = 300
+			c.Server.RateLimit.RequestsPerMinute = 1000
 		}
 		if c.Server.RateLimit.BurstSize <= 0 {
-			c.Server.RateLimit.BurstSize = 30
+			c.Server.RateLimit.BurstSize = 100
 		}
 	}
 

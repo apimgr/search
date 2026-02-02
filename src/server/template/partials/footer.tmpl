@@ -2,14 +2,19 @@
 <footer class="footer">
     {{/* Tor hidden service - per AI.md PART 32 (always show if enabled) */}}
     {{if .TorEnabled}}
-    <p class="tor-address">
+    <div class="tor-access">
         <span class="tor-icon">🧅</span>
         {{if .TorAddress}}
-        <a href="http://{{.TorAddress}}" class="onion-link">{{.TorAddress}}</a>
+        <div class="code-block">
+            <code class="code-content onion-address">{{.TorAddress}}</code>
+            <button type="button" class="copy-btn" data-copy="{{.TorAddress}}" aria-label="Copy to clipboard">
+                <span class="copy-icon">📋</span>
+            </button>
+        </div>
         {{else}}
         <span class="tor-status">Tor: {{.TorStatus}}</span>
         {{end}}
-    </p>
+    </div>
     {{end}}
 
     {{/* Standard page links (always first) - per AI.md PART 17 */}}

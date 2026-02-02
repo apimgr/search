@@ -470,7 +470,7 @@ if cacheSize > 1024*1024*1024 {
 
 | Rule | Description |
 |------|-------------|
-| **SQLite default** | `/data/db/sqlite/server.db` and `/data/db/sqlite/users.db` |
+| **SQLite default** | `{db_dir}/server.db` and `{db_dir}/users.db` (see PART 4 for platform-specific paths) |
 | **Password hashing** | Argon2id - NEVER bcrypt |
 | **Valkey/Redis** | Every app supports it for caching/clustering |
 
@@ -838,6 +838,12 @@ paths:
 - ❌ Add features not in spec without asking
 - ❌ Use "I think" or "probably" - KNOW from spec or ASK
 - ❌ Ask multiple plain-text questions in separate messages - use AskUserQuestion wizard instead
+- ❌ Use generic placeholder content ("Your app name", "Feature 1")
+- ❌ Create /server/about or /server/help with placeholder text
+- ❌ Leave TODO comments in code - implement fully or don't implement
+- ❌ Create stub functions or "future" placeholders
+- ❌ Partial implementations - every feature must be 100% complete
+- ❌ "I'll come back to this later" - there is no later, do it NOW
 
 ## REQUIRED - ALWAYS DO
 - ✅ Read AI.md PART 0, 1 at start of EVERY conversation
@@ -848,6 +854,9 @@ paths:
 - ✅ Keep all docs in sync with code
 - ✅ When unsure, ASK - never guess or assume
 - ✅ Use AskUserQuestion wizard - one question at a time, options + custom input
+- ✅ Source /server/about and /server/help content from IDEA.md
+- ✅ Implement features 100% complete - no stubs, no TODOs, no "future"
+- ✅ ONE thing at a time - finish current task completely before starting another
 
 ## KEY DECISIONS (pre-answered)
 | Question | Answer | Reference |
@@ -895,6 +904,10 @@ Before completing ANY task:
 - ❌ Desktop-first CSS (use mobile-first)
 - ❌ Inline CSS or JavaScript
 - ❌ JavaScript alerts (use toast notifications)
+- ❌ Generic placeholder content in /server/about or /server/help pages
+- ❌ "Your application name here" or "Feature 1, Feature 2" text
+- ❌ Stub templates or "coming soon" pages
+- ❌ Empty handlers or placeholder routes
 
 ## REQUIRED - ALWAYS DO
 - ✅ Server-side rendering (Go templates)
@@ -904,6 +917,19 @@ Before completing ANY task:
 - ✅ Full admin panel with ALL settings
 - ✅ WCAG 2.1 AA accessibility
 - ✅ Touch targets minimum 44x44px
+- ✅ /server/about content from IDEA.md (name, tagline, description, features)
+- ✅ /server/help content from IDEA.md (real endpoints, real examples)
+- ✅ All pages fully functional - no "coming soon" or placeholder pages
+- ✅ All routes implemented - no 501 Not Implemented responses
+
+## PAGE CONTENT SOURCING
+| Page | Content Source |
+|------|----------------|
+| /server/about | IDEA.md → name, tagline, description, features, links |
+| /server/help | IDEA.md → real endpoints, real curl examples, real FAQ |
+| /server/privacy | Config → `server.privacy.*` settings |
+| /server/terms | Config → customizable, default template |
+| /server/contact | Config → `server.contact` settings |
 
 ## SERVER VS CLIENT
 | Task | Where | Why |
@@ -1530,10 +1556,13 @@ Instructions for how this agent should behave...
 |-------------|-------------------|---------------|-----------------|
 | `{config_dir}` | `/etc/apimgr/search` | `/Library/Application Support/apimgr/search` | `%PROGRAMDATA%\apimgr\search` |
 | `{data_dir}` | `/var/lib/apimgr/search` | `/Library/Application Support/apimgr/search` | `%PROGRAMDATA%\apimgr\search` |
+| `{db_dir}` | `{data_dir}/db/` | `{data_dir}/db/` | `{data_dir}\db\` |
 | `{log_dir}` | `/var/log/apimgr/search` | `/Library/Logs/apimgr/search` | `%PROGRAMDATA%\apimgr\search\logs` |
 | `{cache_dir}` | `/var/cache/apimgr/search` | `/Library/Caches/apimgr/search` | `%PROGRAMDATA%\apimgr\search\cache` |
 | `{backup_dir}` | `/mnt/Backups/apimgr/search` | `/Library/Application Support/apimgr/search/backups` | `%PROGRAMDATA%\apimgr\search\backups` |
 | `{pid_file}` | `/var/run/apimgr/search.pid` | `/var/run/apimgr/search.pid` | N/A (Windows uses SCM) |
+
+**Note:** In Docker containers, `{db_dir}` is `/data/db/sqlite` (see Docker paths section).
 
 ## Binary Terminology
 
@@ -1649,6 +1678,13 @@ This distinction exists for clarity. When referring to OS-level resources that b
 | **Server Web Setup** | Web-based setup flow at `/{admin_path}/server/setup` (HTML pages served by server, accessed in browser) - creates Primary Admin, customizes branding |
 | **CLI Setup Wizard** | Built-in TUI/GUI wizard in CLI binary - prompts for server URL, tests connection, saves config (CLI is the ONLY binary with a built-in wizard) |
 | **Setup Token** | One-time 32-char hex token generated on server first-run, displayed in console, required to access server's web-based setup |
+
+**Setup Token Storage (file-based):**
+- File: `{config_dir}/setup_token.txt` (contains SHA-256 hash of token)
+- Generated on first-run if no admins exist in database
+- Plaintext token shown ONCE in console output, then only hash stored
+- Token invalidated (file deleted) after successful setup completion
+- File-based because database may not exist yet on first run
 
 **Key distinction:** Server serves web pages for setup (browser-based). CLI has a built-in interactive wizard (TUI/GUI). Agent has no wizard (uses connection string).
 
@@ -3779,14 +3815,18 @@ db.Query("SELECT * FROM users WHERE email = '" + email + "'")
 
 ### Rate Limiting Defaults
 
-| Endpoint Type | Limit | Window | Response |
-|---------------|-------|--------|----------|
+**These are sensible defaults - all limits are configurable via admin panel and config file.**
+
+| Endpoint Type | Default Limit | Default Window | Response |
+|---------------|---------------|----------------|----------|
 | **Login attempts** | 5 | 15 minutes | 429 + lockout |
 | **Password reset** | 3 | 1 hour | 429 + silent (no email hint) |
-| **API (authenticated)** | 100 | 1 minute | 429 + Retry-After header |
-| **API (unauthenticated)** | 20 | 1 minute | 429 + Retry-After header |
+| **API (authenticated)** | Configurable | 1 minute | 429 + Retry-After header |
+| **API (unauthenticated)** | Configurable | 1 minute | 429 + Retry-After header |
 | **Registration** | 5 | 1 hour | 429 |
 | **File upload** | 10 | 1 hour | 429 |
+
+**Project-specific defaults:** Each project defines its own default rate limits based on expected usage patterns. High-traffic APIs may need higher limits; sensitive operations may need lower limits. Define project-appropriate defaults in IDEA.md.
 
 ### Error Message Rules
 
@@ -4556,7 +4596,7 @@ search-cli [command] --help
 
 ## Configuration
 
-Configuration is auto-generated on first run. Edit via admin panel at `http://{fqdn}:{port}/{admin_path}` (admin_path defaults to "admin").
+Configuration is auto-generated on first run. Edit via admin panel at `{proto}://{fqdn}/{admin_path}` (admin_path defaults to "admin").
 
 Key settings:
 - `server.port` - Listen port (default: random 64xxx)
@@ -6317,6 +6357,8 @@ Before proceeding, confirm you understand:
 
 ## Docker/Container
 
+**⚠️ DOCKER-ONLY PATHS: `/data/**` and `/config/**` are ONLY used inside Docker containers. On native Linux/macOS/Windows/FreeBSD, use the platform-specific paths above.**
+
 | Type | Path |
 |------|------|
 | Binary | `/usr/local/bin/search` |
@@ -6330,6 +6372,13 @@ Before proceeding, confirm you understand:
 | SQLite DB | `/data/db/sqlite/` (server.db, users.db) |
 | Backup | `/data/backups/search/` |
 | Internal Port | `80` |
+
+**Docker volume mounts map host paths to container paths:**
+```yaml
+volumes:
+  - './rootfs/config:/config:z'   # Host ./rootfs/config → Container /config
+  - './rootfs/data:/data:z'       # Host ./rootfs/data → Container /data
+```
 
 ---
 
@@ -7096,7 +7145,7 @@ _cache:
 | `ssl.enabled` | `true` | 2025-01-15 09:00:00 |
 | `ssl.letsencrypt.enabled` | `true` | 2025-01-15 09:00:00 |
 | `rate_limit.enabled` | `true` | 2025-01-14 15:00:00 |
-| `rate_limit.requests` | `120` | 2025-01-14 15:00:00 |
+| `rate_limit.requests` | `0` | 2025-01-14 15:00:00 |
 
 **Cluster State Table:**
 
@@ -7779,7 +7828,7 @@ Binary checks:
    "Setup already completed. To reconfigure:
     1. Use existing admin credentials via WebUI
     2. Run as root: sudo search --maintenance setup
-    3. Use setup token from server logs (if available)"
+    3. Use setup token shown at first-run (if you saved it)"
 ```
 
 **Restore authorization flow:**
@@ -8222,7 +8271,8 @@ server:
 
   rate_limit:
     enabled: true
-    requests: 120
+    # Project-specific default (define in IDEA.md based on expected usage)
+    requests: 0  # 0 = use project default
     window: 60
 
   # Database
@@ -11648,7 +11698,7 @@ INSERT INTO config (key, value, type) VALUES
     ('ssl.key', '""', 'string'),                     -- Empty = auto-detect
     ('ssl.min_version', '"TLS1.2"', 'string'),
     ('cors.allowed_origins', '["https://example.com","https://api.example.com"]', 'array'),
-    ('ratelimit.requests_per_minute', '60', 'number'),
+    ('ratelimit.requests_per_minute', '0', 'number'),  -- 0 = use project default from IDEA.md
     ('branding.site_name', '"My App"', 'string');
 ```
 
@@ -12190,6 +12240,14 @@ All templates, Swagger/OpenAPI, GraphQL, email links, etc. MUST use these resolv
 | `{proto}` | Protocol (http/https) | `https` |
 | `{fqdn}` | Fully qualified domain name | `api.example.com` |
 | `{port}` | Port number (ALWAYS stripped if 80/443) | `8080` or empty |
+| `{address}` | Listen IP address | `203.0.113.50` |
+| `{app_mode}` | Application mode | `production` or `development` |
+| `{onion_address}` | Tor .onion address (if enabled) | `abc...xyz.onion` |
+| `{i2p_address}` | I2P address (if enabled) | `abc...xyz.b32.i2p` |
+| `{smtp_address}` | SMTP server address (if configured) | `172.17.0.1` |
+| `{smtp_port}` | SMTP server port | `25` |
+| `{startup_datetime}` | Server start timestamp | `Wed Jan 15, 2025 at 09:00:00 EST` |
+| `{setup_token}` | First-run setup token (shown ONCE) | `a1b2c3d4e5f67890abcdef1234567890` |
 
 **URL Format:** `{proto}://{fqdn}/path` or `{proto}://{fqdn}:{port}/path`
 
@@ -15612,11 +15670,13 @@ server:
 server:
   rate_limit:
     enabled: true
-    # Requests allowed per window
-    requests: 120
+    # Requests allowed per window (0 = use project default from IDEA.md)
+    requests: 0
     # Window size in seconds
     window: 60
 ```
+
+**Note:** Each project defines its own default rate limit in IDEA.md based on expected usage patterns.
 
 ## Internationalization (i18n)
 
@@ -19319,26 +19379,28 @@ import (
     "golang.org/x/term"
 )
 
-func PrintServerStartupBanner(appName, version, appMode string, urls []string) {
+func PrintServerStartupBanner(appName, version, appMode string, urls []string, forceColor *bool) {
     width, _, _ := term.GetSize(int(os.Stdout.Fd()))
     if width == 0 {
         width = 80 // Default
     }
 
-    // Check for plain output mode (NO_COLOR or TERM=dumb)
-    plainMode := os.Getenv("NO_COLOR") != "" || os.Getenv("TERM") == "dumb"
+    // Use shared color/emoji detection (respects --color flag, config, NO_COLOR, TERM)
+    // See PART 8 for ColorEnabled() and EmojiEnabled() priority order
+    useEmojis := output.EmojiEnabled()
+    useColors := output.ColorEnabled(forceColor)
 
-    if plainMode {
-        // Plain text banner (no emojis, no ASCII art)
+    // Plain mode: no emojis (NO_COLOR, TERM=dumb, or --color=never)
+    if !useEmojis {
         printServerBannerPlain(appName, version, appMode, urls)
         return
     }
 
     switch {
     case width >= 80:
-        printServerBannerFull(appName, version, appMode, urls)
+        printServerBannerFull(appName, version, appMode, urls, useColors)
     case width >= 60:
-        printServerBannerCompact(appName, version, appMode, urls)
+        printServerBannerCompact(appName, version, appMode, urls, useColors)
     case width >= 40:
         printServerBannerMinimal(appName, version, urls)
     default:
@@ -19573,10 +19635,10 @@ formatURL(host, 8443, true)
 
 | Clearnet Config | Tor URL | I2P URL |
 |-----------------|---------|---------|
-| `--port 8080` | `http://{onion}.onion` | `http://{i2p}.b32.i2p` |
-| `--port 443` | `https://{onion}.onion` | `https://{i2p}.b32.i2p` |
-| `--port 80,443` | `http://{onion}.onion` | `http://{i2p}.b32.i2p` |
-| `--port 8080,8443` | `http://{onion}.onion` | `http://{i2p}.b32.i2p` |
+| `--port 8080` | `http://{onion_address}` | `http://{i2p_address}` |
+| `--port 443` | `https://{onion_address}` | `https://{i2p_address}` |
+| `--port 80,443` | `http://{onion_address}` | `http://{i2p_address}` |
+| `--port 8080,8443` | `http://{onion_address}` | `http://{i2p_address}` |
 
 **Why HTTP for overlays in dual mode?**
 - Tor/I2P provide end-to-end encryption at the network layer
@@ -19587,131 +19649,227 @@ formatURL(host, 8443, true)
 
 **"Last update" MUST use build date, NEVER hardcoded.** Use `{builddatetime}` template variable which comes from `BUILD_DATE` at compile time. This ensures the footer always shows when the binary was built, not a static date in the source code.
 
+**⚠️ DYNAMIC WIDTH: Banner width adapts to terminal size at runtime. Examples below show ≥80 col format. See "Responsive Startup Banner" section for all size variants (<40, 40-59, 60-79, ≥80 cols).**
+
 **Example (Production with SSL + Tor on 443):**
 ```
-╭─────────────────────────────────────────────────────────────╮
-│  🚀 SEARCH · 📦 {projectversion}                      │
-├─────────────────────────────────────────────────────────────┤
-│  🔒 Running in mode: production                             │
-├─────────────────────────────────────────────────────────────┤
-│  🧅 Tor    http://abc123def456ghi789jklmnop.onion           │
-│  🔐 HTTPS  https://api.example.com                          │
-├─────────────────────────────────────────────────────────────┤
-│  📡 Listening on https://203.0.113.50                       │
-│  ✅ Server started on Wed Jan 15, 2025 at 09:00:00 EST      │
-╰─────────────────────────────────────────────────────────────╯
+╭───────────────────────────────────────────────────────────╮
+│  🚀 SEARCH · 📦 {projectversion}                   │
+├───────────────────────────────────────────────────────────┤
+│  🔒 Running in mode: production                           │
+├───────────────────────────────────────────────────────────┤
+│  🧅 Tor:   http://{onion_address}                         │
+│  🔐 HTTPS: {proto}://{fqdn}                               │
+├───────────────────────────────────────────────────────────┤
+│  📡 Listening on {proto}://{address}                      │
+│  ✅ Server started on {startup_datetime}                  │
+╰───────────────────────────────────────────────────────────╯
 ```
 
-**Example (Production with Tor + I2P on 443):**
+**Example (Full Banner with Tor + I2P + SMTP):**
 ```
-╭─────────────────────────────────────────────────────────────╮
-│  🚀 SEARCH · 📦 {projectversion}                      │
-├─────────────────────────────────────────────────────────────┤
-│  🔒 Running in mode: production                             │
-├─────────────────────────────────────────────────────────────┤
-│  🧅 Tor    http://abc123def456ghi789jklmnop.onion           │
-│  🔗 I2P    http://xyz789abc123def456uvwxyz.b32.i2p          │
-│  🔐 HTTPS  https://api.example.com                          │
-├─────────────────────────────────────────────────────────────┤
-│  📡 Listening on https://203.0.113.50                       │
-│  ✅ Server started on Wed Jan 15, 2025 at 09:00:00 EST      │
-╰─────────────────────────────────────────────────────────────╯
+╭───────────────────────────────────────────────────────────╮
+│  🚀 SEARCH · 📦 {projectversion}                   │
+├───────────────────────────────────────────────────────────┤
+│  🔒 Running in mode: {app_mode}                           │
+├───────────────────────────────────────────────────────────┤
+│  🧅 Tor:   http://{onion_address}                         │
+│  🔗 I2P:   http://{i2p_address}                           │
+│  📧 SMTP:  {smtp_address}:{smtp_port}                     │
+├───────────────────────────────────────────────────────────┤
+│  📡 Listening on {proto}://{address}                      │
+├───────────────────────────────────────────────────────────┤
+│  🔐 Website: {proto}://{fqdn}                             │
+├───────────────────────────────────────────────────────────┤
+│  ✅ Server started on {startup_datetime}                  │
+╰───────────────────────────────────────────────────────────╯
 ```
 
 **Example (Production on port 8080):**
 ```
-╭─────────────────────────────────────────────────────────────╮
-│  🚀 SEARCH · 📦 {projectversion}                      │
-├─────────────────────────────────────────────────────────────┤
-│  🔒 Running in mode: production                             │
-├─────────────────────────────────────────────────────────────┤
-│  🌐 HTTP   http://api.example.com:8080                      │
-├─────────────────────────────────────────────────────────────┤
-│  📡 Listening on http://203.0.113.50:8080                   │
-│  ✅ Server started on Wed Jan 15, 2025 at 09:00:00 EST      │
-╰─────────────────────────────────────────────────────────────╯
+╭───────────────────────────────────────────────────────────╮
+│  🚀 SEARCH · 📦 {projectversion}                   │
+├───────────────────────────────────────────────────────────┤
+│  🔒 Running in mode: production                           │
+├───────────────────────────────────────────────────────────┤
+│  🌐 HTTP:  {proto}://{fqdn}:{port}                        │
+├───────────────────────────────────────────────────────────┤
+│  📡 Listening on {proto}://{address}:{port}               │
+│  ✅ Server started on {startup_datetime}                  │
+╰───────────────────────────────────────────────────────────╯
 ```
 
 **Example (Development on port 8080):**
 ```
-╭─────────────────────────────────────────────────────────────╮
-│  🚀 SEARCH · 📦 {projectversion}                      │
-├─────────────────────────────────────────────────────────────┤
-│  🔧 Running in mode: development                            │
-├─────────────────────────────────────────────────────────────┤
-│  🌐 HTTP   http://192.168.1.100:8080                        │
-├─────────────────────────────────────────────────────────────┤
-│  📡 Listening on http://192.168.1.100:8080                  │
-│  ✅ Server started on Wed Jan 15, 2025 at 09:00:00 EST      │
-╰─────────────────────────────────────────────────────────────╯
+╭───────────────────────────────────────────────────────────╮
+│  🚀 SEARCH · 📦 {projectversion}                   │
+├───────────────────────────────────────────────────────────┤
+│  🔧 Running in mode: development                          │
+├───────────────────────────────────────────────────────────┤
+│  🌐 HTTP:  {proto}://{address}:{port}                     │
+├───────────────────────────────────────────────────────────┤
+│  📡 Listening on {proto}://{address}:{port}               │
+│  ✅ Server started on {startup_datetime}                  │
+╰───────────────────────────────────────────────────────────╯
 ```
 
 **Example (Development IPv6 on port 8080):**
 ```
-╭─────────────────────────────────────────────────────────────╮
-│  🚀 SEARCH · 📦 {projectversion}                      │
-├─────────────────────────────────────────────────────────────┤
-│  🔧 Running in mode: development                            │
-├─────────────────────────────────────────────────────────────┤
-│  🌍 IPv6   http://[2001:db8::1]:8080                        │
-├─────────────────────────────────────────────────────────────┤
-│  📡 Listening on http://[2001:db8::1]:8080                  │
-│  ✅ Server started on Wed Jan 15, 2025 at 09:00:00 EST      │
-╰─────────────────────────────────────────────────────────────╯
+╭───────────────────────────────────────────────────────────╮
+│  🚀 SEARCH · 📦 {projectversion}                   │
+├───────────────────────────────────────────────────────────┤
+│  🔧 Running in mode: development                          │
+├───────────────────────────────────────────────────────────┤
+│  🌍 IPv6:  {proto}://[{address}]:{port}                   │
+├───────────────────────────────────────────────────────────┤
+│  📡 Listening on {proto}://[{address}]:{port}             │
+│  ✅ Server started on {startup_datetime}                  │
+╰───────────────────────────────────────────────────────────╯
 ```
 
 **Example (Production on port 80):**
 ```
-╭─────────────────────────────────────────────────────────────╮
-│  🚀 SEARCH · 📦 {projectversion}                      │
-├─────────────────────────────────────────────────────────────┤
-│  🔒 Running in mode: production                             │
-├─────────────────────────────────────────────────────────────┤
-│  🌐 HTTP   http://api.example.com                           │
-├─────────────────────────────────────────────────────────────┤
-│  📡 Listening on http://203.0.113.50                        │
-│  ✅ Server started on Wed Jan 15, 2025 at 09:00:00 EST      │
-╰─────────────────────────────────────────────────────────────╯
+╭───────────────────────────────────────────────────────────╮
+│  🚀 SEARCH · 📦 {projectversion}                   │
+├───────────────────────────────────────────────────────────┤
+│  🔒 Running in mode: production                           │
+├───────────────────────────────────────────────────────────┤
+│  🌐 HTTP:  {proto}://{fqdn}                               │
+├───────────────────────────────────────────────────────────┤
+│  📡 Listening on {proto}://{address}                      │
+│  ✅ Server started on {startup_datetime}                  │
+╰───────────────────────────────────────────────────────────╯
 ```
 
 **Example (Production with debugging enabled):**
 ```
-╭─────────────────────────────────────────────────────────────╮
-│  🚀 SEARCH · 📦 {projectversion}                      │
-├─────────────────────────────────────────────────────────────┤
-│  🔒 Running in mode: production [debugging]                 │
-├─────────────────────────────────────────────────────────────┤
-│  🌐 HTTP   http://api.example.com                           │
-├─────────────────────────────────────────────────────────────┤
-│  📡 Listening on http://203.0.113.50                        │
-│  ✅ Server started on Wed Jan 15, 2025 at 09:00:00 EST      │
-╰─────────────────────────────────────────────────────────────╯
+╭───────────────────────────────────────────────────────────╮
+│  🚀 SEARCH · 📦 {projectversion}                   │
+├───────────────────────────────────────────────────────────┤
+│  🔒 Running in mode: {app_mode} [debugging]               │
+├───────────────────────────────────────────────────────────┤
+│  🌐 HTTP:  {proto}://{fqdn}                               │
+├───────────────────────────────────────────────────────────┤
+│  📡 Listening on {proto}://{address}                      │
+│  ✅ Server started on {startup_datetime}                  │
+╰───────────────────────────────────────────────────────────╯
 ```
 
 **Example (First Run - Setup Required):**
 ```
-╭─────────────────────────────────────────────────────────────╮
-│  🚀 SEARCH · 📦 {projectversion}                      │
-├─────────────────────────────────────────────────────────────┤
-│  🔧 Running in mode: development                            │
-├─────────────────────────────────────────────────────────────┤
-│  🌐 HTTP   http://192.168.1.100:8080                        │
-├─────────────────────────────────────────────────────────────┤
-│  📡 Listening on http://192.168.1.100:8080                  │
-│  ✅ Server started on Wed Jan 15, 2025 at 09:00:00 EST      │
-╰─────────────────────────────────────────────────────────────╯
+╭───────────────────────────────────────────────────────────╮
+│  🚀 SEARCH · 📦 {projectversion}                   │
+├───────────────────────────────────────────────────────────┤
+│  🔧 Running in mode: {app_mode}                           │
+├───────────────────────────────────────────────────────────┤
+│  🌐 HTTP:  {proto}://{address}:{port}                     │
+├───────────────────────────────────────────────────────────┤
+│  📡 Listening on {proto}://{address}:{port}               │
+│  ✅ Server started on {startup_datetime}                  │
+╰───────────────────────────────────────────────────────────╯
 
-┌─────────────────────────────────────────────────────────────┐
-│  🔑 SETUP REQUIRED                                          │
-├─────────────────────────────────────────────────────────────┤
-│  Setup Token: a1b2c3d4e5f67890abcdef1234567890              │
-│                                                             │
-│  Go to /admin and enter this token to complete setup.       │
-│  This token will only be shown ONCE.                        │
-└─────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────┐
+│  🔑 SETUP REQUIRED                                        │
+├───────────────────────────────────────────────────────────┤
+│  Setup Token: {setup_token}                               │
+│                                                           │
+│  Go to {proto}://{fqdn}/{admin_path}/server/setup         │
+│  and enter this token to complete setup.                  │
+│                                                           │
+│  This token will only be shown ONCE.                      │
+└───────────────────────────────────────────────────────────┘
 ```
 
 **Note:** Setup token is displayed ONCE on first run. After setup wizard is completed, this section never appears again.
+
+---
+
+### Banner Size Variants
+
+**All banners adapt to terminal width at runtime. Examples below show each size variant.**
+
+**60-79 cols (Compact - no ASCII art, icons + text):**
+```
+🚀 SEARCH v{projectversion}
+🔒 Mode: {app_mode}
+🌐 {proto}://{fqdn}
+📡 Listening: {proto}://{address}:{port}
+✅ Started: {startup_datetime}
+```
+
+**60-79 cols (Compact - First Run):**
+```
+🚀 SEARCH v{projectversion}
+🔧 Mode: {app_mode}
+🌐 {proto}://{address}:{port}
+📡 Listening: {proto}://{address}:{port}
+✅ Started: {startup_datetime}
+
+🔑 SETUP REQUIRED
+Token: {setup_token}
+Go to: {proto}://{fqdn}/{admin_path}/server/setup
+(Token shown ONCE)
+```
+
+**40-59 cols (Minimal - abbreviated, no icons):**
+```
+SEARCH {projectversion}
+{app_mode}
+{fqdn}:{port}
+```
+
+**40-59 cols (Minimal - First Run):**
+```
+SEARCH {projectversion}
+{app_mode}
+{address}:{port}
+SETUP: {setup_token}
+```
+
+**<40 cols (Micro - single line):**
+```
+SEARCH :{port}
+```
+
+**<40 cols (Micro - First Run):**
+```
+SEARCH :{port} [SETUP]
+```
+
+**NO_COLOR / TERM=dumb (Plain text - no emojis, no box drawing, no colors):**
+```
+SEARCH v{projectversion}
+Mode: {app_mode}
+URL: {proto}://{fqdn}
+Listening: {proto}://{address}:{port}
+Started: {startup_datetime}
+```
+
+**NO_COLOR / TERM=dumb (Plain - First Run):**
+```
+SEARCH v{projectversion}
+Mode: {app_mode}
+URL: {proto}://{address}:{port}
+Listening: {proto}://{address}:{port}
+Started: {startup_datetime}
+
+SETUP REQUIRED
+Token: {setup_token}
+Setup URL: {proto}://{fqdn}/{admin_path}/server/setup
+This token will only be shown ONCE.
+```
+
+**--color flag overrides (applies to all sizes):**
+```bash
+# Force colors on (overrides NO_COLOR)
+search --color=always
+
+# Force colors off
+search --color=never
+
+# Auto-detect (default) - respects NO_COLOR, TERM, TTY
+search --color=auto
+```
 
 ### Console vs Logs 
 
@@ -23028,7 +23186,7 @@ src/server/template/
 ├── page/
 │   ├── index.tmpl          # Home page
 │   ├── healthz.tmpl        # Health check page
-│   └── error.tmpl          # Error pages (404, 500, etc.)
+│   └── error.tmpl          # Error pages (404, 500, 502, 503, etc.) - MUST use site theme
 ├── auth/
 │   ├── login.tmpl          # Login page
 │   ├── register.tmpl       # Registration page
@@ -23041,6 +23199,41 @@ src/server/template/
     ├── modal.tmpl          # Reusable modal component
     ├── toast.tmpl          # Toast notifications
     └── ...
+```
+
+## Error Pages (MUST Match Theme)
+
+**ALL error pages MUST use the site theme system. No plain/unstyled error pages.**
+
+| Status | Page | Theme Required |
+|--------|------|----------------|
+| 400 | Bad Request | ✅ Yes |
+| 401 | Unauthorized | ✅ Yes |
+| 403 | Forbidden | ✅ Yes |
+| 404 | Not Found | ✅ Yes |
+| 500 | Internal Server Error | ✅ Yes |
+| 502 | Bad Gateway | ✅ Yes |
+| 503 | Service Unavailable | ✅ Yes |
+
+**Error page requirements:**
+- Use `error.tmpl` template (extends `public.tmpl` layout)
+- Respect user's theme preference (dark/light/auto)
+- Include navigation (user can navigate away)
+- Show appropriate error message (not stack traces in production)
+- Provide helpful action (go home, go back, contact support)
+- NO generic browser error pages - always render themed template
+
+**Error page structure:**
+```html
+{{template "public.tmpl" .}}
+{{define "content"}}
+<div class="error-page">
+  <h1>{{.StatusCode}}</h1>
+  <h2>{{.StatusText}}</h2>
+  <p>{{.Message}}</p>
+  <a href="/" class="btn">Go Home</a>
+</div>
+{{end}}
 ```
 
 ## Layout Separation 
@@ -24753,6 +24946,13 @@ When admin edits `custom_html`, show:
     <a href="/server/help">Help</a>
   </p>
 
+  <!-- Tor Support (only shown if Tor is enabled and running) -->
+  {{ if and .TorEnabled .TorRunning }}
+  <p>
+    <a href="/server/help#tor-access">Tor Support</a>
+  </p>
+  {{ end }}
+
   <br />
 
   <!-- Application branding -->
@@ -25303,7 +25503,7 @@ func trackingScript(r *http.Request) template.HTML {
 
 ### /server/about
 
-**About the application - what it does, version info, and optionally Tor access.**
+**About the application - what it does and version info.**
 
 | Section | Description |
 |---------|-------------|
@@ -25311,23 +25511,66 @@ func trackingScript(r *http.Request) template.HTML {
 | Version | Current version |
 | Description | From branding config or project-specific |
 | Features | Key features list (project-specific) |
-| Tor access | If Tor installed, show .onion address with copy button |
 | Links | GitHub, documentation, etc. |
 
-**Tor Section (shown only if `tor` binary is installed - auto-detected):**
+**⚠️ CRITICAL: Content MUST come from IDEA.md - NEVER use generic placeholders.**
 
+| Field | Source | Example |
+|-------|--------|---------|
+| Application name | `IDEA.md` → Project Name | "JokeAPI" |
+| Tagline | `IDEA.md` → Tagline | "A free API for random jokes" |
+| Description | `IDEA.md` → Description section | Actual project description |
+| Features | `IDEA.md` → Features section | List actual features from IDEA.md |
+| Links | `IDEA.md` → Links/URLs or infer from projectorg/projectname | GitHub, docs URLs |
+
+**DO NOT use:**
+- "Your application name here"
+- "Description of your application"
+- "Feature 1, Feature 2, Feature 3"
+- Any placeholder text
+
+**Example About Page (for a jokes API):**
 ```html
-<!-- Example Tor section -->
-<div class="tor-access">
-  <h3>Tor Hidden Service</h3>
-  <p>This application is also available via Tor for enhanced privacy.</p>
-  <div class="onion-address">
-    <code>{onion_address}</code>
-    <button onclick="copyToClipboard()">[Copy]</button>
-  </div>
-  <p class="note">Requires Tor Browser or Tor-enabled browser.</p>
-</div>
+<article class="about-page">
+  <h1>JokeAPI</h1>
+  <p class="tagline">A free API for random jokes</p>
+
+  <section class="description">
+    <h2>About</h2>
+    <p>JokeAPI is a free, open-source REST API that serves random jokes.
+    It supports multiple categories, formats, and languages.</p>
+  </section>
+
+  <section class="features">
+    <h2>Features</h2>
+    <ul>
+      <li>Multiple joke categories (programming, misc, dark, pun)</li>
+      <li>Safe mode filtering</li>
+      <li>Multiple response formats (JSON, XML, YAML, plain text)</li>
+      <li>GraphQL support</li>
+      <li>No authentication required</li>
+    </ul>
+  </section>
+
+  <section class="version">
+    <h2>Version</h2>
+    <p>{{ .Version }} ({{ .BuildDate }})</p>
+  </section>
+
+  <section class="links">
+    <h2>Links</h2>
+    <ul>
+      <li><a href="https://github.com/example/jokeapi">GitHub</a></li>
+      <li><a href="https://jokeapi.readthedocs.io">Documentation</a></li>
+    </ul>
+  </section>
+</article>
 ```
+
+**Note:** Tor address is NOT shown here. Tor access is available via:
+- **Footer**: "Tor Support" link → `/server/help#tor-access` (shown when Tor is enabled)
+- **`/server/help`**: Tor Access section with .onion address, copy button, and setup instructions
+- **`/healthz`**: Tor status and .onion address (technical/status view)
 
 ### /server/privacy
 
@@ -25667,8 +25910,86 @@ func trackingScript(r *http.Request) template.HTML {
 | Getting started | Quick start guide |
 | Features | How to use key features |
 | API Documentation | Links to Swagger (/openapi) and GraphQL (/graphql) - both in sync |
+| Tor Access | How to access via Tor (only shown if Tor enabled) |
 | FAQ | Frequently asked questions |
 | Troubleshooting | Common issues and solutions |
+
+**⚠️ CRITICAL: Content MUST reflect the ACTUAL project - NEVER use generic placeholders.**
+
+| Section | Source | What to include |
+|---------|--------|-----------------|
+| Getting started | `IDEA.md` + actual endpoints | Real curl examples using actual API endpoints |
+| Features | `IDEA.md` → Features | How to USE each feature (not just list them) |
+| FAQ | Common questions for THIS project type | Real questions users would ask |
+| Troubleshooting | Actual error scenarios | Real errors and solutions |
+
+**DO NOT use:**
+- "curl https://api.example.com/endpoint"
+- "Replace YOUR_API_KEY with your actual key"
+- "This is how you use feature X"
+- Generic placeholder examples
+
+**Example Help Page (for a jokes API):**
+```html
+<article class="help-page">
+  <h1>Help</h1>
+
+  <section id="getting-started">
+    <h2>Getting Started</h2>
+    <p>Get a random joke with a single request:</p>
+    <pre><code>curl https://jokes.example.com/api/v1/joke</code></pre>
+
+    <p>Response:</p>
+    <pre><code>{
+  "id": "abc123",
+  "category": "programming",
+  "setup": "Why do programmers prefer dark mode?",
+  "punchline": "Because light attracts bugs."
+}</code></pre>
+  </section>
+
+  <section id="features">
+    <h2>Features</h2>
+
+    <h3>Categories</h3>
+    <p>Filter jokes by category:</p>
+    <pre><code>curl https://jokes.example.com/api/v1/joke?category=programming</code></pre>
+    <p>Available categories: <code>programming</code>, <code>misc</code>, <code>dark</code>, <code>pun</code></p>
+
+    <h3>Safe Mode</h3>
+    <p>Filter out NSFW content:</p>
+    <pre><code>curl https://jokes.example.com/api/v1/joke?safe=true</code></pre>
+
+    <h3>Response Formats</h3>
+    <p>Get jokes in different formats:</p>
+    <pre><code>curl -H "Accept: text/plain" https://jokes.example.com/api/v1/joke
+curl -H "Accept: application/xml" https://jokes.example.com/api/v1/joke</code></pre>
+  </section>
+
+  <section id="faq">
+    <h2>FAQ</h2>
+
+    <h3>Do I need an API key?</h3>
+    <p>No, the API is completely free and requires no authentication.</p>
+
+    <h3>Is there a rate limit?</h3>
+    <p>Yes, 100 requests per minute per IP address.</p>
+
+    <h3>Can I submit jokes?</h3>
+    <p>Yes, use the <code>POST /api/v1/joke/submit</code> endpoint.</p>
+  </section>
+
+  <section id="troubleshooting">
+    <h2>Troubleshooting</h2>
+
+    <h3>429 Too Many Requests</h3>
+    <p>You've exceeded the rate limit. Wait 60 seconds before retrying.</p>
+
+    <h3>No jokes in category</h3>
+    <p>Some category/filter combinations may have no results. Try removing filters.</p>
+  </section>
+</article>
+```
 
 **API Documentation section (always shown):**
 ```html
@@ -25682,7 +26003,35 @@ func trackingScript(r *http.Request) template.HTML {
 </div>
 ```
 
-**Content is project-specific. Markdown supported.**
+**Tor Access section (only shown if Tor is enabled and running):**
+```html
+{{ if and .TorEnabled .TorRunning }}
+<section id="tor-access" class="tor-access">
+  <h3>Tor Access</h3>
+  <p>This application is available as a Tor hidden service for enhanced privacy.</p>
+
+  <h4>Onion Address</h4>
+  <div class="code-block">
+    <code class="code-content">{{ .TorAddress }}</code>
+    <button type="button" class="copy-btn" data-copy="{{ .TorAddress }}" aria-label="Copy to clipboard">
+      <span class="copy-icon">📋</span>
+      <span class="copy-text">Copy</span>
+    </button>
+  </div>
+
+  <h4>How to Connect</h4>
+  <ol>
+    <li>Download <a href="https://www.torproject.org/download/" target="_blank" rel="noopener">Tor Browser</a></li>
+    <li>Open Tor Browser and wait for it to connect</li>
+    <li>Copy the onion address above and paste it into the Tor Browser address bar</li>
+  </ol>
+
+  <p class="note">Using Tor provides additional privacy by hiding your IP address and encrypting your connection through the Tor network.</p>
+</section>
+{{ end }}
+```
+
+**⚠️ REMINDER: All content sections MUST be populated from IDEA.md - see sourcing rules above.**
 
 ### /server/terms
 
@@ -25713,8 +26062,6 @@ server:
     about:
       # Additional content for about page (markdown supported)
       content: ""
-      # Show Tor section (auto-detected from tor.enabled, but can override)
-      show_tor: auto
 
     privacy:
       # Privacy policy content (markdown supported)
@@ -25748,7 +26095,6 @@ server:
 |---------|------|-------------|
 | **About Page** | | |
 | Content | Markdown editor | Additional about page content |
-| Show Tor section | Toggle | Show .onion address (auto/yes/no) |
 | Preview | Button | Preview about page |
 | **Privacy Policy** | | |
 | Content | Markdown editor | Privacy policy content |
@@ -26305,33 +26651,30 @@ func RegisterAdminRoutes(r *mux.Router) {
 **Console Output (First Run):**
 
 ```
-╔══════════════════════════════════════════════════════════════════════╗
-║                                                                      ║
-║   SEARCH {projectversion}                                     ║
-║                                                                      ║
-║   Status: Running (first run - setup available)                      ║
-║                                                                      ║
-╠══════════════════════════════════════════════════════════════════════╣
-║                                                                      ║
-║   🌐 Web Interface:                                                   ║
-║      http://myserver.example.com:64580                               ║
-║      http://192.168.1.100:64580                                      ║
-║                                                                      ║
-║   🔧 Admin Panel:                                                     ║
-║      http://myserver.example.com:64580/{admin_path}                  ║
-║                                                                      ║
-║   🔑 Setup Token (use at /{admin_path}):                              ║
-║      a1b2c3d4e5f67890abcdef1234567890                                ║
-║                                                                      ║
-║   📧 SMTP: 172.17.0.1:25                                                ║
-║                                                                      ║
-║   ⚠️  Save the setup token! It will not be shown again.               ║
-║                                                                      ║
-╚══════════════════════════════════════════════════════════════════════╝
+╭───────────────────────────────────────────────────────────╮
+│  🚀 SEARCH · 📦 {projectversion}                   │
+├───────────────────────────────────────────────────────────┤
+│  🔧 Running in mode: {app_mode}                           │
+├───────────────────────────────────────────────────────────┤
+│  🌐 HTTP:  {proto}://{fqdn}:{port}                        │
+├───────────────────────────────────────────────────────────┤
+│  📡 Listening on {proto}://{address}:{port}               │
+│  ✅ Server started on {startup_datetime}                  │
+╰───────────────────────────────────────────────────────────╯
+
+┌───────────────────────────────────────────────────────────┐
+│  🔑 SETUP REQUIRED                                        │
+├───────────────────────────────────────────────────────────┤
+│  Setup Token: {setup_token}                               │
+│                                                           │
+│  Go to {proto}://{fqdn}/{admin_path}/server/setup         │
+│  and enter this token to complete setup.                  │
+│                                                           │
+│  This token will only be shown ONCE.                      │
+└───────────────────────────────────────────────────────────┘
 
 [INFO] Server started successfully
 [INFO] Listening on {address}:{port}
-[INFO] SMTP: 172.17.0.1:25
 ```
 
 ### App Usability Before Setup
@@ -27028,7 +27371,7 @@ Admin Panel Header:
 |---------|---------|---------|---------|-------------|
 | `admin_path` | Text | `admin` | Reload | Custom admin panel path (see PART 17) |
 | `rate_limit.enabled` | Toggle | On | No | Enable rate limiting |
-| `rate_limit.requests` | Number | `120` | No | Requests per window |
+| `rate_limit.requests` | Number | `0` | No | Requests per window (0 = project default) |
 | `rate_limit.window` | Duration | `1 minute` | No | Rate limit window |
 | `cors.enabled` | Toggle | On | No | Enable CORS |
 | `cors.origins` | Tags | `*` | No | Allowed origins |
@@ -28090,7 +28433,10 @@ Time: {timestamp}
 | `{app_name}` | Application name/title |
 | `{app_url}` | Application URL (full FQDN, e.g., `https://api.example.com`) |
 | `{fqdn}` | Server FQDN only (e.g., `api.example.com`) |
-| `{onion_url}` | Tor .onion URL (if enabled) |
+| `{onion_url}` | Tor .onion full URL (e.g., `http://abc...xyz.onion`) |
+| `{onion_address}` | Tor .onion address only (e.g., `abc...xyz.onion`) |
+| `{i2p_url}` | I2P full URL (e.g., `http://abc...xyz.b32.i2p`) |
+| `{i2p_address}` | I2P address only (e.g., `abc...xyz.b32.i2p`) |
 | `{admin_email}` | Admin email address |
 | `{recipient_email}` | Email address this message is being sent to |
 | `{recipient_username}` | Username of the account (if applicable) |
@@ -31732,16 +32078,17 @@ POST /api/{api_version}/{admin_path}/server/restore
 **When restoring a backup to a NEW server, the Primary Admin must re-authenticate:**
 
 ```
-Restore completed. Primary admin re-authentication required.
-
-A new setup token has been generated:
-
-  Setup Token: a1b2c3d4e5f67890abcdef1234567890
-
-Go to: https://{fqdn}:{port}/{admin_path}
-
-Enter the setup token to verify you are the server administrator.
-Your existing password and settings will be preserved.
+┌─────────────────────────────────────────────────────────────┐
+│  🔑 RESTORE COMPLETE - RE-AUTHENTICATION REQUIRED           │
+├─────────────────────────────────────────────────────────────┤
+│  Setup Token: a1b2c3d4e5f67890abcdef1234567890              │
+│                                                             │
+│  Go to {proto}://{fqdn}/{admin_path} and enter this token   │
+│  to verify you are the server administrator.                │
+│                                                             │
+│  Your existing password and settings will be preserved.     │
+│  This token will only be shown ONCE.                        │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 **Why Re-Authentication?**
@@ -31817,21 +32164,20 @@ search --service stop
 search --maintenance setup
 
 # Output:
-# ╔══════════════════════════════════════════════════════════════════╗
-# ║                     ADMIN CREDENTIALS RESET                      ║
-# ╠══════════════════════════════════════════════════════════════════╣
-# ║  Admin password and API token have been cleared.                 ║
-# ║                                                                  ║
-# ║  NEW SETUP TOKEN (copy this now, shown ONCE):                    ║
-# ║  ┌────────────────────────────────────────────────────────────┐  ║
-# ║  │  a1b2c3d4e5f67890abcdef1234567890                          │  ║
-# ║  └────────────────────────────────────────────────────────────┘  ║
-# ║                                                                  ║
-# ║  1. Start the service: search --service start             ║
-# ║  2. Go to: http://{fqdn}:{port}/{admin_path}                     ║
-# ║  3. Enter the setup token above                                  ║
-# ║  4. Create new admin account via setup wizard                    ║
-# ╚══════════════════════════════════════════════════════════════════╝
+# ┌─────────────────────────────────────────────────────────────┐
+# │  🔑 ADMIN CREDENTIALS RESET                                 │
+# ├─────────────────────────────────────────────────────────────┤
+# │  Admin password and API token have been cleared.            │
+# │                                                             │
+# │  Setup Token: a1b2c3d4e5f67890abcdef1234567890              │
+# │                                                             │
+# │  1. Start the service: search --service start        │
+# │  2. Go to: {proto}://{fqdn}/{admin_path}                    │
+# │  3. Enter the setup token above                             │
+# │  4. Create new admin account via setup wizard               │
+# │                                                             │
+# │  This token will only be shown ONCE.                        │
+# └─────────────────────────────────────────────────────────────┘
 
 # Start the service
 search --service start
@@ -40961,7 +41307,7 @@ See [Configuration](configuration.md) for all options.
 
 ## Config File
 
-Default location: `/etc/apimgr/search/server.yml`
+Default location: `{config_dir}/server.yml` (see PART 4 for platform-specific paths)
 
 ```yaml
 server:
@@ -40970,7 +41316,9 @@ server:
 
 database:
   type: sqlite
-  path: /data/db/server.db
+  # Path auto-detected based on platform (see PART 4)
+  # Docker: /data/db/sqlite/server.db
+  # Native: {db_dir}/server.db
 
 # ... (all configuration options)
 ```
@@ -47564,7 +47912,7 @@ The Agent is essentially the Server's "little sibling" - same professional struc
 |--------|--------|-------|
 | **Listens for connections** | ✅ Yes (`--port`, `--address`) | ❌ No |
 | **Connects to parent server** | ❌ No (IS the server) | ✅ Yes (`--server`, `--token`) |
-| **Setup** | ✅ Web-based (`--setup-token` for access) | ❌ No (registers with server via connection string) |
+| **Setup** | ✅ Web-based (token entered at `/{admin_path}/server/setup`) | ❌ No (registers with server via connection string) |
 | **Admin operations** | N/A (IS the server) | ❌ No (Client's job) |
 | **WebUI** | ✅ Yes | ❌ No (headless) |
 | **Database** | ✅ `server.db` | ✅ `agent.db` (if needed) |
@@ -49209,7 +49557,7 @@ GET /api/{api_version}/users
     "location": "San Francisco, CA",
     "website": "https://johndoe.dev",
     "visibility": "public",
-    "timezone": "America/Los_Angeles",
+    "timezone": "America/New_York",
     "language": "en",
     "verified": true,
     "created_at": "2024-01-15T10:30:00Z"
@@ -49280,7 +49628,7 @@ Account Settings (/users/settings)
 │  ─────────────────────────────────────────────────────────  │
 │                                                             │
 │  Timezone                                                   │
-│  [America/Los_Angeles (UTC-8)            ▼]                │
+│  [America/New_York (UTC-5)               ▼]                │
 │                                                             │
 │  Language                                                   │
 │  [English                                ▼]                │
@@ -49466,7 +49814,7 @@ GET /api/{api_version}/users/settings
         "bio": "Software developer",
         "location": "San Francisco, CA",
         "website": "https://johndoe.dev",
-        "timezone": "America/Los_Angeles",
+        "timezone": "America/New_York",
         "language": "en",
         "date_format": "MM/DD/YYYY",
         "time_format": "24h"
@@ -53534,7 +53882,7 @@ make docker # Build Docker image
 - [ ] `--pid {path}` - PID file path
 - [ ] `--address {addr}` - Listen address
 - [ ] `--port {port}` - Listen port
-- [ ] `--mode {mode}` - Application mode
+- [ ] `--mode {production|development}` - Application mode
 - [ ] `--status` - Show running status
 - [ ] `--daemon` - Daemonize (detach)
 - [ ] `--debug` - Enable debug mode
@@ -53921,12 +54269,12 @@ make docker # Build Docker image
 
 ### Security Headers
 
-- [ ] Content-Security-Policy
-- [ ] X-Frame-Options: DENY
+- [ ] Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'
+- [ ] X-Frame-Options: SAMEORIGIN
 - [ ] X-Content-Type-Options: nosniff
 - [ ] X-XSS-Protection: 1; mode=block
 - [ ] Referrer-Policy: strict-origin-when-cross-origin
-- [ ] Permissions-Policy (as appropriate)
+- [ ] Permissions-Policy: geolocation=(), microphone=(), camera=()
 
 ### Data Protection
 
@@ -54275,6 +54623,7 @@ make docker # Build Docker image
 
 - [ ] Web frontend uses theme
 - [ ] Admin panel uses theme
+- [ ] Error pages use theme (404, 500, 502, 503, etc.)
 - [ ] Swagger UI uses theme
 - [ ] GraphQL Playground uses theme
 - [ ] ReadTheDocs uses theme

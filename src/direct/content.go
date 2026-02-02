@@ -567,7 +567,6 @@ func (h *PkgHandler) fetchNPM(ctx context.Context, name string) (*Answer, error)
 	var pkg struct {
 		Name        string `json:"name"`
 		Description string `json:"description"`
-		Version     string `json:"dist-tags"`
 		DistTags    struct {
 			Latest string `json:"latest"`
 		} `json:"dist-tags"`

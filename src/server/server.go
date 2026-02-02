@@ -322,6 +322,14 @@ func New(cfg *config.Config) *Server {
 		if err != nil {
 			log.Printf("[Users] Warning: Failed to initialize database: %v", err)
 		} else {
+			// Run database migrations - per AI.md PART 10
+			migrator := database.NewDatabaseMigrator(dbMgr)
+			if err := migrator.MigrateAll(context.Background()); err != nil {
+				log.Printf("[Database] Warning: Failed to run migrations: %v", err)
+			} else {
+				log.Printf("[Database] Migrations completed successfully")
+			}
+
 			// Get users database
 			usersDB := dbMgr.UsersDB().SQL()
 			if usersDB != nil {

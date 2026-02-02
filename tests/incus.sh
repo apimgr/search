@@ -95,8 +95,9 @@ if [ -f "$BUILD_DIR/${PROJECTNAME}-agent" ]; then
     incus exec "$CONTAINER_NAME" -- chmod +x "/usr/local/bin/${PROJECTNAME}-agent"
 fi
 
-# Ensure curl is available for testing
-incus exec "$CONTAINER_NAME" -- bash -c "command -v curl || (apt-get update && apt-get install -y curl file jq procps)" >/dev/null 2>&1
+# Ensure required packages are available for testing
+# Per AI.md PART 27: tor is a required package (auto-enabled when found)
+incus exec "$CONTAINER_NAME" -- bash -c "apt-get update && apt-get install -y curl file jq procps tor" >/dev/null 2>&1
 
 echo "=== Running tests in Incus ==="
 incus exec "$CONTAINER_NAME" -- bash -c "

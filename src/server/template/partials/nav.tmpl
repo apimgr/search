@@ -1,6 +1,10 @@
 {{define "nav"}}
-{{/* Base nav bar - per AI.md PART 16: server-side rendering, mobile-first CSS */}}
+{{/* Nav bar: separate row below header (CSS-only mobile menu) - per AI.md PART 16 */}}
 <nav class="nav">
+    {{/* Hidden checkbox controls menu state - NO JavaScript per AI.md PART 16 */}}
+    <input type="checkbox" id="nav-toggle" class="nav-checkbox" hidden>
+
+    {{/* Desktop: inline links | Mobile: hamburger only */}}
     <div class="nav-links">
         <a href="/" class="nav-link{{if eq .Page "home"}} active{{end}}">Home</a>
         {{/* Search header form for non-home pages */}}
@@ -26,5 +30,24 @@
             </svg>
         </button>
     </div>
+
+    {{/* Mobile: hamburger toggle (checkbox label) - per AI.md PART 16 */}}
+    <label for="nav-toggle" class="nav-toggle" aria-label="Toggle navigation">
+        <span></span>
+        <span></span>
+        <span></span>
+    </label>
+
+    {{/* Slide-in panel for mobile - per AI.md PART 16 */}}
+    <div class="nav-panel">
+        <label for="nav-toggle" class="nav-close" aria-label="Close menu">&times;</label>
+        <a href="/" class="nav-panel-link{{if eq .Page "home"}} active{{end}}">Home</a>
+        <a href="/preferences" class="nav-panel-link{{if eq .Page "preferences"}} active{{end}}">Preferences</a>
+        <a href="/server/about" class="nav-panel-link{{if eq .Page "about"}} active{{end}}">About</a>
+        <a href="/help" class="nav-panel-link{{if eq .Page "help"}} active{{end}}">Help</a>
+    </div>
+
+    {{/* Overlay - clicking label unchecks checkbox, closing menu - per AI.md PART 16 */}}
+    <label for="nav-toggle" class="nav-overlay"></label>
 </nav>
 {{end}}
