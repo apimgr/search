@@ -1653,15 +1653,29 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// Save saves configuration to file
+// Save saves configuration to file with comments per AI.md config-rules.md
+// Comments are placed ABOVE each setting, never inline
 func (c *Config) Save(path string) error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	data, err := yaml.Marshal(c)
-	if err != nil {
+	// Marshal to yaml.Node for comment support
+	var node yaml.Node
+	if err := node.Encode(c); err != nil {
 		return err
 	}
+
+	// Add comments to top-level sections
+	addConfigComments(&node)
+
+	// Encode with comments
+	var buf strings.Builder
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(&node); err != nil {
+		return err
+	}
+	enc.Close()
 
 	// Ensure directory exists
 	dir := filepath.Dir(path)
@@ -1669,7 +1683,86 @@ func (c *Config) Save(path string) error {
 		return err
 	}
 
-	return os.WriteFile(path, data, 0600)
+	return os.WriteFile(path, []byte(buf.String()), 0600)
+}
+
+// addConfigComments adds comments to configuration node
+// Per AI.md config-rules.md: Comments ABOVE the setting, never inline
+func addConfigComments(node *yaml.Node) {
+	if node.Kind != yaml.DocumentNode || len(node.Content) == 0 {
+		return
+	}
+
+	root := node.Content[0]
+	if root.Kind != yaml.MappingNode {
+		return
+	}
+
+	// Section comments (key → comment)
+	sectionComments := map[string]string{
+		"server":  "Server configuration",
+		"search":  "Search settings and behavior",
+		"engines": "Search engine configurations",
+	}
+
+	// Subsection comments under server
+	serverSubComments := map[string]string{
+		"title":            "Server title displayed in UI",
+		"description":      "Server description/tagline",
+		"port":             "HTTP port (default: 64580)",
+		"https_port":       "HTTPS port for dual-port mode (optional)",
+		"address":          "Listen address ([::]  for all interfaces)",
+		"mode":             "Application mode: production or development",
+		"secret_key":       "Secret key for session encryption (auto-generated)",
+		"base_url":         "Public URL for this instance",
+		"ssl":              "SSL/TLS configuration",
+		"admin":            "Admin panel settings",
+		"branding":         "Branding and appearance",
+		"rate_limit":       "Rate limiting configuration",
+		"session":          "Session management settings",
+		"logs":             "Logging configuration",
+		"tor":              "Tor hidden service settings",
+		"email":            "Email/SMTP configuration",
+		"security":         "Security settings",
+		"auth":             "External authentication (OIDC/LDAP)",
+		"users":            "User management settings",
+		"pages":            "Custom pages configuration",
+		"web":              "Web settings (robots.txt, security.txt)",
+		"scheduler":        "Built-in task scheduler",
+		"cache":            "Response caching",
+		"geoip":            "GeoIP database settings",
+		"metrics":          "Prometheus metrics endpoint",
+		"image_proxy":      "Image proxy for privacy",
+		"contact":          "Contact form settings",
+		"seo":              "SEO and sitemap settings",
+		"compression":      "Response compression",
+		"limits":           "Request size limits",
+		"i18n":             "Internationalization settings",
+		"maintenance_mode": "Enable maintenance mode to show maintenance page",
+		"backup":           "Backup configuration",
+		"compliance":       "Compliance settings (GDPR, etc.)",
+	}
+
+	// Add comments to top-level sections
+	for i := 0; i < len(root.Content)-1; i += 2 {
+		key := root.Content[i]
+		if comment, ok := sectionComments[key.Value]; ok {
+			key.HeadComment = comment
+		}
+
+		// Add subsection comments for server section
+		if key.Value == "server" {
+			value := root.Content[i+1]
+			if value.Kind == yaml.MappingNode {
+				for j := 0; j < len(value.Content)-1; j += 2 {
+					subKey := value.Content[j]
+					if comment, ok := serverSubComments[subKey.Value]; ok {
+						subKey.HeadComment = comment
+					}
+				}
+			}
+		}
+	}
 }
 
 // LoadOrCreate loads configuration from file or creates default if not exists

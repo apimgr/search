@@ -1,5 +1,5 @@
-{{/* Admin Panel Sidebar */}}
-{{/* Per AI.md PART 18: Admin Panel Layout */}}
+{{define "admin/sidebar"}}
+{{/* Admin Panel Sidebar - per AI.md PART 18: Admin Panel Layout */}}
 <aside class="admin-sidebar" id="admin-sidebar">
   <nav class="admin-nav">
     <a href="/admin/dashboard" class="admin-nav-item{{if eq .CurrentPage "dashboard"}} active{{end}}">
@@ -74,3 +74,4 @@
     </a>
   </nav>
 </aside>
+{{end}}

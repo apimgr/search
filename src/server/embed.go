@@ -161,7 +161,14 @@ func (tr *TemplateRenderer) loadTemplates() error {
 }
 
 // loadPartialsRecursive recursively loads partials from a directory
+// baseDir is the root partials directory (e.g., "template/partials")
+// currentDir is the current directory being processed
 func (tr *TemplateRenderer) loadPartialsRecursive(dir string, partials map[string]string) {
+	tr.loadPartialsRecursiveWithPrefix(dir, "", partials)
+}
+
+// loadPartialsRecursiveWithPrefix recursively loads partials with subdirectory prefix
+func (tr *TemplateRenderer) loadPartialsRecursiveWithPrefix(dir, prefix string, partials map[string]string) {
 	entries, err := fs.ReadDir(EmbeddedFS, dir)
 	if err != nil {
 		return
@@ -170,14 +177,23 @@ func (tr *TemplateRenderer) loadPartialsRecursive(dir string, partials map[strin
 	for _, entry := range entries {
 		path := dir + "/" + entry.Name()
 		if entry.IsDir() {
-			// Recurse into subdirectory
-			tr.loadPartialsRecursive(path, partials)
+			// Recurse into subdirectory with updated prefix
+			subPrefix := entry.Name()
+			if prefix != "" {
+				subPrefix = prefix + "/" + entry.Name()
+			}
+			tr.loadPartialsRecursiveWithPrefix(path, subPrefix, partials)
 		} else if strings.HasSuffix(entry.Name(), ".tmpl") {
 			content, err := fs.ReadFile(EmbeddedFS, path)
 			if err != nil {
 				continue
 			}
-			name := strings.TrimSuffix(entry.Name(), ".tmpl")
+			// Build partial name with prefix (e.g., "public/header" for partials/public/header.tmpl)
+			baseName := strings.TrimSuffix(entry.Name(), ".tmpl")
+			name := baseName
+			if prefix != "" {
+				name = prefix + "/" + baseName
+			}
 			partials[name] = string(content)
 		}
 	}

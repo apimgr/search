@@ -1572,20 +1572,12 @@ html.theme-light .theme-icon-dark {
         margin-top: 0.5rem;
     }
 
+    /* Mobile: simplified nav without hamburger - per AI.md PART 16 */
     .nav-links {
-        display: none;
-        position: absolute;
-        top: 100%;
-        left: 0;
-        right: 0;
-        background-color: var(--bg-secondary);
-        flex-direction: column;
-        padding: 1rem;
-        border-bottom: 1px solid var(--border-color);
-    }
-
-    .nav-links.active {
         display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        justify-content: center;
     }
 
     /* Search Results Mobile */
@@ -1677,15 +1669,7 @@ html.theme-light .theme-icon-dark {
         font-size: 0.9rem;
     }
 
-    /* Mobile: show hamburger, hide nav-links per AI.md PART 16 */
-    .nav-toggle {
-        display: flex;
-        margin-left: auto;
-    }
-
-    .nav-links {
-        display: none;
-    }
+    /* Mobile nav - hamburger removed, simplified navigation */
 
     .home-container {
         min-height: calc(100vh - 250px);
