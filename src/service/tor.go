@@ -637,11 +637,11 @@ func (t *TorService) GenerateVanity(prefix string) error {
 		return fmt.Errorf("prefix too long: max 6 characters for built-in generation")
 	}
 
-	// Check for valid characters (base32)
+	// Check for valid characters (base32 lowercase only)
 	validChars := "abcdefghijklmnopqrstuvwxyz234567"
-	for _, c := range strings.ToLower(prefix) {
+	for _, c := range prefix {
 		if !strings.ContainsRune(validChars, c) {
-			return fmt.Errorf("invalid character '%c' in prefix: must be a-z or 2-7", c)
+			return fmt.Errorf("invalid character '%c' in prefix: must be lowercase a-z or 2-7", c)
 		}
 	}
 

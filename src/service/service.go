@@ -253,6 +253,7 @@ ReadWritePaths=/etc/apimgr/search
 ReadWritePaths=/var/lib/apimgr/search
 ReadWritePaths=/var/cache/apimgr/search
 ReadWritePaths=/var/log/apimgr/search
+ReadWritePaths=/var/run/apimgr
 
 [Install]
 WantedBy=multi-user.target

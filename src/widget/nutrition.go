@@ -356,14 +356,16 @@ func (f *NutritionFetcher) fetchFromOpenFoodFacts(ctx context.Context, foodItem 
 				EnergyKcalServing    float64 `json:"energy-kcal_serving"`
 			} `json:"nutriments"`
 		} `json:"products"`
-		Count int `json:"count"`
+		Count json.Number `json:"count"` // Can be string or int from API
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, err
 	}
 
-	if result.Count == 0 || len(result.Products) == 0 {
+	// Parse count (API sometimes returns string, sometimes int)
+	count, _ := result.Count.Int64()
+	if count == 0 || len(result.Products) == 0 {
 		return nil, nil
 	}
 

@@ -563,8 +563,9 @@ func TestWidgetsEndpointNoManager(t *testing.T) {
 		t.Fatal("Expected data to be a map")
 	}
 
-	if data["enabled"] != false {
-		t.Error("Expected enabled to be false when widget manager is nil")
+	// When widget manager is nil, still returns enabled: true with basic widgets
+	if data["enabled"] != true {
+		t.Error("Expected enabled to be true (basic widgets available)")
 	}
 }
 
@@ -578,8 +579,9 @@ func TestWidgetDataNoManager(t *testing.T) {
 
 	handler.handleWidgetData(w, req)
 
-	if w.Code != http.StatusServiceUnavailable {
-		t.Errorf("Expected status %d, got %d", http.StatusServiceUnavailable, w.Code)
+	// Returns 200 OK with error message (graceful degradation)
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
 	}
 }
 
@@ -3012,9 +3014,9 @@ func TestWidgetDataEmptyType(t *testing.T) {
 
 	handler.handleWidgetData(w, req)
 
-	// Without widget manager, should return service unavailable
-	if w.Code != http.StatusServiceUnavailable {
-		t.Errorf("Expected status %d, got %d", http.StatusServiceUnavailable, w.Code)
+	// Returns 200 OK with error message (graceful degradation)
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
 	}
 }
 
