@@ -269,9 +269,9 @@ func (h *UnicodeHandler) searchUnicodeName(name string) (*Answer, error) {
 		Type:        AnswerTypeUnicode,
 		Term:        name,
 		Title:       "Unicode Search",
-		Description: "Search by name not implemented",
-		Content:     fmt.Sprintf("<p>Searching by Unicode name is not yet implemented. Try entering a character directly or use <code>U+XXXX</code> format.</p>"),
-		Error:       "not_implemented",
+		Description: "Unicode name search not supported",
+		Content:     fmt.Sprintf("<p>Searching by Unicode name is not supported. Try entering a character directly or use <code>U+XXXX</code> format.</p>"),
+		Error:       "not_supported",
 	}, nil
 }
 

@@ -16,10 +16,12 @@ import (
 )
 
 // Build info - set via -ldflags at build time
+// Per AI.md PART 26: LDFLAGS must include Version, CommitID, BuildDate, OfficialSite
 var (
-	Version   = "dev"
-	CommitID  = "unknown"
-	BuildDate = "unknown"
+	Version      = "dev"
+	CommitID     = "unknown"
+	BuildDate    = "unknown"
+	OfficialSite = "https://scour.li" // Default, can be overridden via -ldflags
 )
 
 // Config represents the complete application configuration
@@ -55,6 +57,7 @@ func (c *Config) GetPath() string {
 
 // Reload reloads the configuration from the original file
 // Note: Some settings (port, address) may require restart to take effect
+// Per AI.md PART 5: Unknown config keys are ERRORS, not ignored
 func (c *Config) Reload() error {
 	c.mu.RLock()
 	path := c.configPath
@@ -64,13 +67,17 @@ func (c *Config) Reload() error {
 		return fmt.Errorf("config path not set, cannot reload")
 	}
 
-	data, err := os.ReadFile(path)
+	file, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("failed to read config file: %w", err)
 	}
+	defer file.Close()
 
 	var newCfg Config
-	if err := yaml.Unmarshal(data, &newCfg); err != nil {
+	decoder := yaml.NewDecoder(file)
+	decoder.KnownFields(true) // Per AI.md PART 5: Unknown keys cause errors
+
+	if err := decoder.Decode(&newCfg); err != nil {
 		return fmt.Errorf("failed to parse config file: %w", err)
 	}
 
@@ -1636,15 +1643,20 @@ func DefaultConfig() *Config {
 }
 
 // Load loads configuration from file
+// Per AI.md PART 5: Unknown config keys are ERRORS, not ignored
 func Load(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
+	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
+	defer file.Close()
 
 	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, err
+	decoder := yaml.NewDecoder(file)
+	decoder.KnownFields(true) // Per AI.md PART 5: Unknown keys cause errors
+
+	if err := decoder.Decode(&cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
 	// Store path for reload

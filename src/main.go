@@ -51,15 +51,17 @@ var (
 	flagShell       string
 
 	// Required flags per AI.md PART 6 (NON-NEGOTIABLE)
-	flagMode    string
-	flagData    string
-	flagConfig  string
-	flagCache   string
-	flagLog     string
-	flagBackup  string
-	flagPID     string
-	flagAddress string
-	flagPort    int
+	flagMode      string
+	flagData      string
+	flagConfig    string
+	flagCache     string
+	flagLog       string
+	flagBackup    string
+	flagPID       string
+	flagAddress   string
+	flagPort      int
+	flagAdminPath string
+	flagColor     string
 )
 
 func init() {
@@ -92,6 +94,8 @@ func init() {
 	flag.StringVar(&flagPID, "pid", "", "Set PID file path")
 	flag.StringVar(&flagAddress, "address", "", "Set listen address")
 	flag.IntVar(&flagPort, "port", 0, "Set listen port")
+	flag.StringVar(&flagAdminPath, "admin-path", "", "Set admin panel path (default: admin)")
+	flag.StringVar(&flagColor, "color", "", "Set color output mode (always|never|auto)")
 }
 
 func main() {
@@ -166,7 +170,8 @@ func main() {
 		runtimeFlags := map[string]bool{
 			"--port": true, "--address": true, "--mode": true, "--data": true,
 			"--config": true, "--cache": true, "--log": true, "--backup": true,
-			"--pid": true, "--debug": true, "--daemon": true,
+			"--pid": true, "--debug": true, "--daemon": true, "--admin-path": true,
+			"--color": true,
 		}
 		if !runtimeFlags[os.Args[1]] {
 			handleLegacyArgs()
@@ -230,6 +235,15 @@ func applyCliOverrides() {
 	if flagPort != 0 {
 		os.Setenv("SEARCH_PORT", fmt.Sprintf("%d", flagPort))
 		os.Setenv("PORT", fmt.Sprintf("%d", flagPort))
+	}
+	if flagAdminPath != "" {
+		os.Setenv("SEARCH_ADMIN_PATH", flagAdminPath)
+		config.SetAdminPathOverride(flagAdminPath)
+	}
+	// Per AI.md PART 8: Color priority: CLI flag > Config > NO_COLOR env > Auto-detect
+	if flagColor != "" {
+		os.Setenv("SEARCH_COLOR", flagColor)
+		config.SetColorMode(flagColor)
 	}
 
 	// Ensure directories exist after CLI overrides are applied
@@ -381,7 +395,7 @@ func runServer() {
 		URLs:       urls,
 		ShowSetup:  showSetup,
 		SetupToken: setupToken,
-		AdminPath:  "admin",
+		AdminPath:  config.GetAdminPath(),
 	})
 
 	// Create server
@@ -436,6 +450,8 @@ Runtime Flags:
   --pid <file>             Set PID file path
   --address <addr>         Set listen address
   --port <port>            Set listen port
+  --admin-path <path>      Set admin panel path (default: admin)
+  --color <mode>           Set color output mode (always|never|auto)
   --daemon                 Daemonize (detach from terminal, Unix only)
   --debug                  Enable debug mode (verbose logging, debug endpoints)
 
@@ -503,6 +519,9 @@ Environment Variables:
   PORT, SEARCH_PORT        Server port
   MODE, SEARCH_MODE        Application mode (production|development)
   INSTANCE_NAME            Instance display name
+  SEARCH_ADMIN_PATH        Admin panel path (default: admin)
+  SEARCH_COLOR             Color output mode (always|never|auto)
+  NO_COLOR                 Disable colors when set (standard)
   DISABLE_TOR              Disable Tor (auto-enabled if tor binary installed)
   BACKUP_PASSWORD          Password for backup encryption (AES-256-GCM)
 
@@ -1596,24 +1615,18 @@ func displayFirstRunSetupToken(cfg *config.Config, dbPath string) {
 // ============================================================
 
 // generateSetupToken creates a cryptographically secure setup token
+// Per AI.md: Setup token must be 32 hex chars, no dashes
 func generateSetupToken() string {
-	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	token := make([]byte, 32)
-
-	// Use crypto/rand for secure generation
-	randomBytes := make([]byte, 32)
+	// Generate 16 random bytes = 32 hex characters
+	randomBytes := make([]byte, 16)
 	if _, err := cryptoRand.Read(randomBytes); err != nil {
 		// Fallback to less secure method if crypto/rand fails
-		for i := range token {
-			token[i] = chars[mathRand.Intn(len(chars))]
+		for i := range randomBytes {
+			randomBytes[i] = byte(mathRand.Intn(256))
 		}
-		return string(token)
 	}
-
-	for i, b := range randomBytes {
-		token[i] = chars[int(b)%len(chars)]
-	}
-	return string(token)
+	// Return as lowercase hex string (32 chars)
+	return hex.EncodeToString(randomBytes)
 }
 
 // storeSetupToken stores the hashed setup token in the database

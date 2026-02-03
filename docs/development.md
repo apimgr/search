@@ -201,7 +201,7 @@ docker build -t search:dev -f docker/Dockerfile .
 ### Run Container
 
 ```bash
-docker run -p 8080:80 search:dev
+docker run -p 64580:80 search:dev
 ```
 
 ### Docker Compose

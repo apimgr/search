@@ -177,7 +177,7 @@ See [checksums.txt](./checksums.txt) for SHA-256 checksums of all release files.
 
 \`\`\`bash
 docker pull ghcr.io/apimgr/search:$VERSION
-docker run -p 8080:8080 ghcr.io/apimgr/search:$VERSION
+docker run -p 64580:80 ghcr.io/apimgr/search:$VERSION
 \`\`\`
 
 ## Full Changelog

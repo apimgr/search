@@ -217,12 +217,14 @@ func (h *Handler) validateCSRFToken(r *http.Request) bool {
 
 // newAdminPageData creates AdminPageData with CSRF token and common fields
 // Per AI.md PART 20: All admin forms MUST have CSRF protection
+// Per AI.md PART 17: Admin path is configurable (default: "admin")
 func (h *Handler) newAdminPageData(w http.ResponseWriter, r *http.Request, title, page string) *AdminPageData {
 	return &AdminPageData{
 		Title:     title,
 		Page:      page,
 		Config:    h.config,
 		CSRFToken: h.getOrCreateCSRFToken(w, r),
+		AdminPath: config.GetAdminPath(),
 	}
 }
 
@@ -426,7 +428,8 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
 		Title:  "Admin Login",
 		Page:   "admin-login",
-		Config: h.config,
+		Config:    h.config,
+		AdminPath: config.GetAdminPath(),
 		Error:  r.URL.Query().Get("error"),
 	}
 
@@ -514,16 +517,43 @@ func (h *Handler) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		{Name: "Session Cleanup", NextRun: "hourly"},
 	}
 
-	// Recent activity (placeholder - in production, read from audit log)
-	recentActivity := []ActivityItem{
-		{Time: time.Now().Format("15:04"), Message: "Admin logged in", Type: "info"},
-		{Time: h.startTime.Format("15:04"), Message: "Server started", Type: "success"},
+	// Recent activity from audit log
+	recentActivity := []ActivityItem{}
+	if h.service != nil {
+		ctx := context.Background()
+		logs, err := h.service.GetAuditLogs(ctx, 5, 0)
+		if err == nil {
+			for _, entry := range logs {
+				activityType := "info"
+				if strings.Contains(strings.ToLower(entry.Action), "error") ||
+					strings.Contains(strings.ToLower(entry.Action), "fail") {
+					activityType = "error"
+				} else if strings.Contains(strings.ToLower(entry.Action), "success") ||
+					strings.Contains(strings.ToLower(entry.Action), "login") {
+					activityType = "success"
+				}
+				recentActivity = append(recentActivity, ActivityItem{
+					Time:    entry.Timestamp.Format("15:04"),
+					Message: entry.Action,
+					Type:    activityType,
+				})
+			}
+		}
+	}
+	// Add server start event if no audit logs yet
+	if len(recentActivity) == 0 {
+		recentActivity = append(recentActivity, ActivityItem{
+			Time:    h.startTime.Format("15:04"),
+			Message: "Server started",
+			Type:    "success",
+		})
 	}
 
 	data := &AdminPageData{
 		Title:  "Dashboard",
 		Page:   "admin-dashboard",
-		Config: h.config,
+		Config:    h.config,
+		AdminPath: config.GetAdminPath(),
 		Stats: &DashboardStats{
 			Status:         status,
 			Uptime:         formatDuration(time.Since(h.startTime)),
@@ -558,7 +588,8 @@ func (h *Handler) handleAdminProfile(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
 		Title:  "My Profile",
 		Page:   "admin-profile",
-		Config: h.config,
+		Config:    h.config,
+		AdminPath: config.GetAdminPath(),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	h.renderAdminPage(w, "profile", data)
@@ -570,7 +601,8 @@ func (h *Handler) handleAdminPreferences(w http.ResponseWriter, r *http.Request)
 	data := &AdminPageData{
 		Title:  "My Preferences",
 		Page:   "admin-preferences",
-		Config: h.config,
+		Config:    h.config,
+		AdminPath: config.GetAdminPath(),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	h.renderAdminPage(w, "preferences", data)
@@ -582,7 +614,8 @@ func (h *Handler) handleAuditLogs(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
 		Title:  "Audit Logs",
 		Page:   "admin-audit-logs",
-		Config: h.config,
+		Config:    h.config,
+		AdminPath: config.GetAdminPath(),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	h.renderAdminPage(w, "audit-logs", data)
@@ -594,7 +627,8 @@ func (h *Handler) handleServerAuth(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
 		Title:  "Authentication Settings",
 		Page:   "admin-auth",
-		Config: h.config,
+		Config:    h.config,
+		AdminPath: config.GetAdminPath(),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	h.renderAdminPage(w, "auth", data)
@@ -606,7 +640,8 @@ func (h *Handler) handleServerFirewall(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
 		Title:  "Firewall Settings",
 		Page:   "admin-firewall",
-		Config: h.config,
+		Config:    h.config,
+		AdminPath: config.GetAdminPath(),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	h.renderAdminPage(w, "firewall", data)
@@ -618,7 +653,8 @@ func (h *Handler) handleUsers(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
 		Title:  "User Management",
 		Page:   "admin-users",
-		Config: h.config,
+		Config:    h.config,
+		AdminPath: config.GetAdminPath(),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	h.renderAdminPage(w, "users", data)
@@ -630,7 +666,8 @@ func (h *Handler) handleCluster(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
 		Title:  "Cluster Management",
 		Page:   "admin-cluster",
-		Config: h.config,
+		Config:    h.config,
+		AdminPath: config.GetAdminPath(),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	h.renderAdminPage(w, "cluster", data)
@@ -647,7 +684,8 @@ func (h *Handler) handleConfig(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
 		Title:  "Configuration",
 		Page:   "admin-config",
-		Config: h.config,
+		Config:    h.config,
+		AdminPath: config.GetAdminPath(),
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -659,7 +697,8 @@ func (h *Handler) handleEngines(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
 		Title:  "Search Engines",
 		Page:   "admin-engines",
-		Config: h.config,
+		Config:    h.config,
+		AdminPath: config.GetAdminPath(),
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -676,7 +715,8 @@ func (h *Handler) handleTokens(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
 		Title:  "API Tokens",
 		Page:   "admin-tokens",
-		Config: h.config,
+		Config:    h.config,
+		AdminPath: config.GetAdminPath(),
 		Tokens: h.auth.ListAPITokens(),
 	}
 
@@ -689,7 +729,8 @@ func (h *Handler) handleLogs(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
 		Title:  "Logs",
 		Page:   "admin-logs",
-		Config: h.config,
+		Config:    h.config,
+		AdminPath: config.GetAdminPath(),
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -998,6 +1039,7 @@ type AdminPageData struct {
 	SchedulerRunning bool // Per AI.md PART 19: Scheduler is ALWAYS RUNNING
 	Extra            map[string]interface{}
 	CSRFToken        string // Per AI.md PART 20: CSRF protection on all forms
+	AdminPath        string // Per AI.md PART 17: Configurable admin path (default: "admin")
 }
 
 // DashboardStats holds dashboard statistics
@@ -1826,7 +1868,8 @@ func (h *Handler) handleHelp(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
 		Title:  "Help & Documentation",
 		Page:   "admin-help",
-		Config: h.config,
+		Config:    h.config,
+		AdminPath: config.GetAdminPath(),
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -2561,7 +2604,8 @@ func (h *Handler) handleSetup(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
 		Title:  "Admin Setup",
 		Page:   "admin-setup",
-		Config: h.config,
+		Config:    h.config,
+		AdminPath: config.GetAdminPath(),
 		Error:  r.URL.Query().Get("error"),
 		Extra: map[string]interface{}{
 			"SetupTokenRequired": setupTokenRequired,
@@ -2782,7 +2826,8 @@ func (h *Handler) handleInviteAccept(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
 		Title:  "Accept Admin Invite",
 		Page:   "admin-invite",
-		Config: h.config,
+		Config:    h.config,
+		AdminPath: config.GetAdminPath(),
 		Error:  r.URL.Query().Get("error"),
 		Extra: map[string]interface{}{
 			"Invite":           invite,
@@ -2852,7 +2897,8 @@ func (h *Handler) renderInviteError(w http.ResponseWriter, message string) {
 	data := &AdminPageData{
 		Title:  "Invalid Invite",
 		Page:   "admin-invite-error",
-		Config: h.config,
+		Config:    h.config,
+		AdminPath: config.GetAdminPath(),
 		Error:  message,
 	}
 
@@ -3504,7 +3550,8 @@ func (h *Handler) handleRateLimiting(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
 		Title:  "Rate Limiting",
 		Page:   "admin-ratelimit",
-		Config: h.config,
+		Config:    h.config,
+		AdminPath: config.GetAdminPath(),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	h.renderAdminPage(w, "ratelimit", data)
@@ -3516,7 +3563,8 @@ func (h *Handler) handleBlocklists(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
 		Title:  "Blocklists",
 		Page:   "admin-blocklists",
-		Config: h.config,
+		Config:    h.config,
+		AdminPath: config.GetAdminPath(),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	h.renderAdminPage(w, "blocklists", data)
@@ -3528,7 +3576,8 @@ func (h *Handler) handleUserInvites(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
 		Title:  "User Invites",
 		Page:   "admin-user-invites",
-		Config: h.config,
+		Config:    h.config,
+		AdminPath: config.GetAdminPath(),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	h.renderAdminPage(w, "user-invites", data)
@@ -3542,7 +3591,8 @@ func (h *Handler) handleClusterAddNode(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
 		Title:  "Add Cluster Node",
 		Page:   "admin-cluster-add",
-		Config: h.config,
+		Config:    h.config,
+		AdminPath: config.GetAdminPath(),
 		Extra:  make(map[string]interface{}),
 	}
 
@@ -3567,7 +3617,8 @@ func (h *Handler) handleHelpRoot(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
 		Title:  "Help & Documentation",
 		Page:   "admin-help",
-		Config: h.config,
+		Config:    h.config,
+		AdminPath: config.GetAdminPath(),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	h.renderAdminPage(w, "help", data)

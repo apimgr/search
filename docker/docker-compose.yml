@@ -18,8 +18,9 @@ services:
       - MODE=production
       - TZ=America/New_York
     ports:
-      # Production: bound to Docker bridge only
-      - "172.17.0.1:64580:80"
+      # Default: accessible on all interfaces
+      # For production security, bind to specific IP: "127.0.0.1:64580:80"
+      - "64580:80"
     volumes:
       # TEMP DIR WORKFLOW: ./rootfs/ resolves to $TEMP_DIR/rootfs/
       # NEVER run from project directory - always use temp dir workflow

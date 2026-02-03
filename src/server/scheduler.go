@@ -5,15 +5,17 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
+	"github.com/apimgr/search/src/backup"
 	"github.com/apimgr/search/src/scheduler"
 )
 
 // initScheduler initializes and starts the scheduler per AI.md PART 19
 // The scheduler is ALWAYS RUNNING - there is no enable/disable option
 func (s *Server) initScheduler(db *sql.DB) {
-	// Standalone node ID (cluster mode not implemented)
+	// Standalone node ID (single-node mode)
 	nodeID := "standalone"
 	sched := scheduler.New(db, nodeID)
 
@@ -102,16 +104,16 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 			return nil
 		},
 
-		// Backup Daily - full backup with incremental
+		// Backup Daily - full backup with verification
+		// Per AI.md PART 22: Backup verification is NON-NEGOTIABLE
 		BackupDaily: func(ctx context.Context) error {
-			log.Println("[Task] Daily backup complete")
-			return nil
+			return s.performScheduledBackup(ctx, "daily")
 		},
 
-		// Backup Hourly - hourly incremental
+		// Backup Hourly - hourly incremental backup
+		// Per AI.md PART 22: Optional hourly backup (disabled by default)
 		BackupHourly: func(ctx context.Context) error {
-			log.Println("[Task] Hourly backup complete")
-			return nil
+			return s.performScheduledBackup(ctx, "hourly")
 		},
 
 		// Healthcheck Self - verify own health
@@ -247,5 +249,127 @@ func (s *Server) storeTaskFailureNotification(notification *scheduler.TaskFailur
 
 	if _, err := s.dbManager.ServerDB().Exec(ctx, query, notifID, title, message); err != nil {
 		log.Printf("[Scheduler] Failed to store task failure notification: %v", err)
+	}
+}
+
+// performScheduledBackup performs a scheduled backup with verification
+// Per AI.md PART 22: Backup verification is NON-NEGOTIABLE
+// - File exists
+// - Size > 0
+// - Checksum valid
+// - Manifest readable
+// - Decrypt test (if encrypted)
+// Only delete old backups if new backup passes ALL verification checks.
+func (s *Server) performScheduledBackup(ctx context.Context, backupType string) error {
+	log.Printf("[Backup] Starting %s backup...", backupType)
+
+	// Create backup manager
+	mgr := backup.NewManager()
+	mgr.SetCreatedBy("scheduler") // Per AI.md PART 25: attribution
+
+	// Per AI.md PART 22: Check compliance mode
+	// If compliance enabled and no password, skip backup with warning
+	complianceEnabled := s.config.Server.Compliance.Enabled
+	encryptionEnabled := s.config.Server.Backup.Encryption.Enabled
+
+	// Get backup password from environment variable (NEVER stored in config)
+	// Per AI.md PART 22/24: Password is NEVER stored - derived on-demand
+	backupPassword := os.Getenv("BACKUP_PASSWORD")
+
+	if complianceEnabled {
+		if backupPassword == "" {
+			// Per AI.md PART 22: Scheduled backups skip with audit log warning
+			log.Printf("[Backup] WARNING: Compliance mode enabled but BACKUP_PASSWORD not set - backup skipped")
+			s.logAuditEvent("backup.skipped", "Compliance mode requires backup encryption but password not set")
+			return fmt.Errorf("compliance mode requires backup encryption but BACKUP_PASSWORD not set")
+		}
+		// Compliance mode forces encryption
+		encryptionEnabled = true
+	}
+
+	// Set password if encryption is enabled
+	if encryptionEnabled && backupPassword != "" {
+		mgr.SetPassword(backupPassword)
+	}
+
+	// Get retention settings from config
+	// Per AI.md PART 22: max_backups (default: 1)
+	maxBackups := s.config.Server.Backup.Retention.MaxBackups
+	if maxBackups < 1 {
+		maxBackups = 1 // Minimum 1 backup
+	}
+
+	var backupPath string
+	var verifyResult *backup.VerificationResult
+	var err error
+
+	// Create backup with verification
+	// Per AI.md PART 22: Only delete old backups if new backup passes ALL verification checks
+	if encryptionEnabled && backupPassword != "" {
+		// Create encrypted backup with verification
+		backupPath, verifyResult, err = mgr.CreateEncryptedAndVerify("")
+	} else {
+		// Create unencrypted backup with verification
+		backupPath, verifyResult, err = mgr.CreateAndVerify("")
+	}
+
+	if err != nil {
+		// Per AI.md PART 22: On failure, DO NOT delete any existing backups
+		log.Printf("[Backup] %s backup failed: %v", backupType, err)
+		s.logAuditEvent("backup.verification_failed", fmt.Sprintf("%s backup failed: %v", backupType, err))
+		return err
+	}
+
+	// Log verification results
+	if verifyResult != nil && verifyResult.AllPassed {
+		log.Printf("[Backup] %s backup created and verified: %s", backupType, backupPath)
+		s.logAuditEvent("backup.created", fmt.Sprintf("%s backup created: %s (verified: file=%v, size=%v, checksum=%v, manifest=%v)",
+			backupType, backupPath, verifyResult.FileExists, verifyResult.SizeValid, verifyResult.ChecksumValid, verifyResult.ManifestValid))
+	}
+
+	// Apply retention policy only after verification passes
+	// Per AI.md PART 22: Only delete old backups if new backup passes ALL verification checks
+	if err := mgr.ScheduledBackupWithVerification(maxBackups); err != nil {
+		// Don't fail the task, just log the retention cleanup error
+		log.Printf("[Backup] Warning: retention cleanup failed: %v", err)
+	}
+
+	// Apply advanced retention policy if configured
+	// Per AI.md PART 22: keep_weekly, keep_monthly, keep_yearly
+	retention := s.config.Server.Backup.Retention
+	if retention.KeepWeekly > 0 || retention.KeepMonthly > 0 || retention.KeepYearly > 0 {
+		policy := backup.RetentionPolicy{
+			Count: maxBackups,
+			Day:   7, // Keep 7 days of daily backups
+			Week:  retention.KeepWeekly,
+			Month: retention.KeepMonthly,
+			Year:  retention.KeepYearly,
+		}
+		if err := mgr.ApplyRetention(policy); err != nil {
+			log.Printf("[Backup] Warning: advanced retention policy failed: %v", err)
+		} else {
+			s.logAuditEvent("backup.retention_cleanup", "Applied retention policy")
+		}
+	}
+
+	log.Printf("[Backup] %s backup complete", backupType)
+	return nil
+}
+
+// logAuditEvent logs an audit event (simplified version for scheduler)
+// Per AI.md PART 22: Audit logging for backup events
+func (s *Server) logAuditEvent(event, details string) {
+	if s.dbManager == nil || s.dbManager.ServerDB() == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	query := `INSERT INTO audit_log (event, details, ip_address, user_agent, created_at)
+		VALUES (?, ?, 'scheduler', 'internal', CURRENT_TIMESTAMP)`
+
+	if _, err := s.dbManager.ServerDB().Exec(ctx, query, event, details); err != nil {
+		log.Printf("[Audit] Failed to log event %s: %v", event, err)
 	}
 }

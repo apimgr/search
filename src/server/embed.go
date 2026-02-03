@@ -311,6 +311,7 @@ type PageData struct {
 	DefaultWidgets string // JSON array of default widget types
 	CookieConsent  *CookieConsentData
 	Extra          map[string]interface{}
+	AdminPath      string // Per AI.md PART 17: Configurable admin path (default: "admin")
 }
 
 // ErrorPageData extends PageData with error-specific fields
@@ -482,6 +483,7 @@ func NewPageData(cfg *config.Config, title, page string) *PageData {
 		Dir:         "ltr",
 		Config:      cfg,
 		BuildDate:   time.Now().Format(time.RFC3339),
+		AdminPath:   config.GetAdminPath(), // Per AI.md PART 17: Configurable admin path
 	}
 
 	// Populate active announcements from config

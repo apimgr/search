@@ -98,8 +98,8 @@ Restrict access to the admin panel:
 
 ```bash
 # Example: Only allow admin access from internal network
-iptables -A INPUT -p tcp --dport 8080 -s 192.168.1.0/24 -j ACCEPT
-iptables -A INPUT -p tcp --dport 8080 -j DROP
+iptables -A INPUT -p tcp --dport 64580 -s 192.168.1.0/24 -j ACCEPT
+iptables -A INPUT -p tcp --dport 64580 -j DROP
 ```
 
 ## Security Reporting

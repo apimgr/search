@@ -11,6 +11,7 @@ on:
 
 env:
   PROJECTNAME: search
+  OFFICIALSITE: https://scour.li
 
 jobs:
   build:
@@ -21,6 +22,20 @@ jobs:
           - goos: linux
             goarch: amd64
           - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+            ext: .exe
+          - goos: windows
+            goarch: arm64
+            ext: .exe
+          - goos: freebsd
+            goarch: amd64
+          - goos: freebsd
             goarch: arm64
 
     steps:
@@ -43,8 +58,8 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'github.com/apimgr/search/src/config.Version=${{ env.VERSION }}' -X 'github.com/apimgr/search/src/config.CommitID=${{ env.COMMIT_ID }}' -X 'github.com/apimgr/search/src/config.BuildDate=${{ env.BUILD_DATE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }} ./src
+          LDFLAGS="-s -w -X 'github.com/apimgr/search/src/config.Version=${{ env.VERSION }}' -X 'github.com/apimgr/search/src/config.CommitID=${{ env.COMMIT_ID }}' -X 'github.com/apimgr/search/src/config.BuildDate=${{ env.BUILD_DATE }}' -X 'github.com/apimgr/search/src/config.OfficialSite=${{ env.OFFICIALSITE }}'"
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src
 
       - name: Build CLI
         if: hashFiles('src/client/') != ''
@@ -53,21 +68,21 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'github.com/apimgr/search/src/client/cmd.ProjectName=${{ env.PROJECTNAME }}' -X 'github.com/apimgr/search/src/client/cmd.Version=${{ env.VERSION }}' -X 'github.com/apimgr/search/src/client/cmd.CommitID=${{ env.COMMIT_ID }}' -X 'github.com/apimgr/search/src/client/cmd.BuildDate=${{ env.BUILD_DATE }}' -X 'github.com/apimgr/search/src/client/api.ProjectName=${{ env.PROJECTNAME }}' -X 'github.com/apimgr/search/src/client/api.Version=${{ env.VERSION }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli ./src/client
+          LDFLAGS="-s -w -X 'github.com/apimgr/search/src/client/cmd.ProjectName=${{ env.PROJECTNAME }}' -X 'github.com/apimgr/search/src/client/cmd.Version=${{ env.VERSION }}' -X 'github.com/apimgr/search/src/client/cmd.CommitID=${{ env.COMMIT_ID }}' -X 'github.com/apimgr/search/src/client/cmd.BuildDate=${{ env.BUILD_DATE }}' -X 'github.com/apimgr/search/src/client/cmd.OfficialSite=${{ env.OFFICIALSITE }}' -X 'github.com/apimgr/search/src/client/api.ProjectName=${{ env.PROJECTNAME }}' -X 'github.com/apimgr/search/src/client/api.Version=${{ env.VERSION }}'"
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
       - name: Upload CLI artifact
         if: hashFiles('src/client/') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
-          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
+          name: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
   release:
     needs: build

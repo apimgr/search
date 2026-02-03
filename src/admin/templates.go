@@ -1,7 +1,9 @@
 package admin
 
 import (
+	"context"
 	"fmt"
+	"html/template"
 	"net/http"
 	"strings"
 	"time"
@@ -192,6 +194,8 @@ func (h *Handler) renderAdminPage(w http.ResponseWriter, page string, data *Admi
 		h.renderInviteErrorContent(w, data)
 	case "nodes":
 		h.renderNodesContent(w, data)
+	case "audit-logs":
+		h.renderAuditLogsContent(w, data)
 	}
 
 	// Render admin footer
@@ -553,10 +557,119 @@ func (h *Handler) renderTokensContent(w http.ResponseWriter, data *AdminPageData
 }
 
 func (h *Handler) renderLogsContent(w http.ResponseWriter, data *AdminPageData) {
+	logDir := h.config.GetLogDir()
 	fmt.Fprintf(w, `
             <div class="admin-section">
                 <h2>Server Logs</h2>
-                <p class="text-secondary">Log viewing coming soon. Check server output for logs.</p>
+                <p class="text-secondary">Server logs are written to the configured log directory.</p>
+
+                <div class="info-card">
+                    <h3>Log Location</h3>
+                    <code class="long-string">%s</code>
+                </div>
+
+                <div class="info-card">
+                    <h3>Log Files</h3>
+                    <ul>
+                        <li><strong>access.log</strong> - HTTP request logs</li>
+                        <li><strong>error.log</strong> - Error and warning messages</li>
+                        <li><strong>app.log</strong> - Application events</li>
+                    </ul>
+                </div>
+
+                <div class="info-card">
+                    <h3>View Logs</h3>
+                    <p>Use these commands to view logs:</p>
+                    <pre>tail -f %s/access.log
+tail -f %s/error.log
+tail -f %s/app.log</pre>
+                </div>
+
+                <div class="info-card">
+                    <h3>Audit Logs</h3>
+                    <p>For security audit logs (login attempts, config changes, etc.), visit:</p>
+                    <a href="/admin/server/logs/audit" class="btn btn-primary">View Audit Logs</a>
+                </div>
+            </div>`, logDir, logDir, logDir, logDir)
+}
+
+func (h *Handler) renderAuditLogsContent(w http.ResponseWriter, data *AdminPageData) {
+	fmt.Fprintf(w, `
+            <div class="admin-section">
+                <h2>Audit Logs</h2>
+                <p class="text-secondary">Security audit trail for administrative actions.</p>
+
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Action</th>
+                                <th>Resource</th>
+                                <th>IP Address</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody>`)
+
+	// Get audit logs from database if available
+	if h.service != nil {
+		ctx := context.Background()
+		logs, err := h.service.GetAuditLogs(ctx, 100, 0)
+		if err == nil && len(logs) > 0 {
+			for _, entry := range logs {
+				details := entry.Details
+				if len(details) > 50 {
+					details = details[:50] + "..."
+				}
+				fmt.Fprintf(w, `
+                            <tr>
+                                <td>%s</td>
+                                <td><code>%s</code></td>
+                                <td>%s</td>
+                                <td class="long-string">%s</td>
+                                <td>%s</td>
+                            </tr>`,
+					entry.Timestamp.Format("2006-01-02 15:04:05"),
+					template.HTMLEscapeString(entry.Action),
+					template.HTMLEscapeString(entry.Resource),
+					template.HTMLEscapeString(entry.IPAddress),
+					template.HTMLEscapeString(details))
+			}
+		} else if err != nil {
+			fmt.Fprintf(w, `
+                            <tr>
+                                <td colspan="5" class="text-center text-secondary">Error loading audit logs: %s</td>
+                            </tr>`, template.HTMLEscapeString(err.Error()))
+		} else {
+			fmt.Fprintf(w, `
+                            <tr>
+                                <td colspan="5" class="text-center text-secondary">No audit log entries found.</td>
+                            </tr>`)
+		}
+	} else {
+		fmt.Fprintf(w, `
+                            <tr>
+                                <td colspan="5" class="text-center text-secondary">Database not available.</td>
+                            </tr>`)
+	}
+
+	fmt.Fprintf(w, `
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="info-card">
+                    <h3>About Audit Logs</h3>
+                    <p>Audit logs track security-relevant events:</p>
+                    <ul>
+                        <li>Admin login attempts (successful and failed)</li>
+                        <li>Configuration changes</li>
+                        <li>User management actions</li>
+                        <li>API token creation/revocation</li>
+                        <li>Backup and restore operations</li>
+                    </ul>
+                </div>
             </div>`)
 }
 

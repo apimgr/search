@@ -2,9 +2,42 @@ package cmd
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"testing"
 )
+
+// captureStdout captures stdout during function execution
+// Uses a goroutine to read concurrently to avoid pipe buffer deadlock
+func captureStdout(fn func() error) (string, error) {
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		return "", err
+	}
+	os.Stdout = w
+
+	// Read from pipe concurrently to avoid buffer deadlock
+	outputChan := make(chan string)
+	go func() {
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		outputChan <- buf.String()
+	}()
+
+	// Run the function
+	fnErr := fn()
+
+	// Restore stdout and close writer to signal EOF to reader
+	w.Close()
+	os.Stdout = oldStdout
+
+	// Wait for reader goroutine to finish
+	output := <-outputChan
+	r.Close()
+
+	return output, fnErr
+}
 
 // Tests for detectShell
 
@@ -58,24 +91,14 @@ func TestDetectShellEmptyEnv(t *testing.T) {
 // Tests for printCompletions
 
 func TestPrintCompletionsBash(t *testing.T) {
-	// Capture stdout
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := printCompletions("bash")
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	output, err := captureStdout(func() error {
+		return printCompletions("bash")
+	})
 
 	if err != nil {
 		t.Fatalf("printCompletions('bash') error = %v", err)
 	}
 
-	output := buf.String()
 	// Bash completion should contain certain keywords
 	if len(output) == 0 {
 		t.Error("printCompletions('bash') produced no output")
@@ -83,89 +106,57 @@ func TestPrintCompletionsBash(t *testing.T) {
 }
 
 func TestPrintCompletionsZsh(t *testing.T) {
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := printCompletions("zsh")
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	output, err := captureStdout(func() error {
+		return printCompletions("zsh")
+	})
 
 	if err != nil {
 		t.Fatalf("printCompletions('zsh') error = %v", err)
 	}
 
-	if buf.Len() == 0 {
+	if len(output) == 0 {
 		t.Error("printCompletions('zsh') produced no output")
 	}
 }
 
 func TestPrintCompletionsFish(t *testing.T) {
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := printCompletions("fish")
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	output, err := captureStdout(func() error {
+		return printCompletions("fish")
+	})
 
 	if err != nil {
 		t.Fatalf("printCompletions('fish') error = %v", err)
 	}
 
-	if buf.Len() == 0 {
+	if len(output) == 0 {
 		t.Error("printCompletions('fish') produced no output")
 	}
 }
 
 func TestPrintCompletionsPowershell(t *testing.T) {
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := printCompletions("powershell")
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	output, err := captureStdout(func() error {
+		return printCompletions("powershell")
+	})
 
 	if err != nil {
 		t.Fatalf("printCompletions('powershell') error = %v", err)
 	}
 
-	if buf.Len() == 0 {
+	if len(output) == 0 {
 		t.Error("printCompletions('powershell') produced no output")
 	}
 }
 
 func TestPrintCompletionsPwsh(t *testing.T) {
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := printCompletions("pwsh")
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	output, err := captureStdout(func() error {
+		return printCompletions("pwsh")
+	})
 
 	if err != nil {
 		t.Fatalf("printCompletions('pwsh') error = %v", err)
 	}
 
-	if buf.Len() == 0 {
+	if len(output) == 0 {
 		t.Error("printCompletions('pwsh') produced no output")
 	}
 }
@@ -175,24 +166,15 @@ func TestPrintCompletionsPosixShells(t *testing.T) {
 
 	for _, shell := range shells {
 		t.Run(shell, func(t *testing.T) {
-			oldStdout := os.Stdout
-			r, w, _ := os.Pipe()
-			os.Stdout = w
-
-			err := printCompletions(shell)
-
-			w.Close()
-			os.Stdout = oldStdout
-
-			var buf bytes.Buffer
-			buf.ReadFrom(r)
+			output, err := captureStdout(func() error {
+				return printCompletions(shell)
+			})
 
 			if err != nil {
 				t.Fatalf("printCompletions(%q) error = %v", shell, err)
 			}
 
 			// POSIX shells should output a comment
-			output := buf.String()
 			if len(output) == 0 {
 				t.Errorf("printCompletions(%q) produced no output", shell)
 			}
@@ -211,68 +193,43 @@ func TestPrintCompletionsUnsupported(t *testing.T) {
 // Tests for printInit
 
 func TestPrintInitBash(t *testing.T) {
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := printInit("bash")
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	output, err := captureStdout(func() error {
+		return printInit("bash")
+	})
 
 	if err != nil {
 		t.Fatalf("printInit('bash') error = %v", err)
 	}
 
-	output := buf.String()
 	if len(output) == 0 {
 		t.Error("printInit('bash') produced no output")
 	}
 }
 
 func TestPrintInitZsh(t *testing.T) {
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := printInit("zsh")
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	output, err := captureStdout(func() error {
+		return printInit("zsh")
+	})
 
 	if err != nil {
 		t.Fatalf("printInit('zsh') error = %v", err)
 	}
 
-	if buf.Len() == 0 {
+	if len(output) == 0 {
 		t.Error("printInit('zsh') produced no output")
 	}
 }
 
 func TestPrintInitFish(t *testing.T) {
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := printInit("fish")
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	output, err := captureStdout(func() error {
+		return printInit("fish")
+	})
 
 	if err != nil {
 		t.Fatalf("printInit('fish') error = %v", err)
 	}
 
-	if buf.Len() == 0 {
+	if len(output) == 0 {
 		t.Error("printInit('fish') produced no output")
 	}
 }
@@ -282,23 +239,15 @@ func TestPrintInitPosixShells(t *testing.T) {
 
 	for _, shell := range shells {
 		t.Run(shell, func(t *testing.T) {
-			oldStdout := os.Stdout
-			r, w, _ := os.Pipe()
-			os.Stdout = w
-
-			err := printInit(shell)
-
-			w.Close()
-			os.Stdout = oldStdout
-
-			var buf bytes.Buffer
-			buf.ReadFrom(r)
+			output, err := captureStdout(func() error {
+				return printInit(shell)
+			})
 
 			if err != nil {
 				t.Fatalf("printInit(%q) error = %v", shell, err)
 			}
 
-			if buf.Len() == 0 {
+			if len(output) == 0 {
 				t.Errorf("printInit(%q) produced no output", shell)
 			}
 		})
@@ -306,45 +255,29 @@ func TestPrintInitPosixShells(t *testing.T) {
 }
 
 func TestPrintInitPowershell(t *testing.T) {
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := printInit("powershell")
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	output, err := captureStdout(func() error {
+		return printInit("powershell")
+	})
 
 	if err != nil {
 		t.Fatalf("printInit('powershell') error = %v", err)
 	}
 
-	if buf.Len() == 0 {
+	if len(output) == 0 {
 		t.Error("printInit('powershell') produced no output")
 	}
 }
 
 func TestPrintInitPwsh(t *testing.T) {
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := printInit("pwsh")
-
-	w.Close()
-	os.Stdout = oldStdout
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	output, err := captureStdout(func() error {
+		return printInit("pwsh")
+	})
 
 	if err != nil {
 		t.Fatalf("printInit('pwsh') error = %v", err)
 	}
 
-	if buf.Len() == 0 {
+	if len(output) == 0 {
 		t.Error("printInit('pwsh') produced no output")
 	}
 }
@@ -471,14 +404,9 @@ func TestCompletionsCmdRunEAutoDetect(t *testing.T) {
 	os.Setenv("SHELL", "/bin/bash")
 	defer os.Unsetenv("SHELL")
 
-	oldStdout := os.Stdout
-	_, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := completionsCmd.RunE(completionsCmd, []string{})
-
-	w.Close()
-	os.Stdout = oldStdout
+	_, err := captureStdout(func() error {
+		return completionsCmd.RunE(completionsCmd, []string{})
+	})
 
 	if err != nil {
 		t.Fatalf("completionsCmd.RunE() auto-detect error = %v", err)
@@ -486,14 +414,9 @@ func TestCompletionsCmdRunEAutoDetect(t *testing.T) {
 }
 
 func TestCompletionsCmdRunEWithArg(t *testing.T) {
-	oldStdout := os.Stdout
-	_, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := completionsCmd.RunE(completionsCmd, []string{"zsh"})
-
-	w.Close()
-	os.Stdout = oldStdout
+	_, err := captureStdout(func() error {
+		return completionsCmd.RunE(completionsCmd, []string{"zsh"})
+	})
 
 	if err != nil {
 		t.Fatalf("completionsCmd.RunE(['zsh']) error = %v", err)
@@ -506,14 +429,9 @@ func TestInitCmdRunEAutoDetect(t *testing.T) {
 	os.Setenv("SHELL", "/bin/bash")
 	defer os.Unsetenv("SHELL")
 
-	oldStdout := os.Stdout
-	_, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := initCmd.RunE(initCmd, []string{})
-
-	w.Close()
-	os.Stdout = oldStdout
+	_, err := captureStdout(func() error {
+		return initCmd.RunE(initCmd, []string{})
+	})
 
 	if err != nil {
 		t.Fatalf("initCmd.RunE() auto-detect error = %v", err)
@@ -521,14 +439,9 @@ func TestInitCmdRunEAutoDetect(t *testing.T) {
 }
 
 func TestInitCmdRunEWithArg(t *testing.T) {
-	oldStdout := os.Stdout
-	_, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := initCmd.RunE(initCmd, []string{"fish"})
-
-	w.Close()
-	os.Stdout = oldStdout
+	_, err := captureStdout(func() error {
+		return initCmd.RunE(initCmd, []string{"fish"})
+	})
 
 	if err != nil {
 		t.Fatalf("initCmd.RunE(['fish']) error = %v", err)

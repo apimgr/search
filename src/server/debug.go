@@ -3,9 +3,12 @@ package server
 import (
 	"encoding/json"
 	"expvar"
+	"fmt"
 	"net/http"
 	"net/http/pprof"
 	"runtime"
+
+	"github.com/apimgr/search/src/config"
 )
 
 // registerDebugRoutes registers debug endpoints (DEBUG=true only)
@@ -73,6 +76,8 @@ func (s *Server) handleDebugRoutes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Per AI.md PART 17: Admin path is configurable (default: "admin")
+	adminPath := config.GetAdminPath()
 	routes := []string{
 		"GET /",
 		"GET /search",
@@ -80,7 +85,7 @@ func (s *Server) handleDebugRoutes(w http.ResponseWriter, r *http.Request) {
 		"GET /healthz",
 		"GET /preferences",
 		"GET /static/*",
-		"GET /admin/*",
+		fmt.Sprintf("GET /%s/*", adminPath),
 		"GET /api/v1/*",
 		"GET /debug/*",
 	}

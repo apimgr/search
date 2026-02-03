@@ -241,22 +241,5 @@
         </p>
     </footer>
 </div>
-
-<script>
-// Auto-refresh countdown - progressively enhanced
-(function() {
-    var seconds = 30;
-    var countdown = document.getElementById('countdown');
-    if (!countdown) return;
-
-    var timer = setInterval(function() {
-        seconds--;
-        countdown.textContent = seconds;
-        if (seconds <= 0) {
-            clearInterval(timer);
-            window.location.reload();
-        }
-    }, 1000);
-})();
-</script>
+{{/* Per AI.md PART 16: NO inline JS - auto-refresh in app.js */}}
 {{end}}

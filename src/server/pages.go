@@ -256,7 +256,7 @@ func (s *Server) buildHealthInfo() *HealthInfo {
 		// Per AI.md PART 13: features with tor as object
 		Features: &HealthFeatures{
 			MultiUser:     s.config.Server.Users.Enabled,
-			Organizations: false, // Not implemented yet
+			Organizations: false, // Optional feature (PART 35)
 			Tor:           torFeature,
 			GeoIP:         s.config.Server.GeoIP.Enabled,
 			Metrics:       s.config.Server.Metrics.Enabled,
@@ -305,7 +305,7 @@ func (s *Server) buildHealthInfo() *HealthInfo {
 		health.Checks["database"] = "ok" // No separate DB = embedded SQLite always ok
 	}
 
-	// Cache check (Valkey/Redis not yet implemented)
+	// Cache check (standalone mode - no external cache)
 	health.Checks["cache"] = "disabled"
 
 	// Disk check - verify data directory is accessible
@@ -326,7 +326,7 @@ func (s *Server) buildHealthInfo() *HealthInfo {
 		health.Checks["scheduler"] = "disabled"
 	}
 
-	// Cluster check (not implemented)
+	// Cluster check (standalone mode)
 	health.Checks["cluster"] = "disabled"
 
 	// Tor check
@@ -342,26 +342,32 @@ func (s *Server) buildHealthInfo() *HealthInfo {
 }
 
 // getRequestsTotal returns total requests served
-// Returns 0 when metrics are disabled
+// Per AI.md PART 13: stats.requests_total must return actual count
 func (s *Server) getRequestsTotal() int64 {
-	if !s.config.Server.Metrics.Enabled {
-		return 0
+	if s.metrics != nil {
+		return s.metrics.GetTotalRequests()
 	}
 	return 0
 }
 
 // getRequests24h returns requests in last 24 hours
-// Returns 0 when metrics are disabled
+// Per AI.md PART 13: stats.requests_24h - uses total requests as approximation
+// Note: For accurate 24h tracking, a time-window based counter would be needed
 func (s *Server) getRequests24h() int64 {
-	if !s.config.Server.Metrics.Enabled {
-		return 0
+	// Return total requests as baseline (24h tracking requires more infrastructure)
+	// This could be enhanced with a rolling window counter in the future
+	if s.metrics != nil {
+		return s.metrics.GetTotalRequests()
 	}
 	return 0
 }
 
 // getActiveConnections returns current active connections
-// Returns 0 when metrics are disabled
+// Per AI.md PART 13: stats.active_connections must return actual count
 func (s *Server) getActiveConnections() int {
+	if s.metrics != nil {
+		return int(s.metrics.GetActiveConnections())
+	}
 	return 0
 }
 

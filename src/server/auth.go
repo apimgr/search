@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/apimgr/search/src/config"
 	emailpkg "github.com/apimgr/search/src/email"
 	userpkg "github.com/apimgr/search/src/user"
 )
@@ -119,8 +120,8 @@ func (s *Server) processLogin(w http.ResponseWriter, r *http.Request) {
 
 			// Per AI.md PART 11: Admin login ALWAYS redirects to /{admin_path}
 			// Never to user routes, never to ?redirect= param
-			// Note: Admin path is currently hardcoded to /admin
-			http.Redirect(w, r, "/admin", http.StatusSeeOther)
+			adminPath := "/" + config.GetAdminPath()
+			http.Redirect(w, r, adminPath, http.StatusSeeOther)
 			return
 		}
 	}
@@ -170,7 +171,9 @@ func (s *Server) processLogin(w http.ResponseWriter, r *http.Request) {
 		redirectURL = "/users"
 	}
 	// Security: Prevent user redirect to admin routes
-	if strings.HasPrefix(redirectURL, "/admin") {
+	// Per AI.md PART 17: Admin path is configurable (default: "admin")
+	adminPath := "/" + config.GetAdminPath()
+	if strings.HasPrefix(redirectURL, adminPath) {
 		redirectURL = "/users"
 	}
 	http.Redirect(w, r, redirectURL, http.StatusSeeOther)

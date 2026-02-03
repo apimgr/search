@@ -644,3 +644,55 @@ func (s *AdminService) HasAnyAdmin(ctx context.Context) (bool, error) {
 	err := row.Scan(&count)
 	return count > 0, err
 }
+
+// AuditLogEntry represents an audit log entry for display
+type AuditLogEntry struct {
+	ID        int64
+	Timestamp time.Time
+	UserID    *int64
+	Action    string
+	Resource  string
+	Details   string
+	IPAddress string
+	UserAgent string
+}
+
+// GetAuditLogs retrieves audit log entries
+func (s *AdminService) GetAuditLogs(ctx context.Context, limit, offset int) ([]*AuditLogEntry, error) {
+	rows, err := s.db.Query(ctx,
+		`SELECT id, timestamp, user_id, action, resource, details, ip_address, user_agent
+		 FROM audit_log ORDER BY timestamp DESC LIMIT ? OFFSET ?`,
+		limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	entries := make([]*AuditLogEntry, 0)
+	for rows.Next() {
+		e := &AuditLogEntry{}
+		var userID sql.NullInt64
+		var resource, details, ipAddress, userAgent sql.NullString
+		err := rows.Scan(&e.ID, &e.Timestamp, &userID, &e.Action, &resource, &details, &ipAddress, &userAgent)
+		if err != nil {
+			return nil, err
+		}
+		if userID.Valid {
+			e.UserID = &userID.Int64
+		}
+		if resource.Valid {
+			e.Resource = resource.String
+		}
+		if details.Valid {
+			e.Details = details.String
+		}
+		if ipAddress.Valid {
+			e.IPAddress = ipAddress.String
+		}
+		if userAgent.Valid {
+			e.UserAgent = userAgent.String
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}

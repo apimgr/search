@@ -1,10 +1,11 @@
 {{define "admin/footer"}}
 {{/* Admin Panel Footer - per AI.md PART 17 */}}
+{{/* Per AI.md PART 17: Admin path is configurable (default: "admin") */}}
 <footer class="admin-footer">
     <div class="admin-footer-content">
         {{/* Version info */}}
         <span class="admin-footer-version">
-            <a href="/admin/server/info">search {{version}}</a>
+            <a href="/{{.AdminPath}}/server/info">search {{version}}</a>
         </span>
 
         <span class="admin-footer-separator">•</span>

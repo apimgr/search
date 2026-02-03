@@ -62,6 +62,87 @@ func SetBackupDirOverride(dir string) {
 	cliOverrides["backup"] = dir
 }
 
+// SetAdminPathOverride sets a CLI override for the admin panel path
+// Per AI.md PART 8: --admin-path flag to customize admin panel URL
+func SetAdminPathOverride(path string) {
+	cliOverrideMu.Lock()
+	defer cliOverrideMu.Unlock()
+	cliOverrides["admin_path"] = path
+}
+
+// SetColorMode sets the color output mode
+// Per AI.md PART 8: --color {always|never|auto} flag
+// Priority: CLI flag > Config > NO_COLOR env > Auto-detect
+func SetColorMode(mode string) {
+	cliOverrideMu.Lock()
+	defer cliOverrideMu.Unlock()
+	cliOverrides["color"] = mode
+}
+
+// GetAdminPath returns the admin panel path
+// Per AI.md PART 8: Configurable admin path, defaults to "admin"
+func GetAdminPath() string {
+	// Check CLI override first (--admin-path flag)
+	if path, ok := getOverride("admin_path"); ok && path != "" {
+		return path
+	}
+
+	// Check environment variable
+	if path := os.Getenv("SEARCH_ADMIN_PATH"); path != "" {
+		return path
+	}
+
+	// Default to "admin"
+	return "admin"
+}
+
+// GetColorMode returns the color output mode
+// Per AI.md PART 8: Priority: CLI flag > Config > NO_COLOR env > Auto-detect
+func GetColorMode() string {
+	// Check CLI override first (--color flag)
+	if mode, ok := getOverride("color"); ok && mode != "" {
+		return mode
+	}
+
+	// Check environment variable
+	if mode := os.Getenv("SEARCH_COLOR"); mode != "" {
+		return mode
+	}
+
+	// Check NO_COLOR environment variable (standard)
+	if os.Getenv("NO_COLOR") != "" {
+		return "never"
+	}
+
+	// Auto-detect based on terminal
+	return "auto"
+}
+
+// IsColorEnabled returns whether color output should be enabled
+// Per AI.md PART 8: Honor NO_COLOR standard
+func IsColorEnabled() bool {
+	mode := GetColorMode()
+	switch mode {
+	case "always":
+		return true
+	case "never":
+		return false
+	default: // "auto"
+		// Check if stdout is a terminal
+		return isTerminal()
+	}
+}
+
+// isTerminal checks if stdout is a terminal (platform-specific)
+func isTerminal() bool {
+	// Check for common CI/non-terminal indicators
+	if os.Getenv("CI") != "" || os.Getenv("TERM") == "dumb" {
+		return false
+	}
+	// Check TERM is set (common terminal indicator)
+	return os.Getenv("TERM") != ""
+}
+
 // getOverride returns a CLI override if set
 func getOverride(key string) (string, bool) {
 	cliOverrideMu.RLock()

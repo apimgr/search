@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/i18n"
 )
 
@@ -60,10 +61,11 @@ func (s *Server) handleRobotsTxt(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Allow: %s\n", path)
 	}
 
-	// Deny paths (default: /admin)
+	// Deny paths (default: /{admin_path})
+	// Per AI.md PART 17: Admin path is configurable (default: "admin")
 	denyPaths := web.Robots.Deny
 	if len(denyPaths) == 0 {
-		denyPaths = []string{"/admin"}
+		denyPaths = []string{"/" + config.GetAdminPath()}
 	}
 	for _, path := range denyPaths {
 		fmt.Fprintf(w, "Disallow: %s\n", path)

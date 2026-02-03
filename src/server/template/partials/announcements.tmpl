@@ -15,17 +15,6 @@
     </div>
     {{ end }}
 </div>
-<script>
-// Hide already dismissed announcements on page load
-(function() {
-    var dismissed = JSON.parse(localStorage.getItem('dismissed_announcements') || '[]');
-    dismissed.forEach(function(id) {
-        var el = document.querySelector('[data-announcement-id="' + id + '"]');
-        if (el && el.dataset.dismissible === 'true') {
-            el.style.display = 'none';
-        }
-    });
-})();
-</script>
+{{/* Per AI.md PART 16: NO inline JS - initialization in app.js */}}
 {{ end }}
 {{ end }}

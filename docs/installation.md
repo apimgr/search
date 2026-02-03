@@ -9,7 +9,7 @@ The easiest way to run Search is using Docker:
 ```bash
 docker run -d \
   --name search \
-  -p 8080:80 \
+  -p 64580:80 \
   -v search_data:/data \
   -v search_config:/config \
   ghcr.io/apimgr/search:latest
@@ -27,7 +27,7 @@ services:
     image: ghcr.io/apimgr/search:latest
     container_name: search
     ports:
-      - "8080:80"
+      - "64580:80"
     volumes:
       - ./config:/config
       - ./data:/data
@@ -116,7 +116,7 @@ sudo systemctl start search
 
 ## First Run
 
-After installation, access the web interface at `http://localhost:8080` (or your configured port).
+After installation, access the web interface at `http://localhost:64580` (or your configured port).
 
 On first run, you'll be prompted to complete the setup wizard to create an admin account.
 
@@ -130,7 +130,7 @@ docker stop search
 docker rm search
 docker run -d \
   --name search \
-  -p 8080:80 \
+  -p 64580:80 \
   -v search_data:/data \
   -v search_config:/config \
   ghcr.io/apimgr/search:latest

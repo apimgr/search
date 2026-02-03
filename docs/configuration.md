@@ -24,7 +24,7 @@ server:
   description: "Privacy-Respecting Metasearch Engine"
 
   # Listen port
-  port: 8080
+  port: 64580
 
   # Listen address (empty = all interfaces)
   address: ""
@@ -137,7 +137,7 @@ All configuration can be set via environment variables with the `SEARCH_` prefix
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SEARCH_PORT` | Listen port | `8080` |
+| `SEARCH_PORT` | Listen port | `64580` |
 | `SEARCH_ADDRESS` | Listen address | `` |
 | `SEARCH_MODE` | Application mode | `production` |
 | `SEARCH_ADMIN_USERNAME` | Admin username | `admin` |

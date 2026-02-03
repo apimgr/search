@@ -3,7 +3,7 @@
 {{ define "cookie_consent" }}
 {{ if .CookieConsent }}
 {{ if .CookieConsent.Enabled }}
-<div class="cookie-consent hidden" id="cookie-consent">
+<div class="cookie-consent" id="cookie-consent">
     <div class="cookie-consent-content">
         <p class="cookie-consent-message">
             {{ if .CookieConsent.Message }}
@@ -21,14 +21,7 @@
         </div>
     </div>
 </div>
-<script>
-(function() {
-    var consent = localStorage.getItem('cookie_consent');
-    if (consent === null) {
-        document.getElementById('cookie-consent').style.display = 'flex';
-    }
-})();
-</script>
+{{/* Per AI.md PART 16: NO inline JS - initialization in app.js */}}
 {{ end }}
 {{ end }}
 {{ end }}

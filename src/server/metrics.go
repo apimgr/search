@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -22,6 +23,11 @@ type Metrics struct {
 	config    *config.Config
 	startTime time.Time
 	registry  *prometheus.Registry
+
+	// Per AI.md PART 13: Atomic counters for health endpoint stats
+	// These are separate from Prometheus counters for easy access
+	totalRequests     atomic.Int64
+	activeConnections atomic.Int64
 
 	// HTTP metrics
 	httpRequestsTotal   *prometheus.CounterVec
@@ -403,7 +409,11 @@ func (m *Metrics) collectSystemMetrics() {
 }
 
 // RecordRequest records an HTTP request
+// Per AI.md PART 13: Also increments atomic counter for health endpoint stats
 func (m *Metrics) RecordRequest(method, path string, statusCode int, duration time.Duration, reqSize, respSize int64) {
+	// Increment atomic counter for health endpoint
+	m.totalRequests.Add(1)
+
 	status := strconv.Itoa(statusCode)
 	m.httpRequestsTotal.WithLabelValues(method, path, status).Inc()
 	m.httpRequestDuration.WithLabelValues(method, path).Observe(duration.Seconds())
@@ -488,6 +498,18 @@ func (m *Metrics) SetCacheStats(cache string, size int, bytes int64) {
 	m.cacheBytes.WithLabelValues(cache).Set(float64(bytes))
 }
 
+// GetTotalRequests returns total requests for health endpoint
+// Per AI.md PART 13: stats.requests_total must return actual count
+func (m *Metrics) GetTotalRequests() int64 {
+	return m.totalRequests.Load()
+}
+
+// GetActiveConnections returns current active connections for health endpoint
+// Per AI.md PART 13: stats.active_connections must return actual count
+func (m *Metrics) GetActiveConnections() int64 {
+	return m.activeConnections.Load()
+}
+
 // Handler returns an HTTP handler for Prometheus metrics
 // Per AI.md PART 29: Uses promhttp.Handler()
 func (m *Metrics) Handler() http.Handler {
@@ -522,13 +544,18 @@ func (m *Metrics) AuthenticatedHandler() http.HandlerFunc {
 }
 
 // MetricsMiddleware creates middleware for recording request metrics
+// Per AI.md PART 13: Tracks active connections for health endpoint stats
 func (m *Metrics) MetricsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
-		// Increment active requests
+		// Increment active requests (both Prometheus gauge and atomic counter)
 		m.httpActiveRequests.Inc()
-		defer m.httpActiveRequests.Dec()
+		m.activeConnections.Add(1)
+		defer func() {
+			m.httpActiveRequests.Dec()
+			m.activeConnections.Add(-1)
+		}()
 
 		// Wrap response writer to capture status code and size
 		wrapped := &metricsResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}

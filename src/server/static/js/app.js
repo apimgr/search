@@ -955,23 +955,162 @@
     // INFINITE SCROLL
     // ========================================================================
     function initInfiniteScroll() {
-        const resultsContainer = document.querySelector('.search-results');
-        if (!resultsContainer) return;
+        // Search results page infinite scroll
+        // Per AI.md PART 16: NO inline JS - all in external files
+        var container = document.querySelector('.search-results-page');
+        if (!container) return;
 
-        const loadMoreTrigger = document.querySelector('.load-more-trigger');
-        if (!loadMoreTrigger) return;
+        var resultsContainer = document.getElementById('results-container');
+        var scrollTrigger = document.getElementById('scroll-trigger');
+        var loadingIndicator = document.getElementById('loading-indicator');
+        var endIndicator = document.getElementById('end-indicator');
 
+        if (!resultsContainer || !scrollTrigger) return;
+
+        var query = container.dataset.query;
+        var category = container.dataset.category;
+        var currentPage = parseInt(container.dataset.page) || 1;
+        var isLoading = false;
+        var hasMore = true;
+
+        // Format duration from seconds to MM:SS or HH:MM:SS
+        function formatDuration(seconds) {
+            if (!seconds || seconds <= 0) return '';
+            var h = Math.floor(seconds / 3600);
+            var m = Math.floor((seconds % 3600) / 60);
+            var s = seconds % 60;
+            if (h > 0) {
+                return h + ':' + m.toString().padStart(2, '0') + ':' + s.toString().padStart(2, '0');
+            }
+            return m + ':' + s.toString().padStart(2, '0');
+        }
+
+        // Format view count (e.g., 1.2M, 500K)
+        function formatViewCount(count) {
+            if (!count || count <= 0) return '';
+            if (count >= 1000000000) return (count / 1000000000).toFixed(1).replace(/\.0$/, '') + 'B';
+            if (count >= 1000000) return (count / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+            if (count >= 1000) return (count / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+            return count.toString();
+        }
+
+        // Escape HTML for safe insertion
+        function escapeHtmlLocal(text) {
+            if (!text) return '';
+            var div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Create result card HTML based on category
+        function createResultCard(result) {
+            var domain = '';
+            try {
+                domain = new URL(result.url).hostname;
+            } catch (e) {
+                domain = 'unknown';
+            }
+            var firstLetter = result.title ? result.title.charAt(0).toUpperCase() : '?';
+
+            if (category === 'images') {
+                return '<div class="image-result" data-full-url="' + escapeHtmlLocal(result.url) + '">' +
+                    '<a href="' + escapeHtmlLocal(result.url) + '" target="_blank" rel="noopener noreferrer">' +
+                    (result.thumbnail
+                        ? '<img src="' + escapeHtmlLocal(result.thumbnail) + '" alt="' + escapeHtmlLocal(result.title) + '" loading="lazy">'
+                        : '<div class="image-placeholder"><span>\uD83D\uDDBC\uFE0F</span></div>'
+                    ) +
+                    '</a>' +
+                    '<div class="image-result-info">' +
+                    '<a href="' + escapeHtmlLocal(result.url) + '" class="image-title" target="_blank" rel="noopener noreferrer">' + escapeHtmlLocal(result.title) + '</a>' +
+                    '<div class="image-source">' + escapeHtmlLocal(result.engine) + '</div>' +
+                    '</div></div>';
+            }
+
+            if (category === 'videos') {
+                var durationStr = result.duration ? formatDuration(result.duration) : '';
+                var viewCountStr = result.view_count ? formatViewCount(result.view_count) + ' views' : '';
+                return '<div class="video-result">' +
+                    '<a href="' + escapeHtmlLocal(result.url) + '" class="video-thumbnail-link" target="_blank" rel="noopener noreferrer">' +
+                    '<div class="video-thumbnail-container">' +
+                    (result.thumbnail
+                        ? '<img src="' + escapeHtmlLocal(result.thumbnail) + '" alt="' + escapeHtmlLocal(result.title) + '" loading="lazy" class="video-thumbnail">'
+                        : '<div class="video-placeholder"><span>\uD83C\uDFA5</span></div>'
+                    ) +
+                    '<div class="video-play-overlay"><svg class="play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>' +
+                    (durationStr ? '<span class="video-duration">' + escapeHtmlLocal(durationStr) + '</span>' : '') +
+                    '</div></a>' +
+                    '<div class="video-info">' +
+                    '<h3 class="video-title"><a href="' + escapeHtmlLocal(result.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtmlLocal(result.title) + '</a></h3>' +
+                    '<div class="video-meta">' +
+                    '<span class="video-engine">' + escapeHtmlLocal(result.engine) + '</span>' +
+                    (viewCountStr ? '<span class="video-views">' + escapeHtmlLocal(viewCountStr) + '</span>' : '') +
+                    (result.author ? '<span class="video-author">' + escapeHtmlLocal(result.author) + '</span>' : '') +
+                    '</div>' +
+                    (result.description ? '<p class="video-description">' + escapeHtmlLocal(result.description) + '</p>' : '') +
+                    '</div></div>';
+            }
+
+            // Standard results
+            return '<article class="result-item">' +
+                '<div class="result-favicon">' +
+                '<img src="https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=32" alt="" loading="lazy" onerror="this.classList.add(\'hidden\');this.nextElementSibling.classList.remove(\'hidden\');">' +
+                '<span class="favicon-placeholder hidden">' + escapeHtmlLocal(firstLetter) + '</span>' +
+                '</div>' +
+                '<div class="result-body">' +
+                '<h3 class="result-title"><a href="' + escapeHtmlLocal(result.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtmlLocal(result.title) + '</a></h3>' +
+                '<div class="result-url"><span class="result-url-text">' + escapeHtmlLocal(result.url) + '</span></div>' +
+                '<p class="result-description">' + escapeHtmlLocal(result.description || '') + '</p>' +
+                '<div class="result-meta">' +
+                '<span class="result-engine">' + escapeHtmlLocal(result.engine) + '</span>' +
+                (result.date ? '<span class="result-date">' + escapeHtmlLocal(result.date) + '</span>' : '') +
+                '</div></div></article>';
+        }
+
+        function loadMoreResults() {
+            if (isLoading || !hasMore) return;
+
+            isLoading = true;
+            if (loadingIndicator) loadingIndicator.classList.remove('hidden');
+
+            var nextPage = currentPage + 1;
+            fetch('/api/v1/search?q=' + encodeURIComponent(query) + '&category=' + encodeURIComponent(category) + '&page=' + nextPage + '&limit=20')
+                .then(function(response) { return response.json(); })
+                .then(function(data) {
+                    if (data.success && data.data.results && data.data.results.length > 0) {
+                        data.data.results.forEach(function(result) {
+                            resultsContainer.insertAdjacentHTML('beforeend', createResultCard(result));
+                        });
+                        currentPage = nextPage;
+                        hasMore = data.data.has_more;
+                    } else {
+                        hasMore = false;
+                    }
+
+                    if (!hasMore) {
+                        if (endIndicator) endIndicator.classList.remove('hidden');
+                        scrollTrigger.classList.add('hidden');
+                    }
+                })
+                .catch(function(error) {
+                    console.error('Failed to load more results:', error);
+                })
+                .finally(function() {
+                    isLoading = false;
+                    if (loadingIndicator) loadingIndicator.classList.add('hidden');
+                });
+        }
+
+        // Intersection Observer for infinite scroll
         if ('IntersectionObserver' in window) {
-            const observer = new IntersectionObserver(function(entries) {
+            var observer = new IntersectionObserver(function(entries) {
                 entries.forEach(function(entry) {
-                    if (entry.isIntersecting) {
-                        const event = new CustomEvent('loadmore');
-                        document.dispatchEvent(event);
+                    if (entry.isIntersecting && hasMore) {
+                        loadMoreResults();
                     }
                 });
-            }, { rootMargin: '200px' });
+            }, { rootMargin: '400px' });
 
-            observer.observe(loadMoreTrigger);
+            observer.observe(scrollTrigger);
         }
     }
 
@@ -1384,6 +1523,24 @@
                 return;
             }
 
+            // Password visibility toggle - per AI.md PART 16 (no inline JS)
+            if (target.matches('.password-toggle') || target.closest('.password-toggle')) {
+                const btn = target.closest('.password-toggle') || target;
+                const wrapper = btn.closest('.password-input-wrapper');
+                if (wrapper) {
+                    const input = wrapper.querySelector('input');
+                    if (input) {
+                        const isPassword = input.type === 'password';
+                        input.type = isPassword ? 'text' : 'password';
+                        const icon = btn.querySelector('.icon-eye');
+                        if (icon) {
+                            icon.style.opacity = isPassword ? '0.5' : '1';
+                        }
+                    }
+                }
+                return;
+            }
+
             // Close token modal
             if (target.matches('[data-action="close-token-modal"]')) {
                 closeTokenModal();
@@ -1420,12 +1577,691 @@
     }
 
     // ========================================================================
+    // AUTH FORMS - Per AI.md PART 16 (no inline JS)
+    // ========================================================================
+    function initAuthForms() {
+        // Password strength indicator for registration
+        const passwordInput = document.getElementById('password');
+        const strengthIndicator = document.getElementById('password-strength');
+
+        if (passwordInput && strengthIndicator) {
+            passwordInput.addEventListener('input', function() {
+                const password = this.value;
+                var strength = 0;
+                var color = 'var(--accent-error)';
+
+                if (password.length >= 8) strength += 25;
+                if (password.length >= 12) strength += 15;
+                if (/[a-z]/.test(password)) strength += 15;
+                if (/[A-Z]/.test(password)) strength += 15;
+                if (/[0-9]/.test(password)) strength += 15;
+                if (/[^a-zA-Z0-9]/.test(password)) strength += 15;
+
+                if (strength >= 80) color = 'var(--accent-success)';
+                else if (strength >= 50) color = 'var(--accent-warning)';
+
+                strengthIndicator.style.setProperty('--strength', strength + '%');
+                strengthIndicator.style.setProperty('--strength-color', color);
+            });
+        }
+
+        // Password confirmation validation
+        var confirmInput = document.getElementById('confirm_password');
+        var confirmHelp = document.getElementById('confirm-help');
+
+        if (confirmInput && passwordInput && confirmHelp) {
+            function validateConfirm() {
+                if (confirmInput.value && confirmInput.value !== passwordInput.value) {
+                    confirmHelp.style.display = 'block';
+                    confirmInput.setCustomValidity('Passwords do not match');
+                } else {
+                    confirmHelp.style.display = 'none';
+                    confirmInput.setCustomValidity('');
+                }
+            }
+
+            confirmInput.addEventListener('input', validateConfirm);
+            passwordInput.addEventListener('input', validateConfirm);
+        }
+
+        // Username normalization (lowercase, only allowed chars)
+        var usernameInput = document.getElementById('username');
+        if (usernameInput && document.getElementById('register-form')) {
+            usernameInput.addEventListener('input', function() {
+                this.value = this.value.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+            });
+        }
+    }
+
+    // ========================================================================
+    // HOMEPAGE - Category tabs and Advanced Search
+    // Per AI.md PART 16: NO inline JS - all in external files
+    // ========================================================================
+    function initHomepage() {
+        // Category tab switching
+        var categoryTabs = document.querySelectorAll('.category-tab');
+        var categoryInput = document.getElementById('categoryInput');
+
+        if (categoryTabs.length > 0 && categoryInput) {
+            categoryTabs.forEach(function(tab) {
+                tab.addEventListener('click', function() {
+                    categoryTabs.forEach(function(t) {
+                        t.classList.remove('active');
+                        t.setAttribute('aria-selected', 'false');
+                    });
+                    this.classList.add('active');
+                    this.setAttribute('aria-selected', 'true');
+                    categoryInput.value = this.dataset.category;
+                });
+            });
+        }
+
+        // Advanced search modal controls
+        var advancedModal = document.getElementById('advancedSearchModal');
+        var advancedSearchBtn = document.getElementById('advancedSearchBtn');
+        var advancedSearchClose = document.getElementById('advancedSearchClose');
+        var advancedSearchCancel = document.getElementById('advancedSearchCancel');
+        var advancedSearchSubmit = document.getElementById('advancedSearchSubmit');
+
+        if (advancedSearchBtn && advancedModal) {
+            advancedSearchBtn.addEventListener('click', function() {
+                advancedModal.showModal();
+            });
+        }
+
+        if (advancedSearchClose && advancedModal) {
+            advancedSearchClose.addEventListener('click', function() {
+                advancedModal.close();
+            });
+        }
+
+        if (advancedSearchCancel && advancedModal) {
+            advancedSearchCancel.addEventListener('click', function() {
+                advancedModal.close();
+            });
+        }
+
+        // Advanced search query building
+        function buildAdvancedQuery() {
+            var parts = [];
+            var allWords = document.getElementById('as-allwords');
+            var exactPhrase = document.getElementById('as-exactphrase');
+            var anyWords = document.getElementById('as-anywords');
+            var noneWords = document.getElementById('as-nonewords');
+            var site = document.getElementById('as-site');
+            var filetype = document.getElementById('as-filetype');
+
+            if (allWords && allWords.value.trim()) parts.push(allWords.value.trim());
+            if (exactPhrase && exactPhrase.value.trim()) parts.push('"' + exactPhrase.value.trim() + '"');
+            if (anyWords && anyWords.value.trim()) parts.push('(' + anyWords.value.trim().split(/\s+/).join(' OR ') + ')');
+            if (noneWords && noneWords.value.trim()) parts.push(noneWords.value.trim().split(/\s+/).map(function(w) { return '-' + w; }).join(' '));
+            if (site && site.value.trim()) parts.push('site:' + site.value.trim());
+            if (filetype && filetype.value) parts.push('filetype:' + filetype.value);
+
+            return parts.join(' ');
+        }
+
+        function updateAdvancedPreview() {
+            var preview = document.getElementById('as-preview');
+            if (preview) {
+                var query = buildAdvancedQuery();
+                preview.textContent = query || 'Enter search terms above';
+            }
+        }
+
+        function submitAdvancedSearch() {
+            var query = buildAdvancedQuery();
+            var searchQuery = document.getElementById('searchQuery');
+            var searchForm = document.getElementById('searchForm');
+
+            if (query && searchQuery && searchForm && advancedModal) {
+                searchQuery.value = query;
+                advancedModal.close();
+                searchForm.submit();
+            }
+        }
+
+        if (advancedSearchSubmit) {
+            advancedSearchSubmit.addEventListener('click', submitAdvancedSearch);
+        }
+
+        // Update preview on input changes
+        var advancedInputs = document.querySelectorAll('.advanced-search-content input, .advanced-search-content select');
+        advancedInputs.forEach(function(el) {
+            el.addEventListener('input', updateAdvancedPreview);
+            el.addEventListener('change', updateAdvancedPreview);
+        });
+    }
+
+    // ========================================================================
     // UTILITY FUNCTIONS
     // ========================================================================
     function escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    // ========================================================================
+    // PREFERENCES PAGE - Per AI.md PART 16: NO inline JS
+    // ========================================================================
+    function initPreferencesPage() {
+        var prefsPage = document.querySelector('.preferences-page');
+        if (!prefsPage) return;
+
+        // Storage keys
+        var PREFS_KEY = 'search_preferences';
+        var BANGS_KEY = 'search_custom_bangs';
+        var WIDGETS_KEY = 'search_widgets';
+
+        // Load preferences from localStorage
+        function loadPreferences() {
+            try {
+                var prefs = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
+                var themeSelect = document.getElementById('theme');
+                var safeSearchSelect = document.getElementById('safe-search');
+                var resultsPerPageSelect = document.getElementById('results-per-page');
+                var newTabCheckbox = document.getElementById('new-tab');
+
+                if (prefs.theme && themeSelect) themeSelect.value = prefs.theme;
+                if (prefs.safe_search !== undefined && safeSearchSelect) safeSearchSelect.value = prefs.safe_search;
+                if (prefs.results_per_page && resultsPerPageSelect) resultsPerPageSelect.value = prefs.results_per_page;
+                if (prefs.new_tab && newTabCheckbox) newTabCheckbox.checked = prefs.new_tab;
+            } catch (e) {
+                console.error('Failed to load preferences:', e);
+            }
+        }
+
+        // Save preferences to localStorage
+        function savePreferences() {
+            var themeSelect = document.getElementById('theme');
+            var safeSearchSelect = document.getElementById('safe-search');
+            var resultsPerPageSelect = document.getElementById('results-per-page');
+            var newTabCheckbox = document.getElementById('new-tab');
+
+            var prefs = {
+                theme: themeSelect ? themeSelect.value : 'dark',
+                safe_search: safeSearchSelect ? safeSearchSelect.value : '1',
+                results_per_page: resultsPerPageSelect ? resultsPerPageSelect.value : '20',
+                new_tab: newTabCheckbox ? newTabCheckbox.checked : false
+            };
+
+            localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+
+            // Apply theme immediately
+            if (prefs.theme !== 'system') {
+                document.documentElement.classList.remove('theme-dark', 'theme-light');
+                document.documentElement.classList.add('theme-' + prefs.theme);
+            }
+
+            saveWidgetPreferences();
+            showPrefStatus('Preferences saved!');
+        }
+
+        // Load widget preferences
+        function loadWidgetPreferences() {
+            try {
+                var widgets = JSON.parse(localStorage.getItem(WIDGETS_KEY) || '[]');
+                document.querySelectorAll('.widget-toggle input[type="checkbox"]').forEach(function(checkbox) {
+                    var widgetType = checkbox.dataset.widget;
+                    if (widgets.length > 0) {
+                        checkbox.checked = widgets.includes(widgetType);
+                    }
+                });
+            } catch (e) {
+                console.error('Failed to load widget preferences:', e);
+            }
+        }
+
+        // Save widget preferences
+        function saveWidgetPreferences() {
+            var enabledWidgets = [];
+            document.querySelectorAll('.widget-toggle input[type="checkbox"]:checked').forEach(function(checkbox) {
+                enabledWidgets.push(checkbox.dataset.widget);
+            });
+            localStorage.setItem(WIDGETS_KEY, JSON.stringify(enabledWidgets));
+        }
+
+        // Load custom bangs
+        function loadCustomBangs() {
+            try {
+                var bangs = JSON.parse(localStorage.getItem(BANGS_KEY) || '[]');
+                renderCustomBangs(bangs);
+            } catch (e) {
+                console.error('Failed to load custom bangs:', e);
+            }
+        }
+
+        // Render custom bangs list
+        function renderCustomBangs(bangs) {
+            var list = document.getElementById('custom-bangs-list');
+            if (!list) return;
+            list.innerHTML = '';
+
+            if (bangs.length === 0) {
+                list.innerHTML = '<p class="help-text">No custom bangs defined.</p>';
+                return;
+            }
+
+            bangs.forEach(function(bang, index) {
+                var item = document.createElement('div');
+                item.className = 'custom-bang-item';
+                item.innerHTML = '<div class="bang-info">' +
+                    '<span class="bang-shortcut">!' + escapeHtmlLocal(bang.shortcut) + '</span>' +
+                    '<span class="bang-name">' + escapeHtmlLocal(bang.name) + '</span>' +
+                '</div>' +
+                '<button class="delete-btn" data-bang-index="' + index + '">Delete</button>';
+                list.appendChild(item);
+            });
+        }
+
+        function escapeHtmlLocal(text) {
+            var div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Filter bangs by category
+        function filterBangs(category) {
+            var items = document.querySelectorAll('.bang-item');
+            items.forEach(function(item) {
+                if (category === 'all' || item.dataset.category === category) {
+                    item.classList.remove('hidden');
+                } else {
+                    item.classList.add('hidden');
+                }
+            });
+        }
+
+        // Show status message
+        function showPrefStatus(message, isError) {
+            var status = document.getElementById('save-status');
+            if (!status) return;
+            status.textContent = message;
+            status.style.color = isError ? 'var(--accent-error)' : 'var(--accent-success)';
+            setTimeout(function() {
+                status.textContent = '';
+            }, 3000);
+        }
+
+        // Event handlers via delegation
+        prefsPage.addEventListener('click', function(e) {
+            // Save preferences button
+            if (e.target.id === 'save-preferences') {
+                savePreferences();
+                return;
+            }
+
+            // Category filter buttons
+            if (e.target.matches('.filter-btn')) {
+                document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
+                e.target.classList.add('active');
+                filterBangs(e.target.dataset.category);
+                return;
+            }
+
+            // Delete custom bang button
+            if (e.target.matches('.delete-btn[data-bang-index]')) {
+                var idx = parseInt(e.target.dataset.bangIndex);
+                var bangs = JSON.parse(localStorage.getItem(BANGS_KEY) || '[]');
+                bangs.splice(idx, 1);
+                localStorage.setItem(BANGS_KEY, JSON.stringify(bangs));
+                renderCustomBangs(bangs);
+                showPrefStatus('Bang deleted');
+                return;
+            }
+
+            // Copy OpenSearch URL
+            if (e.target.id === 'copy-opensearch') {
+                var customName = document.getElementById('custom-engine-name');
+                var url = window.location.origin + '/opensearch.xml';
+                if (customName && customName.value) {
+                    url += '?name=' + encodeURIComponent(customName.value);
+                }
+                navigator.clipboard.writeText(url).then(function() {
+                    showPrefStatus('OpenSearch URL copied!');
+                }).catch(function() {
+                    var osUrl = document.getElementById('opensearch-url');
+                    if (osUrl) osUrl.textContent = url;
+                    showPrefStatus('URL updated above - copy manually');
+                });
+                return;
+            }
+
+            // Export preferences
+            if (e.target.id === 'export-prefs') {
+                var data = {
+                    preferences: JSON.parse(localStorage.getItem(PREFS_KEY) || '{}'),
+                    custom_bangs: JSON.parse(localStorage.getItem(BANGS_KEY) || '[]'),
+                    widgets: JSON.parse(localStorage.getItem(WIDGETS_KEY) || '[]'),
+                    exported_at: new Date().toISOString()
+                };
+                var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                var url = URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url;
+                a.download = 'search-preferences.json';
+                a.click();
+                URL.revokeObjectURL(url);
+                showPrefStatus('Preferences exported!');
+                return;
+            }
+
+            // Import preferences button
+            if (e.target.id === 'import-prefs') {
+                var importFile = document.getElementById('import-file');
+                if (importFile) importFile.click();
+                return;
+            }
+
+            // Reset preferences
+            if (e.target.id === 'reset-prefs') {
+                showConfirm('Are you sure you want to reset all preferences?', {
+                    title: 'Reset Preferences',
+                    confirmText: 'Reset',
+                    danger: true
+                }).then(function(confirmed) {
+                    if (!confirmed) return;
+                    localStorage.removeItem(PREFS_KEY);
+                    localStorage.removeItem(BANGS_KEY);
+                    localStorage.removeItem(WIDGETS_KEY);
+                    // Clear widget settings
+                    for (var i = localStorage.length - 1; i >= 0; i--) {
+                        var key = localStorage.key(i);
+                        if (key && key.startsWith('search_widget_')) {
+                            localStorage.removeItem(key);
+                        }
+                    }
+                    location.reload();
+                });
+                return;
+            }
+        });
+
+        // Widget toggle change
+        prefsPage.addEventListener('change', function(e) {
+            if (e.target.matches('.widget-toggle input[type="checkbox"]')) {
+                saveWidgetPreferences();
+            }
+        });
+
+        // Add custom bang form
+        var addBangForm = document.getElementById('add-custom-bang');
+        if (addBangForm) {
+            addBangForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                var shortcutInput = document.getElementById('bang-shortcut');
+                var nameInput = document.getElementById('bang-name');
+                var urlInput = document.getElementById('bang-url');
+                var categoryInput = document.getElementById('bang-category');
+
+                var shortcut = shortcutInput.value.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+                var name = nameInput.value;
+                var url = urlInput.value;
+                var category = categoryInput.value || 'custom';
+
+                if (!shortcut || !name || !url) {
+                    showPrefStatus('Please fill in all required fields', true);
+                    return;
+                }
+
+                var bangs = JSON.parse(localStorage.getItem(BANGS_KEY) || '[]');
+                if (bangs.some(function(b) { return b.shortcut === shortcut; })) {
+                    showPrefStatus('A bang with this shortcut already exists', true);
+                    return;
+                }
+
+                bangs.push({ shortcut: shortcut, name: name, url: url, category: category, enabled: true });
+                localStorage.setItem(BANGS_KEY, JSON.stringify(bangs));
+                renderCustomBangs(bangs);
+                addBangForm.reset();
+                categoryInput.value = 'custom';
+                showPrefStatus('Custom bang added!');
+            });
+        }
+
+        // Import file handler
+        var importFile = document.getElementById('import-file');
+        if (importFile) {
+            importFile.addEventListener('change', function(e) {
+                var file = e.target.files[0];
+                if (!file) return;
+
+                var reader = new FileReader();
+                reader.onload = function(ev) {
+                    try {
+                        var data = JSON.parse(ev.target.result);
+                        if (data.preferences) localStorage.setItem(PREFS_KEY, JSON.stringify(data.preferences));
+                        if (data.custom_bangs) localStorage.setItem(BANGS_KEY, JSON.stringify(data.custom_bangs));
+                        if (data.widgets) localStorage.setItem(WIDGETS_KEY, JSON.stringify(data.widgets));
+                        loadPreferences();
+                        loadCustomBangs();
+                        loadWidgetPreferences();
+                        showPrefStatus('Preferences imported!');
+                    } catch (err) {
+                        showPrefStatus('Failed to import preferences', true);
+                    }
+                };
+                reader.readAsText(file);
+            });
+        }
+
+        // OpenSearch URL update on custom name change
+        var customEngineInput = document.getElementById('custom-engine-name');
+        if (customEngineInput) {
+            customEngineInput.addEventListener('input', function() {
+                var osUrl = document.getElementById('opensearch-url');
+                if (!osUrl) return;
+                var url = window.location.origin + '/opensearch.xml';
+                if (this.value) {
+                    url += '?name=' + encodeURIComponent(this.value);
+                }
+                osUrl.textContent = url;
+            });
+        }
+
+        // Initialize
+        loadPreferences();
+        loadCustomBangs();
+        loadWidgetPreferences();
+    }
+
+    // ========================================================================
+    // USER PAGES (Profile, Security, Tokens) - Per AI.md PART 16: NO inline JS
+    // ========================================================================
+    function initUserPages() {
+        // Profile page - bio character count
+        var bioInput = document.getElementById('bio');
+        var bioCount = document.getElementById('bio-count');
+        if (bioInput && bioCount) {
+            bioInput.addEventListener('input', function() {
+                bioCount.textContent = this.value.length;
+            });
+        }
+
+        // Profile page - avatar preview
+        var avatarInput = document.querySelector('input[name="avatar"]');
+        var avatarPreview = document.querySelector('.current-avatar');
+        if (avatarInput && avatarPreview) {
+            avatarInput.addEventListener('change', function(e) {
+                var file = e.target.files[0];
+                if (file) {
+                    var reader = new FileReader();
+                    reader.onload = function(ev) {
+                        var img = avatarPreview.querySelector('.avatar-img');
+                        if (img) {
+                            img.src = ev.target.result;
+                        } else {
+                            avatarPreview.innerHTML = '<img src="' + ev.target.result + '" alt="Avatar" class="avatar-img">';
+                        }
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+        }
+
+        // Security page - password strength indicator
+        var newPassword = document.getElementById('new_password');
+        var strengthIndicator = document.getElementById('password-strength');
+        if (newPassword && strengthIndicator) {
+            newPassword.addEventListener('input', function() {
+                var password = this.value;
+                var score = 0;
+                var color = 'var(--accent-error)';
+
+                if (password.length >= 8) score += 25;
+                if (password.length >= 12) score += 15;
+                if (/[a-z]/.test(password)) score += 15;
+                if (/[A-Z]/.test(password)) score += 15;
+                if (/[0-9]/.test(password)) score += 15;
+                if (/[^a-zA-Z0-9]/.test(password)) score += 15;
+
+                if (score >= 80) color = 'var(--accent-success)';
+                else if (score >= 50) color = 'var(--accent-warning)';
+
+                strengthIndicator.style.setProperty('--strength', score + '%');
+                strengthIndicator.style.setProperty('--strength-color', color);
+            });
+        }
+
+        // Security page - confirm password match
+        var confirmPassword = document.getElementById('confirm_password');
+        if (newPassword && confirmPassword) {
+            confirmPassword.addEventListener('input', function() {
+                if (this.value !== newPassword.value) {
+                    this.setCustomValidity('Passwords do not match');
+                } else {
+                    this.setCustomValidity('');
+                }
+            });
+        }
+
+        // Tokens page - modal handling
+        var createTokenBtn = document.getElementById('create-token-btn');
+        var tokenModal = document.getElementById('create-token-modal');
+        if (createTokenBtn && tokenModal) {
+            createTokenBtn.addEventListener('click', function() {
+                tokenModal.classList.add('active');
+            });
+
+            // Close modal on Escape
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && tokenModal.classList.contains('active')) {
+                    tokenModal.classList.remove('active');
+                }
+            });
+        }
+
+        // Token page event delegation
+        document.addEventListener('click', function(e) {
+            // Close token modal
+            if (e.target.matches('[data-action="close-token-modal"]')) {
+                if (tokenModal) tokenModal.classList.remove('active');
+                return;
+            }
+
+            // Copy token
+            if (e.target.matches('[data-action="copy-token"]')) {
+                var tokenEl = document.getElementById('new-token');
+                if (tokenEl) {
+                    navigator.clipboard.writeText(tokenEl.textContent).then(function() {
+                        var btn = e.target;
+                        var original = btn.textContent;
+                        btn.textContent = 'Copied!';
+                        setTimeout(function() {
+                            btn.textContent = original;
+                        }, 2000);
+                    });
+                }
+                return;
+            }
+        });
+
+        // Token revoke confirmation
+        document.addEventListener('submit', function(e) {
+            if (e.target.matches('[data-confirm-revoke]')) {
+                e.preventDefault();
+                var form = e.target;
+                showConfirm('Are you sure you want to revoke this token?', {
+                    title: 'Revoke API Token',
+                    confirmText: 'Revoke',
+                    danger: true
+                }).then(function(confirmed) {
+                    if (confirmed) {
+                        form.submit();
+                    }
+                });
+            }
+        });
+    }
+
+    // ========================================================================
+    // ANNOUNCEMENTS - Per AI.md PART 16: NO inline JS
+    // ========================================================================
+    function initAnnouncements() {
+        var dismissed = [];
+        try {
+            dismissed = JSON.parse(localStorage.getItem('dismissed_announcements') || '[]');
+        } catch (e) {
+            dismissed = [];
+        }
+
+        // Hide already dismissed announcements
+        dismissed.forEach(function(id) {
+            var el = document.querySelector('[data-announcement-id="' + id + '"]');
+            if (el && el.dataset.dismissible === 'true') {
+                el.style.display = 'none';
+            }
+        });
+    }
+
+    // Dismiss announcement (exported)
+    function dismissAnnouncement(id) {
+        var el = document.querySelector('[data-announcement-id="' + id + '"]');
+        if (el) {
+            el.style.display = 'none';
+            var dismissed = [];
+            try {
+                dismissed = JSON.parse(localStorage.getItem('dismissed_announcements') || '[]');
+            } catch (e) {
+                dismissed = [];
+            }
+            if (!dismissed.includes(id)) {
+                dismissed.push(id);
+                localStorage.setItem('dismissed_announcements', JSON.stringify(dismissed));
+            }
+        }
+    }
+
+    // ========================================================================
+    // COOKIE CONSENT - Per AI.md PART 16: NO inline JS
+    // ========================================================================
+    function initCookieConsent() {
+        var consentBanner = document.getElementById('cookie-consent');
+        if (!consentBanner) return;
+
+        var consent = localStorage.getItem('cookie_consent');
+        if (consent === null) {
+            consentBanner.classList.add('visible');
+        }
+
+        // Accept button
+        var acceptBtn = consentBanner.querySelector('.cookie-consent-accept');
+        if (acceptBtn) {
+            acceptBtn.addEventListener('click', function() {
+                localStorage.setItem('cookie_consent', 'accepted');
+                consentBanner.classList.remove('visible');
+            });
+        }
+
+        // Decline button
+        var declineBtn = consentBanner.querySelector('.cookie-consent-decline');
+        if (declineBtn) {
+            declineBtn.addEventListener('click', function() {
+                localStorage.setItem('cookie_consent', 'declined');
+                consentBanner.classList.remove('visible');
+            });
+        }
     }
 
     // ========================================================================
@@ -1443,6 +2279,32 @@
         initServiceWorker();
         initEventDelegation();
         initTabKeyboardNav();
+        initAuthForms();
+        initHomepage();
+        initHealthzCountdown();
+        initPreferencesPage();
+        initUserPages();
+        initAnnouncements();
+        initCookieConsent();
+    }
+
+    // ========================================================================
+    // HEALTHZ PAGE - Auto-refresh countdown
+    // Per AI.md PART 16: NO inline JS
+    // ========================================================================
+    function initHealthzCountdown() {
+        var countdown = document.getElementById('countdown');
+        if (!countdown) return;
+
+        var seconds = 30;
+        var timer = setInterval(function() {
+            seconds--;
+            countdown.textContent = seconds;
+            if (seconds <= 0) {
+                clearInterval(timer);
+                window.location.reload();
+            }
+        }, 1000);
     }
 
     // Listen for system theme changes

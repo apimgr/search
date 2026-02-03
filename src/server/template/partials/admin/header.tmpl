@@ -1,8 +1,9 @@
 {{define "admin/header"}}
 {{/* Admin Panel Header - per AI.md PART 18: Admin Panel Layout */}}
+{{/* Per AI.md PART 17: Admin path is configurable (default: "admin") */}}
 <header class="admin-header">
   <div class="admin-header-left">
-    <a href="/admin/dashboard" class="admin-logo">
+    <a href="/{{.AdminPath}}/dashboard" class="admin-logo">
       <span class="admin-logo-text">{{.Config.Server.Title}}</span>
     </a>
   </div>

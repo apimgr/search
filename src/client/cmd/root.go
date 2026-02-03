@@ -21,10 +21,12 @@ import (
 
 var (
 	// Build info - set via -ldflags at build time
-	ProjectName = "search"
-	Version     = "dev"
-	CommitID    = "unknown"
-	BuildDate   = "unknown"
+	// Per AI.md PART 26: LDFLAGS must include Version, CommitID, BuildDate, OfficialSite
+	ProjectName  = "search"
+	Version      = "dev"
+	CommitID     = "unknown"
+	BuildDate    = "unknown"
+	OfficialSite = "https://scour.li" // Default server URL
 
 	cfgFile   string
 	server    string

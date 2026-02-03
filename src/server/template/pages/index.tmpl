@@ -13,7 +13,7 @@
         <input type="hidden" name="category" id="categoryInput" value="general">
         <div class="search-box">
             <input type="text" name="q" id="searchQuery" placeholder="Search the web privately..." autofocus required autocomplete="off" class="search-input">
-            <button type="button" class="advanced-search-trigger" aria-label="Advanced Search" onclick="document.getElementById('advancedSearchModal').showModal()">
+            <button type="button" class="advanced-search-trigger" aria-label="Advanced Search" id="advancedSearchBtn">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="11" cy="8" r="2"></circle>
                     <path d="M11 10v5"></path>
@@ -86,7 +86,7 @@
 <dialog id="advancedSearchModal" class="advanced-search-modal">
     <header>
         <h2>Advanced Search</h2>
-        <button type="button" class="close-btn" onclick="this.closest('dialog').close()" aria-label="Close">&times;</button>
+        <button type="button" class="close-btn" id="advancedSearchClose" aria-label="Close">&times;</button>
     </header>
     <form action="/search" method="GET" class="advanced-search-content">
         <input type="hidden" name="category" value="general">
@@ -160,65 +160,9 @@
         </div>
     </form>
     <footer>
-        <button type="button" class="btn btn-secondary" onclick="this.closest('dialog').close()">Cancel</button>
-        <button type="submit" form="advancedSearchForm" class="btn btn-primary" onclick="submitAdvancedSearch()">Search</button>
+        <button type="button" class="btn btn-secondary" id="advancedSearchCancel">Cancel</button>
+        <button type="button" class="btn btn-primary" id="advancedSearchSubmit">Search</button>
     </footer>
 </dialog>
 {{end}}
-
-{{define "extra_scripts"}}
-<script>
-// Category tab switching
-document.querySelectorAll('.category-tab').forEach(tab => {
-    tab.addEventListener('click', function() {
-        document.querySelectorAll('.category-tab').forEach(t => {
-            t.classList.remove('active');
-            t.setAttribute('aria-selected', 'false');
-        });
-        this.classList.add('active');
-        this.setAttribute('aria-selected', 'true');
-        document.getElementById('categoryInput').value = this.dataset.category;
-    });
-});
-
-// Advanced search functionality
-function buildAdvancedQuery() {
-    const parts = [];
-    const allWords = document.getElementById('as-allwords').value.trim();
-    const exactPhrase = document.getElementById('as-exactphrase').value.trim();
-    const anyWords = document.getElementById('as-anywords').value.trim();
-    const noneWords = document.getElementById('as-nonewords').value.trim();
-    const site = document.getElementById('as-site').value.trim();
-    const filetype = document.getElementById('as-filetype').value;
-
-    if (allWords) parts.push(allWords);
-    if (exactPhrase) parts.push('"' + exactPhrase + '"');
-    if (anyWords) parts.push('(' + anyWords.split(/\s+/).join(' OR ') + ')');
-    if (noneWords) parts.push(noneWords.split(/\s+/).map(w => '-' + w).join(' '));
-    if (site) parts.push('site:' + site);
-    if (filetype) parts.push('filetype:' + filetype);
-
-    return parts.join(' ');
-}
-
-function updateAdvancedPreview() {
-    const query = buildAdvancedQuery();
-    document.getElementById('as-preview').textContent = query || 'Enter search terms above';
-}
-
-function submitAdvancedSearch() {
-    const query = buildAdvancedQuery();
-    if (query) {
-        document.getElementById('searchQuery').value = query;
-        document.getElementById('advancedSearchModal').close();
-        document.getElementById('searchForm').submit();
-    }
-}
-
-// Update preview on input changes
-document.querySelectorAll('.advanced-search-content input, .advanced-search-content select').forEach(el => {
-    el.addEventListener('input', updateAdvancedPreview);
-    el.addEventListener('change', updateAdvancedPreview);
-});
-</script>
-{{end}}
+{{/* Per AI.md PART 16: NO inline JS - all scripts in app.js */}}

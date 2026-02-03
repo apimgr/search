@@ -721,7 +721,9 @@ func (m *Middleware) MaintenanceMode(handler MaintenanceHandler) func(http.Handl
 			}
 
 			// Always allow admin routes (admins can work during maintenance)
-			if strings.HasPrefix(path, "/admin") {
+			// Per AI.md PART 17: Admin path is configurable (default: "admin")
+			adminPath := "/" + config.GetAdminPath()
+			if strings.HasPrefix(path, adminPath) {
 				next.ServeHTTP(w, r)
 				return
 			}

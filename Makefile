@@ -13,18 +13,23 @@ BUILD_DATE := $(shell date +"%a %b %d, %Y at %H:%M:%S %Z")
 COMMIT_ID := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 # COMMIT_ID used directly - no VCS_REF alias
 
-# Linker flags to embed build info
+# Official site URL (per AI.md - https://scour.li)
+OFFICIALSITE := https://scour.li
+
+# Linker flags to embed build info (per AI.md PART 26)
 LDFLAGS := -s -w \
 	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/config.Version=$(VERSION)' \
 	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/config.CommitID=$(COMMIT_ID)' \
-	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/config.BuildDate=$(BUILD_DATE)'
+	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/config.BuildDate=$(BUILD_DATE)' \
+	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/config.OfficialSite=$(OFFICIALSITE)'
 
-# CLI linker flags
+# CLI linker flags (per AI.md PART 26)
 CLI_LDFLAGS := -s -w \
 	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/cmd.ProjectName=$(PROJECTNAME)' \
 	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/cmd.Version=$(VERSION)' \
 	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/cmd.CommitID=$(COMMIT_ID)' \
 	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/cmd.BuildDate=$(BUILD_DATE)' \
+	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/cmd.OfficialSite=$(OFFICIALSITE)' \
 	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/api.ProjectName=$(PROJECTNAME)' \
 	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/client/api.Version=$(VERSION)'
 

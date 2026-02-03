@@ -17,6 +17,9 @@ Search is a privacy-respecting metasearch engine that aggregates results from mu
 - **💾 Local Storage**: User preferences stored in browser only (no server-side tracking)
 - **🚀 Fast & Efficient**: Written in Go with concurrent engine queries
 - **🔍 Multiple Engines**: Aggregate results from Google, Bing, DuckDuckGo, and more
+- **💡 Instant Answers**: Calculator, unit/currency converter, weather, dictionary, and more
+- **⚡ Bang Shortcuts**: Quick redirects like `!g`, `!w`, `!gh` for fast searching
+- **⌨️ Keyboard Navigation**: Vim-style shortcuts for power users (j/k, /, Enter)
 - **📱 Mobile Friendly**: Responsive design that works on all devices
 - **🎨 Beautiful UI**: Modern interface with dark (Dracula) and light themes
 - **⚙️ Easy Configuration**: Web-based admin panel and YAML config
@@ -29,7 +32,7 @@ Search is a privacy-respecting metasearch engine that aggregates results from mu
 
 ## 📦 Official Site
 
-**https://search.apimgr.us**
+**https://scour.li**
 
 ## 🚀 Quick Start
 
@@ -240,7 +243,7 @@ For initial setup (init only):
 
 ```bash
 export MODE=production           # Application mode
-export PORT=8080                 # Server port
+export PORT=64080                # Server port (64xxx range for dev)
 export LISTEN="0.0.0.0"         # Listen address
 export CONFIG_DIR="/etc/apimgr/search"
 export DATA_DIR="/var/lib/apimgr/search"
@@ -255,7 +258,7 @@ export DATA_DIR="/var/lib/apimgr/search"
 search
 
 # Specify port
-search --port 8080
+search --port 64080
 
 # Specify dual ports (HTTP + HTTPS)
 search --port 80,443
@@ -336,6 +339,64 @@ Features:
 - Statistics
 - System monitoring
 
+## 💡 Instant Answers
+
+Zero-click answers displayed above search results:
+
+| Widget | Triggers | Example |
+|--------|----------|---------|
+| **Calculator** | Math expressions | `2 + 2`, `sqrt(144)`, `15% of 200` |
+| **Unit Converter** | Number + unit | `5 miles in km`, `100F to C` |
+| **Currency** | Amount + currency | `100 usd to eur`, `$50 in pounds` |
+| **Weather** | Location weather | `weather tokyo`, `forecast london` |
+| **Dictionary** | Word definitions | `define ubiquitous`, `meaning of ephemeral` |
+| **Thesaurus** | Synonyms/antonyms | `synonyms for happy` |
+| **IP Lookup** | IP or "my ip" | `my ip`, `8.8.8.8` |
+| **Timezone** | Time in location | `time in tokyo`, `3pm EST to PST` |
+| **Hash Generator** | Hash text | `md5 hello`, `sha256 password` |
+| **Password** | Generate password | `password`, `random password` |
+| **QR Code** | Generate QR | `qr https://example.com` |
+
+## ⚡ Bang Shortcuts
+
+Quick redirects to specific sites (DuckDuckGo-style):
+
+```
+!g query     → Google
+!b query     → Bing
+!d query     → DuckDuckGo
+!w query     → Wikipedia
+!yt query    → YouTube
+!gh query    → GitHub
+!so query    → StackOverflow
+!r query     → Reddit
+!amz query   → Amazon
+!maps query  → Google Maps
+!npm query   → NPM
+!mdn query   → MDN Web Docs
+```
+
+Custom bangs can be defined in user preferences.
+
+## ⌨️ Keyboard Shortcuts
+
+Vim-inspired navigation for power users:
+
+| Key | Action |
+|-----|--------|
+| `/` | Focus search box |
+| `Escape` | Clear/unfocus search |
+| `j` / `k` | Navigate results down/up |
+| `Enter` | Open selected result |
+| `o` / `O` | Open in current/new tab |
+| `h` / `l` | Previous/next page |
+| `g g` | Go to first result |
+| `G` | Go to last result |
+| `t` | Toggle theme |
+| `s` | Open settings |
+| `?` | Show shortcuts help |
+| `1-9` | Jump to result N |
+
 ## 🔌 API
 
 ### REST API
@@ -369,7 +430,7 @@ curl -H "Authorization: Bearer YOUR_TOKEN" \
 curl -X PUT \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"server": {"port": "8080"}}' \
+  -d '{"server": {"port": "64580"}}' \
   http://localhost:PORT/api/v1/admin/config
 ```
 
@@ -754,12 +815,12 @@ Development mode enables:
 
 ## 📚 Documentation
 
-Full documentation is available at: https://search.apimgr.us/docs
+Full documentation is available at: https://scour.li/docs
 
-- [Installation Guide](https://search.apimgr.us/docs/installation)
-- [Configuration Reference](https://search.apimgr.us/docs/configuration)
-- [API Documentation](https://search.apimgr.us/docs/api)
-- [Admin Guide](https://search.apimgr.us/docs/admin)
+- [Installation Guide](https://scour.li/docs/installation)
+- [Configuration Reference](https://scour.li/docs/configuration)
+- [API Documentation](https://scour.li/docs/api)
+- [Admin Guide](https://scour.li/docs/admin)
 
 ## 🛠️ Development
 

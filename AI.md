@@ -203,7 +203,7 @@ IDEA.md is the project PLAN. AI.md (this file) is the SOURCE OF TRUTH.
 | **8 platforms required** | linux, darwin, windows, freebsd × amd64, arm64 |
 | **Binary naming** | `search-{os}-{arch}` (windows adds `.exe`) |
 | **NEVER use -musl suffix** | Alpine builds are NOT musl-specific |
-| **Build source** | ALWAYS `src` directory |
+| **Build source** | ALWAYS `./src` directory |
 
 ## Container-Only Development
 
@@ -609,12 +609,34 @@ src/
 
 ### When to Split Files
 
+**File length guidelines are CONTEXTUAL, not rigid rules.**
+
+| File Type | Guideline | Reason |
+|-----------|-----------|--------|
+| **Handlers** (`handler.go`) | ~300-500 lines | Should be thin - delegate to services |
+| **Services** (`service.go`) | ~500-800 lines | Business logic can be denser |
+| **Models** (`model.go`) | ~200-400 lines | Structs + validation, split by domain if larger |
+| **Store/DB** (`store.go`) | ~400-600 lines | CRUD operations, split by entity if larger |
+| **Middleware** | ~200-300 lines | Each middleware should be focused |
+| **Generated code** | No limit | Auto-generated files can be any size |
+| **Embedded assets** | No limit | Binary/text embeds are naturally large |
+| **Test files** | ~500-800 lines | Tests can be verbose, split by feature if unwieldy |
+
+**Split based on COHESION, not just line count:**
+
 | Split When | Into | Example |
 |------------|------|---------|
-| File > 500 lines | Feature-specific files | `user.go` → `user_model.go`, `user_service.go`, `user_handler.go` |
+| Multiple unrelated features | Feature-specific files | `user.go` → `user_model.go`, `user_service.go`, `user_handler.go` |
 | Multiple handlers | Handler per domain | `handler.go` → `handler/user.go`, `handler/admin.go` |
 | Multiple services | Service per domain | `service.go` → `service/user.go`, `service/email.go` |
-| Test file > 300 lines | Test per feature | `server_test.go` → `auth_test.go`, `user_test.go` |
+| Test file covers many features | Test per feature | `server_test.go` → `auth_test.go`, `user_test.go` |
+| File hard to navigate | Logical groupings | Split when you can't find things quickly |
+
+**Signs a file needs splitting:**
+- You scroll constantly to find related code
+- Multiple unrelated concerns in one file
+- Hard to name what the file "does" in one phrase
+- Merge conflicts frequent in that file
 
 ### Directory Purpose (Clear Naming)
 
@@ -1494,8 +1516,7 @@ Instructions for how this agent should behave...
 | `CLAUDE.md` | ✓ | Claude Code project memory (primary location) | No |
 | `CLAUDE.local.md` | - | Personal Claude Code preferences | **Yes** |
 | `README.md` | ✓ | Project documentation | No |
-| `LICENSE` | ✓ | MIT license | No |
-| `LICENSE.md` | ✓ | Third-party license attributions | No |
+| `LICENSE.md` | ✓ | MIT license + embedded third-party licenses | No |
 | `go.mod` | ✓ | Go module definition | No |
 | `go.sum` | ✓ | Go module checksums | No |
 | `Makefile` | ✓ | Local development only | No |
@@ -1757,14 +1778,14 @@ This distinction exists for clarity. When referring to OS-level resources that b
 
 ## How to Read This Large File
 
-**AI.md is ~2.0MB and ~55,000 lines. You CANNOT read it all at once. Follow these procedures.**
+**AI.md is ~2.0MB and ~55,300 lines. You CANNOT read it all at once. Follow these procedures.**
 
 ### File Size Reality
 
 | Constraint | Value |
 |------------|-------|
 | File size | ~2.0MB |
-| Line count | ~55,000 lines |
+| Line count | ~55,300 lines |
 | Read limit | ~500 lines per read |
 | Full reads needed | ~110 reads (impractical) |
 
@@ -1776,45 +1797,45 @@ This distinction exists for clarity. When referring to OS-level resources that b
 
 | PART | Line | Topic | When to Read |
 |------|------|-------|--------------|
-| 0 | ~1875 | AI Assistant Rules | **ALWAYS READ FIRST**, **AI Behavior Rules** |
-| 1 | ~3574 | Critical Rules | **ALWAYS READ FIRST** |
-| 2 | ~4821 | License & Attribution | License requirements |
-| 3 | ~5155 | Project Structure | Setting up new project, **CI/CD badge detection** |
-| 4 | ~6115 | OS-Specific Paths | Path handling |
-| 5 | ~6300 | Configuration | Config file work, **Path Security**, **Privileged Ports**, **Escalation** |
-| 6 | ~8210 | Application Modes | Mode handling, debug endpoints |
-| 7 | ~8818 | Binary Requirements | Binary building, **Display detection**, **TERM=dumb**, **NO_COLOR** |
-| 8 | ~9481 | Server Binary CLI | CLI flags/commands, **NO_COLOR Support**, **--color flag** |
-| 9 | ~12642 | Error Handling & Caching | Error/cache patterns |
-| 10 | ~13019 | Database & Cluster | Database work |
-| 11 | ~13565 | Security & Logging | Security features, **Scoped Agent Tokens**, **Context Detection** |
-| 12 | ~15457 | Server Configuration | Server settings |
-| 13 | ~16517 | Health & Versioning | Health endpoints |
-| 14 | ~17268 | API Structure | REST/GraphQL/Route Compliance, **Non-Interactive Text Output** |
-| 15 | ~18901 | SSL/TLS & Let's Encrypt | SSL certificates |
-| 16 | ~19774 | Web Frontend | Frontend/UI, **Sitemap**, **Site Verification**, **Branding/SEO** |
-| 17 | ~25755 | Admin Panel | Admin UI, **Server Admin**, **Scoped Agents API** |
-| 18 | ~27795 | Email & Notifications | Email/SMTP, **SMTP Auto-Detection** |
-| 19 | ~29115 | Scheduler | Background tasks, **NO external schedulers**, **Backup tasks** |
-| 20 | ~29600 | GeoIP | GeoIP features |
-| 21 | ~29673 | Metrics | Prometheus metrics, **INTERNAL only** |
-| 22 | ~31118 | Backup & Restore | Backup features, **Compliance encryption**, **Cluster backups** |
-| 23 | ~31847 | Update Command | Update feature |
-| 24 | ~32326 | Privilege Escalation & Service | Service/privilege work |
-| 25 | ~33224 | Service Support | Systemd/runit/rc.d/launchd templates |
-| 26 | ~33408 | Makefile | Local dev/tests/debug only, **NOT used in CI/CD** |
-| 27 | ~34163 | Docker | Docker/containers, **NEVER copy/symlink binaries** |
-| 28 | ~35662 | CI/CD Workflows | GitHub/GitLab/Gitea Actions |
-| 29 | ~38516 | Testing & Development | Testing/dev workflow, **AI Docker Compose Rules**, **Content Negotiation Testing** |
-| 30 | ~40337 | ReadTheDocs Documentation | Documentation |
-| 31 | ~41067 | I18N & A11Y | Internationalization |
-| 32 | ~41488 | Tor Hidden Service | Tor support, **binary controls Tor** |
-| 33 | ~43267 | Client & Agent | Client **REQUIRED**, Agent optional - CLI/TUI/GUI, **Scoped Agent Tokens**, **Smart Context**, **First-Run Wizard** |
-| 34 | ~47682 | Multi-User | **OPTIONAL** - Regular User accounts/registration, vanity URLs |
-| 35 | ~51334 | Organizations | **OPTIONAL** - multi-user orgs, vanity URLs |
-| 36 | ~51975 | Custom Domains | **OPTIONAL** - user/org branded domains |
-| 37 | ~52998 | IDEA.md Reference | **Examples only** - NEVER modify |
-| FINAL | ~53252 | Compliance Checklist | Final verification, **AI Quick Reference Rules** |
+| 0 | ~1932 | AI Assistant Rules | **ALWAYS READ FIRST**, **AI Behavior Rules** |
+| 1 | ~3677 | Critical Rules | **ALWAYS READ FIRST** |
+| 2 | ~4928 | License & Attribution | License requirements |
+| 3 | ~5262 | Project Structure | Setting up new project, **CI/CD badge detection** |
+| 4 | ~6222 | OS-Specific Paths | Path handling |
+| 5 | ~6416 | Configuration | Config file work, **Path Security**, **Privileged Ports**, **Escalation** |
+| 6 | ~8327 | Application Modes | Mode handling, debug endpoints |
+| 7 | ~8935 | Binary Requirements | Binary building, **Display detection**, **TERM=dumb**, **NO_COLOR** |
+| 8 | ~9598 | Server Binary CLI | CLI flags/commands, **NO_COLOR Support**, **--color flag** |
+| 9 | ~12767 | Error Handling & Caching | Error/cache patterns |
+| 10 | ~13144 | Database & Cluster | Database work |
+| 11 | ~13690 | Security & Logging | Security features, **Scoped Agent Tokens**, **Context Detection** |
+| 12 | ~15582 | Server Configuration | Server settings |
+| 13 | ~16644 | Health & Versioning | Health endpoints |
+| 14 | ~17395 | API Structure | REST/GraphQL/Route Compliance, **Non-Interactive Text Output** |
+| 15 | ~19028 | SSL/TLS & Let's Encrypt | SSL certificates |
+| 16 | ~19999 | Web Frontend | Frontend/UI, **Sitemap**, **Site Verification**, **Branding/SEO** |
+| 17 | ~26168 | Admin Panel | Admin UI, **Server Admin**, **Scoped Agents API** |
+| 18 | ~28205 | Email & Notifications | Email/SMTP, **SMTP Auto-Detection** |
+| 19 | ~29528 | Scheduler | Background tasks, **NO external schedulers**, **Backup tasks** |
+| 20 | ~30013 | GeoIP | GeoIP features |
+| 21 | ~30086 | Metrics | Prometheus metrics, **INTERNAL only** |
+| 22 | ~31531 | Backup & Restore | Backup features, **Compliance encryption**, **Cluster backups** |
+| 23 | ~32260 | Update Command | Update feature |
+| 24 | ~32739 | Privilege Escalation & Service | Service/privilege work |
+| 25 | ~33637 | Service Support | Systemd/runit/rc.d/launchd templates |
+| 26 | ~33821 | Makefile | Local dev/tests/debug only, **NOT used in CI/CD** |
+| 27 | ~34576 | Docker | Docker/containers, **NEVER copy/symlink binaries** |
+| 28 | ~36075 | CI/CD Workflows | GitHub/GitLab/Gitea Actions |
+| 29 | ~38929 | Testing & Development | Testing/dev workflow, **AI Docker Compose Rules**, **Content Negotiation Testing** |
+| 30 | ~40750 | ReadTheDocs Documentation | Documentation |
+| 31 | ~41482 | I18N & A11Y | Internationalization |
+| 32 | ~41903 | Tor Hidden Service | Tor support, **binary controls Tor** |
+| 33 | ~43682 | Client & Agent | Client **REQUIRED**, Agent optional - CLI/TUI/GUI, **Scoped Agent Tokens**, **Smart Context**, **First-Run Wizard** |
+| 34 | ~48097 | Multi-User | **OPTIONAL** - Regular User accounts/registration, vanity URLs |
+| 35 | ~51749 | Organizations | **OPTIONAL** - multi-user orgs, vanity URLs |
+| 36 | ~52390 | Custom Domains | **OPTIONAL** - user/org branded domains |
+| 37 | ~53413 | IDEA.md Reference | **Examples only** - NEVER modify |
+| FINAL | ~53667 | Compliance Checklist | Final verification, **AI Quick Reference Rules**, **Console/Banner Checklist** |
 
 **When Implementing OPTIONAL PARTs (34-36, Agent from 33):**
 1. Change PART title from `OPTIONAL` → `NON-NEGOTIABLE` in AI.md
@@ -32721,7 +32742,7 @@ func verifyChecksum(filePath, expectedHash string) error {
 
 Application user creation **REQUIRES** privilege escalation. If the user cannot escalate privileges, the application runs as the current user with user-level directories.
 
-**IMPORTANT: See PART 5 "Smart Escalation Logic" (lines ~6668-6703) for the complete escalation flow:**
+**IMPORTANT: See PART 5 "Smart Escalation Logic" (lines ~7728-7763) for the complete escalation flow:**
 - Binary first checks if already root/admin → skips escalation prompt entirely
 - Only prompts if user CAN actually escalate (is in sudoers/wheel/admin group)
 - Never prompts if user cannot escalate → shows informative error instead
@@ -36188,7 +36209,7 @@ jobs:
           CGO_ENABLED: 0
         run: |
           LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli${{ matrix.ext }} ./src/client
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
         uses: actions/upload-artifact@v4
@@ -36200,8 +36221,8 @@ jobs:
         if: hashFiles('src/client/') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
-          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli${{ matrix.ext }}
+          name: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
       # Agent build - only if src/agent/ directory exists
       - name: Build Agent
@@ -36212,14 +36233,14 @@ jobs:
           CGO_ENABLED: 0
         run: |
           LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent${{ matrix.ext }} ./src/agent
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/agent
 
       - name: Upload Agent artifact
         if: hashFiles('src/agent/') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent
-          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent${{ matrix.ext }}
+          name: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
   release:
     needs: build
@@ -36293,6 +36314,20 @@ jobs:
             goarch: amd64
           - goos: linux
             goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+            ext: .exe
+          - goos: windows
+            goarch: arm64
+            ext: .exe
+          - goos: freebsd
+            goarch: amd64
+          - goos: freebsd
+            goarch: arm64
 
     steps:
       - uses: actions/checkout@v4
@@ -36315,7 +36350,7 @@ jobs:
           CGO_ENABLED: 0
         run: |
           LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }} ./src
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src
 
       # CLI build - only if src/client/ directory exists
       - name: Build CLI
@@ -36326,20 +36361,20 @@ jobs:
           CGO_ENABLED: 0
         run: |
           LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli ./src/client
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
       - name: Upload CLI artifact
         if: hashFiles('src/client/') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
-          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
+          name: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
       # Agent build - only if src/agent/ directory exists
       - name: Build Agent
@@ -36350,14 +36385,14 @@ jobs:
           CGO_ENABLED: 0
         run: |
           LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent ./src/agent
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/agent
 
       - name: Upload Agent artifact
         if: hashFiles('src/agent/') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent
-          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent
+          name: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
   release:
     needs: build
@@ -36465,7 +36500,7 @@ jobs:
           CGO_ENABLED: 0
         run: |
           LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli${{ matrix.ext }} ./src/client
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
         uses: actions/upload-artifact@v4
@@ -36477,8 +36512,8 @@ jobs:
         if: hashFiles('src/client/') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
-          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli${{ matrix.ext }}
+          name: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
       # Agent build - only if src/agent/ directory exists
       - name: Build Agent
@@ -36489,14 +36524,14 @@ jobs:
           CGO_ENABLED: 0
         run: |
           LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent${{ matrix.ext }} ./src/agent
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/agent
 
       - name: Upload Agent artifact
         if: hashFiles('src/agent/') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent
-          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent${{ matrix.ext }}
+          name: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
   release:
     needs: build
@@ -36634,7 +36669,7 @@ jobs:
           echo "tags=$TAGS" >> $GITHUB_OUTPUT
 
       - name: Build and push (standard)
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/Dockerfile
@@ -36729,7 +36764,7 @@ jobs:
           echo "tags=$TAGS" >> $GITHUB_OUTPUT
 
       - name: Build and push (all-in-one)
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/Dockerfile.aio
@@ -36903,7 +36938,7 @@ jobs:
           CGO_ENABLED: 0
         run: |
           LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli${{ matrix.ext }} ./src/client
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
         uses: actions/upload-artifact@v4
@@ -36915,8 +36950,8 @@ jobs:
         if: hashFiles('src/client/') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
-          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli${{ matrix.ext }}
+          name: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
       # Agent build - only if src/agent/ directory exists
       - name: Build Agent
@@ -36927,14 +36962,14 @@ jobs:
           CGO_ENABLED: 0
         run: |
           LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent${{ matrix.ext }} ./src/agent
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/agent
 
       - name: Upload Agent artifact
         if: hashFiles('src/agent/') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent
-          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent${{ matrix.ext }}
+          name: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
   release:
     needs: build
@@ -37030,7 +37065,7 @@ jobs:
           CGO_ENABLED: 0
         run: |
           LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }} ./src
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src
 
       # CLI build - only if src/client/ directory exists
       - name: Build CLI
@@ -37041,20 +37076,20 @@ jobs:
           CGO_ENABLED: 0
         run: |
           LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli ./src/client
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
       - name: Upload CLI artifact
         if: hashFiles('src/client/') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
-          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
+          name: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
       # Agent build - only if src/agent/ directory exists
       - name: Build Agent
@@ -37065,14 +37100,14 @@ jobs:
           CGO_ENABLED: 0
         run: |
           LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent ./src/agent
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/agent
 
       - name: Upload Agent artifact
         if: hashFiles('src/agent/') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent
-          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent
+          name: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
   release:
     needs: build
@@ -37180,7 +37215,7 @@ jobs:
           CGO_ENABLED: 0
         run: |
           LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli${{ matrix.ext }} ./src/client
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
         uses: actions/upload-artifact@v4
@@ -37192,8 +37227,8 @@ jobs:
         if: hashFiles('src/client/') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli
-          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-cli${{ matrix.ext }}
+          name: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
       # Agent build - only if src/agent/ directory exists
       - name: Build Agent
@@ -37204,14 +37239,14 @@ jobs:
           CGO_ENABLED: 0
         run: |
           LDFLAGS="-s -w -X 'main.Version=${{ env.VERSION }}' -X 'main.CommitID=${{ env.COMMIT_ID }}' -X 'main.BuildDate=${{ env.BUILD_DATE }}' -X 'main.OfficialSite=${{ env.OFFICIALSITE }}'"
-          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent${{ matrix.ext }} ./src/agent
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/agent
 
       - name: Upload Agent artifact
         if: hashFiles('src/agent/') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent
-          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}-agent${{ matrix.ext }}
+          name: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
   release:
     needs: build
@@ -37343,7 +37378,7 @@ jobs:
           echo "tags=$TAGS" >> $GITEA_OUTPUT
 
       - name: Build and push (standard)
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/Dockerfile
@@ -37445,7 +37480,7 @@ jobs:
           echo "tags=$TAGS" >> $GITEA_OUTPUT
 
       - name: Build and push (all-in-one)
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/Dockerfile.aio
@@ -54653,6 +54688,98 @@ make docker # Build Docker image
 - [ ] Works on all screen sizes
 - [ ] Touch-friendly controls
 - [ ] No horizontal scroll on mobile
+
+---
+
+## CONSOLE/BANNER CHECKLIST
+
+### Responsive Startup Banner (Server, Client, Agent)
+
+- [ ] Banner adapts to terminal width at runtime
+- [ ] ≥80 cols: Full banner with box drawing + icons + all info
+- [ ] 60-79 cols: Compact banner with icons, no box drawing
+- [ ] 40-59 cols: Minimal text, abbreviated, no icons
+- [ ] <40 cols: Single line only (app name + port)
+- [ ] Width detected via `term.GetSize()`, default 80 if detection fails
+- [ ] Banner never wider than terminal (no horizontal scroll)
+
+### NO_COLOR / --color Compliance (ALL Binaries)
+
+- [ ] `NO_COLOR` env var respected (any non-empty value disables colors AND emojis)
+- [ ] `TERM=dumb` disables colors, emojis, and ANSI escape sequences
+- [ ] `--color=always` forces colors ON (overrides NO_COLOR)
+- [ ] `--color=never` forces colors OFF
+- [ ] `--color=auto` (default) uses priority detection
+- [ ] Priority order: CLI flag > config file > NO_COLOR env > auto-detect
+- [ ] Uses shared `ColorEnabled()` and `EmojiEnabled()` functions (PART 8)
+- [ ] Plain mode: no emojis, no box drawing (╭╮╰╯│─), no ANSI colors
+
+### Setup Token (First Run)
+
+- [ ] Generated on first run if no admins exist
+- [ ] 32-character hex string (no dashes)
+- [ ] Stored as SHA-256 hash in `{config_dir}/setup_token.txt`
+- [ ] Plaintext token shown ONCE in console banner
+- [ ] File deleted after successful setup completion
+- [ ] Setup URL displayed: `{proto}://{fqdn}/{admin_path}/server/setup`
+- [ ] Token section only appears on first run (never again after setup)
+
+### CLI Flag Syntax (ALL Binaries)
+
+- [ ] Both `--flag=value` and `--flag value` syntax accepted
+- [ ] `-h` (help) and `-v` (version) are the ONLY short flags
+- [ ] All other flags are long-form only (`--config`, `--port`, etc.)
+- [ ] `--color {always|never|auto}` available on all binaries
+- [ ] `--debug` available on all binaries
+- [ ] Flag parsing consistent across server, client, agent
+
+### Error Pages (Web Frontend)
+
+- [ ] All HTTP error pages use site theme (dark/light/auto)
+- [ ] 400 Bad Request - themed
+- [ ] 401 Unauthorized - themed
+- [ ] 403 Forbidden - themed
+- [ ] 404 Not Found - themed
+- [ ] 500 Internal Server Error - themed
+- [ ] 502 Bad Gateway - themed
+- [ ] 503 Service Unavailable - themed
+- [ ] Error pages extend `public.tmpl` layout
+- [ ] Error pages include navigation (user can navigate away)
+- [ ] No stack traces in production mode
+- [ ] No generic browser error pages - always render themed template
+
+### Banner Placeholders (Must Be Defined)
+
+- [ ] `{proto}` - Protocol (http/https)
+- [ ] `{fqdn}` - Fully qualified domain name
+- [ ] `{port}` - Port number (stripped if 80/443)
+- [ ] `{address}` - Listen IP address
+- [ ] `{app_mode}` - Application mode (production/development)
+- [ ] `{onion_address}` - Tor .onion address (if enabled)
+- [ ] `{i2p_address}` - I2P address (if enabled)
+- [ ] `{smtp_address}` - SMTP server address (if configured)
+- [ ] `{smtp_port}` - SMTP server port
+- [ ] `{startup_datetime}` - Server start timestamp
+- [ ] `{setup_token}` - First-run setup token (shown ONCE)
+- [ ] `SEARCH` - Project name (uppercase for display)
+- [ ] `{projectversion}` - Current version
+
+### Client TUI/GUI Dynamic Sizing
+
+- [ ] TUI adapts to terminal size (same breakpoints as server banner)
+- [ ] GUI uses native window sizing
+- [ ] Layout recalculates on terminal resize
+- [ ] Minimum usable width enforced (shows error if too narrow)
+- [ ] Mouse support respects terminal capabilities
+- [ ] Unicode box drawing respects `TERM` and `NO_COLOR`
+
+### Console Output Rules
+
+- [ ] Startup banner: Pretty (icons, colors, box drawing) - respects NO_COLOR
+- [ ] Log output: ALWAYS plain text (no icons, no colors, no box drawing)
+- [ ] `--status` output: Pretty to console, exit code for scripts (0=healthy, 1=unhealthy)
+- [ ] `--help` output: Plain text, no colors (works in all terminals)
+- [ ] `--version` output: Plain text, single line
 
 ---
 

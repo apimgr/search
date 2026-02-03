@@ -18,11 +18,45 @@
       "description": "API v1"
     }
   ],
+  "tags": [
+    {
+      "name": "System",
+      "description": "System health and information"
+    },
+    {
+      "name": "Search",
+      "description": "Search operations"
+    },
+    {
+      "name": "Engines",
+      "description": "Search engine management"
+    },
+    {
+      "name": "Categories",
+      "description": "Search categories"
+    },
+    {
+      "name": "Widgets",
+      "description": "Homepage widgets"
+    },
+    {
+      "name": "Server",
+      "description": "Server information pages"
+    },
+    {
+      "name": "Auth",
+      "description": "Authentication operations"
+    },
+    {
+      "name": "Users",
+      "description": "User account management"
+    }
+  ],
   "paths": {
     "/healthz": {
       "get": {
         "summary": "Health check",
-        "description": "Returns the health status of the API",
+        "description": "Returns the health status of the API. Supports .txt extension for plain text output.",
         "operationId": "getHealthz",
         "tags": ["System"],
         "responses": {
@@ -33,6 +67,12 @@
                 "schema": {
                   "$ref": "#/components/schemas/HealthResponse"
                 }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "example": "OK"
+                }
               }
             }
           }
@@ -42,7 +82,7 @@
     "/info": {
       "get": {
         "summary": "Server information",
-        "description": "Returns detailed information about the server",
+        "description": "Returns detailed information about the server. Supports .txt extension for plain text output.",
         "operationId": "getInfo",
         "tags": ["System"],
         "responses": {
@@ -62,7 +102,7 @@
     "/search": {
       "get": {
         "summary": "Search",
-        "description": "Perform a search query",
+        "description": "Perform a search query across multiple engines",
         "operationId": "search",
         "tags": ["Search"],
         "parameters": [
@@ -123,6 +163,14 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "engines",
+            "in": "query",
+            "description": "Comma-separated list of engines to use",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -177,10 +225,41 @@
         }
       }
     },
+    "/search/related": {
+      "get": {
+        "summary": "Related searches",
+        "description": "Get related search suggestions for a query",
+        "operationId": "getRelatedSearches",
+        "tags": ["Search"],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "Search query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Related searches",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelatedSearchesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/autocomplete": {
       "get": {
         "summary": "Autocomplete suggestions",
-        "description": "Get autocomplete suggestions for a query",
+        "description": "Get autocomplete suggestions for a partial query",
         "operationId": "autocomplete",
         "tags": ["Search"],
         "parameters": [
@@ -200,18 +279,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean"
-                    },
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    }
-                  }
+                  "$ref": "#/components/schemas/AutocompleteResponse"
                 }
               }
             }
@@ -231,18 +299,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean"
-                    },
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/EngineInfo"
-                      }
-                    }
-                  }
+                  "$ref": "#/components/schemas/EnginesResponse"
                 }
               }
             }
@@ -273,15 +330,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean"
-                    },
-                    "data": {
-                      "$ref": "#/components/schemas/EngineInfo"
-                    }
-                  }
+                  "$ref": "#/components/schemas/EngineResponse"
                 }
               }
             }
@@ -311,18 +360,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean"
-                    },
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/CategoryInfo"
-                      }
-                    }
-                  }
+                  "$ref": "#/components/schemas/CategoriesResponse"
                 }
               }
             }
@@ -380,18 +418,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean"
-                    },
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/WidgetInfo"
-                      }
-                    }
-                  }
+                  "$ref": "#/components/schemas/WidgetsResponse"
                 }
               }
             }
@@ -422,7 +449,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/WidgetData"
+                  "$ref": "#/components/schemas/WidgetDataResponse"
                 }
               }
             }
@@ -443,7 +470,7 @@
     "/instant": {
       "get": {
         "summary": "Get instant answer",
-        "description": "Get instant answer for a query (calculator, definitions, etc.)",
+        "description": "Get instant answer for a query (calculator, definitions, unit conversion, etc.)",
         "operationId": "getInstantAnswer",
         "tags": ["Search"],
         "parameters": [
@@ -463,7 +490,1059 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InstantAnswer"
+                  "$ref": "#/components/schemas/InstantAnswerResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/direct/{type}": {
+      "get": {
+        "summary": "Get direct answer",
+        "description": "Get full-page direct answer for specific content types",
+        "operationId": "getDirectAnswer",
+        "tags": ["Search"],
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "description": "Direct answer type",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "Query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Direct answer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectAnswerResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/server/about": {
+      "get": {
+        "summary": "About page",
+        "description": "Get server about information",
+        "operationId": "getServerAbout",
+        "tags": ["Server"],
+        "responses": {
+          "200": {
+            "description": "About information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerAboutResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/server/privacy": {
+      "get": {
+        "summary": "Privacy policy",
+        "description": "Get server privacy policy",
+        "operationId": "getServerPrivacy",
+        "tags": ["Server"],
+        "responses": {
+          "200": {
+            "description": "Privacy policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerPageResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/server/help": {
+      "get": {
+        "summary": "Help page",
+        "description": "Get server help information",
+        "operationId": "getServerHelp",
+        "tags": ["Server"],
+        "responses": {
+          "200": {
+            "description": "Help information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerPageResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/server/terms": {
+      "get": {
+        "summary": "Terms of service",
+        "description": "Get server terms of service",
+        "operationId": "getServerTerms",
+        "tags": ["Server"],
+        "responses": {
+          "200": {
+            "description": "Terms of service",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerPageResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "summary": "Register new user",
+        "description": "Create a new user account",
+        "operationId": "register",
+        "tags": ["Auth"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Registration disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "Login",
+        "description": "Authenticate user and create session",
+        "operationId": "login",
+        "tags": ["Auth"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "summary": "Logout",
+        "description": "End current session",
+        "operationId": "logout",
+        "tags": ["Auth"],
+        "security": [{"bearerAuth": []}, {"cookieAuth": []}],
+        "responses": {
+          "200": {
+            "description": "Logout successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/forgot": {
+      "post": {
+        "summary": "Forgot password",
+        "description": "Request password reset email",
+        "operationId": "forgotPassword",
+        "tags": ["Auth"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotPasswordRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reset email sent (if account exists)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/reset": {
+      "post": {
+        "summary": "Reset password",
+        "description": "Complete password reset with token",
+        "operationId": "resetPassword",
+        "tags": ["Auth"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password reset successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or expired token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/recovery": {
+      "post": {
+        "summary": "Recovery key login",
+        "description": "Login using a recovery key when 2FA device is lost",
+        "operationId": "recoveryKeyLogin",
+        "tags": ["Auth"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecoveryKeyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid recovery key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/verify": {
+      "post": {
+        "summary": "Verify email",
+        "description": "Verify email address with token",
+        "operationId": "verifyEmail",
+        "tags": ["Auth"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyEmailRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Email verified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or expired token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/2fa/verify": {
+      "post": {
+        "summary": "Verify 2FA code",
+        "description": "Complete login by verifying 2FA code",
+        "operationId": "verify2FA",
+        "tags": ["Auth"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TwoFactorVerifyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "2FA verified, login complete",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid 2FA code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/session": {
+      "get": {
+        "summary": "Get current session",
+        "description": "Get information about the current session",
+        "operationId": "getSession",
+        "tags": ["Auth"],
+        "security": [{"bearerAuth": []}, {"cookieAuth": []}],
+        "responses": {
+          "200": {
+            "description": "Session information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/profile": {
+      "get": {
+        "summary": "Get user profile",
+        "description": "Get current user's profile",
+        "operationId": "getUserProfile",
+        "tags": ["Users"],
+        "security": [{"bearerAuth": []}, {"cookieAuth": []}],
+        "responses": {
+          "200": {
+            "description": "User profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfileResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update user profile",
+        "description": "Update current user's profile",
+        "operationId": "updateUserProfile",
+        "tags": ["Users"],
+        "security": [{"bearerAuth": []}, {"cookieAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProfileRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Profile updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfileResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/password": {
+      "put": {
+        "summary": "Change password",
+        "description": "Change current user's password",
+        "operationId": "changePassword",
+        "tags": ["Users"],
+        "security": [{"bearerAuth": []}, {"cookieAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid current password or weak new password",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/sessions": {
+      "get": {
+        "summary": "List sessions",
+        "description": "List all active sessions for current user",
+        "operationId": "listSessions",
+        "tags": ["Users"],
+        "security": [{"bearerAuth": []}, {"cookieAuth": []}],
+        "responses": {
+          "200": {
+            "description": "List of sessions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/sessions/{session_id}": {
+      "delete": {
+        "summary": "Delete session",
+        "description": "Revoke a specific session",
+        "operationId": "deleteSession",
+        "tags": ["Users"],
+        "security": [{"bearerAuth": []}, {"cookieAuth": []}],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "description": "Session ID to delete",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/tokens": {
+      "get": {
+        "summary": "List API tokens",
+        "description": "List all API tokens for current user",
+        "operationId": "listTokens",
+        "tags": ["Users"],
+        "security": [{"bearerAuth": []}, {"cookieAuth": []}],
+        "responses": {
+          "200": {
+            "description": "List of tokens",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokensResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create API token",
+        "description": "Create a new API token for current user",
+        "operationId": "createToken",
+        "tags": ["Users"],
+        "security": [{"bearerAuth": []}, {"cookieAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTokenRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Token created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NewTokenResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/tokens/{token_id}": {
+      "delete": {
+        "summary": "Delete API token",
+        "description": "Revoke a specific API token",
+        "operationId": "deleteToken",
+        "tags": ["Users"],
+        "security": [{"bearerAuth": []}, {"cookieAuth": []}],
+        "parameters": [
+          {
+            "name": "token_id",
+            "in": "path",
+            "required": true,
+            "description": "Token ID to delete",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Token deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Token not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/2fa/status": {
+      "get": {
+        "summary": "Get 2FA status",
+        "description": "Get current user's 2FA status",
+        "operationId": "get2FAStatus",
+        "tags": ["Users"],
+        "security": [{"bearerAuth": []}, {"cookieAuth": []}],
+        "responses": {
+          "200": {
+            "description": "2FA status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TwoFactorStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/2fa/setup": {
+      "post": {
+        "summary": "Setup 2FA",
+        "description": "Initialize 2FA setup and get QR code",
+        "operationId": "setup2FA",
+        "tags": ["Users"],
+        "security": [{"bearerAuth": []}, {"cookieAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Setup2FARequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "2FA setup data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Setup2FAResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid password",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/2fa/enable": {
+      "post": {
+        "summary": "Enable 2FA",
+        "description": "Complete 2FA setup by verifying TOTP code",
+        "operationId": "enable2FA",
+        "tags": ["Users"],
+        "security": [{"bearerAuth": []}, {"cookieAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Enable2FARequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "2FA enabled with recovery keys",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Enable2FAResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid TOTP code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/2fa/disable": {
+      "post": {
+        "summary": "Disable 2FA",
+        "description": "Disable 2FA for current user",
+        "operationId": "disable2FA",
+        "tags": ["Users"],
+        "security": [{"bearerAuth": []}, {"cookieAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Disable2FARequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "2FA disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid password or code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/recovery-keys": {
+      "get": {
+        "summary": "List recovery keys",
+        "description": "Get recovery key status (not the actual keys)",
+        "operationId": "getRecoveryKeys",
+        "tags": ["Users"],
+        "security": [{"bearerAuth": []}, {"cookieAuth": []}],
+        "responses": {
+          "200": {
+            "description": "Recovery key status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryKeysStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Regenerate recovery keys",
+        "description": "Generate new recovery keys (invalidates old ones)",
+        "operationId": "regenerateRecoveryKeys",
+        "tags": ["Users"],
+        "security": [{"bearerAuth": []}, {"cookieAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegenerateRecoveryKeysRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "New recovery keys",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryKeysResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid password",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -473,37 +1552,191 @@
     }
   },
   "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "API token authentication. Use token with prefix: usr_ for user tokens."
+      },
+      "cookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "session",
+        "description": "Session cookie authentication"
+      }
+    },
     "schemas": {
+      "SuccessResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "example": true
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/APIMeta"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "example": false
+          },
+          "error": {
+            "type": "string",
+            "description": "Error code"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable error message"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/APIMeta"
+          }
+        }
+      },
+      "APIMeta": {
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string"
+          },
+          "process_time_ms": {
+            "type": "number"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
       "HealthResponse": {
         "type": "object",
         "properties": {
-          "success": {
+          "ok": {
             "type": "boolean"
           },
           "data": {
             "type": "object",
             "properties": {
+              "project": {
+                "$ref": "#/components/schemas/ProjectInfo"
+              },
               "status": {
-                "type": "string"
+                "type": "string",
+                "enum": ["healthy", "unhealthy", "degraded"]
               },
               "version": {
                 "type": "string"
               },
+              "go_version": {
+                "type": "string"
+              },
+              "build": {
+                "$ref": "#/components/schemas/BuildInfo"
+              },
               "uptime": {
+                "type": "string"
+              },
+              "mode": {
                 "type": "string"
               },
               "timestamp": {
                 "type": "string",
                 "format": "date-time"
+              },
+              "features": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "boolean"
+                }
+              },
+              "checks": {
+                "$ref": "#/components/schemas/ChecksInfo"
+              },
+              "stats": {
+                "$ref": "#/components/schemas/StatsInfo"
               }
             }
+          }
+        }
+      },
+      "ProjectInfo": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "tagline": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      },
+      "BuildInfo": {
+        "type": "object",
+        "properties": {
+          "commit": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          }
+        }
+      },
+      "ChecksInfo": {
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "string"
+          },
+          "cache": {
+            "type": "string"
+          },
+          "disk": {
+            "type": "string"
+          },
+          "scheduler": {
+            "type": "string"
+          },
+          "cluster": {
+            "type": "string"
+          },
+          "tor": {
+            "type": "string"
+          }
+        }
+      },
+      "StatsInfo": {
+        "type": "object",
+        "properties": {
+          "requests_total": {
+            "type": "integer"
+          },
+          "requests_24h": {
+            "type": "integer"
+          },
+          "active_connections": {
+            "type": "integer"
           }
         }
       },
       "InfoResponse": {
         "type": "object",
         "properties": {
-          "success": {
+          "ok": {
             "type": "boolean"
           },
           "data": {
@@ -606,7 +1839,7 @@
       "SearchResponse": {
         "type": "object",
         "properties": {
-          "success": {
+          "ok": {
             "type": "boolean"
           },
           "data": {
@@ -686,6 +1919,67 @@
           }
         }
       },
+      "RelatedSearchesResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string"
+              },
+              "related": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "AutocompleteResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "EnginesResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EngineInfo"
+            }
+          }
+        }
+      },
+      "EngineResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "$ref": "#/components/schemas/EngineInfo"
+          }
+        }
+      },
       "EngineInfo": {
         "type": "object",
         "properties": {
@@ -716,6 +2010,20 @@
           }
         }
       },
+      "CategoriesResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CategoryInfo"
+            }
+          }
+        }
+      },
       "CategoryInfo": {
         "type": "object",
         "properties": {
@@ -733,42 +2041,31 @@
           }
         }
       },
-      "APIMeta": {
+      "BangsResponse": {
         "type": "object",
         "properties": {
-          "request_id": {
-            "type": "string"
-          },
-          "process_time_ms": {
-            "type": "number"
-          },
-          "version": {
-            "type": "string"
-          }
-        }
-      },
-      "ErrorResponse": {
-        "type": "object",
-        "properties": {
-          "success": {
+          "ok": {
             "type": "boolean"
           },
-          "error": {
+          "data": {
             "type": "object",
             "properties": {
-              "code": {
+              "bangs": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BangInfo"
+                }
+              },
+              "total": {
                 "type": "integer"
               },
-              "message": {
-                "type": "string"
-              },
-              "details": {
-                "type": "string"
+              "categories": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             }
-          },
-          "meta": {
-            "$ref": "#/components/schemas/APIMeta"
           }
         }
       },
@@ -799,30 +2096,16 @@
           }
         }
       },
-      "BangsResponse": {
+      "WidgetsResponse": {
         "type": "object",
         "properties": {
-          "success": {
+          "ok": {
             "type": "boolean"
           },
           "data": {
-            "type": "object",
-            "properties": {
-              "bangs": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/BangInfo"
-                }
-              },
-              "total": {
-                "type": "integer"
-              },
-              "categories": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WidgetInfo"
             }
           }
         }
@@ -847,10 +2130,10 @@
           }
         }
       },
-      "WidgetData": {
+      "WidgetDataResponse": {
         "type": "object",
         "properties": {
-          "success": {
+          "ok": {
             "type": "boolean"
           },
           "data": {
@@ -870,10 +2153,10 @@
           }
         }
       },
-      "InstantAnswer": {
+      "InstantAnswerResponse": {
         "type": "object",
         "properties": {
-          "success": {
+          "ok": {
             "type": "boolean"
           },
           "data": {
@@ -900,29 +2183,642 @@
             }
           }
         }
+      },
+      "DirectAnswerResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "content": {
+                "type": "object"
+              },
+              "source": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "ServerAboutResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "tagline": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "features": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "links": {
+                "type": "object",
+                "properties": {
+                  "website": {
+                    "type": "string"
+                  },
+                  "documentation": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "ServerPageResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              },
+              "last_updated": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "RegisterRequest": {
+        "type": "object",
+        "required": ["username", "email", "password"],
+        "properties": {
+          "username": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 32
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": ["username", "password"],
+        "properties": {
+          "username": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "remember_me": {
+            "type": "boolean",
+            "default": false
+          },
+          "totp_code": {
+            "type": "string",
+            "description": "6-digit TOTP code if 2FA is enabled"
+          }
+        }
+      },
+      "AuthResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "user": {
+                "$ref": "#/components/schemas/UserInfo"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "user": {
+                "$ref": "#/components/schemas/UserInfo"
+              },
+              "session_id": {
+                "type": "string"
+              },
+              "expires_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "requires_2fa": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "UserInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "username": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "avatar_url": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "email_verified": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_login": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ForgotPasswordRequest": {
+        "type": "object",
+        "required": ["email"],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
+        }
+      },
+      "ResetPasswordRequest": {
+        "type": "object",
+        "required": ["token", "new_password"],
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "new_password": {
+            "type": "string",
+            "minLength": 8
+          }
+        }
+      },
+      "RecoveryKeyRequest": {
+        "type": "object",
+        "required": ["username", "recovery_key"],
+        "properties": {
+          "username": {
+            "type": "string"
+          },
+          "recovery_key": {
+            "type": "string"
+          }
+        }
+      },
+      "VerifyEmailRequest": {
+        "type": "object",
+        "required": ["token"],
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        }
+      },
+      "TwoFactorVerifyRequest": {
+        "type": "object",
+        "required": ["code", "session_id"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[0-9]{6}$"
+          },
+          "session_id": {
+            "type": "string"
+          }
+        }
+      },
+      "SessionResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "user": {
+                "$ref": "#/components/schemas/UserInfo"
+              },
+              "session": {
+                "$ref": "#/components/schemas/SessionInfo"
+              }
+            }
+          }
+        }
+      },
+      "SessionInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "device_name": {
+            "type": "string"
+          },
+          "ip_address": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_used": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "is_current": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UserProfileResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "user": {
+                "$ref": "#/components/schemas/UserInfo"
+              },
+              "email_info": {
+                "type": "object"
+              }
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/APIMeta"
+          }
+        }
+      },
+      "UpdateProfileRequest": {
+        "type": "object",
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "bio": {
+            "type": "string"
+          },
+          "avatar_url": {
+            "type": "string"
+          },
+          "notification_email": {
+            "type": "string",
+            "format": "email"
+          }
+        }
+      },
+      "ChangePasswordRequest": {
+        "type": "object",
+        "required": ["current_password", "new_password"],
+        "properties": {
+          "current_password": {
+            "type": "string"
+          },
+          "new_password": {
+            "type": "string",
+            "minLength": 8
+          }
+        }
+      },
+      "SessionsResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessions": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/SessionInfo"
+                }
+              }
+            }
+          }
+        }
+      },
+      "TokensResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "tokens": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/TokenInfo"
+                }
+              }
+            }
+          }
+        }
+      },
+      "TokenInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "prefix": {
+            "type": "string",
+            "description": "Token prefix (e.g., usr_xxxx)"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_used": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CreateTokenRequest": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "expires_in_days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 365
+          }
+        }
+      },
+      "NewTokenResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "token": {
+                "type": "string",
+                "description": "Full token value (only shown once)"
+              },
+              "token_info": {
+                "$ref": "#/components/schemas/TokenInfo"
+              }
+            }
+          }
+        }
+      },
+      "TwoFactorStatusResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "setup_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "recovery_keys_remaining": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "Setup2FARequest": {
+        "type": "object",
+        "required": ["password"],
+        "properties": {
+          "password": {
+            "type": "string"
+          }
+        }
+      },
+      "Setup2FAResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "secret": {
+                "type": "string",
+                "description": "TOTP secret key"
+              },
+              "qr_code": {
+                "type": "string",
+                "description": "Base64 encoded QR code image"
+              },
+              "otpauth_url": {
+                "type": "string",
+                "description": "otpauth:// URL for manual entry"
+              }
+            }
+          }
+        }
+      },
+      "Enable2FARequest": {
+        "type": "object",
+        "required": ["code"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[0-9]{6}$"
+          }
+        }
+      },
+      "Enable2FAResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "recovery_keys": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "One-time recovery keys (store safely)"
+              }
+            }
+          }
+        }
+      },
+      "Disable2FARequest": {
+        "type": "object",
+        "required": ["password", "code"],
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[0-9]{6}$"
+          }
+        }
+      },
+      "RecoveryKeysStatusResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "total": {
+                "type": "integer"
+              },
+              "remaining": {
+                "type": "integer"
+              },
+              "generated_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "RegenerateRecoveryKeysRequest": {
+        "type": "object",
+        "required": ["password"],
+        "properties": {
+          "password": {
+            "type": "string"
+          }
+        }
+      },
+      "RecoveryKeysResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "recovery_keys": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "New recovery keys (store safely, old keys are invalidated)"
+              }
+            }
+          }
+        }
       }
     }
-  },
-  "tags": [
-    {
-      "name": "System",
-      "description": "System health and information"
-    },
-    {
-      "name": "Search",
-      "description": "Search operations"
-    },
-    {
-      "name": "Engines",
-      "description": "Search engine management"
-    },
-    {
-      "name": "Categories",
-      "description": "Search categories"
-    },
-    {
-      "name": "Widgets",
-      "description": "Homepage widgets"
-    }
-  ]
+  }
 }
