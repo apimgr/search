@@ -486,6 +486,7 @@ if cacheSize > 1024*1024*1024 {
 --pid {pid_file}
 --address {listen}
 --port {port}
+--baseurl {path}             # URL path prefix (default: /)
 --debug                      # Enable debug mode
 --status                     # Show status and health (exit 0=healthy, 1=unhealthy)
 --service {start,restart,stop,reload,--install,--uninstall,--disable,--help}
@@ -777,6 +778,7 @@ Quick reference: Accept `yes/no`, `true/false`, `1/0`, `on/off`, `enable/disable
 | `go.mod` | ✓ | Go module |
 | `go.sum` | ✓ | Go dependencies |
 | `release.txt` | ✓ | Version source of truth |
+| `site.txt` | Optional | Official site URL (single line, never guess) |
 | `.gitignore` | ✓ | Git ignore rules |
 | `.dockerignore` | ✓ | Docker ignore rules |
 | `.gitattributes` | Optional | Git attributes |
@@ -1525,6 +1527,8 @@ Instructions for how this agent should behave...
 | `.dockerignore` | ✓ | Docker ignore patterns | No |
 | `.gitattributes` | ✓ | Git attributes | No |
 | `.editorconfig` | - | Editor configuration | No |
+| `release.txt` | ✓ | Version source of truth | No |
+| `site.txt` | - | Official site URL (optional, never guess) | No |
 
 **RULE: If a root file doesn't appear in this list, it MUST NOT exist - ask before creating.**
 
@@ -1568,6 +1572,7 @@ Instructions for how this agent should behave...
 | `SEARCH` | Uppercase project name (for constants, env vars) | `JOKES`, `ECHOIP` |
 | `{officialsite}` | Official project website | `https://jokes.example.com` |
 | `{fqdn}` | Fully qualified domain name | `api.example.com` |
+| `{baseurl}` | URL path prefix (auto-detected from reverse proxy) | `/`, `/myproject` |
 | `{admin_path}` | Admin panel URL path (configurable, default: `admin`) | `admin`, `manage`, `control` |
 | `{api_version}` | API version prefix (default: `v1`) | `v1`, `v2` |
 
@@ -5125,7 +5130,7 @@ jobs:
   check-licenses:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v5
         with:
           go-version: 'stable'
@@ -5153,7 +5158,7 @@ jobs:
 #!/bin/bash
 # scripts/verify-licenses.sh
 
-set -e
+set -euo pipefail
 
 echo "Checking for incompatible licenses..."
 
@@ -5492,7 +5497,8 @@ PROJECTORG=$(git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(
 ├── TODO.AI.md              # Task tracking for 3+ tasks
 ├── PLAN.AI.md                 # Implementation plan (optional)
 ├── Jenkinsfile             # Jenkins pipeline
-└── release.txt             # Version tracking
+├── release.txt             # Version tracking
+└── site.txt                # Official site URL (optional)
 ```
 
 **Gitignored directories:**
@@ -7418,6 +7424,7 @@ func (req *CreateUserRequest) Parse() (*User, error) {
 - `{fqdn}`: Reverse Proxy Headers → `DOMAIN` → `os.Hostname()` → `$HOSTNAME` → Global IP → `localhost`
 - `{proto}`: `X-Forwarded-Proto` → `X-Forwarded-Ssl` → TLS detection → `http`
 - `{port}`: `X-Forwarded-Port` → Host header → Server port → Proto default
+- `{baseurl}`: `X-Forwarded-Prefix` → `X-Forwarded-Path` → `X-Script-Name` → `server.baseurl` → `/`
 
 **Note:** Loopback addresses avoided; global IPs preferred. See PART 5 for full details.
 
@@ -9777,6 +9784,7 @@ NO_COLOR=1 search --status | grep -E '✅|❌|⚠️|🚀'  # Should find nothin
 --pid {pid_file}              # Set PID file path
 --address {listen}           # Set listen address
 --port {port}                # Set the port
+--baseurl {path}             # Set URL path prefix (default: /)
 --status                     # Show status and health (exit 0=healthy, 1=unhealthy)
 --service {start,restart,stop,reload,--install,--uninstall,--disable,--help}
 --daemon                     # Daemonize (detach from terminal)
@@ -9816,6 +9824,7 @@ Server Configuration:
       --pid FILE                    PID file path
       --address ADDR                Listen address (default: 0.0.0.0)
       --port PORT                   Listen port (default: random 64xxx, 80 in container)
+      --baseurl PATH                URL path prefix (default: /)
       --daemon                      Run as daemon (detach from terminal)
       --debug                       Enable debug mode
       --color {always|never|auto}   Color output (default: auto)
@@ -12260,6 +12269,7 @@ All templates, Swagger/OpenAPI, GraphQL, email links, etc. MUST use these resolv
 |----------|-------------|---------|
 | `{proto}` | Protocol (http/https) | `https` |
 | `{fqdn}` | Fully qualified domain name | `api.example.com` |
+| `{baseurl}` | URL path prefix (auto-detected) | `/` or `/myproject` |
 | `{port}` | Port number (ALWAYS stripped if 80/443) | `8080` or empty |
 | `{address}` | Listen IP address | `203.0.113.50` |
 | `{app_mode}` | Application mode | `production` or `development` |
@@ -12357,10 +12367,13 @@ DOMAIN=myapp.com
 | `X-Forwarded-Host` | `{fqdn}` |
 | `X-Forwarded-Proto` | `{proto}` |
 | `X-Forwarded-Port` | `{port}` |
+| `X-Forwarded-Prefix` | `{baseurl}` |
 | `X-Forwarded-Ssl` | `{proto}` (on=https) |
 | `X-Real-Host` | `{fqdn}` (fallback) |
 | `X-Original-Host` | `{fqdn}` (fallback) |
 | `X-Url-Scheme` | `{proto}` (fallback) |
+| `X-Forwarded-Path` | `{baseurl}` (fallback) |
+| `X-Script-Name` | `{baseurl}` (fallback) |
 | `X-Forwarded-For` | Request IP (for logging) |
 | `X-Real-IP` | Request IP (fallback) |
 
@@ -15609,6 +15622,71 @@ func validateConfig(cfg *Config) {
 | **Invalid → default** | Replace invalid values with defaults |
 | **Warn, don't error** | Log warning, don't fail startup |
 | **Never crash on config** | Server must start with sane defaults |
+
+## Base URL
+
+```yaml
+server:
+  baseurl: /              # Default: serve from root (auto-detects from reverse proxy)
+  # baseurl: /myproject   # Serve from /myproject/*
+  # baseurl: /api/v2      # Serve from /api/v2/*
+```
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `baseurl` | URL path prefix for all routes | `/` (auto-detect) |
+
+**Use cases:**
+- `/` - Standard deployment (default)
+- `/myproject` - Multiple apps on same domain
+- `/api/v2` - API versioning at URL level
+
+**Resolution (Reverse Proxy Preferred):**
+
+| Priority | Source | Description |
+|----------|--------|-------------|
+| 1 | `X-Forwarded-Prefix` | Standard prefix header from reverse proxy |
+| 2 | `X-Forwarded-Path` | Alternative prefix header |
+| 3 | `X-Script-Name` | WSGI/Python style (Flask, Django) |
+| 4 | **Config/CLI** | Explicit `server.baseurl` or `--baseurl` |
+| 5 | **Default** | `/` |
+
+**Reverse Proxy Configuration Examples:**
+
+```nginx
+# Nginx
+location /myproject/ {
+    proxy_pass http://backend/;
+    proxy_set_header X-Forwarded-Prefix /myproject;
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+```apache
+# Apache (mod_proxy)
+<Location /myproject>
+    ProxyPass http://backend/
+    ProxyPassReverse http://backend/
+    RequestHeader set X-Forwarded-Prefix "/myproject"
+</Location>
+```
+
+```yaml
+# Traefik
+labels:
+  - "traefik.http.middlewares.myproject-prefix.headers.customrequestheaders.X-Forwarded-Prefix=/myproject"
+```
+
+**Behavior:**
+- All routes prefixed with baseurl (e.g., `/myproject/healthz`, `/myproject/api/v1/...`)
+- Static assets served from `{baseurl}/static/`
+- Admin panel at `{baseurl}/{admin_path}/`
+- Generated URLs (redirects, links) use detected baseurl
+- Trailing slash normalized (both `/myproject` and `/myproject/` work)
+- Empty string treated as `/`
+
+**CLI flag:** `--baseurl /myproject`
 
 ## Request Limits
 
@@ -33842,6 +33920,24 @@ func (ws *windowsService) Execute(args []string, r <-chan svc.ChangeRequest, s c
 - Source of truth for stable version (see PART 13)
 - Semantic versioning: `MAJOR.MINOR.PATCH` (e.g., `1.2.3`)
 
+### Official Site File: `site.txt` (Optional)
+
+- **OPTIONAL** - only create if project has an official hosted instance
+- Single line containing the official site URL (e.g., `https://api.example.com`)
+- **NEVER guess or assume** - must be explicitly created by user
+- Used to embed default `--server` URL in CLI/Agent binaries
+- If not present, CLI/Agent users must always specify `--server` flag
+- Sources checked in order:
+  1. Environment variable: `OFFICIALSITE=https://example.com`
+  2. File: `site.txt` in project root
+  3. CI/CD secrets (repository secrets)
+  4. Empty (self-hosted projects)
+
+**Example:**
+```
+https://api.example.com
+```
+
 ### Version Tag `v` Prefix Rules 
 
 **CRITICAL: Only add `v` prefix to NUMERIC semantic versions, NEVER to text versions.**
@@ -33994,9 +34090,13 @@ BUILD_DATE := $(shell date +"%%B %%-d, %%Y at %%H:%%M:%%S")
 COMMIT_ID := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 # COMMIT_ID used directly - no VCS_REF alias
 
-# Official site (empty if none - users must use --server flag)
-# Set in AI.md or README.md, or leave empty for self-hosted projects
-OFFICIALSITE ?=
+# Official site URL (OPTIONAL - never guess or assume)
+# Sources (in order of precedence):
+#   1. Environment variable: OFFICIALSITE=https://example.com
+#   2. File: site.txt in project root (single line, URL only)
+#   3. Empty (self-hosted projects - users must use --server flag)
+# NEVER infer from project name, domain, or any other source
+OFFICIALSITE ?= $(shell [ -f site.txt ] && cat site.txt || echo "")
 
 # Linker flags to embed build info
 LDFLAGS := -s -w \
@@ -35153,6 +35253,7 @@ services:
 
   search-db:
     image: postgres:alpine
+    pull_policy: always
     container_name: search-db
     restart: always
     logging: *default-logging
@@ -35173,6 +35274,7 @@ services:
 
   search-cache:
     image: valkey/valkey:alpine
+    pull_policy: always
     container_name: search-cache
     restart: always
     logging: *default-logging
@@ -35252,7 +35354,7 @@ x-logging: &default-logging
 
 services:
   search:
-    image: ghcr.io/apimgr/search-aio:latest
+    image: ghcr.io/apimgr/search:latest-aio
     container_name: search-app
     hostname: ${BASE_HOST_NAME:-$HOSTNAME}
     restart: always
@@ -35311,7 +35413,7 @@ networks:
 # All-in-One Dockerfile - includes app + postgresql + valkey + tor
 # Build: golang:alpine (static binary, CGO_ENABLED=0)
 # Runtime: debian:latest (stable, broad compatibility)
-# Image name: {PLATFORM_CONTAINER_REGISTRY}/apimgr/search-aio:latest
+# Image name: {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest-aio
 # PORTS: Only 80 exposed (db/cache are internal-only)
 
 # =============================================================================
@@ -35572,7 +35674,7 @@ exec /usr/bin/supervisord -c /etc/supervisor/supervisord.conf
 | Image | Dockerfile | Description |
 |-------|------------|-------------|
 | `{name}:latest` | `Dockerfile` | Standard image (app only, alpine) |
-| `{name}-aio:latest` | `Dockerfile.aio` | All-in-one (app + postgresql + valkey + tor, debian) |
+| `{name}:latest-aio` | `Dockerfile.aio` | All-in-one (app + postgresql + valkey + tor, debian) |
 
 **AIO Environment Variables:**
 
@@ -35604,7 +35706,7 @@ valkeyURL := "unix:///run/valkey/valkey.sock"
 docker build -t {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest -f docker/Dockerfile .
 
 # All-in-one image (context is project root)
-docker build -t {PLATFORM_CONTAINER_REGISTRY}/apimgr/search-aio:latest -f docker/Dockerfile.aio .
+docker build -t {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest-aio -f docker/Dockerfile.aio .
 ```
 
 **When to use All-in-One:**
@@ -35782,8 +35884,9 @@ name: search-dev
 services:
   search:
     image: {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest
+    pull_policy: always
     container_name: search-dev
-    restart: unless-stopped
+    restart: always
     environment:
       # Development: relaxed security, verbose logging, no caching
       # Does NOT enable debug endpoints - uncomment DEBUG=true for that
@@ -35831,8 +35934,9 @@ name: search
 services:
   search:
     image: {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest
+    pull_policy: always
     container_name: search-app
-    restart: unless-stopped
+    restart: always
     environment:
       # Production: strict security, minimal logging, caching enabled
       # NO debug options - debug must be explicitly set via CLI if needed
@@ -35885,6 +35989,7 @@ name: search-test
 services:
   search:
     image: {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest
+    pull_policy: always
     container_name: search-test
     restart: "no"
     environment:
@@ -35928,8 +36033,9 @@ name: search
 services:
   search:
     image: {PLATFORM_CONTAINER_REGISTRY}/apimgr/search:latest
+    pull_policy: always
     container_name: search-app
-    restart: unless-stopped
+    restart: always
     depends_on:
       search-db:
         condition: service_healthy
@@ -35944,7 +36050,7 @@ services:
       - DB_PORT=5432
       - DB_NAME=search
       - DB_USER=search
-      - DB_PASS=${DB_PASSWORD:-search}
+      - DB_PASSWORD=${DB_PASSWORD:-search}
     ports:
       # Production: bound to Docker bridge only (reverse proxy handles external)
       - "172.17.0.1:64580:80"
@@ -35956,8 +36062,9 @@ services:
 
   search-db:
     image: postgres:alpine
+    pull_policy: always
     container_name: search-db
-    restart: unless-stopped
+    restart: always
     environment:
       - POSTGRES_DB=search
       - POSTGRES_USER=search
@@ -36147,6 +36254,9 @@ on:
       - 'v*'
       - '[0-9]*.[0-9]*.[0-9]*'
 
+permissions:
+  contents: write
+
 env:
   PROJECTNAME: search
 
@@ -36176,7 +36286,7 @@ jobs:
             goarch: arm64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -36188,8 +36298,13 @@ jobs:
           echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
-          # OFFICIALSITE: Set in repository secrets or leave empty for self-hosted
-          echo "OFFICIALSITE=${{ secrets.OFFICIALSITE }}" >> $GITHUB_ENV
+          # OFFICIALSITE (optional): Set in repository secrets, or site.txt file, or leave empty
+          # Never guess or assume - must be explicitly defined by user
+          if [ -f site.txt ]; then
+            echo "OFFICIALSITE=$(cat site.txt)" >> $GITHUB_ENV
+          else
+            echo "OFFICIALSITE=${{ secrets.OFFICIALSITE }}" >> $GITHUB_ENV
+          fi
 
       - name: Build server
         env:
@@ -36212,14 +36327,14 @@ jobs:
           go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
       - name: Upload CLI artifact
         if: hashFiles('src/client/') != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
@@ -36237,7 +36352,7 @@ jobs:
 
       - name: Upload Agent artifact
         if: hashFiles('src/agent/') != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
@@ -36249,10 +36364,10 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: binaries
           merge-multiple: true
@@ -36301,6 +36416,9 @@ on:
     branches:
       - beta
 
+permissions:
+  contents: write
+
 env:
   PROJECTNAME: search
 
@@ -36330,7 +36448,7 @@ jobs:
             goarch: arm64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -36342,6 +36460,13 @@ jobs:
           echo "VERSION=$(date -u +"%Y%m%d%H%M%S")-beta" >> $GITHUB_ENV
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
+          # OFFICIALSITE (optional): Set in repository secrets, or site.txt file, or leave empty
+          # Never guess or assume - must be explicitly defined by user
+          if [ -f site.txt ]; then
+            echo "OFFICIALSITE=$(cat site.txt)" >> $GITHUB_ENV
+          else
+            echo "OFFICIALSITE=${{ secrets.OFFICIALSITE }}" >> $GITHUB_ENV
+          fi
 
       - name: Build server
         env:
@@ -36364,14 +36489,14 @@ jobs:
           go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
       - name: Upload CLI artifact
         if: hashFiles('src/client/') != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
@@ -36389,7 +36514,7 @@ jobs:
 
       - name: Upload Agent artifact
         if: hashFiles('src/agent/') != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
@@ -36401,10 +36526,10 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: binaries
           merge-multiple: true
@@ -36440,6 +36565,9 @@ on:
       - master
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 env:
   PROJECTNAME: search
 
@@ -36469,7 +36597,7 @@ jobs:
             goarch: arm64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -36481,6 +36609,13 @@ jobs:
           echo "VERSION=$(date -u +"%Y%m%d%H%M%S")" >> $GITHUB_ENV
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
+          # OFFICIALSITE (optional): Set in repository secrets, or site.txt file, or leave empty
+          # Never guess or assume - must be explicitly defined by user
+          if [ -f site.txt ]; then
+            echo "OFFICIALSITE=$(cat site.txt)" >> $GITHUB_ENV
+          else
+            echo "OFFICIALSITE=${{ secrets.OFFICIALSITE }}" >> $GITHUB_ENV
+          fi
 
       - name: Build server
         env:
@@ -36503,14 +36638,14 @@ jobs:
           go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
       - name: Upload CLI artifact
         if: hashFiles('src/client/') != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
@@ -36528,7 +36663,7 @@ jobs:
 
       - name: Upload Agent artifact
         if: hashFiles('src/agent/') != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
@@ -36540,10 +36675,10 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: binaries
           merge-multiple: true
@@ -36586,14 +36721,14 @@ jobs:
 |---------|---------------|-----------------|
 | **Any push** (all branches) | `devel`, `{COMMIT_ID}` | `devel-aio`, `{COMMIT_ID}-aio` |
 | Push to beta branch | `devel`, `beta`, `{COMMIT_ID}` | `devel-aio`, `beta-aio`, `{COMMIT_ID}-aio` |
-| Version tag (`v*`, `*.*.*`) | `{version}`, `latest`, `YYMM` | `{version}-aio`, `aio`, `YYMM-aio` |
+| Version tag (`v*`, `*.*.*`) | `{version}`, `latest`, `YYMM` | `{version}-aio`, `latest-aio`, `YYMM-aio` |
 
 **Notes:**
 - `{COMMIT_ID}` = short SHA (7 characters) from `git rev-parse --short HEAD`
 - `YYMM` = year/month (e.g., `2512`)
 - Built for `linux/amd64` and `linux/arm64` using `docker buildx`
 - Registry: `ghcr.io`
-- Standard uses `latest`, All-in-One uses `aio` as the "latest" equivalent
+- Standard uses `latest`, All-in-One uses `latest-aio`
 
 **File:** `.github/workflows/docker.yml`
 
@@ -36621,7 +36756,7 @@ jobs:
       packages: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -36714,7 +36849,7 @@ jobs:
       packages: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -36746,18 +36881,18 @@ jobs:
       - name: Determine tags (all-in-one)
         id: tags
         run: |
-          # AIO uses separate image name: {repo}-aio:{tag}
-          AIO_IMAGE="${{ env.IMAGE_NAME }}-aio"
-          TAGS="${{ env.REGISTRY }}/${AIO_IMAGE}:${{ env.COMMIT_ID }}"
+          # AIO uses same repo with -aio tag suffix: {repo}:{tag}-aio
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          TAGS="${IMAGE}:${{ env.COMMIT_ID }}-aio"
 
           if [[ "${{ env.IS_TAG }}" == "true" ]]; then
-            TAGS="$TAGS,${{ env.REGISTRY }}/${AIO_IMAGE}:${{ env.VERSION }}"
-            TAGS="$TAGS,${{ env.REGISTRY }}/${AIO_IMAGE}:latest"
-            TAGS="$TAGS,${{ env.REGISTRY }}/${AIO_IMAGE}:${{ env.YYMM }}"
+            TAGS="$TAGS,${IMAGE}:${{ env.VERSION }}-aio"
+            TAGS="$TAGS,${IMAGE}:latest-aio"
+            TAGS="$TAGS,${IMAGE}:${{ env.YYMM }}-aio"
           else
-            TAGS="$TAGS,${{ env.REGISTRY }}/${AIO_IMAGE}:devel"
+            TAGS="$TAGS,${IMAGE}:devel-aio"
             if [[ "${{ github.ref }}" == refs/heads/beta ]]; then
-              TAGS="$TAGS,${{ env.REGISTRY }}/${AIO_IMAGE}:beta"
+              TAGS="$TAGS,${IMAGE}:beta-aio"
             fi
           fi
 
@@ -36805,11 +36940,11 @@ jobs:
 
 | Use Case | Standard Image | All-in-One Image |
 |----------|----------------|------------------|
-| Latest stable | `{name}:latest` | `{name}-aio:latest` |
-| Specific version | `{name}:1.2.3` | `{name}-aio:1.2.3` |
-| Development | `{name}:devel` | `{name}-aio:devel` |
-| Beta | `{name}:beta` | `{name}-aio:beta` |
-| Commit | `{name}:abc1234` | `{name}-aio:abc1234` |
+| Latest stable | `{name}:latest` | `{name}:latest-aio` |
+| Specific version | `{name}:1.2.3` | `{name}:1.2.3-aio` |
+| Development | `{name}:devel` | `{name}:devel-aio` |
+| Beta | `{name}:beta` | `{name}:beta-aio` |
+| Commit | `{name}:abc1234` | `{name}:abc1234-aio` |
 
 ---
 
@@ -36878,6 +37013,9 @@ on:
       - 'v*'
       - '[0-9]*.[0-9]*.[0-9]*'
 
+permissions:
+  contents: write
+
 env:
   PROJECTNAME: search
 
@@ -36907,7 +37045,7 @@ jobs:
             goarch: arm64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -36919,6 +37057,13 @@ jobs:
           echo "VERSION=${GITEA_REF_NAME#v}" >> $GITEA_ENV
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
+          # OFFICIALSITE (optional): Set in repository secrets, or site.txt file, or leave empty
+          # Never guess or assume - must be explicitly defined by user
+          if [ -f site.txt ]; then
+            echo "OFFICIALSITE=$(cat site.txt)" >> $GITEA_ENV
+          else
+            echo "OFFICIALSITE=${{ secrets.OFFICIALSITE }}" >> $GITEA_ENV
+          fi
 
       - name: Build server
         env:
@@ -36941,14 +37086,14 @@ jobs:
           go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
       - name: Upload CLI artifact
         if: hashFiles('src/client/') != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
@@ -36966,7 +37111,7 @@ jobs:
 
       - name: Upload Agent artifact
         if: hashFiles('src/agent/') != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
@@ -36978,10 +37123,10 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: binaries
           merge-multiple: true
@@ -37030,6 +37175,9 @@ on:
     branches:
       - beta
 
+permissions:
+  contents: write
+
 env:
   PROJECTNAME: search
 
@@ -37045,7 +37193,7 @@ jobs:
             goarch: arm64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -37057,6 +37205,13 @@ jobs:
           echo "VERSION=$(date -u +"%Y%m%d%H%M%S")-beta" >> $GITEA_ENV
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
+          # OFFICIALSITE (optional): Set in repository secrets, or site.txt file, or leave empty
+          # Never guess or assume - must be explicitly defined by user
+          if [ -f site.txt ]; then
+            echo "OFFICIALSITE=$(cat site.txt)" >> $GITEA_ENV
+          else
+            echo "OFFICIALSITE=${{ secrets.OFFICIALSITE }}" >> $GITEA_ENV
+          fi
 
       - name: Build server
         env:
@@ -37079,14 +37234,14 @@ jobs:
           go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
       - name: Upload CLI artifact
         if: hashFiles('src/client/') != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
@@ -37104,7 +37259,7 @@ jobs:
 
       - name: Upload Agent artifact
         if: hashFiles('src/agent/') != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
@@ -37116,10 +37271,10 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: binaries
           merge-multiple: true
@@ -37155,6 +37310,9 @@ on:
       - master
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 env:
   PROJECTNAME: search
 
@@ -37184,7 +37342,7 @@ jobs:
             goarch: arm64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -37196,6 +37354,13 @@ jobs:
           echo "VERSION=$(date -u +"%Y%m%d%H%M%S")" >> $GITEA_ENV
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITEA_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITEA_ENV
+          # OFFICIALSITE (optional): Set in repository secrets, or site.txt file, or leave empty
+          # Never guess or assume - must be explicitly defined by user
+          if [ -f site.txt ]; then
+            echo "OFFICIALSITE=$(cat site.txt)" >> $GITEA_ENV
+          else
+            echo "OFFICIALSITE=${{ secrets.OFFICIALSITE }}" >> $GITEA_ENV
+          fi
 
       - name: Build server
         env:
@@ -37218,14 +37383,14 @@ jobs:
           go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
       - name: Upload CLI artifact
         if: hashFiles('src/client/') != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
@@ -37243,7 +37408,7 @@ jobs:
 
       - name: Upload Agent artifact
         if: hashFiles('src/agent/') != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
@@ -37255,10 +37420,10 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: binaries
           merge-multiple: true
@@ -37316,7 +37481,7 @@ jobs:
       packages: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -37423,7 +37588,7 @@ jobs:
       packages: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -37462,18 +37627,18 @@ jobs:
       - name: Determine tags (all-in-one)
         id: tags
         run: |
-          # AIO uses separate image name: {repo}-aio:{tag}
-          AIO_IMAGE="${{ env.IMAGE_NAME }}-aio"
-          TAGS="${{ env.REGISTRY }}/${AIO_IMAGE}:${{ env.COMMIT_ID }}"
+          # AIO uses same repo with -aio tag suffix: {repo}:{tag}-aio
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          TAGS="${IMAGE}:${{ env.COMMIT_ID }}-aio"
 
           if [[ "${{ env.IS_TAG }}" == "true" ]]; then
-            TAGS="$TAGS,${{ env.REGISTRY }}/${AIO_IMAGE}:${{ env.VERSION }}"
-            TAGS="$TAGS,${{ env.REGISTRY }}/${AIO_IMAGE}:latest"
-            TAGS="$TAGS,${{ env.REGISTRY }}/${AIO_IMAGE}:${{ env.YYMM }}"
+            TAGS="$TAGS,${IMAGE}:${{ env.VERSION }}-aio"
+            TAGS="$TAGS,${IMAGE}:latest-aio"
+            TAGS="$TAGS,${IMAGE}:${{ env.YYMM }}-aio"
           else
-            TAGS="$TAGS,${{ env.REGISTRY }}/${AIO_IMAGE}:devel"
+            TAGS="$TAGS,${IMAGE}:devel-aio"
             if [[ "${{ gitea.ref }}" == refs/heads/beta ]]; then
-              TAGS="$TAGS,${{ env.REGISTRY }}/${AIO_IMAGE}:beta"
+              TAGS="$TAGS,${IMAGE}:beta-aio"
             fi
           fi
 
@@ -37605,8 +37770,14 @@ stages:
     - export VERSION="${CI_COMMIT_TAG#v}"
     - export COMMIT_ID="${CI_COMMIT_SHORT_SHA}"
     - export BUILD_DATE="$(date +"%a %b %d, %Y at %H:%M:%S %Z")"
-    # OFFICIALSITE: Set in GitLab CI/CD Variables or leave empty for self-hosted
-    - export OFFICIALSITE="${OFFICIALSITE:-}"
+    # OFFICIALSITE (optional): Set in CI/CD Variables, or site.txt file, or leave empty
+    # Never guess or assume - must be explicitly defined by user
+    - |
+      if [ -f site.txt ]; then
+        export OFFICIALSITE="$(cat site.txt)"
+      else
+        export OFFICIALSITE="${OFFICIALSITE:-}"
+      fi
     - export LDFLAGS="-s -w -X 'main.Version=${VERSION}' -X 'main.CommitID=${COMMIT_ID}' -X 'main.BuildDate=${BUILD_DATE}' -X 'main.OfficialSite=${OFFICIALSITE}'"
 
 # =============================================================================
@@ -37994,18 +38165,18 @@ docker:build-aio:
     - docker buildx create --name multiarch-builder --use 2>/dev/null || docker buildx use multiarch-builder
   script:
     - |
-      # AIO uses separate image name: {repo}-aio:{tag}
-      AIO_IMAGE="${CI_REGISTRY_IMAGE}-aio"
+      # AIO uses same repo with -aio tag suffix: {repo}:{tag}-aio
+      IMAGE="${CI_REGISTRY_IMAGE}"
       if [ -n "$CI_COMMIT_TAG" ]; then
         VERSION="${CI_COMMIT_TAG#v}"
         YYMM=$(date +%y%m)
-        TAGS="-t ${AIO_IMAGE}:${VERSION} -t ${AIO_IMAGE}:latest -t ${AIO_IMAGE}:${YYMM} -t ${AIO_IMAGE}:${CI_COMMIT_SHORT_SHA}"
+        TAGS="-t ${IMAGE}:${VERSION}-aio -t ${IMAGE}:latest-aio -t ${IMAGE}:${YYMM}-aio -t ${IMAGE}:${CI_COMMIT_SHORT_SHA}-aio"
       elif [ "$CI_COMMIT_BRANCH" = "beta" ]; then
         VERSION="beta-$CI_COMMIT_SHORT_SHA"
-        TAGS="-t ${AIO_IMAGE}:beta -t ${AIO_IMAGE}:devel -t ${AIO_IMAGE}:${CI_COMMIT_SHORT_SHA}"
+        TAGS="-t ${IMAGE}:beta-aio -t ${IMAGE}:devel-aio -t ${IMAGE}:${CI_COMMIT_SHORT_SHA}-aio"
       else
         VERSION="devel-$CI_COMMIT_SHORT_SHA"
-        TAGS="-t ${AIO_IMAGE}:devel -t ${AIO_IMAGE}:${CI_COMMIT_SHORT_SHA}"
+        TAGS="-t ${IMAGE}:devel-aio -t ${IMAGE}:${CI_COMMIT_SHORT_SHA}-aio"
       fi
       BUILD_DATE="$(date -Iseconds)"
     - |
@@ -38188,6 +38359,9 @@ pipeline {
                     }
                     env.COMMIT_ID = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
                     env.BUILD_DATE = sh(script: 'date +"%a %b %d, %Y at %H:%M:%S %Z"', returnStdout: true).trim()
+                    // OFFICIALSITE (optional): Set in Jenkins credentials, or site.txt file, or leave empty
+                    // Never guess or assume - must be explicitly defined by user
+                    env.OFFICIALSITE = sh(script: '[ -f site.txt ] && cat site.txt || echo "${OFFICIALSITE:-}"', returnStdout: true).trim()
                     env.LDFLAGS = "-s -w -X 'main.Version=${env.VERSION}' -X 'main.CommitID=${env.COMMIT_ID}' -X 'main.BuildDate=${env.BUILD_DATE}' -X 'main.OfficialSite=${env.OFFICIALSITE}'"
                     env.HAS_CLI = sh(script: '[ -d src/client ] && echo true || echo false', returnStdout: true).trim()
                     env.HAS_AGENT = sh(script: '[ -d src/agent ] && echo true || echo false', returnStdout: true).trim()
@@ -38779,27 +38953,26 @@ pipeline {
         }
 
         // Docker All-in-One - matches docker.yml build-aio (ALL branches and tags)
-        // AIO uses separate image name: {repo}-aio:{tag}
+        // AIO uses same repo with -aio tag suffix: {repo}:{tag}-aio
         stage('Docker AIO') {
             agent { label 'amd64' }
             steps {
                 script {
-                    def aioRegistry = "${REGISTRY}-aio"
-                    def tags = "-t ${aioRegistry}:${COMMIT_ID}"
+                    def tags = "-t ${REGISTRY}:${COMMIT_ID}-aio"
 
                     if (env.BUILD_TYPE == 'release') {
                         // Release tag - version, latest, YYMM
                         def yymm = new Date().format('yyMM')
-                        tags += " -t ${aioRegistry}:${VERSION}"
-                        tags += " -t ${aioRegistry}:latest"
-                        tags += " -t ${aioRegistry}:${yymm}"
+                        tags += " -t ${REGISTRY}:${VERSION}-aio"
+                        tags += " -t ${REGISTRY}:latest-aio"
+                        tags += " -t ${REGISTRY}:${yymm}-aio"
                     } else if (env.BUILD_TYPE == 'beta') {
                         // Beta branch - beta, devel
-                        tags += " -t ${aioRegistry}:beta"
-                        tags += " -t ${aioRegistry}:devel"
+                        tags += " -t ${REGISTRY}:beta-aio"
+                        tags += " -t ${REGISTRY}:devel-aio"
                     } else {
                         // All other branches - devel only
-                        tags += " -t ${aioRegistry}:devel"
+                        tags += " -t ${REGISTRY}:devel-aio"
                     }
 
                     // Login to container registry
@@ -39473,7 +39646,7 @@ make test
 test:
   runs-on: ubuntu-latest
   steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Run tests with coverage
       run: |
@@ -53917,6 +54090,7 @@ make docker # Build Docker image
 - [ ] `--pid {path}` - PID file path
 - [ ] `--address {addr}` - Listen address
 - [ ] `--port {port}` - Listen port
+- [ ] `--baseurl {path}` - URL path prefix (default: /)
 - [ ] `--mode {production|development}` - Application mode
 - [ ] `--status` - Show running status
 - [ ] `--daemon` - Daemonize (detach)
@@ -54752,6 +54926,7 @@ make docker # Build Docker image
 
 - [ ] `{proto}` - Protocol (http/https)
 - [ ] `{fqdn}` - Fully qualified domain name
+- [ ] `{baseurl}` - URL path prefix (auto-detected from reverse proxy)
 - [ ] `{port}` - Port number (stripped if 80/443)
 - [ ] `{address}` - Listen IP address
 - [ ] `{app_mode}` - Application mode (production/development)

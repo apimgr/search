@@ -31,6 +31,10 @@ func (sm *ServiceManager) Install() error {
 		if sm.hasRunit() {
 			return sm.installRunit()
 		}
+		// Check for OpenRC (Alpine Linux, Gentoo)
+		if sm.hasOpenRC() {
+			return sm.installOpenRC()
+		}
 		return sm.installSystemd()
 	case "darwin":
 		return sm.installLaunchd()
@@ -65,6 +69,9 @@ func (sm *ServiceManager) Uninstall() error {
 		if sm.hasRunit() {
 			return sm.uninstallRunit()
 		}
+		if sm.hasOpenRC() {
+			return sm.uninstallOpenRC()
+		}
 		return sm.uninstallSystemd()
 	case "darwin":
 		return sm.uninstallLaunchd()
@@ -83,6 +90,9 @@ func (sm *ServiceManager) Status() (string, error) {
 	case "linux":
 		if sm.hasRunit() {
 			return sm.statusRunit()
+		}
+		if sm.hasOpenRC() {
+			return sm.statusOpenRC()
 		}
 		return sm.statusSystemd()
 	case "darwin":
@@ -103,6 +113,9 @@ func (sm *ServiceManager) Start() error {
 		if sm.hasRunit() {
 			return runCommand("sv", "start", "search")
 		}
+		if sm.hasOpenRC() {
+			return runCommand("rc-service", "search", "start")
+		}
 		return runCommand("systemctl", "start", "search")
 	case "darwin":
 		return runCommand("launchctl", "load", sm.getLaunchdPath())
@@ -122,6 +135,9 @@ func (sm *ServiceManager) Stop() error {
 		if sm.hasRunit() {
 			return runCommand("sv", "stop", "search")
 		}
+		if sm.hasOpenRC() {
+			return runCommand("rc-service", "search", "stop")
+		}
 		return runCommand("systemctl", "stop", "search")
 	case "darwin":
 		return runCommand("launchctl", "unload", sm.getLaunchdPath())
@@ -140,6 +156,9 @@ func (sm *ServiceManager) Restart() error {
 	case "linux":
 		if sm.hasRunit() {
 			return runCommand("sv", "restart", "search")
+		}
+		if sm.hasOpenRC() {
+			return runCommand("rc-service", "search", "restart")
 		}
 		return runCommand("systemctl", "restart", "search")
 	case "darwin":
@@ -165,6 +184,10 @@ func (sm *ServiceManager) Reload() error {
 	case "linux":
 		if sm.hasRunit() {
 			return runCommand("sv", "hup", "search")
+		}
+		if sm.hasOpenRC() {
+			// OpenRC doesn't have a reload command, use restart
+			return runCommand("rc-service", "search", "restart")
 		}
 		return runCommand("systemctl", "reload", "search")
 	case "darwin":
@@ -192,6 +215,9 @@ func (sm *ServiceManager) Enable() error {
 			os.Remove(linkPath) // Remove if exists
 			return os.Symlink(serviceDir, linkPath)
 		}
+		if sm.hasOpenRC() {
+			return runCommand("rc-update", "add", "search", "default")
+		}
 		return runCommand("systemctl", "enable", "search")
 	case "darwin":
 		return runCommand("launchctl", "load", "-w", sm.getLaunchdPath())
@@ -213,6 +239,9 @@ func (sm *ServiceManager) Disable() error {
 			// For runit, disabling means removing the symlink
 			activeDir := sm.getRunitActiveDir()
 			return os.Remove(filepath.Join(activeDir, "search"))
+		}
+		if sm.hasOpenRC() {
+			return runCommand("rc-update", "del", "search", "default")
 		}
 		return runCommand("systemctl", "disable", "search")
 	case "darwin":
@@ -480,6 +509,101 @@ func (sm *ServiceManager) statusRunit() (string, error) {
 		return "active", nil
 	}
 	if strings.HasPrefix(output, "down:") {
+		return "inactive", nil
+	}
+	return "unknown", nil
+}
+
+// Linux OpenRC - per AI.md PART 25
+
+// hasOpenRC checks if OpenRC is the init system
+func (sm *ServiceManager) hasOpenRC() bool {
+	// Check for openrc-run (the OpenRC script interpreter)
+	if _, err := exec.LookPath("openrc-run"); err == nil {
+		return true
+	}
+	// Check for rc-service command (OpenRC service manager)
+	if _, err := exec.LookPath("rc-service"); err == nil {
+		return true
+	}
+	return false
+}
+
+// openrcTemplate is the OpenRC init script
+// Per AI.md PART 25: Service starts as root, binary drops to search user after port binding
+const openrcTemplate = `#!/sbin/openrc-run
+
+description="search - Privacy-respecting metasearch engine"
+command="/usr/local/bin/search"
+command_background=true
+pidfile="/run/search.pid"
+output_log="/var/log/apimgr/search/stdout.log"
+error_log="/var/log/apimgr/search/stderr.log"
+
+depend() {
+	need net
+	after firewall
+}
+
+start_pre() {
+	checkpath --directory --owner search:search /var/lib/apimgr/search
+	checkpath --directory --owner search:search /var/log/apimgr/search
+	checkpath --directory --owner search:search /var/cache/apimgr/search
+}
+`
+
+func (sm *ServiceManager) installOpenRC() error {
+	// Create system user and directories first
+	if err := sm.ensureSystemUser(); err != nil {
+		return fmt.Errorf("failed to create system user: %w", err)
+	}
+	if err := sm.createServiceDirectories(); err != nil {
+		return fmt.Errorf("failed to create directories: %w", err)
+	}
+
+	// Ensure log directory exists
+	logDir := "/var/log/apimgr/search"
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return fmt.Errorf("failed to create log directory: %w", err)
+	}
+
+	// Write OpenRC init script to /etc/init.d/search
+	initPath := "/etc/init.d/search"
+	if err := os.WriteFile(initPath, []byte(openrcTemplate), 0755); err != nil {
+		return fmt.Errorf("failed to write init script: %w", err)
+	}
+
+	// Add to default runlevel
+	if err := runCommand("rc-update", "add", "search", "default"); err != nil {
+		return fmt.Errorf("failed to add service to default runlevel: %w", err)
+	}
+
+	return nil
+}
+
+func (sm *ServiceManager) uninstallOpenRC() error {
+	// Stop the service
+	runCommand("rc-service", "search", "stop")
+
+	// Remove from runlevel
+	runCommand("rc-update", "del", "search", "default")
+
+	// Remove init script
+	os.Remove("/etc/init.d/search")
+
+	return nil
+}
+
+func (sm *ServiceManager) statusOpenRC() (string, error) {
+	out, err := exec.Command("rc-service", "search", "status").Output()
+	if err != nil {
+		return "inactive", nil
+	}
+	output := strings.ToLower(string(out))
+	if strings.Contains(output, "started") {
+		return "active", nil
+	}
+	if strings.Contains(output, "stopped") {
 		return "inactive", nil
 	}
 	return "unknown", nil

@@ -342,7 +342,7 @@
                 </details>
                 <details>
                     <summary>Can I self-host this?</summary>
-                    <p>Yes! This is free and open source software. Check our <a href="https://github.com/apimgr/search" target="_blank" rel="noopener">GitHub repository</a> for installation instructions.</p>
+                    <p>Yes! This is free and open source software.{{if .Config.Server.Branding.SourceCodeURL}} Check our <a href="{{.Config.Server.Branding.SourceCodeURL}}" target="_blank" rel="noopener">source code repository</a> for installation instructions.{{end}}</p>
                 </details>
                 <details>
                     <summary>What search engines do you use?</summary>

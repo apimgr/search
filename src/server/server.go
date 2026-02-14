@@ -76,6 +76,11 @@ type Server struct {
 
 	// Internationalization per AI.md PART 32
 	i18nManager *i18n.Manager
+
+	// Per AI.md PART 11: Endpoint-specific rate limiters
+	loginLimiter    *EndpointRateLimiter // 5 attempts / 15 min
+	registerLimiter *EndpointRateLimiter // 5 attempts / 1 hr
+	forgotLimiter   *EndpointRateLimiter // 3 attempts / 1 hr
 }
 
 // registryAdapter wraps engines.Registry to implement admin.EngineRegistry
@@ -160,6 +165,9 @@ func New(cfg *config.Config) *Server {
 	// Create Tor service - auto-enabled if tor binary found per AI.md PART 32
 	// "Auto-enabled if tor binary is installed - no enable flag needed"
 	torSvc := service.NewTorService(cfg)
+
+	// Set Tor service on API handler for health checks per AI.md PART 32
+	apiHandler.SetTorService(torSvc)
 
 	// Create bang manager
 	bangMgr := bangs.NewManager()
@@ -404,6 +412,10 @@ func New(cfg *config.Config) *Server {
 		tokenManager:        tokenMgr,
 		verificationManager: verificationMgr,
 		i18nManager:         i18nMgr,
+		// Per AI.md PART 11: Endpoint-specific rate limiters
+		loginLimiter:    NewEndpointRateLimiter(5, 15*time.Minute),
+		registerLimiter: NewEndpointRateLimiter(5, 1*time.Hour),
+		forgotLimiter:   NewEndpointRateLimiter(3, 1*time.Hour),
 	}
 
 	// Create admin handler (needs renderer interface)
@@ -1056,7 +1068,7 @@ func (s *Server) handleDirect(w http.ResponseWriter, r *http.Request) {
 	// Process the direct answer
 	answer, err := s.directManager.ProcessType(ctx, answerType, term)
 	if err != nil {
-		s.handleError(w, r, http.StatusInternalServerError, "Direct Answer Error", "An error occurred while processing your request: "+err.Error())
+		s.handleInternalError(w, r, "direct answer processing", err)
 		return
 	}
 
@@ -1204,7 +1216,11 @@ footer a{color:var(--accent);text-decoration:none}
 }
 
 // renderSearchError renders an error page
+// Per AI.md PART 9: Never expose internal error details to users
 func (s *Server) renderSearchError(w http.ResponseWriter, query string, err error) {
+	// Log actual error for debugging
+	log.Printf("[ERROR] search error: query=%q - %v", query, err)
+
 	// Use newPageData for TorAddress support per AI.md PART 32
 	baseData := s.newPageData("Search Error", "error")
 	baseData.Description = "An error occurred while searching"
@@ -1214,12 +1230,12 @@ func (s *Server) renderSearchError(w http.ResponseWriter, query string, err erro
 		PageData:     *baseData,
 		ErrorCode:    http.StatusInternalServerError,
 		ErrorTitle:   "Search Error",
-		ErrorMessage: err.Error(),
+		ErrorMessage: "An error occurred while processing your search. Please try again.",
 	}
 
 	if renderErr := s.renderer.Render(w, "error", data); renderErr != nil {
-		// Fallback to plain error
-		fmt.Fprintf(w, "<h1>Search Error</h1><p>%s</p>", html.EscapeString(err.Error()))
+		// Fallback to plain error - still no internal details
+		http.Error(w, "An error occurred. Please try again.", http.StatusInternalServerError)
 	}
 }
 

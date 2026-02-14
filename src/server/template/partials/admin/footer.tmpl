@@ -11,9 +11,11 @@
         <span class="admin-footer-separator">•</span>
 
         {{/* Documentation link */}}
+        {{if .Config.Server.Branding.SourceCodeURL}}
         <span class="admin-footer-docs">
-            <a href="https://github.com/apimgr/search" target="_blank" rel="noopener">Docs</a>
+            <a href="{{.Config.Server.Branding.SourceCodeURL}}" target="_blank" rel="noopener">Docs</a>
         </span>
+        {{end}}
 
         <span class="admin-footer-separator">•</span>
 

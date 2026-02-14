@@ -79,7 +79,7 @@ func (s *Server) renderProfilePage(w http.ResponseWriter, r *http.Request, user 
 	}
 
 	if err := s.renderer.Render(w, "user/profile", data); err != nil {
-		s.handleError(w, r, http.StatusInternalServerError, "Template Error", err.Error())
+		s.handleInternalError(w, r, "template render", err)
 	}
 }
 
@@ -183,7 +183,7 @@ func (s *Server) renderSecurityPage(w http.ResponseWriter, r *http.Request, user
 	}
 
 	if err := s.renderer.Render(w, "user/security", data); err != nil {
-		s.handleError(w, r, http.StatusInternalServerError, "Template Error", err.Error())
+		s.handleInternalError(w, r, "template render", err)
 	}
 }
 
@@ -349,7 +349,7 @@ func (s *Server) renderTokensPage(w http.ResponseWriter, r *http.Request, user *
 	}
 
 	if err := s.renderer.Render(w, "user/tokens", data); err != nil {
-		s.handleError(w, r, http.StatusInternalServerError, "Template Error", err.Error())
+		s.handleInternalError(w, r, "template render", err)
 	}
 }
 
@@ -483,7 +483,7 @@ func (s *Server) render2FASetupPage(w http.ResponseWriter, r *http.Request, user
 	}
 
 	if err := s.renderer.Render(w, "user/2fa-setup", data); err != nil {
-		s.handleError(w, r, http.StatusInternalServerError, "Template Error", err.Error())
+		s.handleInternalError(w, r, "template render", err)
 	}
 }
 
@@ -531,7 +531,7 @@ func (s *Server) process2FASetup(w http.ResponseWriter, r *http.Request, user *u
 		}
 
 		if err := s.renderer.Render(w, "user/2fa-setup", data); err != nil {
-			s.handleError(w, r, http.StatusInternalServerError, "Template Error", err.Error())
+			s.handleInternalError(w, r, "template render", err)
 		}
 
 	case "verify":
@@ -570,7 +570,7 @@ func (s *Server) process2FASetup(w http.ResponseWriter, r *http.Request, user *u
 		}
 
 		if err := s.renderer.Render(w, "user/recovery-keys", data); err != nil {
-			s.handleError(w, r, http.StatusInternalServerError, "Template Error", err.Error())
+			s.handleInternalError(w, r, "template render", err)
 		}
 
 	default:

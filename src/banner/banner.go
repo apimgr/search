@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/apimgr/search/src/display"
 	"github.com/apimgr/search/src/terminal"
 )
 
@@ -91,7 +92,7 @@ func printFull(cfg Config) {
 
 	// Web Interface URLs
 	if len(cfg.URLs) > 0 {
-		printBoxLine(vertical, "   🌐 Web Interface:", boxWidth)
+		printBoxLine(vertical, "   "+display.Emoji("🌐", "[WEB]")+" Web Interface:", boxWidth)
 		for _, url := range cfg.URLs {
 			printBoxLine(vertical, "      "+url, boxWidth)
 		}
@@ -100,7 +101,7 @@ func printFull(cfg Config) {
 
 	// Admin Panel
 	if cfg.AdminPath != "" && len(cfg.URLs) > 0 {
-		printBoxLine(vertical, "   🔧 Admin Panel:", boxWidth)
+		printBoxLine(vertical, "   "+display.Emoji("🔧", "[ADM]")+" Admin Panel:", boxWidth)
 		adminURL := cfg.URLs[0] + "/" + cfg.AdminPath
 		printBoxLine(vertical, "      "+adminURL, boxWidth)
 		printBoxLine(vertical, "", boxWidth)
@@ -108,20 +109,20 @@ func printFull(cfg Config) {
 
 	// Setup Token (first run only)
 	if cfg.ShowSetup && cfg.SetupToken != "" {
-		printBoxLine(vertical, "   🔑 Setup Token (use at /"+cfg.AdminPath+"):", boxWidth)
+		printBoxLine(vertical, "   "+display.Emoji("🔑", "[KEY]")+" Setup Token (use at /"+cfg.AdminPath+"):", boxWidth)
 		printBoxLine(vertical, "      "+cfg.SetupToken, boxWidth)
 		printBoxLine(vertical, "", boxWidth)
 	}
 
 	// SMTP Status
 	if cfg.SMTPStatus != "" {
-		printBoxLine(vertical, "   📧 SMTP: "+cfg.SMTPStatus, boxWidth)
+		printBoxLine(vertical, "   "+display.Emoji("📧", "[MAIL]")+" SMTP: "+cfg.SMTPStatus, boxWidth)
 		printBoxLine(vertical, "", boxWidth)
 	}
 
 	// Warning for first run
 	if cfg.ShowSetup {
-		printBoxLine(vertical, "   ⚠️  Save the setup token! It will not be shown again.", boxWidth)
+		printBoxLine(vertical, "   "+display.Emoji("⚠️", "[!]")+"  Save the setup token! It will not be shown again.", boxWidth)
 		printBoxLine(vertical, "", boxWidth)
 	}
 
@@ -145,26 +146,29 @@ func printBoxLine(border, content string, width int) {
 }
 
 // printCompact prints compact banner (60-79 cols)
+// Per AI.md PART 8: Uses display.Emoji() for NO_COLOR fallback
 func printCompact(cfg Config) {
 	fmt.Println()
-	fmt.Printf("🚀 %s v%s\n", cfg.AppName, cfg.Version)
+	fmt.Printf("%s %s v%s\n", display.Emoji("🚀", "[*]"), cfg.AppName, cfg.Version)
 
 	if cfg.Mode != "" {
-		icon := "🔒"
+		var icon string
 		if cfg.Mode == "development" {
-			icon = "🔧"
+			icon = display.Emoji("🔧", "[DEV]")
+		} else {
+			icon = display.Emoji("🔒", "[PROD]")
 		}
 		fmt.Printf("%s Running in mode: %s\n", icon, cfg.Mode)
 	}
 
 	for _, url := range cfg.URLs {
-		fmt.Printf("🌐 %s\n", url)
+		fmt.Printf("%s %s\n", display.Emoji("🌐", "[WEB]"), url)
 	}
 
 	if cfg.ShowSetup && cfg.SetupToken != "" {
 		fmt.Println()
-		fmt.Printf("🔑 Setup Token: %s\n", cfg.SetupToken)
-		fmt.Println("⚠️  Save this token! Shown only once.")
+		fmt.Printf("%s Setup Token: %s\n", display.Emoji("🔑", "[KEY]"), cfg.SetupToken)
+		fmt.Printf("%s  Save this token! Shown only once.\n", display.Emoji("⚠️", "[!]"))
 	}
 	fmt.Println()
 }

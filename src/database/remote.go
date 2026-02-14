@@ -309,8 +309,25 @@ func (mm *MigrationManager) getTableSchema(ctx context.Context, table string) (s
 	return schema, err
 }
 
+// validIdentifier checks that a table or column name contains only safe characters
+// Per AI.md PART 10: Parameterized queries only - identifiers must be validated
+func validIdentifier(name string) bool {
+	if name == "" || len(name) > 128 {
+		return false
+	}
+	for _, r := range name {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_') {
+			return false
+		}
+	}
+	return true
+}
+
 // countRows counts the rows in a source table
 func (mm *MigrationManager) countRows(ctx context.Context, table string) (int64, error) {
+	if !validIdentifier(table) {
+		return 0, fmt.Errorf("invalid table name: %q", table)
+	}
 	var count int64
 	err := mm.sourceDB.QueryRow(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM "%s"`, table)).Scan(&count)
 	return count, err
@@ -373,6 +390,10 @@ func (mm *MigrationManager) convertSchema(sqliteSchema string) string {
 
 // migrateTableData migrates data from source to target table
 func (mm *MigrationManager) migrateTableData(ctx context.Context, table string, progress chan<- MigrationProgress, totalRows int64) (int64, error) {
+	if !validIdentifier(table) {
+		return 0, fmt.Errorf("invalid table name: %q", table)
+	}
+
 	// Get column names
 	columns, err := mm.getTableColumns(ctx, table)
 	if err != nil {
@@ -381,6 +402,13 @@ func (mm *MigrationManager) migrateTableData(ctx context.Context, table string, 
 
 	if len(columns) == 0 {
 		return 0, nil
+	}
+
+	// Validate all column names
+	for _, col := range columns {
+		if !validIdentifier(col) {
+			return 0, fmt.Errorf("invalid column name: %q", col)
+		}
 	}
 
 	// Build SELECT query
@@ -451,6 +479,9 @@ func (mm *MigrationManager) migrateTableData(ctx context.Context, table string, 
 
 // getTableColumns returns the column names for a table
 func (mm *MigrationManager) getTableColumns(ctx context.Context, table string) ([]string, error) {
+	if !validIdentifier(table) {
+		return nil, fmt.Errorf("invalid table name: %q", table)
+	}
 	rows, err := mm.sourceDB.Query(ctx, fmt.Sprintf(`PRAGMA table_info("%s")`, table))
 	if err != nil {
 		return nil, err

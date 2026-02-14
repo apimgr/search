@@ -2265,6 +2265,43 @@
     }
 
     // ========================================================================
+    // FAVICON ERROR HANDLING - Per AI.md PART 16: NO inline JS
+    // Replaces inline onerror handler with event delegation
+    // ========================================================================
+    function initFaviconErrorHandling() {
+        // Helper to show placeholder and hide image
+        function showPlaceholder(img) {
+            img.classList.add('hidden');
+            var placeholder = img.nextElementSibling;
+            if (placeholder && placeholder.classList.contains('favicon-placeholder')) {
+                placeholder.classList.remove('hidden');
+            }
+        }
+
+        document.querySelectorAll('.result-favicon img[data-favicon-fallback]').forEach(function(img) {
+            // Handle load errors
+            img.addEventListener('error', function() {
+                showPlaceholder(this);
+            });
+
+            // Handle load success - check if it's a 1x1 fallback image
+            img.addEventListener('load', function() {
+                // 1x1 transparent PNG is our fallback, show placeholder instead
+                if (this.naturalWidth <= 1 && this.naturalHeight <= 1) {
+                    showPlaceholder(this);
+                }
+            });
+
+            // Handle already-loaded images (from cache)
+            if (img.complete) {
+                if (img.naturalWidth <= 1 && img.naturalHeight <= 1) {
+                    showPlaceholder(img);
+                }
+            }
+        });
+    }
+
+    // ========================================================================
     // INITIALIZATION
     // ========================================================================
     function init() {
@@ -2286,6 +2323,7 @@
         initUserPages();
         initAnnouncements();
         initCookieConsent();
+        initFaviconErrorHandling();
     }
 
     // ========================================================================

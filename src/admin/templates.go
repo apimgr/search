@@ -557,7 +557,7 @@ func (h *Handler) renderTokensContent(w http.ResponseWriter, data *AdminPageData
 }
 
 func (h *Handler) renderLogsContent(w http.ResponseWriter, data *AdminPageData) {
-	logDir := h.config.GetLogDir()
+	logDir := config.GetLogDir()
 	fmt.Fprintf(w, `
             <div class="admin-section">
                 <h2>Server Logs</h2>
@@ -832,6 +832,10 @@ func (h *Handler) renderServerBrandingContent(w http.ResponseWriter, data *Admin
                         <input type="text" name="favicon_url" value="%s" placeholder="/static/img/favicon.ico">
                     </div>
                     <div class="form-row">
+                        <label>Source Code URL</label>
+                        <input type="url" name="source_code_url" value="%s" placeholder="https://github.com/org/repo">
+                    </div>
+                    <div class="form-row">
                         <label>Footer Text</label>
                         <textarea name="footer_text" rows="2">%s</textarea>
                     </div>
@@ -854,6 +858,7 @@ func (h *Handler) renderServerBrandingContent(w http.ResponseWriter, data *Admin
 		h.config.Server.Branding.Title,
 		h.config.Server.Branding.LogoURL,
 		h.config.Server.Branding.FaviconURL,
+		h.config.Server.Branding.SourceCodeURL,
 		h.config.Server.Branding.FooterText,
 		selectedValue(h.config.Server.Branding.Theme, "dark"),
 		selectedValue(h.config.Server.Branding.Theme, "light"),
@@ -2786,16 +2791,20 @@ func (h *Handler) renderHelpContent(w http.ResponseWriter, data *AdminPageData) 
                                 <p>Complete guides and reference</p>
                             </div>
                         </a>
-                    </li>
+                    </li>`)
+	if h.config.Server.Branding.SourceCodeURL != "" {
+		fmt.Fprintf(w, `
                     <li>
-                        <a href="https://github.com/apimgr/search" target="_blank">
+                        <a href="%s" target="_blank">
                             <span class="icon">💻</span>
                             <div>
-                                <strong>GitHub Repository</strong>
+                                <strong>Source Code Repository</strong>
                                 <p>Source code and issues</p>
                             </div>
                         </a>
-                    </li>
+                    </li>`, h.config.Server.Branding.SourceCodeURL)
+	}
+	fmt.Fprintf(w, `
                 </ul>
             </div>
 

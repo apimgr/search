@@ -4,14 +4,91 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/model"
 	userpkg "github.com/apimgr/search/src/user"
 )
+
+// apiEndpointLimiter implements per-endpoint rate limiting for API auth routes
+// Per AI.md PART 11: login (5/15min), password reset (3/1hr), registration (5/1hr)
+type apiEndpointLimiter struct {
+	mu      sync.Mutex
+	entries map[string]*apiLimitEntry
+	limit   int
+	window  time.Duration
+}
+
+type apiLimitEntry struct {
+	attempts int
+	firstAt  time.Time
+}
+
+func newAPIEndpointLimiter(limit int, window time.Duration) *apiEndpointLimiter {
+	l := &apiEndpointLimiter{
+		entries: make(map[string]*apiLimitEntry),
+		limit:   limit,
+		window:  window,
+	}
+	go l.cleanup()
+	return l
+}
+
+func (l *apiEndpointLimiter) cleanup() {
+	for {
+		time.Sleep(5 * time.Minute)
+		l.mu.Lock()
+		for key, entry := range l.entries {
+			if time.Since(entry.firstAt) > l.window {
+				delete(l.entries, key)
+			}
+		}
+		l.mu.Unlock()
+	}
+}
+
+func (l *apiEndpointLimiter) allow(ip string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	entry, exists := l.entries[ip]
+	if !exists {
+		l.entries[ip] = &apiLimitEntry{attempts: 1, firstAt: time.Now()}
+		return true
+	}
+
+	if time.Since(entry.firstAt) > l.window {
+		l.entries[ip] = &apiLimitEntry{attempts: 1, firstAt: time.Now()}
+		return true
+	}
+
+	if entry.attempts >= l.limit {
+		return false
+	}
+
+	entry.attempts++
+	return true
+}
+
+func (l *apiEndpointLimiter) remainingSeconds(ip string) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	entry, exists := l.entries[ip]
+	if !exists {
+		return 0
+	}
+	remaining := l.window - time.Since(entry.firstAt)
+	if remaining < 0 {
+		return 0
+	}
+	return int(remaining.Seconds())
+}
 
 // AuthHandler handles authentication API requests
 type AuthHandler struct {
@@ -21,6 +98,10 @@ type AuthHandler struct {
 	recoveryManager     *userpkg.RecoveryManager
 	verificationManager *userpkg.VerificationManager
 	db                  *sql.DB
+	// Per AI.md PART 11: Endpoint-specific rate limiters
+	loginLimiter    *apiEndpointLimiter
+	registerLimiter *apiEndpointLimiter
+	forgotLimiter   *apiEndpointLimiter
 }
 
 // NewAuthHandler creates a new auth API handler
@@ -32,6 +113,9 @@ func NewAuthHandler(cfg *config.Config, db *sql.DB, authManager *userpkg.AuthMan
 		totpManager:         totpManager,
 		recoveryManager:     recoveryManager,
 		verificationManager: verificationManager,
+		loginLimiter:        newAPIEndpointLimiter(5, 15*time.Minute),
+		registerLimiter:     newAPIEndpointLimiter(5, 1*time.Hour),
+		forgotLimiter:       newAPIEndpointLimiter(3, 1*time.Hour),
 	}
 }
 
@@ -122,6 +206,14 @@ func (h *AuthHandler) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Per AI.md PART 11: Rate limit registration (5 per 1 hour per IP)
+	ip := getClientIP(r)
+	if !h.registerLimiter.allow(ip) {
+		w.Header().Set("Retry-After", fmt.Sprintf("%d", h.registerLimiter.remainingSeconds(ip)))
+		h.errorResponse(w, http.StatusTooManyRequests, "Too many registration attempts", "Please try again later")
+		return
+	}
+
 	// Check if registration is enabled
 	if !h.config.Server.Users.Registration.Enabled {
 		h.errorResponse(w, http.StatusForbidden, "Registration is disabled", "")
@@ -207,6 +299,14 @@ func (h *AuthHandler) handleRegister(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", "Use POST")
+		return
+	}
+
+	// Per AI.md PART 11: Rate limit login (5 per 15 minutes per IP)
+	ip := getClientIP(r)
+	if !h.loginLimiter.allow(ip) {
+		w.Header().Set("Retry-After", fmt.Sprintf("%d", h.loginLimiter.remainingSeconds(ip)))
+		h.errorResponse(w, http.StatusTooManyRequests, "Too many login attempts", "Please try again later")
 		return
 	}
 
@@ -317,6 +417,14 @@ func (h *AuthHandler) handleLogout(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", "Use POST")
+		return
+	}
+
+	// Per AI.md PART 11: Rate limit password reset (3 per 1 hour per IP)
+	ip := getClientIP(r)
+	if !h.forgotLimiter.allow(ip) {
+		w.Header().Set("Retry-After", fmt.Sprintf("%d", h.forgotLimiter.remainingSeconds(ip)))
+		h.errorResponse(w, http.StatusTooManyRequests, "Too many password reset attempts", "Please try again later")
 		return
 	}
 

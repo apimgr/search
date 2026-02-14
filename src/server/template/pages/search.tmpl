@@ -115,10 +115,10 @@
         {{range .Results}}
         <article class="result-item">
             <div class="result-favicon">
-                <img src="https://www.google.com/s2/favicons?domain={{.URL}}&sz=32"
+                <img src="/api/v1/favicon?url={{.URL}}"
                      alt=""
                      loading="lazy"
-                     onerror="this.classList.add('hidden');this.nextElementSibling.classList.remove('hidden');">
+                     data-favicon-fallback>
                 <span class="favicon-placeholder hidden">{{slice (printf "%s" .Title) 0 1}}</span>
             </div>
             <div class="result-body">

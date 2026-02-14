@@ -79,6 +79,14 @@ func SetColorMode(mode string) {
 	cliOverrides["color"] = mode
 }
 
+// SetBaseURLOverride sets a CLI override for the base URL path prefix
+// Per AI.md PART 6: --baseurl flag for reverse proxy path prefix
+func SetBaseURLOverride(url string) {
+	cliOverrideMu.Lock()
+	defer cliOverrideMu.Unlock()
+	cliOverrides["base_url"] = url
+}
+
 // GetAdminPath returns the admin panel path
 // Per AI.md PART 8: Configurable admin path, defaults to "admin"
 func GetAdminPath() string {
@@ -116,6 +124,23 @@ func GetColorMode() string {
 
 	// Auto-detect based on terminal
 	return "auto"
+}
+
+// GetBaseURL returns the base URL path prefix
+// Per AI.md PART 6: Configurable base URL for reverse proxy, defaults to "/"
+func GetBaseURL() string {
+	// Check CLI override first (--baseurl flag)
+	if url, ok := getOverride("base_url"); ok && url != "" {
+		return url
+	}
+
+	// Check environment variable
+	if url := os.Getenv("SEARCH_BASE_URL"); url != "" {
+		return url
+	}
+
+	// Default to "/"
+	return "/"
 }
 
 // IsColorEnabled returns whether color output should be enabled

@@ -2,8 +2,11 @@ package api
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -18,6 +21,7 @@ import (
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 	"github.com/apimgr/search/src/search/engines"
+	"github.com/apimgr/search/src/service"
 	"github.com/apimgr/search/src/widget"
 )
 
@@ -36,6 +40,7 @@ type Handler struct {
 	instantManager  *instant.Manager
 	directManager   *direct.Manager
 	relatedSearches *search.RelatedSearches
+	torService      *service.TorService // Per AI.md PART 32: Tor service for health status
 	startTime       time.Time
 }
 
@@ -67,6 +72,12 @@ func (h *Handler) SetDirectManager(dm *direct.Manager) {
 // SetRelatedSearches sets the related searches provider for the API handler
 func (h *Handler) SetRelatedSearches(rs *search.RelatedSearches) {
 	h.relatedSearches = rs
+}
+
+// SetTorService sets the Tor service for the API handler
+// Per AI.md PART 32: Tor status is checked via service, not hardcoded
+func (h *Handler) SetTorService(ts *service.TorService) {
+	h.torService = ts
 }
 
 // RegisterRoutes registers API routes
@@ -110,6 +121,10 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/server/privacy", h.handleServerPrivacy)
 	mux.HandleFunc("/api/v1/server/help", h.handleServerHelp)
 	mux.HandleFunc("/api/v1/server/terms", h.handleServerTerms)
+
+	// Favicon proxy - privacy-preserving favicon fetching
+	// Per AI.md PART 16: NO external requests from client, server proxies content
+	mux.HandleFunc("/api/v1/favicon", h.handleFavicon)
 }
 
 // Response types
@@ -344,15 +359,24 @@ type CategoryInfo struct {
 // Handler methods
 
 func (h *Handler) handleHealthz(w http.ResponseWriter, r *http.Request) {
-	// Tor status per AI.md PART 13
+	// Tor status per AI.md PART 13 and PART 32
 	torEnabled := h.config.Server.Tor.Enabled
-	torRunning := false // Will be updated when Tor service is available
+	torRunning := false
 	torStatus := ""
 	torHostname := ""
 	torCheck := ""
+
+	// Check actual Tor service status per AI.md PART 32
 	if torEnabled {
-		torStatus = "unavailable"
-		torCheck = "unavailable"
+		if h.torService != nil && h.torService.IsRunning() {
+			torRunning = true
+			torStatus = "healthy"
+			torHostname = h.torService.GetOnionAddress()
+			torCheck = "ok"
+		} else {
+			torStatus = "unavailable"
+			torCheck = "unavailable"
+		}
 	}
 
 	// Determine overall status
@@ -1598,4 +1622,106 @@ func (h *Handler) handleServerTerms(w http.ResponseWriter, r *http.Request) {
 		},
 		Meta: &APIMeta{Version: APIVersion},
 	})
+}
+
+// handleFavicon handles favicon proxy requests
+// Per AI.md PART 16: NO external requests from client, server proxies content
+// This provides privacy-preserving favicon fetching for search results
+func (h *Handler) handleFavicon(w http.ResponseWriter, r *http.Request) {
+	urlParam := strings.TrimSpace(r.URL.Query().Get("url"))
+	if urlParam == "" {
+		h.serveFaviconFallback(w)
+		return
+	}
+
+	// Extract domain from URL
+	domain := extractDomain(urlParam)
+	if domain == "" {
+		h.serveFaviconFallback(w)
+		return
+	}
+
+	// Try to fetch favicon from the domain
+	faviconURL := "https://" + domain + "/favicon.ico"
+
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 3 {
+				return fmt.Errorf("too many redirects")
+			}
+			return nil
+		},
+	}
+
+	req, err := http.NewRequestWithContext(r.Context(), "GET", faviconURL, nil)
+	if err != nil {
+		log.Printf("[DEBUG] favicon request error for %s: %v", domain, err)
+		h.serveFaviconFallback(w)
+		return
+	}
+
+	// Set a generic user agent
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; FaviconFetcher/1.0)")
+	req.Header.Set("Accept", "image/*")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("[DEBUG] favicon fetch error for %s: %v", domain, err)
+		h.serveFaviconFallback(w)
+		return
+	}
+	defer resp.Body.Close()
+
+	// Check response status
+	if resp.StatusCode != http.StatusOK {
+		h.serveFaviconFallback(w)
+		return
+	}
+
+	// Validate content type is an image
+	contentType := resp.Header.Get("Content-Type")
+	if !strings.HasPrefix(contentType, "image/") {
+		// Some servers return favicon.ico without proper content-type
+		// Accept common favicon patterns
+		if !strings.Contains(contentType, "icon") && contentType != "application/octet-stream" {
+			h.serveFaviconFallback(w)
+			return
+		}
+		// Default to ICO if content-type is ambiguous
+		if contentType == "application/octet-stream" || contentType == "" {
+			contentType = "image/x-icon"
+		}
+	}
+
+	// Limit response size to prevent abuse (max 100KB for favicon)
+	limitedReader := io.LimitReader(resp.Body, 100*1024)
+	body, err := io.ReadAll(limitedReader)
+	if err != nil {
+		log.Printf("[DEBUG] favicon read error for %s: %v", domain, err)
+		h.serveFaviconFallback(w)
+		return
+	}
+
+	// Set response headers
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "public, max-age=86400") // Cache for 24 hours
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(http.StatusOK)
+	w.Write(body)
+}
+
+// serveFaviconFallback serves a 1x1 transparent PNG as fallback
+// This allows the client-side JS to detect load failure and show placeholder
+func (h *Handler) serveFaviconFallback(w http.ResponseWriter) {
+	// 1x1 transparent PNG (smallest valid PNG)
+	transparentPNG := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+	data, _ := base64.StdEncoding.DecodeString(transparentPNG)
+
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "public, max-age=3600") // Cache fallback for 1 hour
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(http.StatusOK)
+	w.Write(data)
 }

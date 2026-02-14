@@ -76,11 +76,20 @@ func (s *Server) renderLoginPage(w http.ResponseWriter, r *http.Request, errorMs
 	}
 
 	if err := s.renderer.Render(w, "auth/login", data); err != nil {
-		s.handleError(w, r, http.StatusInternalServerError, "Template Error", err.Error())
+		s.handleInternalError(w, r, "template render", err)
 	}
 }
 
 func (s *Server) processLogin(w http.ResponseWriter, r *http.Request) {
+	// Per AI.md PART 11: Rate limit login attempts (5 per 15 minutes per IP)
+	ip := getClientIPSimple(r)
+	if !s.loginLimiter.Allow(ip) {
+		remaining := s.loginLimiter.RemainingTime(ip)
+		w.Header().Set("Retry-After", fmt.Sprintf("%d", int(remaining.Seconds())))
+		s.renderLoginPage(w, r, "Too many login attempts. Please try again later.", "")
+		return
+	}
+
 	if err := r.ParseForm(); err != nil {
 		s.renderLoginPage(w, r, "Invalid form data", "")
 		return
@@ -228,11 +237,20 @@ func (s *Server) renderRegisterPage(w http.ResponseWriter, r *http.Request, erro
 	}
 
 	if err := s.renderer.Render(w, "auth/register", data); err != nil {
-		s.handleError(w, r, http.StatusInternalServerError, "Template Error", err.Error())
+		s.handleInternalError(w, r, "template render", err)
 	}
 }
 
 func (s *Server) processRegister(w http.ResponseWriter, r *http.Request) {
+	// Per AI.md PART 11: Rate limit registration (5 per 1 hour per IP)
+	ip := getClientIPSimple(r)
+	if !s.registerLimiter.Allow(ip) {
+		remaining := s.registerLimiter.RemainingTime(ip)
+		w.Header().Set("Retry-After", fmt.Sprintf("%d", int(remaining.Seconds())))
+		s.renderRegisterPage(w, r, "Too many registration attempts. Please try again later.", "")
+		return
+	}
+
 	if err := r.ParseForm(); err != nil {
 		s.renderRegisterPage(w, r, "Invalid form data", "")
 		return
@@ -346,11 +364,20 @@ func (s *Server) renderForgotPage(w http.ResponseWriter, r *http.Request, errorM
 	}
 
 	if err := s.renderer.Render(w, "auth/forgot", data); err != nil {
-		s.handleError(w, r, http.StatusInternalServerError, "Template Error", err.Error())
+		s.handleInternalError(w, r, "template render", err)
 	}
 }
 
 func (s *Server) processForgot(w http.ResponseWriter, r *http.Request) {
+	// Per AI.md PART 11: Rate limit password reset (3 per 1 hour per IP)
+	ip := getClientIPSimple(r)
+	if !s.forgotLimiter.Allow(ip) {
+		remaining := s.forgotLimiter.RemainingTime(ip)
+		w.Header().Set("Retry-After", fmt.Sprintf("%d", int(remaining.Seconds())))
+		s.renderForgotPage(w, r, "Too many password reset requests. Please try again later.", "")
+		return
+	}
+
 	if err := r.ParseForm(); err != nil {
 		s.renderForgotPage(w, r, "Invalid form data", "")
 		return
@@ -438,7 +465,7 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.renderer.Render(w, "auth/verify", data); err != nil {
-		s.handleError(w, r, http.StatusInternalServerError, "Template Error", err.Error())
+		s.handleInternalError(w, r, "template render", err)
 	}
 }
 
@@ -481,7 +508,7 @@ func (s *Server) render2FAPage(w http.ResponseWriter, r *http.Request, errorMsg 
 	}
 
 	if err := s.renderer.Render(w, "auth/2fa", data); err != nil {
-		s.handleError(w, r, http.StatusInternalServerError, "Template Error", err.Error())
+		s.handleInternalError(w, r, "template render", err)
 	}
 }
 

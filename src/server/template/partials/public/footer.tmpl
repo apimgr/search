@@ -32,7 +32,7 @@
 
     {{/* Application branding - per AI.md PART 17 */}}
     <p>
-        <a href="https://github.com/apimgr/search" target="_blank" rel="noopener">Made with</a> ❤️
+        {{if .Config.Server.Branding.SourceCodeURL}}<a href="{{.Config.Server.Branding.SourceCodeURL}}" target="_blank" rel="noopener">Made with</a>{{else}}Made with{{end}} ❤️
         <span>•</span>
         <span>{{version}}</span>
     </p>

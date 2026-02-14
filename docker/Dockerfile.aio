@@ -14,6 +14,7 @@ ARG TARGETARCH
 ARG VERSION=dev
 ARG BUILD_DATE
 ARG COMMIT_ID
+ARG OFFICIALSITE
 
 WORKDIR /build
 
@@ -22,7 +23,7 @@ RUN go mod download
 
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
-    -ldflags "-s -w -X 'github.com/apimgr/search/src/config.Version=${VERSION}' -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/config.BuildDate=${BUILD_DATE}'" \
+    -ldflags "-s -w -X 'github.com/apimgr/search/src/config.Version=${VERSION}' -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/config.BuildDate=${BUILD_DATE}' -X 'github.com/apimgr/search/src/config.OfficialSite=${OFFICIALSITE}'" \
     -o /app ./src
 
 # =============================================================================
@@ -34,7 +35,8 @@ LABEL org.opencontainers.image.source="https://github.com/apimgr/search"
 LABEL org.opencontainers.image.description="search - all-in-one (debian + postgresql + valkey + tor)"
 LABEL org.opencontainers.image.licenses="MIT"
 
-# Install dependencies (PostgreSQL + Valkey + Tor + Supervisor)
+# Install dependencies (PostgreSQL + Valkey + Tor + Supervisor + tini)
+# Per AI.md PART 27: tini required for proper signal handling
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
@@ -42,6 +44,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     postgresql-contrib \
     valkey \
     supervisor \
+    tini \
     tor \
     tzdata \
     && rm -rf /var/lib/apt/lists/*
@@ -82,4 +85,8 @@ EXPOSE 80
 HEALTHCHECK --interval=10s --timeout=5s --start-period=90s --retries=3 \
     CMD timeout 10s bash -c ':> /dev/tcp/127.0.0.1/80' || exit 1
 
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+# Per AI.md PART 27: Proper signal handling
+STOPSIGNAL SIGRTMIN+3
+
+# Per AI.md PART 27: Use tini for signal propagation
+ENTRYPOINT ["tini", "-p", "SIGTERM", "--", "/usr/local/bin/entrypoint.sh"]

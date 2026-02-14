@@ -3,6 +3,8 @@ package httputil
 import (
 	"net/http"
 	"strings"
+
+	"github.com/apimgr/search/src/config"
 )
 
 // ProjectName is the name of this project, used for CLI client detection
@@ -207,4 +209,139 @@ func GetPreferredFormat(r *http.Request) string {
 		}
 		return "text/html"
 	}
+}
+
+// GetBaseURLFromRequest returns the base URL path prefix from the request
+// Per AI.md PART 5: {baseurl} resolution from reverse proxy headers
+// Priority: X-Forwarded-Prefix → X-Forwarded-Path → X-Script-Name → config → "/"
+func GetBaseURLFromRequest(r *http.Request) string {
+	// Check reverse proxy headers first (highest priority)
+	if prefix := r.Header.Get("X-Forwarded-Prefix"); prefix != "" {
+		return normalizeBasePath(prefix)
+	}
+	if path := r.Header.Get("X-Forwarded-Path"); path != "" {
+		return normalizeBasePath(path)
+	}
+	if scriptName := r.Header.Get("X-Script-Name"); scriptName != "" {
+		return normalizeBasePath(scriptName)
+	}
+
+	// Fall back to config
+	return config.GetBaseURL()
+}
+
+// GetProtoFromRequest returns the protocol from the request
+// Per AI.md PART 5: {proto} resolution from reverse proxy headers
+// Priority: X-Forwarded-Proto → X-Forwarded-Ssl → TLS detection → "http"
+func GetProtoFromRequest(r *http.Request) string {
+	// Check X-Forwarded-Proto
+	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+		return strings.ToLower(proto)
+	}
+
+	// Check X-Forwarded-Ssl
+	if ssl := r.Header.Get("X-Forwarded-Ssl"); ssl != "" {
+		if strings.ToLower(ssl) == "on" {
+			return "https"
+		}
+	}
+
+	// Check if TLS connection
+	if r.TLS != nil {
+		return "https"
+	}
+
+	return "http"
+}
+
+// GetHostFromRequest returns the host from the request
+// Per AI.md PART 5: {fqdn} resolution from reverse proxy headers
+// Priority: X-Forwarded-Host → Host header → Request.Host
+func GetHostFromRequest(r *http.Request) string {
+	// Check X-Forwarded-Host
+	if host := r.Header.Get("X-Forwarded-Host"); host != "" {
+		// May contain multiple hosts, use first one
+		if idx := strings.Index(host, ","); idx != -1 {
+			return strings.TrimSpace(host[:idx])
+		}
+		return host
+	}
+
+	// Use Host header or Request.Host
+	return r.Host
+}
+
+// GetPortFromRequest returns the port from the request
+// Per AI.md PART 5: {port} resolution from reverse proxy headers
+// Priority: X-Forwarded-Port → Host header → Server port → Proto default
+func GetPortFromRequest(r *http.Request) string {
+	// Check X-Forwarded-Port
+	if port := r.Header.Get("X-Forwarded-Port"); port != "" {
+		return port
+	}
+
+	// Extract from Host header
+	host := GetHostFromRequest(r)
+	if idx := strings.LastIndex(host, ":"); idx != -1 {
+		// Make sure it's not IPv6 bracket
+		if !strings.Contains(host[idx:], "]") {
+			return host[idx+1:]
+		}
+	}
+
+	// Default based on protocol
+	if GetProtoFromRequest(r) == "https" {
+		return "443"
+	}
+	return "80"
+}
+
+// BuildFullURL builds a full URL from request context
+// Per AI.md PART 5: URL Variables (NON-NEGOTIABLE)
+func BuildFullURL(r *http.Request, path string) string {
+	proto := GetProtoFromRequest(r)
+	host := GetHostFromRequest(r)
+	baseURL := GetBaseURLFromRequest(r)
+
+	// Remove port from host if it's the default port
+	port := GetPortFromRequest(r)
+	if (proto == "http" && port == "80") || (proto == "https" && port == "443") {
+		// Strip default port from host if present
+		if idx := strings.LastIndex(host, ":"); idx != -1 {
+			hostPort := host[idx+1:]
+			if hostPort == port {
+				host = host[:idx]
+			}
+		}
+	}
+
+	// Normalize paths
+	baseURL = normalizeBasePath(baseURL)
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+
+	// Combine base URL and path, avoiding double slashes
+	fullPath := baseURL + path
+	if baseURL != "/" && strings.HasPrefix(path, "/") {
+		fullPath = baseURL + path
+	}
+
+	return proto + "://" + host + fullPath
+}
+
+// normalizeBasePath normalizes a base path
+func normalizeBasePath(path string) string {
+	if path == "" {
+		return "/"
+	}
+	// Ensure it starts with /
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	// Remove trailing slash unless it's just "/"
+	if len(path) > 1 && strings.HasSuffix(path, "/") {
+		path = path[:len(path)-1]
+	}
+	return path
 }

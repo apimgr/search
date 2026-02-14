@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math/big"
 	"net/http"
 	"os"
@@ -40,7 +41,7 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.renderer.Render(w, "index", data); err != nil {
-		s.handleError(w, r, http.StatusInternalServerError, "Template Error", err.Error())
+		s.handleInternalError(w, r, "template render", err)
 	}
 }
 
@@ -50,7 +51,7 @@ func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
 	data.CSRFToken = s.getCSRFToken(r)
 
 	if err := s.renderer.Render(w, "about", data); err != nil {
-		s.handleError(w, r, http.StatusInternalServerError, "Template Error", err.Error())
+		s.handleInternalError(w, r, "template render", err)
 	}
 }
 
@@ -60,7 +61,7 @@ func (s *Server) handlePrivacy(w http.ResponseWriter, r *http.Request) {
 	data.CSRFToken = s.getCSRFToken(r)
 
 	if err := s.renderer.Render(w, "privacy", data); err != nil {
-		s.handleError(w, r, http.StatusInternalServerError, "Template Error", err.Error())
+		s.handleInternalError(w, r, "template render", err)
 	}
 }
 
@@ -92,7 +93,7 @@ func (s *Server) handleContact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.renderer.Render(w, "contact", data); err != nil {
-		s.handleError(w, r, http.StatusInternalServerError, "Template Error", err.Error())
+		s.handleInternalError(w, r, "template render", err)
 	}
 }
 
@@ -135,7 +136,7 @@ func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
 	data.CSRFToken = s.getCSRFToken(r)
 
 	if err := s.renderer.Render(w, "help", data); err != nil {
-		s.handleError(w, r, http.StatusInternalServerError, "Template Error", err.Error())
+		s.handleInternalError(w, r, "template render", err)
 	}
 }
 
@@ -145,7 +146,7 @@ func (s *Server) handleTerms(w http.ResponseWriter, r *http.Request) {
 	data.CSRFToken = s.getCSRFToken(r)
 
 	if err := s.renderer.Render(w, "terms", data); err != nil {
-		s.handleError(w, r, http.StatusInternalServerError, "Template Error", err.Error())
+		s.handleInternalError(w, r, "template render", err)
 	}
 }
 
@@ -481,7 +482,7 @@ func (s *Server) respondHealthHTML(w http.ResponseWriter, r *http.Request, healt
 	}
 
 	if err := s.renderer.Render(w, "healthz", data); err != nil {
-		s.handleError(w, r, http.StatusInternalServerError, "Template Error", err.Error())
+		s.handleInternalError(w, r, "template render", err)
 	}
 }
 
@@ -520,6 +521,15 @@ func (s *Server) handleError(w http.ResponseWriter, r *http.Request, code int, t
 		// Fallback to plain text
 		http.Error(w, fmt.Sprintf("%d - %s: %s", code, title, message), code)
 	}
+}
+
+// handleInternalError logs the actual error internally and shows a generic message to the user.
+// Per AI.md PART 9: User sees "Minimal, helpful" messages; internal details go to logs only.
+func (s *Server) handleInternalError(w http.ResponseWriter, r *http.Request, context string, err error) {
+	// Log the actual error with context for debugging
+	log.Printf("[ERROR] %s: %s %s - %v", context, r.Method, r.URL.Path, err)
+	// Show generic message to user - never expose internal error details
+	s.handleError(w, r, http.StatusInternalServerError, "Error", "An error occurred. Please try again.")
 }
 
 // getCSRFToken returns a CSRF token for the request

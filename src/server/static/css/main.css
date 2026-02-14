@@ -474,8 +474,13 @@ html.theme-light .theme-icon-dark {
     color: inherit;
     font-size: 1.5rem;
     cursor: pointer;
-    padding: 0;
+    padding: 0.5rem;
     line-height: 1;
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 /* Home Page */

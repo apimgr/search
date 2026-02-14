@@ -2,16 +2,18 @@ name: Daily Build
 
 on:
   schedule:
-    - cron: '0 3 * * *'
+    - cron: '0 3 * * *'  # 3am UTC daily
   push:
     branches:
       - main
       - master
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 env:
   PROJECTNAME: search
-  OFFICIALSITE: https://scour.li
 
 jobs:
   build:
@@ -39,7 +41,7 @@ jobs:
             goarch: arm64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -51,6 +53,13 @@ jobs:
           echo "VERSION=$(date -u +"%Y%m%d%H%M%S")" >> $GITHUB_ENV
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
+          # OFFICIALSITE (optional): Set in repository secrets, or site.txt file, or leave empty
+          # Never guess or assume - must be explicitly defined by user
+          if [ -f site.txt ]; then
+            echo "OFFICIALSITE=$(cat site.txt)" >> $GITHUB_ENV
+          else
+            echo "OFFICIALSITE=${{ secrets.OFFICIALSITE }}" >> $GITHUB_ENV
+          fi
 
       - name: Build server
         env:
@@ -61,6 +70,7 @@ jobs:
           LDFLAGS="-s -w -X 'github.com/apimgr/search/src/config.Version=${{ env.VERSION }}' -X 'github.com/apimgr/search/src/config.CommitID=${{ env.COMMIT_ID }}' -X 'github.com/apimgr/search/src/config.BuildDate=${{ env.BUILD_DATE }}' -X 'github.com/apimgr/search/src/config.OfficialSite=${{ env.OFFICIALSITE }}'"
           go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src
 
+      # CLI build - only if src/client/ directory exists
       - name: Build CLI
         if: hashFiles('src/client/') != ''
         env:
@@ -68,21 +78,39 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          LDFLAGS="-s -w -X 'github.com/apimgr/search/src/client/cmd.ProjectName=${{ env.PROJECTNAME }}' -X 'github.com/apimgr/search/src/client/cmd.Version=${{ env.VERSION }}' -X 'github.com/apimgr/search/src/client/cmd.CommitID=${{ env.COMMIT_ID }}' -X 'github.com/apimgr/search/src/client/cmd.BuildDate=${{ env.BUILD_DATE }}' -X 'github.com/apimgr/search/src/client/cmd.OfficialSite=${{ env.OFFICIALSITE }}' -X 'github.com/apimgr/search/src/client/api.ProjectName=${{ env.PROJECTNAME }}' -X 'github.com/apimgr/search/src/client/api.Version=${{ env.VERSION }}'"
+          LDFLAGS="-s -w -X 'github.com/apimgr/search/src/client/cmd.Version=${{ env.VERSION }}' -X 'github.com/apimgr/search/src/client/cmd.CommitID=${{ env.COMMIT_ID }}' -X 'github.com/apimgr/search/src/client/cmd.BuildDate=${{ env.BUILD_DATE }}' -X 'github.com/apimgr/search/src/client/cmd.OfficialSite=${{ env.OFFICIALSITE }}'"
           go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
       - name: Upload CLI artifact
         if: hashFiles('src/client/') != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+
+      # Agent build - only if src/agent/ directory exists
+      - name: Build Agent
+        if: hashFiles('src/agent/') != ''
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          LDFLAGS="-s -w -X 'github.com/apimgr/search/src/config.Version=${{ env.VERSION }}' -X 'github.com/apimgr/search/src/config.CommitID=${{ env.COMMIT_ID }}' -X 'github.com/apimgr/search/src/config.BuildDate=${{ env.BUILD_DATE }}' -X 'github.com/apimgr/search/src/config.OfficialSite=${{ env.OFFICIALSITE }}'"
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/agent
+
+      - name: Upload Agent artifact
+        if: hashFiles('src/agent/') != ''
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
   release:
     needs: build
@@ -91,10 +119,10 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: binaries
           merge-multiple: true
@@ -106,17 +134,62 @@ jobs:
         run: echo "${{ env.VERSION }}" > binaries/version.txt
 
       - name: Delete previous daily release
-        run: |
-          gh release delete daily --yes 2>/dev/null || true
-          git push origin :refs/tags/daily 2>/dev/null || true
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          GITEA_URL="${GITHUB_SERVER_URL}"
+          REPO="${GITHUB_REPOSITORY}"
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: daily
-          name: "Daily Build ${{ env.VERSION }}"
-          files: binaries/*
-          prerelease: true
-          body: "Daily build: ${{ env.VERSION }}"
+          # Find and delete existing daily release
+          EXISTING_ID=$(curl -s \
+            -H "Authorization: token ${GITHUB_TOKEN}" \
+            "${GITEA_URL}/api/v1/repos/${REPO}/releases/tags/daily" \
+            | jq -r '.id // empty')
+
+          if [ -n "$EXISTING_ID" ]; then
+            curl -s -X DELETE \
+              -H "Authorization: token ${GITHUB_TOKEN}" \
+              "${GITEA_URL}/api/v1/repos/${REPO}/releases/${EXISTING_ID}"
+            echo "Deleted existing daily release"
+          fi
+
+          # Delete existing daily tag
+          curl -s -X DELETE \
+            -H "Authorization: token ${GITHUB_TOKEN}" \
+            "${GITEA_URL}/api/v1/repos/${REPO}/tags/daily" 2>/dev/null || true
+
+      - name: Create Release via Gitea API
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          GITEA_URL="${GITHUB_SERVER_URL}"
+          REPO="${GITHUB_REPOSITORY}"
+          TAG="daily"
+
+          # Create release
+          RELEASE_ID=$(curl -s -X POST \
+            -H "Authorization: token ${GITHUB_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${GITEA_URL}/api/v1/repos/${REPO}/releases" \
+            -d "{\"tag_name\": \"${TAG}\", \"name\": \"Daily Build ${{ env.VERSION }}\", \"body\": \"Daily build: ${{ env.VERSION }}\", \"draft\": false, \"prerelease\": true}" \
+            | jq -r '.id')
+
+          if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
+            echo "Failed to create release"
+            exit 1
+          fi
+
+          echo "Created release ID: ${RELEASE_ID}"
+
+          # Upload assets
+          for file in binaries/*; do
+            if [ -f "$file" ]; then
+              FILENAME=$(basename "$file")
+              echo "Uploading ${FILENAME}..."
+              curl -s -X POST \
+                -H "Authorization: token ${GITHUB_TOKEN}" \
+                -H "Content-Type: application/octet-stream" \
+                "${GITEA_URL}/api/v1/repos/${REPO}/releases/${RELEASE_ID}/assets?name=${FILENAME}" \
+                --data-binary "@${file}"
+            fi
+          done

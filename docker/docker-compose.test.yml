@@ -13,27 +13,19 @@ services:
     restart: "no"
     logging: *default-logging
     environment:
-      # Test: development mode with DEBUG enabled
-      # Enables pprof, expvar, detailed request logging
       - MODE=development
-      - TZ=America/New_York
       - DEBUG=true
+      - TZ=America/New_York
     ports:
-      # Test: different port to avoid conflicts
       - "64581:80"
     volumes:
-      # TEMP DIR WORKFLOW: ./rootfs/ resolves to $TEMP_DIR/rootfs/
-      # NEVER run from project directory - always use temp dir workflow
-      - ./rootfs/config:/config
-      - ./rootfs/data:/data
+      # CRITICAL: ./rootfs/ must resolve to $TEMP_DIR/rootfs/, NOT project directory
+      # This file MUST be copied to a temp directory before running
+      # AI: NEVER run this from the project directory
+      - ./rootfs/config:/config:z
+      - ./rootfs/data:/data:z
     networks:
       - search-test
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/healthz"]
-      interval: 5m
-      timeout: 15s
-      retries: 3
-      start_period: 10m
 
 networks:
   search-test:

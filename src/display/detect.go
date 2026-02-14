@@ -14,6 +14,79 @@ var (
 	getSizeFunc    = term.GetSize
 )
 
+// Package-level state for emoji and color output
+// Per AI.md PART 8: NO_COLOR and TERM=dumb disable colors AND emojis
+var (
+	emojiEnabled = true
+	colorEnabled = true
+	colorForce   *bool // nil = auto, true = always, false = never
+)
+
+// InitOutput initializes color and emoji output state based on environment
+// Per AI.md PART 8: Must be called early, before any output
+// colorFlag: "always", "never", or "auto" (from --color flag)
+func InitOutput(colorFlag string) {
+	// Handle --color flag (highest priority)
+	switch colorFlag {
+	case "always":
+		t := true
+		colorForce = &t
+		colorEnabled = true
+		emojiEnabled = true
+		return
+	case "never":
+		f := false
+		colorForce = &f
+		colorEnabled = false
+		emojiEnabled = false
+		return
+	}
+	// "auto" or empty - continue with detection
+
+	// Check NO_COLOR environment variable (standard)
+	if os.Getenv("NO_COLOR") != "" {
+		colorEnabled = false
+		emojiEnabled = false
+		return
+	}
+
+	// Check TERM environment variable
+	term := os.Getenv("TERM")
+	if term == "" || term == "dumb" {
+		colorEnabled = false
+		emojiEnabled = false
+		return
+	}
+
+	// Default: enabled
+	colorEnabled = true
+	emojiEnabled = true
+}
+
+// ColorEnabled returns whether color output is enabled
+// Per AI.md PART 8: NO_COLOR disables colors
+func ColorEnabled() bool {
+	if colorForce != nil {
+		return *colorForce
+	}
+	return colorEnabled
+}
+
+// EmojiEnabled returns whether emoji output is enabled
+// Per AI.md PART 8: NO_COLOR disables both colors AND emojis
+func EmojiEnabled() bool {
+	return emojiEnabled
+}
+
+// Emoji returns the emoji if enabled, otherwise the fallback text
+// Per AI.md PART 8: NO_COLOR disables both colors AND emojis
+func Emoji(icon, fallback string) string {
+	if emojiEnabled {
+		return icon
+	}
+	return fallback
+}
+
 // DisplayType represents the type of display available
 type DisplayType string
 

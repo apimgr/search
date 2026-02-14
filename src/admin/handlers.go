@@ -13,7 +13,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/apimgr/search/src/backup"
@@ -53,6 +55,7 @@ type Handler struct {
 	reloadCallback ReloadCallback
 	configPath     string
 	configSync     *config.ConfigSync // Per AI.md PART 5: Cluster config sync (NON-NEGOTIABLE)
+	loginLimiter   *loginRateLimiter  // Per AI.md PART 11: 5 attempts / 15 min
 }
 
 // TorManager interface for Tor operations per AI.md PART 32
@@ -141,13 +144,85 @@ type ClusterNode struct {
 	JoinedAt  time.Time
 }
 
+// loginRateLimiter tracks per-IP login attempts
+// Per AI.md PART 11: 5 attempts per 15 minutes
+type loginRateLimiter struct {
+	mu      sync.Mutex
+	entries map[string]*loginEntry
+}
+
+type loginEntry struct {
+	attempts int
+	firstAt  time.Time
+}
+
+func newLoginRateLimiter() *loginRateLimiter {
+	lrl := &loginRateLimiter{
+		entries: make(map[string]*loginEntry),
+	}
+	go lrl.cleanup()
+	return lrl
+}
+
+func (lrl *loginRateLimiter) cleanup() {
+	for {
+		time.Sleep(5 * time.Minute)
+		lrl.mu.Lock()
+		for key, entry := range lrl.entries {
+			if time.Since(entry.firstAt) > 15*time.Minute {
+				delete(lrl.entries, key)
+			}
+		}
+		lrl.mu.Unlock()
+	}
+}
+
+func (lrl *loginRateLimiter) allow(ip string) bool {
+	lrl.mu.Lock()
+	defer lrl.mu.Unlock()
+
+	entry, exists := lrl.entries[ip]
+	if !exists {
+		lrl.entries[ip] = &loginEntry{attempts: 1, firstAt: time.Now()}
+		return true
+	}
+
+	if time.Since(entry.firstAt) > 15*time.Minute {
+		lrl.entries[ip] = &loginEntry{attempts: 1, firstAt: time.Now()}
+		return true
+	}
+
+	if entry.attempts >= 5 {
+		return false
+	}
+
+	entry.attempts++
+	return true
+}
+
+func (lrl *loginRateLimiter) remainingTime(ip string) time.Duration {
+	lrl.mu.Lock()
+	defer lrl.mu.Unlock()
+
+	entry, exists := lrl.entries[ip]
+	if !exists {
+		return 0
+	}
+	remaining := 15*time.Minute - time.Since(entry.firstAt)
+	if remaining < 0 {
+		return 0
+	}
+	return remaining
+}
+
 // NewHandler creates a new admin handler
 func NewHandler(cfg *config.Config, renderer Renderer) *Handler {
 	return &Handler{
-		config:    cfg,
-		auth:      NewAuthManager(cfg),
-		renderer:  renderer,
-		startTime: time.Now(),
+		config:       cfg,
+		auth:         NewAuthManager(cfg),
+		renderer:     renderer,
+		startTime:    time.Now(),
+		loginLimiter: newLoginRateLimiter(),
 	}
 }
 
@@ -438,7 +513,19 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 // processLogin handles login form submission
+// Per AI.md PART 11: Rate limited to 5 attempts per 15 minutes per IP
 func (h *Handler) processLogin(w http.ResponseWriter, r *http.Request) {
+	ip := GetClientIP(r)
+
+	// Check endpoint-specific rate limit
+	if !h.loginLimiter.allow(ip) {
+		remaining := h.loginLimiter.remainingTime(ip)
+		w.Header().Set("Retry-After", strconv.Itoa(int(remaining.Seconds())))
+		log.Printf("[Admin] Login rate limited for IP: %s", ip)
+		http.Redirect(w, r, "/admin/login?error=Too+many+login+attempts.+Please+try+again+later.", http.StatusSeeOther)
+		return
+	}
+
 	if err := r.ParseForm(); err != nil {
 		http.Redirect(w, r, "/admin/login?error=Invalid+form+data", http.StatusSeeOther)
 		return
@@ -448,7 +535,7 @@ func (h *Handler) processLogin(w http.ResponseWriter, r *http.Request) {
 	password := r.FormValue("password") // Don't trim passwords
 
 	if !h.auth.Authenticate(username, password) {
-		log.Printf("[Admin] Failed login attempt for user: %s from %s", username, GetClientIP(r))
+		log.Printf("[Admin] Failed login attempt for user: %s from %s", username, ip)
 		http.Redirect(w, r, "/admin/login?error=Invalid+credentials", http.StatusSeeOther)
 		return
 	}
@@ -1224,6 +1311,8 @@ func (h *Handler) processServerBrandingUpdate(w http.ResponseWriter, r *http.Req
 	if footerText := strings.TrimSpace(r.FormValue("footer_text")); footerText != "" {
 		h.config.Server.Branding.FooterText = footerText
 	}
+	// Source code URL can be cleared (empty string) or set
+	h.config.Server.Branding.SourceCodeURL = strings.TrimSpace(r.FormValue("source_code_url"))
 
 	h.saveAndReload(w, r, "/admin/server/branding")
 }

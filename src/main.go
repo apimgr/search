@@ -22,6 +22,7 @@ import (
 	"github.com/apimgr/search/src/backup"
 	"github.com/apimgr/search/src/banner"
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/display"
 	"github.com/apimgr/search/src/mode"
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
@@ -61,6 +62,7 @@ var (
 	flagAddress   string
 	flagPort      int
 	flagAdminPath string
+	flagBaseURL   string
 	flagColor     string
 )
 
@@ -95,6 +97,7 @@ func init() {
 	flag.StringVar(&flagAddress, "address", "", "Set listen address")
 	flag.IntVar(&flagPort, "port", 0, "Set listen port")
 	flag.StringVar(&flagAdminPath, "admin-path", "", "Set admin panel path (default: admin)")
+	flag.StringVar(&flagBaseURL, "baseurl", "", "Set URL path prefix for reverse proxy (default: /)")
 	flag.StringVar(&flagColor, "color", "", "Set color output mode (always|never|auto)")
 }
 
@@ -106,6 +109,10 @@ func main() {
 
 	// Parse flags
 	flag.Parse()
+
+	// Initialize display output (colors and emojis) based on NO_COLOR, TERM, and --color flag
+	// Per AI.md PART 8: Must be called early, before any output
+	display.InitOutput(flagColor)
 
 	// Apply CLI overrides to config (before any other operations)
 	applyCliOverrides()
@@ -171,7 +178,7 @@ func main() {
 			"--port": true, "--address": true, "--mode": true, "--data": true,
 			"--config": true, "--cache": true, "--log": true, "--backup": true,
 			"--pid": true, "--debug": true, "--daemon": true, "--admin-path": true,
-			"--color": true,
+			"--baseurl": true, "--color": true,
 		}
 		if !runtimeFlags[os.Args[1]] {
 			handleLegacyArgs()
@@ -239,6 +246,11 @@ func applyCliOverrides() {
 	if flagAdminPath != "" {
 		os.Setenv("SEARCH_ADMIN_PATH", flagAdminPath)
 		config.SetAdminPathOverride(flagAdminPath)
+	}
+	// Per AI.md PART 6: --baseurl sets URL path prefix for reverse proxy
+	if flagBaseURL != "" {
+		os.Setenv("SEARCH_BASE_URL", flagBaseURL)
+		config.SetBaseURLOverride(flagBaseURL)
 	}
 	// Per AI.md PART 8: Color priority: CLI flag > Config > NO_COLOR env > Auto-detect
 	if flagColor != "" {
@@ -315,7 +327,7 @@ func runServer() {
 	// Check if we should daemonize (only for manual starts, not --service start)
 	if flagDaemon && os.Getenv("_DAEMON_CHILD") != "1" {
 		if err := daemonize(); err != nil {
-			log.Fatalf("❌ Failed to daemonize: %v", err)
+			log.Fatalf(display.Emoji("❌", "[ERROR]")+" Failed to daemonize: %v", err)
 		}
 		// Parent exits in daemonize(), only child continues
 	}
@@ -328,13 +340,13 @@ func runServer() {
 		// Step 8a: Create system user
 		svcUser, err := service.CreateSystemUser("search")
 		if err != nil {
-			log.Fatalf("❌ Failed to create system user: %v", err)
+			log.Fatalf(display.Emoji("❌", "[ERROR]")+" Failed to create system user: %v", err)
 		}
 		log.Printf("[Startup] System user ready: %s (uid=%d, gid=%d)", svcUser.Name, svcUser.UID, svcUser.GID)
 
 		// Step 8b-d: Create directories and set ownership (while still root)
 		if err := config.EnsureSystemDirectories("search"); err != nil {
-			log.Fatalf("❌ Failed to create system directories: %v", err)
+			log.Fatalf(display.Emoji("❌", "[ERROR]")+" Failed to create system directories: %v", err)
 		}
 		log.Println("[Startup] System directories created")
 
@@ -352,12 +364,12 @@ func runServer() {
 		// Step 8g: Drop privileges to search user
 		log.Printf("[Startup] Dropping privileges to user: %s", svcUser.Name)
 		if err := service.DropPrivileges(svcUser.Name); err != nil {
-			log.Fatalf("❌ Failed to drop privileges: %v", err)
+			log.Fatalf(display.Emoji("❌", "[ERROR]")+" Failed to drop privileges: %v", err)
 		}
 
 		// Step 8h: Verify privilege drop succeeded
 		if err := service.VerifyPrivilegesDropped(); err != nil {
-			log.Fatalf("❌ %v", err)
+			log.Fatalf(display.Emoji("❌", "[ERROR]")+" %v", err)
 		}
 		log.Println("[Startup] Privileges dropped successfully")
 	}
@@ -365,7 +377,7 @@ func runServer() {
 	// Initialize configuration
 	cfg, err := config.Initialize()
 	if err != nil {
-		log.Fatalf("❌ Configuration failed: %v", err)
+		log.Fatalf(display.Emoji("❌", "[ERROR]")+" Configuration failed: %v", err)
 	}
 
 	// Build listen URLs for banner
@@ -410,7 +422,7 @@ func runServer() {
 
 	// Start server
 	if err := srv.Start(); err != nil {
-		log.Fatalf("❌ Server failed: %v", err)
+		log.Fatalf(display.Emoji("❌", "[ERROR]")+" Server failed: %v", err)
 	}
 }
 
@@ -451,6 +463,7 @@ Runtime Flags:
   --address <addr>         Set listen address
   --port <port>            Set listen port
   --admin-path <path>      Set admin panel path (default: admin)
+  --baseurl <path>         Set URL path prefix for reverse proxy (default: /)
   --color <mode>           Set color output mode (always|never|auto)
   --daemon                 Daemonize (detach from terminal, Unix only)
   --debug                  Enable debug mode (verbose logging, debug endpoints)
@@ -547,17 +560,17 @@ For more information: https://github.com/apimgr/search
 }
 
 func runInit() {
-	fmt.Println("🔧 Initializing Search configuration...")
+	fmt.Println(display.Emoji("🔧", "[*]") + " Initializing Search configuration...")
 	fmt.Println()
 
 	cfg, err := config.Initialize()
 	if err != nil {
-		log.Fatalf("❌ Initialization failed: %v", err)
+		log.Fatalf(display.Emoji("❌", "[ERROR]")+" Initialization failed: %v", err)
 	}
 
-	fmt.Println("✅ Configuration initialized successfully!")
+	fmt.Println(display.Emoji("✅", "[OK]") + " Configuration initialized successfully!")
 	fmt.Println()
-	fmt.Println("📁 Configuration Paths:")
+	fmt.Println(display.Emoji("📁", "[DIR]") + " Configuration Paths:")
 	fmt.Println("   Config: ", config.GetConfigDir())
 	fmt.Println("   Data:   ", config.GetDataDir())
 	fmt.Println("   Logs:   ", config.GetLogDir())
@@ -566,24 +579,24 @@ func runInit() {
 	fmt.Println("   SSL:    ", config.GetSSLDir())
 	fmt.Println("   Tor:    ", config.GetTorDir())
 	fmt.Println()
-	fmt.Println("⚙️  Server Configuration:")
+	fmt.Println(display.Emoji("⚙️", "[CFG]") + "  Server Configuration:")
 	fmt.Println("   Title:  ", cfg.Server.Title)
 	fmt.Printf("   Port:   %d\n", cfg.Server.Port)
 	fmt.Println("   Mode:   ", cfg.Server.Mode)
 	fmt.Println("   Tor:     (auto-detect at startup)")
 	fmt.Println()
-	fmt.Println("🔍 Search Engines:")
+	fmt.Println(display.Emoji("🔍", "[SEARCH]") + " Search Engines:")
 	for name, engine := range cfg.Engines {
-		status := "❌ disabled"
+		status := display.Emoji("❌", "[X]") + " disabled"
 		if engine.Enabled {
-			status = fmt.Sprintf("✅ enabled (priority: %d)", engine.Priority)
+			status = fmt.Sprintf(display.Emoji("✅", "[OK]")+" enabled (priority: %d)", engine.Priority)
 		}
 		fmt.Printf("   %s: %s\n", name, status)
 	}
 }
 
 func showConfigInfo() {
-	fmt.Println("📁 Configuration Information")
+	fmt.Println(display.Emoji("📁", "[DIR]") + " Configuration Information")
 	fmt.Println()
 
 	env := config.LoadFromEnv()
@@ -619,9 +632,9 @@ func showConfigInfo() {
 	// Check if config exists
 	configPath := config.GetConfigPath()
 	if _, err := os.Stat(configPath); err == nil {
-		fmt.Println("Configuration Status: ✅ exists")
+		fmt.Println("Configuration Status: " + display.Emoji("✅", "[OK]") + " exists")
 	} else {
-		fmt.Println("Configuration Status: ⚠️  not found (run --init to create)")
+		fmt.Println("Configuration Status: " + display.Emoji("⚠️", "[WARN]") + " not found (run --init to create)")
 	}
 
 	fmt.Println()
@@ -816,12 +829,12 @@ func formatUptime(d time.Duration) string {
 }
 
 func runService(action string) {
-	fmt.Printf("🔧 Service Management: %s\n\n", action)
+	fmt.Printf(display.Emoji("🔧", "[*]")+" Service Management: %s\n\n", action)
 
 	// Load configuration
 	cfg, err := config.Initialize()
 	if err != nil {
-		fmt.Printf("❌ Failed to load config: %v\n", err)
+		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to load config: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -831,105 +844,105 @@ func runService(action string) {
 	switch action {
 	case "--install", "install":
 		if !config.IsPrivileged() {
-			fmt.Println("❌ This command requires elevated privileges")
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " This command requires elevated privileges")
 			fmt.Println("   Run with sudo/admin rights")
 			os.Exit(1)
 		}
 		fmt.Printf("Installing service for %s...\n", runtime.GOOS)
 		if err := sm.Install(); err != nil {
-			fmt.Printf("❌ Failed to install service: %v\n", err)
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to install service: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Println("✅ Service installed successfully")
+		fmt.Println(display.Emoji("✅", "[OK]") + " Service installed successfully")
 		fmt.Println("   Run 'search --service start' to start the service")
 
 	case "--uninstall", "uninstall":
 		if !config.IsPrivileged() {
-			fmt.Println("❌ This command requires elevated privileges")
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " This command requires elevated privileges")
 			os.Exit(1)
 		}
 		fmt.Println("Uninstalling service...")
 		if err := sm.Uninstall(); err != nil {
-			fmt.Printf("❌ Failed to uninstall service: %v\n", err)
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to uninstall service: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Println("✅ Service uninstalled successfully")
+		fmt.Println(display.Emoji("✅", "[OK]") + " Service uninstalled successfully")
 
 	case "start":
 		if !config.IsPrivileged() {
-			fmt.Println("❌ This command requires elevated privileges")
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " This command requires elevated privileges")
 			os.Exit(1)
 		}
 		fmt.Println("Starting service...")
 		if err := sm.Start(); err != nil {
-			fmt.Printf("❌ Failed to start service: %v\n", err)
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to start service: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Println("✅ Service started successfully")
+		fmt.Println(display.Emoji("✅", "[OK]") + " Service started successfully")
 
 	case "stop":
 		if !config.IsPrivileged() {
-			fmt.Println("❌ This command requires elevated privileges")
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " This command requires elevated privileges")
 			os.Exit(1)
 		}
 		fmt.Println("Stopping service...")
 		if err := sm.Stop(); err != nil {
-			fmt.Printf("❌ Failed to stop service: %v\n", err)
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to stop service: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Println("✅ Service stopped successfully")
+		fmt.Println(display.Emoji("✅", "[OK]") + " Service stopped successfully")
 
 	case "status":
 		status, err := sm.Status()
 		if err != nil {
-			fmt.Printf("❌ Failed to get service status: %v\n", err)
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to get service status: %v\n", err)
 			os.Exit(1)
 		}
 		fmt.Printf("Service status: %s\n", status)
 
 	case "restart":
 		if !config.IsPrivileged() {
-			fmt.Println("❌ This command requires elevated privileges")
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " This command requires elevated privileges")
 			os.Exit(1)
 		}
 		fmt.Println("Restarting service...")
 		if err := sm.Restart(); err != nil {
-			fmt.Printf("❌ Failed to restart service: %v\n", err)
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to restart service: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Println("✅ Service restarted successfully")
+		fmt.Println(display.Emoji("✅", "[OK]") + " Service restarted successfully")
 
 	case "reload":
 		fmt.Println("Reloading service configuration...")
 		if err := sm.Reload(); err != nil {
-			fmt.Printf("❌ Failed to reload service: %v\n", err)
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to reload service: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Println("✅ Service configuration reloaded")
+		fmt.Println(display.Emoji("✅", "[OK]") + " Service configuration reloaded")
 
 	case "--disable", "disable":
 		if !config.IsPrivileged() {
-			fmt.Println("❌ This command requires elevated privileges")
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " This command requires elevated privileges")
 			os.Exit(1)
 		}
 		fmt.Println("Disabling service autostart...")
 		if err := sm.Disable(); err != nil {
-			fmt.Printf("❌ Failed to disable service: %v\n", err)
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to disable service: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Println("✅ Service autostart disabled")
+		fmt.Println(display.Emoji("✅", "[OK]") + " Service autostart disabled")
 
 	case "--enable", "enable":
 		if !config.IsPrivileged() {
-			fmt.Println("❌ This command requires elevated privileges")
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " This command requires elevated privileges")
 			os.Exit(1)
 		}
 		fmt.Println("Enabling service autostart...")
 		if err := sm.Enable(); err != nil {
-			fmt.Printf("❌ Failed to enable service: %v\n", err)
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to enable service: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Println("✅ Service autostart enabled")
+		fmt.Println(display.Emoji("✅", "[OK]") + " Service autostart enabled")
 
 	case "--help", "help":
 		fmt.Println("Service Management Commands:")
@@ -946,13 +959,13 @@ func runService(action string) {
 		fmt.Println("  --help        Show this help")
 
 	default:
-		fmt.Printf("❌ Unknown action: %s\n", action)
+		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown action: %s\n", action)
 		fmt.Println("Valid actions: start, stop, restart, reload, status, --install, --uninstall, --enable, --disable, --help")
 	}
 }
 
 func runMaintenance(action string) {
-	fmt.Printf("🔧 Maintenance: %s\n\n", action)
+	fmt.Printf(display.Emoji("🔧", "[*]")+" Maintenance: %s\n\n", action)
 
 	bm := backup.NewManager()
 
@@ -967,19 +980,19 @@ func runMaintenance(action string) {
 		// Per AI.md PART 24: Password from env var or prompt
 		password := os.Getenv("BACKUP_PASSWORD")
 		if password != "" {
-			fmt.Println("🔐 Backup encryption: ENABLED")
+			fmt.Println(display.Emoji("🔐", "[ENCRYPTED]") + " Backup encryption: ENABLED")
 			bm.SetPassword(password)
 		} else {
-			fmt.Println("🔓 Backup encryption: DISABLED (set BACKUP_PASSWORD to enable)")
+			fmt.Println(display.Emoji("🔓", "[PLAIN]") + " Backup encryption: DISABLED (set BACKUP_PASSWORD to enable)")
 		}
 
 		fmt.Println("Creating backup...")
 		backupPath, err := bm.Create(filename)
 		if err != nil {
-			fmt.Printf("❌ Backup failed: %v\n", err)
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Backup failed: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("✅ Backup created: %s\n", backupPath)
+		fmt.Printf(display.Emoji("✅", "[OK]")+" Backup created: %s\n", backupPath)
 
 		// Show backup info
 		metadata, err := bm.GetMetadata(backupPath)
@@ -995,7 +1008,7 @@ func runMaintenance(action string) {
 
 	case "restore":
 		if len(os.Args) < 4 {
-			fmt.Println("❌ Please specify backup file to restore")
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " Please specify backup file to restore")
 			fmt.Println("Usage: search --maintenance restore <backup-file>")
 			fmt.Println()
 
@@ -1016,7 +1029,7 @@ func runMaintenance(action string) {
 		// Per AI.md PART 24: Prompt for password if encrypted
 		password := os.Getenv("BACKUP_PASSWORD")
 		if password != "" {
-			fmt.Println("🔐 Using encryption password from BACKUP_PASSWORD env var")
+			fmt.Println(display.Emoji("🔐", "[ENCRYPTED]") + " Using encryption password from BACKUP_PASSWORD env var")
 			bm.SetPassword(password)
 		}
 
@@ -1031,21 +1044,21 @@ func runMaintenance(action string) {
 
 		if err := bm.Restore(filename); err != nil {
 			if strings.Contains(err.Error(), "decryption failed") {
-				fmt.Printf("❌ Restore failed: %v\n", err)
+				fmt.Printf(display.Emoji("❌", "[ERROR]")+" Restore failed: %v\n", err)
 				fmt.Println("   This backup appears to be encrypted.")
 				fmt.Println("   Set BACKUP_PASSWORD environment variable and try again.")
 			} else {
-				fmt.Printf("❌ Restore failed: %v\n", err)
+				fmt.Printf(display.Emoji("❌", "[ERROR]")+" Restore failed: %v\n", err)
 			}
 			os.Exit(1)
 		}
-		fmt.Println("✅ Restore completed successfully")
+		fmt.Println(display.Emoji("✅", "[OK]") + " Restore completed successfully")
 		fmt.Println("   Please restart the server to apply changes.")
 
 	case "list":
 		backups, err := bm.List()
 		if err != nil {
-			fmt.Printf("❌ Failed to list backups: %v\n", err)
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to list backups: %v\n", err)
 			return
 		}
 		if len(backups) == 0 {
@@ -1069,33 +1082,33 @@ func runMaintenance(action string) {
 		fmt.Println("Toggling maintenance mode...")
 		cfg, err := config.Initialize()
 		if err != nil {
-			fmt.Printf("❌ Failed to load config: %v\n", err)
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to load config: %v\n", err)
 			os.Exit(1)
 		}
 		// Toggle maintenance mode
 		cfg.Server.MaintenanceMode = !cfg.Server.MaintenanceMode
 		if err := cfg.Save(config.GetConfigPath()); err != nil {
-			fmt.Printf("❌ Failed to save config: %v\n", err)
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to save config: %v\n", err)
 			os.Exit(1)
 		}
 		if cfg.Server.MaintenanceMode {
-			fmt.Println("✅ Maintenance mode: ENABLED")
+			fmt.Println(display.Emoji("✅", "[OK]") + " Maintenance mode: ENABLED")
 			fmt.Println("   The server will show a maintenance page to users")
 		} else {
-			fmt.Println("✅ Maintenance mode: DISABLED")
+			fmt.Println(display.Emoji("✅", "[OK]") + " Maintenance mode: DISABLED")
 			fmt.Println("   The server is now accepting normal requests")
 		}
 
 	case "setup":
 		// Admin recovery per AI.md PART 26
 		// Clears admin password and generates a new setup token
-		fmt.Println("🔧 Admin Recovery Setup")
+		fmt.Println(display.Emoji("🔧", "[*]") + " Admin Recovery Setup")
 		fmt.Println()
 
 		// Initialize database to reset credentials
 		cfg, err := config.Initialize()
 		if err != nil {
-			fmt.Printf("❌ Failed to load config: %v\n", err)
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to load config: %v\n", err)
 			os.Exit(1)
 		}
 
@@ -1128,17 +1141,17 @@ func runMaintenance(action string) {
 
 		// Store hashed setup token in database
 		if err := storeSetupToken(dbPath, setupToken); err != nil {
-			fmt.Printf("❌ Failed to create setup token: %v\n", err)
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to create setup token: %v\n", err)
 			os.Exit(1)
 		}
 
 		// Clear primary admin credentials
 		if err := resetAdminCredentials(dbPath); err != nil {
-			fmt.Printf("⚠️  Warning: Could not reset credentials: %v\n", err)
+			fmt.Printf(display.Emoji("⚠️", "[WARN]")+"  Warning: Could not reset credentials: %v\n", err)
 		}
 
 		fmt.Println()
-		fmt.Println("✅ Setup token created successfully!")
+		fmt.Println(display.Emoji("✅", "[OK]") + " Setup token created successfully!")
 		fmt.Println()
 		fmt.Println("╔══════════════════════════════════════════════════════════╗")
 		fmt.Println("║  SETUP TOKEN (copy this - it will not be shown again)    ║")
@@ -1171,13 +1184,13 @@ func runMaintenance(action string) {
 		fmt.Println("  BACKUP_PASSWORD=secret search --maintenance restore backup.tar.gz")
 
 	default:
-		fmt.Printf("❌ Unknown action: %s\n", action)
+		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown action: %s\n", action)
 		fmt.Println("Valid actions: backup, restore, list, update, mode, setup, help")
 	}
 }
 
 func runUpdate(subCmd string) {
-	fmt.Println("🔄 Update Management")
+	fmt.Println(display.Emoji("🔄", "[UPDATE]") + " Update Management")
 	fmt.Println()
 
 	um := update.NewManager()
@@ -1190,14 +1203,14 @@ func runUpdate(subCmd string) {
 
 		info, err := um.CheckForUpdates(false)
 		if err != nil {
-			fmt.Printf("❌ Failed to check for updates: %v\n", err)
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to check for updates: %v\n", err)
 			return
 		}
 
 		if !info.Available {
-			fmt.Println("✅ You are running the latest version")
+			fmt.Println(display.Emoji("✅", "[OK]") + " You are running the latest version")
 		} else {
-			fmt.Printf("🆕 New version available: %s\n", info.LatestVersion)
+			fmt.Printf(display.Emoji("🆕", "[NEW]")+" New version available: %s\n", info.LatestVersion)
 			fmt.Printf("   Published: %s\n", info.PublishedAt.Format("Jan 2, 2006"))
 			if info.AssetSize > 0 {
 				fmt.Printf("   Size: %.1f MB\n", float64(info.AssetSize)/(1024*1024))
@@ -1211,7 +1224,7 @@ func runUpdate(subCmd string) {
 
 	case "yes", "":
 		if !config.IsPrivileged() {
-			fmt.Println("❌ Update installation requires elevated privileges")
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " Update installation requires elevated privileges")
 			fmt.Println("   Use --update check to check without privileges")
 			os.Exit(1)
 		}
@@ -1219,12 +1232,12 @@ func runUpdate(subCmd string) {
 		fmt.Println("Checking for updates...")
 		info, err := um.CheckForUpdates(false)
 		if err != nil {
-			fmt.Printf("❌ Failed to check for updates: %v\n", err)
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to check for updates: %v\n", err)
 			os.Exit(1)
 		}
 
 		if !info.Available {
-			fmt.Println("✅ You are running the latest version")
+			fmt.Println(display.Emoji("✅", "[OK]") + " You are running the latest version")
 			return
 		}
 
@@ -1239,34 +1252,34 @@ func runUpdate(subCmd string) {
 		fmt.Println()
 
 		if err != nil {
-			fmt.Printf("❌ Download failed: %v\n", err)
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Download failed: %v\n", err)
 			os.Exit(1)
 		}
 
 		fmt.Println("Installing update...")
 		if err := um.InstallUpdate(archivePath); err != nil {
-			fmt.Printf("❌ Installation failed: %v\n", err)
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Installation failed: %v\n", err)
 			fmt.Println("   Run 'search --update rollback' to restore previous version")
 			os.Exit(1)
 		}
 
-		fmt.Println("✅ Update installed successfully!")
+		fmt.Println(display.Emoji("✅", "[OK]") + " Update installed successfully!")
 		fmt.Println("   Please restart the service to apply the update")
 
 	case "rollback":
 		fmt.Println("Rolling back to previous version...")
 		if err := um.Rollback(); err != nil {
-			fmt.Printf("❌ Rollback failed: %v\n", err)
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Rollback failed: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Println("✅ Rollback completed successfully!")
+		fmt.Println(display.Emoji("✅", "[OK]") + " Rollback completed successfully!")
 		fmt.Println("   Please restart the service to apply the change")
 
 	case "list":
 		fmt.Println("Fetching available versions...")
 		versions, err := um.ListAvailableVersions()
 		if err != nil {
-			fmt.Printf("❌ Failed to fetch versions: %v\n", err)
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to fetch versions: %v\n", err)
 			return
 		}
 		fmt.Printf("Current version: %s\n", config.Version)
@@ -1282,7 +1295,7 @@ func runUpdate(subCmd string) {
 
 	case "branch":
 		if len(os.Args) < 4 {
-			fmt.Println("❌ Please specify branch name")
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " Please specify branch name")
 			fmt.Println("Usage: search --update branch <stable|beta|daily>")
 			return
 		}
@@ -1295,27 +1308,27 @@ func runUpdate(subCmd string) {
 		case "daily":
 			fmt.Println("Update branch set to: daily (bleeding edge)")
 		default:
-			fmt.Printf("❌ Invalid branch: %s\n", branch)
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Invalid branch: %s\n", branch)
 			fmt.Println("Valid branches: stable, beta, daily")
 		}
 
 	default:
-		fmt.Printf("❌ Unknown subcommand: %s\n", subCmd)
+		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown subcommand: %s\n", subCmd)
 		fmt.Println("Valid subcommands: check, yes, rollback, list, branch <name>")
 	}
 }
 
 func runTest() {
-	fmt.Println("🧪 Testing Search Engines...")
+	fmt.Println(display.Emoji("🧪", "[TEST]") + " Testing Search Engines...")
 	fmt.Println()
 
 	// Create engine registry
 	registry := engines.DefaultRegistry()
 
-	fmt.Printf("✅ Registered %d engines\n\n", registry.Count())
+	fmt.Printf(display.Emoji("✅", "[OK]")+" Registered %d engines\n\n", registry.Count())
 
 	// List engines
-	fmt.Println("📋 Available Engines:")
+	fmt.Println(display.Emoji("📋", "[LIST]") + " Available Engines:")
 	for _, engine := range registry.GetEnabled() {
 		fmt.Printf("  • %s (priority: %d)\n", engine.DisplayName(), engine.GetPriority())
 	}
@@ -1327,7 +1340,7 @@ func runTest() {
 		testQuery = os.Args[2]
 	}
 
-	fmt.Printf("🔎 Searching for: \"%s\"\n\n", testQuery)
+	fmt.Printf(display.Emoji("🔎", "[SEARCH]")+" Searching for: \"%s\"\n\n", testQuery)
 
 	query := model.NewQuery(testQuery)
 	query.Category = model.CategoryGeneral
@@ -1345,17 +1358,17 @@ func runTest() {
 
 	if err != nil {
 		if err == model.ErrNoResults {
-			fmt.Println("⚠️  No results found")
+			fmt.Println(display.Emoji("⚠️", "[WARN]") + "  No results found")
 			return
 		}
-		log.Fatalf("❌ Search failed: %v", err)
+		log.Fatalf(display.Emoji("❌", "[ERROR]")+" Search failed: %v", err)
 	}
 
 	// Display results
-	fmt.Printf("✅ Found %d results in %.2f seconds\n", results.TotalResults, results.SearchTime)
-	fmt.Printf("📊 Engines used: %v\n\n", results.Engines)
+	fmt.Printf(display.Emoji("✅", "[OK]")+" Found %d results in %.2f seconds\n", results.TotalResults, results.SearchTime)
+	fmt.Printf(display.Emoji("📊", "[STATS]")+" Engines used: %v\n\n", results.Engines)
 
-	fmt.Println("🎯 Top Results:")
+	fmt.Println(display.Emoji("🎯", "[>]") + " Top Results:")
 	fmt.Println(strings.Repeat("─", 80))
 
 	displayCount := 10
@@ -1366,15 +1379,15 @@ func runTest() {
 	for i := 0; i < displayCount; i++ {
 		result := results.Results[i]
 		fmt.Printf("\n%d. %s\n", i+1, result.Title)
-		fmt.Printf("   🔗 %s\n", result.URL)
+		fmt.Printf("   "+display.Emoji("🔗", "-")+" %s\n", result.URL)
 		if result.Content != "" {
 			content := result.Content
 			if len(content) > 150 {
 				content = content[:150] + "..."
 			}
-			fmt.Printf("   📝 %s\n", content)
+			fmt.Printf("   "+display.Emoji("📝", ">")+"%s\n", content)
 		}
-		fmt.Printf("   🏷️  Engine: %s | Score: %.0f\n", result.Engine, result.Score)
+		fmt.Printf("   "+display.Emoji("🏷️", "*")+" Engine: %s | Score: %.0f\n", result.Engine, result.Score)
 	}
 
 	fmt.Println(strings.Repeat("─", 80))
@@ -1384,7 +1397,7 @@ func runTest() {
 		jsonData, _ := json.MarshalIndent(results, "", "  ")
 		filename := fmt.Sprintf("search_results_%d.json", time.Now().Unix())
 		os.WriteFile(filename, jsonData, 0644)
-		fmt.Printf("\n💾 Results saved to: %s\n", filename)
+		fmt.Printf("\n"+display.Emoji("💾", "[SAVED]")+" Results saved to: %s\n", filename)
 	}
 }
 
@@ -1480,11 +1493,9 @@ func buildListenURLs(cfg *config.Config) []string {
 		addr = "0.0.0.0"
 	}
 
-	// Primary HTTP URL
-	port := cfg.Server.Port
-	if port == 0 {
-		port = 64580
-	}
+	// Primary HTTP URL - use GetHTTPPort which resolves port 0 based on environment
+	// Per AI.md PART 27: Container defaults to port 80, local dev to random 64xxx
+	port := cfg.Server.GetHTTPPort()
 
 	// Use localhost for display if binding to all interfaces
 	displayAddr := addr
@@ -1727,13 +1738,13 @@ type BuildTarget struct {
 // runBuild builds the binary for specified platforms using Docker
 // Per AI.md PART 23: Binary must be able to build itself
 func runBuild(platform string) {
-	fmt.Println("🔧 Build Command")
+	fmt.Println(display.Emoji("🔧", "[*]") + " Build Command")
 	fmt.Printf("   Version: %s\n", config.Version)
 	fmt.Println()
 
 	// Check if Docker is available
 	if _, err := exec.LookPath("docker"); err != nil {
-		fmt.Println("❌ Docker is required for cross-platform builds")
+		fmt.Println(display.Emoji("❌", "[ERROR]") + " Docker is required for cross-platform builds")
 		fmt.Println("   Please install Docker and try again")
 		os.Exit(1)
 	}
@@ -1741,7 +1752,7 @@ func runBuild(platform string) {
 	// Find the source directory
 	srcDir, err := findSourceDir()
 	if err != nil {
-		fmt.Printf("❌ Cannot find source directory: %v\n", err)
+		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Cannot find source directory: %v\n", err)
 		fmt.Println("   The build command requires access to the source code")
 		os.Exit(1)
 	}
@@ -1779,7 +1790,7 @@ func runBuild(platform string) {
 		if len(parts) == 2 {
 			targets = []BuildTarget{{parts[0], parts[1]}}
 		} else {
-			fmt.Printf("❌ Unknown platform: %s\n", platform)
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown platform: %s\n", platform)
 			fmt.Println("   Valid options: all, linux, darwin, windows, freebsd, host, or OS/ARCH")
 			os.Exit(1)
 		}
@@ -1788,13 +1799,13 @@ func runBuild(platform string) {
 	// Create output directory
 	outputDir := filepath.Join(srcDir, "binaries")
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		fmt.Printf("❌ Failed to create output directory: %v\n", err)
+		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to create output directory: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("📁 Source: %s\n", srcDir)
-	fmt.Printf("📁 Output: %s\n", outputDir)
-	fmt.Printf("🎯 Targets: %d platforms\n\n", len(targets))
+	fmt.Printf(display.Emoji("📁", "[DIR]")+" Source: %s\n", srcDir)
+	fmt.Printf(display.Emoji("📁", "[DIR]")+" Output: %s\n", outputDir)
+	fmt.Printf(display.Emoji("🎯", "[>]")+" Targets: %d platforms\n\n", len(targets))
 
 	// Build for each target
 	failed := 0
@@ -1809,24 +1820,24 @@ func runBuild(platform string) {
 		fmt.Printf("   Building %s/%s... ", target.OS, target.Arch)
 
 		if err := buildWithDocker(srcDir, outputPath, target.OS, target.Arch); err != nil {
-			fmt.Printf("❌ %v\n", err)
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" %v\n", err)
 			failed++
 		} else {
 			// Get file size
 			if info, err := os.Stat(outputPath); err == nil {
-				fmt.Printf("✅ (%s)\n", formatBytes(info.Size()))
+				fmt.Printf(display.Emoji("✅", "[OK]")+" (%s)\n", formatBytes(info.Size()))
 			} else {
-				fmt.Println("✅")
+				fmt.Println(display.Emoji("✅", "[OK]") + "")
 			}
 		}
 	}
 
 	fmt.Println()
 	if failed > 0 {
-		fmt.Printf("⚠️  %d/%d builds failed\n", failed, len(targets))
+		fmt.Printf(display.Emoji("⚠️", "[WARN]")+"  %d/%d builds failed\n", failed, len(targets))
 		os.Exit(1)
 	}
-	fmt.Printf("✅ Build complete: %d binaries in %s/\n", len(targets), outputDir)
+	fmt.Printf(display.Emoji("✅", "[OK]")+" Build complete: %d binaries in %s/\n", len(targets), outputDir)
 }
 
 // findSourceDir locates the source directory
@@ -1991,7 +2002,7 @@ func runShell(subCmd string) {
 	case "help", "--help":
 		printShellHelp(binaryName)
 	default:
-		fmt.Printf("❌ Unknown shell subcommand: %s\n", subCmd)
+		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown shell subcommand: %s\n", subCmd)
 		fmt.Println("Valid subcommands: completions, init, --help")
 		os.Exit(1)
 	}
@@ -2193,7 +2204,7 @@ Register-ArgumentCompleter -CommandName %s -ScriptBlock {
 `, binaryName, binaryName, binaryName)
 
 	default:
-		fmt.Printf("❌ Unsupported shell: %s\n", shell)
+		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unsupported shell: %s\n", shell)
 		fmt.Println("Supported shells: bash, zsh, fish, powershell")
 		os.Exit(1)
 	}
@@ -2211,7 +2222,7 @@ func printShellInit(binaryName, shell string) {
 	case "powershell", "pwsh":
 		fmt.Printf("Invoke-Expression (&%s --shell completions powershell)\n", binaryName)
 	default:
-		fmt.Printf("❌ Unsupported shell: %s\n", shell)
+		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unsupported shell: %s\n", shell)
 		fmt.Println("Supported shells: bash, zsh, fish, powershell")
 		os.Exit(1)
 	}

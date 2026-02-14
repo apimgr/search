@@ -10,31 +10,19 @@ on:
 
 env:
   PROJECTNAME: search
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build:
+  build-standard:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        run: docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+        run: docker buildx create --use --name builder --driver docker-container
 
       - name: Set build info
         run: |
@@ -42,69 +30,155 @@ jobs:
           echo "YYMM=$(date +"%y%m")" >> $GITHUB_ENV
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
             VERSION="${GITHUB_REF#refs/tags/}"
-            echo "VERSION=${VERSION#v}" >> $GITHUB_ENV  # Strip 'v' prefix
+            echo "VERSION=${VERSION#v}" >> $GITHUB_ENV
             echo "IS_TAG=true" >> $GITHUB_ENV
           else
             echo "VERSION=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
             echo "IS_TAG=false" >> $GITHUB_ENV
           fi
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
+          # OFFICIALSITE (optional): Set in repository secrets, or site.txt file, or leave empty
+          # Never guess or assume - must be explicitly defined by user
+          if [ -f site.txt ]; then
+            echo "OFFICIALSITE=$(cat site.txt)" >> $GITHUB_ENV
+          else
+            echo "OFFICIALSITE=${{ secrets.OFFICIALSITE }}" >> $GITHUB_ENV
+          fi
 
-      - name: Determine tags
+      - name: Determine registry and tags (standard)
         id: tags
         run: |
-          TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.COMMIT_ID }}"
+          # Use Gitea container registry
+          REGISTRY="${GITHUB_SERVER_URL#https://}"
+          REGISTRY="${REGISTRY#http://}"
+          IMAGE="${REGISTRY}/${GITHUB_REPOSITORY}"
+          TAGS="${IMAGE}:${{ env.COMMIT_ID }}"
 
           if [[ "${{ env.IS_TAG }}" == "true" ]]; then
-            # Release tag - version, latest, YYMM
-            TAGS="$TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}"
-            TAGS="$TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-            TAGS="$TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.YYMM }}"
+            TAGS="$TAGS,${IMAGE}:${{ env.VERSION }}"
+            TAGS="$TAGS,${IMAGE}:latest"
+            TAGS="$TAGS,${IMAGE}:${{ env.YYMM }}"
           else
-            # All pushes get devel tag
-            TAGS="$TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:devel"
-
-            # Beta branch also gets beta tag
+            TAGS="$TAGS,${IMAGE}:devel"
             if [[ "${{ github.ref }}" == refs/heads/beta ]]; then
-              TAGS="$TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:beta"
+              TAGS="$TAGS,${IMAGE}:beta"
             fi
           fi
 
           echo "tags=$TAGS" >> $GITHUB_OUTPUT
+          echo "registry=$REGISTRY" >> $GITHUB_OUTPUT
 
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./docker/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.tags.outputs.tags }}
-          build-args: |
-            VERSION="${{ env.VERSION }}"
-            BUILD_DATE="${{ env.BUILD_DATE }}"
-            COMMIT_ID="${{ env.COMMIT_ID }}"
-          labels: |
-            org.opencontainers.image.vendor=apimgr
-            org.opencontainers.image.authors=apimgr
-            org.opencontainers.image.title=${{ env.PROJECTNAME }}
-            org.opencontainers.image.description=Privacy-respecting metasearch engine
-            org.opencontainers.image.version=${{ env.VERSION }}
-            org.opencontainers.image.created=${{ env.BUILD_DATE }}
-            org.opencontainers.image.revision=${{ env.COMMIT_ID }}
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.licenses=MIT
-          annotations: |
-            manifest:org.opencontainers.image.vendor=apimgr
-            manifest:org.opencontainers.image.authors=apimgr
-            manifest:org.opencontainers.image.title=${{ env.PROJECTNAME }}
-            manifest:org.opencontainers.image.description=Privacy-respecting metasearch engine
-            manifest:org.opencontainers.image.version=${{ env.VERSION }}
-            manifest:org.opencontainers.image.created=${{ env.BUILD_DATE }}
-            manifest:org.opencontainers.image.revision=${{ env.COMMIT_ID }}
-            manifest:org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            manifest:org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
-            manifest:org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}
-            manifest:org.opencontainers.image.licenses=MIT
+      - name: Log in to Container Registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login "${{ steps.tags.outputs.registry }}" \
+            -u "${{ github.actor }}" --password-stdin
+
+      - name: Build and push (standard)
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --file docker/Dockerfile \
+            --build-arg VERSION=${{ env.VERSION }} \
+            --build-arg BUILD_DATE="${{ env.BUILD_DATE }}" \
+            --build-arg COMMIT_ID=${{ env.COMMIT_ID }} \
+            --build-arg OFFICIALSITE="${{ env.OFFICIALSITE }}" \
+            --label "org.opencontainers.image.vendor=apimgr" \
+            --label "org.opencontainers.image.authors=apimgr" \
+            --label "org.opencontainers.image.title=${{ env.PROJECTNAME }}" \
+            --label "org.opencontainers.image.base.name=${{ env.PROJECTNAME }}" \
+            --label "org.opencontainers.image.description=${{ env.PROJECTNAME }} - standard image (alpine)" \
+            --label "org.opencontainers.image.version=${{ env.VERSION }}" \
+            --label "org.opencontainers.image.created=${{ env.BUILD_DATE }}" \
+            --label "org.opencontainers.image.revision=${{ env.COMMIT_ID }}" \
+            --label "org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}" \
+            --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+            --label "org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}" \
+            --label "org.opencontainers.image.licenses=MIT" \
+            --tag $(echo "${{ steps.tags.outputs.tags }}" | sed 's/,/ --tag /g') \
+            --push \
+            .
+
+  build-aio:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up QEMU
+        run: docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+
+      - name: Set up Docker Buildx
+        run: docker buildx create --use --name builder-aio --driver docker-container
+
+      - name: Set build info
+        run: |
+          echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "YYMM=$(date +"%y%m")" >> $GITHUB_ENV
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+            echo "VERSION=${VERSION#v}" >> $GITHUB_ENV
+            echo "IS_TAG=true" >> $GITHUB_ENV
+          else
+            echo "VERSION=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+            echo "IS_TAG=false" >> $GITHUB_ENV
+          fi
+          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
+          # OFFICIALSITE (optional): Set in repository secrets, or site.txt file, or leave empty
+          # Never guess or assume - must be explicitly defined by user
+          if [ -f site.txt ]; then
+            echo "OFFICIALSITE=$(cat site.txt)" >> $GITHUB_ENV
+          else
+            echo "OFFICIALSITE=${{ secrets.OFFICIALSITE }}" >> $GITHUB_ENV
+          fi
+
+      - name: Determine registry and tags (all-in-one)
+        id: tags
+        run: |
+          # Use Gitea container registry
+          REGISTRY="${GITHUB_SERVER_URL#https://}"
+          REGISTRY="${REGISTRY#http://}"
+          AIO_IMAGE="${REGISTRY}/${GITHUB_REPOSITORY}-aio"
+          TAGS="${AIO_IMAGE}:${{ env.COMMIT_ID }}"
+
+          if [[ "${{ env.IS_TAG }}" == "true" ]]; then
+            TAGS="$TAGS,${AIO_IMAGE}:${{ env.VERSION }}"
+            TAGS="$TAGS,${AIO_IMAGE}:latest"
+            TAGS="$TAGS,${AIO_IMAGE}:${{ env.YYMM }}"
+          else
+            TAGS="$TAGS,${AIO_IMAGE}:devel"
+            if [[ "${{ github.ref }}" == refs/heads/beta ]]; then
+              TAGS="$TAGS,${AIO_IMAGE}:beta"
+            fi
+          fi
+
+          echo "tags=$TAGS" >> $GITHUB_OUTPUT
+          echo "registry=$REGISTRY" >> $GITHUB_OUTPUT
+
+      - name: Log in to Container Registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login "${{ steps.tags.outputs.registry }}" \
+            -u "${{ github.actor }}" --password-stdin
+
+      - name: Build and push (all-in-one)
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --file docker/Dockerfile.aio \
+            --build-arg VERSION=${{ env.VERSION }} \
+            --build-arg BUILD_DATE="${{ env.BUILD_DATE }}" \
+            --build-arg COMMIT_ID=${{ env.COMMIT_ID }} \
+            --build-arg OFFICIALSITE="${{ env.OFFICIALSITE }}" \
+            --label "org.opencontainers.image.vendor=apimgr" \
+            --label "org.opencontainers.image.authors=apimgr" \
+            --label "org.opencontainers.image.title=${{ env.PROJECTNAME }}-aio" \
+            --label "org.opencontainers.image.description=${{ env.PROJECTNAME }} - all-in-one (debian + postgresql + valkey + tor)" \
+            --label "org.opencontainers.image.version=${{ env.VERSION }}" \
+            --label "org.opencontainers.image.created=${{ env.BUILD_DATE }}" \
+            --label "org.opencontainers.image.revision=${{ env.COMMIT_ID }}" \
+            --label "org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}" \
+            --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+            --label "org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}" \
+            --label "org.opencontainers.image.licenses=MIT" \
+            --tag $(echo "${{ steps.tags.outputs.tags }}" | sed 's/,/ --tag /g') \
+            --push \
+            .

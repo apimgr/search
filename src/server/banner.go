@@ -7,8 +7,18 @@ import (
 	"time"
 
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/display"
 	"golang.org/x/term"
 )
+
+// color wraps text in ANSI color code if colors are enabled
+// Per AI.md PART 8: NO_COLOR disables colors
+func color(code, text string) string {
+	if display.ColorEnabled() {
+		return code + text + "\033[0m"
+	}
+	return text
+}
 
 // BannerInfo holds information for the startup banner
 type BannerInfo struct {
@@ -66,35 +76,31 @@ func getTerminalWidth() int {
 }
 
 // printTopBorder prints the top border
+// Per AI.md PART 8: Respects NO_COLOR for border colors
 func printTopBorder(width int) {
-	fmt.Print("\033[36m") // Cyan
-	fmt.Print("╭")
-	fmt.Print(strings.Repeat("─", width-2))
-	fmt.Println("╮")
-	fmt.Print("\033[0m") // Reset
+	border := "╭" + strings.Repeat("─", width-2) + "╮"
+	fmt.Println(color("\033[36m", border))
 }
 
 // printBottomBorder prints the bottom border
+// Per AI.md PART 8: Respects NO_COLOR for border colors
 func printBottomBorder(width int) {
-	fmt.Print("\033[36m") // Cyan
-	fmt.Print("╰")
-	fmt.Print(strings.Repeat("─", width-2))
-	fmt.Println("╯")
-	fmt.Print("\033[0m") // Reset
+	border := "╰" + strings.Repeat("─", width-2) + "╯"
+	fmt.Println(color("\033[36m", border))
 }
 
 // printSeparator prints a separator line
+// Per AI.md PART 8: Respects NO_COLOR for border colors
 func printSeparator(width int) {
-	fmt.Print("\033[36m") // Cyan
-	fmt.Print("├")
-	fmt.Print(strings.Repeat("─", width-2))
-	fmt.Println("┤")
-	fmt.Print("\033[0m") // Reset
+	separator := "├" + strings.Repeat("─", width-2) + "┤"
+	fmt.Println(color("\033[36m", separator))
 }
 
 // printLine prints a padded line within the banner
+// Per AI.md PART 8: Respects NO_COLOR for border colors
 func printLine(content string, innerWidth int) {
-	fmt.Print("\033[36m│\033[0m  ") // Cyan border
+	border := color("\033[36m", "│")
+	fmt.Print(border + "  ")
 	// Calculate visible length (ignoring ANSI codes)
 	visibleLen := visibleLength(content)
 	padding := innerWidth - visibleLen
@@ -103,7 +109,7 @@ func printLine(content string, innerWidth int) {
 	}
 	fmt.Print(content)
 	fmt.Print(strings.Repeat(" ", padding))
-	fmt.Println("\033[36m│\033[0m") // Cyan border
+	fmt.Println(border)
 }
 
 // visibleLength calculates the visible length of a string (ignoring ANSI escape codes)
@@ -127,6 +133,7 @@ func visibleLength(s string) int {
 }
 
 // printHeaderLine prints the app name and version
+// Per AI.md PART 8: Uses display.Emoji() for NO_COLOR fallback
 func printHeaderLine(info *BannerInfo, innerWidth int) {
 	// Use project name from config, with emoji
 	appName := info.AppName
@@ -134,75 +141,90 @@ func printHeaderLine(info *BannerInfo, innerWidth int) {
 		appName = "Search"
 	}
 
-	header := fmt.Sprintf("\033[1;35m🚀 %s\033[0m · \033[33m📦 v%s\033[0m",
-		strings.ToUpper(appName), info.Version)
+	rocket := display.Emoji("🚀", "[*]")
+	pkg := display.Emoji("📦", "v")
+	header := fmt.Sprintf("%s %s · %s%s",
+		color("\033[1;35m", rocket+" "+strings.ToUpper(appName)),
+		"",
+		color("\033[33m", pkg),
+		info.Version)
 	printLine(header, innerWidth)
 }
 
 // printModeLine prints the mode and debug status
+// Per AI.md PART 8: Uses display.Emoji() for NO_COLOR fallback
 func printModeLine(info *BannerInfo, innerWidth int) {
 	var modeIcon, modeColor string
 	mode := strings.ToLower(info.Mode)
 
 	if mode == "production" {
-		modeIcon = "🔒"
+		modeIcon = display.Emoji("🔒", "[PROD]")
 		modeColor = "\033[32m" // Green
 	} else {
-		modeIcon = "🔧"
+		modeIcon = display.Emoji("🔧", "[DEV]")
 		modeColor = "\033[33m" // Yellow
 	}
 
-	modeLine := fmt.Sprintf("%s %sRunning in mode: %s\033[0m", modeIcon, modeColor, mode)
+	modeLine := fmt.Sprintf("%s %s", modeIcon, color(modeColor, "Running in mode: "+mode))
 
 	if info.Debug {
-		modeLine += " \033[35m[debugging]\033[0m"
+		modeLine += " " + color("\033[35m", "[debugging]")
 	}
 
 	printLine(modeLine, innerWidth)
 }
 
 // printURLLines prints the access URLs
+// Per AI.md PART 8: Uses display.Emoji() for NO_COLOR fallback
 func printURLLines(info *BannerInfo, innerWidth int) {
 	// Tor URL (if available)
 	if info.TorAddr != "" {
-		torLine := fmt.Sprintf("🧅 \033[35mTor\033[0m    %s", info.TorAddr)
+		torIcon := display.Emoji("🧅", "[TOR]")
+		torLine := fmt.Sprintf("%s %s  %s", torIcon, color("\033[35m", "Tor"), info.TorAddr)
 		printLine(torLine, innerWidth)
 	}
 
 	// I2P URL (if available)
 	if info.I2PAddr != "" {
-		i2pLine := fmt.Sprintf("🔗 \033[36mI2P\033[0m    %s", info.I2PAddr)
+		i2pIcon := display.Emoji("🔗", "[I2P]")
+		i2pLine := fmt.Sprintf("%s %s  %s", i2pIcon, color("\033[36m", "I2P"), info.I2PAddr)
 		printLine(i2pLine, innerWidth)
 	}
 
 	// HTTPS URL
 	if info.HTTPSAddr != "" {
-		httpsLine := fmt.Sprintf("🔐 \033[32mHTTPS\033[0m  %s", info.HTTPSAddr)
+		httpsIcon := display.Emoji("🔐", "[SSL]")
+		httpsLine := fmt.Sprintf("%s %s  %s", httpsIcon, color("\033[32m", "HTTPS"), info.HTTPSAddr)
 		printLine(httpsLine, innerWidth)
 	}
 
 	// HTTP URL (only show if no HTTPS or in dual port mode)
 	if info.HTTPAddr != "" && (info.HTTPSAddr == "" || info.HTTPSPort > 0) {
-		httpLine := fmt.Sprintf("🌐 \033[34mHTTP\033[0m   %s", info.HTTPAddr)
+		httpIcon := display.Emoji("🌐", "[WEB]")
+		httpLine := fmt.Sprintf("%s %s   %s", httpIcon, color("\033[34m", "HTTP"), info.HTTPAddr)
 		printLine(httpLine, innerWidth)
 	}
 }
 
 // printListenLine prints the listening address
+// Per AI.md PART 8: Uses display.Emoji() for NO_COLOR fallback
 func printListenLine(info *BannerInfo, innerWidth int) {
 	proto := "http"
 	if info.IsHTTPS {
 		proto = "https"
 	}
-	listenLine := fmt.Sprintf("📡 \033[36mListening on %s://%s\033[0m", proto, info.ListenAddr)
+	listenIcon := display.Emoji("📡", "[LISTEN]")
+	listenLine := fmt.Sprintf("%s %s", listenIcon, color("\033[36m", fmt.Sprintf("Listening on %s://%s", proto, info.ListenAddr)))
 	printLine(listenLine, innerWidth)
 }
 
 // printTimestampLine prints the startup timestamp
+// Per AI.md PART 8: Uses display.Emoji() for NO_COLOR fallback
 func printTimestampLine(innerWidth int) {
 	// Format: Wed Jan 15, 2025 at 09:00:00 EST
 	timestamp := time.Now().Format("Mon Jan 02, 2006 at 15:04:05 MST")
-	timeLine := fmt.Sprintf("✅ \033[32mServer started on %s\033[0m", timestamp)
+	okIcon := display.Emoji("✅", "[OK]")
+	timeLine := fmt.Sprintf("%s %s", okIcon, color("\033[32m", "Server started on "+timestamp))
 	printLine(timeLine, innerWidth)
 }
 

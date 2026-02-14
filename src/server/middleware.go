@@ -224,6 +224,94 @@ func (rl *RateLimiter) Allow(ip string) bool {
 	return false
 }
 
+// EndpointRateLimiter implements per-endpoint rate limiting
+// Per AI.md PART 11: login (5/15min), password reset (3/1hr), registration (5/1hr)
+type EndpointRateLimiter struct {
+	mu      sync.Mutex
+	entries map[string]*endpointEntry
+	limit   int
+	window  time.Duration
+}
+
+type endpointEntry struct {
+	attempts int
+	firstAt  time.Time
+}
+
+// NewEndpointRateLimiter creates a rate limiter for a specific endpoint
+func NewEndpointRateLimiter(limit int, window time.Duration) *EndpointRateLimiter {
+	erl := &EndpointRateLimiter{
+		entries: make(map[string]*endpointEntry),
+		limit:   limit,
+		window:  window,
+	}
+	go erl.cleanup()
+	return erl
+}
+
+// cleanup removes expired entries periodically
+func (erl *EndpointRateLimiter) cleanup() {
+	for {
+		time.Sleep(5 * time.Minute)
+		erl.mu.Lock()
+		for key, entry := range erl.entries {
+			if time.Since(entry.firstAt) > erl.window {
+				delete(erl.entries, key)
+			}
+		}
+		erl.mu.Unlock()
+	}
+}
+
+// Allow checks if a request from the given IP is allowed
+func (erl *EndpointRateLimiter) Allow(ip string) bool {
+	erl.mu.Lock()
+	defer erl.mu.Unlock()
+
+	entry, exists := erl.entries[ip]
+	if !exists {
+		erl.entries[ip] = &endpointEntry{
+			attempts: 1,
+			firstAt:  time.Now(),
+		}
+		return true
+	}
+
+	// Window expired, reset
+	if time.Since(entry.firstAt) > erl.window {
+		erl.entries[ip] = &endpointEntry{
+			attempts: 1,
+			firstAt:  time.Now(),
+		}
+		return true
+	}
+
+	// Within window, check limit
+	if entry.attempts >= erl.limit {
+		return false
+	}
+
+	entry.attempts++
+	return true
+}
+
+// RemainingTime returns how long until the rate limit window resets for an IP
+func (erl *EndpointRateLimiter) RemainingTime(ip string) time.Duration {
+	erl.mu.Lock()
+	defer erl.mu.Unlock()
+
+	entry, exists := erl.entries[ip]
+	if !exists {
+		return 0
+	}
+
+	remaining := erl.window - time.Since(entry.firstAt)
+	if remaining < 0 {
+		return 0
+	}
+	return remaining
+}
+
 // RateLimit middleware applies rate limiting
 func (m *Middleware) RateLimit(limiter *RateLimiter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

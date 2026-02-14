@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/apimgr/search/src/display"
 	"gopkg.in/yaml.v3"
 )
 
@@ -236,14 +237,15 @@ type AdminConfig struct {
 // BrandingConfig represents branding configuration
 // Per AI.md PART 13/16: branding fields for healthz project info
 type BrandingConfig struct {
-	Title        string `yaml:"title"`         // Per PART 13: project.name source
-	Tagline      string `yaml:"tagline"`       // Per PART 13: project.tagline source
-	Description  string `yaml:"description"`   // Per PART 13: project.description source
-	LogoURL      string `yaml:"logo_url"`
-	FaviconURL   string `yaml:"favicon_url"`
-	FooterText   string `yaml:"footer_text"`
-	Theme        string `yaml:"theme"`
-	PrimaryColor string `yaml:"primary_color"`
+	Title         string `yaml:"title"`           // Per PART 13: project.name source
+	Tagline       string `yaml:"tagline"`         // Per PART 13: project.tagline source
+	Description   string `yaml:"description"`     // Per PART 13: project.description source
+	SourceCodeURL string `yaml:"source_code_url"` // Per AI.md: {PLATFORM_REPO_URL} - repository URL
+	LogoURL       string `yaml:"logo_url"`
+	FaviconURL    string `yaml:"favicon_url"`
+	FooterText    string `yaml:"footer_text"`
+	Theme         string `yaml:"theme"`
+	PrimaryColor  string `yaml:"primary_color"`
 }
 
 // RateLimitConfig represents rate limiting configuration
@@ -1105,11 +1107,11 @@ func DefaultConfig() *Config {
 		Server: ServerConfig{
 			Title:       "Scour",
 			Description: "Privacy-Respecting Metasearch Engine",
-			Port:        64580,
+			Port:        0, // 0 = auto-detect: container=80, local=random 64xxx
 			Address:     "[::]",
 			Mode:        "production",
 			SecretKey:   generateSecret(),
-			BaseURL:     "https://scour.li",
+			BaseURL:     "", // Empty = auto-detect from request headers
 			SSL: SSLConfig{
 				Enabled: false,
 				AutoTLS: false,
@@ -1908,9 +1910,15 @@ func GetRandomPort() int {
 	return 64000 + int(binary.LittleEndian.Uint16(b[:]))%1000
 }
 
-// ResolvePort resolves the port, using random port if 0
+// ResolvePort resolves the port based on environment
+// Per AI.md PART 27: Container defaults to port 80, local dev to random 64xxx
 func ResolvePort(port int) int {
 	if port == 0 {
+		// Container: default port 80
+		// Local (dev): random 64xxx
+		if IsRunningInContainer() {
+			return 80
+		}
 		return GetRandomPort()
 	}
 	return port
@@ -2206,7 +2214,7 @@ func LogValidationWarnings(warnings []ValidationWarning) {
 		return
 	}
 
-	fmt.Printf("⚠️  Configuration warnings (%d):\n", len(warnings))
+	fmt.Printf("%s  Configuration warnings (%d):\n", display.Emoji("⚠️", "[WARN]"), len(warnings))
 	for _, w := range warnings {
 		fmt.Printf("   • %s: %s (default: %v)\n", w.Field, w.Message, w.Default)
 	}

@@ -224,7 +224,7 @@ func (s *Server) handlePreferences(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.renderer.Render(w, "preferences", data); err != nil {
-		s.handleError(w, r, http.StatusInternalServerError, "Template Error", err.Error())
+		s.handleInternalError(w, r, "template render", err)
 	}
 }
 

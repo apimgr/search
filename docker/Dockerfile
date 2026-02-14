@@ -10,6 +10,7 @@ ARG TARGETARCH
 ARG VERSION=dev
 ARG BUILD_DATE
 ARG COMMIT_ID
+ARG OFFICIALSITE
 
 WORKDIR /build
 
@@ -20,8 +21,8 @@ RUN go mod download
 # Copy source and build
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
-    -ldflags "-s -w -X 'github.com/apimgr/search/src/config.Version=${VERSION}' -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/config.BuildDate=${BUILD_DATE}'" \
-    -o /app ./src
+    -ldflags "-s -w -X 'github.com/apimgr/search/src/config.Version=${VERSION}' -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/config.BuildDate=${BUILD_DATE}' -X 'github.com/apimgr/search/src/config.OfficialSite=${OFFICIALSITE}'" \
+    -o /build/binary/search ./src
 
 # =============================================================================
 # Runtime Stage - Minimal Alpine image
@@ -70,7 +71,7 @@ RUN apk add --no-cache \
 # Per AI.md PART 27: Binary handles directories, permissions, user/group, Tor, etc.
 
 # Copy binary from builder stage (multi-stage build)
-COPY --from=builder /app /usr/local/bin/search
+COPY --from=builder /build/binary/search /usr/local/bin/search
 
 # Copy entrypoint script from ./docker/file_system/
 COPY docker/file_system/ /
@@ -82,12 +83,11 @@ COPY docker/Dockerfile /root/Dockerfile
 RUN chmod 755 /usr/local/bin/*
 
 # Set environment
-# Note: Tor is auto-detected (enabled if tor binary installed) per TEMPLATE.md PART 29
-# No ENABLE_TOR env var needed - tor binary is always installed in this image
-# PORT=80 forces app to listen on port 80 inside container
+# Note: Tor available (binary installed) but server binary controls Tor startup (see PART 32)
+# DATABASE_DIR: SQLite location (binary auto-detects container, but explicit is clearer)
 ENV MODE=development \
     TZ=America/New_York \
-    PORT=80
+    DATABASE_DIR=/data/db/sqlite
 
 # Expose internal port (80 inside container, map to 64080 on host)
 EXPOSE 80

@@ -1,3 +1,6 @@
+# search - privacy-respecting metasearch engine
+# nginx proxy address - http://172.17.0.1:64580
+
 name: search
 
 x-logging: &default-logging
@@ -9,31 +12,34 @@ x-logging: &default-logging
 services:
   search:
     image: ghcr.io/apimgr/search:latest
-    container_name: search
-    restart: unless-stopped
+    container_name: search-app
+    hostname: ${BASE_HOST_NAME:-$HOSTNAME}
+    restart: always
+    pull_policy: always
     logging: *default-logging
     environment:
       # Hardcoded with sane defaults - NO .env files
       # Note: Tor is auto-detected (enabled if tor binary installed)
       - MODE=production
-      - TZ=America/New_York
+      - PORT=80
+      - DEBUG=false
+      - TZ=${TZ:-America/New_York}
     ports:
-      # Default: accessible on all interfaces
-      # For production security, bind to specific IP: "127.0.0.1:64580:80"
-      - "64580:80"
+      # Production: bound to Docker bridge only (reverse proxy handles external)
+      - '172.17.0.1:64580:80'
     volumes:
       # TEMP DIR WORKFLOW: ./rootfs/ resolves to $TEMP_DIR/rootfs/
       # NEVER run from project directory - always use temp dir workflow
       - ./rootfs/config:/config:z
       - ./rootfs/data:/data:z
+    healthcheck:
+      test: /usr/local/bin/search --status
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
     networks:
       - search
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/healthz"]
-      interval: 5m
-      timeout: 15s
-      retries: 3
-      start_period: 10m
 
 networks:
   search:
