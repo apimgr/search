@@ -1796,6 +1796,16 @@
 
             saveWidgetPreferences();
             showPrefStatus('Preferences saved!');
+
+            // Redirect back to previous page after a short delay
+            var referrer = document.referrer;
+            setTimeout(function() {
+                if (referrer && referrer.indexOf(window.location.hostname) !== -1 && referrer !== window.location.href) {
+                    window.location.href = referrer;
+                } else {
+                    window.location.href = '/';
+                }
+            }, 500);
         }
 
         // Load widget preferences
@@ -3589,12 +3599,19 @@
 
             switch (widgetType) {
                 case 'weather':
+                    var useGeolocation = settings.useGeolocation || false;
                     content =
-                        '<label>City:<input type="text" id="setting-city" value="' + escapeHtml(settings.city || '') + '" placeholder="e.g., London, UK"></label>' +
+                        '<div class="setting-group">' +
+                            '<label class="setting-checkbox"><input type="checkbox" id="setting-use-location"' + (useGeolocation ? ' checked' : '') + '> Use current location</label>' +
+                            '<p class="setting-help" id="geolocation-status">' + (useGeolocation && settings.lat ? 'Using your location' : 'Enter a city or use your location') + '</p>' +
+                        '</div>' +
+                        '<label>City:<input type="text" id="setting-city" value="' + escapeHtml(settings.city || '') + '" placeholder="e.g., London, UK"' + (useGeolocation ? ' disabled' : '') + '></label>' +
                         '<label>Units:<select id="setting-units">' +
                             '<option value="metric"' + (settings.units !== 'imperial' ? ' selected' : '') + '>Celsius</option>' +
                             '<option value="imperial"' + (settings.units === 'imperial' ? ' selected' : '') + '>Fahrenheit</option>' +
-                        '</select></label>';
+                        '</select></label>' +
+                        '<input type="hidden" id="setting-lat" value="' + (settings.lat || '') + '">' +
+                        '<input type="hidden" id="setting-lon" value="' + (settings.lon || '') + '">';
                     break;
                 case 'clock':
                     content =
@@ -3645,6 +3662,63 @@
             modal.addEventListener('click', function(e) {
                 if (e.target === modal) modal.remove();
             });
+
+            // Weather-specific geolocation handling
+            if (widgetType === 'weather') {
+                var useLocationCheckbox = modal.querySelector('#setting-use-location');
+                var cityInput = modal.querySelector('#setting-city');
+                var latInput = modal.querySelector('#setting-lat');
+                var lonInput = modal.querySelector('#setting-lon');
+                var statusEl = modal.querySelector('#geolocation-status');
+
+                if (useLocationCheckbox) {
+                    useLocationCheckbox.addEventListener('change', function() {
+                        if (this.checked) {
+                            cityInput.disabled = true;
+                            statusEl.textContent = 'Getting your location...';
+
+                            if ('geolocation' in navigator) {
+                                navigator.geolocation.getCurrentPosition(
+                                    function(position) {
+                                        latInput.value = position.coords.latitude;
+                                        lonInput.value = position.coords.longitude;
+                                        statusEl.textContent = 'Location acquired! (' + position.coords.latitude.toFixed(2) + ', ' + position.coords.longitude.toFixed(2) + ')';
+                                    },
+                                    function(error) {
+                                        useLocationCheckbox.checked = false;
+                                        cityInput.disabled = false;
+                                        latInput.value = '';
+                                        lonInput.value = '';
+                                        switch(error.code) {
+                                            case error.PERMISSION_DENIED:
+                                                statusEl.textContent = 'Location permission denied. Please enter a city.';
+                                                break;
+                                            case error.POSITION_UNAVAILABLE:
+                                                statusEl.textContent = 'Location unavailable. Please enter a city.';
+                                                break;
+                                            case error.TIMEOUT:
+                                                statusEl.textContent = 'Location request timed out. Please enter a city.';
+                                                break;
+                                            default:
+                                                statusEl.textContent = 'Could not get location. Please enter a city.';
+                                        }
+                                    },
+                                    { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
+                                );
+                            } else {
+                                useLocationCheckbox.checked = false;
+                                cityInput.disabled = false;
+                                statusEl.textContent = 'Geolocation not supported. Please enter a city.';
+                            }
+                        } else {
+                            cityInput.disabled = false;
+                            latInput.value = '';
+                            lonInput.value = '';
+                            statusEl.textContent = 'Enter a city or use your location';
+                        }
+                    });
+                }
+            }
         },
 
         saveSettings: function(widgetType) {
@@ -3652,8 +3726,11 @@
 
             switch (widgetType) {
                 case 'weather':
+                    settings.useGeolocation = document.getElementById('setting-use-location')?.checked || false;
                     settings.city = document.getElementById('setting-city')?.value || '';
                     settings.units = document.getElementById('setting-units')?.value || 'metric';
+                    settings.lat = document.getElementById('setting-lat')?.value || '';
+                    settings.lon = document.getElementById('setting-lon')?.value || '';
                     break;
                 case 'clock':
                     settings.format = document.getElementById('setting-format')?.value || '24h';

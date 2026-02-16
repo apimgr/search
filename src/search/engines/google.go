@@ -354,7 +354,9 @@ func (e *Google) parseNewsResults(resp *http.Response, query *model.Query) ([]mo
 	// Google News result patterns
 	// News results have a distinct structure with source and time info
 	titlePattern := regexp.MustCompile(`<div[^>]*role="heading"[^>]*>([^<]+)</div>`)
-	urlPattern := regexp.MustCompile(`<a[^>]*href="(https?://(?!google\.com)[^"]+)"[^>]*>`)
+	// Note: Go regexp doesn't support negative lookahead (?!), so we match all URLs
+	// and filter out google.com URLs in post-processing below
+	urlPattern := regexp.MustCompile(`<a[^>]*href="(https?://[^"]+)"[^>]*>`)
 	snippetPattern := regexp.MustCompile(`<div[^>]*class="[^"]*GI74Re[^"]*"[^>]*>([^<]+)</div>`)
 	sourcePattern := regexp.MustCompile(`<div[^>]*class="[^"]*CEMjEf[^"]*"[^>]*>([^<]+)</div>`)
 	timePattern := regexp.MustCompile(`<span[^>]*class="[^"]*WG9SHc[^"]*"[^>]*>([^<]+)</span>`)

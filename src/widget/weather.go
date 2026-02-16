@@ -80,18 +80,6 @@ func (f *WeatherFetcher) CacheDuration() time.Duration {
 
 // Fetch fetches weather data
 func (f *WeatherFetcher) Fetch(ctx context.Context, params map[string]string) (*WidgetData, error) {
-	city := params["city"]
-	if city == "" {
-		city = f.config.DefaultCity
-	}
-	if city == "" {
-		return &WidgetData{
-			Type:      WidgetWeather,
-			Error:     "no city specified",
-			UpdatedAt: time.Now(),
-		}, nil
-	}
-
 	units := params["units"]
 	if units == "" {
 		units = f.config.Units
@@ -100,14 +88,54 @@ func (f *WeatherFetcher) Fetch(ctx context.Context, params map[string]string) (*
 		units = "metric"
 	}
 
-	// First, geocode the city to get coordinates
-	lat, lon, locationName, err := f.geocodeCity(ctx, city)
-	if err != nil {
-		return &WidgetData{
-			Type:      WidgetWeather,
-			Error:     fmt.Sprintf("failed to find city: %v", err),
-			UpdatedAt: time.Now(),
-		}, nil
+	var lat, lon float64
+	var locationName string
+	var err error
+
+	// Check if lat/lon coordinates are provided (from browser geolocation)
+	if params["lat"] != "" && params["lon"] != "" {
+		if _, err := fmt.Sscanf(params["lat"], "%f", &lat); err != nil {
+			return &WidgetData{
+				Type:      WidgetWeather,
+				Error:     "invalid latitude",
+				UpdatedAt: time.Now(),
+			}, nil
+		}
+		if _, err := fmt.Sscanf(params["lon"], "%f", &lon); err != nil {
+			return &WidgetData{
+				Type:      WidgetWeather,
+				Error:     "invalid longitude",
+				UpdatedAt: time.Now(),
+			}, nil
+		}
+		// Reverse geocode to get location name
+		locationName, err = f.reverseGeocode(ctx, lat, lon)
+		if err != nil {
+			locationName = fmt.Sprintf("%.2f, %.2f", lat, lon)
+		}
+	} else {
+		// Fall back to city name geocoding
+		city := params["city"]
+		if city == "" {
+			city = f.config.DefaultCity
+		}
+		if city == "" {
+			return &WidgetData{
+				Type:      WidgetWeather,
+				Error:     "no city specified",
+				UpdatedAt: time.Now(),
+			}, nil
+		}
+
+		// Geocode the city to get coordinates
+		lat, lon, locationName, err = f.geocodeCity(ctx, city)
+		if err != nil {
+			return &WidgetData{
+				Type:      WidgetWeather,
+				Error:     fmt.Sprintf("failed to find city: %v", err),
+				UpdatedAt: time.Now(),
+			}, nil
+		}
 	}
 
 	// Fetch weather data
@@ -127,6 +155,86 @@ func (f *WeatherFetcher) Fetch(ctx context.Context, params map[string]string) (*
 		Data:      weather,
 		UpdatedAt: time.Now(),
 	}, nil
+}
+
+// NominatimResponse represents OpenStreetMap Nominatim reverse geocoding response
+type NominatimResponse struct {
+	DisplayName string `json:"display_name"`
+	Address     struct {
+		City        string `json:"city"`
+		Town        string `json:"town"`
+		Village     string `json:"village"`
+		County      string `json:"county"`
+		State       string `json:"state"`
+		Country     string `json:"country"`
+		CountryCode string `json:"country_code"`
+	} `json:"address"`
+}
+
+// reverseGeocode converts coordinates to a location name using OpenStreetMap Nominatim
+func (f *WeatherFetcher) reverseGeocode(ctx context.Context, lat, lon float64) (string, error) {
+	// Use OpenStreetMap Nominatim for reverse geocoding (free, no API key required)
+	apiURL := fmt.Sprintf("https://nominatim.openstreetmap.org/reverse?lat=%f&lon=%f&format=json&zoom=10",
+		lat, lon)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+	if err != nil {
+		return fmt.Sprintf("%.2f, %.2f", lat, lon), err
+	}
+
+	// Nominatim requires a User-Agent header
+	req.Header.Set("User-Agent", "Search/1.0")
+
+	resp, err := f.client.Do(req)
+	if err != nil {
+		return fmt.Sprintf("%.2f, %.2f", lat, lon), err
+	}
+	defer resp.Body.Close()
+
+	// If reverse geocoding fails, return coordinates as string
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Sprintf("%.2f, %.2f", lat, lon), nil
+	}
+
+	var nomResp NominatimResponse
+	if err := json.NewDecoder(resp.Body).Decode(&nomResp); err != nil {
+		return fmt.Sprintf("%.2f, %.2f", lat, lon), nil
+	}
+
+	// Build location name from address parts
+	var locationName string
+	addr := nomResp.Address
+
+	// Get city/town/village
+	if addr.City != "" {
+		locationName = addr.City
+	} else if addr.Town != "" {
+		locationName = addr.Town
+	} else if addr.Village != "" {
+		locationName = addr.Village
+	} else if addr.County != "" {
+		locationName = addr.County
+	}
+
+	// Add state/region if available
+	if addr.State != "" && locationName != "" {
+		locationName += ", " + addr.State
+	}
+
+	// Add country
+	if addr.Country != "" {
+		if locationName != "" {
+			locationName += ", " + addr.Country
+		} else {
+			locationName = addr.Country
+		}
+	}
+
+	if locationName == "" {
+		return fmt.Sprintf("%.2f, %.2f", lat, lon), nil
+	}
+
+	return locationName, nil
 }
 
 // geocodeCity converts a city name to coordinates
