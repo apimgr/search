@@ -3602,10 +3602,10 @@
                     var useGeolocation = settings.useGeolocation || false;
                     content =
                         '<div class="setting-group">' +
-                            '<label class="setting-checkbox"><input type="checkbox" id="setting-use-location"' + (useGeolocation ? ' checked' : '') + '> Use current location</label>' +
-                            '<p class="setting-help" id="geolocation-status">' + (useGeolocation && settings.lat ? 'Using your location' : 'Enter a city or use your location') + '</p>' +
+                            '<label class="setting-checkbox"><input type="checkbox" id="setting-use-location"' + (useGeolocation ? ' checked' : '') + '> Use current location (requires HTTPS)</label>' +
+                            '<p class="setting-help" id="geolocation-status">' + (useGeolocation && settings.lat ? 'Using your location' : 'Enter city name (e.g., "Albany, NY" or "Paris, France")') + '</p>' +
                         '</div>' +
-                        '<label>City:<input type="text" id="setting-city" value="' + escapeHtml(settings.city || '') + '" placeholder="e.g., London, UK"' + (useGeolocation ? ' disabled' : '') + '></label>' +
+                        '<label>City:<input type="text" id="setting-city" value="' + escapeHtml(settings.city || '') + '" placeholder="Albany, NY or Paris, France"' + (useGeolocation ? ' disabled' : '') + '></label>' +
                         '<label>Units:<select id="setting-units">' +
                             '<option value="metric"' + (settings.units !== 'imperial' ? ' selected' : '') + '>Celsius</option>' +
                             '<option value="imperial"' + (settings.units === 'imperial' ? ' selected' : '') + '>Fahrenheit</option>' +
@@ -3674,8 +3674,19 @@
                 if (useLocationCheckbox) {
                     useLocationCheckbox.addEventListener('change', function() {
                         if (this.checked) {
+                            // Check if we're in a secure context (HTTPS or localhost)
+                            var isSecure = window.isSecureContext || window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+                            if (!isSecure) {
+                                useLocationCheckbox.checked = false;
+                                statusEl.textContent = 'Location requires HTTPS. Please enter a city (e.g., "London" or "Paris, France").';
+                                statusEl.style.color = 'var(--accent-warning, #f1c40f)';
+                                return;
+                            }
+
                             cityInput.disabled = true;
                             statusEl.textContent = 'Getting your location...';
+                            statusEl.style.color = '';
 
                             if ('geolocation' in navigator) {
                                 navigator.geolocation.getCurrentPosition(
@@ -3683,24 +3694,26 @@
                                         latInput.value = position.coords.latitude;
                                         lonInput.value = position.coords.longitude;
                                         statusEl.textContent = 'Location acquired! (' + position.coords.latitude.toFixed(2) + ', ' + position.coords.longitude.toFixed(2) + ')';
+                                        statusEl.style.color = 'var(--accent-success, #2ecc71)';
                                     },
                                     function(error) {
                                         useLocationCheckbox.checked = false;
                                         cityInput.disabled = false;
                                         latInput.value = '';
                                         lonInput.value = '';
+                                        statusEl.style.color = 'var(--accent-warning, #f1c40f)';
                                         switch(error.code) {
                                             case error.PERMISSION_DENIED:
-                                                statusEl.textContent = 'Location permission denied. Please enter a city.';
+                                                statusEl.textContent = 'Location permission denied. Enter a city (e.g., "Albany, NY").';
                                                 break;
                                             case error.POSITION_UNAVAILABLE:
-                                                statusEl.textContent = 'Location unavailable. Please enter a city.';
+                                                statusEl.textContent = 'Location unavailable. Enter a city (e.g., "London, UK").';
                                                 break;
                                             case error.TIMEOUT:
-                                                statusEl.textContent = 'Location request timed out. Please enter a city.';
+                                                statusEl.textContent = 'Location timed out. Enter a city (e.g., "Paris, France").';
                                                 break;
                                             default:
-                                                statusEl.textContent = 'Could not get location. Please enter a city.';
+                                                statusEl.textContent = 'Could not get location. Enter a city (e.g., "Tokyo, Japan").';
                                         }
                                     },
                                     { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
@@ -3708,13 +3721,15 @@
                             } else {
                                 useLocationCheckbox.checked = false;
                                 cityInput.disabled = false;
-                                statusEl.textContent = 'Geolocation not supported. Please enter a city.';
+                                statusEl.textContent = 'Geolocation not supported. Enter a city (e.g., "New York, NY").';
+                                statusEl.style.color = 'var(--accent-warning, #f1c40f)';
                             }
                         } else {
                             cityInput.disabled = false;
                             latInput.value = '';
                             lonInput.value = '';
-                            statusEl.textContent = 'Enter a city or use your location';
+                            statusEl.textContent = 'Enter a city (e.g., "Albany, NY" or "Paris, France")';
+                            statusEl.style.color = '';
                         }
                     });
                 }
@@ -3770,13 +3785,13 @@
             if (!display) return;
 
             // Don't evaluate empty expression
-            var expr = this.calcExpression.replace(/[^0-9+\-*/.()]/g, '');
+            var expr = this.calcExpression;
             if (!expr || expr.trim() === '') {
                 return;
             }
 
             try {
-                var result = Function('"use strict"; return (' + expr + ')')();
+                var result = this.safeEval(expr);
                 // Handle invalid results
                 if (result === undefined || result === null || isNaN(result)) {
                     display.value = 'Error';
@@ -3785,6 +3800,8 @@
                     display.value = result > 0 ? 'Infinity' : '-Infinity';
                     this.calcExpression = '';
                 } else {
+                    // Round to avoid floating point issues
+                    result = Math.round(result * 1000000000) / 1000000000;
                     display.value = result;
                     this.calcExpression = String(result);
                 }
@@ -3792,6 +3809,57 @@
                 display.value = 'Error';
                 this.calcExpression = '';
             }
+        },
+
+        // Safe expression evaluator (no eval/Function)
+        safeEval: function(expr) {
+            // Tokenize the expression
+            var tokens = [];
+            var numBuffer = '';
+
+            for (var i = 0; i < expr.length; i++) {
+                var c = expr[i];
+                if ((c >= '0' && c <= '9') || c === '.') {
+                    numBuffer += c;
+                } else if (c === '+' || c === '-' || c === '*' || c === '/') {
+                    if (numBuffer) {
+                        tokens.push(parseFloat(numBuffer));
+                        numBuffer = '';
+                    } else if (c === '-' && (tokens.length === 0 || typeof tokens[tokens.length - 1] === 'string')) {
+                        // Negative number
+                        numBuffer = '-';
+                        continue;
+                    }
+                    tokens.push(c);
+                }
+            }
+            if (numBuffer) {
+                tokens.push(parseFloat(numBuffer));
+            }
+
+            // Handle multiplication and division first
+            var i = 0;
+            while (i < tokens.length) {
+                if (tokens[i] === '*' || tokens[i] === '/') {
+                    var left = tokens[i - 1];
+                    var right = tokens[i + 1];
+                    var result = tokens[i] === '*' ? left * right : left / right;
+                    tokens.splice(i - 1, 3, result);
+                } else {
+                    i++;
+                }
+            }
+
+            // Handle addition and subtraction
+            var result = tokens[0];
+            for (var i = 1; i < tokens.length; i += 2) {
+                var op = tokens[i];
+                var num = tokens[i + 1];
+                if (op === '+') result += num;
+                else if (op === '-') result -= num;
+            }
+
+            return result;
         },
 
         // Quick Links

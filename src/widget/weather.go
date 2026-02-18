@@ -6,10 +6,60 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/apimgr/search/src/config"
 )
+
+// US state abbreviations to full names
+var usStateAbbreviations = map[string]string{
+	"AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
+	"CA": "California", "CO": "Colorado", "CT": "Connecticut", "DE": "Delaware",
+	"FL": "Florida", "GA": "Georgia", "HI": "Hawaii", "ID": "Idaho",
+	"IL": "Illinois", "IN": "Indiana", "IA": "Iowa", "KS": "Kansas",
+	"KY": "Kentucky", "LA": "Louisiana", "ME": "Maine", "MD": "Maryland",
+	"MA": "Massachusetts", "MI": "Michigan", "MN": "Minnesota", "MS": "Mississippi",
+	"MO": "Missouri", "MT": "Montana", "NE": "Nebraska", "NV": "Nevada",
+	"NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico", "NY": "New York",
+	"NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio", "OK": "Oklahoma",
+	"OR": "Oregon", "PA": "Pennsylvania", "RI": "Rhode Island", "SC": "South Carolina",
+	"SD": "South Dakota", "TN": "Tennessee", "TX": "Texas", "UT": "Utah",
+	"VT": "Vermont", "VA": "Virginia", "WA": "Washington", "WV": "West Virginia",
+	"WI": "Wisconsin", "WY": "Wyoming", "DC": "District of Columbia",
+}
+
+// Common country abbreviations
+var countryAbbreviations = map[string]string{
+	"UK": "United Kingdom", "GB": "United Kingdom", "US": "United States",
+	"USA": "United States", "DE": "Germany", "FR": "France", "ES": "Spain",
+	"IT": "Italy", "NL": "Netherlands", "BE": "Belgium", "CH": "Switzerland",
+	"AT": "Austria", "AU": "Australia", "NZ": "New Zealand", "CA": "Canada",
+	"MX": "Mexico", "BR": "Brazil", "AR": "Argentina", "JP": "Japan",
+	"CN": "China", "KR": "South Korea", "IN": "India", "RU": "Russia",
+}
+
+// expandLocationAbbreviations expands common abbreviations in location strings
+func expandLocationAbbreviations(location string) string {
+	parts := strings.Split(location, ",")
+	for i, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		upper := strings.ToUpper(trimmed)
+
+		// Check US state abbreviations
+		if fullName, ok := usStateAbbreviations[upper]; ok {
+			parts[i] = fullName
+			continue
+		}
+
+		// Check country abbreviations
+		if fullName, ok := countryAbbreviations[upper]; ok {
+			parts[i] = fullName
+		}
+	}
+
+	return strings.Join(parts, ", ")
+}
 
 // WeatherFetcher fetches weather data from Open-Meteo API
 type WeatherFetcher struct {
@@ -239,8 +289,28 @@ func (f *WeatherFetcher) reverseGeocode(ctx context.Context, lat, lon float64) (
 
 // geocodeCity converts a city name to coordinates
 func (f *WeatherFetcher) geocodeCity(ctx context.Context, city string) (float64, float64, string, error) {
-	apiURL := fmt.Sprintf("https://geocoding-api.open-meteo.com/v1/search?name=%s&count=1&language=en&format=json",
-		url.QueryEscape(city))
+	// Parse city input - could be "City", "City, State", "City, Country", etc.
+	parts := strings.Split(city, ",")
+	cityName := strings.TrimSpace(parts[0])
+
+	// Extract and expand state/country filter if provided
+	var stateFilter, countryFilter string
+	if len(parts) > 1 {
+		// Expand abbreviations for the second part
+		expanded := expandLocationAbbreviations(strings.TrimSpace(parts[1]))
+		// Could be state or country
+		stateFilter = strings.ToLower(expanded)
+		countryFilter = stateFilter
+	}
+	if len(parts) > 2 {
+		// Third part is country
+		expanded := expandLocationAbbreviations(strings.TrimSpace(parts[2]))
+		countryFilter = strings.ToLower(expanded)
+	}
+
+	// Query API with city name only, get multiple results to filter
+	apiURL := fmt.Sprintf("https://geocoding-api.open-meteo.com/v1/search?name=%s&count=10&language=en&format=json",
+		url.QueryEscape(cityName))
 
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
 	if err != nil {
@@ -266,7 +336,27 @@ func (f *WeatherFetcher) geocodeCity(ctx context.Context, city string) (float64,
 		return 0, 0, "", fmt.Errorf("city not found: %s", city)
 	}
 
-	result := geoResp.Results[0]
+	// Find the best match based on state/country filter
+	var result = geoResp.Results[0] // Default to first result
+	if stateFilter != "" || countryFilter != "" {
+		for _, r := range geoResp.Results {
+			admin1Lower := strings.ToLower(r.Admin1)
+			countryLower := strings.ToLower(r.Country)
+
+			// Check for state/admin1 match
+			if stateFilter != "" && strings.Contains(admin1Lower, stateFilter) {
+				result = r
+				break
+			}
+
+			// Check for country match
+			if countryFilter != "" && strings.Contains(countryLower, countryFilter) {
+				result = r
+				break
+			}
+		}
+	}
+
 	locationName := result.Name
 	if result.Admin1 != "" {
 		locationName += ", " + result.Admin1
