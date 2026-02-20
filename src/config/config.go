@@ -1295,7 +1295,7 @@ func DefaultConfig() *Config {
 					XContentTypeOptions:   "nosniff",
 					XXSSProtection:        "1; mode=block",
 					ReferrerPolicy:        "strict-origin-when-cross-origin",
-					ContentSecurityPolicy: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'",
+					ContentSecurityPolicy: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; media-src *",
 					PermissionsPolicy:     "geolocation=(), microphone=(), camera=()",
 				},
 			},
