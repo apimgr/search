@@ -154,9 +154,6 @@ a:hover {
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    position: sticky;
-    top: 0;
-    z-index: 100;
 }
 
 /* Site brand - per AI.md PART 16 */
@@ -318,6 +315,53 @@ a:hover {
     color: var(--accent-primary);
 }
 
+/* Header nav - desktop navigation (hidden on mobile, shown on tablet+) */
+.header-nav {
+    display: none;
+    align-items: center;
+    gap: 1rem;
+    flex: 1;
+    justify-content: flex-start;
+    margin-left: 1rem;
+}
+
+/* Header search form - compact search for non-home pages */
+.header-search-form {
+    display: flex;
+    align-items: stretch;
+    flex: 1;
+    max-width: 400px;
+    margin: 0 1rem;
+}
+
+/* Header mobile - hamburger + settings (shown on mobile, hidden on tablet+) */
+.header-mobile {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-left: auto;
+}
+
+/* Desktop-only utility class */
+.desktop-only {
+    display: none;
+}
+
+/* Tablet+ (768px): show desktop nav, hide mobile */
+@media (min-width: 768px) {
+    .header-nav {
+        display: flex;
+    }
+
+    .header-mobile {
+        display: none;
+    }
+
+    .desktop-only {
+        display: flex;
+    }
+}
+
 .theme-toggle {
     background: none;
     border: none;
@@ -332,18 +376,68 @@ a:hover {
     color: var(--accent-primary);
 }
 
+/* Nav Search Form - Mobile first */
+.nav-search-form {
+    display: flex;
+    align-items: stretch;
+    flex: 1;
+    max-width: 400px;
+    margin: 0 0.5rem;
+}
+
+.nav-search-input {
+    flex: 1;
+    min-width: 0;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.9rem;
+    background-color: var(--input-bg);
+    border: 1px solid var(--border-color);
+    border-right: none;
+    border-radius: 20px 0 0 20px;
+    color: var(--text-primary);
+    outline: none;
+}
+
+.nav-search-input:focus {
+    border-color: var(--accent-primary);
+}
+
+.nav-search-input::placeholder {
+    color: var(--text-muted);
+}
+
+.nav-search-btn {
+    padding: 0.5rem 0.75rem;
+    min-width: var(--touch-target);
+    min-height: var(--touch-target);
+    background-color: var(--accent-primary);
+    border: 1px solid var(--accent-primary);
+    border-radius: 0 20px 20px 0;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.nav-search-btn:hover {
+    background-color: var(--accent-secondary);
+    border-color: var(--accent-secondary);
+}
+
 /* Per AI.md PART 16: Use CSS classes on <html> element */
 html.theme-dark .theme-icon-light,
 html.theme-light .theme-icon-dark {
     display: none;
 }
 
-/* Navigation bar - separate row below header per AI.md PART 16 */
+/* Navigation bar - HIDDEN: nav moved to header per AI.md PART 16 */
 .nav {
+    display: none;
     background-color: var(--bg-primary);
     border-bottom: 1px solid var(--border-color);
     padding: 0.5rem 1rem;
-    display: flex;
     align-items: center;
     justify-content: flex-end;
     gap: 0.5rem;
@@ -383,16 +477,16 @@ html.theme-light .theme-icon-dark {
     transition: transform 0.2s ease, opacity 0.2s ease;
 }
 
-/* Hamburger animation when open */
-.nav-checkbox:checked ~ .nav-toggle span:nth-child(1) {
+/* Hamburger animation when open - works with checkbox at header level */
+.nav-checkbox:checked ~ .header-mobile .nav-toggle span:nth-child(1) {
     transform: rotate(45deg) translate(5px, 5px);
 }
 
-.nav-checkbox:checked ~ .nav-toggle span:nth-child(2) {
+.nav-checkbox:checked ~ .header-mobile .nav-toggle span:nth-child(2) {
     opacity: 0;
 }
 
-.nav-checkbox:checked ~ .nav-toggle span:nth-child(3) {
+.nav-checkbox:checked ~ .header-mobile .nav-toggle span:nth-child(3) {
     transform: rotate(-45deg) translate(5px, -5px);
 }
 
@@ -471,6 +565,13 @@ html.theme-light .theme-icon-dark {
     background-color: rgba(189, 147, 249, 0.1);
     color: var(--accent-primary);
     border-left: 3px solid var(--accent-primary);
+}
+
+/* Nav panel icons - per AI.md PART 16: NO inline styles */
+.nav-panel-icon {
+    margin-right: 12px;
+    opacity: 0.7;
+    flex-shrink: 0;
 }
 
 /* Nav panel divider */
@@ -655,6 +756,8 @@ html.theme-light .theme-label-light { display: inline; }
 .search-form {
     width: 100%;
     max-width: 650px;
+    padding: 0 0.5rem;
+    box-sizing: border-box;
 }
 
 .search-box {
@@ -664,6 +767,8 @@ html.theme-light .theme-label-light { display: inline; }
     box-shadow: 0 4px 16px var(--shadow-color);
     border-radius: 28px;
     overflow: visible;
+    width: 100%;
+    max-width: 100%;
 }
 
 .search-input {
@@ -1456,9 +1561,10 @@ html.theme-light .theme-label-light { display: inline; }
     font-size: 0.9rem;
     line-height: 1.6;
     display: -webkit-box;
-    -webkit-line-clamp: 3;
+    -webkit-line-clamp: 5;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    margin-top: 0.5rem;
 }
 
 .result-meta {
@@ -1552,11 +1658,11 @@ html.theme-light .theme-label-light { display: inline; }
     font-size: 0.9rem;
 }
 
-/* Image Results */
+/* Image Results - Mobile first: 2 columns */
 .image-results {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 1rem;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
 }
 
 .image-result {
@@ -1622,11 +1728,11 @@ html.theme-light .theme-label-light { display: inline; }
     text-transform: capitalize;
 }
 
-/* Video Results */
+/* Video Results - Mobile first: single column */
 .video-results {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 1.5rem;
+    grid-template-columns: 1fr;
+    gap: 1rem;
 }
 
 .video-result {
@@ -1930,7 +2036,7 @@ html.theme-light .theme-label-light { display: inline; }
 }
 
 .result-description {
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 4;
 }
 
 .image-results {
@@ -2065,7 +2171,7 @@ html.theme-light .theme-label-light { display: inline; }
     }
 
     .result-description {
-        -webkit-line-clamp: 3;
+        -webkit-line-clamp: 4;
     }
 
     .image-results {
@@ -2074,17 +2180,17 @@ html.theme-light .theme-label-light { display: inline; }
     }
 
     .image-result img {
-        height: 150px;
+        height: 160px;
     }
 
     .image-placeholder {
-        height: 150px;
+        height: 160px;
         font-size: 2.5rem;
     }
 
     .video-results {
         grid-template-columns: repeat(2, 1fr);
-        gap: 1.5rem;
+        gap: 1.25rem;
     }
 
     .video-play-overlay {
@@ -2159,6 +2265,22 @@ html.theme-light .theme-label-light { display: inline; }
     .category-tab {
         padding: 0.5rem 0.75rem;
         min-width: 60px;
+    }
+
+    /* Image grid: 3 columns on small tablets */
+    .image-results {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.875rem;
+    }
+
+    .image-result img,
+    .image-placeholder {
+        height: 140px;
+    }
+
+    /* Video grid: still single column but with larger thumbnails */
+    .video-results {
+        gap: 1.25rem;
     }
 }
 
@@ -3887,8 +4009,9 @@ html.theme-light .theme-label-light { display: inline; }
     border-left: 1px solid var(--border-color);
     color: var(--text-secondary);
     cursor: pointer;
-    padding: 0 1rem;
+    padding: 0 0.75rem;
     min-height: var(--touch-target);
+    min-width: var(--touch-target);
     font-size: 18px;
     display: flex;
     align-items: center;

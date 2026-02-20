@@ -1,0 +1,25 @@
+📱 Fix mobile UI: combine header/nav, remove wasted row 📱
+
+Restructure header and navigation for better mobile UX:
+
+- Combine header and nav into single row, eliminating wasted vertical
+  space on mobile where hamburger was on separate row
+- Move nav controls (hamburger, slide-in panel) into header.tmpl
+- Empty nav.tmpl to prevent duplicate rendering
+- Add CSS: .header-nav, .header-mobile, .desktop-only, .header-search-form
+- Update hamburger animation selectors for new DOM structure
+- Set .nav to display:none since content moved to header
+
+Fix content issues:
+
+- Remove placeholder text from config defaults (About/Privacy/Help)
+  that was overriding full template content
+- About page now shows feature grid instead of one-liner
+- Help page now shows full documentation sections
+
+Other fixes:
+
+- Advanced search trigger visible on all screen sizes (was hidden on mobile)
+- Preferences page minor text fix
+
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>

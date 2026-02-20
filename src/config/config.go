@@ -1360,14 +1360,14 @@ func DefaultConfig() *Config {
 					Content string `yaml:"content"`
 				}{
 					Enabled: true,
-					Content: "Search is a privacy-respecting metasearch engine that aggregates results from multiple search engines without tracking you.",
+					Content: "",
 				},
 				Privacy: struct {
 					Enabled bool   `yaml:"enabled"`
 					Content string `yaml:"content"`
 				}{
 					Enabled: true,
-					Content: "We don't track you. We don't store your searches. Your privacy is our priority.",
+					Content: "",
 				},
 				Contact: struct {
 					Enabled bool   `yaml:"enabled"`
@@ -1380,7 +1380,7 @@ func DefaultConfig() *Config {
 					Content string `yaml:"content"`
 				}{
 					Enabled: true,
-					Content: "How to use Search...",
+					Content: "",
 				},
 			},
 			Web: WebConfig{

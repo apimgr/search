@@ -23,6 +23,7 @@
                 <li><a href="#keyboard-shortcuts">Keyboard Shortcuts</a></li>
                 <li><a href="#api-docs">API Documentation</a></li>
                 <li><a href="#privacy">Privacy Features</a></li>
+                {{if .Config.Server.Tor.Enabled}}<li><a href="#tor-access">Tor Access</a></li>{{end}}
                 <li><a href="#faq">FAQ</a></li>
             </ul>
         </nav>
@@ -313,6 +314,80 @@
                     <p>Interactive GraphQL explorer with schema documentation</p>
                 </a>
             </div>
+
+            <h3>API Endpoints</h3>
+            <table class="operators-table">
+                <thead>
+                    <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>GET</code></td>
+                        <td><code>/api/v1/search</code></td>
+                        <td>JSON search results</td>
+                    </tr>
+                    <tr>
+                        <td><code>GET</code></td>
+                        <td><code>/api/v1/autocomplete</code></td>
+                        <td>Search suggestions</td>
+                    </tr>
+                    <tr>
+                        <td><code>GET</code></td>
+                        <td><code>/api/v1/instant</code></td>
+                        <td>Instant answers</td>
+                    </tr>
+                    <tr>
+                        <td><code>GET</code></td>
+                        <td><code>/api/v1/engines</code></td>
+                        <td>Available engines and status</td>
+                    </tr>
+                    <tr>
+                        <td><code>GET</code></td>
+                        <td><code>/api/v1/categories</code></td>
+                        <td>Search categories</td>
+                    </tr>
+                    <tr>
+                        <td><code>GET</code></td>
+                        <td><code>/api/v1/bangs</code></td>
+                        <td>Available bang shortcuts</td>
+                    </tr>
+                    <tr>
+                        <td><code>GET</code></td>
+                        <td><code>/opensearch.xml</code></td>
+                        <td>OpenSearch descriptor</td>
+                    </tr>
+                    <tr>
+                        <td><code>GET</code></td>
+                        <td><code>/search.rss</code></td>
+                        <td>Search results as RSS feed</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Example: Search API</h3>
+            <p class="api-note">Replace <code>$SERVER</code> with your server URL (e.g., <code>{{if .Config.Server.BaseURL}}{{.Config.Server.BaseURL}}{{else}}https://search.example.com{{end}}</code>)</p>
+            <pre class="code-block"><code># Search for "golang tutorial"
+curl "$SERVER/api/v1/search?q=golang+tutorial&category=general"
+
+# Image search with safe search
+curl "$SERVER/api/v1/search?q=nature&category=images&safe=moderate"
+
+# Get autocomplete suggestions
+curl "$SERVER/api/v1/autocomplete?q=pyth"</code></pre>
+
+            <h3>Example: Instant Answers</h3>
+            <pre class="code-block"><code># Calculator
+curl "$SERVER/api/v1/instant?q=sqrt(144)"
+
+# Weather
+curl "$SERVER/api/v1/instant?q=weather+tokyo"
+
+# IP lookup
+curl "$SERVER/api/v1/instant?q=ip:8.8.8.8"</code></pre>
+
+            <h3>Example: RSS Feed</h3>
+            <pre class="code-block"><code># Get search results as RSS
+curl "$SERVER/search.rss?q=linux+news"</code></pre>
         </section>
 
         {{/* Privacy Features */}}
@@ -321,12 +396,45 @@
             <ul class="privacy-list">
                 <li><strong>No tracking:</strong> We don't track your searches or create user profiles</li>
                 <li><strong>No search history:</strong> Your searches are not stored on our servers</li>
-                <li><strong>Tor support:</strong> Access via Tor hidden service for maximum anonymity</li>
+                <li><strong>Tor support:</strong> Access via Tor hidden service for maximum anonymity{{if .Config.Server.Tor.Enabled}} (<a href="#tor-access">see below</a>){{end}}</li>
                 <li><strong>Minimal cookies:</strong> Only essential cookies for preferences (no analytics)</li>
                 <li><strong>No JavaScript required:</strong> Core search works without JavaScript</li>
                 <li><strong>Open source:</strong> Full source code available for audit</li>
             </ul>
         </section>
+
+        {{/* Tor Access - only shown if Tor is enabled */}}
+        {{if .Config.Server.Tor.Enabled}}
+        <section id="tor-access" class="help-section tor-access">
+            <h2>Tor Access</h2>
+            <p>This application is available as a Tor hidden service for enhanced privacy.</p>
+
+            {{if .TorAddress}}
+            <h3>Onion Address</h3>
+            <div class="onion-address-box">
+                <code id="onion-addr" class="onion-address">{{.TorAddress}}</code>
+                <button class="btn-copy" data-copy-target="onion-addr" aria-label="Copy to clipboard">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                    Copy
+                </button>
+            </div>
+            {{else}}
+            <p class="tor-note">Tor address will be available once the hidden service connects to the Tor network.</p>
+            {{end}}
+
+            <h3>How to Connect</h3>
+            <ol>
+                <li>Download <a href="https://www.torproject.org/download/" target="_blank" rel="noopener">Tor Browser</a></li>
+                <li>Open Tor Browser and wait for it to connect</li>
+                <li>Copy the onion address above and paste it into the Tor Browser address bar</li>
+            </ol>
+
+            <p class="tor-note">Using Tor provides additional privacy by hiding your IP address and encrypting your connection through the Tor network.</p>
+        </section>
+        {{end}}
 
         {{/* FAQ */}}
         <section id="faq" class="help-section">
@@ -338,7 +446,7 @@
                 </details>
                 <details>
                     <summary>How do I access via Tor?</summary>
-                    <p>Install <a href="https://www.torproject.org/download/" target="_blank" rel="noopener">Tor Browser</a> and use our .onion address (shown on the <a href="/server/about">About page</a> when Tor is enabled).</p>
+                    <p>Install <a href="https://www.torproject.org/download/" target="_blank" rel="noopener">Tor Browser</a> and use our .onion address.{{if .Config.Server.Tor.Enabled}} See the <a href="#tor-access">Tor Access section</a> above for the address and instructions.{{end}}</p>
                 </details>
                 <details>
                     <summary>Can I self-host this?</summary>

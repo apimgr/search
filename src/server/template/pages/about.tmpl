@@ -61,29 +61,6 @@
             </div>
         </section>
 
-        {{/* Tor section - shown only if enabled */}}
-        {{if .Config.Server.Tor.Enabled}}
-        <section class="about-section tor-section">
-            <h2>Tor Hidden Service</h2>
-            <p>This search engine is available via Tor for enhanced privacy and anonymity.</p>
-            {{if .TorAddress}}
-            <div class="onion-address-box">
-                <code id="onion-addr">{{.TorAddress}}</code>
-                <button class="btn-copy" data-copy-target="onion-addr" aria-label="Copy address">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                    </svg>
-                    Copy
-                </button>
-            </div>
-            <p class="tor-note">Requires <a href="https://www.torproject.org/download/" target="_blank" rel="noopener">Tor Browser</a> or a Tor-enabled browser.</p>
-            {{else}}
-            <p class="tor-note">Tor address will be available once the hidden service connects to the Tor network.</p>
-            {{end}}
-        </section>
-        {{end}}
-
         {{/* API Documentation */}}
         <section class="about-section">
             <h2>API & Documentation</h2>
