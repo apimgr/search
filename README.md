@@ -346,34 +346,110 @@ Zero-click answers displayed above search results:
 | Widget | Triggers | Example |
 |--------|----------|---------|
 | **Calculator** | Math expressions | `2 + 2`, `sqrt(144)`, `15% of 200` |
-| **Unit Converter** | Number + unit | `5 miles in km`, `100F to C` |
+| **Unit Converter** | Number + unit | `5 miles in km`, `100F to C`, `2 cups in ml` |
 | **Currency** | Amount + currency | `100 usd to eur`, `$50 in pounds` |
 | **Weather** | Location weather | `weather tokyo`, `forecast london` |
-| **Dictionary** | Word definitions | `define ubiquitous`, `meaning of ephemeral` |
-| **Thesaurus** | Synonyms/antonyms | `synonyms for happy` |
-| **IP Lookup** | IP or "my ip" | `my ip`, `8.8.8.8` |
+| **Dictionary** | Word definitions | `define ubiquitous`, `dict: serendipity` |
+| **Thesaurus** | Synonyms/antonyms | `synonyms for happy`, `antonyms of good` |
+| **IP Lookup** | IP address | `my ip`, `8.8.8.8`, `ip 1.1.1.1` |
 | **Timezone** | Time in location | `time in tokyo`, `3pm EST to PST` |
-| **Hash Generator** | Hash text | `md5 hello`, `sha256 password` |
-| **Password** | Generate password | `password`, `random password` |
+| **Calendar** | Date arithmetic | `days until christmas`, `days between jan 1 and mar 15` |
+| **Stopwatch** | Timer/stopwatch | `stopwatch`, `timer 5 minutes`, `countdown 30 seconds` |
+| **Color** | Color codes | `#ff5733`, `rgb(255,87,51)`, `dark blue` |
+| **Hash** | Hash text | `md5 hello`, `sha256 password` |
+| **Password** | Generate password | `password`, `random password`, `password 16` |
+| **UUID** | Generate UUID | `uuid`, `generate uuid`, `guid` |
+| **Random** | Random numbers | `random 1-100`, `roll d20`, `flip coin` |
 | **QR Code** | Generate QR | `qr https://example.com` |
+
+## 🔍 Direct Answer Operators
+
+Type these prefixes in the search box for instant full-page answers:
+
+### Network & Security
+| Operator | Example | Description |
+|----------|---------|-------------|
+| `ip:` | `ip:8.8.8.8` | IP geolocation |
+| `dns:` | `dns:example.com` | DNS records |
+| `whois:` | `whois:example.com` | WHOIS info |
+| `cert:` | `cert:example.com` | SSL certificate |
+| `headers:` | `headers:example.com` | HTTP response headers |
+| `asn:` | `asn:AS15169` | ASN information |
+| `subnet:` | `subnet:192.168.1.0/24` | Subnet calculator |
+| `resolve:` | `resolve:example.com` | Hostname to IP |
+| `robots:` | `robots:example.com` | robots.txt contents |
+| `sitemap:` | `sitemap:example.com` | Sitemap URLs |
+| `tech:` | `tech:example.com` | Technology detection |
+| `feed:` | `feed:example.com` | RSS/Atom feeds |
+| `expand:` | `expand:short.url/x` | Expand shortened URL |
+| `safe:` | `safe:example.com` | Safe browsing check |
+
+### Encoding & Conversion
+| Operator | Example | Description |
+|----------|---------|-------------|
+| `base64:` | `base64:hello world` | Base64 encode/decode |
+| `url:` | `url:hello world!` | URL encode/decode |
+| `hash:` | `hash:hello` | MD5, SHA1, SHA256, SHA512 |
+| `html:` | `html:<b>text</b>` | HTML entity encode/decode |
+| `escape:` | `escape:hello & world` | Escape special characters |
+| `color:` | `color:#ff5500` | Color info & conversion |
+| `unicode:` | `unicode:U+1F600` | Unicode character lookup |
+| `emoji:` | `emoji:smile` | Emoji search |
+| `ascii:` | `ascii:hello` | ASCII art |
+| `qr:` | `qr:https://example.com` | QR code generator |
+| `uuid:` | `uuid:` | Generate UUID v4 |
+| `jwt:` | `jwt:eyJ...` | Decode JWT token |
+
+### Developer Tools
+| Operator | Example | Description |
+|----------|---------|-------------|
+| `json:` | `json:{"key":"val"}` | Format / validate JSON |
+| `yaml:` | `yaml:key: value` | Format / validate YAML |
+| `regex:` | `regex:[a-z]+` | Explain regex pattern |
+| `beautify:` | `beautify:minified code` | Beautify / format code |
+| `cron:` | `cron:0 * * * *` | Explain cron expression |
+| `chmod:` | `chmod:755` | File permission converter |
+| `timestamp:` | `timestamp:1700000000` | Unix timestamp converter |
+| `slug:` | `slug:Hello World` | Generate URL slug |
+| `case:` | `case:hello world` | Case conversion (upper/lower/camel/snake) |
+
+### Reference
+| Operator | Example | Description |
+|----------|---------|-------------|
+| `tldr:` | `tldr:git` | Simplified man page |
+| `man:` | `man:grep` | Full Unix man page |
+| `cheat:` | `cheat:git` | Command cheatsheet |
+| `rfc:` | `rfc:2616` | RFC document |
+| `cve:` | `cve:CVE-2024-1234` | CVE vulnerability info |
+| `pkg:` | `pkg:express` | Package info (npm/PyPI/Go) |
+| `http:` | `http:404` | HTTP status code |
+| `port:` | `port:443` | Port number info |
 
 ## ⚡ Bang Shortcuts
 
-Quick redirects to specific sites (DuckDuckGo-style):
+Quick redirects to specific sites (180+ bangs available):
 
+| Category | Bangs |
+|----------|-------|
+| **Search** | `!g` Google, `!b` Bing, `!ddg` DuckDuckGo, `!br` Brave, `!sp` Startpage, `!q` Qwant, `!kagi` Kagi |
+| **Images** | `!gi` Google Images, `!bi` Bing Images, `!fl` Flickr, `!pexels`, `!pixabay`, `!tineye` |
+| **Video** | `!yt` YouTube, `!v` Vimeo, `!twitch`, `!tiktok`, `!rumble` |
+| **Maps** | `!gm` Google Maps, `!osm` OpenStreetMap, `!waze`, `!yelp`, `!tripadvisor` |
+| **News** | `!gn` Google News, `!hn` Hacker News, `!bbc`, `!techcrunch`, `!verge`, `!reuters` |
+| **Social** | `!tw` Twitter/X, `!r` Reddit, `!mast` Mastodon, `!lb` Lobsters, `!bluesky` |
+| **Code & Dev** | `!gh` GitHub, `!gl` GitLab, `!so` Stack Overflow, `!npm`, `!pypi`, `!crates`, `!docker`, `!mdn` |
+| **Shopping** | `!amz` Amazon, `!eb` eBay, `!etsy`, `!walmart`, `!camelcamelcamel` |
+| **Science** | `!scholar` Google Scholar, `!arxiv`, `!pubmed`, `!doi` |
+| **Reference** | `!w` Wikipedia, `!wa` Wolfram Alpha, `!mw` Merriam-Webster, `!ud` Urban Dictionary |
+| **Privacy** | `!wbm` Wayback Machine, `!virustotal`, `!shodan`, `!urlscan` |
+| **Entertainment** | `!imdb`, `!rt` Rotten Tomatoes, `!steam`, `!spot` Spotify, `!letterboxd` |
+
+Examples:
 ```
-!g query     → Google
-!b query     → Bing
-!d query     → DuckDuckGo
-!w query     → Wikipedia
-!yt query    → YouTube
-!gh query    → GitHub
-!so query    → StackOverflow
-!r query     → Reddit
-!amz query   → Amazon
-!maps query  → Google Maps
-!npm query   → NPM
-!mdn query   → MDN Web Docs
+!g golang tutorial     → Search Google
+!w machine learning    → Wikipedia article
+!gh octocat            → GitHub search
+!npm express           → NPM package
 ```
 
 Custom bangs can be defined in user preferences.

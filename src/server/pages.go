@@ -507,10 +507,10 @@ func (s *Server) handleError(w http.ResponseWriter, r *http.Request, code int, t
 	baseData := s.newPageData(title, "error")
 
 	data := &ErrorPageData{
-		PageData:     *baseData,
-		ErrorCode:    code,
-		ErrorTitle:   title,
-		ErrorMessage: message,
+		PageData:   *baseData,
+		StatusCode: code,
+		StatusText: title,
+		Message:    message,
 	}
 
 	if s.config.IsDevelopment() {

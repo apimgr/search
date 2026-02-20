@@ -1648,29 +1648,41 @@ rules:all
 
 ### Bang Shortcuts
 
-Quick redirects to specific sites/engines:
+Quick redirects to specific sites/engines. 180+ bangs implemented across categories:
 
-```
-!g query     → Google
-!b query     → Bing
-!d query     → DuckDuckGo
-!w query     → Wikipedia
-!yt query    → YouTube
-!gh query    → GitHub
-!so query    → StackOverflow
-!r query     → Reddit
-!tw query    → Twitter/X
-!amz query   → Amazon
-!ebay query  → eBay
-!maps query  → Google Maps
-!osm query   → OpenStreetMap
-!wa query    → Wolfram Alpha
-!npm query   → NPM
-!pypi query  → PyPI
-!crates query → Crates.io
-!mdn query   → MDN Web Docs
-!arch query  → Arch Wiki
-```
+**General Search**: `!g` Google, `!b` Bing, `!ddg` DuckDuckGo, `!sp` Startpage, `!br` Brave, `!q` Qwant, `!ya` Yahoo, `!kagi` Kagi, `!you` You.com, `!perplexity` Perplexity
+
+**Images**: `!gi` Google Images, `!bi` Bing Images, `!fl` Flickr, `!pexels` Pexels, `!pixabay` Pixabay, `!500px` 500px, `!pinterest` Pinterest, `!imgur` Imgur, `!tineye` TinEye
+
+**Video**: `!yt` YouTube, `!v` Vimeo, `!twitch` Twitch, `!tiktok` TikTok, `!dtube` DTube, `!pt` PeerTube, `!rumble` Rumble
+
+**Maps**: `!gm` Google Maps, `!osm` OpenStreetMap, `!waze` Waze, `!mapquest` MapQuest, `!yelp` Yelp, `!tripadvisor` TripAdvisor
+
+**News**: `!gn` Google News, `!reuters` Reuters, `!bbc` BBC, `!techcrunch` TechCrunch, `!verge` The Verge, `!hn` Hacker News, `!r` Reddit
+
+**Knowledge**: `!w` Wikipedia, `!wa` Wolfram Alpha, `!wd` Wikidata, `!britannica` Britannica, `!quora` Quora
+
+**Social**: `!tw` Twitter/X, `!mast` Mastodon, `!fb` Facebook, `!linkedin` LinkedIn, `!bluesky` Bluesky, `!lb` Lobsters
+
+**Code & Dev**: `!gh` GitHub, `!gl` GitLab, `!bb` Bitbucket, `!so` Stack Overflow, `!npm` NPM, `!pypi` PyPI, `!crates` Crates.io, `!gopkg` Go Packages, `!hex` Hex.pm, `!nuget` NuGet, `!mdn` MDN, `!devdocs` DevDocs, `!can` Can I Use, `!tldr` tldr pages, `!docker` Docker Hub, `!codepen` CodePen
+
+**Shopping**: `!amz` Amazon, `!eb` eBay, `!aliexpress` AliExpress, `!walmart` Walmart, `!etsy` Etsy, `!camelcamelcamel` CamelCamelCamel
+
+**Files & Books**: `!archive` Internet Archive, `!libgen` Library Genesis, `!annas` Anna's Archive, `!gutenberg` Project Gutenberg, `!goodreads` Goodreads, `!googlebooks` Google Books
+
+**Music**: `!spot` Spotify, `!sc` SoundCloud, `!bc` Bandcamp, `!lastfm` Last.fm, `!discogs` Discogs
+
+**Science**: `!scholar` Google Scholar, `!arxiv` arXiv, `!pubmed` PubMed, `!semanticscholar` Semantic Scholar, `!doi` DOI Resolver
+
+**Translation**: `!gt` Google Translate, `!deepl` DeepL, `!dict` Dictionary.com, `!thesaurus` Thesaurus.com, `!mw` Merriam-Webster, `!ud` Urban Dictionary
+
+**Privacy & Security**: `!wbm` Wayback Machine, `!virustotal` VirusTotal, `!shodan` Shodan, `!whois` WHOIS, `!urlscan` URLScan
+
+**Movies & TV**: `!imdb` IMDb, `!rt` Rotten Tomatoes, `!letterboxd` Letterboxd, `!justwatch` JustWatch, `!tmdb` TMDB
+
+**Games**: `!steam` Steam, `!gog` GOG, `!itch` itch.io, `!igdb` IGDB, `!howlongtobeat` HowLongToBeat
+
+**Jobs**: `!indeed` Indeed, `!glassdoor` Glassdoor, `!linkedin` LinkedIn Jobs
 
 - **Custom Bangs**: Define your own shortcuts in settings
 - **Bang Autocomplete**: Suggestions as you type `!`

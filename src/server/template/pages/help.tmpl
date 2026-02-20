@@ -76,7 +76,7 @@
         {{/* Bang Commands */}}
         <section id="bang-commands" class="help-section">
             <h2>Bang Commands</h2>
-            <p>Bang commands let you search other sites directly. Start your query with a bang (!) followed by the site shortcut.</p>
+            <p>Bang commands let you search other sites directly. Start your query with a bang (<code>!</code>) followed by the site shortcut. 180+ bangs are available.</p>
 
             <h3>Popular Bangs</h3>
             <div class="bang-grid">
@@ -90,23 +90,53 @@
                 <div class="bang-item"><code>!r</code> Reddit</div>
                 <div class="bang-item"><code>!tw</code> Twitter/X</div>
                 <div class="bang-item"><code>!amz</code> Amazon</div>
-                <div class="bang-item"><code>!ebay</code> eBay</div>
-                <div class="bang-item"><code>!maps</code> Google Maps</div>
+                <div class="bang-item"><code>!gm</code> Google Maps</div>
+                <div class="bang-item"><code>!osm</code> OpenStreetMap</div>
+                <div class="bang-item"><code>!wa</code> Wolfram Alpha</div>
+                <div class="bang-item"><code>!mdn</code> MDN Web Docs</div>
+                <div class="bang-item"><code>!npm</code> NPM</div>
+                <div class="bang-item"><code>!pypi</code> PyPI</div>
+                <div class="bang-item"><code>!crates</code> Crates.io</div>
+                <div class="bang-item"><code>!scholar</code> Google Scholar</div>
+                <div class="bang-item"><code>!arxiv</code> arXiv</div>
+                <div class="bang-item"><code>!imdb</code> IMDb</div>
+                <div class="bang-item"><code>!steam</code> Steam</div>
+                <div class="bang-item"><code>!spot</code> Spotify</div>
             </div>
+
+            <h3>By Category</h3>
+            <table class="operators-table">
+                <thead><tr><th>Category</th><th>Examples</th></tr></thead>
+                <tbody>
+                    <tr><td>Search</td><td><code>!g</code> <code>!b</code> <code>!ddg</code> <code>!br</code> <code>!sp</code> <code>!q</code> <code>!kagi</code> <code>!perplexity</code></td></tr>
+                    <tr><td>Images</td><td><code>!gi</code> <code>!bi</code> <code>!fl</code> <code>!pexels</code> <code>!pixabay</code> <code>!pinterest</code> <code>!tineye</code></td></tr>
+                    <tr><td>Video</td><td><code>!yt</code> <code>!v</code> <code>!twitch</code> <code>!tiktok</code> <code>!rumble</code> <code>!pt</code></td></tr>
+                    <tr><td>Maps</td><td><code>!gm</code> <code>!osm</code> <code>!waze</code> <code>!yelp</code> <code>!tripadvisor</code></td></tr>
+                    <tr><td>News</td><td><code>!gn</code> <code>!hn</code> <code>!bbc</code> <code>!techcrunch</code> <code>!verge</code> <code>!reuters</code></td></tr>
+                    <tr><td>Social</td><td><code>!tw</code> <code>!mast</code> <code>!fb</code> <code>!linkedin</code> <code>!bluesky</code> <code>!lb</code></td></tr>
+                    <tr><td>Code &amp; Dev</td><td><code>!gh</code> <code>!gl</code> <code>!so</code> <code>!npm</code> <code>!pypi</code> <code>!crates</code> <code>!docker</code> <code>!mdn</code></td></tr>
+                    <tr><td>Shopping</td><td><code>!amz</code> <code>!eb</code> <code>!etsy</code> <code>!walmart</code> <code>!camelcamelcamel</code></td></tr>
+                    <tr><td>Science</td><td><code>!scholar</code> <code>!arxiv</code> <code>!pubmed</code> <code>!doi</code></td></tr>
+                    <tr><td>Reference</td><td><code>!w</code> <code>!wa</code> <code>!mw</code> <code>!ud</code> <code>!britannica</code></td></tr>
+                    <tr><td>Privacy</td><td><code>!wbm</code> <code>!virustotal</code> <code>!shodan</code> <code>!urlscan</code></td></tr>
+                    <tr><td>Entertainment</td><td><code>!imdb</code> <code>!rt</code> <code>!steam</code> <code>!spot</code> <code>!letterboxd</code></td></tr>
+                </tbody>
+            </table>
 
             <h3>Examples</h3>
             <ul class="example-list">
-                <li><code>!g python tutorial</code> - Search Google for "python tutorial"</li>
-                <li><code>!w artificial intelligence</code> - Go to Wikipedia article</li>
-                <li><code>!yt funny cats</code> - Search YouTube</li>
+                <li><code>!g python tutorial</code> — Search Google for "python tutorial"</li>
+                <li><code>!w artificial intelligence</code> — Go to Wikipedia article</li>
+                <li><code>!gh octocat</code> — Search GitHub</li>
+                <li><code>!npm express</code> — Look up npm package</li>
             </ul>
-            <p><a href="/preferences">View all available bangs</a></p>
+            <p><a href="/api/v1/bangs">View full bang list (JSON)</a></p>
         </section>
 
         {{/* Direct Answers */}}
         <section id="direct-answers" class="help-section">
             <h2>Direct Answers</h2>
-            <p>Get instant results for specific queries using these operators:</p>
+            <p>Get instant full-page results for specific queries using these operators:</p>
 
             <h3>Network & Security</h3>
             <div class="operator-grid">
@@ -123,16 +153,48 @@
                     <span>Domain WHOIS info</span>
                 </div>
                 <div class="operator-item">
-                    <code>ssl:example.com</code>
+                    <code>cert:example.com</code>
                     <span>SSL certificate info</span>
                 </div>
                 <div class="operator-item">
                     <code>headers:example.com</code>
-                    <span>HTTP headers</span>
+                    <span>HTTP response headers</span>
                 </div>
                 <div class="operator-item">
                     <code>asn:AS15169</code>
                     <span>ASN information</span>
+                </div>
+                <div class="operator-item">
+                    <code>subnet:192.168.1.0/24</code>
+                    <span>Subnet / CIDR calculator</span>
+                </div>
+                <div class="operator-item">
+                    <code>resolve:example.com</code>
+                    <span>Hostname to IP resolution</span>
+                </div>
+                <div class="operator-item">
+                    <code>robots:example.com</code>
+                    <span>robots.txt contents</span>
+                </div>
+                <div class="operator-item">
+                    <code>sitemap:example.com</code>
+                    <span>Sitemap URLs</span>
+                </div>
+                <div class="operator-item">
+                    <code>tech:example.com</code>
+                    <span>Technology stack detection</span>
+                </div>
+                <div class="operator-item">
+                    <code>feed:example.com</code>
+                    <span>RSS / Atom feeds</span>
+                </div>
+                <div class="operator-item">
+                    <code>expand:short.url/x</code>
+                    <span>Expand shortened URL</span>
+                </div>
+                <div class="operator-item">
+                    <code>safe:example.com</code>
+                    <span>Safe browsing check</span>
                 </div>
             </div>
 
@@ -148,19 +210,43 @@
                 </div>
                 <div class="operator-item">
                     <code>hash:hello</code>
-                    <span>Hash (MD5, SHA)</span>
+                    <span>Hash (MD5, SHA1, SHA256, SHA512)</span>
                 </div>
                 <div class="operator-item">
-                    <code>qr:hello</code>
+                    <code>qr:https://example.com</code>
                     <span>Generate QR code</span>
                 </div>
                 <div class="operator-item">
                     <code>uuid:</code>
-                    <span>Generate UUID</span>
+                    <span>Generate UUID v4</span>
                 </div>
                 <div class="operator-item">
                     <code>jwt:token</code>
-                    <span>Decode JWT</span>
+                    <span>Decode JWT token</span>
+                </div>
+                <div class="operator-item">
+                    <code>html:&lt;b&gt;text&lt;/b&gt;</code>
+                    <span>HTML entity encode/decode</span>
+                </div>
+                <div class="operator-item">
+                    <code>escape:hello &amp; world</code>
+                    <span>Escape special characters</span>
+                </div>
+                <div class="operator-item">
+                    <code>ascii:hello</code>
+                    <span>ASCII art text</span>
+                </div>
+                <div class="operator-item">
+                    <code>unicode:U+1F600</code>
+                    <span>Unicode character lookup</span>
+                </div>
+                <div class="operator-item">
+                    <code>emoji:smile</code>
+                    <span>Emoji search</span>
+                </div>
+                <div class="operator-item">
+                    <code>color:#ff5500</code>
+                    <span>Color info &amp; conversion</span>
                 </div>
             </div>
 
@@ -168,55 +254,75 @@
             <div class="operator-grid">
                 <div class="operator-item">
                     <code>json:{"key":"val"}</code>
-                    <span>Format JSON</span>
+                    <span>Format / validate JSON</span>
                 </div>
                 <div class="operator-item">
-                    <code>regex:pattern</code>
-                    <span>Test regex</span>
+                    <code>yaml:key: value</code>
+                    <span>Format / validate YAML</span>
                 </div>
                 <div class="operator-item">
-                    <code>color:#ff5500</code>
-                    <span>Color info</span>
+                    <code>regex:[a-z]+</code>
+                    <span>Explain regex pattern</span>
                 </div>
                 <div class="operator-item">
-                    <code>unix:1234567890</code>
-                    <span>Unix timestamp</span>
+                    <code>beautify:code</code>
+                    <span>Beautify / format code</span>
                 </div>
                 <div class="operator-item">
                     <code>cron:* * * * *</code>
-                    <span>Explain cron</span>
+                    <span>Explain cron expression</span>
                 </div>
                 <div class="operator-item">
-                    <code>ua:</code>
-                    <span>User agent info</span>
+                    <code>chmod:755</code>
+                    <span>File permission converter</span>
+                </div>
+                <div class="operator-item">
+                    <code>timestamp:1700000000</code>
+                    <span>Unix timestamp converter</span>
+                </div>
+                <div class="operator-item">
+                    <code>slug:Hello World</code>
+                    <span>Generate URL slug</span>
+                </div>
+                <div class="operator-item">
+                    <code>case:hello world</code>
+                    <span>Case conversion (upper/lower/title/camel)</span>
                 </div>
             </div>
 
             <h3>Reference</h3>
             <div class="operator-grid">
                 <div class="operator-item">
+                    <code>tldr:git</code>
+                    <span>tldr simplified man page</span>
+                </div>
+                <div class="operator-item">
+                    <code>man:grep</code>
+                    <span>Full Unix man page</span>
+                </div>
+                <div class="operator-item">
+                    <code>cheat:git</code>
+                    <span>Command cheatsheet</span>
+                </div>
+                <div class="operator-item">
                     <code>rfc:2616</code>
                     <span>RFC document</span>
                 </div>
                 <div class="operator-item">
-                    <code>man:grep</code>
-                    <span>Man page</span>
+                    <code>cve:CVE-2024-1234</code>
+                    <span>CVE vulnerability info</span>
+                </div>
+                <div class="operator-item">
+                    <code>pkg:express</code>
+                    <span>Package info (npm / PyPI / Go)</span>
                 </div>
                 <div class="operator-item">
                     <code>http:404</code>
-                    <span>HTTP status code</span>
-                </div>
-                <div class="operator-item">
-                    <code>mime:pdf</code>
-                    <span>MIME type</span>
+                    <span>HTTP status code explanation</span>
                 </div>
                 <div class="operator-item">
                     <code>port:443</code>
-                    <span>Port info</span>
-                </div>
-                <div class="operator-item">
-                    <code>unicode:U+1F600</code>
-                    <span>Unicode character</span>
+                    <span>Port number info</span>
                 </div>
             </div>
         </section>

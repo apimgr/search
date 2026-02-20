@@ -1227,10 +1227,10 @@ func (s *Server) renderSearchError(w http.ResponseWriter, query string, err erro
 	baseData.Query = query
 
 	data := &ErrorPageData{
-		PageData:     *baseData,
-		ErrorCode:    http.StatusInternalServerError,
-		ErrorTitle:   "Search Error",
-		ErrorMessage: "An error occurred while processing your search. Please try again.",
+		PageData:   *baseData,
+		StatusCode: http.StatusInternalServerError,
+		StatusText: "Search Error",
+		Message:    "An error occurred while processing your search. Please try again.",
 	}
 
 	if renderErr := s.renderer.Render(w, "error", data); renderErr != nil {

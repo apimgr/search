@@ -206,6 +206,30 @@ a:hover {
     margin-left: auto;
 }
 
+/* Shared icon button style for header actions (theme toggle, preferences) */
+.header-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    text-decoration: none;
+    transition: background-color 0.2s ease, color 0.2s ease;
+    flex-shrink: 0;
+}
+
+.header-icon-btn:hover {
+    background-color: var(--bg-tertiary);
+    color: var(--accent-primary);
+    text-decoration: none;
+}
+
+/* Legacy .user-icon kept for backwards compat */
 .user-icon {
     display: flex;
     align-items: center;
@@ -319,22 +343,27 @@ a:hover {
 .header-nav {
     display: none;
     align-items: center;
-    gap: 1rem;
     flex: 1;
-    justify-content: flex-start;
-    margin-left: 1rem;
+    margin: 0 1rem;
 }
 
-/* Header search form - compact search for non-home pages */
+/* Header search form - fills available space */
 .header-search-form {
     display: flex;
     align-items: stretch;
     flex: 1;
-    max-width: 400px;
-    margin: 0 1rem;
+    max-width: 640px;
 }
 
-/* Header mobile - hamburger + settings (shown on mobile, hidden on tablet+) */
+/* Header actions - theme toggle + settings icons, grouped on the right */
+.header-actions {
+    display: none;
+    align-items: center;
+    gap: 0.25rem;
+    flex-shrink: 0;
+}
+
+/* Header mobile - hamburger only (shown on mobile, hidden on tablet+) */
 .header-mobile {
     display: flex;
     align-items: center;
@@ -342,12 +371,7 @@ a:hover {
     margin-left: auto;
 }
 
-/* Desktop-only utility class */
-.desktop-only {
-    display: none;
-}
-
-/* Tablet+ (768px): show desktop nav, hide mobile */
+/* Tablet+ (768px): show desktop nav + actions, hide mobile hamburger */
 @media (min-width: 768px) {
     .header-nav {
         display: flex;
@@ -357,7 +381,7 @@ a:hover {
         display: none;
     }
 
-    .desktop-only {
+    .header-actions {
         display: flex;
     }
 }
@@ -6488,6 +6512,68 @@ html.theme-light .theme-label-light { display: inline; }
 
 .error-text {
     color: var(--accent-error);
+}
+
+/* Error page (404, 500, 502, 503, etc.) */
+.error-page {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 60vh;
+    padding: var(--spacing-xl) var(--spacing-md);
+    text-align: center;
+}
+
+.error-container {
+    max-width: 480px;
+    width: 100%;
+}
+
+.error-code {
+    font-size: 6rem;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--accent-primary);
+    opacity: 0.8;
+    margin-bottom: var(--spacing-md);
+}
+
+.error-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: var(--spacing-sm);
+}
+
+.error-message {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-lg);
+    line-height: 1.6;
+}
+
+.error-details {
+    text-align: left;
+    margin-bottom: var(--spacing-lg);
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.error-details pre {
+    margin-top: var(--spacing-sm);
+    white-space: pre-wrap;
+    word-break: break-all;
+    font-family: "SF Mono", "Monaco", "Inconsolata", "Fira Code", monospace;
+}
+
+.error-actions {
+    display: flex;
+    gap: var(--spacing-sm);
+    justify-content: center;
+    flex-wrap: wrap;
 }
 
 .hidden {

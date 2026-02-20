@@ -317,10 +317,10 @@ type PageData struct {
 // ErrorPageData extends PageData with error-specific fields
 type ErrorPageData struct {
 	PageData
-	ErrorCode    int
-	ErrorTitle   string
-	ErrorMessage string
-	ErrorDetails string
+	StatusCode   int
+	StatusText   string
+	Message      string
+	ErrorDetails string // dev-only technical details
 }
 
 // SearchPageData extends PageData with search-specific fields
