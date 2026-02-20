@@ -1,9 +1,11 @@
 package admin
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"html/template"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -12,59 +14,23 @@ import (
 	"github.com/apimgr/search/src/ssl"
 )
 
-// renderAdminLogin renders the admin login page
-func (h *Handler) renderAdminLogin(w http.ResponseWriter, data *AdminPageData) {
-	fmt.Fprintf(w, `<!DOCTYPE html>
-<html lang="en" data-theme="dark">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="robots" content="noindex, nofollow">
-    <title>%s - %s</title>
-    <link rel="stylesheet" href="/static/css/main.css">
-    <link rel="stylesheet" href="/static/css/admin.css">
-</head>
-<body>
-    <div class="login-container">
-        <div class="login-box">
-            <div class="login-header">
-                <h1>🔐 Admin Login</h1>
-                <p>%s Administration</p>
-            </div>
-            %s
-            <form method="POST" action="/admin/login">
-                <input type="hidden" name="csrf_token" value="%s">
-                <input type="hidden" name="redirect" value="">
-                <div class="form-group">
-                    <label for="username">Username</label>
-                    <input type="text" id="username" name="username" required autofocus>
-                </div>
-                <div class="form-group">
-                    <label for="password">Password</label>
-                    <input type="password" id="password" name="password" required>
-                </div>
-                <button type="submit" class="login-btn">Sign In</button>
-            </form>
-            <p class="back-link"><a href="/">← Back to Search</a></p>
-        </div>
-    </div>
-</body>
-</html>`,
-		data.Title,
-		h.config.Server.Title,
-		h.config.Server.Title,
-		func() string {
-			if data.Error != "" {
-				return fmt.Sprintf(`<div class="error-message">%s</div>`, data.Error)
-			}
-			return ""
-		}(),
-		data.CSRFToken,
-	)
+// renderAdminPage renders admin pages with the admin layout.
+// Uses a buffered writer so the configured admin path (default: "admin")
+// can be substituted for the hardcoded "/admin/" placeholders in the template.
+func (h *Handler) renderAdminPage(w http.ResponseWriter, page string, data *AdminPageData) {
+	ap := "/" + config.GetAdminPath() // e.g. "/admin" or "/manage"
+	bw := &bytes.Buffer{}
+	h.renderAdminPageInner(bw, page, data)
+	// Replace hardcoded /admin prefix with the configured admin path
+	html := strings.ReplaceAll(bw.String(), `href="/admin/`, `href="`+ap+`/`)
+	html = strings.ReplaceAll(html, `href="/admin"`, `href="`+ap+`"`)
+	html = strings.ReplaceAll(html, `action="/admin/`, `action="`+ap+`/`)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprint(w, html)
 }
 
-// renderAdminPage renders admin pages with the admin layout
-func (h *Handler) renderAdminPage(w http.ResponseWriter, page string, data *AdminPageData) {
+// renderAdminPageInner writes the raw admin page HTML (with "/admin/" placeholders) to w.
+func (h *Handler) renderAdminPageInner(w io.Writer, page string, data *AdminPageData) {
 	// Render admin header
 	fmt.Fprintf(w, `<!DOCTYPE html>
 <html lang="en" data-theme="dark">
@@ -225,7 +191,7 @@ func formatFlashMessages(errorMsg, successMsg string) string {
 	return result
 }
 
-func (h *Handler) renderDashboardContent(w http.ResponseWriter, data *AdminPageData) {
+func (h *Handler) renderDashboardContent(w io.Writer, data *AdminPageData) {
 	if data.Stats == nil {
 		return
 	}
@@ -406,7 +372,7 @@ func (h *Handler) renderDashboardContent(w http.ResponseWriter, data *AdminPageD
 	)
 }
 
-func (h *Handler) renderConfigContent(w http.ResponseWriter, data *AdminPageData) {
+func (h *Handler) renderConfigContent(w io.Writer, data *AdminPageData) {
 	fmt.Fprintf(w, `
             <div class="admin-section">
                 <h2>Server Configuration</h2>
@@ -443,7 +409,7 @@ func (h *Handler) renderConfigContent(w http.ResponseWriter, data *AdminPageData
 	)
 }
 
-func (h *Handler) renderEnginesContent(w http.ResponseWriter, data *AdminPageData) {
+func (h *Handler) renderEnginesContent(w io.Writer, data *AdminPageData) {
 	fmt.Fprintf(w, `
             <div class="admin-section">
                 <h2>Search Engines</h2>
@@ -484,7 +450,7 @@ func (h *Handler) renderEnginesContent(w http.ResponseWriter, data *AdminPageDat
             </div>`)
 }
 
-func (h *Handler) renderTokensContent(w http.ResponseWriter, data *AdminPageData) {
+func (h *Handler) renderTokensContent(w io.Writer, data *AdminPageData) {
 	// Show new token if just created
 	newTokenHTML := ""
 	// Note: In real implementation, pass this through query param
@@ -556,7 +522,7 @@ func (h *Handler) renderTokensContent(w http.ResponseWriter, data *AdminPageData
             </div>`)
 }
 
-func (h *Handler) renderLogsContent(w http.ResponseWriter, data *AdminPageData) {
+func (h *Handler) renderLogsContent(w io.Writer, data *AdminPageData) {
 	logDir := config.GetLogDir()
 	fmt.Fprintf(w, `
             <div class="admin-section">
@@ -593,7 +559,7 @@ tail -f %s/app.log</pre>
             </div>`, logDir, logDir, logDir, logDir)
 }
 
-func (h *Handler) renderAuditLogsContent(w http.ResponseWriter, data *AdminPageData) {
+func (h *Handler) renderAuditLogsContent(w io.Writer, data *AdminPageData) {
 	fmt.Fprintf(w, `
             <div class="admin-section">
                 <h2>Audit Logs</h2>
@@ -727,7 +693,7 @@ func checked(b bool) string {
 
 // Server Settings Pages
 
-func (h *Handler) renderServerSettingsContent(w http.ResponseWriter, data *AdminPageData) {
+func (h *Handler) renderServerSettingsContent(w io.Writer, data *AdminPageData) {
 	fmt.Fprintf(w, `
             <div class="admin-section">
                 <h2>General Server Settings</h2>
@@ -813,7 +779,7 @@ func (h *Handler) renderServerSettingsContent(w http.ResponseWriter, data *Admin
 	)
 }
 
-func (h *Handler) renderServerBrandingContent(w http.ResponseWriter, data *AdminPageData) {
+func (h *Handler) renderServerBrandingContent(w io.Writer, data *AdminPageData) {
 	fmt.Fprintf(w, `
             <div class="admin-section">
                 <h2>Branding Settings</h2>
@@ -867,7 +833,7 @@ func (h *Handler) renderServerBrandingContent(w http.ResponseWriter, data *Admin
 	)
 }
 
-func (h *Handler) renderServerSSLContent(w http.ResponseWriter, data *AdminPageData) {
+func (h *Handler) renderServerSSLContent(w io.Writer, data *AdminPageData) {
 	// Get DNS providers from Extra data
 	dnsProviders, _ := data.Extra["DNSProviders"].([]ssl.DNSProviderInfo)
 	currentProvider, _ := data.Extra["CurrentDNSProvider"].(string)
@@ -1075,7 +1041,7 @@ func selectedBool(b bool) string {
 
 // renderServerNetworkContent renders the network settings overview page
 // Per AI.md PART 17: Network settings overview with links to Tor and GeoIP
-func (h *Handler) renderServerNetworkContent(w http.ResponseWriter, data *AdminPageData) {
+func (h *Handler) renderServerNetworkContent(w io.Writer, data *AdminPageData) {
 	// Get status from Extra data
 	torStatus := data.Extra["TorStatus"].(map[string]interface{})
 	geoipStatus := data.Extra["GeoIPStatus"].(map[string]interface{})
@@ -1146,7 +1112,7 @@ func (h *Handler) renderServerNetworkContent(w http.ResponseWriter, data *AdminP
 	)
 }
 
-func (h *Handler) renderServerTorContent(w http.ResponseWriter, data *AdminPageData) {
+func (h *Handler) renderServerTorContent(w io.Writer, data *AdminPageData) {
 	// Per AI.md PART 32: Tor is auto-enabled if binary found
 	torStatus := "Disabled (tor binary not found)"
 	torStatusClass := "disabled"
@@ -1358,7 +1324,7 @@ func (h *Handler) renderServerTorContent(w http.ResponseWriter, data *AdminPageD
             </script>`)
 }
 
-func (h *Handler) renderServerWebContent(w http.ResponseWriter, data *AdminPageData) {
+func (h *Handler) renderServerWebContent(w io.Writer, data *AdminPageData) {
 	fmt.Fprintf(w, `
             <div class="admin-section">
                 <h2>robots.txt Configuration</h2>
@@ -1439,7 +1405,7 @@ func (h *Handler) renderServerWebContent(w http.ResponseWriter, data *AdminPageD
 
 // renderServerEmailContent renders the email/SMTP settings page
 // Per AI.md PART 18: Nested SMTP and From blocks with TLS mode dropdown
-func (h *Handler) renderServerEmailContent(w http.ResponseWriter, data *AdminPageData) {
+func (h *Handler) renderServerEmailContent(w io.Writer, data *AdminPageData) {
 	// Per AI.md PART 18: TLS mode selection
 	tlsMode := h.config.Server.Email.SMTP.TLS
 	if tlsMode == "" {
@@ -1514,7 +1480,7 @@ func (h *Handler) renderServerEmailContent(w http.ResponseWriter, data *AdminPag
 	)
 }
 
-func (h *Handler) renderServerAnnouncementsContent(w http.ResponseWriter, data *AdminPageData) {
+func (h *Handler) renderServerAnnouncementsContent(w io.Writer, data *AdminPageData) {
 	fmt.Fprintf(w, `
             <div class="admin-section">
                 <h2>Announcements</h2>
@@ -1626,7 +1592,7 @@ func (h *Handler) renderServerAnnouncementsContent(w http.ResponseWriter, data *
             </div>`)
 }
 
-func (h *Handler) renderServerGeoIPContent(w http.ResponseWriter, data *AdminPageData) {
+func (h *Handler) renderServerGeoIPContent(w io.Writer, data *AdminPageData) {
 	fmt.Fprintf(w, `
             <div class="admin-section">
                 <h2>GeoIP Configuration</h2>
@@ -1693,7 +1659,7 @@ func (h *Handler) renderServerGeoIPContent(w http.ResponseWriter, data *AdminPag
 	)
 }
 
-func (h *Handler) renderServerMetricsContent(w http.ResponseWriter, data *AdminPageData) {
+func (h *Handler) renderServerMetricsContent(w io.Writer, data *AdminPageData) {
 	fmt.Fprintf(w, `
             <div class="admin-section">
                 <h2>Prometheus Metrics</h2>
@@ -1753,7 +1719,7 @@ func (h *Handler) renderServerMetricsContent(w http.ResponseWriter, data *AdminP
 }
 
 // renderSchedulerContent renders the scheduler management page
-func (h *Handler) renderSchedulerContent(w http.ResponseWriter, data *AdminPageData) {
+func (h *Handler) renderSchedulerContent(w io.Writer, data *AdminPageData) {
 	fmt.Fprintf(w, `
             <div class="admin-section">
                 <h2>Scheduled Tasks</h2>
@@ -1991,7 +1957,7 @@ func taskStatusText(enabled bool) string {
 // ============================================================
 
 // renderSetupContent renders the initial setup page
-func (h *Handler) renderSetupContent(w http.ResponseWriter, data *AdminPageData) {
+func (h *Handler) renderSetupContent(w io.Writer, data *AdminPageData) {
 	setupTokenRequired := false
 	if data.Extra != nil {
 		if v, ok := data.Extra["SetupTokenRequired"].(bool); ok {
@@ -2051,7 +2017,7 @@ func (h *Handler) renderSetupContent(w http.ResponseWriter, data *AdminPageData)
 }
 
 // renderAdminsContent renders the server admins management page
-func (h *Handler) renderAdminsContent(w http.ResponseWriter, data *AdminPageData) {
+func (h *Handler) renderAdminsContent(w io.Writer, data *AdminPageData) {
 	admins := []*Admin{}
 	totalCount := 0
 	isPrimary := false
@@ -2221,7 +2187,7 @@ func (h *Handler) renderAdminsContent(w http.ResponseWriter, data *AdminPageData
 }
 
 // renderInviteAcceptContent renders the invite acceptance page
-func (h *Handler) renderInviteAcceptContent(w http.ResponseWriter, data *AdminPageData) {
+func (h *Handler) renderInviteAcceptContent(w io.Writer, data *AdminPageData) {
 	suggestedUsername := ""
 	if data.Extra != nil {
 		if v, ok := data.Extra["SuggestedUsername"].(string); ok {
@@ -2268,7 +2234,7 @@ func (h *Handler) renderInviteAcceptContent(w http.ResponseWriter, data *AdminPa
 }
 
 // renderInviteErrorContent renders the invite error page
-func (h *Handler) renderInviteErrorContent(w http.ResponseWriter, data *AdminPageData) {
+func (h *Handler) renderInviteErrorContent(w io.Writer, data *AdminPageData) {
 	fmt.Fprintf(w, `
             <div class="admin-section text-center">
                 <h2 class="text-danger">Invalid Invite</h2>
@@ -2318,7 +2284,7 @@ func maskEmail(email string) string {
 // ============================================================
 
 // renderNodesContent renders the cluster nodes management page
-func (h *Handler) renderNodesContent(w http.ResponseWriter, data *AdminPageData) {
+func (h *Handler) renderNodesContent(w io.Writer, data *AdminPageData) {
 	nodes := []ClusterNode{}
 	isPrimary := true
 	nodeID := "local"
@@ -2532,7 +2498,7 @@ func (h *Handler) renderNodesContent(w http.ResponseWriter, data *AdminPageData)
 }
 
 // renderServerBackupContent renders the backup management page content
-func (h *Handler) renderServerBackupContent(w http.ResponseWriter, data *AdminPageData) {
+func (h *Handler) renderServerBackupContent(w io.Writer, data *AdminPageData) {
 	fmt.Fprintf(w, `
             <div class="admin-section">
                 <h2>Create Backup</h2>
@@ -2591,7 +2557,7 @@ func (h *Handler) renderServerBackupContent(w http.ResponseWriter, data *AdminPa
 }
 
 // renderServerMaintenanceContent renders the maintenance mode page content
-func (h *Handler) renderServerMaintenanceContent(w http.ResponseWriter, data *AdminPageData) {
+func (h *Handler) renderServerMaintenanceContent(w io.Writer, data *AdminPageData) {
 	maintenanceEnabled := ""
 	if data.Config.Server.MaintenanceMode {
 		maintenanceEnabled = "checked"
@@ -2625,7 +2591,7 @@ func (h *Handler) renderServerMaintenanceContent(w http.ResponseWriter, data *Ad
 }
 
 // renderServerUpdatesContent renders the updates page content
-func (h *Handler) renderServerUpdatesContent(w http.ResponseWriter, data *AdminPageData) {
+func (h *Handler) renderServerUpdatesContent(w io.Writer, data *AdminPageData) {
 	fmt.Fprintf(w, `
             <div class="admin-section">
                 <h2>Current Version</h2>
@@ -2676,7 +2642,7 @@ func (h *Handler) renderServerUpdatesContent(w http.ResponseWriter, data *AdminP
 }
 
 // renderServerInfoContent renders the server info page content
-func (h *Handler) renderServerInfoContent(w http.ResponseWriter, data *AdminPageData) {
+func (h *Handler) renderServerInfoContent(w io.Writer, data *AdminPageData) {
 	if data.Stats == nil {
 		fmt.Fprintf(w, `<div class="admin-section"><p>Unable to load server info.</p></div>`)
 		return
@@ -2723,7 +2689,7 @@ func (h *Handler) renderServerInfoContent(w http.ResponseWriter, data *AdminPage
 }
 
 // renderServerSecurityContent renders the security settings page content
-func (h *Handler) renderServerSecurityContent(w http.ResponseWriter, data *AdminPageData) {
+func (h *Handler) renderServerSecurityContent(w io.Writer, data *AdminPageData) {
 	rateLimitEnabled := ""
 	if data.Config.Server.RateLimit.Enabled {
 		rateLimitEnabled = "checked"
@@ -2778,7 +2744,7 @@ func (h *Handler) renderServerSecurityContent(w http.ResponseWriter, data *Admin
 }
 
 // renderHelpContent renders the help/documentation page content
-func (h *Handler) renderHelpContent(w http.ResponseWriter, data *AdminPageData) {
+func (h *Handler) renderHelpContent(w io.Writer, data *AdminPageData) {
 	fmt.Fprintf(w, `
             <div class="admin-section">
                 <h2>Documentation</h2>

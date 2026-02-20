@@ -783,7 +783,14 @@ func (s *Server) setupRoutes() http.Handler {
 	mux.HandleFunc("/autocomplete", s.handleAutocomplete)
 
 	// Standard server pages (per AI.md spec)
+	// /server → /server/about redirect per AI.md line 17696
+	mux.HandleFunc("/server", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/server/about", http.StatusMovedPermanently)
+	})
 	mux.HandleFunc("/server/about", s.handleAbout)
+	mux.HandleFunc("/server/about/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/server/about", http.StatusMovedPermanently)
+	})
 	mux.HandleFunc("/server/privacy", s.handlePrivacy)
 	mux.HandleFunc("/server/contact", s.handleContact)
 	mux.HandleFunc("/server/help", s.handleHelp)
@@ -825,13 +832,21 @@ func (s *Server) setupRoutes() http.Handler {
 		s.adminHandler.RegisterRoutes(mux)
 	}
 
-	// User authentication routes (if user management is enabled)
+	// Per AI.md PART 11: /auth/login and /auth/logout are the SINGLE login/logout
+	// endpoints for ALL account types (admin + user). ALWAYS registered regardless
+	// of whether user management is enabled — admins need them.
+	mux.HandleFunc("/auth/login", s.handleLogin)
+	mux.HandleFunc("/auth/logout", s.handleLogout)
+
+	// User authentication and profile routes (only if user management is enabled)
 	if s.config.Server.Users.Enabled {
-		mux.HandleFunc("/auth/login", s.handleLogin)
-		mux.HandleFunc("/auth/logout", s.handleLogout)
 		mux.HandleFunc("/auth/register", s.handleRegister)
-		mux.HandleFunc("/auth/forgot", s.handleForgot)
-		mux.HandleFunc("/auth/verify", s.handleVerify)
+		// Per AI.md PART 11/50443: password routes use /auth/password/* prefix
+		mux.HandleFunc("/auth/password/forgot", s.handleForgot)
+		mux.HandleFunc("/auth/forgot", s.handleForgot) // legacy alias
+		// Per AI.md: verification code in path, not query param
+		mux.HandleFunc("/auth/verify/", s.handleVerify)
+		mux.HandleFunc("/auth/verify", s.handleVerify) // no-code fallback
 		mux.HandleFunc("/auth/2fa", s.handle2FA)
 		mux.HandleFunc("/auth/recovery", s.handleRecoveryLogin)
 

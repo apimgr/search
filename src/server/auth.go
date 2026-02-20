@@ -39,13 +39,9 @@ type TwoFactorPageData struct {
 }
 
 // handleLogin renders the login page and processes login
+// Per AI.md PART 11: /auth/login is the SINGLE login form for both admin and users.
+// Admin always logs in here regardless of whether user management is enabled.
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
-	// Check if user management is enabled
-	if !s.config.Server.Users.Enabled {
-		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
-	}
-
 	switch r.Method {
 	case http.MethodGet:
 		s.renderLoginPage(w, r, "", "")
@@ -429,7 +425,14 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token := r.URL.Query().Get("token")
+	// Per AI.md PART 11: code is in path /auth/verify/{code}, also accept ?token= for legacy
+	token := strings.TrimPrefix(r.URL.Path, "/auth/verify/")
+	if token == "" || token == r.URL.Path {
+		token = r.URL.Query().Get("token")
+	}
+	if token == "" {
+		token = r.URL.Query().Get("code")
+	}
 	if token == "" {
 		s.handleError(w, r, http.StatusBadRequest, "Invalid Verification", "No verification token provided.")
 		return

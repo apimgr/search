@@ -13,9 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/apimgr/search/src/backup"
@@ -55,7 +53,6 @@ type Handler struct {
 	reloadCallback ReloadCallback
 	configPath     string
 	configSync     *config.ConfigSync // Per AI.md PART 5: Cluster config sync (NON-NEGOTIABLE)
-	loginLimiter   *loginRateLimiter  // Per AI.md PART 11: 5 attempts / 15 min
 }
 
 // TorManager interface for Tor operations per AI.md PART 32
@@ -144,85 +141,13 @@ type ClusterNode struct {
 	JoinedAt  time.Time
 }
 
-// loginRateLimiter tracks per-IP login attempts
-// Per AI.md PART 11: 5 attempts per 15 minutes
-type loginRateLimiter struct {
-	mu      sync.Mutex
-	entries map[string]*loginEntry
-}
-
-type loginEntry struct {
-	attempts int
-	firstAt  time.Time
-}
-
-func newLoginRateLimiter() *loginRateLimiter {
-	lrl := &loginRateLimiter{
-		entries: make(map[string]*loginEntry),
-	}
-	go lrl.cleanup()
-	return lrl
-}
-
-func (lrl *loginRateLimiter) cleanup() {
-	for {
-		time.Sleep(5 * time.Minute)
-		lrl.mu.Lock()
-		for key, entry := range lrl.entries {
-			if time.Since(entry.firstAt) > 15*time.Minute {
-				delete(lrl.entries, key)
-			}
-		}
-		lrl.mu.Unlock()
-	}
-}
-
-func (lrl *loginRateLimiter) allow(ip string) bool {
-	lrl.mu.Lock()
-	defer lrl.mu.Unlock()
-
-	entry, exists := lrl.entries[ip]
-	if !exists {
-		lrl.entries[ip] = &loginEntry{attempts: 1, firstAt: time.Now()}
-		return true
-	}
-
-	if time.Since(entry.firstAt) > 15*time.Minute {
-		lrl.entries[ip] = &loginEntry{attempts: 1, firstAt: time.Now()}
-		return true
-	}
-
-	if entry.attempts >= 5 {
-		return false
-	}
-
-	entry.attempts++
-	return true
-}
-
-func (lrl *loginRateLimiter) remainingTime(ip string) time.Duration {
-	lrl.mu.Lock()
-	defer lrl.mu.Unlock()
-
-	entry, exists := lrl.entries[ip]
-	if !exists {
-		return 0
-	}
-	remaining := 15*time.Minute - time.Since(entry.firstAt)
-	if remaining < 0 {
-		return 0
-	}
-	return remaining
-}
-
 // NewHandler creates a new admin handler
 func NewHandler(cfg *config.Config, renderer Renderer) *Handler {
 	return &Handler{
-		config:       cfg,
-		auth:         NewAuthManager(cfg),
-		renderer:     renderer,
-		startTime:    time.Now(),
-		loginLimiter: newLoginRateLimiter(),
+		config:    cfg,
+		auth:      NewAuthManager(cfg),
+		renderer:  renderer,
+		startTime: time.Now(),
 	}
 }
 
@@ -347,104 +272,126 @@ func (h *Handler) AuthManager() *AuthManager {
 // - /{adminpath}/profile = Admin's own profile
 // - /{adminpath}/preferences = Admin's own preferences
 // - /{adminpath}/server/* = ALL server management
+// - /api/v1/{adminpath}/* = Admin API endpoints
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
-	// Public routes (no auth required)
-	mux.HandleFunc("/admin/login", h.handleLogin)
-	mux.HandleFunc("/admin/logout", h.handleLogout)
-	mux.HandleFunc("/admin/setup", h.handleSetup)
-	// Per AI.md PART 11 line 11403: Admin invite at /auth/invite/server/{code}
+	p := config.GetAdminPath() // e.g. "admin" (configurable per spec)
+	ap := "/" + p              // e.g. "/admin"
+	api := "/api/v1/" + p     // e.g. "/api/v1/admin"
+
+	// Legacy /admin/login and /admin/logout redirect to unified /auth/login
+	// (only needed when admin path differs from "admin")
+	if p != "admin" {
+		mux.HandleFunc("/admin/login", h.handleLogin)
+		mux.HandleFunc("/admin/logout", h.handleLogout)
+	}
+
+	// Setup at /{admin_path}/server/setup per AI.md PART 17 line 1704
+	mux.HandleFunc(ap+"/server/setup", h.handleSetup)
+
+	// Per AI.md PART 11: Admin invite at /auth/invite/server/{code}
 	mux.HandleFunc("/auth/invite/server/", h.handleInviteAccept)
 
 	// Dashboard (only valid root-level route per AI.md PART 17)
-	mux.HandleFunc("/admin", h.requireAuth(h.handleDashboard))
-	mux.HandleFunc("/admin/", h.requireAuth(h.handleDashboard))
+	// Register /dashboard explicitly so it can be used as redirect target
+	mux.HandleFunc(ap, h.requireAuth(h.handleDashboard))
+	mux.HandleFunc(ap+"/", h.requireAuth(h.handleDashboard))
+	mux.HandleFunc(ap+"/dashboard", h.requireAuth(h.handleDashboard))
+
+	// Notifications (top-level per AI.md PART 17)
+	mux.HandleFunc(ap+"/notifications", h.requireAuth(h.handleNotifications))
 
 	// Admin's own profile/preferences (valid root-level routes per AI.md PART 17)
-	mux.HandleFunc("/admin/profile", h.requireAuth(h.handleAdminProfile))
-	mux.HandleFunc("/admin/preferences", h.requireAuth(h.handleAdminPreferences))
+	mux.HandleFunc(ap+"/profile", h.requireAuth(h.handleAdminProfile))
+	mux.HandleFunc(ap+"/preferences", h.requireAuth(h.handleAdminPreferences))
 
-	// Server management - ALL under /admin/server/* per AI.md PART 17
-	mux.HandleFunc("/admin/server/settings", h.requireAuth(h.handleServerSettings))
-	mux.HandleFunc("/admin/server/branding", h.requireAuth(h.handleServerBranding))
-	mux.HandleFunc("/admin/server/engines", h.requireAuth(h.handleEngines))
-	mux.HandleFunc("/admin/server/web", h.requireAuth(h.handleServerWeb))
-	mux.HandleFunc("/admin/server/email", h.requireAuth(h.handleServerEmail))
-	mux.HandleFunc("/admin/server/announcements", h.requireAuth(h.handleServerAnnouncements))
-	mux.HandleFunc("/admin/server/scheduler", h.requireAuth(h.handleScheduler))
-	mux.HandleFunc("/admin/server/logs", h.requireAuth(h.handleLogs))
-	mux.HandleFunc("/admin/server/logs/audit", h.requireAuth(h.handleAuditLogs))
-	mux.HandleFunc("/admin/server/backup", h.requireAuth(h.handleServerBackup))
-	mux.HandleFunc("/admin/server/maintenance", h.requireAuth(h.handleServerMaintenance))
-	mux.HandleFunc("/admin/server/updates", h.requireAuth(h.handleServerUpdates))
-	mux.HandleFunc("/admin/server/info", h.requireAuth(h.handleServerInfo))
-	mux.HandleFunc("/admin/server/metrics", h.requireAuth(h.handleServerMetrics))
-	mux.HandleFunc("/admin/server/help", h.requireAuth(h.handleHelp))
+	// Server management - ALL under /{admin_path}/server/* per AI.md PART 17
+	mux.HandleFunc(ap+"/server/settings", h.requireAuth(h.handleServerSettings))
+	mux.HandleFunc(ap+"/server/branding", h.requireAuth(h.handleServerBranding))
+	mux.HandleFunc(ap+"/server/engines", h.requireAuth(h.handleEngines))
+	mux.HandleFunc(ap+"/server/web", h.requireAuth(h.handleServerWeb))
+	mux.HandleFunc(ap+"/server/email", h.requireAuth(h.handleServerEmail))
+	mux.HandleFunc(ap+"/server/announcements", h.requireAuth(h.handleServerAnnouncements))
+	mux.HandleFunc(ap+"/server/scheduler", h.requireAuth(h.handleScheduler))
+	mux.HandleFunc(ap+"/server/logs", h.requireAuth(h.handleLogs))
+	mux.HandleFunc(ap+"/server/logs/audit", h.requireAuth(h.handleAuditLogs))
+	mux.HandleFunc(ap+"/server/backup", h.requireAuth(h.handleServerBackup))
+	mux.HandleFunc(ap+"/server/maintenance", h.requireAuth(h.handleServerMaintenance))
+	mux.HandleFunc(ap+"/server/updates", h.requireAuth(h.handleServerUpdates))
+	mux.HandleFunc(ap+"/server/info", h.requireAuth(h.handleServerInfo))
+	mux.HandleFunc(ap+"/server/metrics", h.requireAuth(h.handleServerMetrics))
+	mux.HandleFunc(ap+"/server/help", h.requireAuth(h.handleHelp))
 
-	// SSL/TLS - direct under /admin/server/ per AI.md PART 17
-	mux.HandleFunc("/admin/server/ssl", h.requireAuth(h.handleServerSSL))
+	// SSL/TLS
+	mux.HandleFunc(ap+"/server/ssl", h.requireAuth(h.handleServerSSL))
 
-	// Network settings - /admin/server/network/* per AI.md PART 17
-	mux.HandleFunc("/admin/server/network", h.requireAuth(h.handleServerNetwork))
-	mux.HandleFunc("/admin/server/network/tor", h.requireAuth(h.handleServerTor))
-	mux.HandleFunc("/admin/server/network/geoip", h.requireAuth(h.handleServerGeoIP))
-	mux.HandleFunc("/admin/server/network/blocklists", h.requireAuth(h.handleBlocklists))
+	// Network settings
+	mux.HandleFunc(ap+"/server/network", h.requireAuth(h.handleServerNetwork))
+	mux.HandleFunc(ap+"/server/network/tor", h.requireAuth(h.handleServerTor))
+	mux.HandleFunc(ap+"/server/network/geoip", h.requireAuth(h.handleServerGeoIP))
+	mux.HandleFunc(ap+"/server/network/blocklists", h.requireAuth(h.handleBlocklists))
 
-	// Security settings - /admin/server/security/* per AI.md PART 17
-	mux.HandleFunc("/admin/server/security", h.requireAuth(h.handleServerSecurity))
-	mux.HandleFunc("/admin/server/security/auth", h.requireAuth(h.handleServerAuth))
-	mux.HandleFunc("/admin/server/security/tokens", h.requireAuth(h.handleTokens))
-	mux.HandleFunc("/admin/server/security/firewall", h.requireAuth(h.handleServerFirewall))
-	mux.HandleFunc("/admin/server/security/ratelimit", h.requireAuth(h.handleRateLimiting))
+	// Security settings
+	mux.HandleFunc(ap+"/server/security", h.requireAuth(h.handleServerSecurity))
+	mux.HandleFunc(ap+"/server/security/auth", h.requireAuth(h.handleServerAuth))
+	mux.HandleFunc(ap+"/server/security/tokens", h.requireAuth(h.handleTokens))
+	mux.HandleFunc(ap+"/server/security/firewall", h.requireAuth(h.handleServerFirewall))
+	mux.HandleFunc(ap+"/server/security/ratelimit", h.requireAuth(h.handleRateLimiting))
 
-	// User management - /admin/server/users/* per AI.md PART 17
-	mux.HandleFunc("/admin/server/users", h.requireAuth(h.handleUsers))
-	mux.HandleFunc("/admin/server/users/admins", h.requireAuth(h.handleAdmins))
-	mux.HandleFunc("/admin/server/users/admins/invite", h.requireAuth(h.handleAdminInvite))
-	mux.HandleFunc("/admin/server/users/invites", h.requireAuth(h.handleUserInvites))
+	// User management
+	mux.HandleFunc(ap+"/server/users", h.requireAuth(h.handleUsers))
+	mux.HandleFunc(ap+"/server/users/admins", h.requireAuth(h.handleAdmins))
+	mux.HandleFunc(ap+"/server/users/admins/invite", h.requireAuth(h.handleAdminInvite))
+	mux.HandleFunc(ap+"/server/users/invites", h.requireAuth(h.handleUserInvites))
 
-	// Cluster/Node management - /admin/server/cluster/* per AI.md PART 17
-	mux.HandleFunc("/admin/server/cluster", h.requireAuth(h.handleCluster))
-	mux.HandleFunc("/admin/server/cluster/nodes", h.requireAuth(h.handleNodes))
-	mux.HandleFunc("/admin/server/cluster/nodes/token", h.requireAuth(h.handleNodesToken))
-	mux.HandleFunc("/admin/server/cluster/nodes/leave", h.requireAuth(h.handleNodesLeave))
-	mux.HandleFunc("/admin/server/cluster/add", h.requireAuth(h.handleClusterAddNode))
+	// Cluster/Node management
+	mux.HandleFunc(ap+"/server/cluster", h.requireAuth(h.handleCluster))
+	mux.HandleFunc(ap+"/server/cluster/nodes", h.requireAuth(h.handleNodes))
+	mux.HandleFunc(ap+"/server/cluster/nodes/token", h.requireAuth(h.handleNodesToken))
+	mux.HandleFunc(ap+"/server/cluster/nodes/leave", h.requireAuth(h.handleNodesLeave))
+	mux.HandleFunc(ap+"/server/cluster/add", h.requireAuth(h.handleClusterAddNode))
 
-	// Help - per AI.md PART 17: /admin/help (valid root-level route)
-	mux.HandleFunc("/admin/help", h.requireAuth(h.handleHelpRoot))
+	// Help - /{admin_path}/help per AI.md PART 17
+	mux.HandleFunc(ap+"/help", h.requireAuth(h.handleHelpRoot))
 
-	// API routes (bearer token auth) - per AI.md PART 17: /api/v1/admin/server/*
-	mux.HandleFunc("/api/v1/admin/status", h.requireAPIAuth(h.apiStatus))
-	mux.HandleFunc("/api/v1/admin/server/settings", h.requireAPIAuth(h.apiConfig))
-	mux.HandleFunc("/api/v1/admin/server/engines", h.requireAPIAuth(h.apiEngines))
-	mux.HandleFunc("/api/v1/admin/server/security/tokens", h.requireAPIAuth(h.apiTokens))
-	mux.HandleFunc("/api/v1/admin/server/reload", h.requireAPIAuth(h.apiReload))
-	mux.HandleFunc("/api/v1/admin/server/backup", h.requireAPIAuth(h.apiBackups))
-	mux.HandleFunc("/api/v1/admin/server/backup/restore", h.requireAPIAuth(h.apiBackupRestore))
-	mux.HandleFunc("/api/v1/admin/server/backup/download/", h.requireAPIAuth(h.apiBackupDownload))
-	mux.HandleFunc("/api/v1/admin/server/backup/verify", h.requireAPIAuth(h.apiBackupVerify))
-	mux.HandleFunc("/api/v1/admin/server/logs", h.requireAPIAuth(h.apiLogs))
-	mux.HandleFunc("/api/v1/admin/server/scheduler", h.requireAPIAuth(h.apiScheduler))
-	mux.HandleFunc("/api/v1/admin/email/test", h.requireAPIAuth(h.apiEmailTest))
-	mux.HandleFunc("/api/v1/admin/email/templates", h.requireAPIAuth(h.apiEmailTemplates))
-	mux.HandleFunc("/api/v1/admin/email/preview", h.requireAPIAuth(h.apiEmailPreview))
-	mux.HandleFunc("/api/v1/admin/update/check", h.requireAPIAuth(h.apiUpdateCheck))
-	mux.HandleFunc("/api/v1/admin/admins", h.requireAPIAuth(h.apiAdmins))
-	mux.HandleFunc("/api/v1/admin/admins/invite", h.requireAPIAuth(h.apiAdminInvite))
+	// Admin API routes - /api/v1/{admin_path}/* per AI.md PART 17
+	mux.HandleFunc(api+"/status", h.requireAPIAuth(h.apiStatus))
+	mux.HandleFunc(api+"/server/settings", h.requireAPIAuth(h.apiConfig))
+	mux.HandleFunc(api+"/server/engines", h.requireAPIAuth(h.apiEngines))
+	mux.HandleFunc(api+"/server/security/tokens", h.requireAPIAuth(h.apiTokens))
+	mux.HandleFunc(api+"/server/reload", h.requireAPIAuth(h.apiReload))
+	mux.HandleFunc(api+"/server/backup", h.requireAPIAuth(h.apiBackups))
+	mux.HandleFunc(api+"/server/backup/restore", h.requireAPIAuth(h.apiBackupRestore))
+	mux.HandleFunc(api+"/server/backup/download/", h.requireAPIAuth(h.apiBackupDownload))
+	mux.HandleFunc(api+"/server/backup/verify", h.requireAPIAuth(h.apiBackupVerify))
+	mux.HandleFunc(api+"/server/logs", h.requireAPIAuth(h.apiLogs))
+	mux.HandleFunc(api+"/server/scheduler", h.requireAPIAuth(h.apiScheduler))
+	mux.HandleFunc(api+"/email/test", h.requireAPIAuth(h.apiEmailTest))
+	mux.HandleFunc(api+"/email/templates", h.requireAPIAuth(h.apiEmailTemplates))
+	mux.HandleFunc(api+"/email/preview", h.requireAPIAuth(h.apiEmailPreview))
+	mux.HandleFunc(api+"/update/check", h.requireAPIAuth(h.apiUpdateCheck))
+	mux.HandleFunc(api+"/admins", h.requireAPIAuth(h.apiAdmins))
+	mux.HandleFunc(api+"/admins/invite", h.requireAPIAuth(h.apiAdminInvite))
 
-	// Tor API routes per AI.md spec
-	mux.HandleFunc("/api/v1/admin/tor/status", h.requireAPIAuth(h.apiTorStatus))
-	mux.HandleFunc("/api/v1/admin/tor/start", h.requireAPIAuth(h.apiTorStart))
-	mux.HandleFunc("/api/v1/admin/tor/stop", h.requireAPIAuth(h.apiTorStop))
-	mux.HandleFunc("/api/v1/admin/tor/restart", h.requireAPIAuth(h.apiTorRestart))
-	mux.HandleFunc("/api/v1/admin/tor/address/regenerate", h.requireAPIAuth(h.apiTorRegenerateAddress))
-	mux.HandleFunc("/api/v1/admin/tor/vanity/start", h.requireAPIAuth(h.apiTorVanityStart))
-	mux.HandleFunc("/api/v1/admin/tor/vanity/status", h.requireAPIAuth(h.apiTorVanityStatus))
-	mux.HandleFunc("/api/v1/admin/tor/vanity/cancel", h.requireAPIAuth(h.apiTorVanityCancel))
-	mux.HandleFunc("/api/v1/admin/tor/keys/export", h.requireAPIAuth(h.apiTorKeysExport))
-	mux.HandleFunc("/api/v1/admin/tor/keys/import", h.requireAPIAuth(h.apiTorKeysImport))
+	// Tor API routes
+	mux.HandleFunc(api+"/tor/status", h.requireAPIAuth(h.apiTorStatus))
+	mux.HandleFunc(api+"/tor/start", h.requireAPIAuth(h.apiTorStart))
+	mux.HandleFunc(api+"/tor/stop", h.requireAPIAuth(h.apiTorStop))
+	mux.HandleFunc(api+"/tor/restart", h.requireAPIAuth(h.apiTorRestart))
+	mux.HandleFunc(api+"/tor/address/regenerate", h.requireAPIAuth(h.apiTorRegenerateAddress))
+	mux.HandleFunc(api+"/tor/vanity/start", h.requireAPIAuth(h.apiTorVanityStart))
+	mux.HandleFunc(api+"/tor/vanity/status", h.requireAPIAuth(h.apiTorVanityStatus))
+	mux.HandleFunc(api+"/tor/vanity/cancel", h.requireAPIAuth(h.apiTorVanityCancel))
+	mux.HandleFunc(api+"/tor/keys/export", h.requireAPIAuth(h.apiTorKeysExport))
+	mux.HandleFunc(api+"/tor/keys/import", h.requireAPIAuth(h.apiTorKeysImport))
 
-	// Bang management API routes (per AI.md PART 36 line 28288)
-	mux.HandleFunc("/api/v1/admin/bangs", h.requireAPIAuth(h.apiBangs))
+	// Bang management API routes per AI.md PART 36
+	mux.HandleFunc(api+"/bangs", h.requireAPIAuth(h.apiBangs))
+}
+
+// ap returns the base admin path (e.g. "/admin") for use in redirect targets.
+// Using this ensures redirect targets respect the configurable admin path.
+func (h *Handler) ap() string {
+	return "/" + config.GetAdminPath()
 }
 
 // requireAuth middleware checks for valid admin session
@@ -452,7 +399,9 @@ func (h *Handler) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		session, ok := h.auth.GetSessionFromRequest(r)
 		if !ok {
-			http.Redirect(w, r, "/admin/login?redirect="+r.URL.Path, http.StatusSeeOther)
+			// Per AI.md PART 11: Admin ALWAYS goes to /{admin_path} after login.
+			// ?redirect= param is IGNORED for admins.
+			http.Redirect(w, r, "/auth/login", http.StatusSeeOther)
 			return
 		}
 
@@ -486,73 +435,15 @@ func (h *Handler) requireAPIAuth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// handleLogin handles admin login
+// handleLogin redirects legacy /admin/login to the unified /auth/login form.
+// Per AI.md PART 11: /auth/login is the single login form for all account types.
+// Use 302 (not 301) to avoid permanent client-side caching.
 func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodPost {
-		h.processLogin(w, r)
-		return
-	}
-
-	// Check if already logged in
-	if _, ok := h.auth.GetSessionFromRequest(r); ok {
-		http.Redirect(w, r, "/admin/dashboard", http.StatusSeeOther)
-		return
-	}
-
-	// Render login page
-	data := &AdminPageData{
-		Title:  "Admin Login",
-		Page:   "admin-login",
-		Config:    h.config,
-		AdminPath: config.GetAdminPath(),
-		Error:  r.URL.Query().Get("error"),
-	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminLogin(w, data)
+	http.Redirect(w, r, "/auth/login", http.StatusFound)
 }
 
-// processLogin handles login form submission
-// Per AI.md PART 11: Rate limited to 5 attempts per 15 minutes per IP
-func (h *Handler) processLogin(w http.ResponseWriter, r *http.Request) {
-	ip := GetClientIP(r)
-
-	// Check endpoint-specific rate limit
-	if !h.loginLimiter.allow(ip) {
-		remaining := h.loginLimiter.remainingTime(ip)
-		w.Header().Set("Retry-After", strconv.Itoa(int(remaining.Seconds())))
-		log.Printf("[Admin] Login rate limited for IP: %s", ip)
-		http.Redirect(w, r, "/admin/login?error=Too+many+login+attempts.+Please+try+again+later.", http.StatusSeeOther)
-		return
-	}
-
-	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/admin/login?error=Invalid+form+data", http.StatusSeeOther)
-		return
-	}
-
-	username := strings.TrimSpace(r.FormValue("username"))
-	password := r.FormValue("password") // Don't trim passwords
-
-	if !h.auth.Authenticate(username, password) {
-		log.Printf("[Admin] Failed login attempt for user: %s from %s", username, ip)
-		http.Redirect(w, r, "/admin/login?error=Invalid+credentials", http.StatusSeeOther)
-		return
-	}
-
-	// Create session
-	session := h.auth.CreateSession(username, GetClientIP(r), r.UserAgent())
-	h.auth.SetSessionCookie(w, session)
-
-	log.Printf("[Admin] Successful login for user: %s from %s", username, GetClientIP(r))
-
-	// Redirect to dashboard or original URL
-	redirect := r.FormValue("redirect")
-	if redirect == "" || redirect == "/admin/login" {
-		redirect = "/admin/dashboard"
-	}
-	http.Redirect(w, r, redirect, http.StatusSeeOther)
-}
+// processLogin — removed. Admin login is now handled exclusively by /auth/login
+// in server/auth.go per AI.md PART 11 (single login form).
 
 // handleLogout handles admin logout
 func (h *Handler) handleLogout(w http.ResponseWriter, r *http.Request) {
@@ -561,7 +452,8 @@ func (h *Handler) handleLogout(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[Admin] User logged out: %s", session.Username)
 	}
 	h.auth.ClearSessionCookie(w)
-	http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+	// Per spec: consistent with user logout signal
+	http.Redirect(w, r, "/auth/login?logout=1", http.StatusSeeOther)
 }
 
 // handleDashboard renders the admin dashboard
@@ -680,6 +572,19 @@ func (h *Handler) handleAdminProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	h.renderAdminPage(w, "profile", data)
+}
+
+// handleNotifications handles the admin notifications page.
+// Per AI.md PART 17: /{adminpath}/notifications = Admin notifications
+func (h *Handler) handleNotifications(w http.ResponseWriter, r *http.Request) {
+	data := &AdminPageData{
+		Title:     "Notifications",
+		Page:      "notifications",
+		Config:    h.config,
+		AdminPath: config.GetAdminPath(),
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	h.renderAdminPage(w, "notifications", data)
 }
 
 // handleAdminPreferences handles the admin's own UI preferences
@@ -827,7 +732,7 @@ func (h *Handler) handleLogs(w http.ResponseWriter, r *http.Request) {
 // processConfigUpdate handles configuration updates
 func (h *Handler) processConfigUpdate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/admin/config?error=Invalid+form+data", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/config?error=Invalid+form+data", http.StatusSeeOther)
 		return
 	}
 
@@ -863,7 +768,7 @@ func (h *Handler) processConfigUpdate(w http.ResponseWriter, r *http.Request) {
 			// Standalone mode: write directly to file
 			if err := h.saveConfig(); err != nil {
 				log.Printf("[Admin] Failed to save config: %v", err)
-				http.Redirect(w, r, "/admin/config?error=Failed+to+save+config", http.StatusSeeOther)
+				http.Redirect(w, r, h.ap()+"/config?error=Failed+to+save+config", http.StatusSeeOther)
 				return
 			}
 		}
@@ -876,7 +781,7 @@ func (h *Handler) processConfigUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	http.Redirect(w, r, "/admin/config?success=Configuration+updated", http.StatusSeeOther)
+	http.Redirect(w, r, h.ap()+"/config?success=Configuration+updated", http.StatusSeeOther)
 }
 
 // saveConfig saves the current config to the config file
@@ -900,7 +805,7 @@ func (h *Handler) saveConfig() error {
 // processTokenCreate handles API token creation
 func (h *Handler) processTokenCreate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/admin/tokens?error=Invalid+form+data", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/tokens?error=Invalid+form+data", http.StatusSeeOther)
 		return
 	}
 
@@ -909,7 +814,7 @@ func (h *Handler) processTokenCreate(w http.ResponseWriter, r *http.Request) {
 	validDays := 365 // Default to 1 year
 
 	if name == "" {
-		http.Redirect(w, r, "/admin/tokens?error=Name+is+required", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/tokens?error=Name+is+required", http.StatusSeeOther)
 		return
 	}
 
@@ -917,7 +822,7 @@ func (h *Handler) processTokenCreate(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[Admin] API token created: %s", name)
 
 	// Redirect with the token shown (only time it's visible)
-	http.Redirect(w, r, "/admin/tokens?new_token="+token.Token, http.StatusSeeOther)
+	http.Redirect(w, r, h.ap()+"/tokens?new_token="+token.Token, http.StatusSeeOther)
 }
 
 // API handlers
@@ -1248,7 +1153,7 @@ func (h *Handler) handleServerSettings(w http.ResponseWriter, r *http.Request) {
 // processServerSettingsUpdate handles server settings form submission
 func (h *Handler) processServerSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/admin/server/settings?error=Invalid+form+data", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/settings?error=Invalid+form+data", http.StatusSeeOther)
 		return
 	}
 
@@ -1288,7 +1193,7 @@ func (h *Handler) handleServerBranding(w http.ResponseWriter, r *http.Request) {
 // processServerBrandingUpdate handles branding form submission
 func (h *Handler) processServerBrandingUpdate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/admin/server/branding?error=Invalid+form+data", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/branding?error=Invalid+form+data", http.StatusSeeOther)
 		return
 	}
 
@@ -1348,7 +1253,7 @@ func (h *Handler) handleServerSSL(w http.ResponseWriter, r *http.Request) {
 // processServerSSLUpdate handles SSL settings form submission
 func (h *Handler) processServerSSLUpdate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/admin/server/ssl?error=Invalid+form+data", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/ssl?error=Invalid+form+data", http.StatusSeeOther)
 		return
 	}
 
@@ -1379,7 +1284,7 @@ func (h *Handler) processServerSSLUpdate(w http.ResponseWriter, r *http.Request)
 		if len(credentials) > 0 {
 			encrypted, err := ssl.EncryptCredentials(credentials, h.config.Server.SecretKey)
 			if err != nil {
-				http.Redirect(w, r, "/admin/server/ssl?error=Failed+to+encrypt+credentials", http.StatusSeeOther)
+				http.Redirect(w, r, h.ap()+"/server/ssl?error=Failed+to+encrypt+credentials", http.StatusSeeOther)
 				return
 			}
 			h.config.Server.SSL.DNS01.Provider = dnsProvider
@@ -1454,7 +1359,7 @@ func (h *Handler) handleServerTor(w http.ResponseWriter, r *http.Request) {
 // Per AI.md PART 32: Tor is auto-enabled if binary found - not configurable
 func (h *Handler) processServerTorUpdate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/admin/server/tor?error=Invalid+form+data", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/tor?error=Invalid+form+data", http.StatusSeeOther)
 		return
 	}
 
@@ -1486,7 +1391,7 @@ func (h *Handler) handleServerWeb(w http.ResponseWriter, r *http.Request) {
 // processServerWebUpdate handles web settings form submission
 func (h *Handler) processServerWebUpdate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/admin/server/web?error=Invalid+form+data", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/web?error=Invalid+form+data", http.StatusSeeOther)
 		return
 	}
 
@@ -1520,7 +1425,7 @@ func (h *Handler) handleServerEmail(w http.ResponseWriter, r *http.Request) {
 // Per AI.md PART 18: Nested SMTP and From blocks
 func (h *Handler) processServerEmailUpdate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/admin/server/email?error=Invalid+form+data", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/email?error=Invalid+form+data", http.StatusSeeOther)
 		return
 	}
 
@@ -1568,7 +1473,7 @@ func (h *Handler) handleServerAnnouncements(w http.ResponseWriter, r *http.Reque
 // processServerAnnouncementsUpdate handles announcements form submission
 func (h *Handler) processServerAnnouncementsUpdate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/admin/server/announcements?error=Invalid+form+data", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/announcements?error=Invalid+form+data", http.StatusSeeOther)
 		return
 	}
 
@@ -1599,7 +1504,7 @@ func (h *Handler) handleServerGeoIP(w http.ResponseWriter, r *http.Request) {
 // processServerGeoIPUpdate handles GeoIP settings form submission
 func (h *Handler) processServerGeoIPUpdate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/admin/server/geoip?error=Invalid+form+data", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/geoip?error=Invalid+form+data", http.StatusSeeOther)
 		return
 	}
 
@@ -1633,7 +1538,7 @@ func (h *Handler) handleServerMetrics(w http.ResponseWriter, r *http.Request) {
 // processServerMetricsUpdate handles metrics settings form submission
 func (h *Handler) processServerMetricsUpdate(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/admin/server/metrics?error=Invalid+form+data", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/metrics?error=Invalid+form+data", http.StatusSeeOther)
 		return
 	}
 
@@ -1718,7 +1623,7 @@ func (h *Handler) processBackupCreate(w http.ResponseWriter, r *http.Request, bm
 
 	// Per AI.md PART 22: Compliance mode requires encryption
 	if h.config.Server.Compliance.Enabled && password == "" {
-		http.Redirect(w, r, "/admin/server/backup?error=Compliance+mode+requires+encryption+password", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/backup?error=Compliance+mode+requires+encryption+password", http.StatusSeeOther)
 		return
 	}
 
@@ -1735,17 +1640,17 @@ func (h *Handler) processBackupCreate(w http.ResponseWriter, r *http.Request, bm
 
 	if err != nil {
 		log.Printf("[Admin] Backup creation failed: %v", err)
-		http.Redirect(w, r, "/admin/server/backup?error=Backup+creation+failed:+"+err.Error(), http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/backup?error=Backup+creation+failed:+"+err.Error(), http.StatusSeeOther)
 		return
 	}
 
 	if verifyResult != nil && !verifyResult.AllPassed {
-		http.Redirect(w, r, "/admin/server/backup?error=Backup+verification+failed", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/backup?error=Backup+verification+failed", http.StatusSeeOther)
 		return
 	}
 
 	log.Printf("[Admin] Backup created successfully: %s", filepath.Base(backupPath))
-	http.Redirect(w, r, "/admin/server/backup?success=Backup+created+successfully:+"+filepath.Base(backupPath), http.StatusSeeOther)
+	http.Redirect(w, r, h.ap()+"/server/backup?success=Backup+created+successfully:+"+filepath.Base(backupPath), http.StatusSeeOther)
 }
 
 // processBackupRestore handles restore from the admin panel
@@ -1755,7 +1660,7 @@ func (h *Handler) processBackupRestore(w http.ResponseWriter, r *http.Request, b
 	password := r.FormValue("password")
 
 	if filename == "" {
-		http.Redirect(w, r, "/admin/server/backup?error=No+backup+file+selected", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/backup?error=No+backup+file+selected", http.StatusSeeOther)
 		return
 	}
 
@@ -1764,19 +1669,19 @@ func (h *Handler) processBackupRestore(w http.ResponseWriter, r *http.Request, b
 	// Check if backup is encrypted
 	if backup.IsEncrypted(backupPath) {
 		if password == "" {
-			http.Redirect(w, r, "/admin/server/backup?error=Password+required+for+encrypted+backup", http.StatusSeeOther)
+			http.Redirect(w, r, h.ap()+"/server/backup?error=Password+required+for+encrypted+backup", http.StatusSeeOther)
 			return
 		}
 		bm.SetPassword(password)
 		if err := bm.RestoreEncrypted(backupPath); err != nil {
 			log.Printf("[Admin] Restore failed: %v", err)
-			http.Redirect(w, r, "/admin/server/backup?error=Restore+failed:+"+err.Error(), http.StatusSeeOther)
+			http.Redirect(w, r, h.ap()+"/server/backup?error=Restore+failed:+"+err.Error(), http.StatusSeeOther)
 			return
 		}
 	} else {
 		if err := bm.Restore(backupPath); err != nil {
 			log.Printf("[Admin] Restore failed: %v", err)
-			http.Redirect(w, r, "/admin/server/backup?error=Restore+failed:+"+err.Error(), http.StatusSeeOther)
+			http.Redirect(w, r, h.ap()+"/server/backup?error=Restore+failed:+"+err.Error(), http.StatusSeeOther)
 			return
 		}
 	}
@@ -1790,25 +1695,25 @@ func (h *Handler) processBackupRestore(w http.ResponseWriter, r *http.Request, b
 		}
 	}
 
-	http.Redirect(w, r, "/admin/server/backup?success=Restore+completed+successfully", http.StatusSeeOther)
+	http.Redirect(w, r, h.ap()+"/server/backup?success=Restore+completed+successfully", http.StatusSeeOther)
 }
 
 // processBackupDelete handles backup deletion from the admin panel
 func (h *Handler) processBackupDelete(w http.ResponseWriter, r *http.Request, bm *backup.Manager) {
 	filename := r.FormValue("filename")
 	if filename == "" {
-		http.Redirect(w, r, "/admin/server/backup?error=No+backup+file+specified", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/backup?error=No+backup+file+specified", http.StatusSeeOther)
 		return
 	}
 
 	if err := bm.Delete(filename); err != nil {
 		log.Printf("[Admin] Failed to delete backup: %v", err)
-		http.Redirect(w, r, "/admin/server/backup?error=Failed+to+delete+backup:+"+err.Error(), http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/backup?error=Failed+to+delete+backup:+"+err.Error(), http.StatusSeeOther)
 		return
 	}
 
 	log.Printf("[Admin] Backup deleted: %s", filename)
-	http.Redirect(w, r, "/admin/server/backup?success=Backup+deleted+successfully", http.StatusSeeOther)
+	http.Redirect(w, r, h.ap()+"/server/backup?success=Backup+deleted+successfully", http.StatusSeeOther)
 }
 
 // processBackupVerify handles backup verification from the admin panel
@@ -1818,7 +1723,7 @@ func (h *Handler) processBackupVerify(w http.ResponseWriter, r *http.Request, bm
 	password := r.FormValue("password")
 
 	if filename == "" {
-		http.Redirect(w, r, "/admin/server/backup?error=No+backup+file+specified", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/backup?error=No+backup+file+specified", http.StatusSeeOther)
 		return
 	}
 
@@ -1831,18 +1736,18 @@ func (h *Handler) processBackupVerify(w http.ResponseWriter, r *http.Request, bm
 
 	result, err := bm.VerifyBackup(backupPath)
 	if err != nil {
-		http.Redirect(w, r, "/admin/server/backup?error=Verification+error:+"+err.Error(), http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/backup?error=Verification+error:+"+err.Error(), http.StatusSeeOther)
 		return
 	}
 
 	if result.AllPassed {
-		http.Redirect(w, r, "/admin/server/backup?success=Backup+verified+successfully:+all+checks+passed", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/backup?success=Backup+verified+successfully:+all+checks+passed", http.StatusSeeOther)
 	} else {
 		errMsg := "Verification+failed"
 		if len(result.Errors) > 0 {
 			errMsg = "Verification+failed:+" + result.Errors[0]
 		}
-		http.Redirect(w, r, "/admin/server/backup?error="+errMsg, http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/backup?error="+errMsg, http.StatusSeeOther)
 	}
 }
 
@@ -1854,12 +1759,12 @@ func (h *Handler) processBackupSetPassword(w http.ResponseWriter, r *http.Reques
 	hint := r.FormValue("hint")
 
 	if password == "" {
-		http.Redirect(w, r, "/admin/server/backup?error=Password+cannot+be+empty", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/backup?error=Password+cannot+be+empty", http.StatusSeeOther)
 		return
 	}
 
 	if password != confirmPassword {
-		http.Redirect(w, r, "/admin/server/backup?error=Passwords+do+not+match", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/backup?error=Passwords+do+not+match", http.StatusSeeOther)
 		return
 	}
 
@@ -2685,7 +2590,8 @@ func (h *Handler) handleSetup(w http.ResponseWriter, r *http.Request) {
 			tokenValid, _ = h.service.ValidateSetupToken(ctx, token)
 		}
 		if !tokenValid {
-			http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+			// Per AI.md PART 11: /auth/login is the single login form
+			http.Redirect(w, r, "/auth/login", http.StatusSeeOther)
 			return
 		}
 	}
@@ -2710,7 +2616,7 @@ func (h *Handler) processSetup(w http.ResponseWriter, r *http.Request, requireTo
 	ctx := r.Context()
 
 	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/admin/setup?error=Invalid+form+data", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/setup?error=Invalid+form+data", http.StatusSeeOther)
 		return
 	}
 
@@ -2719,7 +2625,7 @@ func (h *Handler) processSetup(w http.ResponseWriter, r *http.Request, requireTo
 		token := r.FormValue("setup_token")
 		valid, err := h.service.ValidateSetupToken(ctx, token)
 		if err != nil || !valid {
-			http.Redirect(w, r, "/admin/setup?error=Invalid+or+expired+setup+token", http.StatusSeeOther)
+			http.Redirect(w, r, h.ap()+"/server/setup?error=Invalid+or+expired+setup+token", http.StatusSeeOther)
 			return
 		}
 		// Mark token as used
@@ -2733,23 +2639,23 @@ func (h *Handler) processSetup(w http.ResponseWriter, r *http.Request, requireTo
 
 	// Validate input
 	if username == "" || password == "" {
-		http.Redirect(w, r, "/admin/setup?error=Username+and+password+required", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/setup?error=Username+and+password+required", http.StatusSeeOther)
 		return
 	}
 
 	if password != confirmPassword {
-		http.Redirect(w, r, "/admin/setup?error=Passwords+do+not+match", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/setup?error=Passwords+do+not+match", http.StatusSeeOther)
 		return
 	}
 
 	// Password cannot start or end with whitespace
 	if len(password) > 0 && (password[0] == ' ' || password[0] == '\t' || password[len(password)-1] == ' ' || password[len(password)-1] == '\t') {
-		http.Redirect(w, r, "/admin/setup?error=Password+cannot+start+or+end+with+whitespace", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/setup?error=Password+cannot+start+or+end+with+whitespace", http.StatusSeeOther)
 		return
 	}
 
 	if len(password) < 8 {
-		http.Redirect(w, r, "/admin/setup?error=Password+must+be+at+least+8+characters", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/setup?error=Password+must+be+at+least+8+characters", http.StatusSeeOther)
 		return
 	}
 
@@ -2757,7 +2663,7 @@ func (h *Handler) processSetup(w http.ResponseWriter, r *http.Request, requireTo
 	admin, err := h.service.CreateAdmin(ctx, username, email, password, true)
 	if err != nil {
 		log.Printf("[Admin] Failed to create admin: %v", err)
-		http.Redirect(w, r, "/admin/setup?error=Failed+to+create+admin+account", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/setup?error=Failed+to+create+admin+account", http.StatusSeeOther)
 		return
 	}
 
@@ -2767,7 +2673,7 @@ func (h *Handler) processSetup(w http.ResponseWriter, r *http.Request, requireTo
 	session := h.auth.CreateSession(username, GetClientIP(r), r.UserAgent())
 	h.auth.SetSessionCookie(w, session)
 
-	http.Redirect(w, r, "/admin/dashboard", http.StatusSeeOther)
+	http.Redirect(w, r, h.ap()+"/dashboard", http.StatusSeeOther)
 }
 
 // handleAdmins renders the admin management page
@@ -2782,7 +2688,7 @@ func (h *Handler) handleAdmins(w http.ResponseWriter, r *http.Request) {
 	// Get current admin from session
 	session, ok := h.auth.GetSessionFromRequest(r)
 	if !ok {
-		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		http.Redirect(w, r, "/auth/login", http.StatusSeeOther)
 		return
 	}
 
@@ -2832,31 +2738,31 @@ func (h *Handler) handleAdminInvite(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.service == nil {
-		http.Redirect(w, r, "/admin/users/admins?error=Admin+service+not+configured", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/users/admins?error=Admin+service+not+configured", http.StatusSeeOther)
 		return
 	}
 
 	// Get current admin from session
 	session, ok := h.auth.GetSessionFromRequest(r)
 	if !ok {
-		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		http.Redirect(w, r, "/auth/login", http.StatusSeeOther)
 		return
 	}
 
 	currentAdmin, err := h.service.GetAdminByUsername(ctx, session.Username)
 	if err != nil || currentAdmin == nil {
-		http.Redirect(w, r, "/admin/users/admins?error=Admin+not+found", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/users/admins?error=Admin+not+found", http.StatusSeeOther)
 		return
 	}
 
 	// Only primary admin can create invites
 	if !currentAdmin.IsPrimary {
-		http.Redirect(w, r, "/admin/users/admins?error=Only+primary+admin+can+create+invites", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/users/admins?error=Only+primary+admin+can+create+invites", http.StatusSeeOther)
 		return
 	}
 
 	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/admin/users/admins?error=Invalid+form+data", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/users/admins?error=Invalid+form+data", http.StatusSeeOther)
 		return
 	}
 
@@ -2866,7 +2772,7 @@ func (h *Handler) handleAdminInvite(w http.ResponseWriter, r *http.Request) {
 	token, err := h.service.CreateInvite(ctx, currentAdmin.ID, username, 7*24*time.Hour)
 	if err != nil {
 		log.Printf("[Admin] Failed to create invite: %v", err)
-		http.Redirect(w, r, "/admin/users/admins?error=Failed+to+create+invite", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/users/admins?error=Failed+to+create+invite", http.StatusSeeOther)
 		return
 	}
 
@@ -2875,7 +2781,7 @@ func (h *Handler) handleAdminInvite(w http.ResponseWriter, r *http.Request) {
 	// Redirect with the invite URL shown
 	// Per AI.md PART 11 line 11403: Admin invite at /auth/invite/server/{code}
 	inviteURL := fmt.Sprintf("/auth/invite/server/%s", token)
-	http.Redirect(w, r, "/admin/users/admins?success=Invite+created&invite_url="+inviteURL, http.StatusSeeOther)
+	http.Redirect(w, r, h.ap()+"/server/users/admins?success=Invite+created&invite_url="+inviteURL, http.StatusSeeOther)
 }
 
 // handleInviteAccept handles the invite acceptance page
@@ -2978,7 +2884,7 @@ func (h *Handler) processInviteAccept(w http.ResponseWriter, r *http.Request, to
 	session := h.auth.CreateSession(username, GetClientIP(r), r.UserAgent())
 	h.auth.SetSessionCookie(w, session)
 
-	http.Redirect(w, r, "/admin/dashboard", http.StatusSeeOther)
+	http.Redirect(w, r, h.ap()+"/dashboard", http.StatusSeeOther)
 }
 
 // renderInviteError renders the invite error page
@@ -3160,23 +3066,23 @@ func (h *Handler) handleNodesToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.cluster == nil || !h.cluster.IsClusterMode() {
-		http.Redirect(w, r, "/admin/server/nodes?error=Not+in+cluster+mode", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/nodes?error=Not+in+cluster+mode", http.StatusSeeOther)
 		return
 	}
 
 	if !h.cluster.IsPrimary() {
-		http.Redirect(w, r, "/admin/server/nodes?error=Only+primary+node+can+generate+tokens", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/nodes?error=Only+primary+node+can+generate+tokens", http.StatusSeeOther)
 		return
 	}
 
 	token, err := h.cluster.GenerateJoinToken(ctx)
 	if err != nil {
 		log.Printf("[Admin] Failed to generate join token: %v", err)
-		http.Redirect(w, r, "/admin/server/nodes?error=Failed+to+generate+token", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/nodes?error=Failed+to+generate+token", http.StatusSeeOther)
 		return
 	}
 
-	http.Redirect(w, r, "/admin/server/nodes?success=Join+token+generated&token="+token, http.StatusSeeOther)
+	http.Redirect(w, r, h.ap()+"/server/nodes?success=Join+token+generated&token="+token, http.StatusSeeOther)
 }
 
 // handleNodesLeave removes this node from the cluster
@@ -3189,17 +3095,17 @@ func (h *Handler) handleNodesLeave(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.cluster == nil || !h.cluster.IsClusterMode() {
-		http.Redirect(w, r, "/admin/server/nodes?error=Not+in+cluster+mode", http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/nodes?error=Not+in+cluster+mode", http.StatusSeeOther)
 		return
 	}
 
 	if err := h.cluster.LeaveCluster(ctx); err != nil {
 		log.Printf("[Admin] Failed to leave cluster: %v", err)
-		http.Redirect(w, r, "/admin/server/nodes?error=Failed+to+leave+cluster:+"+err.Error(), http.StatusSeeOther)
+		http.Redirect(w, r, h.ap()+"/server/nodes?error=Failed+to+leave+cluster:+"+err.Error(), http.StatusSeeOther)
 		return
 	}
 
-	http.Redirect(w, r, "/admin/server/nodes?success=Left+cluster+successfully", http.StatusSeeOther)
+	http.Redirect(w, r, h.ap()+"/server/nodes?success=Left+cluster+successfully", http.StatusSeeOther)
 }
 
 // ============================================================
