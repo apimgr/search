@@ -16,7 +16,7 @@ import (
 	"github.com/apimgr/search/src/config"
 )
 
-//go:embed template/layouts/*.tmpl template/partials/*.tmpl template/partials/admin/*.tmpl template/partials/public/*.tmpl template/components/*.tmpl template/pages/*.tmpl template/pages/auth/*.tmpl template/pages/user/*.tmpl static/*
+//go:embed template/layout/*.tmpl template/partial/*.tmpl template/partial/admin/*.tmpl template/partial/public/*.tmpl template/component/*.tmpl template/page/*.tmpl template/auth/*.tmpl template/user/*.tmpl static/*
 var EmbeddedFS embed.FS
 
 // TemplateRenderer handles template rendering
@@ -145,24 +145,29 @@ func (tr *TemplateRenderer) loadTemplates() error {
 	defer tr.mu.Unlock()
 
 	// Load layout template
-	layoutContent, err := fs.ReadFile(EmbeddedFS, "template/layouts/base.tmpl")
+	layoutContent, err := fs.ReadFile(EmbeddedFS, "template/layout/base.tmpl")
 	if err != nil {
 		return err
 	}
 
-	// Load all partials (including subdirectories like partials/public/)
+	// Load all partials (including subdirectories like partial/public/)
 	partials := make(map[string]string)
-	tr.loadPartialsRecursive("template/partials", partials)
+	tr.loadPartialsRecursive("template/partial", partials)
 
-	// Load all page templates (including subdirectories like pages/auth/, pages/user/)
-	tr.loadPagesRecursive("template/pages", "", string(layoutContent), partials)
+	// Load page templates from template/page/ (index, healthz, error, etc.)
+	tr.loadPagesRecursive("template/page", "", string(layoutContent), partials)
+
+	// Load auth pages from template/auth/ (per AI.md: auth/ is sibling of page/)
+	tr.loadPagesRecursive("template/auth", "auth", string(layoutContent), partials)
+
+	// Load user pages from template/user/
+	tr.loadPagesRecursive("template/user", "user", string(layoutContent), partials)
 
 	return nil
 }
 
 // loadPartialsRecursive recursively loads partials from a directory
-// baseDir is the root partials directory (e.g., "template/partials")
-// currentDir is the current directory being processed
+// baseDir is the root partials directory (e.g., "template/partial")
 func (tr *TemplateRenderer) loadPartialsRecursive(dir string, partials map[string]string) {
 	tr.loadPartialsRecursiveWithPrefix(dir, "", partials)
 }
@@ -188,7 +193,7 @@ func (tr *TemplateRenderer) loadPartialsRecursiveWithPrefix(dir, prefix string, 
 			if err != nil {
 				continue
 			}
-			// Build partial name with prefix (e.g., "public/header" for partials/public/header.tmpl)
+			// Build partial name with prefix (e.g., "public/header" for partial/public/header.tmpl)
 			baseName := strings.TrimSuffix(entry.Name(), ".tmpl")
 			name := baseName
 			if prefix != "" {

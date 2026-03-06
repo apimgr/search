@@ -1,0 +1,264 @@
+/* ==============================================================================
+ * MODAL COMPONENT STYLES
+ * Per AI.md PART 16: NO inline CSS - all styles in external main.css
+ * ============================================================================== */
+
+/* Modal base styles using HTML dialog element - mobile-first */
+dialog.modal {
+    border: none;
+    border-radius: 0.5rem;
+    padding: 0;
+    max-width: 95vw;
+    margin: 1rem;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+/* Tablet+ modal enhancement */
+@media (min-width: 769px) {
+    dialog.modal {
+        max-width: 500px;
+        margin: auto;
+    }
+}
+
+dialog.modal::backdrop {
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(3px);
+}
+
+dialog.modal .modal-content {
+    display: flex;
+    flex-direction: column;
+}
+
+dialog.modal .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+dialog.modal .modal-title {
+    margin: 0;
+    font-size: 1.25rem;
+}
+
+dialog.modal .modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    width: 2rem;
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.25rem;
+    color: var(--text-muted);
+}
+
+dialog.modal .modal-close:hover {
+    background: rgba(0, 0, 0, 0.1);
+    color: var(--text-primary);
+}
+
+dialog.modal .modal-body {
+    padding: 1.5rem;
+}
+
+dialog.modal .modal-body p {
+    margin: 0 0 1rem 0;
+}
+
+dialog.modal .modal-body input {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.25rem;
+    font-size: 1rem;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+dialog.modal .modal-body input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px rgba(189, 147, 249, 0.15);
+}
+
+dialog.modal .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--border-color);
+}
+
+/* Modal responsive - mobile-first, see base dialog.modal styles above */
+
+/* ==============================================================================
+ * ANNOUNCEMENTS STYLES
+ * Per AI.md PART 16: NO inline CSS - all styles in external main.css
+ * ============================================================================== */
+
+.announcements-container {
+    position: relative;
+    z-index: 100;
+}
+
+.announcement {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+}
+
+.announcement-info {
+    background: rgba(139, 233, 253, 0.1);
+    border-bottom: 1px solid rgba(139, 233, 253, 0.2);
+    color: var(--accent-info);
+}
+
+.announcement-warning {
+    background: rgba(255, 184, 108, 0.1);
+    border-bottom: 1px solid rgba(255, 184, 108, 0.2);
+    color: var(--accent-warning);
+}
+
+.announcement-error {
+    background: rgba(255, 85, 85, 0.1);
+    border-bottom: 1px solid rgba(255, 85, 85, 0.2);
+    color: var(--accent-error);
+}
+
+.announcement-success {
+    background: rgba(80, 250, 123, 0.1);
+    border-bottom: 1px solid rgba(80, 250, 123, 0.2);
+    color: var(--accent-success);
+}
+
+.announcement-content {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.announcement-title {
+    font-weight: 600;
+}
+
+.announcement-dismiss {
+    background: none;
+    border: none;
+    font-size: 1.25rem;
+    cursor: pointer;
+    padding: 0.25rem;
+    line-height: 1;
+    color: inherit;
+    opacity: 0.7;
+}
+
+.announcement-dismiss:hover {
+    opacity: 1;
+}
+
+/* ==============================================================================
+ * COOKIE CONSENT STYLES
+ * Per AI.md PART 16: NO inline CSS - all styles in external main.css
+ * ============================================================================== */
+
+.cookie-consent {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-color);
+    padding: 1rem;
+    z-index: 1000;
+    display: none;
+}
+
+.cookie-consent.visible {
+    display: flex;
+}
+
+.cookie-consent-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    text-align: center;
+    gap: 1rem;
+}
+
+/* Tablet+ cookie consent content enhancement */
+@media (min-width: 769px) {
+    .cookie-consent-content {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        text-align: left;
+        flex-wrap: wrap;
+    }
+}
+
+.cookie-consent-message {
+    margin: 0;
+    flex: 1;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.cookie-consent-link {
+    color: var(--accent-primary);
+    text-decoration: underline;
+}
+
+.cookie-consent-actions {
+    display: flex;
+    gap: 0.5rem;
+    width: 100%;
+    justify-content: center;
+}
+
+/* Tablet+ cookie consent actions enhancement */
+@media (min-width: 769px) {
+    .cookie-consent-actions {
+        width: auto;
+        justify-content: flex-end;
+    }
+}
+
+.cookie-consent-accept,
+.cookie-consent-decline {
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    cursor: pointer;
+    border: none;
+}
+
+.cookie-consent-accept {
+    background: var(--accent-primary);
+    color: var(--bg-primary);
+}
+
+.cookie-consent-decline {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.cookie-consent-accept:hover,
+.cookie-consent-decline:hover {
+    opacity: 0.9;
+}
+
+/* Cookie consent responsive - mobile-first, see individual element media queries above */

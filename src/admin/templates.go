@@ -39,7 +39,8 @@ func (h *Handler) renderAdminPageInner(w io.Writer, page string, data *AdminPage
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
     <title>%s - Admin - %s</title>
-    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/common.css">
+    <link rel="stylesheet" href="/static/css/components.css">
     <link rel="stylesheet" href="/static/css/admin.css">
 </head>
 <body>

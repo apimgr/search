@@ -1,150 +1,3 @@
-/* Search - Privacy-Respecting Metasearch Engine
- * Main stylesheet with Dracula theme (dark) and light theme
- * Mobile-first responsive design
- */
-
-/* CSS Variables - Dracula Theme (Dark) - Default */
-/* Per AI.md PART 16: Apply theme class to <html> element: theme-light, theme-dark */
-:root,
-html.theme-dark {
-    /* Spacing scale (8px base) - per AI.md PART 16 */
-    --space-1: 0.25rem;  /* 4px */
-    --space-2: 0.5rem;   /* 8px */
-    --space-3: 0.75rem;  /* 12px */
-    --space-4: 1rem;     /* 16px */
-    --space-5: 1.5rem;   /* 24px */
-    --space-6: 2rem;     /* 32px */
-    --space-8: 3rem;     /* 48px */
-
-    /* Touch target minimum - per AI.md PART 16 (44px) */
-    --touch-target: 44px;
-
-    /* Dracula palette colors */
-    --cyan: #8be9fd;
-    --green: #50fa7b;
-    --orange: #ffb86c;
-    --pink: #ff79c6;
-    --purple: #bd93f9;
-    --red: #ff5555;
-    --yellow: #f1fa8c;
-
-    /* Theme colors */
-    --bg-primary: #282a36;
-    --bg-secondary: #44475a;
-    --bg-tertiary: #1e1f29;
-    --text-primary: #f8f8f2;
-    --text-secondary: #6272a4;
-    --text-muted: #6272a4;
-    --accent-primary: #bd93f9;
-    --accent-secondary: #ff79c6;
-    --accent-success: #50fa7b;
-    --accent-warning: #ffb86c;
-    --accent-error: #ff5555;
-    --accent-error-hover: #ff3333;
-    --accent-info: #8be9fd;
-    --border-color: #44475a;
-    --shadow-color: rgba(0, 0, 0, 0.3);
-    --input-bg: #44475a;
-    --input-border: #6272a4;
-    --input-focus: #bd93f9;
-    --link-color: #8be9fd;
-    --link-hover: #bd93f9;
-
-    /* Contrast colors for icons on colored backgrounds */
-    --icon-on-dark: #282a36;
-    --icon-on-light: #f8f8f2;
-}
-
-/* Light Theme */
-/* Per AI.md PART 16: Apply theme class to <html> element */
-html.theme-light {
-    /* Light theme palette colors */
-    --cyan: #0284c7;
-    --green: #059669;
-    --orange: #d97706;
-    --pink: #db2777;
-    --purple: #7c3aed;
-    --red: #dc2626;
-    --yellow: #ca8a04;
-
-    /* Theme colors */
-    --bg-primary: #f8f8f2;
-    --bg-secondary: #ffffff;
-    --bg-tertiary: #e8e8e8;
-    --text-primary: #282a36;
-    --text-secondary: #44475a;
-    --text-muted: #6272a4;
-    --accent-primary: #7c3aed;
-    --accent-secondary: #db2777;
-    --accent-success: #059669;
-    --accent-warning: #d97706;
-    --accent-error: #dc2626;
-    --accent-error-hover: #b91c1c;
-    --accent-info: #0284c7;
-    --border-color: #e5e7eb;
-    --shadow-color: rgba(0, 0, 0, 0.1);
-    --input-bg: #ffffff;
-    --input-border: #d1d5db;
-    --input-focus: #7c3aed;
-    --link-color: #0284c7;
-    --link-hover: #7c3aed;
-
-    /* Contrast colors for icons on colored backgrounds */
-    --icon-on-dark: #f8f8f2;
-    --icon-on-light: #282a36;
-}
-
-/* Reset */
-*, *::before, *::after {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-}
-
-/* Responsive Container (per AI.md PART 17)
- * >=720px: 90% width with 5% margins
- * <720px: 98% width with 1% margins
- */
-.container {
-    width: 98%;
-    margin: 0 auto;
-    max-width: 1400px;
-}
-
-/* Tablet+ (>=768px) */
-@media (min-width: 768px) {
-    .container {
-        width: 90%;
-    }
-}
-
-/* Base */
-html {
-    font-size: 16px;
-    scroll-behavior: smooth;
-}
-
-body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    background-color: var(--bg-primary);
-    color: var(--text-primary);
-    line-height: 1.6;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-}
-
-a {
-    color: var(--link-color);
-    text-decoration: none;
-    transition: color 0.2s ease;
-}
-
-a:hover {
-    color: var(--link-hover);
-    text-decoration: underline;
-}
-
 /* Header - per AI.md PART 16: NO position: sticky/fixed on header/nav/footer */
 .header {
     background-color: var(--bg-primary);
@@ -290,13 +143,14 @@ a:hover {
 
 .header-search-input {
     flex: 1;
-    padding: 0.5rem 1rem;
+    min-width: 0;
+    padding: 0.4rem 0.5rem;
     background-color: var(--input-bg);
     border: 1px solid var(--input-border);
     border-right: none;
     border-radius: 20px 0 0 20px;
     color: var(--text-primary);
-    font-size: 0.9rem;
+    font-size: 0.85rem;
 }
 
 .header-search-input:focus {
@@ -305,7 +159,8 @@ a:hover {
 }
 
 .header-search-btn {
-    padding: 0.5rem 1rem;
+    padding: 0.4rem 0.6rem;
+    min-height: 44px;
     background-color: var(--accent-primary);
     border: 1px solid var(--accent-primary);
     border-radius: 0 20px 20px 0;
@@ -314,6 +169,7 @@ a:hover {
     display: flex;
     align-items: center;
     transition: background-color 0.2s ease;
+    flex-shrink: 0;
 }
 
 .header-search-btn:hover {
@@ -341,10 +197,10 @@ a:hover {
 
 /* Header nav - desktop navigation (hidden on mobile, shown on tablet+) */
 .header-nav {
-    display: none;
+    display: flex;
     align-items: center;
     flex: 1;
-    margin: 0 1rem;
+    margin: 0 0.5rem;
 }
 
 /* Header search form - fills available space */
@@ -368,13 +224,22 @@ a:hover {
     display: flex;
     align-items: center;
     gap: 0.25rem;
-    margin-left: auto;
+    flex-shrink: 0;
 }
 
-/* Tablet+ (768px): show desktop nav + actions, hide mobile hamburger */
+/* Tablet+ (768px): hide mobile hamburger, show desktop actions, expand search */
 @media (min-width: 768px) {
     .header-nav {
-        display: flex;
+        margin: 0 1rem;
+    }
+
+    .header-search-input {
+        padding: 0.5rem 1rem;
+        font-size: 0.9rem;
+    }
+
+    .header-search-btn {
+        padding: 0.5rem 1rem;
     }
 
     .header-mobile {
@@ -566,6 +431,41 @@ html.theme-light .theme-icon-dark {
 .nav-close:hover {
     background-color: var(--bg-tertiary);
     color: var(--text-primary);
+}
+
+.nav-panel-search {
+    display: flex;
+    align-items: stretch;
+    margin: 0.75rem 1rem;
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.nav-panel-search-input {
+    flex: 1;
+    min-width: 0;
+    padding: 0.6rem 0.75rem;
+    background-color: var(--input-bg);
+    border: none;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+
+.nav-panel-search-input:focus {
+    outline: none;
+}
+
+.nav-panel-search-btn {
+    padding: 0.6rem 0.75rem;
+    min-height: 44px;
+    background-color: var(--accent-primary);
+    border: none;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
 }
 
 .nav-panel-link {
@@ -8023,267 +7923,3 @@ html.theme-light .theme-label-light { display: inline; }
 
 /* User page responsive - mobile-first, see individual element media queries above */
 
-/* ==============================================================================
- * MODAL COMPONENT STYLES
- * Per AI.md PART 16: NO inline CSS - all styles in external main.css
- * ============================================================================== */
-
-/* Modal base styles using HTML dialog element - mobile-first */
-dialog.modal {
-    border: none;
-    border-radius: 0.5rem;
-    padding: 0;
-    max-width: 95vw;
-    margin: 1rem;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-}
-
-/* Tablet+ modal enhancement */
-@media (min-width: 769px) {
-    dialog.modal {
-        max-width: 500px;
-        margin: auto;
-    }
-}
-
-dialog.modal::backdrop {
-    background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(3px);
-}
-
-dialog.modal .modal-content {
-    display: flex;
-    flex-direction: column;
-}
-
-dialog.modal .modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1rem 1.5rem;
-    border-bottom: 1px solid var(--border-color);
-}
-
-dialog.modal .modal-title {
-    margin: 0;
-    font-size: 1.25rem;
-}
-
-dialog.modal .modal-close {
-    background: none;
-    border: none;
-    font-size: 1.5rem;
-    cursor: pointer;
-    padding: 0;
-    width: 2rem;
-    height: 2rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 0.25rem;
-    color: var(--text-muted);
-}
-
-dialog.modal .modal-close:hover {
-    background: rgba(0, 0, 0, 0.1);
-    color: var(--text-primary);
-}
-
-dialog.modal .modal-body {
-    padding: 1.5rem;
-}
-
-dialog.modal .modal-body p {
-    margin: 0 0 1rem 0;
-}
-
-dialog.modal .modal-body input {
-    width: 100%;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid var(--border-color);
-    border-radius: 0.25rem;
-    font-size: 1rem;
-    background: var(--bg-primary);
-    color: var(--text-primary);
-}
-
-dialog.modal .modal-body input:focus {
-    outline: none;
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 0 3px rgba(189, 147, 249, 0.15);
-}
-
-dialog.modal .modal-footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.5rem;
-    padding: 1rem 1.5rem;
-    border-top: 1px solid var(--border-color);
-}
-
-/* Modal responsive - mobile-first, see base dialog.modal styles above */
-
-/* ==============================================================================
- * ANNOUNCEMENTS STYLES
- * Per AI.md PART 16: NO inline CSS - all styles in external main.css
- * ============================================================================== */
-
-.announcements-container {
-    position: relative;
-    z-index: 100;
-}
-
-.announcement {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.75rem 1rem;
-    font-size: 0.9rem;
-}
-
-.announcement-info {
-    background: rgba(139, 233, 253, 0.1);
-    border-bottom: 1px solid rgba(139, 233, 253, 0.2);
-    color: var(--accent-info);
-}
-
-.announcement-warning {
-    background: rgba(255, 184, 108, 0.1);
-    border-bottom: 1px solid rgba(255, 184, 108, 0.2);
-    color: var(--accent-warning);
-}
-
-.announcement-error {
-    background: rgba(255, 85, 85, 0.1);
-    border-bottom: 1px solid rgba(255, 85, 85, 0.2);
-    color: var(--accent-error);
-}
-
-.announcement-success {
-    background: rgba(80, 250, 123, 0.1);
-    border-bottom: 1px solid rgba(80, 250, 123, 0.2);
-    color: var(--accent-success);
-}
-
-.announcement-content {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-}
-
-.announcement-title {
-    font-weight: 600;
-}
-
-.announcement-dismiss {
-    background: none;
-    border: none;
-    font-size: 1.25rem;
-    cursor: pointer;
-    padding: 0.25rem;
-    line-height: 1;
-    color: inherit;
-    opacity: 0.7;
-}
-
-.announcement-dismiss:hover {
-    opacity: 1;
-}
-
-/* ==============================================================================
- * COOKIE CONSENT STYLES
- * Per AI.md PART 16: NO inline CSS - all styles in external main.css
- * ============================================================================== */
-
-.cookie-consent {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: var(--bg-secondary);
-    border-top: 1px solid var(--border-color);
-    padding: 1rem;
-    z-index: 1000;
-    display: none;
-}
-
-.cookie-consent.visible {
-    display: flex;
-}
-
-.cookie-consent-content {
-    max-width: 1200px;
-    margin: 0 auto;
-    display: flex;
-    flex-direction: column;
-    text-align: center;
-    gap: 1rem;
-}
-
-/* Tablet+ cookie consent content enhancement */
-@media (min-width: 769px) {
-    .cookie-consent-content {
-        flex-direction: row;
-        align-items: center;
-        justify-content: space-between;
-        text-align: left;
-        flex-wrap: wrap;
-    }
-}
-
-.cookie-consent-message {
-    margin: 0;
-    flex: 1;
-    font-size: 0.9rem;
-    color: var(--text-secondary);
-}
-
-.cookie-consent-link {
-    color: var(--accent-primary);
-    text-decoration: underline;
-}
-
-.cookie-consent-actions {
-    display: flex;
-    gap: 0.5rem;
-    width: 100%;
-    justify-content: center;
-}
-
-/* Tablet+ cookie consent actions enhancement */
-@media (min-width: 769px) {
-    .cookie-consent-actions {
-        width: auto;
-        justify-content: flex-end;
-    }
-}
-
-.cookie-consent-accept,
-.cookie-consent-decline {
-    padding: 0.5rem 1rem;
-    border-radius: 4px;
-    font-size: 0.875rem;
-    cursor: pointer;
-    border: none;
-}
-
-.cookie-consent-accept {
-    background: var(--accent-primary);
-    color: var(--bg-primary);
-}
-
-.cookie-consent-decline {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
-}
-
-.cookie-consent-accept:hover,
-.cookie-consent-decline:hover {
-    opacity: 0.9;
-}
-
-/* Cookie consent responsive - mobile-first, see individual element media queries above */

@@ -31,6 +31,9 @@
 <meta name="theme-color" content="#282a36">
 <link rel="apple-touch-icon" href="/static/img/icon-192.png">
 
-<link rel="stylesheet" href="/static/css/main.css">
+{{/* Per AI.md: Load order: common → components → public/admin */}}
+<link rel="stylesheet" href="/static/css/common.css">
+<link rel="stylesheet" href="/static/css/components.css">
+<link rel="stylesheet" href="/static/css/public.css">
 {{/* Per AI.md PART 16: All JS code is consolidated in app.js, loaded via scripts.tmpl */}}
 {{end}}

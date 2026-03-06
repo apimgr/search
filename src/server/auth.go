@@ -407,7 +407,7 @@ func (s *Server) processForgot(w http.ResponseWriter, r *http.Request) {
 				baseURL := fmt.Sprintf("%s://%s:%d", scheme, host, s.config.Server.Port)
 
 				// Send password reset email with token
-				resetURL := fmt.Sprintf("%s/auth/reset?token=%s", baseURL, token)
+				resetURL := fmt.Sprintf("%s/auth/password/reset?token=%s", baseURL, token)
 				msg := emailpkg.NewMessage([]string{user.Email}, "Password Reset Request",
 					fmt.Sprintf("Click the following link to reset your password:\n\n%s\n\nThis link expires in 1 hour.\n\nIf you didn't request this, please ignore this email.", resetURL))
 				_ = s.mailer.Send(msg) // Silent failure - don't expose whether email was sent
@@ -641,4 +641,107 @@ func getClientIPSimple(r *http.Request) string {
 		ip = ip[:colonIdx]
 	}
 	return ip
+}
+
+// handleReset renders the password reset form and processes new password submission.
+// Per AI.md PART 11: route is /auth/password/reset GET/POST, token passed as query param.
+func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
+if !s.config.Server.Users.Enabled{
+http.Redirect(w, r, "/", http.StatusSeeOther)
+return
+}
+if s.verificationManager == nil {
+s.handleError(w, r, http.StatusServiceUnavailable, "Not Available", "Password reset is not configured.")
+return
+}
+
+switch r.Method {
+case http.MethodGet:
+token := r.URL.Query().Get("token")
+if token == "" {
+// Accept /auth/password/reset/{token} path param too
+token = strings.TrimPrefix(r.URL.Path, "/auth/password/reset/")
+}
+if token != "" {
+if _, err := s.verificationManager.ValidatePasswordReset(r.Context(), token); err != nil {
+s.renderResetPage(w, r, "", "Invalid or expired reset link. Please request a new one.", "", true)
+return
+}
+}
+s.renderResetPage(w, r, token, "", "", false)
+case http.MethodPost:
+s.processReset(w, r)
+default:
+http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+}
+}
+
+func (s *Server) renderResetPage(w http.ResponseWriter, r *http.Request, token, errorMsg, successMsg string, hideForm bool) {
+type ResetPageData struct {
+PageData
+Token   string
+Error   string
+Success string
+}
+data := &ResetPageData{
+PageData: PageData{
+Title:       "Reset Password",
+Description: "Set a new password for your account",
+Page:        "auth/reset",
+Theme:       "dark",
+Config:      s.config,
+CSRFToken:   s.getCSRFToken(r),
+},
+Token:   token,
+Error:   errorMsg,
+Success: successMsg,
+}
+if hideForm {
+data.Token = ""
+}
+if err := s.renderer.Render(w, "auth/reset", data); err != nil {
+s.handleInternalError(w, r, "template render", err)
+}
+}
+
+func (s *Server) processReset(w http.ResponseWriter, r *http.Request) {
+if err := r.ParseForm(); err != nil {
+s.renderResetPage(w, r, "", "Invalid form data", "", false)
+return
+}
+if !s.csrf.ValidateToken(r){
+s.renderResetPage(w, r, "", "Invalid request. Please try again.", "", false)
+return
+}
+
+token := r.FormValue("token")
+password := r.FormValue("password")
+confirm := r.FormValue("password_confirm")
+
+if token == "" {
+s.renderResetPage(w, r, "", "Missing reset token.", "", true)
+return
+}
+if password == "" || confirm == "" {
+s.renderResetPage(w, r, token, "Password is required.", "", false)
+return
+}
+if password != confirm {
+s.renderResetPage(w, r, token, "Passwords do not match.", "", false)
+return
+}
+
+// Consume the token (validates + deletes it)
+resetUser, err := s.verificationManager.ConsumePasswordReset(r.Context(), token)
+if err != nil {
+s.renderResetPage(w, r, "", "Invalid or expired reset link. Please request a new one.", "", true)
+return
+}
+
+if err := s.userAuthManager.UpdatePassword(r.Context(), resetUser.ID, password, s.config.Server.Users.Auth.PasswordMinLength); err != nil {
+s.renderResetPage(w, r, token, "Password must be at least 8 characters and cannot start or end with whitespace.", "", false)
+return
+}
+
+s.renderResetPage(w, r, "", "", "Password reset successfully.", false)
 }

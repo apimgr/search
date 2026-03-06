@@ -1,0 +1,60 @@
+{{define "content"}}
+<div class="auth-page reset-page">
+    <div class="auth-container">
+        <div class="auth-header">
+            <h1>Reset Password</h1>
+            <p class="auth-subtitle">Enter your new password below</p>
+        </div>
+
+        {{if .Error}}
+        <div class="alert alert-error" role="alert">
+            {{.Error}}
+        </div>
+        {{end}}
+
+        {{if .Success}}
+        <div class="alert alert-success" role="alert">
+            Your password has been reset successfully.
+        </div>
+        <div class="auth-footer">
+            <a href="/auth/login" class="btn btn-primary btn-block">Sign In</a>
+        </div>
+        {{else if eq .Token ""}}
+        <div class="alert alert-error" role="alert">
+            Invalid or missing reset token. Please request a new password reset link.
+        </div>
+        <div class="auth-footer">
+            <a href="/auth/password/forgot" class="btn btn-secondary btn-block">Request New Link</a>
+        </div>
+        {{else}}
+        <form method="POST" action="/auth/password/reset" class="auth-form" id="reset-form">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <input type="hidden" name="token" value="{{.Token}}">
+
+            <div class="form-group">
+                <label for="password">New Password</label>
+                <input type="password" id="password" name="password"
+                       autocomplete="new-password" required autofocus
+                       placeholder="At least 8 characters" minlength="8">
+            </div>
+
+            <div class="form-group">
+                <label for="password_confirm">Confirm New Password</label>
+                <input type="password" id="password_confirm" name="password_confirm"
+                       autocomplete="new-password" required
+                       placeholder="Repeat your new password">
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block">
+                Reset Password
+            </button>
+        </form>
+
+        <div class="auth-footer">
+            <a href="/auth/login">Back to Sign In</a>
+        </div>
+        {{end}}
+    </div>
+</div>
+{{/* Per AI.md PART 16: NO inline CSS/JS - all styles in main.css */}}
+{{end}}

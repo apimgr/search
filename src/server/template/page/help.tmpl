@@ -201,24 +201,8 @@
             <h3>Encoding & Conversion</h3>
             <div class="operator-grid">
                 <div class="operator-item">
-                    <code>base64:hello</code>
-                    <span>Base64 encode/decode</span>
-                </div>
-                <div class="operator-item">
-                    <code>url:hello world</code>
-                    <span>URL encode/decode</span>
-                </div>
-                <div class="operator-item">
-                    <code>hash:hello</code>
-                    <span>Hash (MD5, SHA1, SHA256, SHA512)</span>
-                </div>
-                <div class="operator-item">
                     <code>qr:https://example.com</code>
                     <span>Generate QR code</span>
-                </div>
-                <div class="operator-item">
-                    <code>uuid:</code>
-                    <span>Generate UUID v4</span>
                 </div>
                 <div class="operator-item">
                     <code>jwt:token</code>
@@ -243,10 +227,6 @@
                 <div class="operator-item">
                     <code>emoji:smile</code>
                     <span>Emoji search</span>
-                </div>
-                <div class="operator-item">
-                    <code>color:#ff5500</code>
-                    <span>Color info &amp; conversion</span>
                 </div>
             </div>
 
@@ -325,6 +305,86 @@
                     <span>Port number info</span>
                 </div>
             </div>
+
+            <h3>Content & Knowledge</h3>
+            <div class="operator-grid">
+                <div class="operator-item">
+                    <code>wiki:python</code>
+                    <span>Wikipedia article summary</span>
+                </div>
+                <div class="operator-item">
+                    <code>dict:ephemeral</code>
+                    <span>Dictionary definition</span>
+                </div>
+                <div class="operator-item">
+                    <code>thesaurus:happy</code>
+                    <span>Synonyms and antonyms</span>
+                </div>
+                <div class="operator-item">
+                    <code>slang:yolo</code>
+                    <span>Slang / internet slang definition</span>
+                </div>
+                <div class="operator-item">
+                    <code>country:DE</code>
+                    <span>Country information (ISO code or name)</span>
+                </div>
+                <div class="operator-item">
+                    <code>license:MIT</code>
+                    <span>Open-source license summary</span>
+                </div>
+            </div>
+
+            <h3>Text Tools</h3>
+            <div class="operator-grid">
+                <div class="operator-item">
+                    <code>lorem:3</code>
+                    <span>Lorem ipsum placeholder text (N paragraphs)</span>
+                </div>
+                <div class="operator-item">
+                    <code>word:random</code>
+                    <span>Random word / word info</span>
+                </div>
+                <div class="operator-item">
+                    <code>diff:text1|text2</code>
+                    <span>Text diff comparison</span>
+                </div>
+                <div class="operator-item">
+                    <code>useragent:</code>
+                    <span>Your browser's User-Agent string</span>
+                </div>
+                <div class="operator-item">
+                    <code>mime:application/json</code>
+                    <span>MIME type lookup</span>
+                </div>
+            </div>
+
+            <h3>File Directories</h3>
+            <div class="operator-grid">
+                <div class="operator-item">
+                    <code>directory:linux iso</code>
+                    <span>Search open directory listings</span>
+                </div>
+                <div class="operator-item">
+                    <code>directory:pdf book</code>
+                    <span>Find document directories</span>
+                </div>
+                <div class="operator-item">
+                    <code>directory:mp3 album</code>
+                    <span>Find music directories</span>
+                </div>
+            </div>
+
+            <h3>Cache & Archive</h3>
+            <div class="operator-grid">
+                <div class="operator-item">
+                    <code>cache:example.com</code>
+                    <span>Cached version of a page</span>
+                </div>
+                <div class="operator-item">
+                    <code>rules:robots</code>
+                    <span>Built-in rules and references</span>
+                </div>
+            </div>
         </section>
 
         {{/* Search Operators */}}
@@ -342,14 +402,34 @@
                         <td>Search for exact phrase</td>
                     </tr>
                     <tr>
-                        <td><code>-</code></td>
+                        <td><code>-word</code></td>
                         <td><code>apple -fruit</code></td>
                         <td>Exclude word from results</td>
+                    </tr>
+                    <tr>
+                        <td><code>*</code></td>
+                        <td><code>best * for python</code></td>
+                        <td>Wildcard — matches any word</td>
+                    </tr>
+                    <tr>
+                        <td><code>OR</code></td>
+                        <td><code>cat OR dog</code></td>
+                        <td>Either term</td>
+                    </tr>
+                    <tr>
+                        <td><code>AND</code></td>
+                        <td><code>privacy AND security</code></td>
+                        <td>Both terms required</td>
                     </tr>
                     <tr>
                         <td><code>site:</code></td>
                         <td><code>site:example.com query</code></td>
                         <td>Search within a specific site</td>
+                    </tr>
+                    <tr>
+                        <td><code>-site:</code></td>
+                        <td><code>-site:spam.com query</code></td>
+                        <td>Exclude a site from results</td>
                     </tr>
                     <tr>
                         <td><code>filetype:</code></td>
@@ -366,9 +446,38 @@
                         <td><code>inurl:blog</code></td>
                         <td>Find word in URL</td>
                     </tr>
+                    <tr>
+                        <td><code>intext:</code></td>
+                        <td><code>intext:privacy policy</code></td>
+                        <td>Find word in page body text</td>
+                    </tr>
+                    <tr>
+                        <td><code>define:</code></td>
+                        <td><code>define:ephemeral</code></td>
+                        <td>Dictionary definition</td>
+                    </tr>
+                    <tr>
+                        <td><code>before:</code></td>
+                        <td><code>before:2023-01-01 python</code></td>
+                        <td>Results before a date</td>
+                    </tr>
+                    <tr>
+                        <td><code>after:</code></td>
+                        <td><code>after:2024-01-01 python</code></td>
+                        <td>Results after a date</td>
+                    </tr>
+                    <tr>
+                        <td><code>lang:</code></td>
+                        <td><code>lang:en linux</code></td>
+                        <td>Filter by language</td>
+                    </tr>
+                    <tr>
+                        <td><code>related:</code></td>
+                        <td><code>related:github.com</code></td>
+                        <td>Sites similar to a given URL</td>
+                    </tr>
                 </tbody>
             </table>
-        </section>
 
         {{/* Keyboard Shortcuts */}}
         <section id="keyboard-shortcuts" class="help-section">

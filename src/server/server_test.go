@@ -975,7 +975,7 @@ func TestNormalizePath(t *testing.T) {
 		{"/api/v1/search", "/api/v1/search"},
 		{"/api/v1/users/123", "/api/v1/users/:id"},
 		{"/api/v1/items/123e4567-e89b-12d3-a456-426614174000", "/api/v1/items/:id"},
-		{"/static/css/main.css", "/static/css/main.css"},
+		{"/static/css/common.css", "/static/css/common.css"},
 	}
 
 	for _, tt := range tests {

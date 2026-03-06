@@ -20,7 +20,7 @@
             <a href="/auth/login" class="btn btn-secondary btn-block">{{t "auth.forgot.back"}}</a>
         </div>
         {{else}}
-        <form method="POST" action="/auth/forgot" class="auth-form" id="forgot-form">
+        <form method="POST" action="/auth/password/forgot" class="auth-form" id="forgot-form">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 
             <div class="form-group">

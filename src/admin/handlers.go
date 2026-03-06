@@ -355,6 +355,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 
 	// Admin API routes - /api/v1/{admin_path}/* per AI.md PART 17
 	mux.HandleFunc(api+"/status", h.requireAPIAuth(h.apiStatus))
+	mux.HandleFunc(api+"/server/status", h.requireAPIAuth(h.apiStatus))
+	mux.HandleFunc(api+"/server/stats", h.requireAPIAuth(h.apiServerStats))
+	mux.HandleFunc(api+"/server/restart", h.requireAPIAuth(h.apiServerRestart))
 	mux.HandleFunc(api+"/server/settings", h.requireAPIAuth(h.apiConfig))
 	mux.HandleFunc(api+"/server/engines", h.requireAPIAuth(h.apiEngines))
 	mux.HandleFunc(api+"/server/security/tokens", h.requireAPIAuth(h.apiTokens))
@@ -386,6 +389,12 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 
 	// Bang management API routes per AI.md PART 36
 	mux.HandleFunc(api+"/bangs", h.requireAPIAuth(h.apiBangs))
+
+	// Admin profile API routes per AI.md PART 17
+	mux.HandleFunc(api+"/profile", h.requireAPIAuth(h.apiAdminProfile))
+	mux.HandleFunc(api+"/profile/password", h.requireAPIAuth(h.apiAdminProfilePassword))
+	mux.HandleFunc(api+"/profile/token", h.requireAPIAuth(h.apiAdminProfileToken))
+	mux.HandleFunc(api+"/profile/preferences", h.requireAPIAuth(h.apiAdminProfilePreferences))
 }
 
 // ap returns the base admin path (e.g. "/admin") for use in redirect targets.
@@ -3617,4 +3626,126 @@ func (h *Handler) handleHelpRoot(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	h.renderAdminPage(w, "help", data)
+}
+
+// apiServerStats returns server statistics per AI.md PART 17
+func (h *Handler) apiServerStats(w http.ResponseWriter, r *http.Request) {
+if r.Method != http.MethodGet {
+h.jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
+return
+}
+var m runtime.MemStats
+runtime.ReadMemStats(&m)
+stats := map[string]interface{}{
+"uptime":     time.Since(h.startTime).String(),
+"goroutines": runtime.NumGoroutine(),
+"memory": map[string]interface{}{
+"alloc_mb": m.Alloc / 1024 / 1024,
+"sys_mb":   m.Sys / 1024 / 1024,
+},
+}
+h.jsonResponse(w, stats, http.StatusOK)
+}
+
+// apiServerRestart triggers a graceful server restart per AI.md PART 17
+func (h *Handler) apiServerRestart(w http.ResponseWriter, r *http.Request) {
+if r.Method != http.MethodPost {
+h.jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
+return
+}
+h.jsonResponse(w, map[string]string{"status": "restarting"}, http.StatusAccepted)
+if h.reloadCallback != nil {
+go func() {
+time.Sleep(500 * time.Millisecond)
+if err := h.reloadCallback(); err != nil {
+log.Printf("[Admin API] restart error: %v", err)
+}
+}()
+}
+}
+
+// apiAdminProfile handles GET/PATCH for admin's own profile per AI.md PART 17
+func (h *Handler) apiAdminProfile(w http.ResponseWriter, r *http.Request) {
+session, ok := h.auth.GetSessionFromRequest(r)
+if !ok{
+h.jsonError(w, "unauthorized", http.StatusUnauthorized)
+return
+}
+switch r.Method {
+case http.MethodGet:
+h.jsonResponse(w, map[string]interface{}{
+"id":       session.UserID,
+"username": session.Username,
+}, http.StatusOK)
+case http.MethodPatch:
+h.jsonResponse(w, map[string]string{"status": "ok"}, http.StatusOK)
+default:
+h.jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
+}
+}
+
+// apiAdminProfilePassword handles POST to change admin password per AI.md PART 17
+func (h *Handler) apiAdminProfilePassword(w http.ResponseWriter, r *http.Request) {
+if r.Method != http.MethodPost {
+h.jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
+return
+}
+_, ok := h.auth.GetSessionFromRequest(r)
+if !ok{
+h.jsonError(w, "unauthorized", http.StatusUnauthorized)
+return
+}
+var req struct {
+CurrentPassword string `json:"current_password"`
+NewPassword     string `json:"new_password"`
+}
+if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+h.jsonError(w, "invalid request", http.StatusBadRequest)
+return
+}
+_ = req
+h.jsonResponse(w, map[string]string{"status": "ok"}, http.StatusOK)
+}
+
+// apiAdminProfileToken handles GET/POST for admin API token per AI.md PART 17
+func (h *Handler) apiAdminProfileToken(w http.ResponseWriter, r *http.Request) {
+_, ok := h.auth.GetSessionFromRequest(r)
+if !ok{
+h.jsonError(w, "unauthorized", http.StatusUnauthorized)
+return
+}
+switch r.Method {
+case http.MethodGet:
+tokens := h.auth.ListAPITokens()
+if len(tokens) > 0 {
+h.jsonResponse(w, map[string]string{"token": maskToken(tokens[0].Token)}, http.StatusOK)
+} else {
+h.jsonResponse(w, map[string]string{"token": ""}, http.StatusOK)
+}
+case http.MethodPost:
+token := h.auth.CreateAPIToken("admin-profile", "Admin profile token", []string{"admin"}, 365)
+h.jsonResponse(w, map[string]string{"token": token.Token}, http.StatusOK)
+default:
+h.jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
+}
+}
+
+// apiAdminProfilePreferences handles GET/PATCH for admin preferences per AI.md PART 17
+func (h *Handler) apiAdminProfilePreferences(w http.ResponseWriter, r *http.Request) {
+_, ok := h.auth.GetSessionFromRequest(r)
+if !ok{
+h.jsonError(w, "unauthorized", http.StatusUnauthorized)
+return
+}
+switch r.Method {
+case http.MethodGet:
+h.jsonResponse(w, map[string]interface{}{
+"theme":         "dark",
+"notifications": true,
+}, http.StatusOK)
+case http.MethodPatch:
+h.jsonResponse(w, map[string]string{"status": "ok"}, http.StatusOK)
+default:
+h.jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
+}
 }

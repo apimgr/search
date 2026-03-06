@@ -4,7 +4,9 @@
 const CACHE_NAME = 'search-v1';
 const STATIC_ASSETS = [
   '/',
-  '/static/css/main.css',
+  '/static/css/common.css',
+  '/static/css/components.css',
+  '/static/css/public.css',
   '/static/js/main.js',
   '/static/img/favicon.svg',
   '/static/manifest.json'

@@ -796,10 +796,9 @@ func (s *Server) setupRoutes() http.Handler {
 	mux.HandleFunc("/server/help", s.handleHelp)
 	mux.HandleFunc("/server/terms", s.handleTerms)
 
-	// robots.txt, sitemap.xml, and security.txt (both locations per RFC 9116)
+	// robots.txt, sitemap.xml, and security.txt (/.well-known/ only per RFC 9116)
 	mux.HandleFunc("/robots.txt", s.handleRobotsTxt)
 	mux.HandleFunc("/sitemap.xml", s.handleSitemap)
-	mux.HandleFunc("/security.txt", s.handleSecurityTxtEnhanced)
 	mux.HandleFunc("/.well-known/security.txt", s.handleSecurityTxtEnhanced)
 
 	// Well-known URIs per RFC 8615
@@ -844,6 +843,9 @@ func (s *Server) setupRoutes() http.Handler {
 		// Per AI.md PART 11/50443: password routes use /auth/password/* prefix
 		mux.HandleFunc("/auth/password/forgot", s.handleForgot)
 		mux.HandleFunc("/auth/forgot", s.handleForgot) // legacy alias
+		// Per AI.md: /auth/password/reset/{token} and /auth/password/reset?token=
+		mux.HandleFunc("/auth/password/reset/", s.handleReset)
+		mux.HandleFunc("/auth/password/reset", s.handleReset)
 		// Per AI.md: verification code in path, not query param
 		mux.HandleFunc("/auth/verify/", s.handleVerify)
 		mux.HandleFunc("/auth/verify", s.handleVerify) // no-code fallback
@@ -1301,10 +1303,9 @@ func (s *Server) renderSearchResultsInline(w http.ResponseWriter, query string, 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>%s - %s</title>
-    <link rel="stylesheet" href="/static/css/main.css">
-</head>
-<body>
-    <main class="search-results">
+    <link rel="stylesheet" href="/static/css/common.css">
+    <link rel="stylesheet" href="/static/css/components.css">
+    <link rel="stylesheet" href="/static/css/public.css">
         <h1>Results for: %s</h1>
         <p>%d results (%.3fs)</p>`,
 		html.EscapeString(query),
