@@ -13,12 +13,20 @@ import (
 // AuthPageData represents data for auth pages
 type AuthPageData struct {
 	PageData
-	Error        string
-	Success      string
-	Username     string
-	Email        string
-	SSOProviders []SSOProvider
-	RequireEmail bool
+	Error                    string
+	Success                  string
+	Username                 string
+	Email                    string
+	SSOProviders             []SSOProvider
+	RequireEmail             bool
+	Redirect                 string // redirect URL after login (per AI.md PART 11)
+	InviteCode               string // invite code for registration
+	CanResend                bool   // whether verification email can be resent
+	RegistrationEnabled      bool   // whether user registration is open
+	LDAPEnabled              bool   // whether LDAP auth is configured
+	OIDCEnabled              bool   // whether OIDC auth is configured
+	RequireEmailVerification bool   // whether email verification is required on registration
+	FormData                 map[string]string // preserved form field values on error
 }
 
 // SSOProvider represents a single sign-on provider
@@ -62,8 +70,12 @@ func (s *Server) renderLoginPage(w http.ResponseWriter, r *http.Request, errorMs
 			Config:      s.config,
 			CSRFToken:   s.getCSRFToken(r),
 		},
-		Error:   errorMsg,
-		Success: successMsg,
+		Error:               errorMsg,
+		Success:             successMsg,
+		Redirect:            r.URL.Query().Get("redirect"),
+		RegistrationEnabled: s.config.Server.Users.Registration.Enabled,
+		LDAPEnabled:         s.config.Server.Users.SSO.LDAP.Enabled,
+		OIDCEnabled:         len(s.config.Server.Users.SSO.OIDC) > 0,
 	}
 
 	// Add SSO providers if configured
@@ -230,6 +242,8 @@ func (s *Server) renderRegisterPage(w http.ResponseWriter, r *http.Request, erro
 		Error:        errorMsg,
 		Username:     username,
 		RequireEmail: s.config.Server.Users.Registration.RequireEmailVerification,
+		InviteCode:   r.URL.Query().Get("invite"),
+		RequireEmailVerification: s.config.Server.Users.Registration.RequireEmailVerification,
 	}
 
 	if err := s.renderer.Render(w, "auth/register", data); err != nil {
