@@ -10,8 +10,8 @@
     {{/* Skip link for keyboard navigation - WCAG 2.1 AA */}}
     <a href="#main-content" class="skip-link">Skip to main content</a>
 
-    {{template "header" .}}
-    {{template "nav" .}}
+    {{template "public/header" .}}
+    {{template "public/nav" .}}
 
     <main id="main-content" class="main-content" role="main">
         {{/* Announcements banners */}}
@@ -28,7 +28,7 @@
         {{block "content" .}}{{end}}
     </main>
 
-    {{template "footer" .}}
+    {{template "public/footer" .}}
     {{template "scripts" .}}
     {{block "extra_scripts" .}}{{end}}
     {{/* Cookie consent popup */}}
