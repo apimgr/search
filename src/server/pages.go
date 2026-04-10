@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -11,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -71,10 +74,12 @@ func (s *Server) handleContact(w http.ResponseWriter, r *http.Request) {
 	captchaA, _ := rand.Int(rand.Reader, big.NewInt(10))
 	captchaB, _ := rand.Int(rand.Reader, big.NewInt(10))
 
-	// Generate captcha ID
-	captchaIDBytes := make([]byte, 16)
-	rand.Read(captchaIDBytes)
-	captchaID := base64.URLEncoding.EncodeToString(captchaIDBytes)
+	a := int(captchaA.Int64()) + 1
+	b := int(captchaB.Int64()) + 1
+	answer := a + b
+
+	// Generate signed captcha ID containing the expected answer
+	captchaID := s.signCaptcha(answer)
 
 	// Use newPageData for TorAddress support per AI.md PART 32
 	baseData := s.newPageData("Contact", "contact")
@@ -82,8 +87,8 @@ func (s *Server) handleContact(w http.ResponseWriter, r *http.Request) {
 
 	data := &ContactPageData{
 		PageData:  *baseData,
-		CaptchaA:  int(captchaA.Int64()) + 1,
-		CaptchaB:  int(captchaB.Int64()) + 1,
+		CaptchaA:  a,
+		CaptchaB:  b,
 		CaptchaID: captchaID,
 	}
 
@@ -114,6 +119,8 @@ func (s *Server) handleContactSubmit(w http.ResponseWriter, r *http.Request) {
 	email := strings.TrimSpace(r.FormValue("email"))
 	subject := strings.TrimSpace(r.FormValue("subject"))
 	message := strings.TrimSpace(r.FormValue("message"))
+	captchaIDStr := r.FormValue("captcha_id")
+	captchaAnswer := strings.TrimSpace(r.FormValue("captcha"))
 
 	// Validate required fields
 	if name == "" || email == "" || subject == "" || message == "" {
@@ -121,10 +128,15 @@ func (s *Server) handleContactSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate captcha
+	userAnswer, err := strconv.Atoi(captchaAnswer)
+	if err != nil || !s.verifyCaptcha(captchaIDStr, userAnswer) {
+		http.Error(w, "Incorrect verification answer", http.StatusBadRequest)
+		return
+	}
+
 	// Log the contact message (in production, this would send an email)
-	fmt.Printf("[Contact] From: %s <%s>\n", name, email)
-	fmt.Printf("[Contact] Subject: %s\n", subject)
-	fmt.Printf("[Contact] Message: %s\n", message)
+	log.Printf("[Contact] From: %s <%s>, Subject: %s", name, email, subject)
 
 	// Redirect to success
 	http.Redirect(w, r, "/server/contact?success=1", http.StatusSeeOther)
@@ -530,6 +542,38 @@ func (s *Server) handleInternalError(w http.ResponseWriter, r *http.Request, con
 	log.Printf("[ERROR] %s: %s %s - %v", context, r.Method, r.URL.Path, err)
 	// Show generic message to user - never expose internal error details
 	s.handleError(w, r, http.StatusInternalServerError, "Error", "An error occurred. Please try again.")
+}
+
+// signCaptcha creates an HMAC-signed captcha ID containing the expected answer
+func (s *Server) signCaptcha(answer int) string {
+	// Use server start time as HMAC key (stable per process, not guessable)
+	key := []byte(s.startTime.Format(time.RFC3339Nano))
+	data := strconv.Itoa(answer)
+	mac := hmac.New(sha256.New, key)
+	mac.Write([]byte(data))
+	sig := base64.URLEncoding.EncodeToString(mac.Sum(nil))
+	return data + "." + sig
+}
+
+// verifyCaptcha checks the user's captcha answer against the signed captcha ID
+func (s *Server) verifyCaptcha(captchaID string, userAnswer int) bool {
+	parts := strings.SplitN(captchaID, ".", 2)
+	if len(parts) != 2 {
+		return false
+	}
+	expectedAnswer, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return false
+	}
+	// Verify HMAC signature
+	key := []byte(s.startTime.Format(time.RFC3339Nano))
+	mac := hmac.New(sha256.New, key)
+	mac.Write([]byte(parts[0]))
+	expectedSig := base64.URLEncoding.EncodeToString(mac.Sum(nil))
+	if !hmac.Equal([]byte(parts[1]), []byte(expectedSig)) {
+		return false
+	}
+	return userAnswer == expectedAnswer
 }
 
 // getCSRFToken returns a CSRF token for the request

@@ -50,13 +50,11 @@
         {{range .Results}}
         <div class="image-result" data-full-url="{{.URL}}">
             <a href="{{.URL}}" target="_blank" rel="noopener noreferrer">
-                {{if .Thumbnail}}
-                <img src="{{.Thumbnail}}" alt="{{.Title}}" loading="lazy">
-                {{else}}
-                <div class="image-placeholder">
-                    <span>🖼️</span>
+                <div class="image-thumb-wrap">
+                    {{if .Thumbnail}}
+                    <img src="{{.Thumbnail}}" alt="{{.Title}}" loading="lazy">
+                    {{end}}
                 </div>
-                {{end}}
             </a>
             <div class="image-result-info">
                 <a href="{{.URL}}" class="image-title" target="_blank" rel="noopener noreferrer">{{.Title}}</a>
@@ -74,10 +72,6 @@
                 <div class="video-thumbnail-container">
                     {{if .Thumbnail}}
                     <img src="{{.Thumbnail}}" alt="{{.Title}}" loading="lazy" class="video-thumbnail">
-                    {{else}}
-                    <div class="video-placeholder">
-                        <span>🎥</span>
-                    </div>
                     {{end}}
                     <div class="video-play-overlay">
                         <svg class="play-icon" viewBox="0 0 24 24" fill="currentColor">
@@ -131,7 +125,7 @@
                 <p class="result-description">{{.Content}}</p>
                 <div class="result-meta">
                     <span class="result-engine">{{.Engine}}</span>
-                    {{if .PublishedAt}}
+                    {{if not (.PublishedAt.IsZero)}}
                     <span class="result-date">{{.PublishedAt.Format "Jan 2, 2006"}}</span>
                     {{end}}
                 </div>
