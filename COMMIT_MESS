@@ -1,56 +1,39 @@
-🐛 Fix broken nav, calculator, search results, thumbnails, help HTML 🐛
+✨ WebUI: sub-header search bar, mobile layout, SSL detection, results info ✨
 
-Navigation (critical):
-- public/header.tmpl only had brand+icon, no hamburger/nav/search
-- public/nav.tmpl had hamburger but .nav was display:none in CSS
-- Mobile users could not navigate at all
-- Fix: merge combined header (brand+search+actions+hamburger+panel)
-  into public/header.tmpl, make public/nav.tmpl a placeholder
+Sub-header search bar (non-home pages):
+- Create partial/public/subheader.tmpl: full-width search bar shown
+  below the header on all non-home pages; includes advanced search
+  trigger button only when Page == "search"
+- Remove search form from header.tmpl (was in <nav class="header-nav">)
+- Wire {{template "public/subheader" .}} into base.tmpl and public.tmpl
+- base.tmpl also gets public-page body class so all pages (including
+  /healthz) render consistently with the sub-header
 
-Calculator (math.go rewrite):
-- Old code replaced ^ with ** (not valid Go syntax), breaking ALL
-  expressions that went through parser.ParseExpr after preprocessing
-- Old preprocess() replaced constant "e" via regex in raw strings
-- Fix: let Go parser handle ^ as token.XOR, reinterpret as math.Pow
-  in evalNode; handle constants via ast.Ident, not string replacement
-- Add: sqrt, sin, cos, tan, asin, acos, atan, log, log2, ln, exp,
-  cbrt, abs, ceil, floor, round functions
-- Add: pi, e, tau, phi constants
-- Pre-compile regexes instead of compiling on every call
+Help page $SERVER fix:
+- pages.go: populate PageData.ServerURL via s.getBaseURL(r) in handleHelp
+- embed.go: add ServerURL string field to PageData struct
+- help.tmpl: replace all $SERVER literals with {{.ServerURL}}; remove
+  the "Replace $SERVER with..." note
 
-Search results (search.tmpl + public.css):
-- Description summary was truncated to 4 lines on all screens;
-  removed line-clamp so full snippets display
-- Max-width 800px too narrow for results; increase to 960px
-- Image/video thumbnails broken when URL 404s or is empty: only
-  showed placeholder when .Thumbnail field was empty, not when img
-  src failed to load
-- Fix: wrap image thumbs in .image-thumb-wrap with CSS ::before
-  fallback emoji; video-thumbnail-container gets ::before fallback;
-  thumbnail img sits above with z-index so fallback shows through
-  when img fails
-- Video play overlay and duration badge now have z-index:2 to layer
-  above the thumbnail img (z-index:1) and fallback (z-index:0)
-- Image grid: increase mobile height 120px→140px, tablet 140px→160px,
-  desktop 160px→180px
-- Video description: increase line-clamp from 2 to 3
+Search results info bar:
+- embed.go: add Engines []string field to SearchPageData struct
+- server.go: populate Engines from results.Engines in renderSearchResultsWithInstant
+- search.tmpl: results info now shows "47 results · 3 engines: Brave,
+  Google, Bing · 1.23s" instead of bare count
 
-Help page (help.tmpl):
-- <section id="search-operators"> never closed before
-  <section id="keyboard-shortcuts"> started — broken nested HTML
-- Fix: add missing </section> closing tag
+SSL / reverse proxy detection (opensearch.go getBaseURL):
+- Previously only checked r.TLS and X-Forwarded-Proto
+- Now also detects: X-Forwarded-Protocol, X-Forwarded-Ssl: on,
+  X-Scheme, RFC 7239 Forwarded: proto=https
+- X-Forwarded-Host now handles comma-separated values (takes first)
+- Configured BaseURL still takes priority over all detection
 
-Contact form (pages.go):
-- Captcha generated A+B values but handleContactSubmit never validated
-- Fix: HMAC-signed captcha IDs (signCaptcha/verifyCaptcha) using
-  server startTime as key, validated on submission
-- Switch fmt.Printf to log.Printf for contact logging
-
-Search results template:
-- {{if .PublishedAt}} caused nil pointer on zero time.Time values
-- Fix: {{if not (.PublishedAt.IsZero)}}
-
-CSS (public.css):
-- Add missing: .btn-danger, .contact-success, .form-error,
-  .captcha-group, .form-actions, .last-updated styles
-- Add favicon fallback CSS for broken favicon images
+Mobile CSS fixes (public.css):
+- .search-box: flex-wrap wrap so input is full-width row 1, buttons
+  share row 2 on <481px; at 481px+ restores single-row pill layout
+- .subheader* styles: full-width search bar below header, pill shape,
+  touch targets min-height 44px, responsive at 768px+
+- .info-row: add flex-wrap wrap + gap so long values (commit SHA,
+  timestamps) wrap on narrow screens instead of squishing
+- .info-row code: add word-break break-all, overflow-wrap anywhere
+  for long commit hashes on /healthz mobile view

@@ -1276,6 +1276,7 @@ func (s *Server) renderSearchResultsWithInstant(w http.ResponseWriter, query str
 		Results:       results.Results,
 		TotalResults:  results.TotalResults,
 		SearchTime:    results.SearchTime,
+		Engines:       results.Engines,
 		InstantAnswer: instantAnswer,
 	}
 

@@ -41,7 +41,12 @@
     {{else if .Results}}
     <div class="search-info">
         <span class="result-count">{{.TotalResults}} results</span>
-        <span class="search-time">({{printf "%.2f" .SearchTime}} seconds)</span>
+        <span class="search-info-sep">·</span>
+        {{if .Engines}}
+        <span class="search-engines">{{len .Engines}} {{if eq (len .Engines) 1}}engine{{else}}engines{{end}}: {{join .Engines ", "}}</span>
+        <span class="search-info-sep">·</span>
+        {{end}}
+        <span class="search-time">{{printf "%.2f" .SearchTime}}s</span>
     </div>
 
     {{if eq .Category "images"}}

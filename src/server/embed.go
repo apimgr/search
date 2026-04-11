@@ -337,6 +337,7 @@ type SearchPageData struct {
 	Results       interface{}
 	TotalResults  int
 	SearchTime    float64
+	Engines       []string
 	Pagination    *Pagination
 	Error         string
 	InstantAnswer interface{} // Instant answer result (if any)

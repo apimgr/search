@@ -237,22 +237,37 @@ func (s *Server) handlePreferencesSave(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
-// getBaseURL returns the base URL for the server
+// getBaseURL returns the base URL for the server.
+// Detects HTTPS from direct TLS, configured BaseURL, and all common
+// reverse proxy headers (nginx, Caddy, Traefik, Apache, HAProxy, etc.).
 func (s *Server) getBaseURL(r *http.Request) string {
 	// Use configured base URL if available
 	if s.config.Server.BaseURL != "" {
 		return strings.TrimRight(s.config.Server.BaseURL, "/")
 	}
 
-	// Construct from request
+	// Detect HTTPS — check all common reverse proxy headers
 	scheme := "http"
-	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+	switch {
+	case r.TLS != nil:
+		scheme = "https"
+	case r.Header.Get("X-Forwarded-Proto") == "https":
+		scheme = "https"
+	case r.Header.Get("X-Forwarded-Protocol") == "https":
+		scheme = "https"
+	case r.Header.Get("X-Forwarded-Ssl") == "on":
+		scheme = "https"
+	case r.Header.Get("X-Scheme") == "https":
+		scheme = "https"
+	case strings.Contains(r.Header.Get("Forwarded"), "proto=https"):
+		// RFC 7239: Forwarded: for=...; proto=https
 		scheme = "https"
 	}
 
 	host := r.Host
+	// Prefer X-Forwarded-Host for reverse proxy setups; take first value if comma-separated
 	if fwdHost := r.Header.Get("X-Forwarded-Host"); fwdHost != "" {
-		host = fwdHost
+		host = strings.TrimSpace(strings.SplitN(fwdHost, ",", 2)[0])
 	}
 
 	return fmt.Sprintf("%s://%s", scheme, host)

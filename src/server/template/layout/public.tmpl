@@ -13,9 +13,11 @@
     {{/* Public header */}}
     {{template "public/header" .}}
 
+    {{/* Sub-header search bar (non-home pages) */}}
+    {{template "public/subheader" .}}
+
     {{/* Public navigation */}}
     {{template "public/nav" .}}
-
     <main id="main-content" class="main-content" role="main">
         {{/* Announcements banners */}}
         {{template "announcements" .}}
