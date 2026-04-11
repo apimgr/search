@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"fmt"
@@ -25,10 +26,14 @@ const (
 type NodeStatus string
 
 const (
-	NodeStatusOnline  NodeStatus = "online"
+	// NodeStatusHealthy means the node is active and sending heartbeats
+	NodeStatusHealthy NodeStatus = "healthy"
+	// NodeStatusDegraded means the node missed heartbeats (30-90s) but may recover
+	NodeStatusDegraded NodeStatus = "degraded"
+	// NodeStatusOffline means the node has been unreachable for 5+ minutes
 	NodeStatusOffline NodeStatus = "offline"
-	NodeStatusJoining NodeStatus = "joining"
-	NodeStatusLeaving NodeStatus = "leaving"
+	// NodeStatusRemoved means the node was manually removed by an admin
+	NodeStatusRemoved NodeStatus = "removed"
 )
 
 // ClusterNode represents a node in the cluster
@@ -173,7 +178,7 @@ func (cm *ClusterManager) GetNodes(ctx context.Context) ([]*ClusterNode, error) 
 			ID:        cm.nodeID,
 			Hostname:  cm.hostname,
 			IsPrimary: true,
-			Status:    NodeStatusOnline,
+			Status:    NodeStatusHealthy,
 			LastSeen:  time.Now(),
 			JoinedAt:  time.Now(),
 		}}, nil
@@ -215,7 +220,7 @@ func (cm *ClusterManager) GetNode(ctx context.Context, nodeID string) (*ClusterN
 				ID:        cm.nodeID,
 				Hostname:  cm.hostname,
 				IsPrimary: true,
-				Status:    NodeStatusOnline,
+				Status:    NodeStatusHealthy,
 				LastSeen:  time.Now(),
 			}, nil
 		}
@@ -324,10 +329,11 @@ func (cm *ClusterManager) ensureClusterTable(ctx context.Context) error {
 func (cm *ClusterManager) registerNode(ctx context.Context) error {
 	now := time.Now()
 
-	// Check if any primary exists
+	// Check if any primary exists among healthy/degraded nodes
 	var primaryCount int
 	row := cm.db.serverDB.QueryRow(ctx, `
-		SELECT COUNT(*) FROM cluster_nodes WHERE is_primary = 1 AND status = 'online'
+		SELECT COUNT(*) FROM cluster_nodes
+		WHERE is_primary = 1 AND status IN ('healthy', 'degraded')
 	`)
 	if err := row.Scan(&primaryCount); err != nil {
 		return err
@@ -338,11 +344,11 @@ func (cm *ClusterManager) registerNode(ctx context.Context) error {
 
 	_, err := cm.db.serverDB.Exec(ctx, `
 		INSERT INTO cluster_nodes (id, hostname, is_primary, status, last_seen, joined_at)
-		VALUES (?, ?, ?, 'online', ?, ?)
+		VALUES (?, ?, ?, 'healthy', ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			hostname = excluded.hostname,
 			is_primary = excluded.is_primary,
-			status = 'online',
+			status = 'healthy',
 			last_seen = excluded.last_seen
 	`, cm.nodeID, cm.hostname, isPrimary, now, now)
 	if err != nil {
@@ -389,12 +395,20 @@ func (cm *ClusterManager) sendHeartbeat(ctx context.Context) {
 	`, cm.nodeID)
 }
 
-// cleanupStaleNodes marks stale nodes as offline
+// cleanupStaleNodes marks stale nodes as degraded or offline per PART 10 rules:
+// - healthy → degraded after 90 seconds without a heartbeat
+// - degraded → offline after 5 minutes without a heartbeat
 func (cm *ClusterManager) cleanupStaleNodes(ctx context.Context) {
-	// Mark nodes as offline if they haven't sent a heartbeat in 2 minutes
+	// Healthy nodes that have missed 3 heartbeats (90s) become degraded
+	_, _ = cm.db.serverDB.Exec(ctx, `
+		UPDATE cluster_nodes SET status = 'degraded'
+		WHERE status = 'healthy' AND last_seen < datetime('now', '-90 seconds')
+	`)
+
+	// Degraded nodes that haven't recovered after 5 minutes become offline
 	_, _ = cm.db.serverDB.Exec(ctx, `
 		UPDATE cluster_nodes SET status = 'offline'
-		WHERE status = 'online' AND last_seen < datetime('now', '-2 minutes')
+		WHERE status = 'degraded' AND last_seen < datetime('now', '-5 minutes')
 	`)
 }
 
@@ -417,10 +431,11 @@ func (cm *ClusterManager) primaryElectionLoop() {
 
 // checkPrimaryStatus checks if primary election is needed
 func (cm *ClusterManager) checkPrimaryStatus(ctx context.Context) {
-	// Check if there's an online primary
+	// Check if there's a healthy or degraded primary
 	var primaryID string
 	row := cm.db.serverDB.QueryRow(ctx, `
-		SELECT id FROM cluster_nodes WHERE is_primary = 1 AND status = 'online'
+		SELECT id FROM cluster_nodes
+		WHERE is_primary = 1 AND status IN ('healthy', 'degraded')
 	`)
 	err := row.Scan(&primaryID)
 
@@ -430,13 +445,28 @@ func (cm *ClusterManager) checkPrimaryStatus(ctx context.Context) {
 	}
 }
 
-// tryBecomePrimary attempts to become the primary node
+// tryBecomePrimary attempts to become the primary node.
+// Per PART 10: the node with the lowest ID among healthy nodes wins.
 func (cm *ClusterManager) tryBecomePrimary(ctx context.Context) {
+	// Find the eligible node with the lowest ID
+	var lowestID string
+	row := cm.db.serverDB.QueryRow(ctx, `
+		SELECT id FROM cluster_nodes
+		WHERE status IN ('healthy', 'degraded')
+		ORDER BY id ASC LIMIT 1
+	`)
+	if err := row.Scan(&lowestID); err != nil || lowestID != cm.nodeID {
+		return // Another node wins, or no eligible nodes
+	}
+
 	// Use atomic update to prevent race conditions
 	result, err := cm.db.serverDB.Exec(ctx, `
 		UPDATE cluster_nodes SET is_primary = 1
-		WHERE id = ? AND status = 'online'
-		AND NOT EXISTS (SELECT 1 FROM cluster_nodes WHERE is_primary = 1 AND status = 'online')
+		WHERE id = ? AND status IN ('healthy', 'degraded')
+		AND NOT EXISTS (
+			SELECT 1 FROM cluster_nodes
+			WHERE is_primary = 1 AND status IN ('healthy', 'degraded')
+		)
 	`, cm.nodeID)
 	if err != nil {
 		return
@@ -452,12 +482,12 @@ func (cm *ClusterManager) tryBecomePrimary(ctx context.Context) {
 
 // transferPrimary transfers primary role to another node
 func (cm *ClusterManager) transferPrimary(ctx context.Context) error {
-	// Find another online node
+	// Find another healthy/degraded node with lowest ID (per PART 10 primary election rules)
 	var newPrimaryID string
 	row := cm.db.serverDB.QueryRow(ctx, `
 		SELECT id FROM cluster_nodes
-		WHERE id != ? AND status = 'online'
-		ORDER BY joined_at ASC LIMIT 1
+		WHERE id != ? AND status IN ('healthy', 'degraded')
+		ORDER BY id ASC LIMIT 1
 	`, cm.nodeID)
 	if err := row.Scan(&newPrimaryID); err != nil {
 		if err == sql.ErrNoRows {
@@ -489,11 +519,8 @@ func generateNodeID() string {
 	return fmt.Sprintf("node_%s", hex.EncodeToString(b))
 }
 
-// hashToken hashes a token for storage
+// hashToken hashes a token with SHA-256 for secure storage
 func hashToken(token string) string {
-	b := make([]byte, 32)
-	for i := 0; i < len(token) && i < len(b); i++ {
-		b[i] = token[i]
-	}
-	return hex.EncodeToString(b)
+	h := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(h[:])
 }

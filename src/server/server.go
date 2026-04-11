@@ -143,7 +143,7 @@ func New(cfg *config.Config) *Server {
 		Timeout:      30 * time.Second,
 		CacheEnabled: true,
 		CacheTTL:     5 * time.Minute,
-		MaxCacheSize: 1000,
+		// Cache backend defaults to in-memory; set Cache field to use Valkey/Redis
 	})
 
 	// Create middleware with logging

@@ -1,184 +1,109 @@
 package search
 
 import (
-	"sync"
+	"context"
+	"encoding/json"
+	"sync/atomic"
 	"time"
 
+	"github.com/apimgr/search/src/cache"
 	"github.com/apimgr/search/src/model"
 )
 
-// ResultCache provides an in-memory cache for search results
+// ResultCache wraps cache.Cache to store search results.
+// It supports any backend: memory, Valkey, or Redis (PART 9).
+// Cache keys follow the PART 9 naming convention: search:{hash}
 type ResultCache struct {
-	mu       sync.RWMutex
-	items    map[string]*cacheItem
-	maxSize  int
-	ttl      time.Duration
-	hits     int64
-	misses   int64
+	backend cache.Cache
+	ttl     time.Duration
+	hits    atomic.Int64
+	misses  atomic.Int64
 }
 
-type cacheItem struct {
-	results   *model.SearchResults
-	expiresAt time.Time
-}
-
-// NewResultCache creates a new result cache
-func NewResultCache(maxSize int, ttl time.Duration) *ResultCache {
-	if maxSize <= 0 {
-		maxSize = 1000
-	}
+// NewResultCache creates a result cache backed by the given cache.Cache.
+// If backend is nil a no-op cache is used (caching effectively disabled).
+func NewResultCache(backend cache.Cache, ttl time.Duration) *ResultCache {
 	if ttl <= 0 {
-		ttl = 5 * time.Minute
+		ttl = 5 * time.Minute // PART 9: page cache default
 	}
-
-	cache := &ResultCache{
-		items:   make(map[string]*cacheItem),
-		maxSize: maxSize,
-		ttl:     ttl,
-	}
-
-	// Start cleanup goroutine
-	go cache.cleanup()
-
-	return cache
+	return &ResultCache{backend: backend, ttl: ttl}
 }
 
-// Get retrieves cached results for a key
+// Get retrieves cached results for a key.
 func (c *ResultCache) Get(key string) *model.SearchResults {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	item, exists := c.items[key]
-	if !exists {
-		c.misses++
+	if c.backend == nil {
+		c.misses.Add(1)
 		return nil
 	}
 
-	if time.Now().After(item.expiresAt) {
-		c.misses++
+	data, err := c.backend.Get(context.Background(), cacheKey(key))
+	if err != nil {
+		c.misses.Add(1)
 		return nil
 	}
 
-	c.hits++
+	var results model.SearchResults
+	if err := json.Unmarshal(data, &results); err != nil {
+		c.misses.Add(1)
+		return nil
+	}
 
-	// Return a copy to prevent modification
-	result := *item.results
-	resultsCopy := make([]model.Result, len(item.results.Results))
-	copy(resultsCopy, item.results.Results)
-	result.Results = resultsCopy
-
-	return &result
+	c.hits.Add(1)
+	return &results
 }
 
-// Set stores results in the cache
+// Set stores results in the cache with the configured TTL.
 func (c *ResultCache) Set(key string, results *model.SearchResults) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// Evict oldest if at capacity
-	if len(c.items) >= c.maxSize {
-		c.evictOldest()
+	if c.backend == nil || results == nil {
+		return
 	}
 
-	// Make a copy of results
-	resultsCopy := *results
-	itemsCopy := make([]model.Result, len(results.Results))
-	copy(itemsCopy, results.Results)
-	resultsCopy.Results = itemsCopy
-
-	c.items[key] = &cacheItem{
-		results:   &resultsCopy,
-		expiresAt: time.Now().Add(c.ttl),
+	data, err := json.Marshal(results)
+	if err != nil {
+		return
 	}
+
+	_ = c.backend.Set(context.Background(), cacheKey(key), data, c.ttl)
 }
 
-// Delete removes an item from the cache
+// Delete removes an item from the cache.
 func (c *ResultCache) Delete(key string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	delete(c.items, key)
+	if c.backend == nil {
+		return
+	}
+	_ = c.backend.Delete(context.Background(), cacheKey(key))
 }
 
-// Clear removes all items from the cache
+// Clear removes all search result cache entries.
 func (c *ResultCache) Clear() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.items = make(map[string]*cacheItem)
-	c.hits = 0
-	c.misses = 0
+	if c.backend == nil {
+		return
+	}
+	_ = c.backend.Clear(context.Background(), "search:*")
+	c.hits.Store(0)
+	c.misses.Store(0)
 }
 
-// Size returns the current number of cached items
-func (c *ResultCache) Size() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return len(c.items)
-}
-
-// Stats returns cache statistics
+// CacheStats holds cache hit/miss statistics.
 type CacheStats struct {
-	Size    int     `json:"size"`
-	MaxSize int     `json:"max_size"`
 	Hits    int64   `json:"hits"`
 	Misses  int64   `json:"misses"`
 	HitRate float64 `json:"hit_rate"`
 }
 
+// Stats returns cache hit/miss statistics.
 func (c *ResultCache) Stats() CacheStats {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	total := c.hits + c.misses
+	hits := c.hits.Load()
+	misses := c.misses.Load()
+	total := hits + misses
 	hitRate := float64(0)
 	if total > 0 {
-		hitRate = float64(c.hits) / float64(total)
+		hitRate = float64(hits) / float64(total)
 	}
-
-	return CacheStats{
-		Size:    len(c.items),
-		MaxSize: c.maxSize,
-		Hits:    c.hits,
-		Misses:  c.misses,
-		HitRate: hitRate,
-	}
+	return CacheStats{Hits: hits, Misses: misses, HitRate: hitRate}
 }
 
-// evictOldest removes the oldest item (must be called with lock held)
-func (c *ResultCache) evictOldest() {
-	var oldestKey string
-	var oldestTime time.Time
-
-	for key, item := range c.items {
-		if oldestKey == "" || item.expiresAt.Before(oldestTime) {
-			oldestKey = key
-			oldestTime = item.expiresAt
-		}
-	}
-
-	if oldestKey != "" {
-		delete(c.items, oldestKey)
-	}
-}
-
-// cleanup periodically removes expired items
-func (c *ResultCache) cleanup() {
-	ticker := time.NewTicker(time.Minute)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		c.removeExpired()
-	}
-}
-
-// removeExpired removes all expired items
-func (c *ResultCache) removeExpired() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	now := time.Now()
-	for key, item := range c.items {
-		if now.After(item.expiresAt) {
-			delete(c.items, key)
-		}
-	}
+// cacheKey returns the PART 9-compliant key: search:{hash}
+func cacheKey(hash string) string {
+	return "search:" + hash
 }

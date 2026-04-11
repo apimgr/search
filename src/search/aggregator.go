@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/apimgr/search/src/cache"
 	"github.com/apimgr/search/src/model"
 )
 
@@ -27,7 +28,9 @@ type AggregatorConfig struct {
 	Timeout      time.Duration
 	CacheEnabled bool
 	CacheTTL     time.Duration
-	MaxCacheSize int
+	// Cache is the backend to use for result caching (memory, Valkey, Redis).
+	// If nil and CacheEnabled is true, an in-memory backend is created automatically.
+	Cache        cache.Cache
 }
 
 // NewAggregator creates a new search aggregator
@@ -38,9 +41,6 @@ func NewAggregator(engines []Engine, config AggregatorConfig) *Aggregator {
 	if config.CacheTTL == 0 {
 		config.CacheTTL = 5 * time.Minute
 	}
-	if config.MaxCacheSize == 0 {
-		config.MaxCacheSize = 1000
-	}
 
 	a := &Aggregator{
 		engines:      engines,
@@ -50,7 +50,12 @@ func NewAggregator(engines []Engine, config AggregatorConfig) *Aggregator {
 	}
 
 	if config.CacheEnabled {
-		a.cache = NewResultCache(config.MaxCacheSize, config.CacheTTL)
+		backend := config.Cache
+		if backend == nil {
+			// Fallback to in-memory if no external backend provided
+			backend = cache.NewMemoryCache(1000, config.CacheTTL)
+		}
+		a.cache = NewResultCache(backend, config.CacheTTL)
 	}
 
 	return a
