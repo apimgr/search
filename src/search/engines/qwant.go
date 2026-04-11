@@ -68,7 +68,7 @@ func (e *QwantEngine) Search(ctx context.Context, query *model.Query) ([]model.R
 
 	req.Header.Set("User-Agent", UserAgent)
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 10 * time.Second, Transport: SharedTransport}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err

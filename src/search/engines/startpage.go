@@ -31,7 +31,8 @@ func NewStartpageEngine() *Startpage {
 	return &Startpage{
 		BaseEngine: search.NewBaseEngine(config),
 		client: &http.Client{
-			Timeout: time.Duration(config.GetTimeout()) * time.Second,
+			Timeout:   time.Duration(config.GetTimeout()) * time.Second,
+			Transport: SharedTransport,
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				return http.ErrUseLastResponse
 			},

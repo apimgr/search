@@ -31,6 +31,7 @@ func NewDuckDuckGo() *DuckDuckGo {
 		BaseEngine: search.NewBaseEngine(config),
 		client: &http.Client{
 			Timeout: time.Duration(config.GetTimeout()) * time.Second,
+			Transport: SharedTransport,
 		},
 	}
 }
@@ -294,9 +295,11 @@ func (e *DuckDuckGo) getVQDToken(ctx context.Context, query string) (string, err
 	defer resp.Body.Close()
 
 	// Read body to extract vqd token
-	body := make([]byte, 50000)
-	n, _ := resp.Body.Read(body)
-	html := string(body[:n])
+	body, err := ReadBody(resp)
+	if err != nil {
+		return "", fmt.Errorf("reading body: %w", err)
+	}
+	html := string(body)
 
 	// Extract vqd from response
 	// Format: vqd="3-xxxxxxxxxxxx..."

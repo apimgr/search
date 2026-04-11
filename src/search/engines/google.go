@@ -124,9 +124,11 @@ func (e *Google) parseGoogleHTML(resp *http.Response, query *model.Query) ([]mod
 	results := make([]model.Result, 0)
 
 	// Read response body
-	body := make([]byte, 1024*1024) // 1MB max
-	n, _ := resp.Body.Read(body)
-	html := string(body[:n])
+	body, err := ReadBody(resp)
+	if err != nil {
+		return nil, err
+	}
+	html := string(body)
 
 	// Extract search results using regex (simplified)
 	// Google result structure: <div class="g">...</div>
@@ -233,9 +235,11 @@ func (e *Google) searchImages(ctx context.Context, query *model.Query) ([]model.
 func (e *Google) parseImageResults(resp *http.Response, query *model.Query) ([]model.Result, error) {
 	results := make([]model.Result, 0)
 
-	body := make([]byte, 2*1024*1024) // 2MB max for images page
-	n, _ := resp.Body.Read(body)
-	html := string(body[:n])
+	body, err := ReadBody(resp)
+	if err != nil {
+		return nil, err
+	}
+	html := string(body)
 
 	// Google Images embeds image data in JSON within the page
 	// Pattern to extract image URLs and metadata
@@ -347,9 +351,11 @@ func (e *Google) searchNews(ctx context.Context, query *model.Query) ([]model.Re
 func (e *Google) parseNewsResults(resp *http.Response, query *model.Query) ([]model.Result, error) {
 	results := make([]model.Result, 0)
 
-	body := make([]byte, 1024*1024) // 1MB max
-	n, _ := resp.Body.Read(body)
-	html := string(body[:n])
+	body, err := ReadBody(resp)
+	if err != nil {
+		return nil, err
+	}
+	html := string(body)
 
 	// Google News result patterns
 	// News results have a distinct structure with source and time info
@@ -486,9 +492,11 @@ func (e *Google) searchVideos(ctx context.Context, query *model.Query) ([]model.
 func (e *Google) parseVideoResults(resp *http.Response, query *model.Query) ([]model.Result, error) {
 	results := make([]model.Result, 0)
 
-	body := make([]byte, 1024*1024) // 1MB max
-	n, _ := resp.Body.Read(body)
-	html := string(body[:n])
+	body, err := ReadBody(resp)
+	if err != nil {
+		return nil, err
+	}
+	html := string(body)
 
 	// Google Video result patterns
 	titlePattern := regexp.MustCompile(`<h3[^>]*>([^<]+)</h3>`)

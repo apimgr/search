@@ -29,12 +29,8 @@ func NewBing() *BingEngine {
 	config.SupportsTor = false
 
 	client := &http.Client{
-		Timeout: time.Duration(config.GetTimeout()) * time.Second,
-		Transport: &http.Transport{
-			MaxIdleConns:        100,
-			MaxIdleConnsPerHost: 10,
-			IdleConnTimeout:     90 * time.Second,
-		},
+		Timeout:   time.Duration(config.GetTimeout()) * time.Second,
+		Transport: SharedTransport,
 	}
 
 	return &BingEngine{

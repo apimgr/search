@@ -32,6 +32,7 @@ func NewPubMed() *PubMed {
 		BaseEngine: search.NewBaseEngine(config),
 		client: &http.Client{
 			Timeout: time.Duration(config.GetTimeout()) * time.Second,
+			Transport: SharedTransport,
 		},
 	}
 }

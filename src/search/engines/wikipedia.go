@@ -50,7 +50,7 @@ func (e *WikipediaEngine) Search(ctx context.Context, query *model.Query) ([]mod
 
 	req.Header.Set("User-Agent", UserAgent)
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 10 * time.Second, Transport: SharedTransport}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
