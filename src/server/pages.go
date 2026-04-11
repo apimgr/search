@@ -146,6 +146,7 @@ func (s *Server) handleContactSubmit(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
 	data := s.newPageData("Help", "help")
 	data.CSRFToken = s.getCSRFToken(r)
+	data.ServerURL = s.getBaseURL(r)
 
 	if err := s.renderer.Render(w, "help", data); err != nil {
 		s.handleInternalError(w, r, "template render", err)

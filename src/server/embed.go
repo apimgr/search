@@ -317,6 +317,7 @@ type PageData struct {
 	CookieConsent  *CookieConsentData
 	Extra          map[string]interface{}
 	AdminPath      string // Per AI.md PART 17: Configurable admin path (default: "admin")
+	ServerURL      string // Actual server URL for display in templates
 }
 
 // ErrorPageData extends PageData with error-specific fields

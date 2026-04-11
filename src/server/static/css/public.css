@@ -197,7 +197,7 @@
 
 /* Header nav - desktop navigation (hidden on mobile, shown on tablet+) */
 .header-nav {
-    display: flex;
+    display: none;
     align-items: center;
     flex: 1;
     margin: 0 0.5rem;
@@ -230,6 +230,7 @@
 /* Tablet+ (768px): hide mobile hamburger, show desktop actions, expand search */
 @media (min-width: 768px) {
     .header-nav {
+        display: flex;
         margin: 0 1rem;
     }
 

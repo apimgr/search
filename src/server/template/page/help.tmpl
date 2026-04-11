@@ -581,29 +581,28 @@
             </table>
 
             <h3>Example: Search API</h3>
-            <p class="api-note">Replace <code>$SERVER</code> with your server URL (e.g., <code>{{if .Config.Server.BaseURL}}{{.Config.Server.BaseURL}}{{else}}https://search.example.com{{end}}</code>)</p>
             <pre class="code-block"><code># Search for "golang tutorial"
-curl "$SERVER/api/v1/search?q=golang+tutorial&category=general"
+curl "{{.ServerURL}}/api/v1/search?q=golang+tutorial&category=general"
 
 # Image search with safe search
-curl "$SERVER/api/v1/search?q=nature&category=images&safe=moderate"
+curl "{{.ServerURL}}/api/v1/search?q=nature&category=images&safe=moderate"
 
 # Get autocomplete suggestions
-curl "$SERVER/api/v1/autocomplete?q=pyth"</code></pre>
+curl "{{.ServerURL}}/api/v1/autocomplete?q=pyth"</code></pre>
 
             <h3>Example: Instant Answers</h3>
             <pre class="code-block"><code># Calculator
-curl "$SERVER/api/v1/instant?q=sqrt(144)"
+curl "{{.ServerURL}}/api/v1/instant?q=sqrt(144)"
 
 # Weather
-curl "$SERVER/api/v1/instant?q=weather+tokyo"
+curl "{{.ServerURL}}/api/v1/instant?q=weather+tokyo"
 
 # IP lookup
-curl "$SERVER/api/v1/instant?q=ip:8.8.8.8"</code></pre>
+curl "{{.ServerURL}}/api/v1/instant?q=ip:8.8.8.8"</code></pre>
 
             <h3>Example: RSS Feed</h3>
             <pre class="code-block"><code># Get search results as RSS
-curl "$SERVER/search.rss?q=linux+news"</code></pre>
+curl "{{.ServerURL}}/search.rss?q=linux+news"</code></pre>
         </section>
 
         {{/* Privacy Features */}}
