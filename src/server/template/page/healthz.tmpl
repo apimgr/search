@@ -36,20 +36,20 @@
             <dl class="health-info">
                 <div class="info-row">
                     <dt>Version</dt>
-                    <dd><code>{{version}}</code></dd>
+                    <dd><code>{{or (version) "dev"}}</code></dd>
                 </div>
                 <div class="info-row">
                     <dt>Go Version</dt>
-                    <dd><code>{{.Health.GoVersion}}</code></dd>
+                    <dd><code>{{or .Health.GoVersion "unknown"}}</code></dd>
                 </div>
                 {{if .Health.Build}}
                 <div class="info-row">
                     <dt>Commit</dt>
-                    <dd><code>{{.Health.Build.Commit}}</code></dd>
+                    <dd><code>{{or .Health.Build.Commit "dev"}}</code></dd>
                 </div>
                 <div class="info-row">
                     <dt>Build Date</dt>
-                    <dd>{{.Health.Build.Date}}</dd>
+                    <dd>{{or .Health.Build.Date "local"}}</dd>
                 </div>
                 {{end}}
             </dl>

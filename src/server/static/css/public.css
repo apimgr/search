@@ -2225,33 +2225,15 @@ html.theme-light .theme-label-light { display: inline; }
     gap: 1rem;
 }
 
-/* Small mobile (base styles for 480px and below) */
-
-/* Input fills row 1 as a full pill */
-.search-input {
-    padding: 0.75rem 1rem;
-    border-right: 2px solid var(--border-color);
-    border-radius: 28px;
-    width: 100%;
-}
-
-/* Buttons share row 2 */
-.search-btn {
-    flex: 1;
-    padding: 0.75rem 1rem;
-    margin-top: 0.5rem;
-}
-
-.advanced-search-trigger {
-    flex: 1;
-    margin-top: 0.5rem;
-    border: 2px solid var(--border-color);
-    border-right: none;
-    border-radius: 28px 0 0 28px;
-}
-
+/* Category tabs: 5-column grid so all fit on one row on any phone */
 .category-tabs {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
     gap: 0.25rem;
+}
+
+.category-tab {
+    min-width: 0;
 }
 
 /* Tablet+ (768px): desktop enhancements */
@@ -2377,6 +2359,7 @@ html.theme-light .theme-label-light { display: inline; }
     }
 
     .search-input {
+        flex: 1 1 auto;
         width: auto;
         padding: 1rem 1.5rem;
         border-right: none;
@@ -2398,12 +2381,13 @@ html.theme-light .theme-label-light { display: inline; }
     }
 
     .category-tabs {
+        display: flex;
         gap: 0.5rem;
     }
 
     .category-tab {
-        padding: 0.5rem 0.75rem;
         min-width: 60px;
+        padding: 0.5rem 0.75rem;
     }
 
     /* Image grid: 3 columns on small tablets */
@@ -5983,6 +5967,7 @@ html.theme-light .theme-label-light { display: inline; }
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 1rem;
+    min-width: 0;
 }
 
 .section-card {
@@ -5990,6 +5975,8 @@ html.theme-light .theme-label-light { display: inline; }
     border: 1px solid var(--border-color);
     border-radius: 8px;
     padding: 1.25rem;
+    min-width: 0;        /* Prevent grid item from expanding beyond column width */
+    overflow: hidden;    /* Contain long strings (onion address etc.) */
 }
 
 .section-card h2 {
@@ -6007,27 +5994,28 @@ html.theme-light .theme-label-light { display: inline; }
 
 .info-row {
     display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    align-items: center;
-    gap: 0.25rem 0.5rem;
+    align-items: baseline;
     padding: 0.5rem 0;
     border-bottom: 1px solid var(--border-color);
-}
-
-.info-row:last-child {
-    border-bottom: none;
+    gap: 0.5rem;
+    min-width: 0;
 }
 
 .info-row dt {
+    flex: 0 0 45%;
     color: var(--text-muted);
     font-size: 0.9rem;
 }
 
 .info-row dd {
+    flex: 1;
     margin: 0;
     color: var(--text-primary);
     font-weight: 500;
+    text-align: right;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    min-width: 0;
 }
 
 .info-row code {
@@ -8142,4 +8130,61 @@ html.theme-light .theme-label-light { display: inline; }
 }
 
 /* User page responsive - mobile-first, see individual element media queries above */
+
+/* ============================================================================
+   MOBILE-ONLY OVERRIDES (max-width: 480px)
+   Must appear at end of file to override base styles (e.g. .advanced-search-trigger)
+   ============================================================================ */
+@media (max-width: 480px) {
+    /* Search box: 2-row layout — input fills row 1, buttons share row 2 */
+    .search-box {
+        flex-wrap: wrap;
+    }
+
+    /* flex-basis: 100% forces input to take full row 1, pushing buttons to row 2.
+       Using flex shorthand (not just width:100%) because flexbox ignores width
+       when flex-basis is explicitly set (flex:1 sets flex-basis:0). */
+    .search-input {
+        flex: 0 0 100%;
+        min-width: 0;
+        padding: 0.75rem 1rem;
+        border-right: 2px solid var(--border-color);
+        border-radius: 28px;
+    }
+
+    /* Row 2: advanced trigger + submit button, equal width */
+    .search-btn {
+        flex: 1;
+        padding: 0.75rem 1rem;
+        margin-top: 0.5rem;
+        border-radius: 0 28px 28px 0;
+        min-height: var(--touch-target, 44px);
+    }
+
+    .advanced-search-trigger {
+        flex: 1 1 0;
+        flex-shrink: 1;
+        margin-top: 0.5rem;
+        padding: 0.75rem;
+        min-height: var(--touch-target, 44px);
+        border: 2px solid var(--border-color) !important;
+        border-right: none !important;
+        border-radius: 28px 0 0 28px !important;
+        background: var(--bg-secondary);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-secondary);
+        cursor: pointer;
+    }
+
+    /* Tab icon / text sizing for tight 5-column grid */
+    .tab-icon {
+        font-size: 1rem;
+    }
+
+    .tab-text {
+        font-size: 0.6rem;
+    }
+}
 
