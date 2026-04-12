@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -50,18 +51,24 @@ func (e *DuckDuckGo) Search(ctx context.Context, query *model.Query) ([]model.Re
 	}
 }
 
-// searchGeneral performs a general web search
+// searchGeneral performs a general web search using DuckDuckGo HTML endpoint.
+// The Instant Answer API (api.duckduckgo.com) only returns category/disambiguation
+// pages, not real web results, so we scrape the HTML search page instead.
 func (e *DuckDuckGo) searchGeneral(ctx context.Context, query *model.Query) ([]model.Result, error) {
-	// DuckDuckGo Instant Answer API
-	apiURL := "https://api.duckduckgo.com/"
-
 	params := url.Values{}
 	params.Set("q", query.Text)
-	params.Set("format", "json")
-	params.Set("no_html", "1")
-	params.Set("skip_disambig", "1")
+	params.Set("kl", "us-en")
 
-	reqURL := fmt.Sprintf("%s?%s", apiURL, params.Encode())
+	switch query.SafeSearch {
+	case 0:
+		params.Set("kp", "-2") // Off
+	case 2:
+		params.Set("kp", "1") // Strict
+	default:
+		params.Set("kp", "-1") // Moderate
+	}
+
+	reqURL := "https://html.duckduckgo.com/html/?" + params.Encode()
 
 	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
 	if err != nil {
@@ -69,6 +76,8 @@ func (e *DuckDuckGo) searchGeneral(ctx context.Context, query *model.Query) ([]m
 	}
 
 	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
 
 	resp, err := e.client.Do(req)
 	if err != nil {
@@ -77,86 +86,98 @@ func (e *DuckDuckGo) searchGeneral(ctx context.Context, query *model.Query) ([]m
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("DuckDuckGo API returned status %d", resp.StatusCode)
+		return nil, fmt.Errorf("duckduckgo returned status %d", resp.StatusCode)
 	}
 
-	var data struct {
-		AbstractText   string `json:"AbstractText"`
-		AbstractSource string `json:"AbstractSource"`
-		AbstractURL    string `json:"AbstractURL"`
-		Heading        string `json:"Heading"`
-		RelatedTopics  []struct {
-			FirstURL string `json:"FirstURL"`
-			Text     string `json:"Text"`
-		} `json:"RelatedTopics"`
-		Results []struct {
-			FirstURL string `json:"FirstURL"`
-			Text     string `json:"Text"`
-		} `json:"Results"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+	body, err := ReadBody(resp)
+	if err != nil {
 		return nil, err
 	}
 
-	results := make([]model.Result, 0)
-	position := 0
+	return e.parseWebResults(string(body), query)
+}
 
-	// Add abstract as first result if available
-	if data.AbstractText != "" && data.AbstractURL != "" {
+var (
+	ddgTitleRe   = regexp.MustCompile(`(?i)<a[^>]+class="result__a"[^>]+href="([^"]*)"[^>]*>([\s\S]*?)</a>`)
+	ddgSnippetRe = regexp.MustCompile(`(?i)class="result__snippet"[^>]*>([\s\S]*?)</(?:a|div|p)>`)
+	ddgTagRe     = regexp.MustCompile(`<[^>]+>`)
+)
+
+func (e *DuckDuckGo) parseWebResults(html string, query *model.Query) ([]model.Result, error) {
+	titleMatches := ddgTitleRe.FindAllStringSubmatch(html, -1)
+	snippetMatches := ddgSnippetRe.FindAllStringSubmatch(html, -1)
+
+	maxResults := e.GetConfig().GetMaxResults()
+	results := make([]model.Result, 0, min(len(titleMatches), maxResults))
+
+	for i, m := range titleMatches {
+		if len(results) >= maxResults {
+			break
+		}
+
+		realURL := ddgDecodeRedirect(m[1])
+		if realURL == "" {
+			continue
+		}
+
+		title := ddgStripHTML(m[2])
+		snippet := ""
+		if i < len(snippetMatches) {
+			snippet = ddgStripHTML(snippetMatches[i][1])
+		}
+
 		results = append(results, model.Result{
-			Title:    data.Heading,
-			URL:      data.AbstractURL,
-			Content:  data.AbstractText,
+			Title:    title,
+			URL:      realURL,
+			Content:  snippet,
 			Engine:   e.Name(),
 			Category: model.CategoryGeneral,
-			Score:    calculateScore(e.GetPriority(), position, 1),
-			Position: position,
+			Score:    calculateScore(e.GetPriority(), len(results), 1),
+			Position: len(results),
 		})
-		position++
-	}
-
-	// Add related topics
-	for _, topic := range data.RelatedTopics {
-		if topic.FirstURL != "" && topic.Text != "" {
-			results = append(results, model.Result{
-				Title:    extractTitle(topic.Text),
-				URL:      topic.FirstURL,
-				Content:  topic.Text,
-				Engine:   e.Name(),
-				Category: model.CategoryGeneral,
-				Score:    calculateScore(e.GetPriority(), position, 1),
-				Position: position,
-			})
-			position++
-
-			if position >= e.GetConfig().GetMaxResults() {
-				break
-			}
-		}
-	}
-
-	// Add results
-	for _, result := range data.Results {
-		if result.FirstURL != "" && result.Text != "" {
-			results = append(results, model.Result{
-				Title:    extractTitle(result.Text),
-				URL:      result.FirstURL,
-				Content:  result.Text,
-				Engine:   e.Name(),
-				Category: model.CategoryGeneral,
-				Score:    calculateScore(e.GetPriority(), position, 1),
-				Position: position,
-			})
-			position++
-
-			if position >= e.GetConfig().GetMaxResults() {
-				break
-			}
-		}
 	}
 
 	return results, nil
+}
+
+// ddgDecodeRedirect extracts the real destination URL from a DDG redirect href.
+// DDG wraps outbound links as: //duckduckgo.com/l/?uddg=<encoded_url>&rut=...
+func ddgDecodeRedirect(href string) string {
+	if strings.HasPrefix(href, "//") {
+		href = "https:" + href
+	} else if strings.HasPrefix(href, "/") {
+		href = "https://duckduckgo.com" + href
+	}
+
+	u, err := url.Parse(href)
+	if err != nil {
+		return ""
+	}
+
+	if uddg := u.Query().Get("uddg"); uddg != "" {
+		return uddg
+	}
+
+	// Not a redirect — return only if it's an external URL
+	if u.Host != "" && u.Host != "duckduckgo.com" {
+		return href
+	}
+
+	return ""
+}
+
+// ddgStripHTML removes HTML tags and decodes common entities.
+func ddgStripHTML(s string) string {
+	s = ddgTagRe.ReplaceAllString(s, "")
+	s = strings.ReplaceAll(s, "&amp;", "&")
+	s = strings.ReplaceAll(s, "&lt;", "<")
+	s = strings.ReplaceAll(s, "&gt;", ">")
+	s = strings.ReplaceAll(s, "&quot;", `"`)
+	s = strings.ReplaceAll(s, "&#39;", "'")
+	s = strings.ReplaceAll(s, "&#x27;", "'")
+	s = strings.ReplaceAll(s, "&#x2F;", "/")
+	s = strings.ReplaceAll(s, "&nbsp;", " ")
+	return strings.TrimSpace(s)
 }
 
 // searchImages performs an image search using DuckDuckGo images

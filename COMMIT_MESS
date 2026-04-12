@@ -1,0 +1,28 @@
+fix: cache, cluster, engine connections, and DDG web results
+
+Cache (PART 9):
+- Rewrite ResultCache to wrap cache.Cache interface (memory/Valkey backend)
+- Use JSON serialisation so results are backend-portable
+- Key naming follows PART 9 convention: search:{hash}
+- Replace bare int64 counters with sync/atomic.Int64
+- AggregatorConfig.Cache replaces MaxCacheSize; auto-falls back to memory
+
+Cluster (PART 10):
+- Node states: healthy / degraded / offline / removed (was online/offline only)
+- Stale thresholds: healthy→degraded at 90s, degraded→offline at 5min
+- Primary election: lowest node ID wins (was joined_at order)
+- hashToken: use crypto/sha256 (was broken byte-copy)
+
+Engine connection exhaustion (ERR_CONNECTION_TIMED_OUT):
+- Add shared http.Transport (MaxIdleConns 200, MaxIdleConnsPerHost 20,
+  IdleConnTimeout 90s) in transport.go; all 20 engines now share it
+- Replace Body.Read(buf) single-chunk partial reads in google.go (4×)
+  and duckduckgo.go (1×) with io.ReadAll(io.LimitReader) so TCP
+  connections are fully drained and eligible for reuse by the transport
+
+DuckDuckGo general search results:
+- Replace Instant Answer API (api.duckduckgo.com) with HTML endpoint
+  (html.duckduckgo.com/html) — the Instant Answer API only returns
+  category/disambiguation pages (duckduckgo.com/c/...), not web results
+- Parse real web results from HTML using result__a / result__snippet
+- Decode DDG redirect URLs (uddg= param) to actual destination URLs
