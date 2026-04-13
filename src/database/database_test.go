@@ -711,10 +711,10 @@ func TestNodeStatusConstants(t *testing.T) {
 		status NodeStatus
 		want   string
 	}{
-		{NodeStatusOnline, "online"},
+		{NodeStatusHealthy, "healthy"},
+		{NodeStatusDegraded, "degraded"},
 		{NodeStatusOffline, "offline"},
-		{NodeStatusJoining, "joining"},
-		{NodeStatusLeaving, "leaving"},
+		{NodeStatusRemoved, "removed"},
 	}
 
 	for _, tt := range tests {
@@ -735,10 +735,9 @@ func TestClusterNodeStruct(t *testing.T) {
 		Port:      8080,
 		Version:   "1.0.0",
 		IsPrimary: true,
-		Status:    NodeStatusOnline,
+		Status:    NodeStatusHealthy,
 		LastSeen:  now,
 		JoinedAt:  now.Add(-24 * time.Hour),
-		Metadata:  map[string]string{"region": "us-east"},
 	}
 
 	if node.ID != "node-123" {
@@ -756,8 +755,8 @@ func TestClusterNodeStruct(t *testing.T) {
 	if !node.IsPrimary {
 		t.Error("IsPrimary should be true")
 	}
-	if node.Status != NodeStatusOnline {
-		t.Errorf("Status = %q, want 'online'", node.Status)
+	if node.Status != NodeStatusHealthy {
+		t.Errorf("Status = %q, want 'healthy'", node.Status)
 	}
 	if node.Metadata["region"] != "us-east" {
 		t.Errorf("Metadata['region'] = %q, want 'us-east'", node.Metadata["region"])
@@ -4973,8 +4972,8 @@ func TestClusterManagerStandaloneGetNodes(t *testing.T) {
 		t.Error("Node should be primary in standalone mode")
 	}
 
-	if nodes[0].Status != NodeStatusOnline {
-		t.Errorf("Node status = %v, want online", nodes[0].Status)
+	if nodes[0].Status != NodeStatusHealthy {
+		t.Errorf("Node status = %v, want healthy", nodes[0].Status)
 	}
 }
 

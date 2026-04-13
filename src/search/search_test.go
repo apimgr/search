@@ -134,7 +134,6 @@ func TestNewAggregator(t *testing.T) {
 		Timeout:      10 * time.Second,
 		CacheEnabled: true,
 		CacheTTL:     5 * time.Minute,
-		MaxCacheSize: 100,
 	}
 
 	agg := NewAggregator(engines, config)
@@ -240,7 +239,6 @@ func TestAggregatorSearchCaching(t *testing.T) {
 		Timeout:      10 * time.Second,
 		CacheEnabled: true,
 		CacheTTL:     5 * time.Minute,
-		MaxCacheSize: 100,
 	}
 	agg := NewAggregator([]Engine{engine}, config)
 
@@ -1126,21 +1124,16 @@ func TestNewAggregatorCacheDisabled(t *testing.T) {
 	}
 }
 
-func TestNewAggregatorMaxCacheSizeDefault(t *testing.T) {
+func TestNewAggregatorCacheCreated(t *testing.T) {
 	engines := []Engine{newMockEngine("test", model.CategoryGeneral, true)}
 	config := AggregatorConfig{
 		CacheEnabled: true,
-		// MaxCacheSize not set
 	}
 
 	agg := NewAggregator(engines, config)
 
 	if agg.cache == nil {
-		t.Fatal("cache should be created")
-	}
-	// Default maxSize should be 1000
-	if agg.cache.maxSize != 1000 {
-		t.Errorf("cache maxSize = %d, want 1000", agg.cache.maxSize)
+		t.Fatal("cache should be created when CacheEnabled is true")
 	}
 }
 
@@ -1152,7 +1145,6 @@ func TestAggregatorSearchNoCacheForEmptyResults(t *testing.T) {
 		Timeout:      10 * time.Second,
 		CacheEnabled: true,
 		CacheTTL:     5 * time.Minute,
-		MaxCacheSize: 100,
 	}
 	agg := NewAggregator([]Engine{engine}, config)
 

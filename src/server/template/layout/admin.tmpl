@@ -1,7 +1,7 @@
 {{define "admin"}}
 <!DOCTYPE html>
 {{/* Per AI.md PART 31: Dynamic lang and dir for RTL support */}}
-<html lang="{{default "en" .Lang}}" dir="{{default "ltr" .Dir}}" class="theme-{{default "dark" .Theme}}">
+<html lang="{{default "en" .Lang}}" dir="{{default "ltr" .Dir}}" class="theme-{{default "dark" .Theme}}" data-theme-mode="{{default "dark" .ThemeMode}}">
 <head>
     {{template "head" .}}
     {{block "extra_head" .}}{{end}}

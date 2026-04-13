@@ -374,11 +374,24 @@
     border-color: var(--accent-secondary);
 }
 
-/* Per AI.md PART 16: Use CSS classes on <html> element */
-html.theme-dark .theme-icon-light,
-html.theme-light .theme-icon-dark {
-    display: none;
-}
+/* Per AI.md PART 16: Use data-theme-mode attribute for icon display (supports auto mode) */
+/* Auto icon hidden by default (before JS runs) */
+.theme-icon-auto { display: none; }
+
+/* Dark mode: show sun icon (indicates current = dark; clicking → light) */
+html[data-theme-mode="dark"] .theme-icon-dark { display: block; }
+html[data-theme-mode="dark"] .theme-icon-light,
+html[data-theme-mode="dark"] .theme-icon-auto { display: none; }
+
+/* Light mode: show moon icon (indicates current = light; clicking → auto) */
+html[data-theme-mode="light"] .theme-icon-light { display: block; }
+html[data-theme-mode="light"] .theme-icon-dark,
+html[data-theme-mode="light"] .theme-icon-auto { display: none; }
+
+/* Auto mode: show monitor icon (indicates current = auto; clicking → dark) */
+html[data-theme-mode="auto"] .theme-icon-auto { display: block; }
+html[data-theme-mode="auto"] .theme-icon-dark,
+html[data-theme-mode="auto"] .theme-icon-light { display: none; }
 
 /* Navigation bar - HIDDEN: nav moved to header per AI.md PART 16 */
 .nav {
@@ -585,11 +598,20 @@ html.theme-light .theme-icon-dark {
     color: var(--accent-primary);
 }
 
-/* Theme label visibility based on current theme */
-html.theme-dark .theme-label-dark { display: inline; }
-html.theme-dark .theme-label-light { display: none; }
-html.theme-light .theme-label-dark { display: none; }
-html.theme-light .theme-label-light { display: inline; }
+/* Theme label visibility — cycles: dark→light→auto. Labels show what clicking will do */
+html[data-theme-mode="dark"] .theme-label-dark { display: inline; }
+html[data-theme-mode="dark"] .theme-label-light,
+html[data-theme-mode="dark"] .theme-label-auto { display: none; }
+html[data-theme-mode="light"] .theme-label-light { display: inline; }
+html[data-theme-mode="light"] .theme-label-dark,
+html[data-theme-mode="light"] .theme-label-auto { display: none; }
+html[data-theme-mode="auto"] .theme-label-auto { display: inline; }
+html[data-theme-mode="auto"] .theme-label-dark,
+html[data-theme-mode="auto"] .theme-label-light { display: none; }
+/* Before JS runs: hide labels when no data-theme-mode attribute set */
+html:not([data-theme-mode]) .theme-label-dark,
+html:not([data-theme-mode]) .theme-label-light,
+html:not([data-theme-mode]) .theme-label-auto { display: none; }
 
 /* Nav overlay (label) - hidden by default */
 .nav-overlay {

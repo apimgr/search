@@ -709,10 +709,20 @@ func (s *Server) UpdateConfig(cfg *config.Config) {
 	log.Println("[Server] Configuration updated")
 }
 
-// newPageData creates PageData with Tor status automatically set
+// newPageData creates PageData with Tor status and theme automatically set
 // Per AI.md PART 32: Tor section shown if enabled (always, not just when connected)
-func (s *Server) newPageData(title, page string) *PageData {
+// Per AI.md PART 16: Theme read from cookie set by client-side JS
+func (s *Server) newPageData(r *http.Request, title, page string) *PageData {
 	data := NewPageData(s.config, title, page)
+	// Per AI.md PART 16: Theme read from cookie; resolve "auto" to "dark" server-side
+	// JS overrides with system preference on page load when mode is "auto"
+	themeMode := GetTheme(r)
+	data.ThemeMode = themeMode
+	if themeMode == ThemeAuto {
+		data.Theme = ThemeDark // server-side fallback; JS handles system preference
+	} else {
+		data.Theme = themeMode
+	}
 	// Set Tor status per AI.md PART 32
 	if s.torService != nil {
 		data.TorEnabled = true
@@ -1042,11 +1052,11 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	if err != nil {
-		s.renderSearchError(w, queryStr, err)
+		s.renderSearchError(w, r, queryStr, err)
 		return
 	}
 
-	s.renderSearchResultsWithInstant(w, queryStr, results, category, instantAnswer)
+	s.renderSearchResultsWithInstant(w, r, queryStr, results, category, instantAnswer)
 }
 
 // handleDirect handles direct answer requests
@@ -1105,7 +1115,7 @@ func (s *Server) renderDirectAnswer(w http.ResponseWriter, r *http.Request, answ
 	}
 
 	// Use newPageData for TorAddress support per AI.md PART 32
-	baseData := s.newPageData(answer.Title, "direct")
+	baseData := s.newPageData(r, answer.Title, "direct")
 	baseData.Description = answer.Description
 	baseData.Query = fmt.Sprintf("%s:%s", answer.Type, answer.Term)
 
@@ -1234,12 +1244,12 @@ footer a{color:var(--accent);text-decoration:none}
 
 // renderSearchError renders an error page
 // Per AI.md PART 9: Never expose internal error details to users
-func (s *Server) renderSearchError(w http.ResponseWriter, query string, err error) {
+func (s *Server) renderSearchError(w http.ResponseWriter, r *http.Request, query string, err error) {
 	// Log actual error for debugging
 	log.Printf("[ERROR] search error: query=%q - %v", query, err)
 
 	// Use newPageData for TorAddress support per AI.md PART 32
-	baseData := s.newPageData("Search Error", "error")
+	baseData := s.newPageData(r, "Search Error", "error")
 	baseData.Description = "An error occurred while searching"
 	baseData.Query = query
 
@@ -1257,14 +1267,14 @@ func (s *Server) renderSearchError(w http.ResponseWriter, query string, err erro
 }
 
 // renderSearchResults renders the search results page
-func (s *Server) renderSearchResults(w http.ResponseWriter, query string, results *model.SearchResults, category string) {
-	s.renderSearchResultsWithInstant(w, query, results, category, nil)
+func (s *Server) renderSearchResults(w http.ResponseWriter, r *http.Request, query string, results *model.SearchResults, category string) {
+	s.renderSearchResultsWithInstant(w, r, query, results, category, nil)
 }
 
 // renderSearchResultsWithInstant renders search results with optional instant answer
-func (s *Server) renderSearchResultsWithInstant(w http.ResponseWriter, query string, results *model.SearchResults, category string, instantAnswer *instant.Answer) {
+func (s *Server) renderSearchResultsWithInstant(w http.ResponseWriter, r *http.Request, query string, results *model.SearchResults, category string, instantAnswer *instant.Answer) {
 	// Use newPageData for TorAddress support per AI.md PART 32
-	baseData := s.newPageData(query, "search")
+	baseData := s.newPageData(r, query, "search")
 	baseData.Description = fmt.Sprintf("Search results for: %s", query)
 	baseData.Query = query
 	baseData.Category = category

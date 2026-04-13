@@ -302,3 +302,13 @@ func formatNumber(n float64) string {
 	s = strings.TrimRight(s, ".")
 	return s
 }
+
+// evaluateExpression is a package-level helper used by tests.
+func evaluateExpression(expr string) (float64, error) {
+return NewMathHandler().evaluate(expr)
+}
+
+// evalSimple is a package-level helper for simple expressions, used by tests.
+func evalSimple(expr string) (float64, error) {
+return NewMathHandler().evaluate(expr)
+}

@@ -28,7 +28,7 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := s.newPageData("", "home")
+	data := s.newPageData(r, "", "home")
 	data.CSRFToken = s.getCSRFToken(r)
 
 	// Widgets are always available - users control via localStorage
@@ -50,7 +50,7 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 
 // handleAbout renders the about page
 func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
-	data := s.newPageData("About", "about")
+	data := s.newPageData(r, "About", "about")
 	data.CSRFToken = s.getCSRFToken(r)
 
 	if err := s.renderer.Render(w, "about", data); err != nil {
@@ -60,7 +60,7 @@ func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
 
 // handlePrivacy renders the privacy page
 func (s *Server) handlePrivacy(w http.ResponseWriter, r *http.Request) {
-	data := s.newPageData("Privacy Policy", "privacy")
+	data := s.newPageData(r, "Privacy Policy", "privacy")
 	data.CSRFToken = s.getCSRFToken(r)
 
 	if err := s.renderer.Render(w, "privacy", data); err != nil {
@@ -82,7 +82,7 @@ func (s *Server) handleContact(w http.ResponseWriter, r *http.Request) {
 	captchaID := s.signCaptcha(answer)
 
 	// Use newPageData for TorAddress support per AI.md PART 32
-	baseData := s.newPageData("Contact", "contact")
+	baseData := s.newPageData(r, "Contact", "contact")
 	baseData.CSRFToken = s.getCSRFToken(r)
 
 	data := &ContactPageData{
@@ -144,7 +144,7 @@ func (s *Server) handleContactSubmit(w http.ResponseWriter, r *http.Request) {
 
 // handleHelp renders the help page
 func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
-	data := s.newPageData("Help", "help")
+	data := s.newPageData(r, "Help", "help")
 	data.CSRFToken = s.getCSRFToken(r)
 	data.ServerURL = s.getBaseURL(r)
 
@@ -155,7 +155,7 @@ func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
 
 // handleTerms renders the terms of service page
 func (s *Server) handleTerms(w http.ResponseWriter, r *http.Request) {
-	data := s.newPageData("Terms of Service", "terms")
+	data := s.newPageData(r, "Terms of Service", "terms")
 	data.CSRFToken = s.getCSRFToken(r)
 
 	if err := s.renderer.Render(w, "terms", data); err != nil {
@@ -487,7 +487,7 @@ func (s *Server) respondHealthText(w http.ResponseWriter, health *HealthInfo) {
 // respondHealthHTML responds with HTML health page
 func (s *Server) respondHealthHTML(w http.ResponseWriter, r *http.Request, health *HealthInfo) {
 	// Use newPageData for TorAddress support per AI.md PART 32
-	baseData := s.newPageData("Health", "healthz")
+	baseData := s.newPageData(r, "Health", "healthz")
 
 	data := &HealthPageData{
 		PageData: *baseData,
@@ -517,7 +517,7 @@ func (s *Server) handleError(w http.ResponseWriter, r *http.Request, code int, t
 	w.WriteHeader(code)
 
 	// Use newPageData for TorAddress support per AI.md PART 32
-	baseData := s.newPageData(title, "error")
+	baseData := s.newPageData(r, title, "error")
 
 	data := &ErrorPageData{
 		PageData:   *baseData,

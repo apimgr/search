@@ -296,7 +296,8 @@ type PageData struct {
 	Title          string
 	Description    string
 	Page           string
-	Theme          string
+	Theme          string // CSS class: "dark" or "light" (resolved, never "auto")
+	ThemeMode      string // User preference: "dark", "light", or "auto"
 	Lang           string // Language code for html lang attribute (default: "en")
 	Dir            string // Text direction for html dir attribute (default: "ltr")
 	Config         *config.Config

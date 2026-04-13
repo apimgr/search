@@ -131,7 +131,7 @@ func DefaultRegistry() *Registry {
 	registry.Register(NewArXiv())
 
 	// Specialized engines
-	registry.Register(NewWolframAlpha())
+	// WolframAlpha is omitted: JS-rendered page, no open API without key.
 	registry.Register(NewOpenStreetMap())
 
 	return registry

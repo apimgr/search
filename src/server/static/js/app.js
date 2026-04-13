@@ -9,43 +9,61 @@
     // THEME MANAGEMENT
     // ========================================================================
     const THEME_KEY = 'search-theme';
-    const THEMES = ['dark', 'light'];
+    const THEMES = ['dark', 'light', 'auto'];
 
     function getPreferredTheme() {
         const saved = localStorage.getItem(THEME_KEY);
         if (saved && THEMES.includes(saved)) {
             return saved;
         }
-        return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        // Default: follow system preference
+        return 'auto';
+    }
+
+    // Resolve "auto" to actual dark/light based on system preference
+    function resolveTheme(theme) {
+        if (theme === 'auto') {
+            return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        }
+        return theme;
+    }
+
+    function applyTheme(theme) {
+        var resolved = resolveTheme(theme);
+        // Per AI.md PART 16: Apply CSS class and data-theme-mode attribute to <html>
+        document.documentElement.classList.remove('theme-dark', 'theme-light');
+        document.documentElement.classList.add('theme-' + resolved);
+        document.documentElement.setAttribute('data-theme-mode', theme);
     }
 
     function setTheme(theme) {
-        // Per AI.md PART 16: Apply theme class to <html> element: theme-light, theme-dark
-        document.documentElement.classList.remove('theme-dark', 'theme-light');
-        document.documentElement.classList.add('theme-' + theme);
+        applyTheme(theme);
         localStorage.setItem(THEME_KEY, theme);
-        updateThemeIcon(theme);
+        document.cookie = 'theme=' + theme + '; path=/; max-age=' + (30 * 24 * 60 * 60) + '; SameSite=Lax';
     }
 
-    function updateThemeIcon(theme) {
-        const darkIcon = document.querySelector('.theme-icon-dark');
-        const lightIcon = document.querySelector('.theme-icon-light');
-        if (darkIcon && lightIcon) {
-            if (theme === 'dark') {
-                darkIcon.style.display = 'block';
-                lightIcon.style.display = 'none';
-            } else {
-                darkIcon.style.display = 'none';
-                lightIcon.style.display = 'block';
-            }
-        }
-    }
+    // No-op: icon display is now fully CSS-driven via [data-theme-mode] attribute
+    function updateThemeIcon() {}
 
     function toggleTheme() {
-        // Per AI.md PART 16: Read theme from class, not attribute
-        const current = document.documentElement.classList.contains('theme-light') ? 'light' : 'dark';
-        const next = current === 'dark' ? 'light' : 'dark';
+        // Per AI.md PART 16: cycle dark → light → auto → dark
+        const current = document.documentElement.getAttribute('data-theme-mode') || 'dark';
+        const next = current === 'dark' ? 'light' : current === 'light' ? 'auto' : 'dark';
         setTheme(next);
+    }
+
+    // Listen for system preference changes when in auto mode
+    var systemThemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    function onSystemThemeChange() {
+        if ((localStorage.getItem(THEME_KEY) || 'auto') === 'auto') {
+            applyTheme('auto');
+        }
+    }
+    if (systemThemeQuery.addEventListener) {
+        systemThemeQuery.addEventListener('change', onSystemThemeChange);
+    } else if (systemThemeQuery.addListener) {
+        // Safari < 14 fallback
+        systemThemeQuery.addListener(onSystemThemeChange);
     }
 
     // ========================================================================
@@ -2355,12 +2373,7 @@
         }, 1000);
     }
 
-    // Listen for system theme changes
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(e) {
-        if (!localStorage.getItem(THEME_KEY)) {
-            setTheme(e.matches ? 'dark' : 'light');
-        }
-    });
+    // System theme change listener is registered in THEME MANAGEMENT section above
 
     // Initialize on DOM ready
     if (document.readyState === 'loading') {
