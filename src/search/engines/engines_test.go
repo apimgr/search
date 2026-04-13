@@ -99,7 +99,7 @@ func TestRegistryGetEnabled(t *testing.T) {
 
 func TestRegistryGetForCategory(t *testing.T) {
 	registry := NewRegistry()
-	registry.Register(NewGoogle())       // supports general, images, news, videos
+	registry.Register(NewGoogle())          // supports general, images, news, videos
 	registry.Register(NewWikipediaEngine()) // supports general
 
 	generalEngines := registry.GetForCategory(model.CategoryGeneral)
@@ -910,8 +910,8 @@ func TestRegistryUniqueEngines(t *testing.T) {
 
 func TestEngineTorSupport(t *testing.T) {
 	engines := []struct {
-		name       string
-		engine     interface{ GetConfig() *model.EngineConfig }
+		name        string
+		engine      interface{ GetConfig() *model.EngineConfig }
 		supportsTor bool
 	}{
 		{"duckduckgo", NewDuckDuckGo(), true}, // DDG supports Tor
@@ -1077,7 +1077,7 @@ func TestCleanHTMLEdgeCases(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{"multiple entities", "&amp;&lt;&gt;&quot;", `&<>"`,},
+		{"multiple entities", "&amp;&lt;&gt;&quot;", `&<>"`},
 		{"nested tags", "<div><span>text</span></div>", "text"},
 		{"self-closing tags", "a<br/>b<hr/>c", "abc"},
 		{"script tag content", "<script>alert('xss')</script>safe", "alert('xss')safe"},
@@ -2015,8 +2015,8 @@ func TestStartpageParseResults(t *testing.T) {
 
 func TestEngineSupportsTor(t *testing.T) {
 	tests := []struct {
-		name       string
-		engine     interface{ GetConfig() *model.EngineConfig }
+		name        string
+		engine      interface{ GetConfig() *model.EngineConfig }
 		supportsTor bool
 	}{
 		{"duckduckgo", NewDuckDuckGo(), true},
@@ -2284,6 +2284,32 @@ func TestGoogleSearchTimeRanges(t *testing.T) {
 			}
 			_, _ = engine.Search(ctx, query)
 		})
+	}
+}
+
+func TestGoogleParseNewsResultsSkipsGoogleLinks(t *testing.T) {
+	engine := NewGoogle()
+	query := &model.Query{Text: "test", Category: model.CategoryNews}
+
+	html := `
+	<div role="heading">First headline</div>
+	<a href="https://www.google.com/some/internal/link">ignore this</a>
+	<a href="https://example.com/news/story">real result</a>
+	<div role="heading">Second headline</div>
+	<a href="https://news.example.org/article">second result</a>
+	`
+
+	results := engine.parseNewsResults(html, query)
+	if len(results) != 2 {
+		t.Fatalf("parseNewsResults() returned %d results, want 2", len(results))
+	}
+
+	if results[0].URL != "https://example.com/news/story" {
+		t.Fatalf("first result URL = %q, want %q", results[0].URL, "https://example.com/news/story")
+	}
+
+	if results[1].URL != "https://news.example.org/article" {
+		t.Fatalf("second result URL = %q, want %q", results[1].URL, "https://news.example.org/article")
 	}
 }
 
@@ -2610,14 +2636,14 @@ func TestYahooParseResultsComprehensive(t *testing.T) {
 		wantCount int
 	}{
 		{
-			name: "redirect URL extraction",
-			html: `<a href="https://r.search.yahoo.com/redirect?RU=https%3A%2F%2Fexample.com"><h3>Example</h3></a>`,
+			name:      "redirect URL extraction",
+			html:      `<a href="https://r.search.yahoo.com/redirect?RU=https%3A%2F%2Fexample.com"><h3>Example</h3></a>`,
 			category:  model.CategoryGeneral,
 			wantCount: 1,
 		},
 		{
-			name: "complex result pattern fallback",
-			html: `<div class="algo"><a class="ac-algo" href="https://example.com">Example Title</a><p class="s-desc">Description</p></div>`,
+			name:      "complex result pattern fallback",
+			html:      `<div class="algo"><a class="ac-algo" href="https://example.com">Example Title</a><p class="s-desc">Description</p></div>`,
 			category:  model.CategoryGeneral,
 			wantCount: 1, // Parser finds the result
 		},

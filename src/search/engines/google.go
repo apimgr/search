@@ -26,8 +26,10 @@ var (
 	// gNewsHeadingRe matches Google News headings (role="heading" is stable).
 	gNewsHeadingRe = regexp.MustCompile(`<div[^>]+role="heading"[^>]*>([\s\S]{1,300}?)</div>`)
 
-	// gDirectURLRe catches direct external links (used in news/video blocks).
-	gDirectURLRe = regexp.MustCompile(`href="(https?://(?:[^"]*\.(?!google\.com))[^"]{5,500})"`)
+	// gDirectURLRe catches direct absolute links (used in news/video blocks).
+	// Google-owned URLs are filtered in Go with isGoogleURL because Go's regexp
+	// engine does not support Perl-style negative lookaheads.
+	gDirectURLRe = regexp.MustCompile(`href="(https?://[^"]{5,500})"`)
 
 	// gImgJSONRe extracts image metadata embedded as JSON arrays in Google Images.
 	gImgJSONRe = regexp.MustCompile(`\["(https?://[^"]+\.(?:jpg|jpeg|png|gif|webp)[^"]*)",(\d+),(\d+)\]`)
@@ -440,6 +442,9 @@ func cleanHTML(text string) string {
 
 // extractGoogleURL is kept for compatibility.
 func extractGoogleURL(googleURL string) string {
-	return googleDecodeRedirect(strings.Trim(googleURL, `"`))
+	googleURL = googleDecodeEntities(strings.TrimSpace(strings.Trim(googleURL, `"`)))
+	if strings.HasPrefix(googleURL, "http://") || strings.HasPrefix(googleURL, "https://") {
+		return googleURL
+	}
+	return googleDecodeRedirect(googleURL)
 }
-
