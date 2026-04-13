@@ -462,7 +462,8 @@ type TorConfig struct {
 	// Number of introduction points (3-10, default 3)
 	NumIntroPoints int `yaml:"num_intro_points"`
 	// Virtual port for hidden service (1-65535, default 80)
-	HiddenServicePort int `yaml:"hidden_service_port"`
+	// Per AI.md PART 32: yaml key is "virtual_port"
+	VirtualPort int `yaml:"virtual_port"`
 }
 
 // EmailConfig represents email/SMTP configuration
@@ -1247,7 +1248,7 @@ func DefaultConfig() *Config {
 				BandwidthBurst:            "2 MB",
 				MaxMonthlyBandwidth:       "100 GB",
 				NumIntroPoints:            3,
-				HiddenServicePort:         80,
+				VirtualPort:               80,
 			},
 			Email: EmailConfig{
 				// Per AI.md PART 18: Enabled is auto-set based on SMTP availability

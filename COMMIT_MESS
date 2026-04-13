@@ -1,18 +1,21 @@
-fix(theme): implement three-way toggle and fix auto mode rendering
+fix(tor): spec compliance - rename VirtualPort, remove SetEnabled, fix logs
 
-- Add ThemeMode field to PageData to track user preference separately
-  from the resolved CSS class (Theme field is always "dark" or "light")
-- Server resolves "auto" cookie → "dark" CSS class with data-theme-mode="auto"
-  attribute so CSS can display the correct icon without JS running
-- All three layout templates (base, public, admin) now emit data-theme-mode
-  attribute on <html> element for CSS-driven icon/label selection
-- Add monitor/screen SVG icon for auto mode in both desktop and mobile toggles
-- Toggle cycles dark → light → auto → dark per AI.md PART 16 spec
-- CSS icon and label selectors updated from html.theme-X class to
-  html[data-theme-mode="X"] attribute selectors (supports all three states)
-- JS setTheme("auto") resolves to system preference via prefers-color-scheme
-  for the CSS class, but stores "auto" in cookie and localStorage
-- System theme change listener fires applyTheme when stored mode is "auto"
-- Remove duplicate prefers-color-scheme listener (superseded by new one)
+Per AI.md PART 32 Tor hidden service spec:
+
+- Rename HiddenServicePort → VirtualPort with yaml:"virtual_port" in
+  TorConfig (config.go and all references in tor.go, tor_test.go,
+  config.go defaults, config_test.go)
+- Remove SetEnabled() method — spec explicitly says no enable/disable
+  toggle; Tor is auto-enabled when binary is found at runtime
+- Fix success log format to "Tor: {address}" (was "[Tor] Hidden service:
+  ... (port X → Y)")
+- Remove conf.ControlSocket usage — bine's StartConf has no such field;
+  bine uses TCP control port auto-assigned by Tor
+- Remove platform-specific control socket branching (runtime.GOOS check)
+- Fix torrc persistence: create-only on first run (os.Stat check), never
+  overwrite on start; permissions enforced (0600) on existing file
+- Add MaxStreamsPerCircuit to torrc generation in getTorConfig()
+- Update tests: replace TestTorServiceSetEnabled / TestTorServiceSetEnabledFalse
+  with equivalent Stop() idempotency tests
 
 Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>

@@ -96,17 +96,17 @@ func TestTorServiceStopNotRunning(t *testing.T) {
 	}
 }
 
-func TestTorServiceSetEnabled(t *testing.T) {
+// SetEnabled was removed per AI.md PART 32 (no enable/disable toggle).
+// Tor is auto-enabled when binary is found. Test Stop instead.
+func TestTorServiceStopWhenNotRunning(t *testing.T) {
 	cfg := config.DefaultConfig()
 	ts := NewTorService(cfg)
 
-	// SetEnabled(false) should just stop (which is a no-op if not running)
-	err := ts.SetEnabled(false)
+	// Stop is a no-op when not running
+	err := ts.Stop()
 	if err != nil {
-		t.Errorf("SetEnabled(false) error = %v", err)
+		t.Errorf("Stop() error = %v", err)
 	}
-
-	// Note: SetEnabled(true) would try to start Tor which we can't test without Tor installed
 }
 
 func TestFindTorBinary(t *testing.T) {
@@ -581,18 +581,18 @@ func TestTorServiceGetTorStatusFields(t *testing.T) {
 	}
 }
 
-// Test SetEnabled with false
-func TestTorServiceSetEnabledFalse(t *testing.T) {
+// SetEnabled was removed per AI.md PART 32 (no enable/disable toggle).
+func TestTorServiceStopIsNoOpWhenNotRunning(t *testing.T) {
 	cfg := config.DefaultConfig()
 	ts := NewTorService(cfg)
 
-	err := ts.SetEnabled(false)
+	err := ts.Stop()
 	if err != nil {
-		t.Errorf("SetEnabled(false) error = %v", err)
+		t.Errorf("Stop() error = %v", err)
 	}
 
 	if ts.IsRunning() {
-		t.Error("Should not be running after SetEnabled(false)")
+		t.Error("Should not be running")
 	}
 }
 
@@ -854,7 +854,7 @@ func TestTorServiceRestartSequence(t *testing.T) {
 func TestTorServiceWithConfig(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Server.Tor.Enabled = true
-	cfg.Server.Tor.HiddenServicePort = 8080
+	cfg.Server.Tor.VirtualPort = 8080
 	cfg.Server.Port = 3000
 
 	ts := NewTorService(cfg)

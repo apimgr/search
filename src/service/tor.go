@@ -133,8 +133,6 @@ func (t *TorService) getTorConfig() string {
 	} else {
 		// Unix/macOS/BSD: Use Unix socket (no TCP port at all)
 		// Use "ControlPort unix:/path" format - single directive for Unix socket
-		// Note: Cannot use separate ControlPort 0 + ControlSocket as Tor writes
-		// both to controlport file which confuses bine's parser
 		controlSocket := filepath.Join(t.dataDir, "control.sock")
 		controlConfig = fmt.Sprintf("ControlPort unix:%s", controlSocket)
 	}
@@ -168,6 +166,12 @@ func (t *TorService) getTorConfig() string {
 		bandwidthBurst = "2 MB"
 	}
 
+	// MaxStreamsPerCircuit with default
+	maxStreams := cfg.MaxStreamsPerCircuit
+	if maxStreams <= 0 {
+		maxStreams = 100
+	}
+
 	// Monthly bandwidth accounting (if not "unlimited")
 	var accountingConfig string
 	if cfg.MaxMonthlyBandwidth != "" && cfg.MaxMonthlyBandwidth != "unlimited" {
@@ -194,9 +198,9 @@ AccountingMax %s`, cfg.MaxMonthlyBandwidth)
 
 # Security Hardening
 SafeLogging %s
-
-# Circuit limits
 MaxCircuitDirtiness 600
+MaxStreamsPerCircuit %d
+%s
 
 # Bandwidth limits per second
 BandwidthRate %s
@@ -218,7 +222,13 @@ FetchDirInfoExtraEarly 1
 
 # Reduce memory usage
 DisableDebuggerAttachment 1
-`, socksConfig, controlConfig, safeLogging, bandwidthRate, bandwidthBurst, accountingConfig)
+`, socksConfig, controlConfig, safeLogging, maxStreams,
+		func() string {
+			if cfg.CloseCircuitOnStreamLimit {
+				return ""
+			}
+			return "CircuitStreamTimeout 60"
+		}(), bandwidthRate, bandwidthBurst, accountingConfig)
 }
 
 // Start starts the Tor hidden service using bine
@@ -238,11 +248,9 @@ func (t *TorService) Start() error {
 	if torBinary == "" {
 		// Per AI.md PART 32: "NOT FOUND: Log INFO, disable Tor features, continue without Tor"
 		log.Println("[Tor] Tor binary not found, hidden service disabled")
-		torConfig.Enabled = false
 		return nil // Not an error - Tor is optional
 	}
 
-	// Auto-enable when binary is found per AI.md PART 32
 	torConfig.Enabled = true
 	log.Printf("[Tor] Found binary: %s", torBinary)
 
@@ -255,14 +263,20 @@ func (t *TorService) Start() error {
 	torrcPath := filepath.Join(t.configDir, "torrc")
 	keyPath := filepath.Join(t.dataDir, "site", "hs_ed25519_secret_key")
 
-	// Generate and write torrc
-	torrcContent := t.getTorConfig()
-	if err := os.WriteFile(torrcPath, []byte(torrcContent), 0600); err != nil {
-		return fmt.Errorf("failed to write torrc: %w", err)
+	// Per AI.md PART 32: torrc is PERSISTENT — only create if it doesn't exist.
+	// Admin panel config saves use updateTorrc() to overwrite.
+	if _, err := os.Stat(torrcPath); os.IsNotExist(err) {
+		torrcContent := t.getTorConfig()
+		if err := os.WriteFile(torrcPath, []byte(torrcContent), 0600); err != nil {
+			return fmt.Errorf("failed to write torrc: %w", err)
+		}
+		log.Printf("[Tor] Created torrc: %s", torrcPath)
+	} else {
+		// Always enforce correct permissions on existing torrc
+		_ = os.Chmod(torrcPath, 0600)
 	}
 
 	// Build StartConf per AI.md PART 32
-	// NoAutoSocksPort = true: We control SocksPort via torrc, bine won't add conflicting args
 	conf := &tor.StartConf{
 		ExePath:         torBinary,
 		TorrcFile:       torrcPath,
@@ -275,6 +289,8 @@ func (t *TorService) Start() error {
 		conf.DebugWriter = os.Stderr
 	}
 
+	// Per AI.md PART 32 bootstrap logging: start silently; show "Tor: connecting..."
+	// only if bootstrap takes >30s; show address on success.
 	log.Println("[Tor] Starting Tor process...")
 
 	// Start OUR OWN Tor process - completely separate from system Tor
@@ -283,18 +299,32 @@ func (t *TorService) Start() error {
 		return fmt.Errorf("failed to start tor: %w", err)
 	}
 
-	// Wait for Tor to bootstrap (connect to network)
-	// Per AI.md PART 32: Bootstrap timeout default 180 seconds (3 minutes)
+	// Wait for Tor to bootstrap with progressive logging per AI.md PART 32
 	bootstrapTimeout := time.Duration(torConfig.BootstrapTimeout) * time.Second
 	if bootstrapTimeout == 0 {
 		bootstrapTimeout = 3 * time.Minute
 	}
 
-	log.Println("[Tor] Connecting to Tor network...")
-	dialCtx, cancel := context.WithTimeout(t.ctx, bootstrapTimeout)
-	defer cancel()
+	// Bootstrap silently for first 30s; then log "Tor: connecting..." if still waiting
+	slowTimer := time.NewTimer(30 * time.Second)
+	defer slowTimer.Stop()
+	bootstrapDone := make(chan error, 1)
+	go func() {
+		dialCtx, cancel := context.WithTimeout(t.ctx, bootstrapTimeout)
+		defer cancel()
+		bootstrapDone <- torInstance.EnableNetwork(dialCtx, true)
+	}()
 
-	if err := torInstance.EnableNetwork(dialCtx, true); err != nil {
+	select {
+	case err = <-bootstrapDone:
+		// Bootstrap completed (fast)
+		slowTimer.Stop()
+	case <-slowTimer.C:
+		// Slow bootstrap — let user know
+		log.Println("Tor: connecting...")
+		err = <-bootstrapDone
+	}
+	if err != nil {
 		torInstance.Close()
 		return fmt.Errorf("failed to connect to tor network (timeout %v): %w", bootstrapTimeout, err)
 	}
@@ -316,7 +346,7 @@ func (t *TorService) Start() error {
 	// Create hidden service via ADD_ONION control command
 	// Per AI.md PART 32: This forwards .onion:{virtual_port} → 127.0.0.1:serverPort
 	serverPort := t.config.Server.Port
-	virtualPort := torConfig.HiddenServicePort
+	virtualPort := torConfig.VirtualPort
 	if virtualPort == 0 {
 		virtualPort = 80
 	}
@@ -373,7 +403,8 @@ func (t *TorService) Start() error {
 		}
 	}
 
-	log.Printf("[Tor] Hidden service: %s (port %d → %d)", t.onionAddr, virtualPort, serverPort)
+	// Per AI.md PART 32 success log: "Tor: {onion_address}" (short, once at startup)
+	log.Printf("Tor: %s", t.onionAddr)
 
 	// Start monitoring goroutine
 	go t.monitorTor()
@@ -478,7 +509,7 @@ func (t *TorService) RegenerateAddress() (string, error) {
 
 	// Create new hidden service with new keys
 	serverPort := t.config.Server.Port
-	virtualPort := t.config.Server.Tor.HiddenServicePort
+	virtualPort := t.config.Server.Tor.VirtualPort
 	if virtualPort == 0 {
 		virtualPort = 80
 	}
@@ -508,14 +539,6 @@ func (t *TorService) RegenerateAddress() (string, error) {
 
 	log.Printf("[Tor] New hidden service address: %s", t.onionAddr)
 	return t.onionAddr, nil
-}
-
-// SetEnabled enables or disables Tor
-func (t *TorService) SetEnabled(enabled bool) error {
-	if enabled {
-		return t.Start()
-	}
-	return t.Stop()
 }
 
 // monitorTor monitors the Tor process and restarts if it crashes

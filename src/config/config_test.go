@@ -196,8 +196,8 @@ func TestTorConfigDefaults(t *testing.T) {
 	cfg := DefaultConfig()
 
 	// Per AI.md PART 32: Tor auto-enabled, not configurable
-	if cfg.Server.Tor.HiddenServicePort != 80 {
-		t.Errorf("Tor.HiddenServicePort = %d, want 80", cfg.Server.Tor.HiddenServicePort)
+	if cfg.Server.Tor.VirtualPort != 80 {
+		t.Errorf("Tor.VirtualPort = %d, want 80", cfg.Server.Tor.VirtualPort)
 	}
 }
 
