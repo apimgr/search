@@ -254,12 +254,23 @@ func (m *Manager) Parse(query string) (AnswerType, string) {
 		return "", ""
 	}
 
+	lowerQuery := strings.ToLower(query)
+	if strings.HasPrefix(lowerQuery, "rotl:") {
+		return AnswerTypeRules, strings.TrimSpace(query[len("rotl:"):])
+	}
+	if strings.HasPrefix(lowerQuery, "rules:") && strings.TrimSpace(query[len("rules:"):]) == "" {
+		return AnswerTypeRules, ""
+	}
+
 	matches := m.pattern.FindStringSubmatch(query)
 	if len(matches) != 3 {
 		return "", ""
 	}
 
 	answerType := AnswerType(strings.ToLower(matches[1]))
+	if answerType == "rotl" {
+		answerType = AnswerTypeRules
+	}
 	term := strings.TrimSpace(matches[2])
 
 	// Check if we have a handler for this type

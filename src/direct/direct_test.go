@@ -45,6 +45,10 @@ func TestParse(t *testing.T) {
 		{"http:404", AnswerTypeHTTP, "404"},
 		{"chmod:755", AnswerTypeChmod, "755"},
 		{"cron:* * * * *", AnswerTypeCron, "* * * * *"},
+		{"rotl:34", AnswerTypeRules, "34"},
+		{"rotl: all", AnswerTypeRules, "all"},
+		{"rotl:", AnswerTypeRules, ""},
+		{"rules:", AnswerTypeRules, ""},
 		{"", "", ""},
 		{"notacommand", "", ""},
 		{"invalid:", "", ""},
@@ -74,6 +78,8 @@ func TestIsDirectAnswer(t *testing.T) {
 		{"tldr:git", true},
 		{"dns:example.com", true},
 		{"wiki:Python", true},
+		{"rotl:33", true},
+		{"rotl:", true},
 		{"regular search query", false},
 		{"not:ahandler", false},
 		{"", false},
@@ -89,6 +95,36 @@ func TestIsDirectAnswer(t *testing.T) {
 	}
 }
 
+func TestRulesAliasProcess(t *testing.T) {
+	m := NewManager()
+	ctx := context.Background()
+
+	answer, err := m.Process(ctx, "rotl:34")
+	if err != nil {
+		t.Fatalf("Process(rotl:34) error: %v", err)
+	}
+	if answer == nil {
+		t.Fatal("Process(rotl:34) returned nil answer")
+	}
+	if answer.Type != AnswerTypeRules {
+		t.Fatalf("answer type = %v, want %v", answer.Type, AnswerTypeRules)
+	}
+	if answer.Title != "Rule 34 of the Internet" {
+		t.Fatalf("answer title = %q, want %q", answer.Title, "Rule 34 of the Internet")
+	}
+
+	answer, err = m.Process(ctx, "rotl:")
+	if err != nil {
+		t.Fatalf("Process(rotl:) error: %v", err)
+	}
+	if answer == nil {
+		t.Fatal("Process(rotl:) returned nil answer")
+	}
+	if answer.Title != "Rules of the Internet" {
+		t.Fatalf("answer title = %q, want %q", answer.Title, "Rules of the Internet")
+	}
+}
+
 func TestCacheDurations(t *testing.T) {
 	// Verify key cache durations are set correctly
 	tests := []struct {
@@ -99,9 +135,9 @@ func TestCacheDurations(t *testing.T) {
 		{AnswerTypeTLDR, 7 * 24 * time.Hour, 7 * 24 * time.Hour},
 		{AnswerTypeMan, 30 * 24 * time.Hour, 30 * 24 * time.Hour},
 		{AnswerTypeDNS, 1 * time.Hour, 1 * time.Hour},
-		{AnswerTypeHTTP, 0, 0},       // Static, no cache
-		{AnswerTypeChmod, 0, 0},      // Static, no cache
-		{AnswerTypeCache, 0, 0},      // Never cache
+		{AnswerTypeHTTP, 0, 0},  // Static, no cache
+		{AnswerTypeChmod, 0, 0}, // Static, no cache
+		{AnswerTypeCache, 0, 0}, // Never cache
 		{AnswerTypeWiki, 24 * time.Hour, 24 * time.Hour},
 	}
 
