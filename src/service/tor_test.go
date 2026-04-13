@@ -1,6 +1,8 @@
 package service
 
 import (
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/apimgr/search/src/config"
@@ -200,11 +202,11 @@ func TestTorServiceGenerateVanityInvalidChars(t *testing.T) {
 
 	// Invalid characters should fail
 	invalidPrefixes := []string{
-		"ABC",   // uppercase
-		"abc1",  // invalid number (1 is not valid base32)
-		"abc_",  // underscore
-		"abc-",  // hyphen
-		"abc!",  // special char
+		"ABC",  // uppercase
+		"abc1", // invalid number (1 is not valid base32)
+		"abc_", // underscore
+		"abc-", // hyphen
+		"abc!", // special char
 	}
 
 	for _, prefix := range invalidPrefixes {
@@ -235,6 +237,47 @@ func TestTorServiceGenerateVanityValidChars(t *testing.T) {
 		}
 		// Cancel after starting
 		ts.CancelVanity()
+	}
+}
+
+func TestGetTorConfigDoesNotEmitLegacyInvalidOption(t *testing.T) {
+	cfg := config.DefaultConfig()
+	ts := NewTorService(cfg)
+
+	torrc := ts.getTorConfig()
+	if strings.Contains(torrc, "MaxStreamsPerCircuit ") {
+		t.Fatal("getTorConfig() should not include MaxStreamsPerCircuit")
+	}
+}
+
+func TestSanitizeTorrcContentRemovesLegacyInvalidOption(t *testing.T) {
+	dataDir := "/tmp/search-tor"
+	input := strings.Join([]string{
+		"SafeLogging 1",
+		"MaxStreamsPerCircuit 100",
+		"BandwidthRate 1 MB",
+	}, "\n")
+
+	got := sanitizeTorrcContent(input, dataDir)
+	if strings.Contains(got, "MaxStreamsPerCircuit ") {
+		t.Fatal("sanitizeTorrcContent() should remove MaxStreamsPerCircuit")
+	}
+	if !strings.Contains(got, "BandwidthRate 1 MB") {
+		t.Fatal("sanitizeTorrcContent() should preserve unrelated lines")
+	}
+}
+
+func TestSanitizeTorrcContentMigratesUnixControlPort(t *testing.T) {
+	dataDir := "/tmp/search-tor"
+	input := "ControlPort unix:/old/control.sock\nSafeLogging 1"
+
+	got := sanitizeTorrcContent(input, dataDir)
+	if !strings.Contains(got, "ControlPort 0") {
+		t.Fatal("sanitizeTorrcContent() should set ControlPort 0 for migrated unix socket config")
+	}
+	expectedSocket := "ControlSocket " + filepath.Join(dataDir, "control.sock")
+	if !strings.Contains(got, expectedSocket) {
+		t.Fatalf("sanitizeTorrcContent() missing %q", expectedSocket)
 	}
 }
 
@@ -729,21 +772,21 @@ func TestTorServiceGenerateVanityValidation(t *testing.T) {
 		prefix  string
 		wantErr bool
 	}{
-		{"", false},        // Empty is valid
-		{"a", false},       // Single char valid
-		{"abc", false},     // Short valid
-		{"234567", false},  // Numbers 2-7 valid
-		{"abcdef", false},  // 6 chars max for built-in
-		{"abcdefg", true},  // 7 chars too long
-		{"ABC", true},      // Uppercase invalid
-		{"abc1", true},     // 1 invalid in base32
-		{"abc0", true},     // 0 invalid in base32
-		{"abc8", true},     // 8 invalid in base32
-		{"abc9", true},     // 9 invalid in base32
-		{"abc!", true},     // Special char invalid
-		{"abc-", true},     // Hyphen invalid
-		{"abc_", true},     // Underscore invalid
-		{"abc ", true},     // Space invalid
+		{"", false},       // Empty is valid
+		{"a", false},      // Single char valid
+		{"abc", false},    // Short valid
+		{"234567", false}, // Numbers 2-7 valid
+		{"abcdef", false}, // 6 chars max for built-in
+		{"abcdefg", true}, // 7 chars too long
+		{"ABC", true},     // Uppercase invalid
+		{"abc1", true},    // 1 invalid in base32
+		{"abc0", true},    // 0 invalid in base32
+		{"abc8", true},    // 8 invalid in base32
+		{"abc9", true},    // 9 invalid in base32
+		{"abc!", true},    // Special char invalid
+		{"abc-", true},    // Hyphen invalid
+		{"abc_", true},    // Underscore invalid
+		{"abc ", true},    // Space invalid
 	}
 
 	for _, tt := range tests {

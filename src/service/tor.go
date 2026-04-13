@@ -42,10 +42,10 @@ func findTorBinary(configPath string) string {
 	commonLocations := []string{
 		"/usr/bin/tor",
 		"/usr/local/bin/tor",
-		"/opt/local/bin/tor",          // macOS MacPorts
-		"/opt/homebrew/bin/tor",       // macOS Homebrew (Apple Silicon)
-		"/usr/local/opt/tor/bin/tor",  // macOS Homebrew (Intel)
-		"/snap/bin/tor",               // Ubuntu Snap
+		"/opt/local/bin/tor",         // macOS MacPorts
+		"/opt/homebrew/bin/tor",      // macOS Homebrew (Apple Silicon)
+		"/usr/local/opt/tor/bin/tor", // macOS Homebrew (Intel)
+		"/snap/bin/tor",              // Ubuntu Snap
 	}
 
 	for _, loc := range commonLocations {
@@ -68,17 +68,17 @@ var lookPath = func(file string) (string, error) {
 // per AI.md PART 32: TOR HIDDEN SERVICE (NON-NEGOTIABLE)
 // Server binary fully owns and controls the Tor process lifecycle.
 type TorService struct {
-	config      *config.Config
-	tor         *tor.Tor
-	serviceID   string // .onion address (without .onion suffix)
-	dialer      *tor.Dialer
-	running     bool
-	onionAddr   string
-	mu          sync.RWMutex
-	ctx         context.Context
-	cancel      context.CancelFunc
-	dataDir     string
-	configDir   string
+	config    *config.Config
+	tor       *tor.Tor
+	serviceID string // .onion address (without .onion suffix)
+	dialer    *tor.Dialer
+	running   bool
+	onionAddr string
+	mu        sync.RWMutex
+	ctx       context.Context
+	cancel    context.CancelFunc
+	dataDir   string
+	configDir string
 }
 
 // NewTorService creates a new Tor service manager
@@ -97,9 +97,9 @@ func NewTorService(cfg *config.Config) *TorService {
 // Per AI.md PART 32: Server binary owns all Tor files
 func (t *TorService) ensureTorDirs() error {
 	dirs := []string{
-		t.dataDir,                          // {data_dir}/tor/
-		filepath.Join(t.dataDir, "site"),   // {data_dir}/tor/site/ for hidden service keys
-		t.configDir,                        // {config_dir}/tor/ for torrc
+		t.dataDir,                        // {data_dir}/tor/
+		filepath.Join(t.dataDir, "site"), // {data_dir}/tor/site/ for hidden service keys
+		t.configDir,                      // {config_dir}/tor/ for torrc
 	}
 
 	for _, dir := range dirs {
@@ -131,10 +131,10 @@ func (t *TorService) getTorConfig() string {
 		// "auto" = Tor picks available high port at runtime (never saved)
 		controlConfig = "ControlPort 127.0.0.1:auto"
 	} else {
-		// Unix/macOS/BSD: Use Unix socket (no TCP port at all)
-		// Use "ControlPort unix:/path" format - single directive for Unix socket
+		// Unix/macOS/BSD: keep control TCP disabled in torrc and expose a local
+		// control socket; bine still adds its own auto control port at runtime.
 		controlSocket := filepath.Join(t.dataDir, "control.sock")
-		controlConfig = fmt.Sprintf("ControlPort unix:%s", controlSocket)
+		controlConfig = fmt.Sprintf("ControlPort 0\nControlSocket %s", controlSocket)
 	}
 
 	// SocksPort per AI.md PART 32:
@@ -166,12 +166,6 @@ func (t *TorService) getTorConfig() string {
 		bandwidthBurst = "2 MB"
 	}
 
-	// MaxStreamsPerCircuit with default
-	maxStreams := cfg.MaxStreamsPerCircuit
-	if maxStreams <= 0 {
-		maxStreams = 100
-	}
-
 	// Monthly bandwidth accounting (if not "unlimited")
 	var accountingConfig string
 	if cfg.MaxMonthlyBandwidth != "" && cfg.MaxMonthlyBandwidth != "unlimited" {
@@ -199,7 +193,6 @@ AccountingMax %s`, cfg.MaxMonthlyBandwidth)
 # Security Hardening
 SafeLogging %s
 MaxCircuitDirtiness 600
-MaxStreamsPerCircuit %d
 %s
 
 # Bandwidth limits per second
@@ -222,13 +215,33 @@ FetchDirInfoExtraEarly 1
 
 # Reduce memory usage
 DisableDebuggerAttachment 1
-`, socksConfig, controlConfig, safeLogging, maxStreams,
+`, socksConfig, controlConfig, safeLogging,
 		func() string {
 			if cfg.CloseCircuitOnStreamLimit {
 				return ""
 			}
 			return "CircuitStreamTimeout 60"
 		}(), bandwidthRate, bandwidthBurst, accountingConfig)
+}
+
+func sanitizeTorrcContent(content string, dataDir string) string {
+	lines := strings.Split(content, "\n")
+	sanitized := make([]string, 0, len(lines)+2)
+	controlSocket := filepath.Join(dataDir, "control.sock")
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "MaxStreamsPerCircuit ") {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "ControlPort unix:") {
+			sanitized = append(sanitized, "ControlPort 0", fmt.Sprintf("ControlSocket %s", controlSocket))
+			continue
+		}
+		sanitized = append(sanitized, line)
+	}
+
+	return strings.Join(sanitized, "\n")
 }
 
 // Start starts the Tor hidden service using bine
@@ -272,6 +285,15 @@ func (t *TorService) Start() error {
 		}
 		log.Printf("[Tor] Created torrc: %s", torrcPath)
 	} else {
+		if existing, err := os.ReadFile(torrcPath); err == nil {
+			sanitized := sanitizeTorrcContent(string(existing), t.dataDir)
+			if sanitized != string(existing) {
+				if err := os.WriteFile(torrcPath, []byte(sanitized), 0600); err != nil {
+					return fmt.Errorf("failed to migrate torrc: %w", err)
+				}
+				log.Printf("[Tor] Updated legacy torrc: %s", torrcPath)
+			}
+		}
 		// Always enforce correct permissions on existing torrc
 		_ = os.Chmod(torrcPath, 0600)
 	}
