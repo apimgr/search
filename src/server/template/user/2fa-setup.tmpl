@@ -1,0 +1,63 @@
+{{define "content"}}
+<div class="user-page twofa-page">
+    <div class="page-header">
+        <h1>Two-Factor Authentication</h1>
+        <p class="page-subtitle">Protect your account with a time-based one-time password app.</p>
+    </div>
+
+    <div class="user-content">
+        {{if .Error}}
+        <div class="alert alert-error" role="alert">
+            {{.Error}}
+        </div>
+        {{end}}
+
+        {{if .TwoFASetup}}
+        <section class="security-section">
+            <h2>Scan the QR Code</h2>
+            <p class="section-description">Use an authenticator app to scan this code, or enter the secret manually if scanning is not available.</p>
+            <div class="twofa-setup-card">
+                <img src="{{.TwoFASetup.QRCodeURL}}" alt="QR code for two-factor authentication setup" class="twofa-qr">
+                <div class="twofa-setup-details">
+                    <dl class="version-grid">
+                        <dt>Issuer</dt>
+                        <dd>{{.TwoFASetup.Issuer}}</dd>
+                        <dt>Account</dt>
+                        <dd>{{.TwoFASetup.Account}}</dd>
+                        <dt>Secret</dt>
+                        <dd><code class="long-string">{{.TwoFASetup.Secret}}</code></dd>
+                    </dl>
+                </div>
+            </div>
+        </section>
+
+        <section class="security-section">
+            <h2>Verify Setup</h2>
+            <form method="POST" action="/users/2fa/setup" class="security-form">
+                <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                <input type="hidden" name="step" value="verify">
+                <div class="form-group">
+                    <label for="twofa_code">Authentication Code</label>
+                    <input type="text" id="twofa_code" name="code" inputmode="numeric" autocomplete="one-time-code" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Enable Two-Factor Authentication</button>
+            </form>
+        </section>
+        {{else}}
+        <section class="security-section">
+            <h2>Confirm Your Password</h2>
+            <p class="section-description">Enter your password to generate a QR code and begin setup.</p>
+            <form method="POST" action="/users/2fa/setup" class="security-form">
+                <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                <input type="hidden" name="step" value="init">
+                <div class="form-group">
+                    <label for="setup_password">Password</label>
+                    <input type="password" id="setup_password" name="password" autocomplete="current-password" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Continue</button>
+            </form>
+        </section>
+        {{end}}
+    </div>
+</div>
+{{end}}

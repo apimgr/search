@@ -270,14 +270,14 @@ type AutodiscoverResponse struct {
 
 // InfoResponse represents server info response
 type InfoResponse struct {
-	Name        string            `json:"name"`
-	Version     string            `json:"version"`
-	Description string            `json:"description"`
-	Uptime      string            `json:"uptime"`
-	Mode        string            `json:"mode"`
-	Engines     EnginesSummary    `json:"engines"`
-	System      SystemInfo        `json:"system"`
-	Features    map[string]bool   `json:"features"`
+	Name        string          `json:"name"`
+	Version     string          `json:"version"`
+	Description string          `json:"description"`
+	Uptime      string          `json:"uptime"`
+	Mode        string          `json:"mode"`
+	Engines     EnginesSummary  `json:"engines"`
+	System      SystemInfo      `json:"system"`
+	Features    map[string]bool `json:"features"`
 }
 
 // EnginesSummary provides engine statistics
@@ -296,14 +296,14 @@ type SystemInfo struct {
 
 // SearchRequest represents a search API request
 type SearchRequest struct {
-	Query    string   `json:"query"`
-	Category string   `json:"category"`
-	Page     int      `json:"page"`
-	Limit    int      `json:"limit"`
-	Engines  []string `json:"engines,omitempty"`
-	SafeSearch string `json:"safe_search,omitempty"`
-	TimeRange  string `json:"time_range,omitempty"`
-	Language   string `json:"language,omitempty"`
+	Query      string   `json:"query"`
+	Category   string   `json:"category"`
+	Page       int      `json:"page"`
+	Limit      int      `json:"limit"`
+	Engines    []string `json:"engines,omitempty"`
+	SafeSearch string   `json:"safe_search,omitempty"`
+	TimeRange  string   `json:"time_range,omitempty"`
+	Language   string   `json:"language,omitempty"`
 }
 
 // Pagination represents standard pagination info per AI.md PART 14
@@ -326,15 +326,15 @@ type SearchResponse struct {
 
 // SearchResult represents a single search result
 type SearchResult struct {
-	Title       string   `json:"title"`
-	URL         string   `json:"url"`
-	Description string   `json:"description"`
-	Engine      string   `json:"engine"`
-	Score       float64  `json:"score"`
-	Category    string   `json:"category"`
-	Thumbnail   string   `json:"thumbnail,omitempty"`
-	Date        string   `json:"date,omitempty"`
-	Domain      string   `json:"domain,omitempty"`
+	Title       string  `json:"title"`
+	URL         string  `json:"url"`
+	Description string  `json:"description"`
+	Engine      string  `json:"engine"`
+	Score       float64 `json:"score"`
+	Category    string  `json:"category"`
+	Thumbnail   string  `json:"thumbnail,omitempty"`
+	Date        string  `json:"date,omitempty"`
+	Domain      string  `json:"domain,omitempty"`
 }
 
 // EngineInfo represents engine information
@@ -664,9 +664,9 @@ func (h *Handler) handleAutocomplete(w http.ResponseWriter, r *http.Request) {
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	if query == "" {
 		h.jsonResponse(w, http.StatusOK, &APIResponse{
-			OK: true,
-			Data:    []string{},
-			Meta:    &APIMeta{Version: APIVersion},
+			OK:   true,
+			Data: []string{},
+			Meta: &APIMeta{Version: APIVersion},
 		})
 		return
 	}
@@ -675,9 +675,9 @@ func (h *Handler) handleAutocomplete(w http.ResponseWriter, r *http.Request) {
 	suggestions := h.fetchAutocompleteSuggestions(r.Context(), query)
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		OK: true,
-		Data:    suggestions,
-		Meta:    &APIMeta{Version: APIVersion},
+		OK:   true,
+		Data: suggestions,
+		Meta: &APIMeta{Version: APIVersion},
 	})
 }
 
@@ -758,9 +758,9 @@ func (h *Handler) handleEngines(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		OK: true,
-		Data:    engineList,
-		Meta:    &APIMeta{Version: APIVersion},
+		OK:   true,
+		Data: engineList,
+		Meta: &APIMeta{Version: APIVersion},
 	})
 }
 
@@ -812,9 +812,9 @@ func (h *Handler) handleCategories(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		OK: true,
-		Data:    categories,
-		Meta:    &APIMeta{Version: APIVersion},
+		OK:   true,
+		Data: categories,
+		Meta: &APIMeta{Version: APIVersion},
 	})
 }
 
@@ -1510,27 +1510,37 @@ func (h *Handler) handleServerHelp(w http.ResponseWriter, r *http.Request) {
 		{
 			ID:      "getting_started",
 			Title:   "Getting Started",
-			Content: appName + " is a privacy-respecting search engine. Simply type your query in the search box and press Enter or click the search button.",
+			Content: appName + " is a privacy-respecting metasearch engine. Type a query in the search box, refine it with category tabs, or use bang shortcuts and direct answers for targeted lookups.",
 		},
 		{
 			ID:      "categories",
 			Title:   "Search Categories",
-			Content: "Use the category tabs to filter your search results: All (general web search), Images (search for images), Videos (search for videos), News (search news articles), Maps (search for locations).",
+			Content: "Available categories are general, images, videos, news, maps, files, it, science, and social. Each category narrows the enabled engines and result types for the query.",
+		},
+		{
+			ID:      "bangs",
+			Title:   "Bang Commands",
+			Content: "Bang commands send searches directly to another site. Use !shortcut terms or terms !shortcut. Examples include !g, !ddg, !b, !br, !sp, !w, !yt, !gh, !so, !rd, !az, !gm, !osm, !wa, !mdn, !npm, !pypi, !gopkg, !scholar, !arxiv, !archive, and !spot.",
+		},
+		{
+			ID:      "answers",
+			Title:   "Instant and Direct Answers",
+			Content: "Direct answers use the type:term format and open as full-page results, for example dns:example.com, whois:example.com, http:404, regex:[a-z]+, jwt:decode token, useragent:my, and rotl:34. Instant answers also work from the normal search box for queries such as 2 + 2, convert 10 km to miles, time in tokyo, what is my ip, or #ff5733.",
 		},
 		{
 			ID:      "search_tips",
 			Title:   "Search Tips",
-			Content: "Use specific keywords for better results. Put phrases in quotes for exact matches. Use minus to exclude words (e.g., apple -fruit). Search within a site using site:example.com.",
+			Content: "Use quotes for exact phrases, minus to exclude terms, OR and AND for boolean searches, wildcards with *, and filters such as site:, -site:, filetype:, intitle:, inurl:, intext:, related:, cache:, info:, before:, after:, define:, weather:, stocks:, map:, movie:, and source:.",
 		},
 		{
 			ID:      "keyboard_shortcuts",
 			Title:   "Keyboard Shortcuts",
-			Content: "/ - Focus search box. Escape - Clear search / Close dialogs. t - Toggle theme (dark/light).",
+			Content: "Use / to focus the search box, Escape to clear or close dialogs, t to cycle theme (dark, light, auto), ? to show shortcuts, j and k to move through results, Enter or o/O to open a result, h/l or the arrow keys to change pages, gg or G to jump, and 1-9 to open a specific result.",
 		},
 		{
 			ID:      "api_documentation",
 			Title:   "API Documentation",
-			Content: "This application provides a full REST API with interactive documentation at /openapi.",
+			Content: "REST, direct-answer, GraphQL, and OpenAPI interfaces are available. Key endpoints include /api/v1/search, /api/v1/search/related, /api/v1/autocomplete, /api/v1/instant, /api/v1/direct/{type}/{term}, /api/v1/engines, /api/v1/categories, /api/v1/bangs, /api/v1/server/help, /graphql, /openapi, and /openapi.json.",
 		},
 	}
 

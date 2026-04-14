@@ -24,7 +24,9 @@
 {{end}}
 
 {{/* OpenSearch - enables "Add to browser" functionality */}}
+{{if .Config.Search.OpenSearch.Enabled}}
 <link rel="search" type="application/opensearchdescription+xml" title="{{.Config.Server.Title}}" href="/opensearch.xml">
+{{end}}
 
 {{/* PWA Manifest - per AI.md PART 16: PWA Support */}}
 <link rel="manifest" href="/static/manifest.json">

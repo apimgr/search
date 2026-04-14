@@ -1,0 +1,29 @@
+{{define "content"}}
+<div class="user-page recovery-keys-page">
+    <div class="page-header">
+        <h1>Recovery Keys</h1>
+        <p class="page-subtitle">Save these keys now. They are only shown once.</p>
+    </div>
+
+    <div class="user-content">
+        {{if .Success}}
+        <div class="alert alert-success" role="status">
+            {{.Success}}
+        </div>
+        {{end}}
+
+        <section class="security-section">
+            <h2>Store These Safely</h2>
+            <p class="section-description">Each key can be used once to regain access if you lose your authenticator device.</p>
+            <ul class="recovery-keys-list">
+                {{range .RecoveryKeys}}
+                <li class="recovery-key-item"><code class="long-string">{{.}}</code></li>
+                {{end}}
+            </ul>
+            <div class="form-actions">
+                <a href="/users/security" class="btn btn-primary">Return to Security Settings</a>
+            </div>
+        </section>
+    </div>
+</div>
+{{end}}

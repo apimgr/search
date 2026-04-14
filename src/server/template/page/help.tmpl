@@ -38,7 +38,7 @@
         {{/* Search Categories */}}
         <section id="search-categories" class="help-section">
             <h2>Search Categories</h2>
-            <p>Use the category tabs to filter your results:</p>
+            <p>Use the category tabs to narrow the engines and result types used for your search.</p>
             <div class="category-grid">
                 <div class="category-item">
                     <span class="category-icon">🌐</span>
@@ -66,9 +66,24 @@
                     <p>Locations and directions</p>
                 </div>
                 <div class="category-item">
+                    <span class="category-icon">📁</span>
+                    <strong>Files</strong>
+                    <p>Documents, downloads, and open directories</p>
+                </div>
+                <div class="category-item">
+                    <span class="category-icon">💻</span>
+                    <strong>IT</strong>
+                    <p>Developer and technical sources</p>
+                </div>
+                <div class="category-item">
                     <span class="category-icon">📚</span>
                     <strong>Science</strong>
-                    <p>Academic papers (arXiv, PubMed)</p>
+                    <p>Academic papers and research</p>
+                </div>
+                <div class="category-item">
+                    <span class="category-icon">👥</span>
+                    <strong>Social</strong>
+                    <p>Communities and social platforms</p>
                 </div>
             </div>
         </section>
@@ -76,36 +91,37 @@
         {{/* Bang Commands */}}
         <section id="bang-commands" class="help-section">
             <h2>Bang Commands</h2>
-            <p>Bang commands let you search other sites directly. Start your query with a bang (<code>!</code>) followed by the site shortcut. 180+ bangs are available.</p>
+            <p>Bang commands send your search directly to another site. Use either <code>!shortcut terms</code> or <code>terms !shortcut</code>. Built-in bangs are available, and server or user-defined bangs can be added on top.</p>
 
             <h3>Popular Bangs</h3>
             <div class="bang-grid">
                 <div class="bang-item"><code>!g</code> Google</div>
                 <div class="bang-item"><code>!ddg</code> DuckDuckGo</div>
                 <div class="bang-item"><code>!b</code> Bing</div>
+                <div class="bang-item"><code>!br</code> Brave Search</div>
+                <div class="bang-item"><code>!sp</code> Startpage</div>
                 <div class="bang-item"><code>!w</code> Wikipedia</div>
                 <div class="bang-item"><code>!yt</code> YouTube</div>
                 <div class="bang-item"><code>!gh</code> GitHub</div>
                 <div class="bang-item"><code>!so</code> Stack Overflow</div>
-                <div class="bang-item"><code>!r</code> Reddit</div>
+                <div class="bang-item"><code>!rd</code> Reddit</div>
                 <div class="bang-item"><code>!tw</code> Twitter/X</div>
-                <div class="bang-item"><code>!amz</code> Amazon</div>
+                <div class="bang-item"><code>!az</code> Amazon</div>
                 <div class="bang-item"><code>!gm</code> Google Maps</div>
                 <div class="bang-item"><code>!osm</code> OpenStreetMap</div>
                 <div class="bang-item"><code>!wa</code> Wolfram Alpha</div>
                 <div class="bang-item"><code>!mdn</code> MDN Web Docs</div>
-                <div class="bang-item"><code>!npm</code> NPM</div>
+                <div class="bang-item"><code>!npm</code> npm</div>
                 <div class="bang-item"><code>!pypi</code> PyPI</div>
-                <div class="bang-item"><code>!crates</code> Crates.io</div>
+                <div class="bang-item"><code>!gopkg</code> Go Packages</div>
                 <div class="bang-item"><code>!scholar</code> Google Scholar</div>
                 <div class="bang-item"><code>!arxiv</code> arXiv</div>
-                <div class="bang-item"><code>!imdb</code> IMDb</div>
-                <div class="bang-item"><code>!steam</code> Steam</div>
+                <div class="bang-item"><code>!archive</code> Internet Archive</div>
                 <div class="bang-item"><code>!spot</code> Spotify</div>
             </div>
 
             <h3>By Category</h3>
-            <table class="operators-table">
+            <table class="operators-table bang-category-table">
                 <thead><tr><th>Category</th><th>Examples</th></tr></thead>
                 <tbody>
                     <tr><td>Search</td><td><code>!g</code> <code>!b</code> <code>!ddg</code> <code>!br</code> <code>!sp</code> <code>!q</code> <code>!kagi</code> <code>!perplexity</code></td></tr>
@@ -114,18 +130,18 @@
                     <tr><td>Maps</td><td><code>!gm</code> <code>!osm</code> <code>!waze</code> <code>!yelp</code> <code>!tripadvisor</code></td></tr>
                     <tr><td>News</td><td><code>!gn</code> <code>!hn</code> <code>!bbc</code> <code>!techcrunch</code> <code>!verge</code> <code>!reuters</code></td></tr>
                     <tr><td>Social</td><td><code>!tw</code> <code>!mast</code> <code>!fb</code> <code>!linkedin</code> <code>!bluesky</code> <code>!lb</code></td></tr>
-                    <tr><td>Code &amp; Dev</td><td><code>!gh</code> <code>!gl</code> <code>!so</code> <code>!npm</code> <code>!pypi</code> <code>!crates</code> <code>!docker</code> <code>!mdn</code></td></tr>
-                    <tr><td>Shopping</td><td><code>!amz</code> <code>!eb</code> <code>!etsy</code> <code>!walmart</code> <code>!camelcamelcamel</code></td></tr>
-                    <tr><td>Science</td><td><code>!scholar</code> <code>!arxiv</code> <code>!pubmed</code> <code>!doi</code></td></tr>
-                    <tr><td>Reference</td><td><code>!w</code> <code>!wa</code> <code>!mw</code> <code>!ud</code> <code>!britannica</code></td></tr>
-                    <tr><td>Privacy</td><td><code>!wbm</code> <code>!virustotal</code> <code>!shodan</code> <code>!urlscan</code></td></tr>
-                    <tr><td>Entertainment</td><td><code>!imdb</code> <code>!rt</code> <code>!steam</code> <code>!spot</code> <code>!letterboxd</code></td></tr>
+                    <tr><td>Code &amp; Dev</td><td><code>!gh</code> <code>!gl</code> <code>!so</code> <code>!npm</code> <code>!pypi</code> <code>!gopkg</code> <code>!docker</code> <code>!mdn</code></td></tr>
+                    <tr><td>Shopping</td><td><code>!az</code> <code>!eb</code></td></tr>
+                    <tr><td>Science</td><td><code>!scholar</code> <code>!arxiv</code></td></tr>
+                    <tr><td>Reference</td><td><code>!w</code> <code>!wa</code> <code>!britannica</code></td></tr>
+                    <tr><td>Files</td><td><code>!archive</code></td></tr>
                 </tbody>
             </table>
 
             <h3>Examples</h3>
             <ul class="example-list">
                 <li><code>!g python tutorial</code> — Search Google for "python tutorial"</li>
+                <li><code>privacy search !ddg</code> — Send the query to DuckDuckGo from the end of the search</li>
                 <li><code>!w artificial intelligence</code> — Go to Wikipedia article</li>
                 <li><code>!gh octocat</code> — Search GitHub</li>
                 <li><code>!npm express</code> — Look up npm package</li>
@@ -135,15 +151,13 @@
 
         {{/* Direct Answers */}}
         <section id="direct-answers" class="help-section">
-            <h2>Direct Answers</h2>
-            <p>Get instant full-page results for specific queries using these operators:</p>
+            <h2>Instant &amp; Direct Answers</h2>
+            <p><strong>Direct answers</strong> use the <code>type:term</code> format and open as full-page results. <strong>Instant answers</strong> are triggered from the regular search box and can also be accessed over the API.</p>
+
+            <h3>Full-page direct answers (<code>type:term</code>)</h3>
 
             <h3>Network & Security</h3>
             <div class="operator-grid">
-                <div class="operator-item">
-                    <code>ip:8.8.8.8</code>
-                    <span>IP geolocation lookup</span>
-                </div>
                 <div class="operator-item">
                     <code>dns:example.com</code>
                     <span>DNS records lookup</span>
@@ -233,12 +247,12 @@
             <h3>Developer Tools</h3>
             <div class="operator-grid">
                 <div class="operator-item">
-                    <code>json:{"key":"val"}</code>
+                    <code>json:format {"key":"val"}</code>
                     <span>Format / validate JSON</span>
                 </div>
                 <div class="operator-item">
-                    <code>yaml:key: value</code>
-                    <span>Format / validate YAML</span>
+                    <code>yaml:from-json {"key":"val"}</code>
+                    <span>Format YAML or convert JSON and YAML</span>
                 </div>
                 <div class="operator-item">
                     <code>regex:[a-z]+</code>
@@ -338,19 +352,19 @@
             <div class="operator-grid">
                 <div class="operator-item">
                     <code>lorem:3</code>
-                    <span>Lorem ipsum placeholder text (N paragraphs)</span>
+                    <span>Lorem ipsum text (paragraphs, words, or sentences)</span>
                 </div>
                 <div class="operator-item">
-                    <code>word:random</code>
-                    <span>Random word / word info</span>
+                    <code>word:hello world</code>
+                    <span>Text statistics and reading time</span>
                 </div>
                 <div class="operator-item">
                     <code>diff:text1|text2</code>
                     <span>Text diff comparison</span>
                 </div>
                 <div class="operator-item">
-                    <code>useragent:</code>
-                    <span>Your browser's User-Agent string</span>
+                    <code>useragent:my</code>
+                    <span>Parse a User-Agent string</span>
                 </div>
                 <div class="operator-item">
                     <code>mime:application/json</code>
@@ -385,13 +399,41 @@
                     <span>Rules of the Internet direct answer</span>
                 </div>
             </div>
+
+            <h3>Instant answer examples</h3>
+            <div class="operator-grid">
+                <div class="operator-item">
+                    <code>2 + 2</code>
+                    <span>Calculator result</span>
+                </div>
+                <div class="operator-item">
+                    <code>sqrt(144)</code>
+                    <span>Math functions and expressions</span>
+                </div>
+                <div class="operator-item">
+                    <code>convert 10 km to miles</code>
+                    <span>Unit conversion</span>
+                </div>
+                <div class="operator-item">
+                    <code>time in tokyo</code>
+                    <span>Current time and timezone lookups</span>
+                </div>
+                <div class="operator-item">
+                    <code>what is my ip</code>
+                    <span>Your current IP address</span>
+                </div>
+                <div class="operator-item">
+                    <code>#ff5733</code>
+                    <span>Color preview and conversion</span>
+                </div>
+            </div>
         </section>
 
         {{/* Search Operators */}}
         <section id="search-operators" class="help-section">
             <h2>Search Operators</h2>
             <p>Refine your searches with these operators:</p>
-            <table class="operators-table">
+            <table class="operators-table search-operators-table">
                 <thead>
                     <tr><th>Operator</th><th>Example</th><th>Description</th></tr>
                 </thead>
@@ -476,6 +518,46 @@
                         <td><code>related:github.com</code></td>
                         <td>Sites similar to a given URL</td>
                     </tr>
+                    <tr>
+                        <td><code>cache:</code></td>
+                        <td><code>cache:example.com</code></td>
+                        <td>Cached or archived copies of a URL</td>
+                    </tr>
+                    <tr>
+                        <td><code>info:</code></td>
+                        <td><code>info:example.com</code></td>
+                        <td>Information about a URL</td>
+                    </tr>
+                    <tr>
+                        <td><code>define:</code></td>
+                        <td><code>define:ephemeral</code></td>
+                        <td>Dictionary-style definition lookup</td>
+                    </tr>
+                    <tr>
+                        <td><code>weather:</code></td>
+                        <td><code>weather:tokyo</code></td>
+                        <td>Weather-specific query operator</td>
+                    </tr>
+                    <tr>
+                        <td><code>stocks:</code></td>
+                        <td><code>stocks:AAPL</code></td>
+                        <td>Stock symbol lookup</td>
+                    </tr>
+                    <tr>
+                        <td><code>map:</code></td>
+                        <td><code>map:berlin</code></td>
+                        <td>Map/location-focused query</td>
+                    </tr>
+                    <tr>
+                        <td><code>movie:</code></td>
+                        <td><code>movie:arrival</code></td>
+                        <td>Movie/title-focused query</td>
+                    </tr>
+                    <tr>
+                        <td><code>source:</code></td>
+                        <td><code>source:reuters ai</code></td>
+                        <td>News-source filter</td>
+                    </tr>
                 </tbody>
             </table>
         </section>
@@ -483,7 +565,8 @@
         {{/* Keyboard Shortcuts */}}
         <section id="keyboard-shortcuts" class="help-section">
             <h2>Keyboard Shortcuts</h2>
-            <table class="shortcuts-table">
+            <p>Keyboard shortcuts work best on search and results pages. They never replace normal navigation, so everything still works without JavaScript.</p>
+            <table class="shortcuts-table shortcuts-help-table">
                 <thead>
                     <tr><th>Shortcut</th><th>Action</th></tr>
                 </thead>
@@ -498,7 +581,7 @@
                     </tr>
                     <tr>
                         <td><kbd>t</kbd></td>
-                        <td>Toggle theme (dark/light)</td>
+                        <td>Cycle theme (dark → light → auto)</td>
                     </tr>
                     <tr>
                         <td><kbd>?</kbd></td>
@@ -512,6 +595,22 @@
                         <td><kbd>Enter</kbd></td>
                         <td>Open selected result</td>
                     </tr>
+                    <tr>
+                        <td><kbd>o</kbd> / <kbd>O</kbd></td>
+                        <td>Open the selected result in the current tab or a new tab</td>
+                    </tr>
+                    <tr>
+                        <td><kbd>h</kbd> / <kbd>l</kbd></td>
+                        <td>Go to the previous or next page of results</td>
+                    </tr>
+                    <tr>
+                        <td><kbd>g</kbd><kbd>g</kbd> / <kbd>G</kbd></td>
+                        <td>Jump to the first or last result</td>
+                    </tr>
+                    <tr>
+                        <td><kbd>1</kbd>–<kbd>9</kbd></td>
+                        <td>Open result number 1 through 9</td>
+                    </tr>
                 </tbody>
             </table>
         </section>
@@ -519,7 +618,7 @@
         {{/* API Documentation */}}
         <section id="api-docs" class="help-section api-docs">
             <h2>API Documentation</h2>
-            <p>This application provides full REST and GraphQL APIs with interactive documentation.</p>
+            <p>This application exposes REST endpoints, direct-answer APIs, GraphQL, and an OpenAPI description for integrations and automation.</p>
             <div class="api-links">
                 <a href="/openapi" class="api-link-card">
                     <h3>OpenAPI / Swagger</h3>
@@ -532,7 +631,7 @@
             </div>
 
             <h3>API Endpoints</h3>
-            <table class="operators-table">
+            <table class="operators-table api-endpoints-table">
                 <thead>
                     <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
                 </thead>
@@ -544,13 +643,23 @@
                     </tr>
                     <tr>
                         <td><code>GET</code></td>
+                        <td><code>/api/v1/search/related</code></td>
+                        <td>Related search suggestions for a query</td>
+                    </tr>
+                    <tr>
+                        <td><code>GET</code></td>
                         <td><code>/api/v1/autocomplete</code></td>
-                        <td>Search suggestions</td>
+                        <td>Autocomplete suggestions</td>
                     </tr>
                     <tr>
                         <td><code>GET</code></td>
                         <td><code>/api/v1/instant</code></td>
-                        <td>Instant answers</td>
+                        <td>Instant answers for plain-language queries</td>
+                    </tr>
+                    <tr>
+                        <td><code>GET</code></td>
+                        <td><code>/api/v1/direct/{type}/{term}</code></td>
+                        <td>Direct answers for <code>type:term</code> style queries</td>
                     </tr>
                     <tr>
                         <td><code>GET</code></td>
@@ -560,7 +669,7 @@
                     <tr>
                         <td><code>GET</code></td>
                         <td><code>/api/v1/categories</code></td>
-                        <td>Search categories</td>
+                        <td>Available search categories</td>
                     </tr>
                     <tr>
                         <td><code>GET</code></td>
@@ -569,40 +678,55 @@
                     </tr>
                     <tr>
                         <td><code>GET</code></td>
-                        <td><code>/opensearch.xml</code></td>
-                        <td>OpenSearch descriptor</td>
+                        <td><code>/api/v1/server/help</code></td>
+                        <td>Help page content as JSON</td>
                     </tr>
                     <tr>
                         <td><code>GET</code></td>
-                        <td><code>/search.rss</code></td>
-                        <td>Search results as RSS feed</td>
+                        <td><code>/openapi</code> / <code>/openapi.json</code></td>
+                        <td>OpenAPI UI and raw OpenAPI specification</td>
                     </tr>
+                    <tr>
+                        <td><code>GET</code> / <code>POST</code></td>
+                        <td><code>/graphql</code></td>
+                        <td>GraphQL explorer and API endpoint</td>
+                    </tr>
+                    {{if .Config.Search.OpenSearch.Enabled}}
+                    <tr>
+                        <td><code>GET</code></td>
+                        <td><code>/opensearch.xml</code></td>
+                        <td>OpenSearch descriptor for browser integration</td>
+                    </tr>
+                    {{end}}
                 </tbody>
             </table>
 
             <h3>Example: Search API</h3>
             <pre class="code-block"><code># Search for "golang tutorial"
-curl "{{.ServerURL}}/api/v1/search?q=golang+tutorial&category=general"
+curl "{{.ServerURL}}/api/v1/search?q=golang+tutorial&category=general&limit=20"
 
-# Image search with safe search
-curl "{{.ServerURL}}/api/v1/search?q=nature&category=images&safe=moderate"
+# Image search with strict safe search
+curl "{{.ServerURL}}/api/v1/search?q=nature&category=images&safe_search=2"
 
-# Get autocomplete suggestions
-curl "{{.ServerURL}}/api/v1/autocomplete?q=pyth"</code></pre>
+# Get related searches
+curl "{{.ServerURL}}/api/v1/search/related?q=golang+tutorial"</code></pre>
 
             <h3>Example: Instant Answers</h3>
             <pre class="code-block"><code># Calculator
 curl "{{.ServerURL}}/api/v1/instant?q=sqrt(144)"
 
-# Weather
-curl "{{.ServerURL}}/api/v1/instant?q=weather+tokyo"
+# Unit conversion
+curl "{{.ServerURL}}/api/v1/instant?q=convert+10+km+to+miles"
 
 # IP lookup
-curl "{{.ServerURL}}/api/v1/instant?q=ip:8.8.8.8"</code></pre>
+curl "{{.ServerURL}}/api/v1/instant?q=what+is+my+ip"</code></pre>
 
-            <h3>Example: RSS Feed</h3>
-            <pre class="code-block"><code># Get search results as RSS
-curl "{{.ServerURL}}/search.rss?q=linux+news"</code></pre>
+            <h3>Example: Direct Answers</h3>
+            <pre class="code-block"><code># HTTP status explanation
+curl "{{.ServerURL}}/api/v1/direct/http/404"
+
+# Rules of the Internet
+curl "{{.ServerURL}}/api/v1/direct/rules/34"</code></pre>
         </section>
 
         {{/* Privacy Features */}}
@@ -669,11 +793,11 @@ curl "{{.ServerURL}}/search.rss?q=linux+news"</code></pre>
                 </details>
                 <details>
                     <summary>What search engines do you use?</summary>
-                    <p>We aggregate results from multiple sources including DuckDuckGo, Brave Search, Wikipedia, and specialized engines for images, videos, and news.</p>
+                    <p>We aggregate results from multiple engines including Google, Bing, DuckDuckGo, Brave, Qwant, Mojeek, Yahoo, Yandex, Baidu, Startpage, Wikipedia, arXiv, PubMed, GitHub, Hacker News, Reddit, YouTube, OpenStreetMap, and Wolfram Alpha.</p>
                 </details>
                 <details>
                     <summary>How do instant answers work?</summary>
-                    <p>Instant answers are generated locally for common queries like calculations, conversions, and definitions. They don't require external API calls.</p>
+                    <p>Many instant answers are generated locally for calculations, formatting, conversions, parsing, and text tools. Some lookups query remote sources or your configured search backends when that is required for the feature.</p>
                 </details>
             </div>
         </section>

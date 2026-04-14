@@ -12,7 +12,7 @@ import (
 
 // handleWellKnownChangePassword handles /.well-known/change-password
 // Per RFC 8615 and AI.md PART 11: Well-Known URIs
-// Redirects to /users/security/password if logged in, /auth/password/forgot if not
+// Redirects to /users/security if logged in, /auth/password/forgot if not
 func (s *Server) handleWellKnownChangePassword(w http.ResponseWriter, r *http.Request) {
 	// Check if user is logged in
 	var isLoggedIn bool
@@ -29,7 +29,7 @@ func (s *Server) handleWellKnownChangePassword(w http.ResponseWriter, r *http.Re
 
 	// Per AI.md PART 11: redirect based on login state
 	if isLoggedIn {
-		http.Redirect(w, r, "/users/security/password", http.StatusSeeOther)
+		http.Redirect(w, r, "/users/security", http.StatusSeeOther)
 		return
 	}
 

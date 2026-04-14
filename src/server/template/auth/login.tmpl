@@ -57,20 +57,6 @@
         </div>
         {{end}}
 
-        {{if or .OIDCEnabled .LDAPEnabled}}
-        <div class="auth-divider">
-            <span>or</span>
-        </div>
-
-        <div class="auth-social">
-            {{if .OIDCEnabled}}
-            <a href="/auth/oidc" class="btn btn-secondary btn-block">
-                <span class="icon-key"></span>
-                Sign in with SSO
-            </a>
-            {{end}}
-        </div>
-        {{end}}
     </div>
 </div>
 {{/* Per AI.md PART 16: NO inline CSS/JS - all styles in main.css, JS in app.js */}}

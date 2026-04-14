@@ -21,8 +21,9 @@
 
             <div class="security-section">
                 <h2>{{t "user.security.change_password"}}</h2>
-                <form method="POST" action="/users/security/password" class="security-form">
+                <form method="POST" action="/users/security" class="security-form">
                     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                    <input type="hidden" name="action" value="change_password">
 
                     <div class="form-group">
                         <label for="current_password">{{t "user.security.current_password"}}</label>
@@ -56,16 +57,27 @@
                         {{t "user.security.2fa.enabled"}}
                     </div>
                     <p class="status-text">Your account is protected with two-factor authentication.</p>
-                    <button type="button" class="btn btn-danger" id="disable-2fa-btn">
-                        {{t "user.security.2fa.disable"}}
-                    </button>
+                    <form method="POST" action="/users/2fa/disable" class="twofa-disable-form">
+                        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                        <div class="form-group">
+                            <label for="disable_2fa_password">Password</label>
+                            <input type="password" id="disable_2fa_password" name="password" autocomplete="current-password" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="disable_2fa_code">Authentication Code</label>
+                            <input type="text" id="disable_2fa_code" name="code" inputmode="numeric" autocomplete="one-time-code" required>
+                        </div>
+                        <button type="submit" class="btn btn-danger">
+                            {{t "user.security.2fa.disable"}}
+                        </button>
+                    </form>
                     {{else}}
                     <div class="status-badge status-disabled">
                         <span class="status-icon">&#x2717;</span>
                         {{t "user.security.2fa.disabled"}}
                     </div>
                     <p class="status-text">Add an extra layer of security to your account.</p>
-                    <a href="/users/security/2fa/setup" class="btn btn-primary">
+                    <a href="/users/2fa/setup" class="btn btn-primary">
                         {{t "user.security.2fa.enable"}}
                     </a>
                     {{end}}
@@ -77,16 +89,14 @@
                 <h2>{{t "user.security.recovery_keys"}}</h2>
                 <p class="section-description">
                     Recovery keys can be used to access your account if you lose your 2FA device.
-                    You have <strong>{{.RecoveryKeysRemaining}}</strong> recovery keys remaining.
+                    {{if .RecoveryStats}}You have <strong>{{.RecoveryStats.Remaining}}</strong> recovery keys remaining.{{end}}
                 </p>
-                {{if le .RecoveryKeysRemaining 2}}
+                {{if and .RecoveryStats (le .RecoveryStats.Remaining 2)}}
                 <div class="alert alert-warning">
                     You have few recovery keys remaining. Consider regenerating them.
                 </div>
                 {{end}}
-                <a href="/users/security/recovery-keys" class="btn btn-secondary">
-                    View Recovery Keys
-                </a>
+                <p class="section-description">Recovery keys are shown when two-factor authentication is enabled. Store them somewhere safe when they are displayed.</p>
             </div>
             {{end}}
 
@@ -113,8 +123,9 @@
                             </div>
                         </div>
                         {{if not .IsCurrent}}
-                        <form method="POST" action="/users/security/sessions/revoke" class="session-action">
+                        <form method="POST" action="/users/security" class="session-action">
                             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                            <input type="hidden" name="action" value="revoke_session">
                             <input type="hidden" name="session_id" value="{{.ID}}">
                             <button type="submit" class="btn btn-danger btn-sm">
                                 {{t "user.security.sessions.revoke"}}
@@ -126,8 +137,9 @@
                 </div>
 
                 {{if gt (len .Sessions) 1}}
-                <form method="POST" action="/users/security/sessions/revoke-all" class="revoke-all-form">
+                <form method="POST" action="/users/security" class="revoke-all-form">
                     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                    <input type="hidden" name="action" value="revoke_all_sessions">
                     <button type="submit" class="btn btn-danger">
                         {{t "user.security.sessions.revoke_all"}}
                     </button>
