@@ -25,13 +25,13 @@ func NewYahoo() *Yahoo {
 	config := model.NewEngineConfig("yahoo")
 	config.DisplayName = "Yahoo"
 	config.Priority = 65
-	config.Categories = []string{"general", "images", "news"}
+	config.Categories = []string{"general", "images", "news", "files", "music"}
 	config.SupportsTor = false
 
 	return &Yahoo{
 		BaseEngine: search.NewBaseEngine(config),
 		client: &http.Client{
-			Timeout: time.Duration(config.GetTimeout()) * time.Second,
+			Timeout:   time.Duration(config.GetTimeout()) * time.Second,
 			Transport: SharedTransport,
 		},
 	}

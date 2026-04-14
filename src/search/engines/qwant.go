@@ -19,7 +19,7 @@ type QwantEngine struct {
 func NewQwantEngine() *QwantEngine {
 	config := model.NewEngineConfig("qwant")
 	config.DisplayName = "Qwant"
-	config.Categories = []string{"general", "images", "videos", "news"}
+	config.Categories = []string{"general", "images", "videos", "news", "files", "music"}
 	config.Priority = 75
 
 	return &QwantEngine{
@@ -31,13 +31,13 @@ type qwantResponse struct {
 	Data struct {
 		Result struct {
 			Items []struct {
-				Title   string `json:"title"`
-				URL     string `json:"url"`
-				Desc    string `json:"desc"`
-				Source  string `json:"source"`
-				Date    string `json:"date"`
-				Media   string `json:"media"`
-				Thumb   string `json:"thumbnail"`
+				Title  string `json:"title"`
+				URL    string `json:"url"`
+				Desc   string `json:"desc"`
+				Source string `json:"source"`
+				Date   string `json:"date"`
+				Media  string `json:"media"`
+				Thumb  string `json:"thumbnail"`
 			} `json:"items"`
 		} `json:"result"`
 	} `json:"data"`

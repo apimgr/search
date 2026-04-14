@@ -25,13 +25,13 @@ func NewBrave() *Brave {
 	config := model.NewEngineConfig("brave")
 	config.DisplayName = "Brave Search"
 	config.Priority = 75
-	config.Categories = []string{"general", "images", "news"}
+	config.Categories = []string{"general", "images", "news", "files", "music"}
 	config.SupportsTor = true
 
 	return &Brave{
 		BaseEngine: search.NewBaseEngine(config),
 		client: &http.Client{
-			Timeout: time.Duration(config.GetTimeout()) * time.Second,
+			Timeout:   time.Duration(config.GetTimeout()) * time.Second,
 			Transport: SharedTransport,
 		},
 	}

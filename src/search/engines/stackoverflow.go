@@ -23,13 +23,13 @@ func NewStackOverflow() *StackOverflow {
 	config := model.NewEngineConfig("stackoverflow")
 	config.DisplayName = "Stack Overflow"
 	config.Priority = 55
-	config.Categories = []string{"general", "code"}
+	config.Categories = []string{"general", "it"}
 	config.SupportsTor = true
 
 	return &StackOverflow{
 		BaseEngine: search.NewBaseEngine(config),
 		client: &http.Client{
-			Timeout: time.Duration(config.GetTimeout()) * time.Second,
+			Timeout:   time.Duration(config.GetTimeout()) * time.Second,
 			Transport: SharedTransport,
 		},
 	}

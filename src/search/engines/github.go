@@ -23,13 +23,13 @@ func NewGitHub() *GitHub {
 	config := model.NewEngineConfig("github")
 	config.DisplayName = "GitHub"
 	config.Priority = 50
-	config.Categories = []string{"general", "code"}
+	config.Categories = []string{"general", "it"}
 	config.SupportsTor = true
 
 	return &GitHub{
 		BaseEngine: search.NewBaseEngine(config),
 		client: &http.Client{
-			Timeout: time.Duration(config.GetTimeout()) * time.Second,
+			Timeout:   time.Duration(config.GetTimeout()) * time.Second,
 			Transport: SharedTransport,
 		},
 	}

@@ -758,7 +758,7 @@ func TestStackOverflowSupportsCategory(t *testing.T) {
 		want     bool
 	}{
 		{model.CategoryGeneral, true},
-		// StackOverflow uses "code" category, not "it"
+		{model.CategoryIT, true},
 		{model.CategoryImages, false},
 		{model.CategoryNews, false},
 	}
@@ -780,7 +780,7 @@ func TestGitHubSupportsCategory(t *testing.T) {
 		want     bool
 	}{
 		{model.CategoryGeneral, true},
-		// GitHub uses "code" category, not "it"
+		{model.CategoryIT, true},
 		{model.CategoryImages, false},
 		{model.CategoryNews, false},
 	}
@@ -1701,12 +1701,12 @@ func TestEngineCategoriesConfig(t *testing.T) {
 		engine     interface{ GetConfig() *model.EngineConfig }
 		categories []string
 	}{
-		{"google", NewGoogle(), []string{"general", "images", "news", "videos"}},
-		{"duckduckgo", NewDuckDuckGo(), []string{"general", "images", "videos", "news"}},
-		{"bing", NewBing(), []string{"general", "images", "news", "videos"}},
-		{"brave", NewBrave(), []string{"general", "images", "news"}},
+		{"google", NewGoogle(), []string{"general", "images", "news", "videos", "files", "music"}},
+		{"duckduckgo", NewDuckDuckGo(), []string{"general", "images", "videos", "news", "files", "music"}},
+		{"bing", NewBing(), []string{"general", "images", "news", "videos", "files", "music"}},
+		{"brave", NewBrave(), []string{"general", "images", "news", "files", "music"}},
 		{"wikipedia", NewWikipediaEngine(), []string{"general"}},
-		{"youtube", NewYouTubeEngine(), []string{"videos"}},
+		{"youtube", NewYouTubeEngine(), []string{"videos", "music"}},
 	}
 
 	for _, tt := range tests {
@@ -2177,7 +2177,7 @@ func TestYouTubeThumbnailGeneration(t *testing.T) {
 
 func TestEngineCategoryStrings(t *testing.T) {
 	// Verify all expected category strings
-	categories := []string{"general", "images", "videos", "news", "code", "social"}
+	categories := []string{"general", "images", "videos", "news", "files", "music", "it", "science", "social", "maps"}
 
 	registry := DefaultRegistry()
 	engines := registry.GetAll()

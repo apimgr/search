@@ -44,7 +44,7 @@ func NewBaidu() *Baidu {
 	config := model.NewEngineConfig("baidu")
 	config.DisplayName = "Baidu"
 	config.Priority = 60
-	config.Categories = []string{"general", "images", "news", "videos"}
+	config.Categories = []string{"general", "images", "news", "videos", "files", "music"}
 	config.SupportsTor = false // Baidu blocks Tor exit nodes
 
 	return &Baidu{

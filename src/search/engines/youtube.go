@@ -26,13 +26,13 @@ func NewYouTubeEngine() *YouTube {
 	config := model.NewEngineConfig("youtube")
 	config.DisplayName = "YouTube"
 	config.Priority = 65
-	config.Categories = []string{"videos"}
+	config.Categories = []string{"videos", "music"}
 	config.SupportsTor = false
 
 	return &YouTube{
 		BaseEngine: search.NewBaseEngine(config),
 		client: &http.Client{
-			Timeout: time.Duration(config.GetTimeout()) * time.Second,
+			Timeout:   time.Duration(config.GetTimeout()) * time.Second,
 			Transport: SharedTransport,
 		},
 	}

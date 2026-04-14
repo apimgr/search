@@ -4,6 +4,7 @@
 <div class="subheader" role="search">
     <form action="/search" method="GET" class="subheader-form">
         <input type="hidden" name="category" value="{{default "general" .Category}}">
+        {{if .PrefsQuery}}<input type="hidden" name="prefs" value="{{.PrefsQuery}}">{{end}}
         <input
             type="text"
             name="q"

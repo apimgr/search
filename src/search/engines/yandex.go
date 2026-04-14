@@ -48,7 +48,7 @@ func NewYandex() *Yandex {
 	config := model.NewEngineConfig("yandex")
 	config.DisplayName = "Yandex"
 	config.Priority = 70
-	config.Categories = []string{"general", "images", "news", "videos"}
+	config.Categories = []string{"general", "images", "news", "videos", "files", "music"}
 	config.SupportsTor = false // Yandex blocks Tor exit nodes
 
 	return &Yandex{

@@ -13,6 +13,7 @@ func TestCategoryString(t *testing.T) {
 		{CategoryNews, "news"},
 		{CategoryMaps, "maps"},
 		{CategoryFiles, "files"},
+		{CategoryMusic, "music"},
 		{CategoryIT, "it"},
 		{CategoryScience, "science"},
 		{CategorySocial, "social"},
@@ -38,6 +39,7 @@ func TestCategoryIsValid(t *testing.T) {
 		{CategoryNews, true},
 		{CategoryMaps, true},
 		{CategoryFiles, true},
+		{CategoryMusic, true},
 		{CategoryIT, true},
 		{CategoryScience, true},
 		{CategorySocial, true},
@@ -59,9 +61,9 @@ func TestCategoryIsValid(t *testing.T) {
 func TestAllCategories(t *testing.T) {
 	categories := AllCategories()
 
-	// Should have 9 categories
-	if len(categories) != 9 {
-		t.Errorf("AllCategories() returned %d categories, want 9", len(categories))
+	// Should have 10 categories
+	if len(categories) != 10 {
+		t.Errorf("AllCategories() returned %d categories, want 10", len(categories))
 	}
 
 	// Check that all categories are valid

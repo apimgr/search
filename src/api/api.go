@@ -573,9 +573,7 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Set defaults
-	if req.Category == "" {
-		req.Category = "general"
-	}
+	req.Category = model.ParseCategory(req.Category).String()
 	if req.Page <= 0 {
 		req.Page = 1
 	}
@@ -583,24 +581,16 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 		req.Limit = 20
 	}
 
-	// Map category
-	var category model.Category
-	switch req.Category {
-	case "images":
-		category = model.CategoryImages
-	case "videos":
-		category = model.CategoryVideos
-	case "news":
-		category = model.CategoryNews
-	case "maps":
-		category = model.CategoryMaps
-	default:
-		category = model.CategoryGeneral
-	}
-
 	// Perform search
 	query := model.NewQuery(req.Query)
-	query.Category = category
+	query.Category = model.ParseCategory(req.Category)
+	query.Page = req.Page
+	query.PerPage = req.Limit
+	if req.SafeSearch != "" {
+		if safeSearch, err := strconv.Atoi(req.SafeSearch); err == nil {
+			query.SafeSearch = safeSearch
+		}
+	}
 
 	ctx := r.Context()
 	results, err := h.aggregator.Search(ctx, query)
@@ -611,10 +601,7 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 
 	// Convert results
 	apiResults := make([]SearchResult, 0, len(results.Results))
-	for i, result := range results.Results {
-		if i >= req.Limit {
-			break
-		}
+	for _, result := range results.GetPage(req.Page) {
 		apiResults = append(apiResults, SearchResult{
 			Title:       result.Title,
 			URL:         result.URL,
@@ -628,11 +615,6 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Calculate total pages per AI.md PART 14 pagination format
-	totalPages := results.TotalResults / req.Limit
-	if results.TotalResults%req.Limit > 0 {
-		totalPages++
-	}
-
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
 		OK: true,
 		Data: SearchResponse{
@@ -640,10 +622,10 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 			Category: req.Category,
 			Results:  apiResults,
 			Pagination: Pagination{
-				Page:  req.Page,
-				Limit: req.Limit,
+				Page:  results.Page,
+				Limit: results.PerPage,
 				Total: results.TotalResults,
-				Pages: totalPages,
+				Pages: results.TotalPages,
 			},
 			SearchTime: float64(time.Since(start).Microseconds()) / 1000,
 			Engines:    results.Engines,
@@ -804,11 +786,16 @@ func (h *Handler) handleEngineByID(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleCategories(w http.ResponseWriter, r *http.Request) {
 	categories := []CategoryInfo{
-		{ID: "general", Name: "General", Description: "General web search", Icon: "🌐"},
+		{ID: "general", Name: "Web", Description: "General web search", Icon: "🌐"},
 		{ID: "images", Name: "Images", Description: "Image search", Icon: "🖼️"},
 		{ID: "videos", Name: "Videos", Description: "Video search", Icon: "🎥"},
 		{ID: "news", Name: "News", Description: "News search", Icon: "📰"},
 		{ID: "maps", Name: "Maps", Description: "Map and location search", Icon: "🗺️"},
+		{ID: "files", Name: "Files", Description: "Document and downloadable file search", Icon: "📁"},
+		{ID: "music", Name: "Music", Description: "Music tracks, artists, albums, and videos", Icon: "🎵"},
+		{ID: "science", Name: "Science", Description: "Scientific papers and research search", Icon: "🔬"},
+		{ID: "it", Name: "IT", Description: "Developer, code, and technical search", Icon: "💻"},
+		{ID: "social", Name: "Social", Description: "Social media and community search", Icon: "💬"},
 	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{

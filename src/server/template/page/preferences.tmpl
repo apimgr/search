@@ -11,7 +11,23 @@
                 <select id="theme" name="theme">
                     <option value="dark">Dark</option>
                     <option value="light">Light</option>
-                    <option value="system">System Default</option>
+                    <option value="auto">Auto</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="default-category">Default Category</label>
+                <select id="default-category" name="default_category">
+                    <option value="general">Web</option>
+                    <option value="images">Images</option>
+                    <option value="videos">Videos</option>
+                    <option value="news">News</option>
+                    <option value="maps">Maps</option>
+                    <option value="files">Files</option>
+                    <option value="music">Music</option>
+                    <option value="science">Science</option>
+                    <option value="it">IT</option>
+                    <option value="social">Social</option>
                 </select>
             </div>
 
@@ -38,6 +54,22 @@
                 <label for="new-tab">Open Results in New Tab</label>
                 <label class="toggle-switch">
                     <input type="checkbox" id="new-tab" name="new_tab">
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <div class="form-group toggle-group">
+                <label for="infinite-scroll">Infinite Scroll</label>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="infinite-scroll" name="infinite_scroll">
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <div class="form-group toggle-group">
+                <label for="keyboard-shortcuts">Keyboard Shortcuts</label>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="keyboard-shortcuts" name="keyboard_shortcuts" checked>
                     <span class="slider"></span>
                 </label>
             </div>
@@ -225,6 +257,27 @@
             <button type="button" id="reset-prefs" class="btn btn-danger">Reset All Preferences</button>
         </div>
         <input type="file" id="import-file" accept=".json" class="hidden">
+    </div>
+
+    <div class="preferences-section">
+        <h2>Shareable Preference Link</h2>
+        <p class="help-text">Generate a portable <code>prefs</code> string that can be bookmarked, shared, or applied on another device.</p>
+
+        <div class="form-group">
+            <label for="preference-string">Preference String</label>
+            <input type="text" id="preference-string" readonly>
+        </div>
+
+        <div class="form-group">
+            <label for="preference-url">Shareable URL</label>
+            <input type="text" id="preference-url" readonly>
+        </div>
+
+        <div class="data-actions">
+            <button type="button" id="generate-pref-link" class="btn btn-secondary">Generate Link</button>
+            <button type="button" id="copy-pref-link" class="btn btn-secondary">Copy URL</button>
+            <a id="qr-pref-link" class="btn btn-secondary" href="/direct/qr/" target="_blank" rel="noopener noreferrer">QR Code</a>
+        </div>
     </div>
 
     <div class="preferences-actions">

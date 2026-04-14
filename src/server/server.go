@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -386,26 +387,26 @@ func New(cfg *config.Config) *Server {
 	}
 
 	s := &Server{
-		config:          cfg,
-		registry:        registry,
-		aggregator:      aggregator,
-		middleware:      mw,
-		rateLimiter:     rl,
-		csrf:            csrf,
-		renderer:        renderer,
-		apiHandler:      apiHandler,
-		torService:      torSvc,
-		bangManager:     bangMgr,
-		widgetManager:   widgetMgr,
-		logManager:      logMgr,
-		tlsManager:      tlsMgr,
-		instantManager:  instantMgr,
-		directManager:   directMgr,
-		geoipLookup:     geoLookup,
-		mailer:          mailer,
+		config:         cfg,
+		registry:       registry,
+		aggregator:     aggregator,
+		middleware:     mw,
+		rateLimiter:    rl,
+		csrf:           csrf,
+		renderer:       renderer,
+		apiHandler:     apiHandler,
+		torService:     torSvc,
+		bangManager:    bangMgr,
+		widgetManager:  widgetMgr,
+		logManager:     logMgr,
+		tlsManager:     tlsMgr,
+		instantManager: instantMgr,
+		directManager:  directMgr,
+		geoipLookup:    geoLookup,
+		mailer:         mailer,
 		// scheduler is initialized below after Server creation
-		metrics:         metrics,
-		dbManager:       dbMgr,
+		metrics:             metrics,
+		dbManager:           dbMgr,
 		userAuthManager:     userAuthMgr,
 		totpManager:         totpMgr,
 		recoveryManager:     recoveryMgr,
@@ -714,14 +715,23 @@ func (s *Server) UpdateConfig(cfg *config.Config) {
 // Per AI.md PART 16: Theme read from cookie set by client-side JS
 func (s *Server) newPageData(r *http.Request, title, page string) *PageData {
 	data := NewPageData(s.config, title, page)
+	prefsQuery := strings.TrimSpace(r.URL.Query().Get("prefs"))
+	prefs := parseSearchPreferences(prefsQuery)
 	// Per AI.md PART 16: Theme read from cookie; resolve "auto" to "dark" server-side
 	// JS overrides with system preference on page load when mode is "auto"
 	themeMode := GetTheme(r)
+	if prefs.Theme != "" {
+		themeMode = prefs.Theme
+	}
 	data.ThemeMode = themeMode
 	if themeMode == ThemeAuto {
 		data.Theme = ThemeDark // server-side fallback; JS handles system preference
 	} else {
 		data.Theme = themeMode
+	}
+	data.PrefsQuery = prefsQuery
+	if prefs.DefaultCategory != "" {
+		data.Category = prefs.DefaultCategory.String()
 	}
 	// Set Tor status per AI.md PART 32
 	if s.torService != nil {
@@ -916,8 +926,8 @@ func (s *Server) setupRoutes() http.Handler {
 		s.middleware.CORS,
 		s.middleware.GeoBlock(s.geoipLookup),
 		s.middleware.RateLimit(s.rateLimiter),
-		PathSecurityMiddleware,   // SECOND - normalizes paths, blocks traversal
-		URLNormalizeMiddleware,   // FIRST - removes trailing slashes, redirects to canonical
+		PathSecurityMiddleware, // SECOND - normalizes paths, blocks traversal
+		URLNormalizeMiddleware, // FIRST - removes trailing slashes, redirects to canonical
 	)
 
 	return handler
@@ -974,13 +984,40 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 
 // handleSearch handles search requests
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
+	prefs := parseSearchPreferences(r.URL.Query().Get("prefs"))
+
 	// Sanitize and validate input
 	queryStr := sanitizeInput(strings.TrimSpace(r.URL.Query().Get("q")))
-	category := sanitizeInput(strings.TrimSpace(r.URL.Query().Get("category")))
+	categoryParam := sanitizeInput(strings.TrimSpace(r.URL.Query().Get("category")))
+	category := prefs.DefaultCategory.String()
+	if category == "" {
+		category = "general"
+	}
+	if categoryParam != "" {
+		category = model.ParseCategory(categoryParam).String()
+	}
+	page, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("page")))
+	perPage, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("per_page")))
+	if perPage == 0 {
+		perPage, _ = strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("limit")))
+	}
+	safeSearch, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("safe_search")))
 
 	// Default to general if no category specified
 	if category == "" {
 		category = "general"
+	}
+	if page < 1 {
+		page = 1
+	}
+	if perPage < 1 || perPage > 100 {
+		perPage = prefs.ResultsPerPage
+	}
+	if perPage < 1 || perPage > 100 {
+		perPage = 20
+	}
+	if strings.TrimSpace(r.URL.Query().Get("safe_search")) == "" {
+		safeSearch = prefs.SafeSearch
 	}
 
 	if queryStr == "" {
@@ -1027,24 +1064,12 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Map category string to model.Category
-	var searchCategory model.Category
-	switch category {
-	case "images":
-		searchCategory = model.CategoryImages
-	case "videos":
-		searchCategory = model.CategoryVideos
-	case "news":
-		searchCategory = model.CategoryNews
-	case "maps":
-		searchCategory = model.CategoryMaps
-	default:
-		searchCategory = model.CategoryGeneral
-	}
-
 	// Perform search
 	query := model.NewQuery(queryStr)
-	query.Category = searchCategory
+	query.Category = model.ParseCategory(category)
+	query.Page = page
+	query.PerPage = perPage
+	query.SafeSearch = safeSearch
 
 	results, err := s.aggregator.Search(ctx, query)
 
@@ -1273,6 +1298,8 @@ func (s *Server) renderSearchResults(w http.ResponseWriter, r *http.Request, que
 
 // renderSearchResultsWithInstant renders search results with optional instant answer
 func (s *Server) renderSearchResultsWithInstant(w http.ResponseWriter, r *http.Request, query string, results *model.SearchResults, category string, instantAnswer *instant.Answer) {
+	safeSearch, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("safe_search")))
+
 	// Use newPageData for TorAddress support per AI.md PART 32
 	baseData := s.newPageData(r, query, "search")
 	baseData.Description = fmt.Sprintf("Search results for: %s", query)
@@ -1283,21 +1310,28 @@ func (s *Server) renderSearchResultsWithInstant(w http.ResponseWriter, r *http.R
 		PageData:      *baseData,
 		Query:         query,
 		Category:      category,
-		Results:       results.Results,
+		Results:       results.GetPage(results.Page),
 		TotalResults:  results.TotalResults,
 		SearchTime:    results.SearchTime,
 		Engines:       results.Engines,
+		PerPage:       results.PerPage,
+		SafeSearch:    safeSearch,
 		InstantAnswer: instantAnswer,
 	}
 
-	// Calculate pagination
-	totalPages := (results.TotalResults + 19) / 20
-	currentPage := 1
+	pageLinks := make([]int, 0, results.TotalPages)
+	for page := 1; page <= results.TotalPages; page++ {
+		pageLinks = append(pageLinks, page)
+	}
+
 	data.Pagination = &Pagination{
-		CurrentPage: currentPage,
-		TotalPages:  totalPages,
-		HasPrev:     currentPage > 1,
-		HasNext:     currentPage < totalPages,
+		CurrentPage: results.Page,
+		TotalPages:  results.TotalPages,
+		HasPrev:     results.Page > 1,
+		HasNext:     results.Page < results.TotalPages,
+		PrevPage:    results.Page - 1,
+		NextPage:    results.Page + 1,
+		Pages:       pageLinks,
 	}
 
 	if err := s.renderer.Render(w, "search", data); err != nil {

@@ -432,6 +432,37 @@ func TestDeduplicateResults(t *testing.T) {
 	}
 }
 
+func TestSearchSanitizesAndDeduplicatesTrackingURLs(t *testing.T) {
+	google := newMockEngine("google", model.CategoryGeneral, true)
+	google.SetResults([]model.Result{
+		{URL: "https://example.com/post?utm_source=google&id=7", Title: "Tracked", Engine: "google"},
+	})
+	bing := newMockEngine("bing", model.CategoryGeneral, true)
+	bing.SetResults([]model.Result{
+		{URL: "https://example.com/post?id=7", Title: "Clean", Engine: "bing"},
+	})
+
+	engines := []Engine{google, bing}
+
+	agg := NewAggregatorSimple(engines, 5*time.Second)
+	query := model.NewQuery("tracked test")
+	results, err := agg.Search(context.Background(), query)
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+
+	if len(results.Results) != 1 {
+		t.Fatalf("Search() result count = %d, want 1", len(results.Results))
+	}
+
+	if results.Results[0].URL != "https://example.com/post?id=7" {
+		t.Errorf("Sanitized URL = %q, want %q", results.Results[0].URL, "https://example.com/post?id=7")
+	}
+	if results.Results[0].DuplicateCount != 2 {
+		t.Errorf("DuplicateCount = %d, want 2", results.Results[0].DuplicateCount)
+	}
+}
+
 func TestDeduplicateResultsMergesContent(t *testing.T) {
 	results := []model.Result{
 		{URL: "https://example.com/1", Title: "Result", Content: "Short"},
@@ -555,15 +586,15 @@ func TestAggregatorApplyOperators(t *testing.T) {
 	}
 
 	ops := &SearchOperators{
-		Site:       "example.com",
-		FileType:   "pdf",
-		Language:   "de",
-		Before:     "2024-01-01",
-		After:      "2023-01-01",
-		InURL:      "docs",
-		InTitle:    "tutorial",
-		InText:     "golang",
-		Source:     "nytimes",
+		Site:     "example.com",
+		FileType: "pdf",
+		Language: "de",
+		Before:   "2024-01-01",
+		After:    "2023-01-01",
+		InURL:    "docs",
+		InTitle:  "tutorial",
+		InText:   "golang",
+		Source:   "nytimes",
 	}
 
 	agg.applyOperators(query, ops)
@@ -864,7 +895,7 @@ func TestDeduplicateResultsAccumulatesPopularity(t *testing.T) {
 
 func TestSortResultsDateBothZero(t *testing.T) {
 	results := []model.Result{
-		{URL: "1", Score: 50}, // No date
+		{URL: "1", Score: 50},  // No date
 		{URL: "2", Score: 100}, // No date
 	}
 
@@ -878,7 +909,7 @@ func TestSortResultsDateBothZero(t *testing.T) {
 
 func TestSortResultsDateAscBothZero(t *testing.T) {
 	results := []model.Result{
-		{URL: "1", Score: 50}, // No date
+		{URL: "1", Score: 50},  // No date
 		{URL: "2", Score: 100}, // No date
 	}
 
@@ -907,9 +938,9 @@ func TestSortResultsPopularityEqualFallbackToScore(t *testing.T) {
 func TestSortResultsDateMixed(t *testing.T) {
 	now := time.Now()
 	results := []model.Result{
-		{URL: "1"},                                    // No date, lower score
-		{URL: "2", PublishedAt: now, Score: 50},       // Has date
-		{URL: "3", Score: 200},                        // No date, higher score
+		{URL: "1"},                              // No date, lower score
+		{URL: "2", PublishedAt: now, Score: 50}, // Has date
+		{URL: "3", Score: 200},                  // No date, higher score
 	}
 
 	sortResults(results, model.SortDate)
@@ -923,9 +954,9 @@ func TestSortResultsDateMixed(t *testing.T) {
 func TestSortResultsDateAscMixed(t *testing.T) {
 	now := time.Now()
 	results := []model.Result{
-		{URL: "1"},                                    // No date
-		{URL: "2", PublishedAt: now, Score: 50},       // Has date
-		{URL: "3", Score: 200},                        // No date, higher score
+		{URL: "1"},                              // No date
+		{URL: "2", PublishedAt: now, Score: 50}, // Has date
+		{URL: "3", Score: 200},                  // No date, higher score
 	}
 
 	sortResults(results, model.SortDateAsc)

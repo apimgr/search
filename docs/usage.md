@@ -12,11 +12,16 @@ Search provides a clean, privacy-focused web interface for searching the web.
 
 Switch between different search categories using the tabs:
 
-- **General**: Web search results
+- **Web**: Web search results
 - **Images**: Image search
 - **Videos**: Video search
 - **News**: News articles
 - **Maps**: Map results
+- **Files**: Documents, downloads, and open directories
+- **Music**: Songs, artists, albums, and music videos
+- **Science**: Research papers and academic sources
+- **IT**: Developer, code, and technical sources
+- **Social**: Communities and social platforms
 
 ## Bang Commands
 
@@ -94,6 +99,7 @@ Click the settings icon to customize your search experience:
 - No cookies for tracking
 - No search history stored
 - No personal data collection
+- Common tracking parameters are stripped from result links
 
 ### Image Proxy
 

@@ -145,6 +145,59 @@ func TestResultSanitizeStripsHTML(t *testing.T) {
 	}
 }
 
+func TestSanitizeURLStripsTrackingParams(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "utm params",
+			in:   "https://example.com/article?utm_source=newsletter&utm_medium=email&id=42",
+			want: "https://example.com/article?id=42",
+		},
+		{
+			name: "mixed tracking params",
+			in:   "https://example.com/?fbclid=test123&gclid=abc123&q=golang",
+			want: "https://example.com/?q=golang",
+		},
+		{
+			name: "preserve fragment",
+			in:   "https://example.com/path?mc_cid=1&ref=keep#section",
+			want: "https://example.com/path?ref=keep#section",
+		},
+		{
+			name: "leave non tracking params",
+			in:   "https://example.com/search?q=privacy&lang=en",
+			want: "https://example.com/search?q=privacy&lang=en",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := SanitizeURL(tt.in); got != tt.want {
+				t.Errorf("SanitizeURL() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestResultSanitizeStripsTrackingParams(t *testing.T) {
+	r := &Result{
+		URL:       "https://example.com/page?utm_source=rss&id=123",
+		Thumbnail: "https://cdn.example.com/thumb.jpg?fbclid=test",
+	}
+
+	r.Sanitize()
+
+	if r.URL != "https://example.com/page?id=123" {
+		t.Errorf("URL = %q, want %q", r.URL, "https://example.com/page?id=123")
+	}
+	if r.Thumbnail != "https://cdn.example.com/thumb.jpg" {
+		t.Errorf("Thumbnail = %q, want %q", r.Thumbnail, "https://cdn.example.com/thumb.jpg")
+	}
+}
+
 func TestResultExtractDomain(t *testing.T) {
 	tests := []struct {
 		name   string

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -14,6 +15,23 @@ import (
 
 // htmlTagPattern matches HTML tags including their attributes
 var htmlTagPattern = regexp.MustCompile(`<[^>]*>`)
+
+var trackingQueryParams = map[string]struct{}{
+	"fbclid":      {},
+	"gclid":       {},
+	"gbraid":      {},
+	"wbraid":      {},
+	"msclkid":     {},
+	"mc_cid":      {},
+	"mc_eid":      {},
+	"mkt_tok":     {},
+	"oly_anon_id": {},
+	"oly_enc_id":  {},
+	"vero_conv":   {},
+	"vero_id":     {},
+	"_hsenc":      {},
+	"_hsmi":       {},
+}
 
 // StripHTML removes HTML tags from text and decodes HTML entities.
 // For example, `<span class="searchmatch">Google</span>` becomes "Google"
@@ -24,6 +42,41 @@ func StripHTML(s string) string {
 	// Decode HTML entities
 	s = html.UnescapeString(s)
 	return s
+}
+
+// SanitizeURL removes known tracking parameters while preserving the destination.
+func SanitizeURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return raw
+	}
+
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.RawQuery == "" {
+		return raw
+	}
+
+	query := parsed.Query()
+	removed := false
+	for key := range query {
+		lowerKey := strings.ToLower(key)
+		if strings.HasPrefix(lowerKey, "utm_") {
+			query.Del(key)
+			removed = true
+			continue
+		}
+		if _, ok := trackingQueryParams[lowerKey]; ok {
+			query.Del(key)
+			removed = true
+		}
+	}
+
+	if !removed {
+		return raw
+	}
+
+	parsed.RawQuery = query.Encode()
+	return parsed.String()
 }
 
 // Result represents a single search result from an engine
@@ -45,16 +98,16 @@ type Result struct {
 	ImageWidth  int    `json:"image_width,omitempty" xml:"-"`
 	ImageHeight int    `json:"image_height,omitempty" xml:"-"`
 	ImageFormat string `json:"image_format,omitempty" xml:"-"`
-	Duration    int    `json:"duration,omitempty" xml:"-"`    // Video duration in seconds
-	ViewCount   int64  `json:"view_count,omitempty" xml:"-"`  // Video view count
-	FileSize    int64  `json:"file_size,omitempty" xml:"-"`   // File size in bytes
-	FileType    string `json:"file_type,omitempty" xml:"-"`   // File extension
+	Duration    int    `json:"duration,omitempty" xml:"-"`   // Video duration in seconds
+	ViewCount   int64  `json:"view_count,omitempty" xml:"-"` // Video view count
+	FileSize    int64  `json:"file_size,omitempty" xml:"-"`  // File size in bytes
+	FileType    string `json:"file_type,omitempty" xml:"-"`  // File extension
 
 	// Scoring fields
 	Score          float64 `json:"score" xml:"-"`
 	Position       int     `json:"position" xml:"-"`
-	Relevance      float64 `json:"relevance,omitempty" xml:"-"`      // Engine-provided relevance
-	Popularity     float64 `json:"popularity,omitempty" xml:"-"`     // Engagement/popularity score
+	Relevance      float64 `json:"relevance,omitempty" xml:"-"`       // Engine-provided relevance
+	Popularity     float64 `json:"popularity,omitempty" xml:"-"`      // Engagement/popularity score
 	DuplicateCount int     `json:"duplicate_count,omitempty" xml:"-"` // How many engines returned this
 
 	// Language detection
@@ -73,9 +126,9 @@ func (r *Result) Sanitize() {
 	r.Content = strings.TrimSpace(StripHTML(r.Content))
 
 	// URL should not have HTML stripped (preserve URL encoding)
-	r.URL = strings.TrimSpace(r.URL)
+	r.URL = SanitizeURL(r.URL)
 	r.Engine = strings.TrimSpace(r.Engine)
-	r.Thumbnail = strings.TrimSpace(r.Thumbnail)
+	r.Thumbnail = SanitizeURL(r.Thumbnail)
 	r.Author = strings.TrimSpace(r.Author)
 	r.Domain = strings.TrimSpace(r.Domain)
 	r.ImageFormat = strings.TrimSpace(r.ImageFormat)
@@ -331,11 +384,11 @@ func (sr *SearchResults) ToAtom(w io.Writer, baseURL string) error {
 	}
 
 	type AtomEntry struct {
-		Title   string    `xml:"title"`
-		Link    AtomLink  `xml:"link"`
-		ID      string    `xml:"id"`
-		Updated string    `xml:"updated"`
-		Summary string    `xml:"summary"`
+		Title   string   `xml:"title"`
+		Link    AtomLink `xml:"link"`
+		ID      string   `xml:"id"`
+		Updated string   `xml:"updated"`
+		Summary string   `xml:"summary"`
 		Author  *struct {
 			Name string `xml:"name"`
 		} `xml:"author,omitempty"`

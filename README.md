@@ -14,7 +14,7 @@ Search is a privacy-respecting metasearch engine that aggregates results from mu
 
 - **🔒 Privacy First**: No tracking, no logging, no data collection
 - **🧅 Tor Support**: Full Tor integration with SOCKS5, circuit rotation, and .onion service
-- **💾 Local Storage**: User preferences stored in browser only (no server-side tracking)
+- **💾 Portable Preferences**: Save settings locally, export/import them, or share them with portable `prefs` links
 - **🚀 Fast & Efficient**: Written in Go with concurrent engine queries
 - **🔍 Multiple Engines**: Aggregate results from Google, Bing, DuckDuckGo, and more
 - **💡 Instant Answers**: Calculator, unit/currency converter, weather, dictionary, and more
@@ -23,7 +23,7 @@ Search is a privacy-respecting metasearch engine that aggregates results from mu
 - **📱 Mobile Friendly**: Responsive design that works on all devices
 - **🎨 Beautiful UI**: Modern interface with dark (Dracula) and light themes
 - **⚙️ Easy Configuration**: Web-based admin panel and YAML config
-- **🌐 Multi-Category**: Web, images, videos, news, and more
+- **🌐 Multi-Category**: Web, images, videos, news, maps, files, music, science, IT, and social
 - **🔐 Built-in SSL**: Let's Encrypt integration for automatic HTTPS
 - **📊 Monitoring**: Prometheus metrics and health endpoints
 - **🐳 Container Ready**: Docker and Docker Compose support
@@ -318,7 +318,7 @@ Access the search interface at: `http://localhost:PORT/`
 
 Features:
 - Clean, ad-free search results
-- Category tabs (Web, Images, Videos, News)
+- Category tabs (Web, Images, Videos, News, Maps, Files, Music, Science, IT, Social)
 - Advanced search options
 - Dark/Light theme toggle
 - Mobile-responsive design
@@ -548,6 +548,7 @@ Search is designed with privacy as the top priority:
 - ✅ **No logging**: Search queries are not logged by default
 - ✅ **No data sharing**: Your data never leaves your server
 - ✅ **No ads**: Clean, ad-free results
+- ✅ **Clean result links**: Common tracking parameters are stripped from result URLs
 - ✅ **Tor support**: Full Tor integration with circuit rotation and .onion service
 - ✅ **Local storage**: User preferences stored in browser only (no server-side tracking)
 - ✅ **Proxy support**: Route requests through SOCKS5/HTTP/Tor proxies
@@ -617,7 +618,7 @@ search --tor-status
 
 ## 💾 User Preferences (Local Storage)
 
-User preferences are stored **only in your browser** using localStorage. Nothing is stored on the server.
+User preferences stay **client-side**. They can live in browser localStorage, be exported/imported as JSON, or be encoded into portable `?prefs=` links. Nothing is stored on the server.
 
 ### Stored Preferences
 
@@ -640,7 +641,8 @@ All preferences can be managed in the web UI:
 3. Click **Save** (stored in browser only)
 4. **Export** preferences as JSON for backup
 5. **Import** preferences from JSON on new browser
-6. **Clear All** to reset to defaults
+6. **Generate Link** to create a shareable `?prefs=` URL or QR code
+7. **Clear All** to reset to defaults
 
 ### Privacy Notes
 

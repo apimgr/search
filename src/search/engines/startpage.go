@@ -25,7 +25,7 @@ func NewStartpageEngine() *Startpage {
 	config := model.NewEngineConfig("startpage")
 	config.DisplayName = "Startpage"
 	config.Priority = 70
-	config.Categories = []string{"general", "images"}
+	config.Categories = []string{"general", "images", "files", "music"}
 	config.SupportsTor = true
 
 	return &Startpage{

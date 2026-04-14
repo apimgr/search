@@ -10,7 +10,8 @@
     </div>
 
     <form action="/search" method="GET" class="search-form" id="searchForm">
-        <input type="hidden" name="category" id="categoryInput" value="general">
+        <input type="hidden" name="category" id="categoryInput" value="{{default "general" .Category}}">
+        {{if .PrefsQuery}}<input type="hidden" name="prefs" value="{{.PrefsQuery}}">{{end}}
         <div class="search-box">
             <input type="text" name="q" id="searchQuery" placeholder="Search the web privately..." autofocus required autocomplete="off" class="search-input">
             <button type="button" class="advanced-search-trigger" aria-label="Advanced Search" id="advancedSearchBtn">
@@ -34,25 +35,45 @@
         </div>
 
         <div class="category-tabs" role="tablist">
-            <button type="button" class="category-tab active" data-category="general" role="tab" aria-selected="true">
+            <button type="button" class="category-tab{{if eq .Category "general"}} active{{end}}" data-category="general" role="tab" aria-selected="{{if eq .Category "general"}}true{{else}}false{{end}}">
                 <span class="tab-icon">🌐</span>
-                <span class="tab-text">All</span>
+                <span class="tab-text">Web</span>
             </button>
-            <button type="button" class="category-tab" data-category="images" role="tab" aria-selected="false">
+            <button type="button" class="category-tab{{if eq .Category "images"}} active{{end}}" data-category="images" role="tab" aria-selected="{{if eq .Category "images"}}true{{else}}false{{end}}">
                 <span class="tab-icon">🖼️</span>
                 <span class="tab-text">Images</span>
             </button>
-            <button type="button" class="category-tab" data-category="videos" role="tab" aria-selected="false">
+            <button type="button" class="category-tab{{if eq .Category "videos"}} active{{end}}" data-category="videos" role="tab" aria-selected="{{if eq .Category "videos"}}true{{else}}false{{end}}">
                 <span class="tab-icon">🎥</span>
                 <span class="tab-text">Videos</span>
             </button>
-            <button type="button" class="category-tab" data-category="news" role="tab" aria-selected="false">
+            <button type="button" class="category-tab{{if eq .Category "news"}} active{{end}}" data-category="news" role="tab" aria-selected="{{if eq .Category "news"}}true{{else}}false{{end}}">
                 <span class="tab-icon">📰</span>
                 <span class="tab-text">News</span>
             </button>
-            <button type="button" class="category-tab" data-category="maps" role="tab" aria-selected="false">
+            <button type="button" class="category-tab{{if eq .Category "maps"}} active{{end}}" data-category="maps" role="tab" aria-selected="{{if eq .Category "maps"}}true{{else}}false{{end}}">
                 <span class="tab-icon">🗺️</span>
                 <span class="tab-text">Maps</span>
+            </button>
+            <button type="button" class="category-tab{{if eq .Category "files"}} active{{end}}" data-category="files" role="tab" aria-selected="{{if eq .Category "files"}}true{{else}}false{{end}}">
+                <span class="tab-icon">📁</span>
+                <span class="tab-text">Files</span>
+            </button>
+            <button type="button" class="category-tab{{if eq .Category "music"}} active{{end}}" data-category="music" role="tab" aria-selected="{{if eq .Category "music"}}true{{else}}false{{end}}">
+                <span class="tab-icon">🎵</span>
+                <span class="tab-text">Music</span>
+            </button>
+            <button type="button" class="category-tab{{if eq .Category "science"}} active{{end}}" data-category="science" role="tab" aria-selected="{{if eq .Category "science"}}true{{else}}false{{end}}">
+                <span class="tab-icon">🔬</span>
+                <span class="tab-text">Science</span>
+            </button>
+            <button type="button" class="category-tab{{if eq .Category "it"}} active{{end}}" data-category="it" role="tab" aria-selected="{{if eq .Category "it"}}true{{else}}false{{end}}">
+                <span class="tab-icon">💻</span>
+                <span class="tab-text">IT</span>
+            </button>
+            <button type="button" class="category-tab{{if eq .Category "social"}} active{{end}}" data-category="social" role="tab" aria-selected="{{if eq .Category "social"}}true{{else}}false{{end}}">
+                <span class="tab-icon">💬</span>
+                <span class="tab-text">Social</span>
             </button>
         </div>
     </form>
@@ -90,6 +111,7 @@
     </header>
     <form action="/search" method="GET" class="advanced-search-content">
         <input type="hidden" name="category" value="general">
+        {{if .PrefsQuery}}<input type="hidden" name="prefs" value="{{.PrefsQuery}}">{{end}}
 
         <div class="advanced-search-group">
             <label for="as-allwords">All these words</label>

@@ -49,7 +49,7 @@ func NewGoogle() *Google {
 	config := model.NewEngineConfig("google")
 	config.DisplayName = "Google"
 	config.Priority = 90
-	config.Categories = []string{"general", "images", "news", "videos"}
+	config.Categories = []string{"general", "images", "news", "videos", "files", "music"}
 	config.SupportsTor = false // Google blocks Tor exit nodes
 
 	return &Google{

@@ -25,13 +25,13 @@ func NewDuckDuckGo() *DuckDuckGo {
 	config := model.NewEngineConfig("duckduckgo")
 	config.DisplayName = "DuckDuckGo"
 	config.Priority = 100 // Highest priority (default engine)
-	config.Categories = []string{"general", "images", "videos", "news"}
+	config.Categories = []string{"general", "images", "videos", "news", "files", "music"}
 	config.SupportsTor = true
 
 	return &DuckDuckGo{
 		BaseEngine: search.NewBaseEngine(config),
 		client: &http.Client{
-			Timeout: time.Duration(config.GetTimeout()) * time.Second,
+			Timeout:   time.Duration(config.GetTimeout()) * time.Second,
 			Transport: SharedTransport,
 		},
 	}
@@ -423,7 +423,7 @@ func (e *DuckDuckGo) searchVideos(ctx context.Context, query *model.Query) ([]mo
 	var data struct {
 		Results []struct {
 			Title       string `json:"title"`
-			URL         string `json:"content"`    // Video page URL
+			URL         string `json:"content"` // Video page URL
 			Description string `json:"description"`
 			Duration    string `json:"duration"`
 			ViewCount   int64  `json:"views"`

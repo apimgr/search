@@ -106,9 +106,9 @@ func TestCategoriesEndpoint(t *testing.T) {
 		t.Fatal("Expected data to be an array")
 	}
 
-	// Should have 5 categories: general, images, videos, news, maps
-	if len(data) != 5 {
-		t.Errorf("Expected 5 categories, got %d", len(data))
+	// Should expose the full IDEA category set
+	if len(data) != 10 {
+		t.Errorf("Expected 10 categories, got %d", len(data))
 	}
 }
 
@@ -306,9 +306,9 @@ func TestExtractDomain(t *testing.T) {
 func TestAPIResponseStructure(t *testing.T) {
 	// Test that APIResponse serializes correctly
 	response := APIResponse{
-		OK: true,
-		Data:    map[string]string{"key": "value"},
-		Meta:    &APIMeta{Version: "v1"},
+		OK:   true,
+		Data: map[string]string{"key": "value"},
+		Meta: &APIMeta{Version: "v1"},
 	}
 
 	data, err := json.Marshal(response)
@@ -1884,7 +1884,7 @@ func TestExtractDomainEdgeCases(t *testing.T) {
 	}{
 		{"", ""},
 		{"not-a-url", "not-a-url"},
-		{"ftp://ftp.example.com/file", "ftp:"},  // Only http/https schemes are parsed fully
+		{"ftp://ftp.example.com/file", "ftp:"}, // Only http/https schemes are parsed fully
 		{"https://sub.domain.example.com/path/to/page?q=test", "sub.domain.example.com"},
 		{"http://localhost:8080/api", "localhost:8080"},
 	}
@@ -2633,7 +2633,7 @@ func TestSearchEndpointPOSTInvalidJSON(t *testing.T) {
 func TestSearchEndpointAllCategories(t *testing.T) {
 	handler := newTestHandler()
 
-	categories := []string{"general", "images", "videos", "news", "maps", "unknown"}
+	categories := []string{"general", "images", "videos", "news", "maps", "files", "music", "science", "it", "social", "unknown"}
 	for _, cat := range categories {
 		t.Run(cat, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/api/v1/search?q=test&category="+cat, nil)
@@ -2655,10 +2655,10 @@ func TestSearchEndpointLimitBounds(t *testing.T) {
 		limit    string
 		expected int
 	}{
-		{"0", 20},    // Should default to 20
-		{"-1", 20},   // Should default to 20
-		{"200", 20},  // Should cap to 20 (>100 triggers default)
-		{"50", 50},   // Valid limit
+		{"0", 20},   // Should default to 20
+		{"-1", 20},  // Should default to 20
+		{"200", 20}, // Should cap to 20 (>100 triggers default)
+		{"50", 50},  // Valid limit
 	}
 
 	for _, tt := range tests {

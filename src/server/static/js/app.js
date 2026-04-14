@@ -9,7 +9,162 @@
     // THEME MANAGEMENT
     // ========================================================================
     const THEME_KEY = 'search-theme';
+    const SEARCH_PREFERENCES_KEY = 'search_preferences';
     const THEMES = ['dark', 'light', 'auto'];
+
+    function normalizeThemePreference(theme) {
+        if (theme === 'system') return 'auto';
+        return THEMES.includes(theme) ? theme : 'auto';
+    }
+
+    function normalizeSearchPreferences(prefs) {
+        prefs = prefs || {};
+        return {
+            theme: normalizeThemePreference(prefs.theme || 'auto'),
+            default_category: prefs.default_category || 'general',
+            safe_search: prefs.safe_search !== undefined ? String(prefs.safe_search) : '1',
+            results_per_page: prefs.results_per_page ? String(prefs.results_per_page) : '20',
+            new_tab: !!prefs.new_tab,
+            infinite_scroll: !!prefs.infinite_scroll,
+            keyboard_shortcuts: prefs.keyboard_shortcuts !== false
+        };
+    }
+
+    function getStoredSearchPreferences() {
+        try {
+            return normalizeSearchPreferences(JSON.parse(localStorage.getItem(SEARCH_PREFERENCES_KEY) || '{}'));
+        } catch (e) {
+            return normalizeSearchPreferences({});
+        }
+    }
+
+    function decodePreferencePayload(raw) {
+        if (!raw) return '';
+        try {
+            return atob(raw.replace(/-/g, '+').replace(/_/g, '/'));
+        } catch (e) {
+            return raw;
+        }
+    }
+
+    function parsePreferenceString(raw) {
+        var prefs = normalizeSearchPreferences({});
+        raw = decodePreferencePayload((raw || '').trim());
+        if (!raw) return prefs;
+
+        if (raw.charAt(0) === '{') {
+            try {
+                return normalizeSearchPreferences(JSON.parse(raw));
+            } catch (e) {
+                return prefs;
+            }
+        }
+
+        raw.split(';').forEach(function(part) {
+            if (!part) return;
+            var bits = part.split('=');
+            if (bits.length < 2) return;
+            var key = bits[0].trim();
+            var value = bits.slice(1).join('=').trim();
+
+            switch (key) {
+                case 't':
+                    prefs.theme = normalizeThemePreference(value === 'd' ? 'dark' : value === 'l' ? 'light' : value === 'a' ? 'auto' : value);
+                    break;
+                case 'c':
+                    prefs.default_category = value === 'web' ? 'general' : value;
+                    break;
+                case 's':
+                    prefs.safe_search = value === 'o' ? '0' : value === 'm' ? '1' : value === 's' ? '2' : String(value || '1');
+                    break;
+                case 'r':
+                    prefs.results_per_page = value || '20';
+                    break;
+                case 'n':
+                    prefs.new_tab = value === '1';
+                    break;
+                case 'p':
+                    prefs.infinite_scroll = value === 'i';
+                    break;
+                case 'k':
+                    prefs.keyboard_shortcuts = value !== '0';
+                    break;
+            }
+        });
+
+        return normalizeSearchPreferences(prefs);
+    }
+
+    function encodePreferenceString(prefs) {
+        prefs = normalizeSearchPreferences(prefs);
+        var themeMap = { dark: 'd', light: 'l', auto: 'a' };
+        var safeSearchMap = { '0': 'o', '1': 'm', '2': 's' };
+        var category = prefs.default_category === 'general' ? 'web' : prefs.default_category;
+        return [
+            't=' + themeMap[prefs.theme],
+            'c=' + category,
+            's=' + (safeSearchMap[prefs.safe_search] || 'm'),
+            'r=' + prefs.results_per_page,
+            'n=' + (prefs.new_tab ? '1' : '0'),
+            'p=' + (prefs.infinite_scroll ? 'i' : 'p'),
+            'k=' + (prefs.keyboard_shortcuts ? '1' : '0')
+        ].join(';');
+    }
+
+    function getURLPreferenceString() {
+        try {
+            var urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get('prefs') || '';
+        } catch (e) {
+            return '';
+        }
+    }
+
+    function getActiveSearchPreferences() {
+        var stored = getStoredSearchPreferences();
+        var urlPrefsRaw = getURLPreferenceString();
+        if (!urlPrefsRaw) {
+            return stored;
+        }
+
+        var urlPrefs = parsePreferenceString(urlPrefsRaw);
+        var merged = normalizeSearchPreferences({
+            theme: urlPrefs.theme || stored.theme,
+            default_category: urlPrefs.default_category || stored.default_category,
+            safe_search: urlPrefs.safe_search || stored.safe_search,
+            results_per_page: urlPrefs.results_per_page || stored.results_per_page,
+            new_tab: urlPrefs.new_tab,
+            infinite_scroll: urlPrefs.infinite_scroll,
+            keyboard_shortcuts: urlPrefs.keyboard_shortcuts
+        });
+        localStorage.setItem(SEARCH_PREFERENCES_KEY, JSON.stringify(merged));
+        return merged;
+    }
+
+    function upsertHiddenField(form, name, value) {
+        if (!form) return;
+        var input = form.querySelector('input[name="' + name + '"]');
+        if (!input) {
+            input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = name;
+            form.appendChild(input);
+        }
+        input.value = value;
+    }
+
+    function applySearchPreferencesToForms() {
+        var prefs = getActiveSearchPreferences();
+        var urlPrefs = getURLPreferenceString();
+
+        document.querySelectorAll('form[action="/search"]').forEach(function(form) {
+            upsertHiddenField(form, 'safe_search', prefs.safe_search);
+            upsertHiddenField(form, 'per_page', prefs.results_per_page);
+            if (urlPrefs) {
+                upsertHiddenField(form, 'prefs', urlPrefs);
+            }
+        });
+    }
 
     function getPreferredTheme() {
         const saved = localStorage.getItem(THEME_KEY);
@@ -679,6 +834,7 @@
 
     function initKeyboardShortcuts() {
         document.addEventListener('keydown', function(e) {
+            if (!getActiveSearchPreferences().keyboard_shortcuts) return;
             // Skip if modifier keys (except shift for O)
             if (e.ctrlKey || e.altKey || e.metaKey) return;
 
@@ -977,17 +1133,23 @@
         // Per AI.md PART 16: NO inline JS - all in external files
         var container = document.querySelector('.search-results-page');
         if (!container) return;
+        if (!getActiveSearchPreferences().infinite_scroll) return;
 
         var resultsContainer = document.getElementById('results-container');
         var scrollTrigger = document.getElementById('scroll-trigger');
         var loadingIndicator = document.getElementById('loading-indicator');
         var endIndicator = document.getElementById('end-indicator');
+        var pagination = document.querySelector('.pagination');
 
         if (!resultsContainer || !scrollTrigger) return;
+        if (pagination) pagination.classList.add('hidden');
 
         var query = container.dataset.query;
         var category = container.dataset.category;
         var currentPage = parseInt(container.dataset.page) || 1;
+        var perPage = parseInt(container.dataset.perPage) || 20;
+        var safeSearch = container.dataset.safeSearch || '1';
+        var prefsParam = container.dataset.prefs || '';
         var isLoading = false;
         var hasMore = true;
 
@@ -1022,12 +1184,6 @@
 
         // Create result card HTML based on category
         function createResultCard(result) {
-            var domain = '';
-            try {
-                domain = new URL(result.url).hostname;
-            } catch (e) {
-                domain = 'unknown';
-            }
             var firstLetter = result.title ? result.title.charAt(0).toUpperCase() : '?';
 
             if (category === 'images') {
@@ -1071,7 +1227,7 @@
             // Standard results
             return '<article class="result-item">' +
                 '<div class="result-favicon">' +
-                '<img src="https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=32" alt="" loading="lazy" onerror="this.classList.add(\'hidden\');this.nextElementSibling.classList.remove(\'hidden\');">' +
+                '<img src="/api/v1/favicon?url=' + encodeURIComponent(result.url) + '" alt="" loading="lazy" data-favicon-fallback>' +
                 '<span class="favicon-placeholder hidden">' + escapeHtmlLocal(firstLetter) + '</span>' +
                 '</div>' +
                 '<div class="result-body">' +
@@ -1091,15 +1247,23 @@
             if (loadingIndicator) loadingIndicator.classList.remove('hidden');
 
             var nextPage = currentPage + 1;
-            fetch('/api/v1/search?q=' + encodeURIComponent(query) + '&category=' + encodeURIComponent(category) + '&page=' + nextPage + '&limit=20')
+            var apiURL = '/api/v1/search?q=' + encodeURIComponent(query) +
+                '&category=' + encodeURIComponent(category) +
+                '&page=' + nextPage +
+                '&limit=' + perPage +
+                '&safe_search=' + encodeURIComponent(safeSearch);
+            if (prefsParam) {
+                apiURL += '&prefs=' + encodeURIComponent(prefsParam);
+            }
+            fetch(apiURL)
                 .then(function(response) { return response.json(); })
                 .then(function(data) {
-                    if (data.success && data.data.results && data.data.results.length > 0) {
+                    if (data.ok && data.data && data.data.results && data.data.results.length > 0) {
                         data.data.results.forEach(function(result) {
                             resultsContainer.insertAdjacentHTML('beforeend', createResultCard(result));
                         });
-                        currentPage = nextPage;
-                        hasMore = data.data.has_more;
+                        currentPage = data.data.pagination.page;
+                        hasMore = currentPage < data.data.pagination.pages;
                     } else {
                         hasMore = false;
                     }
@@ -1659,8 +1823,20 @@
         // Category tab switching
         var categoryTabs = document.querySelectorAll('.category-tab');
         var categoryInput = document.getElementById('categoryInput');
+        var advancedCategoryInput = document.querySelector('.advanced-search-content input[name="category"]');
+        var prefs = getActiveSearchPreferences();
 
         if (categoryTabs.length > 0 && categoryInput) {
+            if (prefs.default_category) {
+                categoryInput.value = prefs.default_category;
+                if (advancedCategoryInput) advancedCategoryInput.value = prefs.default_category;
+                categoryTabs.forEach(function(tab) {
+                    var active = tab.dataset.category === prefs.default_category;
+                    tab.classList.toggle('active', active);
+                    tab.setAttribute('aria-selected', active ? 'true' : 'false');
+                });
+            }
+
             categoryTabs.forEach(function(tab) {
                 tab.addEventListener('click', function() {
                     categoryTabs.forEach(function(t) {
@@ -1670,6 +1846,7 @@
                     this.classList.add('active');
                     this.setAttribute('aria-selected', 'true');
                     categoryInput.value = this.dataset.category;
+                    if (advancedCategoryInput) advancedCategoryInput.value = this.dataset.category;
                 });
             });
         }
@@ -1768,7 +1945,7 @@
         if (!prefsPage) return;
 
         // Storage keys
-        var PREFS_KEY = 'search_preferences';
+        var PREFS_KEY = SEARCH_PREFERENCES_KEY;
         var BANGS_KEY = 'search_custom_bangs';
         var WIDGETS_KEY = 'search_widgets';
 
@@ -1777,14 +1954,20 @@
             try {
                 var prefs = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
                 var themeSelect = document.getElementById('theme');
+                var defaultCategorySelect = document.getElementById('default-category');
                 var safeSearchSelect = document.getElementById('safe-search');
                 var resultsPerPageSelect = document.getElementById('results-per-page');
                 var newTabCheckbox = document.getElementById('new-tab');
+                var infiniteScrollCheckbox = document.getElementById('infinite-scroll');
+                var keyboardShortcutsCheckbox = document.getElementById('keyboard-shortcuts');
 
-                if (prefs.theme && themeSelect) themeSelect.value = prefs.theme;
+                if (prefs.theme && themeSelect) themeSelect.value = normalizeThemePreference(prefs.theme);
+                if (prefs.default_category && defaultCategorySelect) defaultCategorySelect.value = prefs.default_category;
                 if (prefs.safe_search !== undefined && safeSearchSelect) safeSearchSelect.value = prefs.safe_search;
                 if (prefs.results_per_page && resultsPerPageSelect) resultsPerPageSelect.value = prefs.results_per_page;
                 if (prefs.new_tab && newTabCheckbox) newTabCheckbox.checked = prefs.new_tab;
+                if (infiniteScrollCheckbox) infiniteScrollCheckbox.checked = !!prefs.infinite_scroll;
+                if (keyboardShortcutsCheckbox) keyboardShortcutsCheckbox.checked = prefs.keyboard_shortcuts !== false;
             } catch (e) {
                 console.error('Failed to load preferences:', e);
             }
@@ -1793,26 +1976,30 @@
         // Save preferences to localStorage
         function savePreferences() {
             var themeSelect = document.getElementById('theme');
+            var defaultCategorySelect = document.getElementById('default-category');
             var safeSearchSelect = document.getElementById('safe-search');
             var resultsPerPageSelect = document.getElementById('results-per-page');
             var newTabCheckbox = document.getElementById('new-tab');
+            var infiniteScrollCheckbox = document.getElementById('infinite-scroll');
+            var keyboardShortcutsCheckbox = document.getElementById('keyboard-shortcuts');
 
             var prefs = {
-                theme: themeSelect ? themeSelect.value : 'dark',
+                theme: themeSelect ? normalizeThemePreference(themeSelect.value) : 'auto',
+                default_category: defaultCategorySelect ? defaultCategorySelect.value : 'general',
                 safe_search: safeSearchSelect ? safeSearchSelect.value : '1',
                 results_per_page: resultsPerPageSelect ? resultsPerPageSelect.value : '20',
-                new_tab: newTabCheckbox ? newTabCheckbox.checked : false
+                new_tab: newTabCheckbox ? newTabCheckbox.checked : false,
+                infinite_scroll: infiniteScrollCheckbox ? infiniteScrollCheckbox.checked : false,
+                keyboard_shortcuts: keyboardShortcutsCheckbox ? keyboardShortcutsCheckbox.checked : true
             };
 
             localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+            localStorage.setItem(THEME_KEY, prefs.theme);
 
-            // Apply theme immediately
-            if (prefs.theme !== 'system') {
-                document.documentElement.classList.remove('theme-dark', 'theme-light');
-                document.documentElement.classList.add('theme-' + prefs.theme);
-            }
+            applyTheme(prefs.theme);
 
             saveWidgetPreferences();
+            applySearchPreferencesToForms();
             showPrefStatus('Preferences saved!');
 
             // Redirect back to previous page after a short delay
@@ -1912,6 +2099,19 @@
             }, 3000);
         }
 
+        function updatePreferenceSharing() {
+            var prefs = normalizeSearchPreferences(JSON.parse(localStorage.getItem(PREFS_KEY) || '{}'));
+            var prefString = encodePreferenceString(prefs);
+            var prefURL = window.location.origin + '/?prefs=' + encodeURIComponent(prefString);
+            var prefStringInput = document.getElementById('preference-string');
+            var prefURLInput = document.getElementById('preference-url');
+            var qrLink = document.getElementById('qr-pref-link');
+
+            if (prefStringInput) prefStringInput.value = prefString;
+            if (prefURLInput) prefURLInput.value = prefURL;
+            if (qrLink) qrLink.href = '/direct/qr/' + encodeURIComponent(prefURL);
+        }
+
         // Event handlers via delegation
         prefsPage.addEventListener('click', function(e) {
             // Save preferences button
@@ -1979,6 +2179,25 @@
             if (e.target.id === 'import-prefs') {
                 var importFile = document.getElementById('import-file');
                 if (importFile) importFile.click();
+                return;
+            }
+
+            if (e.target.id === 'generate-pref-link') {
+                updatePreferenceSharing();
+                showPrefStatus('Share link updated!');
+                return;
+            }
+
+            if (e.target.id === 'copy-pref-link') {
+                updatePreferenceSharing();
+                var prefUrl = document.getElementById('preference-url');
+                if (prefUrl) {
+                    navigator.clipboard.writeText(prefUrl.value).then(function() {
+                        showPrefStatus('Preference URL copied!');
+                    }).catch(function() {
+                        showPrefStatus('Copy failed - copy the URL manually', true);
+                    });
+                }
                 return;
             }
 
@@ -2065,6 +2284,7 @@
                         loadPreferences();
                         loadCustomBangs();
                         loadWidgetPreferences();
+                        updatePreferenceSharing();
                         showPrefStatus('Preferences imported!');
                     } catch (err) {
                         showPrefStatus('Failed to import preferences', true);
@@ -2092,6 +2312,7 @@
         loadPreferences();
         loadCustomBangs();
         loadWidgetPreferences();
+        updatePreferenceSharing();
     }
 
     // ========================================================================
@@ -2306,25 +2527,23 @@
             }
         }
 
+        document.addEventListener('error', function(e) {
+            if (e.target && e.target.matches('.result-favicon img[data-favicon-fallback]')) {
+                showPlaceholder(e.target);
+            }
+        }, true);
+
+        document.addEventListener('load', function(e) {
+            if (e.target && e.target.matches('.result-favicon img[data-favicon-fallback]')) {
+                if (e.target.naturalWidth <= 1 && e.target.naturalHeight <= 1) {
+                    showPlaceholder(e.target);
+                }
+            }
+        }, true);
+
         document.querySelectorAll('.result-favicon img[data-favicon-fallback]').forEach(function(img) {
-            // Handle load errors
-            img.addEventListener('error', function() {
-                showPlaceholder(this);
-            });
-
-            // Handle load success - check if it's a 1x1 fallback image
-            img.addEventListener('load', function() {
-                // 1x1 transparent PNG is our fallback, show placeholder instead
-                if (this.naturalWidth <= 1 && this.naturalHeight <= 1) {
-                    showPlaceholder(this);
-                }
-            });
-
-            // Handle already-loaded images (from cache)
-            if (img.complete) {
-                if (img.naturalWidth <= 1 && img.naturalHeight <= 1) {
-                    showPlaceholder(img);
-                }
+            if (img.complete && img.naturalWidth <= 1 && img.naturalHeight <= 1) {
+                showPlaceholder(img);
             }
         });
     }
@@ -2333,7 +2552,8 @@
     // INITIALIZATION
     // ========================================================================
     function init() {
-        setTheme(getPreferredTheme());
+        applyTheme(getActiveSearchPreferences().theme || getPreferredTheme());
+        applySearchPreferencesToForms();
         initFlashMessages();
         initSearchAutocomplete();
         initKeyboardShortcuts();
@@ -4020,16 +4240,13 @@
     }
 
     function applyPreferences() {
-        var prefs = getPreferences();
+        var prefs = getActiveSearchPreferences();
 
         // Per AI.md PART 16: Apply theme class to <html> element: theme-light, theme-dark
-        if (prefs.theme && prefs.theme !== 'system') {
-            document.documentElement.classList.remove('theme-dark', 'theme-light');
-            document.documentElement.classList.add('theme-' + prefs.theme);
-        }
+        applyTheme(prefs.theme);
 
         if (prefs.new_tab) {
-            document.querySelectorAll('.result a').forEach(function(link) {
+            document.querySelectorAll('.result a, .result-item a, .video-result a, .image-result a').forEach(function(link) {
                 link.setAttribute('target', '_blank');
                 link.setAttribute('rel', 'noopener noreferrer');
             });

@@ -31,8 +31,8 @@ type Config struct {
 	configPath string // Path to config file for reload
 	firstRun   bool   // True if this is first run (no config existed)
 
-	Server  ServerConfig           `yaml:"server"`
-	Search  SearchConfig           `yaml:"search"`
+	Server  ServerConfig            `yaml:"server"`
+	Search  SearchConfig            `yaml:"search"`
 	Engines map[string]EngineConfig `yaml:"engines"`
 }
 
@@ -113,8 +113,8 @@ type ServerConfig struct {
 	// Core settings
 	Title       string `yaml:"title"`
 	Description string `yaml:"description"`
-	Port        int    `yaml:"port"`        // HTTP port (or single port if HTTPSPort not set)
-	HTTPSPort   int    `yaml:"https_port"`  // HTTPS port for dual port mode (optional)
+	Port        int    `yaml:"port"`       // HTTP port (or single port if HTTPSPort not set)
+	HTTPSPort   int    `yaml:"https_port"` // HTTPS port for dual port mode (optional)
 	Address     string `yaml:"address"`
 	Mode        string `yaml:"mode"`
 	SecretKey   string `yaml:"secret_key"`
@@ -250,13 +250,13 @@ type BrandingConfig struct {
 
 // RateLimitConfig represents rate limiting configuration
 type RateLimitConfig struct {
-	Enabled           bool `yaml:"enabled"`
-	RequestsPerMinute int  `yaml:"requests_per_minute"`
-	RequestsPerHour   int  `yaml:"requests_per_hour"`
-	RequestsPerDay    int  `yaml:"requests_per_day"`
-	BurstSize         int  `yaml:"burst_size"`
-	ByIP              bool `yaml:"by_ip"`
-	ByUser            bool `yaml:"by_user"`
+	Enabled           bool     `yaml:"enabled"`
+	RequestsPerMinute int      `yaml:"requests_per_minute"`
+	RequestsPerHour   int      `yaml:"requests_per_hour"`
+	RequestsPerDay    int      `yaml:"requests_per_day"`
+	BurstSize         int      `yaml:"burst_size"`
+	ByIP              bool     `yaml:"by_ip"`
+	ByUser            bool     `yaml:"by_user"`
 	Whitelist         []string `yaml:"whitelist"`
 	Blacklist         []string `yaml:"blacklist"`
 }
@@ -470,8 +470,8 @@ type TorConfig struct {
 // Per AI.md PART 18: Nested SMTP and From blocks
 type EmailConfig struct {
 	// Enabled is auto-set based on SMTP availability (no manual toggle)
-	Enabled bool `yaml:"-"` // Computed, not stored
-	SMTP    SMTPConfig `yaml:"smtp"`
+	Enabled bool            `yaml:"-"` // Computed, not stored
+	SMTP    SMTPConfig      `yaml:"smtp"`
 	From    EmailFromConfig `yaml:"from"`
 }
 
@@ -485,14 +485,14 @@ type SMTPConfig struct {
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
 	// TLS mode: auto, starttls, tls, none
-	TLS      string `yaml:"tls"`
+	TLS string `yaml:"tls"`
 }
 
 // EmailFromConfig represents the from address configuration
 // Per AI.md PART 18: From name and email defaults
 type EmailFromConfig struct {
 	// Default: app title
-	Name  string `yaml:"name"`
+	Name string `yaml:"name"`
 	// Default: no-reply@{fqdn}
 	Email string `yaml:"email"`
 }
@@ -501,12 +501,12 @@ type EmailFromConfig struct {
 type SecurityConfig struct {
 	// CORS
 	CORS struct {
-		Enabled        bool     `yaml:"enabled"`
-		AllowedOrigins []string `yaml:"allowed_origins"`
-		AllowedMethods []string `yaml:"allowed_methods"`
-		AllowedHeaders []string `yaml:"allowed_headers"`
-		AllowCredentials bool    `yaml:"allow_credentials"`
-		MaxAge         int      `yaml:"max_age"`
+		Enabled          bool     `yaml:"enabled"`
+		AllowedOrigins   []string `yaml:"allowed_origins"`
+		AllowedMethods   []string `yaml:"allowed_methods"`
+		AllowedHeaders   []string `yaml:"allowed_headers"`
+		AllowCredentials bool     `yaml:"allow_credentials"`
+		MaxAge           int      `yaml:"max_age"`
 	} `yaml:"cors"`
 	// CSRF
 	CSRF struct {
@@ -552,19 +552,19 @@ type OIDCProviderConfig struct {
 
 // LDAPConfig represents LDAP authentication configuration
 type LDAPConfig struct {
-	ID             string   `yaml:"id"`
-	Name           string   `yaml:"name"`
-	Enabled        bool     `yaml:"enabled"`
-	Host           string   `yaml:"host"`
-	Port           int      `yaml:"port"`
-	UseTLS         bool     `yaml:"use_tls"`
-	SkipTLSVerify  bool     `yaml:"skip_tls_verify"`
-	BindDN         string   `yaml:"bind_dn"`
-	BindPassword   string   `yaml:"bind_password"`
-	BaseDN         string   `yaml:"base_dn"`
-	UserFilter     string   `yaml:"user_filter"`
-	UsernameAttr   string   `yaml:"username_attr"`
-	EmailAttr      string   `yaml:"email_attr"`
+	ID            string `yaml:"id"`
+	Name          string `yaml:"name"`
+	Enabled       bool   `yaml:"enabled"`
+	Host          string `yaml:"host"`
+	Port          int    `yaml:"port"`
+	UseTLS        bool   `yaml:"use_tls"`
+	SkipTLSVerify bool   `yaml:"skip_tls_verify"`
+	BindDN        string `yaml:"bind_dn"`
+	BindPassword  string `yaml:"bind_password"`
+	BaseDN        string `yaml:"base_dn"`
+	UserFilter    string `yaml:"user_filter"`
+	UsernameAttr  string `yaml:"username_attr"`
+	EmailAttr     string `yaml:"email_attr"`
 	// Admin group mapping per AI.md PART 31
 	AdminGroups     []string `yaml:"admin_groups"`
 	GroupFilter     string   `yaml:"group_filter"`
@@ -573,7 +573,7 @@ type LDAPConfig struct {
 
 // UsersConfig represents user management configuration
 type UsersConfig struct {
-	Enabled bool `yaml:"enabled"`
+	Enabled      bool `yaml:"enabled"`
 	Registration struct {
 		Enabled                  bool     `yaml:"enabled"`
 		RequireEmailVerification bool     `yaml:"require_email_verification"`
@@ -839,9 +839,9 @@ type CacheConfig struct {
 // Per AI.md PART 20: GeoIP configuration
 type GeoIPConfig struct {
 	Enabled          bool     `yaml:"enabled"`
-	Dir              string   `yaml:"dir"`              // Directory for MMDB files
-	Update           string   `yaml:"update"`           // never, daily, weekly, monthly
-	DenyCountries    []string `yaml:"deny_countries"`   // Countries to block (ISO 3166-1 alpha-2)
+	Dir              string   `yaml:"dir"`               // Directory for MMDB files
+	Update           string   `yaml:"update"`            // never, daily, weekly, monthly
+	DenyCountries    []string `yaml:"deny_countries"`    // Countries to block (ISO 3166-1 alpha-2)
 	AllowedCountries []string `yaml:"allowed_countries"` // If set, only these countries allowed
 	// Database toggles per AI.md PART 20
 	ASN     bool `yaml:"asn"`     // Enable ASN lookups
@@ -908,17 +908,17 @@ type ContactConfig struct {
 
 // SEOConfig represents SEO configuration
 type SEOConfig struct {
-	Enabled           bool              `yaml:"enabled"`
-	DefaultTitle      string            `yaml:"default_title"`
-	TitleSeparator    string            `yaml:"title_separator"`
-	DefaultDescription string           `yaml:"default_description"`
-	Keywords          []string          `yaml:"keywords"`
-	MetaTags          map[string]string `yaml:"meta_tags"`
-	OpenGraph         OpenGraphConfig   `yaml:"opengraph"`
-	Twitter           TwitterConfig     `yaml:"twitter"`
-	Canonical         bool              `yaml:"canonical"` // Include canonical URLs
-	NoIndex           bool              `yaml:"noindex"`   // Set noindex on search results
-	Sitemap           bool              `yaml:"sitemap"`   // Generate sitemap.xml
+	Enabled            bool              `yaml:"enabled"`
+	DefaultTitle       string            `yaml:"default_title"`
+	TitleSeparator     string            `yaml:"title_separator"`
+	DefaultDescription string            `yaml:"default_description"`
+	Keywords           []string          `yaml:"keywords"`
+	MetaTags           map[string]string `yaml:"meta_tags"`
+	OpenGraph          OpenGraphConfig   `yaml:"opengraph"`
+	Twitter            TwitterConfig     `yaml:"twitter"`
+	Canonical          bool              `yaml:"canonical"` // Include canonical URLs
+	NoIndex            bool              `yaml:"noindex"`   // Set noindex on search results
+	Sitemap            bool              `yaml:"sitemap"`   // Generate sitemap.xml
 }
 
 // OpenGraphConfig represents OpenGraph meta tags
@@ -932,10 +932,10 @@ type OpenGraphConfig struct {
 
 // TwitterConfig represents Twitter card meta tags
 type TwitterConfig struct {
-	Enabled     bool   `yaml:"enabled"`
-	Card        string `yaml:"card"` // summary, summary_large_image
-	Site        string `yaml:"site"` // @username
-	Creator     string `yaml:"creator"`
+	Enabled bool   `yaml:"enabled"`
+	Card    string `yaml:"card"` // summary, summary_large_image
+	Site    string `yaml:"site"` // @username
+	Creator string `yaml:"creator"`
 }
 
 // CompressionConfig represents HTTP response compression settings
@@ -952,10 +952,10 @@ type CompressionConfig struct {
 // LimitsConfig represents request limits configuration per AI.md PART 18
 // Protects against DoS attacks (Slowloris, large uploads)
 type LimitsConfig struct {
-	MaxBodySize  string `yaml:"max_body_size"`  // Maximum request body size (e.g., "10MB")
-	ReadTimeout  string `yaml:"read_timeout"`   // HTTP read timeout (e.g., "30s")
-	WriteTimeout string `yaml:"write_timeout"`  // HTTP write timeout (e.g., "30s")
-	IdleTimeout  string `yaml:"idle_timeout"`   // HTTP idle connection timeout (e.g., "120s")
+	MaxBodySize  string `yaml:"max_body_size"` // Maximum request body size (e.g., "10MB")
+	ReadTimeout  string `yaml:"read_timeout"`  // HTTP read timeout (e.g., "30s")
+	WriteTimeout string `yaml:"write_timeout"` // HTTP write timeout (e.g., "30s")
+	IdleTimeout  string `yaml:"idle_timeout"`  // HTTP idle connection timeout (e.g., "120s")
 }
 
 // GetMaxBodySizeBytes parses MaxBodySize and returns bytes
@@ -986,14 +986,14 @@ func (l *LimitsConfig) GetMaxBodySizeBytes() int64 {
 
 // I18nConfig represents internationalization configuration
 type I18nConfig struct {
-	Enabled          bool     `yaml:"enabled"`
-	DefaultLanguage  string   `yaml:"default_language"`  // BCP 47 language tag (e.g., en, en-US, de)
+	Enabled            bool     `yaml:"enabled"`
+	DefaultLanguage    string   `yaml:"default_language"`    // BCP 47 language tag (e.g., en, en-US, de)
 	SupportedLanguages []string `yaml:"supported_languages"` // List of supported languages
-	AutoDetect       bool     `yaml:"auto_detect"`       // Detect from Accept-Language header
-	ShowSelector     bool     `yaml:"show_selector"`     // Show language selector in UI
-	RTLLanguages     []string `yaml:"rtl_languages"`     // Right-to-left languages (ar, he, etc.)
-	TranslationsDir  string   `yaml:"translations_dir"`  // Directory for translation files
-	FallbackLanguage string   `yaml:"fallback_language"` // Fallback if requested language not available
+	AutoDetect         bool     `yaml:"auto_detect"`         // Detect from Accept-Language header
+	ShowSelector       bool     `yaml:"show_selector"`       // Show language selector in UI
+	RTLLanguages       []string `yaml:"rtl_languages"`       // Right-to-left languages (ar, he, etc.)
+	TranslationsDir    string   `yaml:"translations_dir"`    // Directory for translation files
+	FallbackLanguage   string   `yaml:"fallback_language"`   // Fallback if requested language not available
 }
 
 // SearchConfig represents search configuration
@@ -1260,12 +1260,12 @@ func DefaultConfig() *Config {
 			},
 			Security: SecurityConfig{
 				CORS: struct {
-					Enabled        bool     `yaml:"enabled"`
-					AllowedOrigins []string `yaml:"allowed_origins"`
-					AllowedMethods []string `yaml:"allowed_methods"`
-					AllowedHeaders []string `yaml:"allowed_headers"`
-					AllowCredentials bool    `yaml:"allow_credentials"`
-					MaxAge         int      `yaml:"max_age"`
+					Enabled          bool     `yaml:"enabled"`
+					AllowedOrigins   []string `yaml:"allowed_origins"`
+					AllowedMethods   []string `yaml:"allowed_methods"`
+					AllowedHeaders   []string `yaml:"allowed_headers"`
+					AllowCredentials bool     `yaml:"allow_credentials"`
+					MaxAge           int      `yaml:"max_age"`
 				}{
 					Enabled:        false,
 					AllowedOrigins: []string{"*"},
@@ -1303,15 +1303,15 @@ func DefaultConfig() *Config {
 			Users: UsersConfig{
 				Enabled: true,
 				Registration: struct {
-					Enabled                bool     `yaml:"enabled"`
-					RequireEmailVerification bool    `yaml:"require_email_verification"`
-					RequireApproval        bool     `yaml:"require_approval"`
-					AllowedDomains         []string `yaml:"allowed_domains"`
-					BlockedDomains         []string `yaml:"blocked_domains"`
+					Enabled                  bool     `yaml:"enabled"`
+					RequireEmailVerification bool     `yaml:"require_email_verification"`
+					RequireApproval          bool     `yaml:"require_approval"`
+					AllowedDomains           []string `yaml:"allowed_domains"`
+					BlockedDomains           []string `yaml:"blocked_domains"`
 				}{
-					Enabled:                false,
+					Enabled:                  false,
 					RequireEmailVerification: true,
-					RequireApproval:        false,
+					RequireApproval:          false,
 				},
 				Roles: struct {
 					Available []string `yaml:"available"`
@@ -1342,17 +1342,17 @@ func DefaultConfig() *Config {
 					SessionDuration          string `yaml:"session_duration"`
 					SessionDurationDays      int    `yaml:"session_duration_days"`
 					Require2FA               bool   `yaml:"require_2fa"`
-					Allow2FA                bool   `yaml:"allow_2fa"`
-					PasswordMinLength       int    `yaml:"password_min_length"`
+					Allow2FA                 bool   `yaml:"allow_2fa"`
+					PasswordMinLength        int    `yaml:"password_min_length"`
 					PasswordRequireUppercase bool   `yaml:"password_require_uppercase"`
-					PasswordRequireNumber   bool   `yaml:"password_require_number"`
-					PasswordRequireSpecial  bool   `yaml:"password_require_special"`
+					PasswordRequireNumber    bool   `yaml:"password_require_number"`
+					PasswordRequireSpecial   bool   `yaml:"password_require_special"`
 				}{
 					SessionDuration:     "30d",
 					SessionDurationDays: 30,
 					Require2FA:          false,
-					Allow2FA:          true,
-					PasswordMinLength: 8,
+					Allow2FA:            true,
+					PasswordMinLength:   8,
 				},
 			},
 			Pages: PagesConfig{
@@ -1454,12 +1454,12 @@ func DefaultConfig() *Config {
 				Enabled: true,
 			},
 			SEO: SEOConfig{
-				Enabled:           true,
-				DefaultTitle:      "Search",
-				TitleSeparator:    " - ",
+				Enabled:            true,
+				DefaultTitle:       "Search",
+				TitleSeparator:     " - ",
 				DefaultDescription: "A privacy-respecting metasearch engine",
-				Keywords:          []string{"search", "privacy", "metasearch"},
-				MetaTags:          map[string]string{},
+				Keywords:           []string{"search", "privacy", "metasearch"},
+				MetaTags:           map[string]string{},
 				OpenGraph: OpenGraphConfig{
 					Enabled:  true,
 					Type:     "website",
@@ -1523,10 +1523,10 @@ func DefaultConfig() *Config {
 			},
 			OpenSearch: OpenSearchConfig{
 				Enabled:     true,
-				ShortName:   "",   // Uses server.title if empty
-				Description: "",   // Uses server.description if empty
+				ShortName:   "", // Uses server.title if empty
+				Description: "", // Uses server.description if empty
 				Tags:        "search privacy metasearch",
-				LongName:    "",   // Uses server.title if empty
+				LongName:    "", // Uses server.title if empty
 				Image:       "/static/img/favicon.png",
 			},
 			Widgets: WidgetsConfig{
@@ -1623,14 +1623,14 @@ func DefaultConfig() *Config {
 			"stackoverflow": {
 				Enabled:    true,
 				Priority:   55,
-				Categories: []string{"general", "code"},
+				Categories: []string{"general", "it"},
 				Timeout:    10,
 				Weight:     0.8,
 			},
 			"github": {
 				Enabled:    true,
 				Priority:   50,
-				Categories: []string{"general", "code"},
+				Categories: []string{"general", "it"},
 				Timeout:    10,
 				Weight:     0.8,
 			},

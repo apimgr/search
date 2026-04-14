@@ -72,29 +72,29 @@ func NewTemplateRenderer(cfg *config.Config, i18nFuncs template.FuncMap) *Templa
 			}
 			return "ltr"
 		},
-		"safe":     func(s string) template.HTML { return template.HTML(s) },
-		"safeHTML": func(s string) template.HTML { return template.HTML(s) },
-		"safeURL":  func(s string) template.URL { return template.URL(s) },
-		"safeCSS":  func(s string) template.CSS { return template.CSS(s) },
-		"safeJS":   func(s string) template.JS { return template.JS(s) },
-		"lower":    strings.ToLower,
-		"upper":    strings.ToUpper,
-		"title":    strings.Title,
-		"contains": strings.Contains,
+		"safe":      func(s string) template.HTML { return template.HTML(s) },
+		"safeHTML":  func(s string) template.HTML { return template.HTML(s) },
+		"safeURL":   func(s string) template.URL { return template.URL(s) },
+		"safeCSS":   func(s string) template.CSS { return template.CSS(s) },
+		"safeJS":    func(s string) template.JS { return template.JS(s) },
+		"lower":     strings.ToLower,
+		"upper":     strings.ToUpper,
+		"title":     strings.Title,
+		"contains":  strings.Contains,
 		"hasPrefix": strings.HasPrefix,
 		"hasSuffix": strings.HasSuffix,
-		"replace":  strings.ReplaceAll,
-		"trim":     strings.TrimSpace,
-		"join":     strings.Join,
-		"split":    strings.Split,
+		"replace":   strings.ReplaceAll,
+		"trim":      strings.TrimSpace,
+		"join":      strings.Join,
+		"split":     strings.Split,
 		"default": func(def, val interface{}) interface{} {
 			if val == nil || val == "" {
 				return def
 			}
 			return val
 		},
-		"eq": func(a, b interface{}) bool { return a == b },
-		"ne": func(a, b interface{}) bool { return a != b },
+		"eq":  func(a, b interface{}) bool { return a == b },
+		"ne":  func(a, b interface{}) bool { return a != b },
 		"add": func(a, b int) int { return a + b },
 		"sub": func(a, b int) int { return a - b },
 		"mul": func(a, b int) int { return a * b },
@@ -123,7 +123,7 @@ func NewTemplateRenderer(cfg *config.Config, i18nFuncs template.FuncMap) *Templa
 			}
 			return s[:length] + "..."
 		},
-		"config": func() *config.Config { return cfg },
+		"config":  func() *config.Config { return cfg },
 		"version": func() string { return config.Version },
 		"year": func() int {
 			return time.Now().Year()
@@ -132,7 +132,7 @@ func NewTemplateRenderer(cfg *config.Config, i18nFuncs template.FuncMap) *Templa
 			return url.QueryEscape(s)
 		},
 		"formatVideoDuration": formatVideoDuration,
-		"formatViewCount": formatViewCount,
+		"formatViewCount":     formatViewCount,
 	}
 
 	tr.loadTemplates()
@@ -310,15 +310,16 @@ type PageData struct {
 	Category       string
 	BuildDate      string
 	Announcements  []Announcement // Active announcements
-	TorEnabled     bool   // Tor hidden service enabled (binary found)
-	TorStatus      string // Tor status: "connected", "connecting", "disabled"
-	TorAddress     string // .onion address (when connected)
+	TorEnabled     bool           // Tor hidden service enabled (binary found)
+	TorStatus      string         // Tor status: "connected", "connecting", "disabled"
+	TorAddress     string         // .onion address (when connected)
 	WidgetsEnabled bool
 	DefaultWidgets string // JSON array of default widget types
 	CookieConsent  *CookieConsentData
 	Extra          map[string]interface{}
 	AdminPath      string // Per AI.md PART 17: Configurable admin path (default: "admin")
 	ServerURL      string // Actual server URL for display in templates
+	PrefsQuery     string
 }
 
 // ErrorPageData extends PageData with error-specific fields
@@ -339,6 +340,8 @@ type SearchPageData struct {
 	TotalResults  int
 	SearchTime    float64
 	Engines       []string
+	PerPage       int
+	SafeSearch    int
 	Pagination    *Pagination
 	Error         string
 	InstantAnswer interface{} // Instant answer result (if any)
@@ -418,11 +421,11 @@ type NodeInfo struct {
 // ClusterInfo represents cluster status per AI.md PART 13
 type ClusterInfo struct {
 	Enabled   bool     `json:"enabled"`
-	Status    string   `json:"status,omitempty"`    // "connected", "disconnected"
-	Primary   string   `json:"primary,omitempty"`   // primary node public URL
-	Nodes     []string `json:"nodes,omitempty"`     // all node public URLs
+	Status    string   `json:"status,omitempty"`     // "connected", "disconnected"
+	Primary   string   `json:"primary,omitempty"`    // primary node public URL
+	Nodes     []string `json:"nodes,omitempty"`      // all node public URLs
 	NodeCount int      `json:"node_count,omitempty"` // total nodes
-	Role      string   `json:"role,omitempty"`      // "primary" or "member"
+	Role      string   `json:"role,omitempty"`       // "primary" or "member"
 }
 
 // MaintenanceInfo represents maintenance mode status
@@ -446,6 +449,9 @@ type Pagination struct {
 	TotalPages  int
 	HasPrev     bool
 	HasNext     bool
+	PrevPage    int
+	NextPage    int
+	Pages       []int
 }
 
 // ContactPageData extends PageData with contact form fields

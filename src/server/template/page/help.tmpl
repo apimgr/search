@@ -71,6 +71,11 @@
                     <p>Documents, downloads, and open directories</p>
                 </div>
                 <div class="category-item">
+                    <span class="category-icon">🎵</span>
+                    <strong>Music</strong>
+                    <p>Songs, artists, albums, and music videos</p>
+                </div>
+                <div class="category-item">
                     <span class="category-icon">💻</span>
                     <strong>IT</strong>
                     <p>Developer and technical sources</p>
@@ -735,6 +740,7 @@ curl "{{.ServerURL}}/api/v1/direct/rules/34"</code></pre>
             <ul class="privacy-list">
                 <li><strong>No tracking:</strong> We don't track your searches or create user profiles</li>
                 <li><strong>No search history:</strong> Your searches are not stored on our servers</li>
+                <li><strong>Sanitized result links:</strong> Common tracking parameters are stripped from result URLs before they are shown</li>
                 <li><strong>Tor support:</strong> Access via Tor hidden service for maximum anonymity{{if .Config.Server.Tor.Enabled}} (<a href="#tor-access">see below</a>){{end}}</li>
                 <li><strong>Minimal cookies:</strong> Only essential cookies for preferences (no analytics)</li>
                 <li><strong>No JavaScript required:</strong> Core search works without JavaScript</li>
