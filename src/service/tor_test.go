@@ -1,7 +1,7 @@
 package service
 
 import (
-	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -248,6 +248,9 @@ func TestGetTorConfigDoesNotEmitLegacyInvalidOption(t *testing.T) {
 	if strings.Contains(torrc, "MaxStreamsPerCircuit ") {
 		t.Fatal("getTorConfig() should not include MaxStreamsPerCircuit")
 	}
+	if runtime.GOOS != "windows" && strings.Contains(torrc, "ControlSocket ") {
+		t.Fatal("getTorConfig() should not include ControlSocket on Unix when using bine control-port discovery")
+	}
 }
 
 func TestSanitizeTorrcContentRemovesLegacyInvalidOption(t *testing.T) {
@@ -275,9 +278,22 @@ func TestSanitizeTorrcContentMigratesUnixControlPort(t *testing.T) {
 	if !strings.Contains(got, "ControlPort 0") {
 		t.Fatal("sanitizeTorrcContent() should set ControlPort 0 for migrated unix socket config")
 	}
-	expectedSocket := "ControlSocket " + filepath.Join(dataDir, "control.sock")
-	if !strings.Contains(got, expectedSocket) {
-		t.Fatalf("sanitizeTorrcContent() missing %q", expectedSocket)
+	if strings.Contains(got, "ControlSocket ") {
+		t.Fatal("sanitizeTorrcContent() should remove ControlSocket entries from legacy unix socket config")
+	}
+}
+
+func TestSanitizeTorrcContentRemovesControlSocketLine(t *testing.T) {
+	dataDir := "/tmp/search-tor"
+	input := strings.Join([]string{
+		"ControlPort 0",
+		"ControlSocket " + dataDir + "/control.sock",
+		"SafeLogging 1",
+	}, "\n")
+
+	got := sanitizeTorrcContent(input, dataDir)
+	if strings.Contains(got, "ControlSocket ") {
+		t.Fatal("sanitizeTorrcContent() should strip standalone ControlSocket lines")
 	}
 }
 

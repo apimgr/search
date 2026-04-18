@@ -131,10 +131,11 @@ func (t *TorService) getTorConfig() string {
 		// "auto" = Tor picks available high port at runtime (never saved)
 		controlConfig = "ControlPort 127.0.0.1:auto"
 	} else {
-		// Unix/macOS/BSD: keep control TCP disabled in torrc and expose a local
-		// control socket; bine still adds its own auto control port at runtime.
-		controlSocket := filepath.Join(t.dataDir, "control.sock")
-		controlConfig = fmt.Sprintf("ControlPort 0\nControlSocket %s", controlSocket)
+		// Unix/macOS/BSD: bine v0.2.0 still discovers the controller through a
+		// TCP control port file and cannot parse mixed PORT/UNIX_PORT output.
+		// Keep torrc itself on ControlPort 0 and let bine add its own runtime
+		// localhost control port via command-line args.
+		controlConfig = "ControlPort 0"
 	}
 
 	// SocksPort per AI.md PART 32:
@@ -224,18 +225,20 @@ DisableDebuggerAttachment 1
 		}(), bandwidthRate, bandwidthBurst, accountingConfig)
 }
 
-func sanitizeTorrcContent(content string, dataDir string) string {
+func sanitizeTorrcContent(content string, _ string) string {
 	lines := strings.Split(content, "\n")
-	sanitized := make([]string, 0, len(lines)+2)
-	controlSocket := filepath.Join(dataDir, "control.sock")
+	sanitized := make([]string, 0, len(lines))
 
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "MaxStreamsPerCircuit ") {
 			continue
 		}
+		if strings.HasPrefix(trimmed, "ControlSocket ") {
+			continue
+		}
 		if strings.HasPrefix(trimmed, "ControlPort unix:") {
-			sanitized = append(sanitized, "ControlPort 0", fmt.Sprintf("ControlSocket %s", controlSocket))
+			sanitized = append(sanitized, "ControlPort 0")
 			continue
 		}
 		sanitized = append(sanitized, line)
