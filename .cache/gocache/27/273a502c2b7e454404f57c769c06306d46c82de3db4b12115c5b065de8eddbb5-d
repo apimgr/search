@@ -1,0 +1,4 @@
+./sqlite_lexer.go
+./sqlite_parser.go
+./sqliteparser_base_listener.go
+./sqliteparser_listener.go

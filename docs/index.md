@@ -4,7 +4,7 @@ A privacy-respecting metasearch engine that aggregates results from multiple sea
 
 ## Features
 
-- **Privacy-First**: No tracking, no logging of search queries, no personal data collection
+- **Privacy-First**: No third-party analytics by default, consent-aware preferences, no hosted user profiling
 - **Multiple Engines**: Aggregates results from DuckDuckGo, Google, Bing, Brave, and more
 - **Self-Hosted**: Run your own search engine instance
 - **Dark Theme**: Beautiful Dracula-inspired dark theme

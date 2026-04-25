@@ -446,7 +446,7 @@ func TestExtractHost(t *testing.T) {
 		{"https://example.com", "example.com"},
 		{"https://api.example.com:443/path", "api.example.com"},
 		{"http://127.0.0.1:9000/test", "127.0.0.1"},
-		{"", ""},  // Empty string returns empty
+		{"", ""}, // Empty string returns empty
 	}
 
 	for _, tt := range tests {
@@ -522,9 +522,9 @@ func TestGetSwaggerThemeCSS(t *testing.T) {
 // TestGetSwaggerThemeCSSTableDriven tests all theme variations using table-driven approach
 func TestGetSwaggerThemeCSSTableDriven(t *testing.T) {
 	tests := []struct {
-		name      string
-		theme     string
-		wantDark  bool // true means should return dark theme
+		name     string
+		theme    string
+		wantDark bool // true means should return dark theme
 	}{
 		{
 			name:     "light theme returns light CSS",
@@ -686,9 +686,9 @@ func TestExtractHostEdgeCases(t *testing.T) {
 // TestServeSwaggerUIWithDifferentThemes tests serveSwaggerUI with various theme cookies
 func TestServeSwaggerUIWithDifferentThemes(t *testing.T) {
 	tests := []struct {
-		name           string
-		themeCookie    string
-		expectDarkCSS  bool
+		name          string
+		themeCookie   string
+		expectDarkCSS bool
 	}{
 		{
 			name:          "no theme cookie defaults to dark",
@@ -766,6 +766,18 @@ func TestServeSwaggerUIBaseURLInjection(t *testing.T) {
 				t.Errorf("Response should contain spec URL %q", expectedURL)
 			}
 		})
+	}
+}
+
+func TestServeSwaggerUILanguageAttributes(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/swagger?lang=de", nil)
+	rec := httptest.NewRecorder()
+
+	serveSwaggerUI(rec, req, "http://localhost:8080")
+
+	body := rec.Body.String()
+	if !strings.Contains(body, `<html lang="de" dir="ltr">`) {
+		t.Fatalf("Swagger UI should use request locale, got body: %s", body)
 	}
 }
 

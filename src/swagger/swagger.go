@@ -6,21 +6,22 @@ import (
 	"strings"
 
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/i18n"
 )
 
 // OpenAPISpec represents the OpenAPI 3.0 specification
 type OpenAPISpec struct {
-	OpenAPI string                 `json:"openapi"`
-	Info    Info                   `json:"info"`
-	Servers []Server               `json:"servers"`
-	Paths   map[string]PathItem    `json:"paths"`
-	Components Components           `json:"components,omitempty"`
+	OpenAPI    string              `json:"openapi"`
+	Info       Info                `json:"info"`
+	Servers    []Server            `json:"servers"`
+	Paths      map[string]PathItem `json:"paths"`
+	Components Components          `json:"components,omitempty"`
 }
 
 type Info struct {
-	Title       string  `json:"title"`
-	Description string  `json:"description"`
-	Version     string  `json:"version"`
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	Version     string   `json:"version"`
 	Contact     *Contact `json:"contact,omitempty"`
 }
 
@@ -61,13 +62,13 @@ type Parameter struct {
 }
 
 type RequestBody struct {
-	Description string             `json:"description,omitempty"`
-	Required    bool               `json:"required,omitempty"`
+	Description string               `json:"description,omitempty"`
+	Required    bool                 `json:"required,omitempty"`
 	Content     map[string]MediaType `json:"content"`
 }
 
 type Response struct {
-	Description string             `json:"description"`
+	Description string               `json:"description"`
 	Content     map[string]MediaType `json:"content,omitempty"`
 }
 
@@ -333,6 +334,158 @@ func generatePaths() map[string]PathItem {
 		},
 	}
 
+	paths["/api/v1/alerts"] = PathItem{
+		Post: &Operation{
+			Summary:     "Create search alert",
+			Description: "Create an accountless search alert with email, private RSS, and/or webhook delivery",
+			Tags:        []string{"Alerts"},
+			RequestBody: &RequestBody{
+				Description: "Alert creation payload",
+				Required:    true,
+				Content: map[string]MediaType{
+					"application/json": {
+						Schema: &Schema{
+							Type: "object",
+							Properties: map[string]Schema{
+								"query":           {Type: "string"},
+								"category":        {Type: "string"},
+								"language":        {Type: "string"},
+								"region":          {Type: "string"},
+								"engines":         {Type: "array", Items: &Schema{Type: "string"}},
+								"safe_search":     {Type: "integer"},
+								"frequency":       {Type: "string"},
+								"email":           {Type: "string"},
+								"deliver_email":   {Type: "boolean"},
+								"deliver_rss":     {Type: "boolean"},
+								"deliver_webhook": {Type: "boolean"},
+								"webhook_url":     {Type: "string"},
+							},
+						},
+					},
+				},
+			},
+			Responses: map[string]Response{
+				"201": {Description: "Alert created"},
+			},
+		},
+	}
+
+	paths["/api/v1/alerts/{token}"] = PathItem{
+		Get: &Operation{
+			Summary:     "Get alert details",
+			Description: "Get alert details for a manage token",
+			Tags:        []string{"Alerts"},
+			Parameters: []Parameter{
+				{Name: "token", In: "path", Description: "Alert manage token", Required: true, Schema: &Schema{Type: "string"}},
+			},
+			Responses: map[string]Response{
+				"200": {Description: "Alert details"},
+			},
+		},
+		Patch: &Operation{
+			Summary:     "Update alert",
+			Description: "Update an alert using its manage token",
+			Tags:        []string{"Alerts"},
+			Parameters: []Parameter{
+				{Name: "token", In: "path", Description: "Alert manage token", Required: true, Schema: &Schema{Type: "string"}},
+			},
+			RequestBody: &RequestBody{
+				Description: "Alert update payload",
+				Required:    true,
+				Content: map[string]MediaType{
+					"application/json": {
+						Schema: &Schema{
+							Type: "object",
+							Properties: map[string]Schema{
+								"query":           {Type: "string"},
+								"category":        {Type: "string"},
+								"language":        {Type: "string"},
+								"region":          {Type: "string"},
+								"engines":         {Type: "array", Items: &Schema{Type: "string"}},
+								"safe_search":     {Type: "integer"},
+								"frequency":       {Type: "string"},
+								"deliver_email":   {Type: "boolean"},
+								"deliver_rss":     {Type: "boolean"},
+								"deliver_webhook": {Type: "boolean"},
+								"webhook_url":     {Type: "string"},
+							},
+						},
+					},
+				},
+			},
+			Responses: map[string]Response{
+				"200": {Description: "Alert updated"},
+			},
+		},
+		Delete: &Operation{
+			Summary:     "Delete alert",
+			Description: "Delete an alert using its manage token",
+			Tags:        []string{"Alerts"},
+			Parameters: []Parameter{
+				{Name: "token", In: "path", Description: "Alert manage token", Required: true, Schema: &Schema{Type: "string"}},
+			},
+			Responses: map[string]Response{
+				"200": {Description: "Alert deleted"},
+			},
+		},
+	}
+
+	paths["/api/v1/alerts/{token}/verify"] = PathItem{
+		Post: &Operation{
+			Summary:     "Verify alert",
+			Description: "Verify and activate an alert using its email verification token",
+			Tags:        []string{"Alerts"},
+			Parameters: []Parameter{
+				{Name: "token", In: "path", Description: "Alert verification token", Required: true, Schema: &Schema{Type: "string"}},
+			},
+			Responses: map[string]Response{
+				"200": {Description: "Alert verified"},
+			},
+		},
+	}
+
+	paths["/api/v1/alerts/{token}/pause"] = PathItem{
+		Post: &Operation{
+			Summary:     "Pause or resume alert",
+			Description: "Pause or resume an alert using its manage token",
+			Tags:        []string{"Alerts"},
+			Parameters: []Parameter{
+				{Name: "token", In: "path", Description: "Alert manage token", Required: true, Schema: &Schema{Type: "string"}},
+			},
+			RequestBody: &RequestBody{
+				Description: "Pause state payload",
+				Required:    false,
+				Content: map[string]MediaType{
+					"application/json": {
+						Schema: &Schema{
+							Type: "object",
+							Properties: map[string]Schema{
+								"paused": {Type: "boolean"},
+							},
+						},
+					},
+				},
+			},
+			Responses: map[string]Response{
+				"200": {Description: "Alert pause state updated"},
+			},
+		},
+	}
+
+	paths["/api/v1/alerts/{token}/rss"] = PathItem{
+		Get: &Operation{
+			Summary:     "Get alert RSS feed",
+			Description: "Return the private RSS feed for an alert",
+			Tags:        []string{"Alerts"},
+			Parameters: []Parameter{
+				{Name: "token", In: "path", Description: "Alert RSS token", Required: true, Schema: &Schema{Type: "string"}},
+			},
+			Responses: map[string]Response{
+				"200": {Description: "RSS feed payload"},
+			},
+		},
+	}
+
 	return paths
 }
 
@@ -343,14 +496,14 @@ func generateComponents() Components {
 			"SearchResult": {
 				Type: "object",
 				Properties: map[string]Schema{
-					"title":      {Type: "string"},
-					"url":        {Type: "string"},
-					"content":    {Type: "string"},
-					"engine":     {Type: "string"},
-					"score":      {Type: "number"},
-					"image_url":  {Type: "string"},
-					"thumbnail":  {Type: "string"},
-					"published":  {Type: "string"},
+					"title":     {Type: "string"},
+					"url":       {Type: "string"},
+					"content":   {Type: "string"},
+					"engine":    {Type: "string"},
+					"score":     {Type: "number"},
+					"image_url": {Type: "string"},
+					"thumbnail": {Type: "string"},
+					"published": {Type: "string"},
 				},
 			},
 			"HealthResponse": {
@@ -388,9 +541,10 @@ func Handler(cfg *config.Config) http.HandlerFunc {
 func serveSwaggerUI(w http.ResponseWriter, r *http.Request, baseURL string) {
 	// Get theme from cookie or default to dark
 	theme := getTheme(r)
+	lang, dir := i18n.DetectRequestLocale(r)
 
 	html := `<!DOCTYPE html>
-<html lang="en">
+<html lang="` + lang + `" dir="` + dir + `">
 <head>
 	<meta charset="UTF-8">
 	<title>Search API - Swagger UI</title>

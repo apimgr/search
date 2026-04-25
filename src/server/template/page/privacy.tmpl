@@ -1,6 +1,6 @@
 {{define "content"}}
 <div class="static-page privacy-page">
-    <h1>Privacy Policy</h1>
+    <h1>{{t "footer.privacy_policy"}}</h1>
 
     {{if .Config.Server.Pages.Privacy.Content}}
     <div class="page-content markdown">
@@ -9,54 +9,54 @@
     {{else}}
     <div class="page-content">
         <section class="privacy-section">
-            <h2>Data Collection</h2>
-            <p>{{.Config.Server.Branding.Title}} is designed with privacy as a core principle. We minimize data collection to what is strictly necessary for the service to function.</p>
+            <h2>{{t "privacy.data_collection_heading"}}</h2>
+            <p>{{t "privacy.data_collection_description" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}}</p>
             <ul>
-                <li><strong>Search Queries:</strong> Your search queries are sent to upstream search engines but are not stored on our servers.</li>
-                <li><strong>IP Addresses:</strong> We do not log IP addresses or use them for tracking.</li>
-                <li><strong>Cookies:</strong> We only use essential cookies for session management and user preferences (like theme settings).</li>
+                <li><strong>{{t "privacy.search_queries_label"}}:</strong> {{t "privacy.search_queries_description"}}</li>
+                <li><strong>{{t "privacy.ip_addresses_label"}}:</strong> {{t "privacy.ip_addresses_description"}}</li>
+                <li><strong>{{t "privacy.cookies_label"}}:</strong> {{t "privacy.cookies_description"}}</li>
             </ul>
         </section>
 
         <section class="privacy-section">
-            <h2>Data Usage</h2>
-            <p>Any data that is temporarily processed is used only to:</p>
+            <h2>{{t "privacy.data_usage_heading"}}</h2>
+            <p>{{t "privacy.data_usage_description"}}</p>
             <ul>
-                <li>Forward your search query to upstream search engines</li>
-                <li>Aggregate and display results to you</li>
-                <li>Remember your preferences (theme, language)</li>
+                <li>{{t "privacy.data_usage_item_forward"}}</li>
+                <li>{{t "privacy.data_usage_item_aggregate"}}</li>
+                <li>{{t "privacy.data_usage_item_preferences"}}</li>
             </ul>
         </section>
 
         <section class="privacy-section">
-            <h2>Data Retention</h2>
-            <p>We do not retain search queries or personal data. Session data is temporary and is deleted when you close your browser or your session expires.</p>
+            <h2>{{t "privacy.data_retention_heading"}}</h2>
+            <p>{{t "privacy.data_retention_description"}}</p>
         </section>
 
         <section class="privacy-section">
-            <h2>Third Parties</h2>
-            <p>Your search queries are forwarded to upstream search engines to retrieve results. We do not share any other data with third parties.</p>
-            <p>Each upstream search engine has its own privacy policy. We recommend reviewing them if you have concerns.</p>
+            <h2>{{t "privacy.third_parties_heading"}}</h2>
+            <p>{{t "privacy.third_parties_description"}}</p>
+            <p>{{t "privacy.third_parties_followup"}}</p>
         </section>
 
         <section class="privacy-section">
-            <h2>Cookies</h2>
-            <p>We use only essential cookies:</p>
+            <h2>{{t "privacy.cookies_heading"}}</h2>
+            <p>{{t "privacy.cookies_intro"}}</p>
             <ul>
-                <li><strong>Session Cookie:</strong> To maintain your session (if logged in)</li>
-                <li><strong>Preference Cookie:</strong> To remember your theme and language preferences</li>
+                <li><strong>{{t "privacy.session_cookie_label"}}:</strong> {{t "privacy.session_cookie_description"}}</li>
+                <li><strong>{{t "privacy.preference_cookie_label"}}:</strong> {{t "privacy.preference_cookie_description"}}</li>
             </ul>
-            <p>We do not use tracking cookies, analytics cookies, or advertising cookies.</p>
+            <p>{{t "privacy.cookies_followup"}}</p>
         </section>
 
         <section class="privacy-section">
-            <h2>Your Rights</h2>
-            <p>Since we don't store personal data, there is no data to access, modify, or delete. Your privacy is protected by design.</p>
+            <h2>{{t "privacy.your_rights_heading"}}</h2>
+            <p>{{t "privacy.your_rights_description"}}</p>
         </section>
 
         <section class="privacy-section">
-            <h2>Contact</h2>
-            <p>If you have questions about our privacy practices, please <a href="/server/contact">contact us</a>.</p>
+            <h2>{{t "contact.page_title"}}</h2>
+            <p>{{t "privacy.contact_prefix"}} <a href="/server/contact">{{t "contact.title"}}</a>{{t "privacy.contact_suffix"}}</p>
         </section>
     </div>
     {{end}}

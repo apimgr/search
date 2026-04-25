@@ -59,23 +59,19 @@ func (s *Server) handleUserProfile(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		s.processProfileUpdate(w, r, user)
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 	}
 }
 
 func (s *Server) renderProfilePage(w http.ResponseWriter, r *http.Request, user *userpkg.User, errorMsg, successMsg string) {
+	baseData := s.newPageData(w, r, "Profile", "user/profile")
+	baseData.Description = "Manage your profile"
+	baseData.CSRFToken = s.getCSRFToken(r)
 	data := &UserPageData{
-		PageData: PageData{
-			Title:       "Profile",
-			Description: "Manage your profile",
-			Page:        "user/profile",
-			Theme:       GetTheme(r),
-			Config:      s.config,
-			CSRFToken:   s.getCSRFToken(r),
-		},
-		User:    user,
-		Error:   errorMsg,
-		Success: successMsg,
+		PageData: *baseData,
+		User:     user,
+		Error:    errorMsg,
+		Success:  successMsg,
 	}
 
 	if err := s.renderer.Render(w, "user/profile", data); err != nil {
@@ -125,7 +121,7 @@ func (s *Server) handleUserSecurity(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		s.processSecurityUpdate(w, r, user)
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 	}
 }
 
@@ -164,15 +160,12 @@ func (s *Server) renderSecurityPage(w http.ResponseWriter, r *http.Request, user
 		recoveryStats, _ = s.recoveryManager.GetUsageStats(r.Context(), user.ID)
 	}
 
+	baseData := s.newPageData(w, r, "Security", "user/security")
+	baseData.Description = "Manage your security settings"
+	baseData.CSRFToken = s.getCSRFToken(r)
+
 	data := &UserPageData{
-		PageData: PageData{
-			Title:       "Security",
-			Description: "Manage your security settings",
-			Page:        "user/security",
-			Theme:       GetTheme(r),
-			Config:      s.config,
-			CSRFToken:   s.getCSRFToken(r),
-		},
+		PageData:       *baseData,
 		User:           user,
 		Error:          errorMsg,
 		Success:        successMsg,
@@ -295,7 +288,7 @@ func (s *Server) handleUserTokens(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		s.processTokenAction(w, r, user)
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 	}
 }
 
@@ -326,19 +319,16 @@ func (s *Server) renderTokensPage(w http.ResponseWriter, r *http.Request, user *
 		}
 	}
 
+	baseData := s.newPageData(w, r, "API Tokens", "user/tokens")
+	baseData.Description = "Manage your API tokens"
+	baseData.CSRFToken = s.getCSRFToken(r)
+
 	data := &UserPageData{
-		PageData: PageData{
-			Title:       "API Tokens",
-			Description: "Manage your API tokens",
-			Page:        "user/tokens",
-			Theme:       GetTheme(r),
-			Config:      s.config,
-			CSRFToken:   s.getCSRFToken(r),
-		},
-		User:    user,
-		Error:   errorMsg,
-		Success: successMsg,
-		Tokens:  tokenDisplays,
+		PageData: *baseData,
+		User:     user,
+		Error:    errorMsg,
+		Success:  successMsg,
+		Tokens:   tokenDisplays,
 	}
 
 	// Add new token to template data if just created
@@ -458,7 +448,7 @@ func (s *Server) handle2FASetup(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		s.process2FASetup(w, r, user)
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 	}
 }
 
@@ -469,17 +459,14 @@ func (s *Server) render2FASetupPage(w http.ResponseWriter, r *http.Request, user
 		return
 	}
 
+	baseData := s.newPageData(w, r, "Setup Two-Factor Authentication", "user/2fa-setup")
+	baseData.Description = "Enable 2FA for your account"
+	baseData.CSRFToken = s.getCSRFToken(r)
+
 	data := &UserPageData{
-		PageData: PageData{
-			Title:       "Setup Two-Factor Authentication",
-			Description: "Enable 2FA for your account",
-			Page:        "user/2fa-setup",
-			Theme:       GetTheme(r),
-			Config:      s.config,
-			CSRFToken:   s.getCSRFToken(r),
-		},
-		User:  user,
-		Error: errorMsg,
+		PageData: *baseData,
+		User:     user,
+		Error:    errorMsg,
 	}
 
 	if err := s.renderer.Render(w, "user/2fa-setup", data); err != nil {
@@ -517,15 +504,12 @@ func (s *Server) process2FASetup(w http.ResponseWriter, r *http.Request, user *u
 		}
 
 		// Render setup page with QR code
+		baseData := s.newPageData(w, r, "Setup Two-Factor Authentication", "user/2fa-setup")
+		baseData.Description = "Scan the QR code"
+		baseData.CSRFToken = s.getCSRFToken(r)
+
 		data := &UserPageData{
-			PageData: PageData{
-				Title:       "Setup Two-Factor Authentication",
-				Description: "Scan the QR code",
-				Page:        "user/2fa-setup",
-				Theme:       GetTheme(r),
-				Config:      s.config,
-				CSRFToken:   s.getCSRFToken(r),
-			},
+			PageData:   *baseData,
 			User:       user,
 			TwoFASetup: setup,
 		}
@@ -555,15 +539,12 @@ func (s *Server) process2FASetup(w http.ResponseWriter, r *http.Request, user *u
 		}
 
 		// Show recovery keys
+		baseData := s.newPageData(w, r, "Save Your Recovery Keys", "user/recovery-keys")
+		baseData.Description = "Store these keys safely"
+		baseData.CSRFToken = s.getCSRFToken(r)
+
 		data := &UserPageData{
-			PageData: PageData{
-				Title:       "Save Your Recovery Keys",
-				Description: "Store these keys safely",
-				Page:        "user/recovery-keys",
-				Theme:       GetTheme(r),
-				Config:      s.config,
-				CSRFToken:   s.getCSRFToken(r),
-			},
+			PageData:     *baseData,
 			User:         user,
 			RecoveryKeys: recoveryKeys,
 			Success:      "Two-factor authentication has been enabled",

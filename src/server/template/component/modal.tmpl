@@ -5,15 +5,15 @@
 <dialog id="confirm-modal" class="modal" role="alertdialog" aria-labelledby="confirm-title" aria-describedby="confirm-message" aria-modal="true">
   <div class="modal-content">
     <header class="modal-header">
-      <h2 id="confirm-title" class="modal-title">Confirm Action</h2>
-      <button type="button" class="modal-close" aria-label="Close dialog">✕</button>
+      <h2 id="confirm-title" class="modal-title">{{t "common.confirm_action"}}</h2>
+      <button type="button" class="modal-close" aria-label="{{t "accessibility.close_dialog"}}">✕</button>
     </header>
     <main class="modal-body">
       <p id="confirm-message"></p>
     </main>
     <footer class="modal-footer">
-      <button type="button" class="btn btn-secondary" data-action="modal-cancel">Cancel</button>
-      <button type="button" class="btn btn-primary" id="confirm-ok" autofocus>Confirm</button>
+      <button type="button" class="btn btn-secondary" data-action="modal-cancel">{{t "common.cancel"}}</button>
+      <button type="button" class="btn btn-primary" id="confirm-ok" autofocus>{{t "common.confirm"}}</button>
     </footer>
   </div>
 </dialog>
@@ -22,16 +22,16 @@
 <dialog id="prompt-modal" class="modal" role="dialog" aria-labelledby="prompt-title" aria-describedby="prompt-message" aria-modal="true">
   <div class="modal-content">
     <header class="modal-header">
-      <h2 id="prompt-title" class="modal-title">Input Required</h2>
-      <button type="button" class="modal-close" aria-label="Close dialog">✕</button>
+      <h2 id="prompt-title" class="modal-title">{{t "modal.prompt_title"}}</h2>
+      <button type="button" class="modal-close" aria-label="{{t "accessibility.close_dialog"}}">✕</button>
     </header>
     <main class="modal-body">
       <p id="prompt-message"></p>
-      <input type="text" id="prompt-input" class="form-control" aria-label="Input value" autofocus />
+      <input type="text" id="prompt-input" class="form-control" aria-label="{{t "accessibility.input_value"}}" autofocus />
     </main>
     <footer class="modal-footer">
-      <button type="button" class="btn btn-secondary" data-action="modal-cancel">Cancel</button>
-      <button type="button" class="btn btn-primary" id="prompt-ok">OK</button>
+      <button type="button" class="btn btn-secondary" data-action="modal-cancel">{{t "common.cancel"}}</button>
+      <button type="button" class="btn btn-primary" id="prompt-ok">{{t "common.ok"}}</button>
     </footer>
   </div>
 </dialog>
@@ -40,14 +40,14 @@
 <dialog id="alert-modal" class="modal" role="alertdialog" aria-labelledby="alert-title" aria-describedby="alert-message" aria-modal="true">
   <div class="modal-content">
     <header class="modal-header">
-      <h2 id="alert-title" class="modal-title">Notice</h2>
-      <button type="button" class="modal-close" aria-label="Close dialog">✕</button>
+      <h2 id="alert-title" class="modal-title">{{t "modal.alert_title"}}</h2>
+      <button type="button" class="modal-close" aria-label="{{t "accessibility.close_dialog"}}">✕</button>
     </header>
     <main class="modal-body">
       <p id="alert-message"></p>
     </main>
     <footer class="modal-footer">
-      <button type="button" class="btn btn-primary modal-close" autofocus>OK</button>
+      <button type="button" class="btn btn-primary modal-close" autofocus>{{t "common.ok"}}</button>
     </footer>
   </div>
 </dialog>

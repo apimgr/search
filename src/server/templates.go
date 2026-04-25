@@ -3,11 +3,13 @@ package server
 import (
 	"fmt"
 	"net/http"
+
+	"github.com/apimgr/search/src/i18n"
 )
 
 // Common HTML template parts
 const htmlHead = `<!DOCTYPE html>
-<html lang="en">
+<html lang="%s" dir="%s">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
@@ -235,7 +237,8 @@ const htmlFooter = `
 </body>
 </html>`
 
-func (s *Server) renderHeader(w http.ResponseWriter, title string, activePage string) {
+func (s *Server) renderHeader(w http.ResponseWriter, r *http.Request, title string, activePage string) {
+	lang, dir := i18n.DetectRequestLocale(r)
 	contactLink := ""
 	if s.isContactEnabled() {
 		activeContact := ""
@@ -258,7 +261,7 @@ func (s *Server) renderHeader(w http.ResponseWriter, title string, activePage st
 		activePrivacy = " class=\"active\""
 	}
 
-	fmt.Fprintf(w, htmlHead, title, s.config.Server.Title)
+	fmt.Fprintf(w, htmlHead, lang, dir, title, s.config.Server.Title)
 	fmt.Fprintf(w, `
     <header>
         <div class="container">

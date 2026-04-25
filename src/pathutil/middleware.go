@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"path"
 	"strings"
+
+	"github.com/apimgr/search/src/i18n"
 )
 
 // PathSecurityMiddleware normalizes paths and blocks traversal attempts
@@ -26,7 +28,7 @@ func PathSecurityMiddleware(next http.Handler) http.Handler {
 		if strings.Contains(original, "..") ||
 			strings.Contains(rawPath, "..") ||
 			strings.Contains(strings.ToLower(rawPath), "%2e") {
-			http.Error(w, "Bad Request", http.StatusBadRequest)
+			http.Error(w, i18n.RequestString(r, "errors.bad_request"), http.StatusBadRequest)
 			return
 		}
 

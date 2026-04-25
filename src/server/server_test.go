@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/direct"
+	"github.com/apimgr/search/src/i18n"
 )
 
 // Tests for Middleware
@@ -588,11 +590,11 @@ func TestPathSecurityMiddleware(t *testing.T) {
 
 func TestExtractContextFromPath(t *testing.T) {
 	tests := []struct {
-		name       string
-		path       string
-		adminPath  string
-		wantType   TargetType
-		wantName   string
+		name      string
+		path      string
+		adminPath string
+		wantType  TargetType
+		wantName  string
 	}{
 		{
 			name:      "root path",
@@ -938,11 +940,14 @@ func TestMetrics(t *testing.T) {
 		handler := m.AuthenticatedHandler()
 
 		// Test without token
-		req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		req := httptest.NewRequest(http.MethodGet, "/metrics?lang=de", nil)
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 		if rec.Code != http.StatusUnauthorized {
 			t.Errorf("Status without token = %d, want %d", rec.Code, http.StatusUnauthorized)
+		}
+		if body := strings.TrimSpace(rec.Body.String()); body != "Nicht autorisiert" {
+			t.Errorf("Body without token = %q, want %q", body, "Nicht autorisiert")
 		}
 
 		// Test with invalid token
@@ -1201,10 +1206,10 @@ func TestThemeConstants(t *testing.T) {
 
 func TestGetTheme(t *testing.T) {
 	tests := []struct {
-		name       string
-		cookie     string
-		query      string
-		wantTheme  string
+		name      string
+		cookie    string
+		query     string
+		wantTheme string
 	}{
 		{"default", "", "", ThemeDark},
 		{"cookie_dark", "dark", "", ThemeDark},
@@ -1233,6 +1238,154 @@ func TestGetTheme(t *testing.T) {
 				t.Errorf("GetTheme() = %q, want %q", got, tt.wantTheme)
 			}
 		})
+	}
+}
+
+func TestNewPageDataResolvesLanguageFromQueryAndSetsCookie(t *testing.T) {
+	s := &Server{
+		config:      &config.Config{},
+		i18nManager: i18n.NewManager("en", []string{"en", "de", "ar"}),
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/?lang=ar", nil)
+	rec := httptest.NewRecorder()
+
+	data := s.newPageData(rec, req, "Title", "home")
+	if data.Lang != "ar" {
+		t.Fatalf("Lang = %q, want %q", data.Lang, "ar")
+	}
+	if data.Dir != "rtl" {
+		t.Fatalf("Dir = %q, want %q", data.Dir, "rtl")
+	}
+	if len(data.AvailableLanguages) != 3 {
+		t.Fatalf("AvailableLanguages length = %d, want 3", len(data.AvailableLanguages))
+	}
+
+	found := false
+	for _, cookie := range rec.Result().Cookies() {
+		if cookie.Name == "lang" {
+			found = true
+			if cookie.Value != "ar" {
+				t.Fatalf("lang cookie = %q, want %q", cookie.Value, "ar")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("newPageData() did not set lang cookie for supported query")
+	}
+}
+
+func TestNewPageDataInvalidLanguageQueryFallsBackToDefault(t *testing.T) {
+	s := &Server{
+		config:      &config.Config{},
+		i18nManager: i18n.NewManager("en", []string{"en", "de"}),
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/?lang=zz", nil)
+	req.Header.Set("Accept-Language", "de")
+	rec := httptest.NewRecorder()
+
+	data := s.newPageData(rec, req, "Title", "home")
+	if data.Lang != "en" {
+		t.Fatalf("Lang = %q, want %q", data.Lang, "en")
+	}
+	if data.Dir != "ltr" {
+		t.Fatalf("Dir = %q, want %q", data.Dir, "ltr")
+	}
+
+	for _, cookie := range rec.Result().Cookies() {
+		if cookie.Name == "lang" {
+			t.Fatalf("unexpected lang cookie for invalid query: %q", cookie.Value)
+		}
+	}
+}
+
+func TestHandleLocaleServesRequestedLanguage(t *testing.T) {
+	s := &Server{
+		config:      &config.Config{},
+		i18nManager: i18n.NewManager("en", []string{"en", "de"}),
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/locales/de.json", nil)
+	rec := httptest.NewRecorder()
+
+	s.handleLocale(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if got := rec.Header().Get("Content-Type"); !strings.Contains(got, "application/json") {
+		t.Fatalf("Content-Type = %q, want application/json", got)
+	}
+	if !strings.Contains(rec.Body.String(), `"language": "de"`) {
+		t.Fatalf("Body did not contain German locale metadata: %s", rec.Body.String())
+	}
+}
+
+func TestHandleLocaleFallsBackToDefaultLanguage(t *testing.T) {
+	s := &Server{
+		config:      &config.Config{},
+		i18nManager: i18n.NewManager("en", []string{"en", "de"}),
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/locales/zz.json", nil)
+	rec := httptest.NewRecorder()
+
+	s.handleLocale(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if !strings.Contains(rec.Body.String(), `"language": "en"`) {
+		t.Fatalf("Body did not fall back to English locale metadata: %s", rec.Body.String())
+	}
+}
+
+func TestHandleLocaleRejectsInvalidPath(t *testing.T) {
+	s := &Server{
+		config:      &config.Config{},
+		i18nManager: i18n.NewManager("en", []string{"en", "de"}),
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/locales/de", nil)
+	rec := httptest.NewRecorder()
+
+	s.handleLocale(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("Status = %d, want %d", rec.Code, http.StatusNotFound)
+	}
+}
+
+func TestRenderDirectAnswerFallbackLocalizesLabels(t *testing.T) {
+	manager, err := i18n.DefaultManager()
+	if err != nil {
+		t.Fatalf("DefaultManager() error = %v", err)
+	}
+
+	s := &Server{
+		config:      &config.Config{},
+		i18nManager: manager,
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/direct/wiki/Python?lang=de", nil)
+	rec := httptest.NewRecorder()
+	answer := &direct.Answer{
+		Type:      direct.AnswerTypeWiki,
+		Term:      "Python",
+		Title:     "Python",
+		Content:   "<p>Example</p>",
+		Source:    "Wikipedia",
+		SourceURL: "https://example.com/python",
+	}
+
+	s.renderDirectAnswerFallback(rec, req, answer)
+
+	body := rec.Body.String()
+	for _, needle := range []string{"Quelle:", "Direkte Antwort"} {
+		if !strings.Contains(body, needle) {
+			t.Fatalf("fallback body missing %q: %s", needle, body)
+		}
 	}
 }
 
@@ -1427,9 +1580,9 @@ func TestBannerInfoStruct(t *testing.T) {
 
 func TestVisibleLength(t *testing.T) {
 	tests := []struct {
-		name   string
-		input  string
-		want   int
+		name  string
+		input string
+		want  int
 	}{
 		{"plain_text", "hello", 5},
 		{"with_ansi_color", "\033[31mhello\033[0m", 5},

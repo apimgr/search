@@ -9,11 +9,13 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/i18n"
 )
 
 //go:embed template/layout/*.tmpl template/partial/*.tmpl template/partial/admin/*.tmpl template/partial/public/*.tmpl template/component/*.tmpl template/page/*.tmpl template/auth/*.tmpl template/user/*.tmpl static/*
@@ -21,24 +23,28 @@ var EmbeddedFS embed.FS
 
 // TemplateRenderer handles template rendering
 type TemplateRenderer struct {
-	templates map[string]*template.Template
-	mu        sync.RWMutex
-	config    *config.Config
-	devMode   bool
-	funcMap   template.FuncMap
+	templates   map[string]map[string]*template.Template
+	mu          sync.RWMutex
+	config      *config.Config
+	devMode     bool
+	i18nManager *i18n.Manager
 }
 
 // NewTemplateRenderer creates a new template renderer
-// i18nFuncs provides translation functions (t, lang, isRTL, dir, languages)
-// If nil, a fallback t function that returns the key is used
-func NewTemplateRenderer(cfg *config.Config, i18nFuncs template.FuncMap) *TemplateRenderer {
+func NewTemplateRenderer(cfg *config.Config, i18nManager *i18n.Manager) *TemplateRenderer {
 	tr := &TemplateRenderer{
-		templates: make(map[string]*template.Template),
-		config:    cfg,
-		devMode:   cfg.IsDevelopment(),
+		templates:   make(map[string]map[string]*template.Template),
+		config:      cfg,
+		devMode:     cfg.IsDevelopment(),
+		i18nManager: i18nManager,
 	}
 
-	tr.funcMap = template.FuncMap{
+	tr.loadTemplates()
+	return tr
+}
+
+func (tr *TemplateRenderer) newFuncMap(i18nFuncs template.FuncMap) template.FuncMap {
+	return template.FuncMap{
 		// i18n functions - use provided funcs or fallback
 		"t": func(key string, args ...interface{}) string {
 			if i18nFuncs != nil {
@@ -123,7 +129,7 @@ func NewTemplateRenderer(cfg *config.Config, i18nFuncs template.FuncMap) *Templa
 			}
 			return s[:length] + "..."
 		},
-		"config":  func() *config.Config { return cfg },
+		"config":  func() *config.Config { return tr.config },
 		"version": func() string { return config.Version },
 		"year": func() int {
 			return time.Now().Year()
@@ -133,16 +139,16 @@ func NewTemplateRenderer(cfg *config.Config, i18nFuncs template.FuncMap) *Templa
 		},
 		"formatVideoDuration": formatVideoDuration,
 		"formatViewCount":     formatViewCount,
+		// Use a numeric date format so search results do not hardcode English month names.
+		"formatSearchDate": formatSearchDate,
 	}
-
-	tr.loadTemplates()
-	return tr
 }
 
 // loadTemplates loads all templates from embedded filesystem
 func (tr *TemplateRenderer) loadTemplates() error {
 	tr.mu.Lock()
 	defer tr.mu.Unlock()
+	tr.templates = make(map[string]map[string]*template.Template)
 
 	// Load layout template
 	layoutContent, err := fs.ReadFile(EmbeddedFS, "template/layout/base.tmpl")
@@ -154,14 +160,19 @@ func (tr *TemplateRenderer) loadTemplates() error {
 	partials := make(map[string]string)
 	tr.loadPartialsRecursive("template/partial", partials)
 
-	// Load page templates from template/page/ (index, healthz, error, etc.)
-	tr.loadPagesRecursive("template/page", "", string(layoutContent), partials)
+	for _, lang := range tr.supportedLanguages() {
+		tr.templates[lang] = make(map[string]*template.Template)
+		funcMap := tr.newFuncMap(tr.languageFuncMap(lang))
 
-	// Load auth pages from template/auth/ (per AI.md: auth/ is sibling of page/)
-	tr.loadPagesRecursive("template/auth", "auth", string(layoutContent), partials)
+		// Load page templates from template/page/ (index, healthz, error, etc.)
+		tr.loadPagesRecursive("template/page", "", string(layoutContent), partials, tr.templates[lang], funcMap)
 
-	// Load user pages from template/user/
-	tr.loadPagesRecursive("template/user", "user", string(layoutContent), partials)
+		// Load auth pages from template/auth/ (per AI.md: auth/ is sibling of page/)
+		tr.loadPagesRecursive("template/auth", "auth", string(layoutContent), partials, tr.templates[lang], funcMap)
+
+		// Load user pages from template/user/
+		tr.loadPagesRecursive("template/user", "user", string(layoutContent), partials, tr.templates[lang], funcMap)
+	}
 
 	return nil
 }
@@ -205,7 +216,7 @@ func (tr *TemplateRenderer) loadPartialsRecursiveWithPrefix(dir, prefix string, 
 }
 
 // loadPagesRecursive recursively loads page templates from a directory
-func (tr *TemplateRenderer) loadPagesRecursive(dir, prefix, layoutContent string, partials map[string]string) {
+func (tr *TemplateRenderer) loadPagesRecursive(dir, prefix, layoutContent string, partials map[string]string, templateSet map[string]*template.Template, funcMap template.FuncMap) {
 	entries, err := fs.ReadDir(EmbeddedFS, dir)
 	if err != nil {
 		return
@@ -219,7 +230,7 @@ func (tr *TemplateRenderer) loadPagesRecursive(dir, prefix, layoutContent string
 			if prefix != "" {
 				subPrefix = prefix + "/" + entry.Name()
 			}
-			tr.loadPagesRecursive(path, subPrefix, layoutContent, partials)
+			tr.loadPagesRecursive(path, subPrefix, layoutContent, partials, templateSet, funcMap)
 		} else if strings.HasSuffix(entry.Name(), ".tmpl") {
 			pageContent, err := fs.ReadFile(EmbeddedFS, path)
 			if err != nil {
@@ -240,12 +251,12 @@ func (tr *TemplateRenderer) loadPagesRecursive(dir, prefix, layoutContent string
 			}
 			combined += "\n" + string(pageContent)
 
-			tmpl, err := template.New(name).Funcs(tr.funcMap).Parse(combined)
+			tmpl, err := template.New(name).Funcs(funcMap).Parse(combined)
 			if err != nil {
 				continue
 			}
 
-			tr.templates[name] = tmpl
+			templateSet[name] = tmpl
 		}
 	}
 }
@@ -258,7 +269,11 @@ func (tr *TemplateRenderer) Render(w io.Writer, name string, data interface{}) e
 	}
 
 	tr.mu.RLock()
-	tmpl, ok := tr.templates[name]
+	templateSet, ok := tr.templates[tr.resolveTemplateLanguage(data)]
+	if !ok {
+		templateSet = tr.templates[tr.defaultLanguage()]
+	}
+	tmpl, ok := templateSet[name]
 	tr.mu.RUnlock()
 
 	if !ok {
@@ -266,6 +281,70 @@ func (tr *TemplateRenderer) Render(w io.Writer, name string, data interface{}) e
 	}
 
 	return tmpl.ExecuteTemplate(w, "base", data)
+}
+
+func (tr *TemplateRenderer) supportedLanguages() []string {
+	if tr.i18nManager == nil {
+		return []string{"en"}
+	}
+	langs := tr.i18nManager.SupportedLanguageCodes()
+	if len(langs) == 0 {
+		return []string{tr.i18nManager.DefaultLanguage()}
+	}
+	return langs
+}
+
+func (tr *TemplateRenderer) defaultLanguage() string {
+	if tr.i18nManager != nil && tr.i18nManager.DefaultLanguage() != "" {
+		return tr.i18nManager.DefaultLanguage()
+	}
+	return "en"
+}
+
+func (tr *TemplateRenderer) languageFuncMap(lang string) template.FuncMap {
+	if tr.i18nManager == nil {
+		return nil
+	}
+	return tr.i18nManager.TemplateFuncs(lang)
+}
+
+func (tr *TemplateRenderer) resolveTemplateLanguage(data interface{}) string {
+	if data == nil {
+		return tr.defaultLanguage()
+	}
+
+	value := reflect.ValueOf(data)
+	if !value.IsValid() {
+		return tr.defaultLanguage()
+	}
+	if value.Kind() == reflect.Pointer {
+		if value.IsNil() {
+			return tr.defaultLanguage()
+		}
+		value = value.Elem()
+	}
+	if value.Kind() != reflect.Struct {
+		return tr.defaultLanguage()
+	}
+
+	if lang := getStringField(value, "Lang"); lang != "" {
+		return lang
+	}
+	if pageData := value.FieldByName("PageData"); pageData.IsValid() && pageData.Kind() == reflect.Struct {
+		if lang := getStringField(pageData, "Lang"); lang != "" {
+			return lang
+		}
+	}
+
+	return tr.defaultLanguage()
+}
+
+func getStringField(value reflect.Value, field string) string {
+	result := value.FieldByName(field)
+	if !result.IsValid() || result.Kind() != reflect.String {
+		return ""
+	}
+	return strings.TrimSpace(result.String())
 }
 
 // TemplateNotFoundError is returned when a template is not found
@@ -293,33 +372,34 @@ func GetStaticFile(path string) ([]byte, error) {
 
 // PageData represents common data passed to all page templates
 type PageData struct {
-	Title          string
-	Description    string
-	Page           string
-	Theme          string // CSS class: "dark" or "light" (resolved, never "auto")
-	ThemeMode      string // User preference: "dark", "light", or "auto"
-	Lang           string // Language code for html lang attribute (default: "en")
-	Dir            string // Text direction for html dir attribute (default: "ltr")
-	Config         *config.Config
-	User           interface{}
-	CSRF           string
-	CSRFToken      string
-	Flash          *FlashMessage
-	Data           interface{}
-	Query          string
-	Category       string
-	BuildDate      string
-	Announcements  []Announcement // Active announcements
-	TorEnabled     bool           // Tor hidden service enabled (binary found)
-	TorStatus      string         // Tor status: "connected", "connecting", "disabled"
-	TorAddress     string         // .onion address (when connected)
-	WidgetsEnabled bool
-	DefaultWidgets string // JSON array of default widget types
-	CookieConsent  *CookieConsentData
-	Extra          map[string]interface{}
-	AdminPath      string // Per AI.md PART 17: Configurable admin path (default: "admin")
-	ServerURL      string // Actual server URL for display in templates
-	PrefsQuery     string
+	Title              string
+	Description        string
+	Page               string
+	Theme              string // CSS class: "dark" or "light" (resolved, never "auto")
+	ThemeMode          string // User preference: "dark", "light", or "auto"
+	Lang               string // Language code for html lang attribute (default: "en")
+	Dir                string // Text direction for html dir attribute (default: "ltr")
+	AvailableLanguages []i18n.Language
+	Config             *config.Config
+	User               interface{}
+	CSRF               string
+	CSRFToken          string
+	Flash              *FlashMessage
+	Data               interface{}
+	Query              string
+	Category           string
+	BuildDate          string
+	Announcements      []Announcement // Active announcements
+	TorEnabled         bool           // Tor hidden service enabled (binary found)
+	TorStatus          string         // Tor status: "connected", "connecting", "disabled"
+	TorAddress         string         // .onion address (when connected)
+	WidgetsEnabled     bool
+	DefaultWidgets     string // JSON array of default widget types
+	CookieConsent      *CookieConsentData
+	Extra              map[string]interface{}
+	AdminPath          string // Per AI.md PART 17: Configurable admin path (default: "admin")
+	ServerURL          string // Actual server URL for display in templates
+	PrefsQuery         string
 }
 
 // ErrorPageData extends PageData with error-specific fields
@@ -568,4 +648,11 @@ func formatViewCount(count int64) string {
 		return strings.TrimSuffix(fmt.Sprintf("%.1fK", v), ".0K") + ""
 	}
 	return fmt.Sprintf("%d", count)
+}
+
+func formatSearchDate(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format("2006-01-02")
 }

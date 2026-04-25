@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"html"
-	"html/template"
 	"log"
 	"net/http"
 	"net/url"
@@ -16,6 +15,7 @@ import (
 	"time"
 
 	"github.com/apimgr/search/src/admin"
+	"github.com/apimgr/search/src/alert"
 	"github.com/apimgr/search/src/api"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/database"
@@ -64,6 +64,7 @@ type Server struct {
 	scheduler      *scheduler.Scheduler
 	metrics        *Metrics
 	dbManager      *database.DatabaseManager
+	alertManager   *alert.Manager
 	configSync     *config.ConfigSync // Per AI.md PART 5: Cluster config sync (NON-NEGOTIABLE)
 
 	// User management
@@ -141,9 +142,10 @@ func New(cfg *config.Config) *Server {
 
 	// Create aggregator with 30 second timeout and caching
 	aggregator := search.NewAggregator(enabledEngines, search.AggregatorConfig{
-		Timeout:      30 * time.Second,
-		CacheEnabled: true,
-		CacheTTL:     5 * time.Minute,
+		Timeout:       time.Duration(cfg.Search.Timeout) * time.Second,
+		CacheEnabled:  true,
+		CacheTTL:      5 * time.Minute,
+		MaxConcurrent: cfg.Search.MaxConcurrent,
 		// Cache backend defaults to in-memory; set Cache field to use Valkey/Redis
 	})
 
@@ -309,68 +311,66 @@ func New(cfg *config.Config) *Server {
 	// Scheduler is initialized after Server struct creation per AI.md PART 19
 	// The scheduler is ALWAYS RUNNING - no enable/disable option
 
-	// Create database manager for user management
+	// Create database manager for server persistence
 	var dbMgr *database.DatabaseManager
 	var userAuthMgr *user.AuthManager
 	var totpMgr *user.TOTPManager
 	var recoveryMgr *user.RecoveryManager
 	var tokenMgr *user.TokenManager
 	var verificationMgr *user.VerificationManager
+	var err error
 
-	if cfg.Server.Users.Enabled {
-		// Initialize database manager
-		dbConfig := &database.Config{
-			Driver:   "sqlite",
-			DataDir:  config.GetDatabaseDir(),
-			MaxOpen:  10,
-			MaxIdle:  5,
-			Lifetime: 300,
-		}
-		var err error
-		dbMgr, err = database.NewDatabaseManager(dbConfig)
-		if err != nil {
-			log.Printf("[Users] Warning: Failed to initialize database: %v", err)
+	dbConfig := &database.Config{
+		Driver:   "sqlite",
+		DataDir:  config.GetDatabaseDir(),
+		MaxOpen:  10,
+		MaxIdle:  5,
+		Lifetime: 300,
+	}
+	dbMgr, err = database.NewDatabaseManager(dbConfig)
+	if err != nil {
+		log.Printf("[Database] Warning: Failed to initialize database: %v", err)
+	} else {
+		migrator := database.NewDatabaseMigrator(dbMgr)
+		if err := migrator.MigrateAll(context.Background()); err != nil {
+			log.Printf("[Database] Warning: Failed to run migrations: %v", err)
 		} else {
-			// Run database migrations - per AI.md PART 10
-			migrator := database.NewDatabaseMigrator(dbMgr)
-			if err := migrator.MigrateAll(context.Background()); err != nil {
-				log.Printf("[Database] Warning: Failed to run migrations: %v", err)
-			} else {
-				log.Printf("[Database] Migrations completed successfully")
+			log.Printf("[Database] Migrations completed successfully")
+		}
+	}
+
+	if cfg.Server.Users.Enabled && dbMgr != nil {
+		// Get users database
+		usersDB := dbMgr.UsersDB().SQL()
+		if usersDB != nil {
+			// Create auth manager
+			authCfg := user.AuthConfig{
+				SessionDurationDays: cfg.Server.Users.GetSessionDurationDays(),
+				CookieName:          "user_session",
+				CookieSecure:        cfg.Server.SSL.Enabled,
+			}
+			userAuthMgr = user.NewAuthManager(usersDB, authCfg)
+			log.Printf("[Users] Auth manager initialized")
+
+			// Create TOTP manager if 2FA is allowed
+			if cfg.Server.Users.Auth.Allow2FA {
+				encKey := cfg.GetEncryptionKey()
+				if len(encKey) == 32 {
+					totpMgr, _ = user.NewTOTPManager(usersDB, cfg.Server.Title, encKey)
+					log.Printf("[Users] 2FA manager initialized")
+				}
 			}
 
-			// Get users database
-			usersDB := dbMgr.UsersDB().SQL()
-			if usersDB != nil {
-				// Create auth manager
-				authCfg := user.AuthConfig{
-					SessionDurationDays: cfg.Server.Users.GetSessionDurationDays(),
-					CookieName:          "user_session",
-					CookieSecure:        cfg.Server.SSL.Enabled,
-				}
-				userAuthMgr = user.NewAuthManager(usersDB, authCfg)
-				log.Printf("[Users] Auth manager initialized")
+			// Create recovery manager
+			recoveryMgr = user.NewRecoveryManager(usersDB, 10)
 
-				// Create TOTP manager if 2FA is allowed
-				if cfg.Server.Users.Auth.Allow2FA {
-					encKey := cfg.GetEncryptionKey()
-					if len(encKey) == 32 {
-						totpMgr, _ = user.NewTOTPManager(usersDB, cfg.Server.Title, encKey)
-						log.Printf("[Users] 2FA manager initialized")
-					}
-				}
+			// Create token manager
+			tokenMgr = user.NewTokenManager(usersDB)
+			log.Printf("[Users] Token manager initialized")
 
-				// Create recovery manager
-				recoveryMgr = user.NewRecoveryManager(usersDB, 10)
-
-				// Create token manager
-				tokenMgr = user.NewTokenManager(usersDB)
-				log.Printf("[Users] Token manager initialized")
-
-				// Create verification manager for email verification and password reset tokens
-				verificationMgr = user.NewVerificationManager(usersDB)
-				log.Printf("[Users] Verification manager initialized")
-			}
+			// Create verification manager for email verification and password reset tokens
+			verificationMgr = user.NewVerificationManager(usersDB)
+			log.Printf("[Users] Verification manager initialized")
 		}
 	}
 
@@ -384,6 +384,13 @@ func New(cfg *config.Config) *Server {
 		// Continue without translations - will use keys as fallback
 	} else {
 		log.Printf("[I18N] Translations loaded for %d languages", len(i18n.DefaultSupportedLanguages()))
+	}
+
+	renderer = NewTemplateRenderer(cfg, i18nMgr)
+
+	var alertMgr *alert.Manager
+	if dbMgr != nil && dbMgr.ServerDB() != nil && dbMgr.ServerDB().SQL() != nil {
+		alertMgr = alert.NewManager(dbMgr.ServerDB().SQL(), cfg, aggregator, mailer)
 	}
 
 	s := &Server{
@@ -407,6 +414,7 @@ func New(cfg *config.Config) *Server {
 		// scheduler is initialized below after Server creation
 		metrics:             metrics,
 		dbManager:           dbMgr,
+		alertManager:        alertMgr,
 		userAuthManager:     userAuthMgr,
 		totpManager:         totpMgr,
 		recoveryManager:     recoveryMgr,
@@ -435,11 +443,7 @@ func New(cfg *config.Config) *Server {
 		log.Println("[Server] Configuration reload triggered")
 		// Re-render templates in development mode
 		if cfg.IsDevelopment() {
-			var i18nFuncs template.FuncMap
-			if s.i18nManager != nil {
-				i18nFuncs = s.i18nManager.TemplateFuncs("en")
-			}
-			s.renderer = NewTemplateRenderer(cfg, i18nFuncs)
+			s.renderer = NewTemplateRenderer(cfg, s.i18nManager)
 		}
 		return nil
 	})
@@ -477,6 +481,7 @@ func New(cfg *config.Config) *Server {
 	// Set related searches provider on API handler
 	relatedSearches := search.NewRelatedSearches()
 	s.apiHandler.SetRelatedSearches(relatedSearches)
+	s.apiHandler.SetAlertManager(alertMgr)
 
 	// Create auth and user API handlers if user management is enabled
 	if cfg.Server.Users.Enabled && userAuthMgr != nil && dbMgr != nil {
@@ -713,8 +718,16 @@ func (s *Server) UpdateConfig(cfg *config.Config) {
 // newPageData creates PageData with Tor status and theme automatically set
 // Per AI.md PART 32: Tor section shown if enabled (always, not just when connected)
 // Per AI.md PART 16: Theme read from cookie set by client-side JS
-func (s *Server) newPageData(r *http.Request, title, page string) *PageData {
+func (s *Server) newPageData(w http.ResponseWriter, r *http.Request, title, page string) *PageData {
 	data := NewPageData(s.config, title, page)
+	i18nManager := s.getI18nManager()
+	data.Lang = i18nManager.ResolveLanguage(w, r)
+	if i18nManager.IsRTL(data.Lang) {
+		data.Dir = "rtl"
+	} else {
+		data.Dir = "ltr"
+	}
+	data.AvailableLanguages = i18nManager.SupportedLanguages()
 	prefsQuery := strings.TrimSpace(r.URL.Query().Get("prefs"))
 	prefs := parseSearchPreferences(prefsQuery)
 	// Per AI.md PART 16: Theme read from cookie; resolve "auto" to "dark" server-side
@@ -748,6 +761,13 @@ func (s *Server) newPageData(r *http.Request, title, page string) *PageData {
 		}
 	}
 	return data
+}
+
+func (s *Server) getI18nManager() *i18n.Manager {
+	if s.i18nManager != nil {
+		return s.i18nManager
+	}
+	return i18n.NewManager("en", i18n.DefaultSupportedLanguages())
 }
 
 // createPIDFile creates a PID file with stale PID detection
@@ -795,6 +815,10 @@ func (s *Server) setupRoutes() http.Handler {
 
 	// Search
 	mux.HandleFunc("/search", s.handleSearch)
+	mux.HandleFunc("/alerts/new", s.handleAlertNew)
+	mux.HandleFunc("/alerts/confirm", s.handleAlertConfirm)
+	mux.HandleFunc("/alerts", s.handleAlerts)
+	mux.HandleFunc("/alerts/", s.handleAlertAction)
 
 	// Direct answers (full-page results for type:term queries per IDEA.md)
 	mux.HandleFunc("/direct/", s.handleDirect)
@@ -845,6 +869,7 @@ func (s *Server) setupRoutes() http.Handler {
 
 	// Static files (served from embedded filesystem)
 	mux.Handle("/static/", http.StripPrefix("/static/", StaticFileServer()))
+	mux.HandleFunc("/locales/", s.handleLocale)
 
 	// Admin routes (if enabled)
 	if s.config.Server.Admin.Enabled || s.config.Server.Admin.Username != "" {
@@ -1140,7 +1165,7 @@ func (s *Server) renderDirectAnswer(w http.ResponseWriter, r *http.Request, answ
 	}
 
 	// Use newPageData for TorAddress support per AI.md PART 32
-	baseData := s.newPageData(r, answer.Title, "direct")
+	baseData := s.newPageData(w, r, answer.Title, "direct")
 	baseData.Description = answer.Description
 	baseData.Query = fmt.Sprintf("%s:%s", answer.Type, answer.Term)
 
@@ -1152,7 +1177,7 @@ func (s *Server) renderDirectAnswer(w http.ResponseWriter, r *http.Request, answ
 	// Try to render with template
 	if err := s.renderer.Render(w, "direct", data); err != nil {
 		// Fallback to inline rendering
-		s.renderDirectAnswerFallback(w, answer)
+		s.renderDirectAnswerFallback(w, r, answer)
 	}
 }
 
@@ -1163,7 +1188,7 @@ type DirectAnswerPageData struct {
 }
 
 // renderDirectAnswerFallback renders a direct answer without templates
-func (s *Server) renderDirectAnswerFallback(w http.ResponseWriter, answer *direct.Answer) {
+func (s *Server) renderDirectAnswerFallback(w http.ResponseWriter, r *http.Request, answer *direct.Answer) {
 	baseURL := s.config.Server.BaseURL
 	if baseURL == "" {
 		baseURL = ""
@@ -1172,10 +1197,18 @@ func (s *Server) renderDirectAnswerFallback(w http.ResponseWriter, answer *direc
 	if appName == "" {
 		appName = "Search"
 	}
+	baseData := s.newPageData(w, r, answer.Title, "direct")
+	t := func(key string, args ...interface{}) string {
+		return s.getI18nManager().T(baseData.Lang, key, args...)
+	}
 
 	// Build minimal HTML5 page
 	fmt.Fprint(w, `<!DOCTYPE html>
-<html lang="en">
+<html lang="`)
+	fmt.Fprint(w, html.EscapeString(baseData.Lang))
+	fmt.Fprint(w, `" dir="`)
+	fmt.Fprint(w, html.EscapeString(baseData.Dir))
+	fmt.Fprint(w, `">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1237,7 +1270,9 @@ footer a{color:var(--accent);text-decoration:none}
 	fmt.Fprint(w, answer.Content)
 	fmt.Fprint(w, `</div>`)
 	if answer.Source != "" || answer.SourceURL != "" {
-		fmt.Fprint(w, `<div class="source">Source: `)
+		fmt.Fprint(w, `<div class="source">`)
+		fmt.Fprint(w, html.EscapeString(t("direct.source_label")))
+		fmt.Fprint(w, ` `)
 		if answer.SourceURL != "" {
 			fmt.Fprint(w, `<a href="`)
 			fmt.Fprint(w, html.EscapeString(answer.SourceURL))
@@ -1260,7 +1295,9 @@ footer a{color:var(--accent);text-decoration:none}
 	fmt.Fprint(w, baseURL)
 	fmt.Fprint(w, `/">`)
 	fmt.Fprint(w, html.EscapeString(appName))
-	fmt.Fprint(w, `</a> &middot; Direct Answer
+	fmt.Fprint(w, `</a> &middot; `)
+	fmt.Fprint(w, html.EscapeString(t("direct.footer_label")))
+	fmt.Fprint(w, `
 </footer>
 </div>
 </body>
@@ -1274,7 +1311,7 @@ func (s *Server) renderSearchError(w http.ResponseWriter, r *http.Request, query
 	log.Printf("[ERROR] search error: query=%q - %v", query, err)
 
 	// Use newPageData for TorAddress support per AI.md PART 32
-	baseData := s.newPageData(r, "Search Error", "error")
+	baseData := s.newPageData(w, r, "Search Error", "error")
 	baseData.Description = "An error occurred while searching"
 	baseData.Query = query
 
@@ -1287,7 +1324,7 @@ func (s *Server) renderSearchError(w http.ResponseWriter, r *http.Request, query
 
 	if renderErr := s.renderer.Render(w, "error", data); renderErr != nil {
 		// Fallback to plain error - still no internal details
-		http.Error(w, "An error occurred. Please try again.", http.StatusInternalServerError)
+		localizedHTTPError(w, r, http.StatusInternalServerError, "errors.server_error")
 	}
 }
 
@@ -1301,7 +1338,7 @@ func (s *Server) renderSearchResultsWithInstant(w http.ResponseWriter, r *http.R
 	safeSearch, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("safe_search")))
 
 	// Use newPageData for TorAddress support per AI.md PART 32
-	baseData := s.newPageData(r, query, "search")
+	baseData := s.newPageData(w, r, query, "search")
 	baseData.Description = fmt.Sprintf("Search results for: %s", query)
 	baseData.Query = query
 	baseData.Category = category
@@ -1336,14 +1373,15 @@ func (s *Server) renderSearchResultsWithInstant(w http.ResponseWriter, r *http.R
 
 	if err := s.renderer.Render(w, "search", data); err != nil {
 		// Fallback to inline rendering
-		s.renderSearchResultsInline(w, query, results, category)
+		s.renderSearchResultsInline(w, r, query, results, category)
 	}
 }
 
 // renderSearchResultsInline is a fallback for when templates fail
-func (s *Server) renderSearchResultsInline(w http.ResponseWriter, query string, results *model.SearchResults, category string) {
+func (s *Server) renderSearchResultsInline(w http.ResponseWriter, r *http.Request, query string, results *model.SearchResults, category string) {
+	baseData := s.newPageData(w, r, query, "search")
 	fmt.Fprintf(w, `<!DOCTYPE html>
-<html lang="en" class="theme-dark">
+<html lang="%s" dir="%s" class="theme-%s">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1353,8 +1391,11 @@ func (s *Server) renderSearchResultsInline(w http.ResponseWriter, query string, 
     <link rel="stylesheet" href="/static/css/public.css">
         <h1>Results for: %s</h1>
         <p>%d results (%.3fs)</p>`,
+		html.EscapeString(baseData.Lang),
+		html.EscapeString(baseData.Dir),
+		html.EscapeString(baseData.Theme),
 		html.EscapeString(query),
-		s.config.Server.Title,
+		html.EscapeString(s.config.Server.Title),
 		html.EscapeString(query),
 		results.TotalResults,
 		results.SearchTime,

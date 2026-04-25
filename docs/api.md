@@ -89,6 +89,85 @@ curl "https://search.example.com/api/v1/autocomplete?q=priv"
 }
 ```
 
+### Search Alerts
+
+Search alerts are managed through the REST API and use unguessable manage and RSS tokens instead of accounts.
+
+#### `POST /api/v1/alerts`
+
+Create an alert subscription for a query.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `query` | string | Yes | Search query to monitor |
+| `category` | string | Yes | Search category |
+| `language` | string | No | Language filter (defaults to `en`) |
+| `region` | string | No | Region filter |
+| `engines` | array | No | Restrict the alert to selected engine names |
+| `safe_search` | int | No | Safe search level (`0`, `1`, `2`) |
+| `frequency` | string | Yes | `immediate`, `daily`, or `weekly` |
+| `email` | string | Yes | Contact email for verification and notifications |
+| `deliver_email` | bool | No | Enable email digests when SMTP is configured |
+| `deliver_rss` | bool | No | Enable the private RSS feed |
+| `deliver_webhook` | bool | No | Enable webhook delivery |
+| `webhook_url` | string | No | Webhook destination when webhook delivery is enabled |
+
+**Example Response:**
+
+```json
+{
+  "ok": true,
+  "data": {
+    "alert": {
+      "ID": "6b6b4b8f31f40dc8309cc6b66c78cb80",
+      "Email": "alerts@example.com",
+      "Query": "golang release notes",
+      "Category": "news",
+      "Language": "en",
+      "Region": "",
+      "Engines": [],
+      "SafeSearch": 1,
+      "Frequency": "daily",
+      "DeliverEmail": false,
+      "DeliverRSS": true,
+      "DeliverWebhook": false,
+      "EmailVerified": true,
+      "Status": "active",
+      "BaseURL": "https://search.example.com"
+    },
+    "manage_url": "https://search.example.com/alerts/manage/MANAGE_TOKEN",
+    "rss_url": "https://search.example.com/alerts/RSS_TOKEN.rss",
+    "manage_token": "MANAGE_TOKEN",
+    "rss_token": "RSS_TOKEN",
+    "verification_sent": false
+  }
+}
+```
+
+#### `GET /api/v1/alerts/{token}`
+
+Return alert details for a manage token, including the current manage and RSS URLs.
+
+#### `PATCH /api/v1/alerts/{token}`
+
+Update alert query filters or delivery settings.
+
+#### `POST /api/v1/alerts/{token}/verify`
+
+Verify and activate an alert using the one-time email verification token.
+
+#### `POST /api/v1/alerts/{token}/pause`
+
+Pause or resume an alert. Send `{"paused": true}` to pause or `{"paused": false}` to resume.
+
+#### `DELETE /api/v1/alerts/{token}`
+
+Delete an alert permanently.
+
+#### `GET /api/v1/alerts/{token}/rss`
+
+Return the private RSS feed for an alert.
+
 ## Admin API
 
 The admin API requires authentication via Bearer token.
@@ -146,6 +225,8 @@ Access the GraphQL endpoint at `/graphql`:
 
 - **GET**: Opens GraphiQL (interactive IDE)
 - **POST**: Execute GraphQL queries
+
+Search alert management is currently exposed through the REST API only.
 
 ### Schema
 

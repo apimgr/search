@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/apimgr/search/src/alert"
 	"github.com/apimgr/search/src/backup"
 	"github.com/apimgr/search/src/scheduler"
 )
@@ -118,6 +119,11 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 
 		// Healthcheck Self - verify own health
 		HealthcheckSelf: func(ctx context.Context) error {
+			if s.aggregator != nil {
+				if err := s.aggregator.RefreshEngineHealth(ctx); err != nil {
+					return err
+				}
+			}
 			log.Println("[Task] Self health check passed")
 			return nil
 		},
@@ -133,6 +139,27 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 				return s.torService.Restart()
 			}
 			return nil
+		},
+
+		AlertsImmediate: func(ctx context.Context) error {
+			if s.alertManager == nil {
+				return nil
+			}
+			return s.alertManager.ProcessDue(ctx, alert.FrequencyImmediate)
+		},
+
+		AlertsDaily: func(ctx context.Context) error {
+			if s.alertManager == nil {
+				return nil
+			}
+			return s.alertManager.ProcessDue(ctx, alert.FrequencyDaily)
+		},
+
+		AlertsWeekly: func(ctx context.Context) error {
+			if s.alertManager == nil {
+				return nil
+			}
+			return s.alertManager.ProcessDue(ctx, alert.FrequencyWeekly)
 		},
 
 		// Cluster Heartbeat - only active in cluster mode

@@ -15,17 +15,17 @@ import (
 
 // OpenSearchDescription represents the OpenSearch XML format
 type OpenSearchDescription struct {
-	XMLName     xml.Name `xml:"OpenSearchDescription"`
-	XMLNS       string   `xml:"xmlns,attr"`
-	ShortName   string   `xml:"ShortName"`
-	Description string   `xml:"Description"`
-	Tags        string   `xml:"Tags,omitempty"`
-	Contact     string   `xml:"Contact,omitempty"`
-	LongName    string   `xml:"LongName,omitempty"`
-	Image       *OpenSearchImage `xml:"Image,omitempty"`
-	URLs        []OpenSearchURL  `xml:"Url"`
-	InputEncoding  string `xml:"InputEncoding"`
-	OutputEncoding string `xml:"OutputEncoding"`
+	XMLName        xml.Name         `xml:"OpenSearchDescription"`
+	XMLNS          string           `xml:"xmlns,attr"`
+	ShortName      string           `xml:"ShortName"`
+	Description    string           `xml:"Description"`
+	Tags           string           `xml:"Tags,omitempty"`
+	Contact        string           `xml:"Contact,omitempty"`
+	LongName       string           `xml:"LongName,omitempty"`
+	Image          *OpenSearchImage `xml:"Image,omitempty"`
+	URLs           []OpenSearchURL  `xml:"Url"`
+	InputEncoding  string           `xml:"InputEncoding"`
+	OutputEncoding string           `xml:"OutputEncoding"`
 }
 
 // OpenSearchImage represents the search engine icon
@@ -78,12 +78,12 @@ func (s *Server) handleOpenSearch(w http.ResponseWriter, r *http.Request) {
 
 	// Build OpenSearch description
 	osd := &OpenSearchDescription{
-		XMLNS:       "http://a9.com/-/spec/opensearch/1.1/",
-		ShortName:   shortName,
-		Description: description,
-		Tags:        s.config.Search.OpenSearch.Tags,
-		Contact:     contact,
-		LongName:    longName,
+		XMLNS:          "http://a9.com/-/spec/opensearch/1.1/",
+		ShortName:      shortName,
+		Description:    description,
+		Tags:           s.config.Search.OpenSearch.Tags,
+		Contact:        contact,
+		LongName:       longName,
 		InputEncoding:  "UTF-8",
 		OutputEncoding: "UTF-8",
 		URLs: []OpenSearchURL{
@@ -123,7 +123,7 @@ func (s *Server) handleOpenSearch(w http.ResponseWriter, r *http.Request) {
 	enc := xml.NewEncoder(w)
 	enc.Indent("", "  ")
 	if err := enc.Encode(osd); err != nil {
-		http.Error(w, "Failed to generate OpenSearch XML", http.StatusInternalServerError)
+		localizedHTTPError(w, r, http.StatusInternalServerError, "errors.server_error")
 		return
 	}
 }
@@ -213,7 +213,7 @@ func (s *Server) handlePreferences(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := s.newPageData(r, "Preferences", "preferences")
+	data := s.newPageData(w, r, "Preferences", "preferences")
 	data.CSRFToken = s.getCSRFToken(r)
 
 	// Get all available bangs for display

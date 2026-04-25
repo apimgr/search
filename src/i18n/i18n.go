@@ -128,11 +128,19 @@ func (m *Manager) T(lang, key string, args ...interface{}) string {
 }
 
 // DetectLanguage detects the preferred language from the request
-// Priority: 1. Cookie 2. Accept-Language header 3. Default
+// Priority: 1. Query param 2. Cookie 3. Accept-Language header 4. Default
 func (m *Manager) DetectLanguage(r *http.Request) string {
+	// Check query param first
+	if raw := strings.TrimSpace(r.URL.Query().Get("lang")); raw != "" {
+		if lang := m.normalizeSupportedLanguage(raw); lang != "" {
+			return lang
+		}
+		return m.defaultLang
+	}
+
 	// Check cookie first
 	if cookie, err := r.Cookie("lang"); err == nil {
-		lang := strings.ToLower(cookie.Value)
+		lang := normalizeLanguageCode(cookie.Value)
 		if m.IsSupported(lang) {
 			return lang
 		}
@@ -148,6 +156,42 @@ func (m *Manager) DetectLanguage(r *http.Request) string {
 	}
 
 	return m.defaultLang
+}
+
+// ResolveLanguage detects the preferred language and persists a supported query
+// parameter value to the language cookie.
+func (m *Manager) ResolveLanguage(w http.ResponseWriter, r *http.Request) string {
+	if raw := strings.TrimSpace(r.URL.Query().Get("lang")); raw != "" {
+		if lang := m.normalizeSupportedLanguage(raw); lang != "" {
+			if w != nil {
+				SetLanguageCookie(w, lang)
+			}
+			return lang
+		}
+		return m.defaultLang
+	}
+
+	return m.DetectLanguage(r)
+}
+
+// ResolveSupportedLanguage normalizes a language code and falls back to the
+// manager default if the value is unsupported.
+func (m *Manager) ResolveSupportedLanguage(value string) string {
+	if lang := m.normalizeSupportedLanguage(value); lang != "" {
+		return lang
+	}
+	return m.defaultLang
+}
+
+// DetectRequestLocale resolves the request language and matching text
+// direction using the default supported languages.
+func DetectRequestLocale(r *http.Request) (string, string) {
+	manager := NewManager("en", DefaultSupportedLanguages())
+	lang := manager.DetectLanguage(r)
+	if manager.IsRTL(lang) {
+		return lang, "rtl"
+	}
+	return lang, "ltr"
 }
 
 // parseAcceptLanguage parses the Accept-Language header and returns the best match
@@ -204,6 +248,25 @@ func (m *Manager) parseAcceptLanguage(header string) string {
 	}
 
 	return ""
+}
+
+func (m *Manager) normalizeSupportedLanguage(value string) string {
+	lang := normalizeLanguageCode(value)
+	if lang == "" || !m.IsSupported(lang) {
+		return ""
+	}
+	return lang
+}
+
+func normalizeLanguageCode(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return ""
+	}
+	if idx := strings.IndexAny(value, "-_"); idx != -1 {
+		value = value[:idx]
+	}
+	return value
 }
 
 // IsSupported checks if a language is supported

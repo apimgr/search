@@ -51,10 +51,10 @@ type Metrics struct {
 	cacheBytes     *prometheus.GaugeVec
 
 	// Scheduler metrics
-	schedulerTasksTotal    *prometheus.CounterVec
-	schedulerTaskDuration  *prometheus.HistogramVec
-	schedulerTasksRunning  *prometheus.GaugeVec
-	schedulerLastRun       *prometheus.GaugeVec
+	schedulerTasksTotal   *prometheus.CounterVec
+	schedulerTaskDuration *prometheus.HistogramVec
+	schedulerTasksRunning *prometheus.GaugeVec
+	schedulerLastRun      *prometheus.GaugeVec
 
 	// Authentication metrics
 	authAttempts       *prometheus.CounterVec
@@ -65,21 +65,21 @@ type Metrics struct {
 	usersActive prometheus.Gauge
 
 	// Search metrics
-	searchesTotal    prometheus.Counter
-	searchDuration   *prometheus.HistogramVec
-	engineRequests   *prometheus.CounterVec
-	engineErrors     *prometheus.CounterVec
+	searchesTotal  prometheus.Counter
+	searchDuration *prometheus.HistogramVec
+	engineRequests *prometheus.CounterVec
+	engineErrors   *prometheus.CounterVec
 
 	// System metrics
-	uptimeSeconds    prometheus.Gauge
-	goroutines       prometheus.Gauge
-	memAlloc         prometheus.Gauge
-	memSys           prometheus.Gauge
-	cpuUsage         prometheus.Gauge
-	memUsedPercent   prometheus.Gauge
-	diskUsedBytes    prometheus.Gauge
-	diskTotalBytes   prometheus.Gauge
-	diskUsedPercent  prometheus.Gauge
+	uptimeSeconds   prometheus.Gauge
+	goroutines      prometheus.Gauge
+	memAlloc        prometheus.Gauge
+	memSys          prometheus.Gauge
+	cpuUsage        prometheus.Gauge
+	memUsedPercent  prometheus.Gauge
+	diskUsedBytes   prometheus.Gauge
+	diskTotalBytes  prometheus.Gauge
+	diskUsedPercent prometheus.Gauge
 }
 
 // NewMetrics creates a new Prometheus metrics collector
@@ -525,15 +525,15 @@ func (m *Metrics) AuthenticatedHandler() http.HandlerFunc {
 			auth := r.Header.Get("Authorization")
 			if auth == "" {
 				w.Header().Set("WWW-Authenticate", `Bearer realm="metrics"`)
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				localizedHTTPError(w, r, http.StatusUnauthorized, "errors.unauthorized")
 				return
 			}
 			if len(auth) < 7 || auth[:7] != "Bearer " {
-				http.Error(w, "Invalid authorization header", http.StatusUnauthorized)
+				localizedHTTPError(w, r, http.StatusUnauthorized, "errors.unauthorized")
 				return
 			}
 			if auth[7:] != token {
-				http.Error(w, "Invalid token", http.StatusUnauthorized)
+				localizedHTTPError(w, r, http.StatusUnauthorized, "errors.invalid_token")
 				return
 			}
 		}

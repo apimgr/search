@@ -4,7 +4,7 @@
         {{if .Config.Server.Branding.LogoURL}}
         <img src="{{.Config.Server.Branding.LogoURL}}" alt="{{.Config.Server.Title}}" class="home-logo-img">
         {{else}}
-        <h1 class="home-logo">🔍 {{default "Search" .Config.Server.Branding.Title}}</h1>
+        <h1 class="home-logo">🔍 {{if .Config.Server.Branding.Title}}{{.Config.Server.Branding.Title}}{{else}}{{t "home.brand_fallback"}}{{end}}</h1>
         {{end}}
         <p class="home-tagline">{{.Config.Server.Description}}</p>
     </div>
@@ -13,8 +13,8 @@
         <input type="hidden" name="category" id="categoryInput" value="{{default "general" .Category}}">
         {{if .PrefsQuery}}<input type="hidden" name="prefs" value="{{.PrefsQuery}}">{{end}}
         <div class="search-box">
-            <input type="text" name="q" id="searchQuery" placeholder="Search the web privately..." autofocus required autocomplete="off" class="search-input">
-            <button type="button" class="advanced-search-trigger" aria-label="Advanced Search" id="advancedSearchBtn">
+            <input type="text" name="q" id="searchQuery" placeholder="{{t "home.search_placeholder"}}" autofocus required autocomplete="off" class="search-input">
+            <button type="button" class="advanced-search-trigger" aria-label="{{t "search.advanced"}}" id="advancedSearchBtn">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="11" cy="8" r="2"></circle>
                     <path d="M11 10v5"></path>
@@ -26,7 +26,7 @@
                     <path d="M17 14v5M17 10V5"></path>
                 </svg>
             </button>
-            <button type="submit" class="search-btn" aria-label="Search">
+            <button type="submit" class="search-btn" aria-label="{{t "search.button"}}">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="11" cy="11" r="8"></circle>
                     <path d="m21 21-4.35-4.35"></path>
@@ -37,43 +37,43 @@
         <div class="category-tabs" role="tablist">
             <button type="button" class="category-tab{{if eq .Category "general"}} active{{end}}" data-category="general" role="tab" aria-selected="{{if eq .Category "general"}}true{{else}}false{{end}}">
                 <span class="tab-icon">🌐</span>
-                <span class="tab-text">Web</span>
+                <span class="tab-text">{{t "preferences.default_category_general"}}</span>
             </button>
             <button type="button" class="category-tab{{if eq .Category "images"}} active{{end}}" data-category="images" role="tab" aria-selected="{{if eq .Category "images"}}true{{else}}false{{end}}">
                 <span class="tab-icon">🖼️</span>
-                <span class="tab-text">Images</span>
+                <span class="tab-text">{{t "search.categories.images"}}</span>
             </button>
             <button type="button" class="category-tab{{if eq .Category "videos"}} active{{end}}" data-category="videos" role="tab" aria-selected="{{if eq .Category "videos"}}true{{else}}false{{end}}">
                 <span class="tab-icon">🎥</span>
-                <span class="tab-text">Videos</span>
+                <span class="tab-text">{{t "search.categories.videos"}}</span>
             </button>
             <button type="button" class="category-tab{{if eq .Category "news"}} active{{end}}" data-category="news" role="tab" aria-selected="{{if eq .Category "news"}}true{{else}}false{{end}}">
                 <span class="tab-icon">📰</span>
-                <span class="tab-text">News</span>
+                <span class="tab-text">{{t "search.categories.news"}}</span>
             </button>
             <button type="button" class="category-tab{{if eq .Category "maps"}} active{{end}}" data-category="maps" role="tab" aria-selected="{{if eq .Category "maps"}}true{{else}}false{{end}}">
                 <span class="tab-icon">🗺️</span>
-                <span class="tab-text">Maps</span>
+                <span class="tab-text">{{t "search.categories.maps"}}</span>
             </button>
             <button type="button" class="category-tab{{if eq .Category "files"}} active{{end}}" data-category="files" role="tab" aria-selected="{{if eq .Category "files"}}true{{else}}false{{end}}">
                 <span class="tab-icon">📁</span>
-                <span class="tab-text">Files</span>
+                <span class="tab-text">{{t "search.categories.files"}}</span>
             </button>
             <button type="button" class="category-tab{{if eq .Category "music"}} active{{end}}" data-category="music" role="tab" aria-selected="{{if eq .Category "music"}}true{{else}}false{{end}}">
                 <span class="tab-icon">🎵</span>
-                <span class="tab-text">Music</span>
+                <span class="tab-text">{{t "preferences.default_category_music"}}</span>
             </button>
             <button type="button" class="category-tab{{if eq .Category "science"}} active{{end}}" data-category="science" role="tab" aria-selected="{{if eq .Category "science"}}true{{else}}false{{end}}">
                 <span class="tab-icon">🔬</span>
-                <span class="tab-text">Science</span>
+                <span class="tab-text">{{t "search.categories.science"}}</span>
             </button>
             <button type="button" class="category-tab{{if eq .Category "it"}} active{{end}}" data-category="it" role="tab" aria-selected="{{if eq .Category "it"}}true{{else}}false{{end}}">
                 <span class="tab-icon">💻</span>
-                <span class="tab-text">IT</span>
+                <span class="tab-text">{{t "search.categories.it"}}</span>
             </button>
             <button type="button" class="category-tab{{if eq .Category "social"}} active{{end}}" data-category="social" role="tab" aria-selected="{{if eq .Category "social"}}true{{else}}false{{end}}">
                 <span class="tab-icon">💬</span>
-                <span class="tab-text">Social</span>
+                <span class="tab-text">{{t "search.categories.social"}}</span>
             </button>
         </div>
     </form>
@@ -90,15 +90,15 @@
     <div class="home-features">
         <div class="feature">
             <span class="feature-icon">🔒</span>
-            <span class="feature-text">No Tracking</span>
+            <span class="feature-text">{{t "home.feature_no_tracking"}}</span>
         </div>
         <div class="feature">
             <span class="feature-icon">🌐</span>
-            <span class="feature-text">Multiple Engines</span>
+            <span class="feature-text">{{t "home.feature_multiple_engines"}}</span>
         </div>
         <div class="feature">
             <span class="feature-icon">🧅</span>
-            <span class="feature-text">Tor Support</span>
+            <span class="feature-text">{{t "home.feature_tor_support"}}</span>
         </div>
     </div>
 </div>
@@ -106,84 +106,84 @@
 {{/* Advanced Search Modal - per AI.md PART 16: Server-side rendering with progressive enhancement */}}
 <dialog id="advancedSearchModal" class="advanced-search-modal">
     <header>
-        <h2>Advanced Search</h2>
-        <button type="button" class="close-btn" id="advancedSearchClose" aria-label="Close">&times;</button>
+        <h2>{{t "search.advanced"}}</h2>
+        <button type="button" class="close-btn" id="advancedSearchClose" aria-label="{{t "common.close"}}">&times;</button>
     </header>
     <form action="/search" method="GET" class="advanced-search-content">
         <input type="hidden" name="category" value="general">
         {{if .PrefsQuery}}<input type="hidden" name="prefs" value="{{.PrefsQuery}}">{{end}}
 
         <div class="advanced-search-group">
-            <label for="as-allwords">All these words</label>
-            <input type="text" id="as-allwords" name="as_allwords" placeholder="Type important words: pizza restaurant">
+            <label for="as-allwords">{{t "search.advanced_modal.all_words"}}</label>
+            <input type="text" id="as-allwords" name="as_allwords" placeholder="{{t "search.advanced_modal.all_words_placeholder"}}">
         </div>
 
         <div class="advanced-search-group">
-            <label for="as-exactphrase">Exact phrase</label>
-            <input type="text" id="as-exactphrase" name="as_exactphrase" placeholder="Put exact phrases in quotes: 'best pizza'">
+            <label for="as-exactphrase">{{t "search.advanced_modal.exact_phrase"}}</label>
+            <input type="text" id="as-exactphrase" name="as_exactphrase" placeholder="{{t "search.advanced_modal.exact_phrase_placeholder"}}">
         </div>
 
         <div class="advanced-search-group">
-            <label for="as-anywords">Any of these words</label>
-            <input type="text" id="as-anywords" name="as_anywords" placeholder="Type optional words: delivery takeout">
+            <label for="as-anywords">{{t "search.advanced_modal.any_words"}}</label>
+            <input type="text" id="as-anywords" name="as_anywords" placeholder="{{t "search.advanced_modal.any_words_placeholder"}}">
         </div>
 
         <div class="advanced-search-group">
-            <label for="as-nonewords">None of these words</label>
-            <input type="text" id="as-nonewords" name="as_nonewords" placeholder="Put a minus before words: -anchovies">
+            <label for="as-nonewords">{{t "search.advanced_modal.exclude_words"}}</label>
+            <input type="text" id="as-nonewords" name="as_nonewords" placeholder="{{t "search.advanced_modal.exclude_words_placeholder"}}">
         </div>
 
         <div class="advanced-search-row">
             <div class="advanced-search-group half">
-                <label for="as-site">Site or domain</label>
+                <label for="as-site">{{t "search.advanced_modal.site"}}</label>
                 <input type="text" id="as-site" name="as_site" placeholder="site:example.com">
             </div>
             <div class="advanced-search-group half">
-                <label for="as-filetype">File type</label>
+                <label for="as-filetype">{{t "search.advanced_modal.file_type"}}</label>
                 <select id="as-filetype" name="as_filetype">
-                    <option value="">Any format</option>
+                    <option value="">{{t "home.file_type_any"}}</option>
                     <option value="pdf">PDF</option>
-                    <option value="doc">Word (doc/docx)</option>
-                    <option value="xls">Excel (xls/xlsx)</option>
+                    <option value="doc">{{t "home.file_type_word"}}</option>
+                    <option value="xls">{{t "home.file_type_excel"}}</option>
                     <option value="ppt">PowerPoint</option>
-                    <option value="txt">Plain Text</option>
+                    <option value="txt">{{t "home.file_type_text"}}</option>
                 </select>
             </div>
         </div>
 
         <div class="advanced-search-row">
             <div class="advanced-search-group half">
-                <label for="as-time">Time range</label>
+                <label for="as-time">{{t "search.time_range"}}</label>
                 <select id="as-time" name="as_time">
-                    <option value="">Any time</option>
-                    <option value="d">Past 24 hours</option>
-                    <option value="w">Past week</option>
-                    <option value="m">Past month</option>
-                    <option value="y">Past year</option>
+                    <option value="">{{t "search.any_time"}}</option>
+                    <option value="d">{{t "search.past_day"}}</option>
+                    <option value="w">{{t "search.past_week"}}</option>
+                    <option value="m">{{t "search.past_month"}}</option>
+                    <option value="y">{{t "search.past_year"}}</option>
                 </select>
             </div>
             <div class="advanced-search-group half">
-                <label for="as-lang">Language</label>
+                <label for="as-lang">{{t "search.language"}}</label>
                 <select id="as-lang" name="as_lang">
-                    <option value="">Any language</option>
-                    <option value="en">English</option>
-                    <option value="es">Spanish</option>
-                    <option value="fr">French</option>
-                    <option value="de">German</option>
-                    <option value="zh">Chinese</option>
-                    <option value="ja">Japanese</option>
+                    <option value="">{{t "home.any_language"}}</option>
+                    <option value="en">{{t "home.language_english"}}</option>
+                    <option value="es">{{t "home.language_spanish"}}</option>
+                    <option value="fr">{{t "home.language_french"}}</option>
+                    <option value="de">{{t "home.language_german"}}</option>
+                    <option value="zh">{{t "home.language_chinese"}}</option>
+                    <option value="ja">{{t "home.language_japanese"}}</option>
                 </select>
             </div>
         </div>
 
         <div class="advanced-search-preview">
-            <label>Search query preview:</label>
-            <code id="as-preview">Enter search terms above</code>
+            <label>{{t "search.advanced_modal.query_preview"}}</label>
+            <code id="as-preview">{{t "home.query_preview_empty"}}</code>
         </div>
     </form>
     <footer>
-        <button type="button" class="btn btn-secondary" id="advancedSearchCancel">Cancel</button>
-        <button type="button" class="btn btn-primary" id="advancedSearchSubmit">Search</button>
+        <button type="button" class="btn btn-secondary" id="advancedSearchCancel">{{t "common.cancel"}}</button>
+        <button type="button" class="btn btn-primary" id="advancedSearchSubmit">{{t "search.button"}}</button>
     </footer>
 </dialog>
 {{end}}

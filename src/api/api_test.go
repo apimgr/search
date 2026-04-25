@@ -2173,13 +2173,16 @@ func TestGraphQLHandlerServeHTTPMethodNotAllowed(t *testing.T) {
 		t.Fatalf("Failed to create GraphQL handler: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPut, "/graphql", nil)
+	req := httptest.NewRequest(http.MethodPut, "/graphql?lang=de", nil)
 	w := httptest.NewRecorder()
 
 	gqlHandler.ServeHTTP(w, req)
 
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Errorf("Expected status %d, got %d", http.StatusMethodNotAllowed, w.Code)
+	}
+	if body := strings.TrimSpace(w.Body.String()); body != "Methode nicht erlaubt" {
+		t.Errorf("Expected localized body %q, got %q", "Methode nicht erlaubt", body)
 	}
 }
 
@@ -2190,7 +2193,7 @@ func TestGraphQLHandlerServeHTTPInvalidJSON(t *testing.T) {
 		t.Fatalf("Failed to create GraphQL handler: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/graphql", strings.NewReader("invalid json"))
+	req := httptest.NewRequest(http.MethodPost, "/graphql?lang=de", strings.NewReader("invalid json"))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
@@ -2198,6 +2201,9 @@ func TestGraphQLHandlerServeHTTPInvalidJSON(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("Expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+	if body := strings.TrimSpace(w.Body.String()); body != "Ungültige Anfrage" {
+		t.Errorf("Expected localized body %q, got %q", "Ungültige Anfrage", body)
 	}
 }
 

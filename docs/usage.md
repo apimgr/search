@@ -96,9 +96,10 @@ Click the settings icon to customize your search experience:
 
 ### No Tracking
 
-- No cookies for tracking
+- No third-party tracking cookies
+- Preference cookies are optional and require consent
 - No search history stored
-- No personal data collection
+- No third-party data collection
 - Common tracking parameters are stripped from result links
 
 ### Image Proxy

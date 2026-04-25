@@ -13,6 +13,7 @@ type mockEngine struct {
 	*BaseEngine
 	searchResults []model.Result
 	searchError   error
+	searchCalls   int
 }
 
 func newMockEngine(name string, category model.Category, enabled bool) *mockEngine {
@@ -29,6 +30,7 @@ func newMockEngine(name string, category model.Category, enabled bool) *mockEngi
 }
 
 func (m *mockEngine) Search(ctx context.Context, query *model.Query) ([]model.Result, error) {
+	m.searchCalls++
 	if m.searchError != nil {
 		return nil, m.searchError
 	}
@@ -41,6 +43,10 @@ func (m *mockEngine) SetResults(results []model.Result) {
 
 func (m *mockEngine) SetError(err error) {
 	m.searchError = err
+}
+
+func (m *mockEngine) Calls() int {
+	return m.searchCalls
 }
 
 // Tests for BaseEngine
@@ -1186,6 +1192,115 @@ func TestAggregatorSearchNoCacheForEmptyResults(t *testing.T) {
 	cacheKey := agg.generateCacheKey(query)
 	if agg.cache.Get(cacheKey) != nil {
 		t.Error("Cache should not store empty results")
+	}
+}
+
+func TestAggregatorSearchFallsBackToStaleCache(t *testing.T) {
+	engine := newMockEngine("test", model.CategoryGeneral, true)
+	engine.SetResults([]model.Result{
+		{URL: "https://example.com/1", Title: "Cached result"},
+	})
+
+	agg := NewAggregator([]Engine{engine}, AggregatorConfig{
+		Timeout:       10 * time.Second,
+		CacheEnabled:  true,
+		CacheTTL:      10 * time.Millisecond,
+		MaxConcurrent: 1,
+	})
+
+	query := &model.Query{Text: "stale fallback", Category: model.CategoryGeneral}
+	results, err := agg.Search(context.Background(), query)
+	if err != nil {
+		t.Fatalf("initial Search() error = %v", err)
+	}
+	if len(results.Results) != 1 {
+		t.Fatalf("initial results count = %d, want 1", len(results.Results))
+	}
+
+	time.Sleep(25 * time.Millisecond)
+	engine.SetError(model.ErrEngineUnavailable)
+
+	results, err = agg.Search(context.Background(), query)
+	if err != nil {
+		t.Fatalf("fallback Search() error = %v", err)
+	}
+	if !results.FromCache || !results.Stale {
+		t.Fatalf("expected stale cached results, got FromCache=%v Stale=%v", results.FromCache, results.Stale)
+	}
+	if results.CacheAgeSec < 0 {
+		t.Fatalf("CacheAgeSec = %d, want >= 0", results.CacheAgeSec)
+	}
+}
+
+func TestAggregatorFilterEnginesRotatesHealthySubset(t *testing.T) {
+	e1 := newMockEngine("alpha", model.CategoryGeneral, true)
+	e2 := newMockEngine("beta", model.CategoryGeneral, true)
+	e3 := newMockEngine("gamma", model.CategoryGeneral, true)
+	e1.GetConfig().Priority = 100
+	e2.GetConfig().Priority = 90
+	e3.GetConfig().Priority = 80
+
+	agg := NewAggregator([]Engine{e1, e2, e3}, AggregatorConfig{
+		Timeout:       10 * time.Second,
+		MaxConcurrent: 2,
+	})
+
+	query := &model.Query{Text: "rotation", Category: model.CategoryGeneral}
+	first := agg.filterEngines(query)
+	second := agg.filterEngines(query)
+
+	if len(first) != 2 || len(second) != 2 {
+		t.Fatalf("unexpected engine counts: first=%d second=%d", len(first), len(second))
+	}
+	if first[0].Name() == second[0].Name() && first[1].Name() == second[1].Name() {
+		t.Fatalf("expected rotation across searches, got identical subsets %q/%q", first[0].Name(), first[1].Name())
+	}
+}
+
+func TestAggregatorFilterEnginesPrefersHealthyEngines(t *testing.T) {
+	unhealthy := newMockEngine("unhealthy", model.CategoryGeneral, true)
+	healthy := newMockEngine("healthy", model.CategoryGeneral, true)
+	unhealthy.GetConfig().Priority = 100
+	healthy.GetConfig().Priority = 90
+
+	unhealthy.RecordFailure(model.ErrEngineUnavailable)
+	unhealthy.RecordFailure(model.ErrEngineUnavailable)
+	unhealthy.RecordFailure(model.ErrEngineUnavailable)
+
+	agg := NewAggregator([]Engine{unhealthy, healthy}, AggregatorConfig{
+		Timeout:       10 * time.Second,
+		MaxConcurrent: 1,
+	})
+
+	selected := agg.filterEngines(&model.Query{Text: "health", Category: model.CategoryGeneral})
+	if len(selected) != 1 {
+		t.Fatalf("selected count = %d, want 1", len(selected))
+	}
+	if selected[0].Name() != "healthy" {
+		t.Fatalf("selected engine = %q, want healthy", selected[0].Name())
+	}
+}
+
+func TestAggregatorRefreshEngineHealthRecoversEngine(t *testing.T) {
+	engine := newMockEngine("recover", model.CategoryGeneral, true)
+	engine.RecordFailure(model.ErrEngineUnavailable)
+	engine.RecordFailure(model.ErrEngineUnavailable)
+	engine.RecordFailure(model.ErrEngineUnavailable)
+	engine.SetResults([]model.Result{{URL: "https://example.com", Title: "Recovered"}})
+
+	agg := NewAggregator([]Engine{engine}, AggregatorConfig{
+		Timeout:       10 * time.Second,
+		MaxConcurrent: 1,
+	})
+
+	if engine.CanSearch(time.Now()) {
+		t.Fatal("engine should be cooling down before refresh")
+	}
+	if err := agg.RefreshEngineHealth(context.Background()); err != nil {
+		t.Fatalf("RefreshEngineHealth() error = %v", err)
+	}
+	if !engine.CanSearch(time.Now()) {
+		t.Fatal("engine should be healthy after refresh")
 	}
 }
 

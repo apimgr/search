@@ -1,0 +1,152 @@
+version: 2
+
+project_name: lego
+
+builds:
+  - binary: lego
+
+    main: ./cmd/lego/
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+    goos:
+      - linux
+      - darwin
+      - windows
+      - freebsd
+      - openbsd
+      - solaris
+    goarch:
+      - amd64
+      - 386
+      - arm
+      - arm64
+      - mips
+      - mipsle
+      - mips64
+      - mips64le
+    goarm:
+      - 7
+      - 6
+      - 5
+    gomips:
+      - hardfloat
+      - softfloat
+
+    ignore:
+      - goos: darwin
+        goarch: 386
+      - goos: openbsd
+        goarch: arm
+      # Deprecated in go1.25, Removed in go1.26
+      # https://go.dev/doc/go1.25#windows
+      - goos: windows
+        goarch: arm
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '(?i)^chore:'
+      - '(?i)^Detach v[\d|.]+'
+      - '(?i)^Prepare release v[\d|.]+'
+
+release:
+  skip_upload: false
+  github:
+    owner: 'go-acme'
+    name: 'lego'
+  header: |
+    lego is an independent, free, and open-source project, if you value it, consider [supporting it](https://donate.ldez.dev)! ❤️
+    
+    Everybody thinks that the others will donate, but in the end, nobody does.
+    
+    So if you think that lego is worth it, please consider [donating](https://donate.ldez.dev).
+    
+    For key updates, see the [changelog](https://github.com/go-acme/lego/blob/HEAD/CHANGELOG.md#v{{ .Major }}{{ .Minor }}{{ .Patch }}).
+
+archives:
+  - id: lego
+    name_template: '{{ .ProjectName }}_v{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}{{ if .Mips }}_{{ .Mips }}{{ end }}'
+    formats: ['tar.gz']
+    format_overrides:
+      - goos: windows
+        formats: ['zip']
+    files:
+      - LICENSE
+      - CHANGELOG.md
+
+dockers_v2:
+  - images:
+      - 'goacme/lego'
+    dockerfile: buildx.Dockerfile
+    platforms:
+      - linux/amd64
+      - linux/arm64
+      - linux/arm/v7
+    tags:
+      - 'latest'
+      - 'v{{ .Major }}'
+      - 'v{{ .Major }}.{{ .Minor }}'
+      - '{{ .Tag }}'
+    labels:
+      # https://github.com/opencontainers/image-spec/blob/main/annotations.md#pre-defined-annotation-keys
+      'org.opencontainers.image.title': '{{.ProjectName}}'
+      'org.opencontainers.image.description': 'Lets Encrypt/ACME client and library written in Go'
+      'org.opencontainers.image.source': '{{.GitURL}}'
+      'org.opencontainers.image.url': '{{.GitURL}}'
+      'org.opencontainers.image.documentation': 'https://go-acme.github.io/lego'
+      'org.opencontainers.image.created': '{{.Date}}'
+      'org.opencontainers.image.revision': '{{.FullCommit}}'
+      'org.opencontainers.image.version': '{{.Version}}'
+
+snapcrafts:
+  - name_template: "{{ .ProjectName }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
+    disable: false
+    publish: true
+    grade: stable
+    confinement: strict
+    license: MIT
+    base: core22
+    summary: Lego is a Let's Encrypt/ACME client.
+    description: |
+      Lego is a Let's Encrypt/ACME client written in Go.
+      
+      The lego snap makes it easy to install and use Lego on any Linux distribution that supports snaps.
+      
+      Usage:
+      * `sudo snap install lego`
+      * `sudo lego --email="you@example.com" --domains="example.com" --server=https://acme-staging-v02.api.letsencrypt.org/directory --http --http.port :8080 run
+    apps:
+      lego:
+        command: lego
+        environment:
+          LEGO_PATH: /var/snap/lego/common/.lego
+        plugs:
+          - network-bind
+
+aurs:
+  - description: "Let s Encrypt client and ACME library written in Go"
+    skip_upload: false
+    homepage: https://go-acme.github.io/lego/
+    name: 'lego-bin'
+    provides:
+      - lego
+    maintainers:
+      - "Fernandez Ludovic <lfernandez dot dev at gmail dot com>"
+    license: APACHE
+    private_key: "{{ .Env.AUR_KEY }}"
+    git_url: "ssh://aur@aur.archlinux.org/lego-bin.git"
+    commit_author:
+      name: ldez
+      email: ldez@users.noreply.github.com
+    package: |-
+      # Bin
+      install -Dm755 "./lego" "${pkgdir}/usr/bin/lego"
+
+      # License
+      install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/lego/LICENSE"

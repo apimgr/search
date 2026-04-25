@@ -8,7 +8,7 @@
 </head>
 <body class="public-page {{.Page}}-page">
     {{/* Skip link for keyboard navigation - WCAG 2.1 AA */}}
-    <a href="#main-content" class="skip-link">Skip to main content</a>
+    <a href="#main-content" class="skip-link">{{t "accessibility.skip_to_main_content"}}</a>
 
     {{/* Public header */}}
     {{template "public/header" .}}
@@ -26,7 +26,7 @@
         {{if .Flash}}
         <div class="flash flash-{{.Flash.Type}}" role="alert">
             {{.Flash.Message}}
-            <button class="flash-close" aria-label="Close">&times;</button>
+            <button class="flash-close" aria-label="{{t "common.close"}}">&times;</button>
         </div>
         {{end}}
 

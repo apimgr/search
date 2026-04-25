@@ -1,46 +1,46 @@
 {{define "content"}}
 <div class="static-page contact-page">
-    <h1>Contact Us</h1>
+    <h1>{{t "contact.title"}}</h1>
 
     {{if .ContactSent}}
     <div class="contact-success">
-        <h2>Message Sent!</h2>
-        <p>{{default "Thank you for your message. We'll respond soon." .Config.Server.Pages.Contact.SuccessMessage}}</p>
-        <a href="/" class="btn btn-primary">Return Home</a>
+        <h2>{{t "contact.success_title"}}</h2>
+        <p>{{if .Config.Server.Pages.Contact.SuccessMessage}}{{.Config.Server.Pages.Contact.SuccessMessage}}{{else}}{{t "contact.success_default"}}{{end}}</p>
+        <a href="/" class="btn btn-primary">{{t "contact.return_home"}}</a>
     </div>
     {{else}}
     <div class="page-content">
-        <p>Have questions, feedback, or need help? Send us a message using the form below.</p>
+        <p>{{t "contact.description"}}</p>
 
         <form action="/server/contact" method="POST" class="contact-form">
             {{/* CSRF Token */}}
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 
             <div class="form-group">
-                <label for="name">Name <span class="required">*</span></label>
-                <input type="text" id="name" name="name" required placeholder="Your name" autocomplete="name">
+                <label for="name">{{t "contact.name_label"}} <span class="required">*</span></label>
+                <input type="text" id="name" name="name" required placeholder="{{t "contact.name_placeholder"}}" autocomplete="name">
             </div>
 
             <div class="form-group">
-                <label for="email">Email <span class="required">*</span></label>
-                <input type="email" id="email" name="email" required placeholder="your@email.com" autocomplete="email">
+                <label for="email">{{t "contact.email_label"}} <span class="required">*</span></label>
+                <input type="email" id="email" name="email" required placeholder="{{t "contact.email_placeholder"}}" autocomplete="email">
             </div>
 
             <div class="form-group">
-                <label for="subject">Subject <span class="required">*</span></label>
-                <input type="text" id="subject" name="subject" required placeholder="What is this about?">
+                <label for="subject">{{t "contact.subject_label"}} <span class="required">*</span></label>
+                <input type="text" id="subject" name="subject" required placeholder="{{t "contact.subject_placeholder"}}">
             </div>
 
             <div class="form-group">
-                <label for="message">Message <span class="required">*</span></label>
-                <textarea id="message" name="message" rows="6" required placeholder="Your message..."></textarea>
+                <label for="message">{{t "contact.message_label"}} <span class="required">*</span></label>
+                <textarea id="message" name="message" rows="6" required placeholder="{{t "contact.message_placeholder"}}"></textarea>
             </div>
 
             {{/* Simple captcha */}}
             <div class="form-group captcha-group">
-                <label for="captcha">Verification: What is {{.CaptchaA}} + {{.CaptchaB}}? <span class="required">*</span></label>
+                <label for="captcha">{{t "contact.verification_question" .CaptchaA .CaptchaB}} <span class="required">*</span></label>
                 <input type="hidden" name="captcha_id" value="{{.CaptchaID}}">
-                <input type="number" id="captcha" name="captcha" required placeholder="Answer" autocomplete="off">
+                <input type="number" id="captcha" name="captcha" required placeholder="{{t "contact.answer_placeholder"}}" autocomplete="off">
             </div>
 
             {{if .ContactError}}
@@ -50,7 +50,7 @@
             {{end}}
 
             <div class="form-actions">
-                <button type="submit" class="btn btn-primary">Send Message</button>
+                <button type="submit" class="btn btn-primary">{{t "contact.send_message"}}</button>
             </div>
         </form>
     </div>

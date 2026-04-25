@@ -62,8 +62,8 @@ func SetTheme(w http.ResponseWriter, theme string) {
 		Value:    theme,
 		Path:     "/",
 		MaxAge:   30 * 24 * 60 * 60, // 30 days
-		HttpOnly: false,              // Allow JavaScript access for theme switching
-		Secure:   false,              // Set to true in production with HTTPS
+		HttpOnly: false,             // Allow JavaScript access for theme switching
+		Secure:   false,             // Set to true in production with HTTPS
 		SameSite: http.SameSiteLaxMode,
 	}
 
@@ -131,13 +131,13 @@ func GetThemeInfo(r *http.Request) ThemeInfo {
 // Per AI.md PART 16: Theme switching without page reload
 func (s *Server) handleThemeSwitch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 		return
 	}
 
 	theme := r.FormValue("theme")
 	if !IsValidTheme(theme) {
-		http.Error(w, "Invalid theme", http.StatusBadRequest)
+		localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
 		return
 	}
 

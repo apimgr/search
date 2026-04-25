@@ -47,7 +47,7 @@ func (s *Server) registerDebugRoutes(mux *http.ServeMux) {
 // handleDebugConfig returns sanitized configuration
 func (s *Server) handleDebugConfig(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 		return
 	}
 
@@ -72,7 +72,7 @@ func (s *Server) handleDebugConfig(w http.ResponseWriter, r *http.Request) {
 // handleDebugRoutes lists all registered routes
 func (s *Server) handleDebugRoutes(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 		return
 	}
 
@@ -99,7 +99,7 @@ func (s *Server) handleDebugRoutes(w http.ResponseWriter, r *http.Request) {
 // handleDebugMemory returns memory statistics
 func (s *Server) handleDebugMemory(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 		return
 	}
 
@@ -126,22 +126,22 @@ func (s *Server) handleDebugMemory(w http.ResponseWriter, r *http.Request) {
 // handleDebugGoroutines returns goroutine count
 func (s *Server) handleDebugGoroutines(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"count":    runtime.NumGoroutine(),
+		"count":      runtime.NumGoroutine(),
 		"gomaxprocs": runtime.GOMAXPROCS(0),
-		"numcpu":   runtime.NumCPU(),
+		"numcpu":     runtime.NumCPU(),
 	})
 }
 
 // handleDebugCache returns cache statistics
 func (s *Server) handleDebugCache(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 		return
 	}
 
@@ -162,7 +162,7 @@ func (s *Server) handleDebugCache(w http.ResponseWriter, r *http.Request) {
 // Per AI.md PART 6: Debug endpoint for database stats
 func (s *Server) handleDebugDB(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 		return
 	}
 
@@ -188,7 +188,7 @@ func (s *Server) handleDebugDB(w http.ResponseWriter, r *http.Request) {
 // handleDebugScheduler returns scheduler task status
 func (s *Server) handleDebugScheduler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 		return
 	}
 

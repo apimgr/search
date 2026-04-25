@@ -1,0 +1,11 @@
+./arguments.go
+./definitions.go
+./directives.go
+./document.go
+./location.go
+./name.go
+./node.go
+./selections.go
+./type_definitions.go
+./types.go
+./values.go

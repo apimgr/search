@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"log/slog"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/geoip"
+	"github.com/apimgr/search/src/i18n"
 	"github.com/apimgr/search/src/logging"
 	"github.com/google/uuid"
 )
@@ -333,7 +335,7 @@ func (m *Middleware) RateLimit(limiter *RateLimiter) func(http.Handler) http.Han
 					if m.logManager != nil {
 						m.logManager.Security().LogBlocked(ip, r.URL.Path, "blacklisted")
 					}
-					http.Error(w, "Forbidden", http.StatusForbidden)
+					localizedHTTPError(w, r, http.StatusForbidden, "errors.forbidden")
 					return
 				}
 			}
@@ -344,7 +346,7 @@ func (m *Middleware) RateLimit(limiter *RateLimiter) func(http.Handler) http.Han
 					m.logManager.Security().LogRateLimited(ip, r.URL.Path)
 				}
 				w.Header().Set("Retry-After", "60")
-				http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
+				localizedHTTPError(w, r, http.StatusTooManyRequests, "errors.rate_limit")
 				return
 			}
 
@@ -488,7 +490,7 @@ func (c *CSRFMiddleware) Protect(next http.Handler) http.Handler {
 				}
 				c.logManager.Security().LogCSRFViolation(ip, r.URL.Path)
 			}
-			http.Error(w, "CSRF token missing", http.StatusForbidden)
+			localizedHTTPError(w, r, http.StatusForbidden, "errors.csrf_missing")
 			return
 		}
 
@@ -507,7 +509,7 @@ func (c *CSRFMiddleware) Protect(next http.Handler) http.Handler {
 				}
 				c.logManager.Security().LogCSRFViolation(ip, r.URL.Path)
 			}
-			http.Error(w, "CSRF token invalid", http.StatusForbidden)
+			localizedHTTPError(w, r, http.StatusForbidden, "errors.csrf_invalid")
 			return
 		}
 
@@ -521,7 +523,7 @@ func (c *CSRFMiddleware) Protect(next http.Handler) http.Handler {
 				}
 				c.logManager.Security().LogCSRFViolation(ip, r.URL.Path)
 			}
-			http.Error(w, "CSRF token expired", http.StatusForbidden)
+			localizedHTTPError(w, r, http.StatusForbidden, "errors.csrf_expired")
 			return
 		}
 
@@ -633,11 +635,11 @@ func (m *Middleware) Recovery(next http.Handler) http.Handler {
 
 				// In development mode, show detailed error
 				if m.config.Server.Mode == "development" {
-					http.Error(w, "Internal Server Error: "+errMsg, http.StatusInternalServerError)
+					http.Error(w, i18n.RequestString(r, "errors.server_error")+": "+errMsg, http.StatusInternalServerError)
 					return
 				}
 
-				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+				localizedHTTPError(w, r, http.StatusInternalServerError, "errors.server_error")
 			}
 		}()
 
@@ -760,7 +762,7 @@ func (m *Middleware) GeoBlock(lookup *geoip.Lookup) func(http.Handler) http.Hand
 				if m.logManager != nil {
 					m.logManager.Security().LogBlocked(ip, r.URL.Path, "country:"+result.CountryCode)
 				}
-				http.Error(w, "Access Denied", http.StatusForbidden)
+				localizedHTTPError(w, r, http.StatusForbidden, "errors.forbidden")
 				return
 			}
 
@@ -771,7 +773,7 @@ func (m *Middleware) GeoBlock(lookup *geoip.Lookup) func(http.Handler) http.Hand
 				if m.logManager != nil {
 					m.logManager.Security().LogBlocked(ip, r.URL.Path, "country:"+result.CountryCode)
 				}
-				http.Error(w, "Access Denied", http.StatusForbidden)
+				localizedHTTPError(w, r, http.StatusForbidden, "errors.forbidden")
 				return
 			}
 
@@ -846,10 +848,11 @@ func (m *Middleware) MaintenanceMode(handler MaintenanceHandler) func(http.Handl
 			if message == "" {
 				message = "The system is currently undergoing maintenance. Please try again later."
 			}
+			lang, dir := i18n.DetectRequestLocale(r)
 
 			// Simple maintenance page
-			maintenanceHTML := `<!DOCTYPE html>
-<html lang="en">
+			maintenanceHTML := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="%s" dir="%s">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -879,10 +882,10 @@ func (m *Middleware) MaintenanceMode(handler MaintenanceHandler) func(http.Handl
     <div class="container">
         <div class="icon">🔧</div>
         <h1>System Maintenance</h1>
-        <p>` + message + `</p>
+        <p>%s</p>
     </div>
 </body>
-</html>`
+</html>`, lang, dir, html.EscapeString(message))
 			w.Write([]byte(maintenanceHTML))
 		})
 	}
@@ -1296,7 +1299,7 @@ func PathSecurityMiddleware(next http.Handler) http.Handler {
 		if strings.Contains(original, "..") ||
 			strings.Contains(rawPath, "..") ||
 			strings.Contains(strings.ToLower(rawPath), "%2e") {
-			http.Error(w, "Bad Request", http.StatusBadRequest)
+			localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
 			return
 		}
 

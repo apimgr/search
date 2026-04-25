@@ -616,7 +616,7 @@ func (g *GraphQLHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodPost {
 		if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
-			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
 			return
 		}
 	} else if r.Method == http.MethodGet {
@@ -626,7 +626,7 @@ func (g *GraphQLHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			json.Unmarshal([]byte(varsStr), &params.Variables)
 		}
 	} else {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 		return
 	}
 
@@ -748,7 +748,7 @@ const graphiqlHTML = `<!DOCTYPE html>
 func (g *GraphQLHandler) ServeGraphiQL(w http.ResponseWriter, r *http.Request) {
 	tmpl, err := template.New("graphiql").Parse(graphiqlHTML)
 	if err != nil {
-		http.Error(w, "Template error", http.StatusInternalServerError)
+		localizedHTTPError(w, r, http.StatusInternalServerError, "errors.server_error")
 		return
 	}
 

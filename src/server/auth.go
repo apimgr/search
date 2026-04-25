@@ -19,13 +19,13 @@ type AuthPageData struct {
 	Email                    string
 	SSOProviders             []SSOProvider
 	RequireEmail             bool
-	Redirect                 string // redirect URL after login (per AI.md PART 11)
-	InviteCode               string // invite code for registration
-	CanResend                bool   // whether verification email can be resent
-	RegistrationEnabled      bool   // whether user registration is open
-	LDAPEnabled              bool   // whether LDAP auth is configured
-	OIDCEnabled              bool   // whether OIDC auth is configured
-	RequireEmailVerification bool   // whether email verification is required on registration
+	Redirect                 string            // redirect URL after login (per AI.md PART 11)
+	InviteCode               string            // invite code for registration
+	CanResend                bool              // whether verification email can be resent
+	RegistrationEnabled      bool              // whether user registration is open
+	LDAPEnabled              bool              // whether LDAP auth is configured
+	OIDCEnabled              bool              // whether OIDC auth is configured
+	RequireEmailVerification bool              // whether email verification is required on registration
 	FormData                 map[string]string // preserved form field values on error
 }
 
@@ -40,10 +40,10 @@ type SSOProvider struct {
 // TwoFactorPageData represents data for 2FA pages
 type TwoFactorPageData struct {
 	PageData
-	Error           string
-	SessionID       string
-	RemainingKeys   int
-	UseRecoveryKey  bool
+	Error          string
+	SessionID      string
+	RemainingKeys  int
+	UseRecoveryKey bool
 }
 
 // handleLogin renders the login page and processes login
@@ -56,20 +56,16 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		s.processLogin(w, r)
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 	}
 }
 
 func (s *Server) renderLoginPage(w http.ResponseWriter, r *http.Request, errorMsg, successMsg string) {
+	baseData := s.newPageData(w, r, "Login", "auth/login")
+	baseData.Description = "Sign in to your account"
+	baseData.CSRFToken = s.getCSRFToken(r)
 	data := &AuthPageData{
-		PageData: PageData{
-			Title:       "Login",
-			Description: "Sign in to your account",
-			Page:        "auth/login",
-			Theme:       GetTheme(r),
-			Config:      s.config,
-			CSRFToken:   s.getCSRFToken(r),
-		},
+		PageData:            *baseData,
 		Error:               errorMsg,
 		Success:             successMsg,
 		Redirect:            r.URL.Query().Get("redirect"),
@@ -225,24 +221,20 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		s.processRegister(w, r)
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 	}
 }
 
 func (s *Server) renderRegisterPage(w http.ResponseWriter, r *http.Request, errorMsg, username string) {
+	baseData := s.newPageData(w, r, "Register", "auth/register")
+	baseData.Description = "Create a new account"
+	baseData.CSRFToken = s.getCSRFToken(r)
 	data := &AuthPageData{
-		PageData: PageData{
-			Title:       "Register",
-			Description: "Create a new account",
-			Page:        "auth/register",
-			Theme:       GetTheme(r),
-			Config:      s.config,
-			CSRFToken:   s.getCSRFToken(r),
-		},
-		Error:        errorMsg,
-		Username:     username,
-		RequireEmail: s.config.Server.Users.Registration.RequireEmailVerification,
-		InviteCode:   r.URL.Query().Get("invite"),
+		PageData:                 *baseData,
+		Error:                    errorMsg,
+		Username:                 username,
+		RequireEmail:             s.config.Server.Users.Registration.RequireEmailVerification,
+		InviteCode:               r.URL.Query().Get("invite"),
 		RequireEmailVerification: s.config.Server.Users.Registration.RequireEmailVerification,
 	}
 
@@ -355,22 +347,18 @@ func (s *Server) handleForgot(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		s.processForgot(w, r)
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 	}
 }
 
 func (s *Server) renderForgotPage(w http.ResponseWriter, r *http.Request, errorMsg, successMsg string) {
+	baseData := s.newPageData(w, r, "Forgot Password", "auth/forgot")
+	baseData.Description = "Reset your password"
+	baseData.CSRFToken = s.getCSRFToken(r)
 	data := &AuthPageData{
-		PageData: PageData{
-			Title:       "Forgot Password",
-			Description: "Reset your password",
-			Page:        "auth/forgot",
-			Theme:       GetTheme(r),
-			Config:      s.config,
-			CSRFToken:   s.getCSRFToken(r),
-		},
-		Error:   errorMsg,
-		Success: successMsg,
+		PageData: *baseData,
+		Error:    errorMsg,
+		Success:  successMsg,
 	}
 
 	if err := s.renderer.Render(w, "auth/forgot", data); err != nil {
@@ -470,15 +458,11 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Show success page
+	baseData := s.newPageData(w, r, "Email Verified", "auth/verify")
+	baseData.Description = "Your email has been verified"
 	data := &AuthPageData{
-		PageData: PageData{
-			Title:       "Email Verified",
-			Description: "Your email has been verified",
-			Page:        "auth/verify",
-			Theme:       GetTheme(r),
-			Config:      s.config,
-		},
-		Success: "Your email has been verified successfully. You can now log in.",
+		PageData: *baseData,
+		Success:  "Your email has been verified successfully. You can now log in.",
 	}
 
 	if err := s.renderer.Render(w, "auth/verify", data); err != nil {
@@ -499,7 +483,7 @@ func (s *Server) handle2FA(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		s.process2FA(w, r)
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 	}
 }
 
@@ -510,15 +494,11 @@ func (s *Server) render2FAPage(w http.ResponseWriter, r *http.Request, errorMsg 
 		return
 	}
 
+	baseData := s.newPageData(w, r, "Two-Factor Authentication", "auth/2fa")
+	baseData.Description = "Enter your authentication code"
+	baseData.CSRFToken = s.getCSRFToken(r)
 	data := &TwoFactorPageData{
-		PageData: PageData{
-			Title:       "Two-Factor Authentication",
-			Description: "Enter your authentication code",
-			Page:        "auth/2fa",
-			Theme:       GetTheme(r),
-			Config:      s.config,
-			CSRFToken:   s.getCSRFToken(r),
-		},
+		PageData:       *baseData,
 		Error:          errorMsg,
 		SessionID:      sessionID,
 		UseRecoveryKey: useRecovery,
@@ -660,102 +640,100 @@ func getClientIPSimple(r *http.Request) string {
 // handleReset renders the password reset form and processes new password submission.
 // Per AI.md PART 11: route is /auth/password/reset GET/POST, token passed as query param.
 func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
-if !s.config.Server.Users.Enabled{
-http.Redirect(w, r, "/", http.StatusSeeOther)
-return
-}
-if s.verificationManager == nil {
-s.handleError(w, r, http.StatusServiceUnavailable, "Not Available", "Password reset is not configured.")
-return
-}
+	if !s.config.Server.Users.Enabled {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+	if s.verificationManager == nil {
+		s.handleError(w, r, http.StatusServiceUnavailable, "Not Available", "Password reset is not configured.")
+		return
+	}
 
-switch r.Method {
-case http.MethodGet:
-token := r.URL.Query().Get("token")
-if token == "" {
-// Accept /auth/password/reset/{token} path param too
-token = strings.TrimPrefix(r.URL.Path, "/auth/password/reset/")
-}
-if token != "" {
-if _, err := s.verificationManager.ValidatePasswordReset(r.Context(), token); err != nil {
-s.renderResetPage(w, r, "", "Invalid or expired reset link. Please request a new one.", "", true)
-return
-}
-}
-s.renderResetPage(w, r, token, "", "", false)
-case http.MethodPost:
-s.processReset(w, r)
-default:
-http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-}
+	switch r.Method {
+	case http.MethodGet:
+		token := r.URL.Query().Get("token")
+		if token == "" {
+			// Accept /auth/password/reset/{token} path param too
+			token = strings.TrimPrefix(r.URL.Path, "/auth/password/reset/")
+		}
+		if token != "" {
+			if _, err := s.verificationManager.ValidatePasswordReset(r.Context(), token); err != nil {
+				s.renderResetPage(w, r, "", "Invalid or expired reset link. Please request a new one.", "", true)
+				return
+			}
+		}
+		s.renderResetPage(w, r, token, "", "", false)
+	case http.MethodPost:
+		s.processReset(w, r)
+	default:
+		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
+	}
 }
 
 func (s *Server) renderResetPage(w http.ResponseWriter, r *http.Request, token, errorMsg, successMsg string, hideForm bool) {
-type ResetPageData struct {
-PageData
-Token   string
-Error   string
-Success string
-}
-data := &ResetPageData{
-PageData: PageData{
-Title:       "Reset Password",
-Description: "Set a new password for your account",
-Page:        "auth/reset",
-Theme:       GetTheme(r),
-Config:      s.config,
-CSRFToken:   s.getCSRFToken(r),
-},
-Token:   token,
-Error:   errorMsg,
-Success: successMsg,
-}
-if hideForm {
-data.Token = ""
-}
-if err := s.renderer.Render(w, "auth/reset", data); err != nil {
-s.handleInternalError(w, r, "template render", err)
-}
+	type ResetPageData struct {
+		PageData
+		Token   string
+		Error   string
+		Success string
+	}
+
+	baseData := s.newPageData(w, r, "Reset Password", "auth/reset")
+	baseData.Description = "Set a new password for your account"
+	baseData.CSRFToken = s.getCSRFToken(r)
+
+	data := &ResetPageData{
+		PageData: *baseData,
+		Token:    token,
+		Error:    errorMsg,
+		Success:  successMsg,
+	}
+	if hideForm {
+		data.Token = ""
+	}
+	if err := s.renderer.Render(w, "auth/reset", data); err != nil {
+		s.handleInternalError(w, r, "template render", err)
+	}
 }
 
 func (s *Server) processReset(w http.ResponseWriter, r *http.Request) {
-if err := r.ParseForm(); err != nil {
-s.renderResetPage(w, r, "", "Invalid form data", "", false)
-return
-}
-if !s.csrf.ValidateToken(r){
-s.renderResetPage(w, r, "", "Invalid request. Please try again.", "", false)
-return
-}
+	if err := r.ParseForm(); err != nil {
+		s.renderResetPage(w, r, "", "Invalid form data", "", false)
+		return
+	}
+	if !s.csrf.ValidateToken(r) {
+		s.renderResetPage(w, r, "", "Invalid request. Please try again.", "", false)
+		return
+	}
 
-token := r.FormValue("token")
-password := r.FormValue("password")
-confirm := r.FormValue("password_confirm")
+	token := r.FormValue("token")
+	password := r.FormValue("password")
+	confirm := r.FormValue("password_confirm")
 
-if token == "" {
-s.renderResetPage(w, r, "", "Missing reset token.", "", true)
-return
-}
-if password == "" || confirm == "" {
-s.renderResetPage(w, r, token, "Password is required.", "", false)
-return
-}
-if password != confirm {
-s.renderResetPage(w, r, token, "Passwords do not match.", "", false)
-return
-}
+	if token == "" {
+		s.renderResetPage(w, r, "", "Missing reset token.", "", true)
+		return
+	}
+	if password == "" || confirm == "" {
+		s.renderResetPage(w, r, token, "Password is required.", "", false)
+		return
+	}
+	if password != confirm {
+		s.renderResetPage(w, r, token, "Passwords do not match.", "", false)
+		return
+	}
 
-// Consume the token (validates + deletes it)
-resetUser, err := s.verificationManager.ConsumePasswordReset(r.Context(), token)
-if err != nil {
-s.renderResetPage(w, r, "", "Invalid or expired reset link. Please request a new one.", "", true)
-return
-}
+	// Consume the token (validates + deletes it)
+	resetUser, err := s.verificationManager.ConsumePasswordReset(r.Context(), token)
+	if err != nil {
+		s.renderResetPage(w, r, "", "Invalid or expired reset link. Please request a new one.", "", true)
+		return
+	}
 
-if err := s.userAuthManager.UpdatePassword(r.Context(), resetUser.ID, password, s.config.Server.Users.Auth.PasswordMinLength); err != nil {
-s.renderResetPage(w, r, token, "Password must be at least 8 characters and cannot start or end with whitespace.", "", false)
-return
-}
+	if err := s.userAuthManager.UpdatePassword(r.Context(), resetUser.ID, password, s.config.Server.Users.Auth.PasswordMinLength); err != nil {
+		s.renderResetPage(w, r, token, "Password must be at least 8 characters and cannot start or end with whitespace.", "", false)
+		return
+	}
 
-s.renderResetPage(w, r, "", "", "Password reset successfully.", false)
+	s.renderResetPage(w, r, "", "", "Password reset successfully.", false)
 }

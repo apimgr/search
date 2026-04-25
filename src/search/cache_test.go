@@ -93,6 +93,31 @@ func TestResultCacheGetExpired(t *testing.T) {
 	}
 }
 
+func TestResultCacheGetStaleAfterFreshExpiry(t *testing.T) {
+	rc := newTestCache(10 * time.Millisecond)
+
+	results := &model.SearchResults{Query: "test"}
+	rc.Set("key1", results)
+
+	time.Sleep(25 * time.Millisecond)
+
+	fresh := rc.Get("key1")
+	if fresh != nil {
+		t.Fatal("fresh cache entry should have expired")
+	}
+
+	stale, age := rc.GetStale("key1")
+	if stale == nil {
+		t.Fatal("expected stale cache entry to remain available")
+	}
+	if stale.Query != "test" {
+		t.Fatalf("stale query = %q, want test", stale.Query)
+	}
+	if age < 0 {
+		t.Fatalf("stale age = %v, want >= 0", age)
+	}
+}
+
 func TestResultCacheDelete(t *testing.T) {
 	rc := newTestCache(time.Minute)
 
@@ -133,8 +158,8 @@ func TestResultCacheClearResetsStats(t *testing.T) {
 	rc := newTestCache(time.Minute)
 
 	rc.Set("key1", &model.SearchResults{Query: "test"})
-	rc.Get("key1")         // hit
-	rc.Get("nonexistent")  // miss
+	rc.Get("key1")        // hit
+	rc.Get("nonexistent") // miss
 
 	rc.Clear()
 
@@ -149,9 +174,9 @@ func TestResultCacheStats(t *testing.T) {
 
 	rc.Set("key1", &model.SearchResults{Query: "test"})
 
-	rc.Get("key1")         // hit
-	rc.Get("key1")         // hit
-	rc.Get("nonexistent")  // miss
+	rc.Get("key1")        // hit
+	rc.Get("key1")        // hit
+	rc.Get("nonexistent") // miss
 
 	stats := rc.Stats()
 
@@ -211,12 +236,12 @@ func TestResultCacheStatsAfterOperations(t *testing.T) {
 
 	rc.Set("key1", &model.SearchResults{Query: "test1"})
 	rc.Set("key2", &model.SearchResults{Query: "test2"})
-	rc.Get("key1")         // hit
-	rc.Get("key2")         // hit
-	rc.Get("key3")         // miss
-	rc.Get("key4")         // miss
+	rc.Get("key1") // hit
+	rc.Get("key2") // hit
+	rc.Get("key3") // miss
+	rc.Get("key4") // miss
 	rc.Delete("key1")
-	rc.Get("key1")         // miss (after delete)
+	rc.Get("key1") // miss (after delete)
 
 	stats := rc.Stats()
 

@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apimgr/search/src/httputil"
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/httputil"
 )
 
 // handleHome renders the home page
@@ -28,7 +28,7 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := s.newPageData(r, "", "home")
+	data := s.newPageData(w, r, "", "home")
 	data.CSRFToken = s.getCSRFToken(r)
 
 	// Widgets are always available - users control via localStorage
@@ -50,7 +50,7 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 
 // handleAbout renders the about page
 func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
-	data := s.newPageData(r, "About", "about")
+	data := s.newPageData(w, r, "About", "about")
 	data.CSRFToken = s.getCSRFToken(r)
 
 	if err := s.renderer.Render(w, "about", data); err != nil {
@@ -60,7 +60,8 @@ func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
 
 // handlePrivacy renders the privacy page
 func (s *Server) handlePrivacy(w http.ResponseWriter, r *http.Request) {
-	data := s.newPageData(r, "Privacy Policy", "privacy")
+	data := s.newPageData(w, r, "", "privacy")
+	data.Title = s.getI18nManager().T(data.Lang, "footer.privacy_policy")
 	data.CSRFToken = s.getCSRFToken(r)
 
 	if err := s.renderer.Render(w, "privacy", data); err != nil {
@@ -82,7 +83,8 @@ func (s *Server) handleContact(w http.ResponseWriter, r *http.Request) {
 	captchaID := s.signCaptcha(answer)
 
 	// Use newPageData for TorAddress support per AI.md PART 32
-	baseData := s.newPageData(r, "Contact", "contact")
+	baseData := s.newPageData(w, r, "", "contact")
+	baseData.Title = s.getI18nManager().T(baseData.Lang, "contact.page_title")
 	baseData.CSRFToken = s.getCSRFToken(r)
 
 	data := &ContactPageData{
@@ -111,7 +113,7 @@ func (s *Server) handleContactSubmit(w http.ResponseWriter, r *http.Request) {
 
 	// Parse form
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "Invalid form data", http.StatusBadRequest)
+		localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
 		return
 	}
 
@@ -124,14 +126,14 @@ func (s *Server) handleContactSubmit(w http.ResponseWriter, r *http.Request) {
 
 	// Validate required fields
 	if name == "" || email == "" || subject == "" || message == "" {
-		http.Error(w, "All fields are required", http.StatusBadRequest)
+		localizedHTTPError(w, r, http.StatusBadRequest, "errors.required")
 		return
 	}
 
 	// Validate captcha
 	userAnswer, err := strconv.Atoi(captchaAnswer)
 	if err != nil || !s.verifyCaptcha(captchaIDStr, userAnswer) {
-		http.Error(w, "Incorrect verification answer", http.StatusBadRequest)
+		localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
 		return
 	}
 
@@ -144,7 +146,7 @@ func (s *Server) handleContactSubmit(w http.ResponseWriter, r *http.Request) {
 
 // handleHelp renders the help page
 func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
-	data := s.newPageData(r, "Help", "help")
+	data := s.newPageData(w, r, "Help", "help")
 	data.CSRFToken = s.getCSRFToken(r)
 	data.ServerURL = s.getBaseURL(r)
 
@@ -155,7 +157,8 @@ func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
 
 // handleTerms renders the terms of service page
 func (s *Server) handleTerms(w http.ResponseWriter, r *http.Request) {
-	data := s.newPageData(r, "Terms of Service", "terms")
+	data := s.newPageData(w, r, "", "terms")
+	data.Title = s.getI18nManager().T(data.Lang, "footer.terms")
 	data.CSRFToken = s.getCSRFToken(r)
 
 	if err := s.renderer.Render(w, "terms", data); err != nil {
@@ -487,7 +490,8 @@ func (s *Server) respondHealthText(w http.ResponseWriter, health *HealthInfo) {
 // respondHealthHTML responds with HTML health page
 func (s *Server) respondHealthHTML(w http.ResponseWriter, r *http.Request, health *HealthInfo) {
 	// Use newPageData for TorAddress support per AI.md PART 32
-	baseData := s.newPageData(r, "Health", "healthz")
+	baseData := s.newPageData(w, r, "", "healthz")
+	baseData.Title = s.getI18nManager().T(baseData.Lang, "health.page_title")
 
 	data := &HealthPageData{
 		PageData: *baseData,
@@ -517,7 +521,7 @@ func (s *Server) handleError(w http.ResponseWriter, r *http.Request, code int, t
 	w.WriteHeader(code)
 
 	// Use newPageData for TorAddress support per AI.md PART 32
-	baseData := s.newPageData(r, title, "error")
+	baseData := s.newPageData(w, r, title, "error")
 
 	data := &ErrorPageData{
 		PageData:   *baseData,

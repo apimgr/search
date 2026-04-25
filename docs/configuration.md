@@ -121,6 +121,22 @@ search:
     ttl: 300  # seconds
 ```
 
+### Search Alert Settings
+
+```yaml
+search:
+  alerts:
+    create_rate_limit_per_hour: 10
+    webhook_max_retries: 3
+    webhook_retry_delay_minutes: 5
+    retention_days: 30
+    default_frequency: "daily"
+    default_deliver_rss: true
+    default_deliver_webhook: false
+```
+
+These settings control accountless search alert creation limits, webhook retry and backoff behavior, how long previously seen alert results are retained for deduplication, and which delivery options are enabled by default in the alert UI.
+
 ### Image Proxy
 
 ```yaml

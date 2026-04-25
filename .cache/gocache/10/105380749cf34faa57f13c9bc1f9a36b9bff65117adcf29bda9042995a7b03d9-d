@@ -1,0 +1,9 @@
+./auth.go
+./emails.go
+./passkeys.go
+./preferences.go
+./recovery.go
+./tokens.go
+./totp.go
+./users.go
+./verification.go

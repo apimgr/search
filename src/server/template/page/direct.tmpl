@@ -24,7 +24,7 @@
     {{/* Source attribution */}}
     {{if or .Answer.Source .Answer.SourceURL}}
     <footer class="direct-source">
-        <span class="source-label">Source:</span>
+        <span class="source-label">{{t "direct.source_label"}}</span>
         {{if .Answer.SourceURL}}
         <a href="{{.Answer.SourceURL}}" class="source-link" target="_blank" rel="noopener noreferrer">
             {{if .Answer.Source}}{{.Answer.Source}}{{else}}{{.Answer.SourceURL}}{{end}}
@@ -38,11 +38,11 @@
     {{/* Navigation back to search */}}
     <nav class="direct-nav">
         <a href="/search?q={{urlquery .Query}}" class="back-to-search">
-            <span class="back-icon">&larr;</span> Back to search
+            <span class="back-icon">&larr;</span> {{t "direct.back_to_search"}}
         </a>
         {{/* Quick reference to other direct answer types */}}
         <div class="direct-types-hint">
-            Try:
+            {{t "direct.try_examples_label"}}
             <code>tldr:git</code>,
             <code>dns:example.com</code>,
             <code>wiki:Python</code>,

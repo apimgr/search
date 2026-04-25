@@ -34,6 +34,9 @@ const (
 	TaskHealthcheckSelf  TaskID = "healthcheck.self"
 	TaskTorHealth        TaskID = "tor.health"
 	TaskClusterHeartbeat TaskID = "cluster.heartbeat"
+	TaskAlertsImmediate  TaskID = "alerts.immediate"
+	TaskAlertsDaily      TaskID = "alerts.daily"
+	TaskAlertsWeekly     TaskID = "alerts.weekly"
 )
 
 // TaskStatus represents task execution status
@@ -392,6 +395,46 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 		})
 	}
 
+	if handlers.AlertsImmediate != nil {
+		s.Register(&Task{
+			ID:          TaskAlertsImmediate,
+			Name:        "Immediate Search Alerts",
+			Description: "Check and deliver immediate search alerts",
+			Schedule:    "@every 10m",
+			TaskType:    TaskTypeGlobal,
+			Run:         handlers.AlertsImmediate,
+			Skippable:   false,
+			RunOnStart:  true,
+			Enabled:     true,
+		})
+	}
+
+	if handlers.AlertsDaily != nil {
+		s.Register(&Task{
+			ID:          TaskAlertsDaily,
+			Name:        "Daily Search Alerts",
+			Description: "Check and deliver daily search alerts",
+			Schedule:    "0 8 * * *",
+			TaskType:    TaskTypeGlobal,
+			Run:         handlers.AlertsDaily,
+			Skippable:   false,
+			Enabled:     true,
+		})
+	}
+
+	if handlers.AlertsWeekly != nil {
+		s.Register(&Task{
+			ID:          TaskAlertsWeekly,
+			Name:        "Weekly Search Alerts",
+			Description: "Check and deliver weekly search alerts",
+			Schedule:    "0 8 * * 1",
+			TaskType:    TaskTypeGlobal,
+			Run:         handlers.AlertsWeekly,
+			Skippable:   false,
+			Enabled:     true,
+		})
+	}
+
 	// Cluster Heartbeat - Every 30 seconds, NOT skippable in cluster mode
 	if handlers.ClusterHeartbeat != nil {
 		s.Register(&Task{
@@ -422,6 +465,9 @@ type TaskHandlers struct {
 	HealthcheckSelf  func(ctx context.Context) error
 	TorHealth        func(ctx context.Context) error
 	ClusterHeartbeat func(ctx context.Context) error
+	AlertsImmediate  func(ctx context.Context) error
+	AlertsDaily      func(ctx context.Context) error
+	AlertsWeekly     func(ctx context.Context) error
 }
 
 // Start starts the scheduler

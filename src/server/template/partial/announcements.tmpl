@@ -10,7 +10,7 @@
             <span class="announcement-message">{{ .Message }}</span>
         </div>
         {{ if .Dismissible }}
-        <button class="announcement-dismiss" data-announcement-id="{{ .ID }}" aria-label="Dismiss">&times;</button>
+        <button class="announcement-dismiss" data-announcement-id="{{ .ID }}" aria-label="{{t "common.dismiss"}}">&times;</button>
         {{ end }}
     </div>
     {{ end }}

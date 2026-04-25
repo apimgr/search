@@ -66,33 +66,65 @@ Compact URL-safe encoded string for sharing/bookmarking:
 Format: Base64-encoded JSON or compact key=value
 
 Compact format example:
-t=d;l=en;s=m;e=g,b,d,q;c=web;k=1;r=20
+t=d;c=web;s=m;r=20;n=1;p=i;k=1
 
 Keys:
   t   = theme (d=dark, l=light, a=auto)
-  l   = language (ISO code)
   s   = safe_search (o=off, m=moderate, s=strict)
-  e   = engines (comma-separated: g=google, b=bing, d=duckduckgo, etc.)
   c   = default_category
   k   = keyboard_shortcuts (1=on, 0=off)
   r   = results_per_page
   n   = new_tab (1=on, 0=off)
   p   = pagination (i=infinite, p=pages)
-  f   = font_size (s=small, m=medium, l=large)
 ```
 
 **Use Cases:**
-- **URL Parameter**: `https://search.example.com/?p=dDtkO2w9ZW4...`
+- **URL Parameter**: `https://search.example.com/?prefs=t%3Dd%3Bc%3Dweb%3Bs%3Dm`
 - **Bookmarklet**: Search with preferences baked in
-- **Share Config**: Give others your engine setup without accounts
+- **Share Config**: Give others your default search behavior without accounts
 - **QR Code**: Scan to apply preferences on mobile
-- **CLI Flag**: `search-cli --prefs "t=d;e=g,b,d"`
 
 **Workflow:**
 1. Settings page → "Generate Link" button
 2. Creates URL with `?prefs=ENCODED_STRING`
 3. On page load, if `prefs` param exists → apply settings
 4. Optional: save to localStorage for persistence
+
+### Search Alerts
+
+Google Alerts-style monitoring for saved queries without requiring user accounts.
+
+- **Accountless subscriptions**: Create alerts with email verification and a signed manage link
+- **Delivery Channels**: Email notifications, private RSS feed, and webhook delivery
+- **Flexible Schedules**: Immediate, daily digest, or weekly digest
+- **New Results Only**: Only send newly discovered results since the last successful check
+- **Filter-Aware**: Alert preserves query, category, safe search, language, region, and selected engines
+- **Pause/Resume**: Temporarily disable alerts without deleting them
+- **Per-Alert Manage Page**: Update query, frequency, destinations, or delete without logging in
+- **Privacy-Respecting Storage**: Store only the minimum server-side data needed to deliver opted-in alerts
+
+**Create Alert Workflow:**
+1. User performs a search
+2. Clicks **Create Alert** from the results page
+3. Chooses delivery methods: email, RSS, webhook (one or more)
+4. Selects frequency: immediate, daily, weekly
+5. Submits email address and optional webhook URL
+6. Server sends verification email with one-time confirmation link
+7. After confirmation, server begins scheduled monitoring
+8. User manages the alert later via signed manage link or private RSS URL
+
+**Alert Delivery Rules:**
+- **Email**: Summary of new results with direct links and unsubscribe/manage links
+- **RSS**: Private, tokenized feed containing only newly matched results for that alert
+- **Webhook**: Signed JSON payload with alert metadata and new results
+- **Deduplication**: Track seen result URLs/hashes so the same result is not re-sent repeatedly
+- **Failure Handling**: Temporary delivery failures retry with backoff; repeated failures pause the affected channel and notify the user when possible
+
+**Use Cases:**
+- Track new results for a brand, person, topic, or domain
+- Monitor news or blog mentions for a query
+- Watch for new PDF/files matching a research topic
+- Trigger automations through webhook when new results appear
 
 ### Instant Answers (Widgets)
 
@@ -1800,7 +1832,7 @@ Google-like simplicity with SearXNG-style preferences:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ [Logo] ┌─────────────────────┬───┐  [⚙️] [🌙]          │
+│ [Logo] ┌─────────────────────┬───┐  [Create Alert] [⚙️] [🌙] │
 │        │ query               │ 🔍│                      │
 │        └─────────────────────┴───┘                      │
 │ [Web] [Images] [Videos] [News]    [Tools ▼] [Region ▼]  │
@@ -1935,7 +1967,7 @@ Click → opens video in embedded player or source site
 │ │                                                     │ │
 │ │ Preference String:                                  │ │
 │ │ ┌───────────────────────────────────────────────┐   │ │
-│ │ │ t=d;l=en;s=m;e=g,b,d;c=web;k=1;r=20          │   │ │
+│ │ │ t=d;c=web;s=m;r=20;n=1;p=i;k=1              │   │ │
 │ │ └───────────────────────────────────────────────┘   │ │
 │ │ [Copy] [QR Code]                                    │ │
 │ └─────────────────────────────────────────────────────┘ │
@@ -1996,21 +2028,34 @@ Click → opens video in embedded player or source site
 
 ### User Preferences
 - theme: string - dark, light, auto
-- language: string - ISO language code
-- region: string - ISO country code
 - safe_search: string - off, moderate, strict
 - default_category: string - Default search category
-- engines: []string - Enabled engines (ordered by preference)
 - results_per_page: int - 10, 20, 50, 100
 - new_tab: bool - Open results in new tab
 - keyboard_shortcuts: bool - Enable keyboard navigation
 - infinite_scroll: bool - Use infinite scroll vs pagination
-- show_engine_badges: bool - Show source engine on results
-- font_size: string - small, medium, large
-- custom_css: string - User custom stylesheet
 - custom_bangs: map[string]string - Custom bang shortcuts
-- blocked_domains: []string - Never show results from these
-- search_history_enabled: bool - Save local search history
+- homepage_widgets: []string - Enabled homepage widget types
+
+### Search Alert
+- id: string - Unique alert identifier
+- query: string - Search query being monitored
+- category: string - web, images, videos, news, maps, files, music, science, it, social
+- language: string - ISO language code
+- region: string - ISO country code
+- safe_search: string - off, moderate, strict
+- engines: []string - Optional engine subset for this alert
+- frequency: string - immediate, daily, weekly
+- email: string - Verified destination email
+- rss_token: string - Private token for the alert RSS feed
+- webhook_url: string - Optional signed webhook target
+- webhook_secret: string - Secret used to sign webhook payloads
+- verified: bool - Alert activation state
+- paused: bool - Delivery temporarily disabled
+- last_checked: timestamp - Last search check time
+- last_sent: timestamp - Last successful delivery time
+- seen_results: []string - Result URL hashes already delivered
+- manage_token: string - Signed token for accountless management links
 
 ### Engine Status
 - name: string - Engine identifier
@@ -2042,6 +2087,16 @@ Click → opens video in embedded player or source site
 - Search queries never associated with user identifiers
 - Referrer headers stripped before following result links
 - Tracking parameters removed from result URLs
+- Search alerts are opt-in and store only the minimum data required for verification, scheduling, deduplication, and delivery
+
+### Search Alerts
+- Alerts require email verification before activation
+- Alerts may be delivered by email, private RSS, webhook, or any enabled combination
+- Each alert checks for newly matched results only; previously delivered results are suppressed
+- Manage/unsubscribe actions use signed, unguessable tokens instead of accounts
+- Webhook deliveries are signed and retried with backoff on transient failures
+- RSS feeds are private and tokenized; they must not be publicly enumerable
+- Immediate alerts should batch closely-timed results to avoid notification spam
 
 ### Engine Management
 - Engines automatically disabled after consecutive failures
@@ -2075,6 +2130,14 @@ Click → opens video in embedded player or source site
 | GET | /videos | Video search |
 | GET | /news | News search |
 | GET | /settings | User preferences page |
+| GET | /alerts/new | Create alert from current search |
+| GET | /alerts/confirm | Confirm alert email verification |
+| GET | /alerts/manage/{token} | Manage accountless search alert |
+| POST | /alerts | Create search alert subscription |
+| POST | /alerts/{token}/update | Update alert settings |
+| POST | /alerts/{token}/pause | Pause or resume alert |
+| POST | /alerts/{token}/delete | Delete alert |
+| GET | /alerts/{token}.rss | Private RSS feed for an alert |
 | GET | /about | About page |
 | GET | /stats | Public instance statistics |
 
@@ -2088,6 +2151,13 @@ Click → opens video in embedded player or source site
 | GET | /api/v1/categories | Search categories |
 | GET | /api/v1/bangs | Available bang shortcuts |
 | GET | /api/v1/config | Public instance configuration |
+| POST | /api/v1/alerts | Create alert subscription |
+| GET | /api/v1/alerts/{token} | Get alert details for manage page |
+| PATCH | /api/v1/alerts/{token} | Update alert settings |
+| POST | /api/v1/alerts/{token}/verify | Verify/activate alert |
+| POST | /api/v1/alerts/{token}/pause | Pause or resume alert |
+| DELETE | /api/v1/alerts/{token} | Delete alert |
+| GET | /api/v1/alerts/{token}/rss | Private RSS feed payload |
 | GET | /opensearch.xml | OpenSearch descriptor |
 | GET | /search.rss | Search results as RSS feed |
 
@@ -2147,4 +2217,3 @@ Primary engines with their own indexes - no proxies or metasearch:
 | IP Geolocation | sapics/ip-location-db | Weekly |
 | Timezone | Built-in Go stdlib | Static |
 | Calculator | Built-in | Static |
-

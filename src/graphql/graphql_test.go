@@ -181,13 +181,16 @@ func TestHandlerMethodNotAllowed(t *testing.T) {
 	cfg := &config.Config{}
 	handler := Handler(cfg)
 
-	req := httptest.NewRequest(http.MethodPut, "/graphql", nil)
+	req := httptest.NewRequest(http.MethodPut, "/graphql?lang=de", nil)
 	rec := httptest.NewRecorder()
 
 	handler(rec, req)
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("Status = %d, want %d", rec.Code, http.StatusMethodNotAllowed)
+	}
+	if body := strings.TrimSpace(rec.Body.String()); body != "Methode nicht erlaubt" {
+		t.Errorf("Body = %q, want %q", body, "Methode nicht erlaubt")
 	}
 }
 
@@ -200,7 +203,7 @@ func TestHandlerInvalidJSON(t *testing.T) {
 	cfg := &config.Config{}
 	handler := Handler(cfg)
 
-	req := httptest.NewRequest(http.MethodPost, "/graphql", strings.NewReader("invalid json"))
+	req := httptest.NewRequest(http.MethodPost, "/graphql?lang=de", strings.NewReader("invalid json"))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 
@@ -208,6 +211,9 @@ func TestHandlerInvalidJSON(t *testing.T) {
 
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("Status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	if body := strings.TrimSpace(rec.Body.String()); body != "Ungültige Anfrage" {
+		t.Errorf("Body = %q, want %q", body, "Ungültige Anfrage")
 	}
 }
 
@@ -1262,6 +1268,18 @@ func TestGraphiQLHTMLStructure(t *testing.T) {
 		if !strings.Contains(body, element) {
 			t.Errorf("GraphiQL HTML should contain %q", element)
 		}
+	}
+}
+
+func TestServeGraphiQLLanguageAttributes(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/graphql?lang=de", nil)
+	rec := httptest.NewRecorder()
+
+	serveGraphiQL(rec, req)
+
+	body := rec.Body.String()
+	if !strings.Contains(body, `<html lang="de" dir="ltr">`) {
+		t.Fatalf("GraphiQL should use request locale, got body: %s", body)
 	}
 }
 

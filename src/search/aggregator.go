@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/apimgr/search/src/cache"
@@ -16,21 +17,24 @@ import (
 
 // Aggregator aggregates results from multiple search engines
 type Aggregator struct {
-	engines      []Engine
-	timeout      time.Duration
-	cache        *ResultCache
-	cacheEnabled bool
-	cacheTTL     time.Duration
+	engines        []Engine
+	timeout        time.Duration
+	cache          *ResultCache
+	cacheEnabled   bool
+	cacheTTL       time.Duration
+	maxConcurrent  int
+	rotationOffset atomic.Uint64
 }
 
 // AggregatorConfig holds aggregator configuration
 type AggregatorConfig struct {
-	Timeout      time.Duration
-	CacheEnabled bool
-	CacheTTL     time.Duration
+	Timeout       time.Duration
+	CacheEnabled  bool
+	CacheTTL      time.Duration
+	MaxConcurrent int
 	// Cache is the backend to use for result caching (memory, Valkey, Redis).
 	// If nil and CacheEnabled is true, an in-memory backend is created automatically.
-	Cache        cache.Cache
+	Cache cache.Cache
 }
 
 // NewAggregator creates a new search aggregator
@@ -43,10 +47,14 @@ func NewAggregator(engines []Engine, config AggregatorConfig) *Aggregator {
 	}
 
 	a := &Aggregator{
-		engines:      engines,
-		timeout:      config.Timeout,
-		cacheEnabled: config.CacheEnabled,
-		cacheTTL:     config.CacheTTL,
+		engines:       engines,
+		timeout:       config.Timeout,
+		cacheEnabled:  config.CacheEnabled,
+		cacheTTL:      config.CacheTTL,
+		maxConcurrent: config.MaxConcurrent,
+	}
+	if a.maxConcurrent <= 0 || a.maxConcurrent > len(engines) {
+		a.maxConcurrent = len(engines)
 	}
 
 	if config.CacheEnabled {
@@ -64,8 +72,9 @@ func NewAggregator(engines []Engine, config AggregatorConfig) *Aggregator {
 // NewAggregatorSimple creates an aggregator with default settings (backwards compatible)
 func NewAggregatorSimple(engines []Engine, timeout time.Duration) *Aggregator {
 	return NewAggregator(engines, AggregatorConfig{
-		Timeout:      timeout,
-		CacheEnabled: false,
+		Timeout:       timeout,
+		CacheEnabled:  false,
+		MaxConcurrent: len(engines),
 	})
 }
 
@@ -93,6 +102,9 @@ func (a *Aggregator) Search(ctx context.Context, query *model.Query) (*model.Sea
 		if cached := a.cache.Get(cacheKey); cached != nil {
 			// Update search time to indicate cache hit
 			cached.SearchTime = 0.001 // Nearly instant
+			cached.FromCache = true
+			cached.Stale = false
+			cached.CacheAgeSec = 0
 			return cached, nil
 		}
 	}
@@ -105,14 +117,18 @@ func (a *Aggregator) Search(ctx context.Context, query *model.Query) (*model.Sea
 
 	// Channel for collecting results
 	type engineResult struct {
-		engine  string
+		engine  Engine
 		results []model.Result
 		err     error
+		latency time.Duration
 	}
 
 	// Filter engines
 	activeEngines := a.filterEngines(query)
 	if len(activeEngines) == 0 {
+		if stale := a.getStaleFallback(cacheKey); stale != nil {
+			return stale, nil
+		}
 		return nil, model.ErrNoEngines
 	}
 
@@ -125,11 +141,13 @@ func (a *Aggregator) Search(ctx context.Context, query *model.Query) (*model.Sea
 		go func(eng Engine) {
 			defer wg.Done()
 
+			start := time.Now()
 			results, err := eng.Search(searchCtx, query)
 			resultsChan <- engineResult{
-				engine:  eng.Name(),
+				engine:  eng,
 				results: results,
 				err:     err,
+				latency: time.Since(start),
 			}
 		}(engine)
 	}
@@ -147,11 +165,21 @@ func (a *Aggregator) Search(ctx context.Context, query *model.Query) (*model.Sea
 	searchResults.SortedBy = query.SortBy
 
 	usedEngines := make([]string, 0)
+	successCount := 0
+	errorCount := 0
 
 	for result := range resultsChan {
-		if result.err == nil && len(result.results) > 0 {
+		if result.err != nil {
+			errorCount++
+			a.recordEngineFailure(result.engine, result.err)
+			continue
+		}
+
+		successCount++
+		a.recordEngineSuccess(result.engine, result.latency)
+		if len(result.results) > 0 {
 			searchResults.AddResults(result.results)
-			usedEngines = append(usedEngines, result.engine)
+			usedEngines = append(usedEngines, result.engine.Name())
 		}
 	}
 
@@ -180,6 +208,11 @@ func (a *Aggregator) Search(ctx context.Context, query *model.Query) (*model.Sea
 	}
 
 	if len(searchResults.Results) == 0 {
+		if successCount == 0 && errorCount > 0 {
+			if stale := a.getStaleFallback(cacheKey); stale != nil {
+				return stale, nil
+			}
+		}
 		return searchResults, model.ErrNoResults
 	}
 
@@ -231,7 +264,7 @@ func (a *Aggregator) applyOperators(query *model.Query, ops *SearchOperators) {
 
 // filterEngines returns engines that should be used for this query
 func (a *Aggregator) filterEngines(query *model.Query) []Engine {
-	var result []Engine
+	eligible := make([]Engine, 0, len(a.engines))
 
 	for _, engine := range a.engines {
 		// Check category support
@@ -267,10 +300,216 @@ func (a *Aggregator) filterEngines(query *model.Query) []Engine {
 			}
 		}
 
-		result = append(result, engine)
+		eligible = append(eligible, engine)
 	}
 
-	return result
+	if len(query.Engines) > 0 {
+		return a.orderExplicitEngines(query.Engines, eligible)
+	}
+
+	return a.selectEnginesForSearch(eligible)
+}
+
+// RefreshEngineHealth probes engines that are unhealthy, degraded, or not yet checked.
+func (a *Aggregator) RefreshEngineHealth(ctx context.Context) error {
+	for _, engine := range a.engines {
+		if !a.shouldProbeEngine(engine) {
+			continue
+		}
+
+		probeQuery := &model.Query{
+			Text:     a.healthProbeQuery(engine),
+			Category: a.healthProbeCategory(engine),
+			Language: "en",
+			Page:     1,
+			PerPage:  1,
+		}
+		if err := probeQuery.Validate(); err != nil {
+			return err
+		}
+
+		probeTimeout := a.timeout / 2
+		if probeTimeout <= 0 || probeTimeout > 5*time.Second {
+			probeTimeout = 5 * time.Second
+		}
+		probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
+		start := time.Now()
+		_, err := engine.Search(probeCtx, probeQuery)
+		cancel()
+		if err != nil {
+			a.recordEngineFailure(engine, err)
+			continue
+		}
+		a.recordEngineSuccess(engine, time.Since(start))
+	}
+
+	return nil
+}
+
+func (a *Aggregator) getStaleFallback(cacheKey string) *model.SearchResults {
+	if !a.cacheEnabled || a.cache == nil {
+		return nil
+	}
+
+	stale, age := a.cache.GetStale(cacheKey)
+	if stale == nil {
+		return nil
+	}
+	stale.SearchTime = 0.001
+	stale.FromCache = true
+	stale.Stale = true
+	stale.CacheAgeSec = int64(age.Seconds())
+	return stale
+}
+
+func (a *Aggregator) selectEnginesForSearch(engines []Engine) []Engine {
+	if len(engines) <= 1 {
+		return engines
+	}
+
+	now := time.Now()
+	ready := make([]Engine, 0, len(engines))
+	recovering := make([]Engine, 0, len(engines))
+	for _, engine := range engines {
+		if a.canSearch(engine, now) {
+			ready = append(ready, engine)
+			continue
+		}
+		recovering = append(recovering, engine)
+	}
+
+	a.sortEngines(ready)
+	a.sortEngines(recovering)
+	ready = a.rotateEngines(ready)
+	recovering = a.rotateEngines(recovering)
+
+	limit := a.maxConcurrent
+	if limit <= 0 || limit > len(engines) {
+		limit = len(engines)
+	}
+
+	selected := make([]Engine, 0, limit)
+	selected = append(selected, ready...)
+	if len(selected) > limit {
+		selected = selected[:limit]
+	}
+	if len(selected) < limit && len(recovering) > 0 {
+		selected = append(selected, recovering[:min(limit-len(selected), len(recovering))]...)
+	}
+
+	return selected
+}
+
+func (a *Aggregator) orderExplicitEngines(names []string, engines []Engine) []Engine {
+	ordered := make([]Engine, 0, len(engines))
+	for _, name := range names {
+		for _, engine := range engines {
+			if strings.EqualFold(name, engine.Name()) {
+				ordered = append(ordered, engine)
+				break
+			}
+		}
+	}
+	return ordered
+}
+
+func (a *Aggregator) sortEngines(engines []Engine) {
+	sort.SliceStable(engines, func(i, j int) bool {
+		if engines[i].GetPriority() == engines[j].GetPriority() {
+			return strings.ToLower(engines[i].Name()) < strings.ToLower(engines[j].Name())
+		}
+		return engines[i].GetPriority() > engines[j].GetPriority()
+	})
+}
+
+func (a *Aggregator) rotateEngines(engines []Engine) []Engine {
+	if len(engines) <= 1 {
+		return engines
+	}
+
+	offset := int(a.rotationOffset.Add(1)-1) % len(engines)
+	rotated := make([]Engine, 0, len(engines))
+	rotated = append(rotated, engines[offset:]...)
+	rotated = append(rotated, engines[:offset]...)
+	return rotated
+}
+
+func (a *Aggregator) recordEngineSuccess(engine Engine, latency time.Duration) {
+	if tracker, ok := engine.(interface{ RecordSuccess(time.Duration) }); ok {
+		tracker.RecordSuccess(latency)
+	}
+}
+
+func (a *Aggregator) recordEngineFailure(engine Engine, err error) {
+	if tracker, ok := engine.(interface{ RecordFailure(error) }); ok {
+		tracker.RecordFailure(err)
+	}
+}
+
+func (a *Aggregator) canSearch(engine Engine, now time.Time) bool {
+	if tracker, ok := engine.(interface{ CanSearch(time.Time) bool }); ok {
+		return tracker.CanSearch(now)
+	}
+	return true
+}
+
+func (a *Aggregator) shouldProbeEngine(engine Engine) bool {
+	tracker, ok := engine.(interface{ GetHealth() EngineHealth })
+	if !ok {
+		return false
+	}
+
+	health := tracker.GetHealth()
+	return health.Status != "healthy"
+}
+
+func (a *Aggregator) healthProbeCategory(engine Engine) model.Category {
+	if cfg := engine.GetConfig(); cfg != nil && len(cfg.Categories) > 0 {
+		return model.ParseCategory(cfg.Categories[0])
+	}
+	return model.CategoryGeneral
+}
+
+func (a *Aggregator) healthProbeQuery(engine Engine) string {
+	switch a.healthProbeCategory(engine) {
+	case model.CategoryImages:
+		return "landscape"
+	case model.CategoryVideos:
+		return "technology"
+	case model.CategoryNews:
+		return "world news"
+	case model.CategoryMaps:
+		return "new york"
+	case model.CategoryFiles:
+		return "pdf"
+	case model.CategoryMusic:
+		return "classical music"
+	case model.CategoryIT:
+		return "golang"
+	case model.CategoryScience:
+		return "astronomy"
+	case model.CategorySocial:
+		return "opensource"
+	default:
+		return "privacy search"
+	}
+}
+
+// EngineNames returns the enabled engine names known to the aggregator.
+func (a *Aggregator) EngineNames() []string {
+	names := make([]string, 0, len(a.engines))
+	for _, engine := range a.engines {
+		names = append(names, strings.ToLower(strings.TrimSpace(engine.Name())))
+	}
+	sort.Strings(names)
+	return names
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // applyFilters applies post-search filters to results

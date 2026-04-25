@@ -83,6 +83,7 @@ Displays any system warnings or alerts that need attention.
 - Base URL
 - Server port
 - Application mode
+- Search alert defaults (creation rate limit, webhook retries, result retention, default frequency, and default delivery channels)
 
 ### Branding (`/admin/server/branding`)
 
@@ -165,6 +166,7 @@ Manage scheduled tasks at `/admin/scheduler`:
 - Run tasks manually
 - Configure task schedules
 - View task history
+- Review built-in search alert jobs for immediate, daily, and weekly delivery
 
 ## Cluster Management
 

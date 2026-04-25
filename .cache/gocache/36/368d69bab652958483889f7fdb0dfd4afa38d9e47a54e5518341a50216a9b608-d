@@ -1,0 +1,14 @@
+./cache.go
+./crypto.go
+./currency.go
+./dictionary.go
+./news.go
+./nutrition.go
+./rss.go
+./sports.go
+./stocks.go
+./tracking.go
+./translate.go
+./weather.go
+./widgets.go
+./wikipedia.go

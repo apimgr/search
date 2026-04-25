@@ -10,11 +10,118 @@
     // ========================================================================
     const THEME_KEY = 'search-theme';
     const SEARCH_PREFERENCES_KEY = 'search_preferences';
+    const COOKIE_CONSENT_KEY = 'cookieConsent';
+    const LEGACY_COOKIE_CONSENT_KEY = 'cookie_consent';
     const THEMES = ['dark', 'light', 'auto'];
+    let clientTranslations = null;
 
     function normalizeThemePreference(theme) {
         if (theme === 'system') return 'auto';
         return THEMES.includes(theme) ? theme : 'auto';
+    }
+
+    function getClientLanguage() {
+        var lang = (document.documentElement.lang || 'en').trim().toLowerCase();
+        if (!lang) return 'en';
+        return lang.split(/[-_]/, 1)[0] || 'en';
+    }
+
+    function getTranslationValue(key) {
+        if (!clientTranslations) return '';
+        return key.split('.').reduce(function(obj, part) {
+            return obj && typeof obj === 'object' ? obj[part] : undefined;
+        }, clientTranslations) || '';
+    }
+
+    function t(key, fallback) {
+        return getTranslationValue(key) || fallback || key;
+    }
+
+    function loadClientTranslations() {
+        return fetch('/locales/' + encodeURIComponent(getClientLanguage()) + '.json', {
+            headers: {
+                'Accept': 'application/json'
+            }
+        }).then(function(response) {
+            if (!response.ok) {
+                throw new Error('translation fetch failed');
+            }
+            return response.json();
+        }).then(function(payload) {
+            clientTranslations = payload;
+            return payload;
+        }).catch(function() {
+            clientTranslations = null;
+            return null;
+        });
+    }
+
+    function getCookieConsentChoice() {
+        try {
+            var consent = localStorage.getItem(COOKIE_CONSENT_KEY);
+            if (consent === null) {
+                consent = localStorage.getItem(LEGACY_COOKIE_CONSENT_KEY);
+                if (consent !== null) {
+                    localStorage.setItem(COOKIE_CONSENT_KEY, consent);
+                    localStorage.removeItem(LEGACY_COOKIE_CONSENT_KEY);
+                }
+            }
+            if (consent === 'accepted' || consent === 'declined') {
+                return consent;
+            }
+        } catch (e) {
+            console.error('Failed to read cookie consent preference:', e);
+        }
+        return null;
+    }
+
+    function setCookieConsentChoice(choice) {
+        try {
+            localStorage.setItem(COOKIE_CONSENT_KEY, choice);
+            localStorage.removeItem(LEGACY_COOKIE_CONSENT_KEY);
+        } catch (e) {
+            console.error('Failed to persist cookie consent preference:', e);
+        }
+    }
+
+    function clearCookie(name) {
+        document.cookie = name + '=; path=/; max-age=0; SameSite=Lax';
+    }
+
+    function setCookie(name, value, maxAgeSeconds) {
+        document.cookie = name + '=' + encodeURIComponent(value) + '; path=/; max-age=' + maxAgeSeconds + '; SameSite=Lax';
+    }
+
+    function hideCookieConsentBanner() {
+        var banner = document.getElementById('cookie-consent');
+        if (banner) {
+            banner.classList.remove('visible');
+        }
+    }
+
+    function syncThemeCookiePreference(theme) {
+        clearCookie('cookie_consent');
+
+        if (getCookieConsentChoice() !== 'accepted') {
+            clearCookie('theme');
+            clearCookie('lang');
+            return;
+        }
+
+        var selectedTheme = normalizeThemePreference(theme || '');
+        if (!selectedTheme) {
+            try {
+                selectedTheme = normalizeThemePreference(localStorage.getItem(THEME_KEY) || '');
+            } catch (e) {
+                console.error('Failed to read stored theme preference:', e);
+            }
+        }
+        if (!selectedTheme) {
+            selectedTheme = normalizeThemePreference(document.documentElement.getAttribute('data-theme-mode') || '');
+        }
+        if (selectedTheme) {
+            setCookie('theme', selectedTheme, 30 * 24 * 60 * 60);
+        }
     }
 
     function normalizeSearchPreferences(prefs) {
@@ -194,7 +301,7 @@
     function setTheme(theme) {
         applyTheme(theme);
         localStorage.setItem(THEME_KEY, theme);
-        document.cookie = 'theme=' + theme + '; path=/; max-age=' + (30 * 24 * 60 * 60) + '; SameSite=Lax';
+        syncThemeCookiePreference(theme);
     }
 
     // No-op: icon display is now fully CSS-driven via [data-theme-mode] attribute
@@ -406,19 +513,16 @@
     // COOKIE CONSENT
     // ========================================================================
     function acceptCookies() {
-        document.cookie = 'cookie_consent=accepted; path=/; max-age=31536000; SameSite=Lax';
-        const banner = document.querySelector('.cookie-consent-banner');
-        if (banner) {
-            banner.remove();
-        }
+        setCookieConsentChoice('accepted');
+        syncThemeCookiePreference();
+        hideCookieConsentBanner();
     }
 
     function declineCookies() {
-        document.cookie = 'cookie_consent=declined; path=/; max-age=31536000; SameSite=Lax';
-        const banner = document.querySelector('.cookie-consent-banner');
-        if (banner) {
-            banner.remove();
-        }
+        setCookieConsentChoice('declined');
+        clearCookie('theme');
+        clearCookie('cookie_consent');
+        hideCookieConsentBanner();
     }
 
     // ========================================================================
@@ -447,7 +551,7 @@
         navigator.clipboard.writeText(text).then(function() {
             if (button) {
                 const originalText = button.textContent;
-                button.textContent = 'Copied!';
+                button.textContent = t('common.copied', 'Copied!');
                 button.classList.add('copied');
                 setTimeout(function() {
                     button.textContent = originalText;
@@ -468,7 +572,7 @@
             const btn = document.querySelector('[data-action="copy-token"]');
             if (btn) {
                 const originalText = btn.textContent;
-                btn.textContent = 'Copied!';
+                btn.textContent = t('common.copied', 'Copied!');
                 setTimeout(function() {
                     btn.textContent = originalText;
                 }, 2000);
@@ -480,9 +584,9 @@
     // TOKEN MANAGEMENT
     // ========================================================================
     function handleRevokeToken(form) {
-        return window.showConfirm('Are you sure you want to revoke this token? This action cannot be undone.', {
-            title: 'Revoke Token',
-            confirmText: 'Revoke',
+        return window.showConfirm(t('user.revoke_token_confirm_message', 'Are you sure you want to revoke this token? This action cannot be undone.'), {
+            title: t('user.revoke_token_title', 'Revoke Token'),
+            confirmText: t('user.revoke_token_action', 'Revoke'),
             danger: true
         }).then(function(confirmed) {
             if (confirmed) {
@@ -570,7 +674,7 @@
             dropdown = document.createElement('div');
             dropdown.className = 'autocomplete-dropdown';
             dropdown.setAttribute('role', 'listbox');
-            dropdown.setAttribute('aria-label', 'Search suggestions');
+            dropdown.setAttribute('aria-label', t('accessibility.search_suggestions', 'Search suggestions'));
             dropdown.style.display = 'none';
 
             // Position dropdown relative to input's parent container
@@ -1009,8 +1113,8 @@
             results[index].classList.add('keyboard-selected');
             results[index].scrollIntoView({ behavior: 'smooth', block: 'center' });
             // Announce for screen readers
-            var title = results[index].querySelector('h3, .result-title, a')?.textContent || 'Result ' + (index + 1);
-            announce('Selected: ' + title);
+            var title = results[index].querySelector('h3, .result-title, a')?.textContent || (t('accessibility.result_fallback', 'Result') + ' ' + (index + 1));
+            announce(t('accessibility.selected_prefix', 'Selected') + ': ' + title);
         }
     }
 
@@ -1025,32 +1129,48 @@
         modal.id = 'keyboard-help-modal';
         modal.setAttribute('role', 'dialog');
         modal.setAttribute('aria-labelledby', 'keyboard-help-title');
+        var keyboardShortcutsTitle = escapeHtml(t('accessibility.keyboard_shortcuts_title', 'Keyboard Shortcuts'));
+        var keyboardNavigationHeading = escapeHtml(t('accessibility.keyboard_navigation_heading', 'Navigation'));
+        var keyboardNavigationNextPrevious = escapeHtml(t('accessibility.keyboard_navigation_next_previous_result', 'Next / Previous result'));
+        var keyboardNavigationPrevNextPage = escapeHtml(t('accessibility.keyboard_navigation_previous_next_page', 'Previous / Next page'));
+        var keyboardNavigationFirstResult = escapeHtml(t('accessibility.keyboard_navigation_first_result', 'Go to first result'));
+        var keyboardNavigationLastResult = escapeHtml(t('accessibility.keyboard_navigation_last_result', 'Go to last result'));
+        var keyboardNavigationJumpResult = escapeHtml(t('accessibility.keyboard_navigation_jump_result', 'Jump to result N'));
+        var keyboardActionsHeading = escapeHtml(t('accessibility.keyboard_actions_heading', 'Actions'));
+        var keyboardActionFocusSearch = escapeHtml(t('accessibility.keyboard_action_focus_search', 'Focus search box'));
+        var keyboardActionOpenSelected = escapeHtml(t('accessibility.keyboard_action_open_selected', 'Open selected result'));
+        var keyboardActionOpenNewTab = escapeHtml(t('accessibility.keyboard_action_open_new_tab', 'Open in new tab'));
+        var keyboardActionToggleTheme = escapeHtml(t('accessibility.keyboard_action_toggle_theme', 'Toggle theme'));
+        var keyboardActionClearClose = escapeHtml(t('accessibility.keyboard_action_clear_close', 'Clear / Close'));
+        var keyboardHelpHeading = escapeHtml(t('nav.help', 'Help'));
+        var keyboardHelpShow = escapeHtml(t('accessibility.keyboard_help_show', 'Show this help'));
+        var keyboardClose = escapeHtml(t('common.close', 'Close'));
         modal.innerHTML =
-            '<header><h2 id="keyboard-help-title">Keyboard Shortcuts</h2></header>' +
+            '<header><h2 id="keyboard-help-title">' + keyboardShortcutsTitle + '</h2></header>' +
             '<main class="keyboard-help-content">' +
                 '<div class="shortcut-group">' +
-                    '<h3>Navigation</h3>' +
-                    '<div class="shortcut"><kbd>j</kbd> / <kbd>k</kbd> <span>Next / Previous result</span></div>' +
-                    '<div class="shortcut"><kbd>h</kbd> / <kbd>l</kbd> <span>Previous / Next page</span></div>' +
-                    '<div class="shortcut"><kbd>g</kbd><kbd>g</kbd> <span>Go to first result</span></div>' +
-                    '<div class="shortcut"><kbd>G</kbd> <span>Go to last result</span></div>' +
-                    '<div class="shortcut"><kbd>1</kbd>-<kbd>9</kbd> <span>Jump to result N</span></div>' +
+                    '<h3>' + keyboardNavigationHeading + '</h3>' +
+                    '<div class="shortcut"><kbd>j</kbd> / <kbd>k</kbd> <span>' + keyboardNavigationNextPrevious + '</span></div>' +
+                    '<div class="shortcut"><kbd>h</kbd> / <kbd>l</kbd> <span>' + keyboardNavigationPrevNextPage + '</span></div>' +
+                    '<div class="shortcut"><kbd>g</kbd><kbd>g</kbd> <span>' + keyboardNavigationFirstResult + '</span></div>' +
+                    '<div class="shortcut"><kbd>G</kbd> <span>' + keyboardNavigationLastResult + '</span></div>' +
+                    '<div class="shortcut"><kbd>1</kbd>-<kbd>9</kbd> <span>' + keyboardNavigationJumpResult + '</span></div>' +
                 '</div>' +
                 '<div class="shortcut-group">' +
-                    '<h3>Actions</h3>' +
-                    '<div class="shortcut"><kbd>/</kbd> <span>Focus search box</span></div>' +
-                    '<div class="shortcut"><kbd>Enter</kbd> / <kbd>o</kbd> <span>Open selected result</span></div>' +
-                    '<div class="shortcut"><kbd>O</kbd> <span>Open in new tab</span></div>' +
-                    '<div class="shortcut"><kbd>t</kbd> <span>Toggle theme</span></div>' +
-                    '<div class="shortcut"><kbd>Esc</kbd> <span>Clear / Close</span></div>' +
+                    '<h3>' + keyboardActionsHeading + '</h3>' +
+                    '<div class="shortcut"><kbd>/</kbd> <span>' + keyboardActionFocusSearch + '</span></div>' +
+                    '<div class="shortcut"><kbd>Enter</kbd> / <kbd>o</kbd> <span>' + keyboardActionOpenSelected + '</span></div>' +
+                    '<div class="shortcut"><kbd>O</kbd> <span>' + keyboardActionOpenNewTab + '</span></div>' +
+                    '<div class="shortcut"><kbd>t</kbd> <span>' + keyboardActionToggleTheme + '</span></div>' +
+                    '<div class="shortcut"><kbd>Esc</kbd> <span>' + keyboardActionClearClose + '</span></div>' +
                 '</div>' +
                 '<div class="shortcut-group">' +
-                    '<h3>Help</h3>' +
-                    '<div class="shortcut"><kbd>?</kbd> <span>Show this help</span></div>' +
+                    '<h3>' + keyboardHelpHeading + '</h3>' +
+                    '<div class="shortcut"><kbd>?</kbd> <span>' + keyboardHelpShow + '</span></div>' +
                 '</div>' +
             '</main>' +
             '<footer>' +
-                '<button type="button" class="btn btn-primary" data-action="close-help">Close</button>' +
+                '<button type="button" class="btn btn-primary" data-action="close-help">' + keyboardClose + '</button>' +
             '</footer>';
 
         document.body.appendChild(modal);
@@ -1073,7 +1193,7 @@
         });
 
         modal.showModal();
-        announce('Keyboard shortcuts help opened. Press Escape or ? to close.');
+        announce(t('accessibility.keyboard_help_opened', 'Keyboard shortcuts help opened. Press Escape or ? to close.'));
     }
 
     // ========================================================================
@@ -1329,7 +1449,7 @@
 
         toast.innerHTML = '<span class="toast-icon">' + (icons[type] || icons.info) + '</span>' +
                          '<span class="toast-message">' + escapeHtml(message) + '</span>' +
-                         '<button class="toast-close" data-action="close-toast" aria-label="Dismiss">&times;</button>';
+                         '<button class="toast-close" data-action="close-toast" aria-label="' + escapeHtml(t('common.close', 'Close')) + '">&times;</button>';
 
         container.appendChild(toast);
 
@@ -1377,12 +1497,12 @@
             dialog.setAttribute('aria-labelledby', 'confirm-dialog-title');
             dialog.innerHTML =
                 '<header>' +
-                    '<h2 id="confirm-dialog-title">Confirm</h2>' +
+                    '<h2 id="confirm-dialog-title">' + escapeHtml(t('common.confirm', 'Confirm')) + '</h2>' +
                 '</header>' +
                 '<main id="confirm-dialog-message"></main>' +
                 '<footer>' +
-                    '<button type="button" class="btn btn-secondary" data-action="cancel">Cancel</button>' +
-                    '<button type="button" class="btn btn-danger" data-action="confirm">Confirm</button>' +
+                    '<button type="button" class="btn btn-secondary" data-action="cancel">' + escapeHtml(t('common.cancel', 'Cancel')) + '</button>' +
+                    '<button type="button" class="btn btn-danger" data-action="confirm">' + escapeHtml(t('common.confirm', 'Confirm')) + '</button>' +
                 '</footer>';
             document.body.appendChild(dialog);
         }
@@ -1398,10 +1518,10 @@
             const confirmBtn = dialog.querySelector('[data-action="confirm"]');
             const cancelBtn = dialog.querySelector('[data-action="cancel"]');
 
-            titleEl.textContent = options.title || 'Confirm Action';
+            titleEl.textContent = options.title || t('common.confirm_action', 'Confirm Action');
             messageEl.textContent = message;
-            confirmBtn.textContent = options.confirmText || 'Confirm';
-            cancelBtn.textContent = options.cancelText || 'Cancel';
+            confirmBtn.textContent = options.confirmText || t('common.confirm', 'Confirm');
+            cancelBtn.textContent = options.cancelText || t('common.cancel', 'Cancel');
 
             if (options.danger) {
                 confirmBtn.className = 'btn btn-danger';
@@ -1459,8 +1579,8 @@
                         '<label id="prompt-dialog-label"></label>' +
                         '<input type="text" id="prompt-dialog-input" class="form-control" aria-describedby="prompt-dialog-label">' +
                         '<footer>' +
-                            '<button type="button" class="btn btn-secondary" data-action="cancel">Cancel</button>' +
-                            '<button type="submit" class="btn btn-primary">OK</button>' +
+                            '<button type="button" class="btn btn-secondary" data-action="cancel">' + escapeHtml(t('common.cancel', 'Cancel')) + '</button>' +
+                            '<button type="submit" class="btn btn-primary">' + escapeHtml(t('common.ok', 'OK')) + '</button>' +
                         '</footer>' +
                     '</form>';
                 document.body.appendChild(dialog);
@@ -1518,7 +1638,7 @@
                 dialog.innerHTML =
                     '<main id="alert-dialog-message"></main>' +
                     '<footer>' +
-                        '<button type="button" class="btn btn-primary" data-action="ok">OK</button>' +
+                        '<button type="button" class="btn btn-primary" data-action="ok">' + escapeHtml(t('common.ok', 'OK')) + '</button>' +
                     '</footer>';
                 document.body.appendChild(dialog);
             }
@@ -1995,12 +2115,13 @@
 
             localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
             localStorage.setItem(THEME_KEY, prefs.theme);
+            syncThemeCookiePreference(prefs.theme);
 
             applyTheme(prefs.theme);
 
             saveWidgetPreferences();
             applySearchPreferencesToForms();
-            showPrefStatus('Preferences saved!');
+            showPrefStatus(t('preferences.saved', 'Preferences saved'));
 
             // Redirect back to previous page after a short delay
             var referrer = document.referrer;
@@ -2054,7 +2175,7 @@
             list.innerHTML = '';
 
             if (bangs.length === 0) {
-                list.innerHTML = '<p class="help-text">No custom bangs defined.</p>';
+                list.innerHTML = '<p class="help-text">' + escapeHtml(t('preferences.custom_bangs_empty', 'No custom bangs defined.')) + '</p>';
                 return;
             }
 
@@ -2065,7 +2186,7 @@
                     '<span class="bang-shortcut">!' + escapeHtmlLocal(bang.shortcut) + '</span>' +
                     '<span class="bang-name">' + escapeHtmlLocal(bang.name) + '</span>' +
                 '</div>' +
-                '<button class="delete-btn" data-bang-index="' + index + '">Delete</button>';
+                '<button class="delete-btn" data-bang-index="' + index + '">' + escapeHtml(t('common.delete', 'Delete')) + '</button>';
                 list.appendChild(item);
             });
         }
@@ -2135,7 +2256,7 @@
                 bangs.splice(idx, 1);
                 localStorage.setItem(BANGS_KEY, JSON.stringify(bangs));
                 renderCustomBangs(bangs);
-                showPrefStatus('Bang deleted');
+                showPrefStatus(t('preferences.custom_bang_deleted', 'Bang deleted'));
                 return;
             }
 
@@ -2147,11 +2268,11 @@
                     url += '?name=' + encodeURIComponent(customName.value);
                 }
                 navigator.clipboard.writeText(url).then(function() {
-                    showPrefStatus('OpenSearch URL copied!');
+                    showPrefStatus(t('preferences.opensearch_url_copied', 'OpenSearch URL copied!'));
                 }).catch(function() {
                     var osUrl = document.getElementById('opensearch-url');
                     if (osUrl) osUrl.textContent = url;
-                    showPrefStatus('URL updated above - copy manually');
+                    showPrefStatus(t('preferences.opensearch_copy_manual', 'URL updated above - copy manually'));
                 });
                 return;
             }
@@ -2171,7 +2292,7 @@
                 a.download = 'search-preferences.json';
                 a.click();
                 URL.revokeObjectURL(url);
-                showPrefStatus('Preferences exported!');
+                showPrefStatus(t('preferences.exported_success', 'Preferences exported!'));
                 return;
             }
 
@@ -2184,7 +2305,7 @@
 
             if (e.target.id === 'generate-pref-link') {
                 updatePreferenceSharing();
-                showPrefStatus('Share link updated!');
+                showPrefStatus(t('preferences.share_link_updated', 'Share link updated!'));
                 return;
             }
 
@@ -2193,9 +2314,9 @@
                 var prefUrl = document.getElementById('preference-url');
                 if (prefUrl) {
                     navigator.clipboard.writeText(prefUrl.value).then(function() {
-                        showPrefStatus('Preference URL copied!');
+                        showPrefStatus(t('preferences.preference_url_copied', 'Preference URL copied!'));
                     }).catch(function() {
-                        showPrefStatus('Copy failed - copy the URL manually', true);
+                        showPrefStatus(t('preferences.preference_url_copy_failed', 'Copy failed - copy the URL manually'), true);
                     });
                 }
                 return;
@@ -2203,9 +2324,9 @@
 
             // Reset preferences
             if (e.target.id === 'reset-prefs') {
-                showConfirm('Are you sure you want to reset all preferences?', {
-                    title: 'Reset Preferences',
-                    confirmText: 'Reset',
+                showConfirm(t('preferences.reset_confirm_message', 'Are you sure you want to reset all preferences?'), {
+                    title: t('preferences.reset_confirm_title', 'Reset Preferences'),
+                    confirmText: t('common.reset', 'Reset'),
                     danger: true
                 }).then(function(confirmed) {
                     if (!confirmed) return;
@@ -2248,13 +2369,13 @@
                 var category = categoryInput.value || 'custom';
 
                 if (!shortcut || !name || !url) {
-                    showPrefStatus('Please fill in all required fields', true);
+                    showPrefStatus(t('preferences.required_fields_error', 'Please fill in all required fields'), true);
                     return;
                 }
 
                 var bangs = JSON.parse(localStorage.getItem(BANGS_KEY) || '[]');
                 if (bangs.some(function(b) { return b.shortcut === shortcut; })) {
-                    showPrefStatus('A bang with this shortcut already exists', true);
+                    showPrefStatus(t('preferences.bang_shortcut_exists', 'A bang with this shortcut already exists'), true);
                     return;
                 }
 
@@ -2263,7 +2384,7 @@
                 renderCustomBangs(bangs);
                 addBangForm.reset();
                 categoryInput.value = 'custom';
-                showPrefStatus('Custom bang added!');
+                showPrefStatus(t('preferences.custom_bang_added', 'Custom bang added!'));
             });
         }
 
@@ -2285,9 +2406,9 @@
                         loadCustomBangs();
                         loadWidgetPreferences();
                         updatePreferenceSharing();
-                        showPrefStatus('Preferences imported!');
+                        showPrefStatus(t('preferences.imported_success', 'Preferences imported!'));
                     } catch (err) {
-                        showPrefStatus('Failed to import preferences', true);
+                        showPrefStatus(t('preferences.import_failed', 'Failed to import preferences'), true);
                     }
                 };
                 reader.readAsText(file);
@@ -2416,7 +2537,7 @@
                     navigator.clipboard.writeText(tokenEl.textContent).then(function() {
                         var btn = e.target;
                         var original = btn.textContent;
-                        btn.textContent = 'Copied!';
+                        btn.textContent = t('common.copied', 'Copied!');
                         setTimeout(function() {
                             btn.textContent = original;
                         }, 2000);
@@ -2431,9 +2552,9 @@
             if (e.target.matches('[data-confirm-revoke]')) {
                 e.preventDefault();
                 var form = e.target;
-                showConfirm('Are you sure you want to revoke this token?', {
-                    title: 'Revoke API Token',
-                    confirmText: 'Revoke',
+                showConfirm(t('user.revoke_api_token_confirm_message', 'Are you sure you want to revoke this token?'), {
+                    title: t('user.revoke_api_token_title', 'Revoke API Token'),
+                    confirmText: t('user.revoke_token_action', 'Revoke'),
                     danger: true
                 }).then(function(confirmed) {
                     if (confirmed) {
@@ -2489,28 +2610,19 @@
         var consentBanner = document.getElementById('cookie-consent');
         if (!consentBanner) return;
 
-        var consent = localStorage.getItem('cookie_consent');
+        var consent = getCookieConsentChoice();
         if (consent === null) {
             consentBanner.classList.add('visible');
+            clearCookie('cookie_consent');
+            return;
         }
-
-        // Accept button
-        var acceptBtn = consentBanner.querySelector('.cookie-consent-accept');
-        if (acceptBtn) {
-            acceptBtn.addEventListener('click', function() {
-                localStorage.setItem('cookie_consent', 'accepted');
-                consentBanner.classList.remove('visible');
-            });
+        consentBanner.classList.remove('visible');
+        if (consent === 'accepted') {
+            syncThemeCookiePreference();
+            return;
         }
-
-        // Decline button
-        var declineBtn = consentBanner.querySelector('.cookie-consent-decline');
-        if (declineBtn) {
-            declineBtn.addEventListener('click', function() {
-                localStorage.setItem('cookie_consent', 'declined');
-                consentBanner.classList.remove('visible');
-            });
-        }
+        clearCookie('theme');
+        clearCookie('cookie_consent');
     }
 
     // ========================================================================
@@ -2552,8 +2664,10 @@
     // INITIALIZATION
     // ========================================================================
     function init() {
+        loadClientTranslations();
         applyTheme(getActiveSearchPreferences().theme || getPreferredTheme());
         applySearchPreferencesToForms();
+        initLanguageSelector();
         initFlashMessages();
         initSearchAutocomplete();
         initKeyboardShortcuts();
@@ -2572,6 +2686,21 @@
         initAnnouncements();
         initCookieConsent();
         initFaviconErrorHandling();
+    }
+
+    function initLanguageSelector() {
+        document.querySelectorAll('[data-language-selector]').forEach(function(select) {
+            select.addEventListener('change', function() {
+                var nextLang = (select.value || '').trim();
+                if (!nextLang) {
+                    return;
+                }
+
+                var url = new URL(window.location.href);
+                url.searchParams.set('lang', nextLang);
+                window.location.assign(url.toString());
+            });
+        });
     }
 
     // ========================================================================
@@ -2907,12 +3036,16 @@
     }
 
     function renderWeatherWidget(container, data, settings) {
+        var weatherEmpty = escapeHtml(t('widgets_ui.weather_empty', 'Set your city in widget settings'));
+        var configureLabel = escapeHtml(t('widgets_ui.configure', 'Configure'));
+        var weatherFeelsLike = escapeHtml(t('widgets_ui.weather_feels_like', 'Feels like'));
+        var weatherHumidity = escapeHtml(t('widgets_ui.weather_humidity', 'humidity'));
         if (!data || data.error) {
             container.innerHTML =
                 '<div class="widget-placeholder">' +
                     '<div class="widget-placeholder-icon">&#9925;</div>' +
-                    '<div class="widget-placeholder-text">Set your city in widget settings</div>' +
-                    '<button class="widget-settings-btn" data-widget-settings="weather">Configure</button>' +
+                    '<div class="widget-placeholder-text">' + weatherEmpty + '</div>' +
+                    '<button class="widget-settings-btn" data-widget-settings="weather">' + configureLabel + '</button>' +
                 '</div>';
             return;
         }
@@ -2941,19 +3074,21 @@
                 '<div class="weather-details">' +
                     '<div class="weather-location">' + escapeHtml(data.location) + '</div>' +
                     '<div class="weather-description">' + escapeHtml(data.description) + '</div>' +
-                    '<div class="weather-extra">Feels like ' + feelsLike + '&deg; &middot; ' + data.humidity + '% humidity</div>' +
+                    '<div class="weather-extra">' + weatherFeelsLike + ' ' + feelsLike + '&deg; &middot; ' + data.humidity + '% ' + weatherHumidity + '</div>' +
                 '</div>' +
             '</div>';
     }
 
     function renderQuickLinksWidget(container, data, settings) {
         var links = settings.links || [];
+        var quicklinksEmpty = escapeHtml(t('widgets_ui.quicklinks_empty', 'No links yet'));
+        var quicklinksAdd = escapeHtml(t('widgets_ui.quicklinks_add', 'Add Link'));
 
         if (links.length === 0) {
             container.innerHTML =
                 '<div class="widget-placeholder">' +
-                    '<div class="widget-placeholder-text">No links yet</div>' +
-                    '<button class="widget-add-btn" data-widget-action="add-quicklink">+ Add Link</button>' +
+                    '<div class="widget-placeholder-text">' + quicklinksEmpty + '</div>' +
+                    '<button class="widget-add-btn" data-widget-action="add-quicklink">+ ' + quicklinksAdd + '</button>' +
                 '</div>';
             return;
         }
@@ -2967,7 +3102,7 @@
                 '<span class="quicklink-name">' + escapeHtml(link.name) + '</span>' +
             '</a>';
         });
-        html += '<button class="quicklink-add" data-widget-action="add-quicklink" title="Add link">+</button></div>';
+        html += '<button class="quicklink-add" data-widget-action="add-quicklink" title="' + quicklinksAdd + '">+</button></div>';
         container.innerHTML = html;
     }
 
@@ -2987,9 +3122,10 @@
 
     function renderNotesWidget(container, data, settings) {
         var notes = settings.notes || '';
+        var notesPlaceholder = escapeHtml(t('widgets_ui.notes_placeholder', 'Type your notes here...'));
         container.innerHTML =
             '<div class="notes-widget">' +
-                '<textarea class="notes-textarea" data-widget-notes placeholder="Type your notes here...">' + escapeHtml(notes) + '</textarea>' +
+                '<textarea class="notes-textarea" data-widget-notes placeholder="' + notesPlaceholder + '">' + escapeHtml(notes) + '</textarea>' +
             '</div>';
     }
 
@@ -3024,13 +3160,17 @@
 
     function renderConverterWidget(container, data, settings) {
         var category = settings.defaultCategory || 'length';
+        var converterLength = escapeHtml(t('widgets_ui.converter_length', 'Length'));
+        var converterWeight = escapeHtml(t('widgets_ui.converter_weight', 'Weight'));
+        var converterTemperature = escapeHtml(t('widgets_ui.converter_temperature', 'Temperature'));
+        var converterVolume = escapeHtml(t('widgets_ui.converter_volume', 'Volume'));
         container.innerHTML =
             '<div class="converter-widget">' +
                 '<select id="converter-category" data-converter-category>' +
-                    '<option value="length"' + (category === 'length' ? ' selected' : '') + '>Length</option>' +
-                    '<option value="weight"' + (category === 'weight' ? ' selected' : '') + '>Weight</option>' +
-                    '<option value="temperature"' + (category === 'temperature' ? ' selected' : '') + '>Temperature</option>' +
-                    '<option value="volume"' + (category === 'volume' ? ' selected' : '') + '>Volume</option>' +
+                    '<option value="length"' + (category === 'length' ? ' selected' : '') + '>' + converterLength + '</option>' +
+                    '<option value="weight"' + (category === 'weight' ? ' selected' : '') + '>' + converterWeight + '</option>' +
+                    '<option value="temperature"' + (category === 'temperature' ? ' selected' : '') + '>' + converterTemperature + '</option>' +
+                    '<option value="volume"' + (category === 'volume' ? ' selected' : '') + '>' + converterVolume + '</option>' +
                 '</select>' +
                 '<div class="converter-row">' +
                     '<input type="number" id="converter-from" data-converter-from placeholder="0">' +
@@ -3046,8 +3186,9 @@
     }
 
     function renderNewsWidget(container, data) {
+        var newsEmpty = escapeHtml(t('widgets_ui.news_empty', 'No news available'));
         if (!data || !data.items || data.items.length === 0) {
-            container.innerHTML = '<div class="widget-placeholder"><div class="widget-placeholder-text">No news available</div></div>';
+            container.innerHTML = '<div class="widget-placeholder"><div class="widget-placeholder-text">' + newsEmpty + '</div></div>';
             return;
         }
 
@@ -3063,11 +3204,13 @@
     }
 
     function renderStocksWidget(container, data, settings) {
+        var stocksEmpty = escapeHtml(t('widgets_ui.stocks_empty', 'Configure stock symbols'));
+        var configureLabel = escapeHtml(t('widgets_ui.configure', 'Configure'));
         if (!data || !data.symbols || data.symbols.length === 0) {
             container.innerHTML =
                 '<div class="widget-placeholder">' +
-                    '<div class="widget-placeholder-text">Configure stock symbols</div>' +
-                    '<button class="widget-settings-btn" data-widget-settings="stocks">Configure</button>' +
+                    '<div class="widget-placeholder-text">' + stocksEmpty + '</div>' +
+                    '<button class="widget-settings-btn" data-widget-settings="stocks">' + configureLabel + '</button>' +
                 '</div>';
             return;
         }
@@ -3087,8 +3230,9 @@
     }
 
     function renderCryptoWidget(container, data) {
+        var cryptoLoading = escapeHtml(t('widgets_ui.crypto_loading', 'Loading crypto prices...'));
         if (!data || !data.coins || data.coins.length === 0) {
-            container.innerHTML = '<div class="widget-placeholder"><div class="widget-placeholder-text">Loading crypto prices...</div></div>';
+            container.innerHTML = '<div class="widget-placeholder"><div class="widget-placeholder-text">' + cryptoLoading + '</div></div>';
             return;
         }
 
@@ -3107,15 +3251,17 @@
     }
 
     function renderSportsWidget(container, data) {
+        var sportsEmpty = escapeHtml(t('widgets_ui.sports_empty', 'No games today'));
+        var sportsVersus = escapeHtml(t('widgets_ui.sports_versus', 'vs'));
         if (!data || !data.games || data.games.length === 0) {
-            container.innerHTML = '<div class="widget-placeholder"><div class="widget-placeholder-text">No games today</div></div>';
+            container.innerHTML = '<div class="widget-placeholder"><div class="widget-placeholder-text">' + sportsEmpty + '</div></div>';
             return;
         }
 
         var html = '<div class="sports-widget">';
         data.games.slice(0, 3).forEach(function(game) {
             html += '<div class="sports-game">' +
-                '<div class="sports-teams"><span>' + escapeHtml(game.home_team) + '</span><span class="sports-vs">vs</span><span>' + escapeHtml(game.away_team) + '</span></div>' +
+                '<div class="sports-teams"><span>' + escapeHtml(game.home_team) + '</span><span class="sports-vs">' + sportsVersus + '</span><span>' + escapeHtml(game.away_team) + '</span></div>' +
                 '<div class="sports-score">' + game.home_score + ' - ' + game.away_score + '</div>' +
                 '<div class="sports-status">' + escapeHtml(game.status) + '</div>' +
             '</div>';
@@ -3126,18 +3272,21 @@
 
     function renderRSSWidget(container, data, settings) {
         var feeds = settings.feeds || [];
+        var rssEmpty = escapeHtml(t('widgets_ui.rss_empty', 'No RSS feeds configured'));
+        var rssAddFeed = escapeHtml(t('widgets_ui.rss_add_feed', 'Add Feed'));
+        var rssLoading = escapeHtml(t('widgets_ui.rss_loading', 'Loading feeds...'));
 
         if (feeds.length === 0) {
             container.innerHTML =
                 '<div class="widget-placeholder">' +
-                    '<div class="widget-placeholder-text">No RSS feeds configured</div>' +
-                    '<button class="widget-settings-btn" data-widget-settings="rss">Add Feed</button>' +
+                    '<div class="widget-placeholder-text">' + rssEmpty + '</div>' +
+                    '<button class="widget-settings-btn" data-widget-settings="rss">' + rssAddFeed + '</button>' +
                 '</div>';
             return;
         }
 
         if (!data || !data.items || data.items.length === 0) {
-            container.innerHTML = '<div class="widget-placeholder"><div class="widget-placeholder-text">Loading feeds...</div></div>';
+            container.innerHTML = '<div class="widget-placeholder"><div class="widget-placeholder-text">' + rssLoading + '</div></div>';
             return;
         }
 
@@ -3155,6 +3304,7 @@
     // Additional instant answer render functions per IDEA.md
 
     function renderCurrencyWidget(container, data, settings) {
+        var currencyConvert = escapeHtml(t('widgets_ui.currency_convert', 'Convert'));
         container.innerHTML =
             '<div class="currency-widget">' +
                 '<div class="currency-row">' +
@@ -3186,7 +3336,7 @@
                         '<option value="INR">INR</option>' +
                     '</select>' +
                 '</div>' +
-                '<button class="currency-convert-btn" data-action="convert-currency">Convert</button>' +
+                '<button class="currency-convert-btn" data-action="convert-currency">' + currencyConvert + '</button>' +
             '</div>';
     }
 
@@ -3213,91 +3363,112 @@
     }
 
     function renderTranslateWidget(container, data, settings) {
+        var translateAutoDetect = escapeHtml(t('widgets_ui.translate_auto_detect', 'Auto-detect'));
+        var translateLanguageEnglish = escapeHtml(t('widgets_ui.translate_language_english', 'English'));
+        var translateLanguageSpanish = escapeHtml(t('widgets_ui.translate_language_spanish', 'Spanish'));
+        var translateLanguageFrench = escapeHtml(t('widgets_ui.translate_language_french', 'French'));
+        var translateLanguageGerman = escapeHtml(t('widgets_ui.translate_language_german', 'German'));
+        var translateLanguageItalian = escapeHtml(t('widgets_ui.translate_language_italian', 'Italian'));
+        var translateLanguagePortuguese = escapeHtml(t('widgets_ui.translate_language_portuguese', 'Portuguese'));
+        var translateLanguageRussian = escapeHtml(t('widgets_ui.translate_language_russian', 'Russian'));
+        var translateLanguageJapanese = escapeHtml(t('widgets_ui.translate_language_japanese', 'Japanese'));
+        var translateLanguageKorean = escapeHtml(t('widgets_ui.translate_language_korean', 'Korean'));
+        var translateLanguageChinese = escapeHtml(t('widgets_ui.translate_language_chinese', 'Chinese'));
+        var translateInputPlaceholder = escapeHtml(t('widgets_ui.translate_input_placeholder', 'Enter text to translate...'));
         container.innerHTML =
             '<div class="translate-widget">' +
                 '<div class="translate-row">' +
                     '<select id="translate-from" data-translate-from>' +
-                        '<option value="auto">Auto-detect</option>' +
-                        '<option value="en">English</option>' +
-                        '<option value="es">Spanish</option>' +
-                        '<option value="fr">French</option>' +
-                        '<option value="de">German</option>' +
-                        '<option value="it">Italian</option>' +
-                        '<option value="pt">Portuguese</option>' +
-                        '<option value="ru">Russian</option>' +
-                        '<option value="ja">Japanese</option>' +
-                        '<option value="ko">Korean</option>' +
-                        '<option value="zh">Chinese</option>' +
+                        '<option value="auto">' + translateAutoDetect + '</option>' +
+                        '<option value="en">' + translateLanguageEnglish + '</option>' +
+                        '<option value="es">' + translateLanguageSpanish + '</option>' +
+                        '<option value="fr">' + translateLanguageFrench + '</option>' +
+                        '<option value="de">' + translateLanguageGerman + '</option>' +
+                        '<option value="it">' + translateLanguageItalian + '</option>' +
+                        '<option value="pt">' + translateLanguagePortuguese + '</option>' +
+                        '<option value="ru">' + translateLanguageRussian + '</option>' +
+                        '<option value="ja">' + translateLanguageJapanese + '</option>' +
+                        '<option value="ko">' + translateLanguageKorean + '</option>' +
+                        '<option value="zh">' + translateLanguageChinese + '</option>' +
                     '</select>' +
                     '<span class="translate-arrow">&#8594;</span>' +
                     '<select id="translate-to" data-translate-to>' +
-                        '<option value="en">English</option>' +
-                        '<option value="es">Spanish</option>' +
-                        '<option value="fr">French</option>' +
-                        '<option value="de">German</option>' +
-                        '<option value="it">Italian</option>' +
-                        '<option value="pt">Portuguese</option>' +
-                        '<option value="ru">Russian</option>' +
-                        '<option value="ja">Japanese</option>' +
-                        '<option value="ko">Korean</option>' +
-                        '<option value="zh">Chinese</option>' +
+                        '<option value="en">' + translateLanguageEnglish + '</option>' +
+                        '<option value="es">' + translateLanguageSpanish + '</option>' +
+                        '<option value="fr">' + translateLanguageFrench + '</option>' +
+                        '<option value="de">' + translateLanguageGerman + '</option>' +
+                        '<option value="it">' + translateLanguageItalian + '</option>' +
+                        '<option value="pt">' + translateLanguagePortuguese + '</option>' +
+                        '<option value="ru">' + translateLanguageRussian + '</option>' +
+                        '<option value="ja">' + translateLanguageJapanese + '</option>' +
+                        '<option value="ko">' + translateLanguageKorean + '</option>' +
+                        '<option value="zh">' + translateLanguageChinese + '</option>' +
                     '</select>' +
                 '</div>' +
-                '<textarea id="translate-input" data-translate-input placeholder="Enter text to translate..." rows="3"></textarea>' +
+                '<textarea id="translate-input" data-translate-input placeholder="' + translateInputPlaceholder + '" rows="3"></textarea>' +
                 '<div id="translate-output" class="translate-output"></div>' +
             '</div>';
     }
 
     function renderWikipediaWidget(container, data, settings) {
+        var wikipediaSearchPlaceholder = escapeHtml(t('widgets_ui.wikipedia_search_placeholder', 'Search Wikipedia...'));
+        var wikipediaEnterTopic = escapeHtml(t('widgets_ui.wikipedia_enter_topic', 'Enter a topic to search'));
+        var wikipediaReadMore = escapeHtml(t('widgets_ui.wikipedia_read_more', 'Read more'));
         if (!data || data.error) {
             container.innerHTML =
                 '<div class="wikipedia-widget">' +
-                    '<input type="text" id="wiki-search" data-wiki-search placeholder="Search Wikipedia...">' +
-                    '<div id="wiki-result" class="wiki-placeholder">Enter a topic to search</div>' +
+                    '<input type="text" id="wiki-search" data-wiki-search placeholder="' + wikipediaSearchPlaceholder + '">' +
+                    '<div id="wiki-result" class="wiki-placeholder">' + wikipediaEnterTopic + '</div>' +
                 '</div>';
             return;
         }
 
         container.innerHTML =
             '<div class="wikipedia-widget">' +
-                '<input type="text" id="wiki-search" data-wiki-search placeholder="Search Wikipedia...">' +
+                '<input type="text" id="wiki-search" data-wiki-search placeholder="' + wikipediaSearchPlaceholder + '">' +
                 '<div class="wiki-result">' +
                     (data.thumbnail ? '<img src="' + escapeHtml(data.thumbnail) + '" class="wiki-thumb" alt="">' : '') +
                     '<div class="wiki-content">' +
                         '<h4 class="wiki-title">' + escapeHtml(data.title) + '</h4>' +
                         '<p class="wiki-extract">' + escapeHtml(data.extract ? data.extract.substring(0, 200) + '...' : '') + '</p>' +
-                        '<a href="' + escapeHtml(data.url) + '" target="_blank" rel="noopener" class="wiki-link">Read more</a>' +
+                        '<a href="' + escapeHtml(data.url) + '" target="_blank" rel="noopener" class="wiki-link">' + wikipediaReadMore + '</a>' +
                     '</div>' +
                 '</div>' +
             '</div>';
     }
 
     function renderTrackingWidget(container, data, settings) {
+        var trackingPlaceholder = escapeHtml(t('widgets_ui.tracking_placeholder', 'Enter tracking number...'));
+        var trackingButton = escapeHtml(t('widgets_ui.tracking_button', 'Track'));
+        var trackingStatusPlaceholder = escapeHtml(t('widgets_ui.tracking_status_placeholder', 'Enter a tracking number to check status'));
         container.innerHTML =
             '<div class="tracking-widget">' +
                 '<div class="tracking-input-row">' +
-                    '<input type="text" id="tracking-number" data-tracking-number placeholder="Enter tracking number...">' +
-                    '<button data-action="track-package">Track</button>' +
+                    '<input type="text" id="tracking-number" data-tracking-number placeholder="' + trackingPlaceholder + '">' +
+                    '<button data-action="track-package">' + trackingButton + '</button>' +
                 '</div>' +
-                '<div id="tracking-result" class="tracking-placeholder">Enter a tracking number to check status</div>' +
+                '<div id="tracking-result" class="tracking-placeholder">' + trackingStatusPlaceholder + '</div>' +
             '</div>';
     }
 
     function renderNutritionWidget(container, data, settings) {
+        var nutritionSearchPlaceholder = escapeHtml(t('widgets_ui.nutrition_search_placeholder', 'Search food...'));
+        var nutritionEmptyPlaceholder = escapeHtml(t('widgets_ui.nutrition_empty_placeholder', 'Search for a food item'));
+        var nutritionServingSize = escapeHtml(t('widgets_ui.nutrition_serving_size', 'Per 100g'));
         if (!data || data.error) {
             container.innerHTML =
                 '<div class="nutrition-widget">' +
-                    '<input type="text" id="nutrition-search" data-nutrition-search placeholder="Search food...">' +
-                    '<div class="nutrition-placeholder">Search for a food item</div>' +
+                    '<input type="text" id="nutrition-search" data-nutrition-search placeholder="' + nutritionSearchPlaceholder + '">' +
+                    '<div class="nutrition-placeholder">' + nutritionEmptyPlaceholder + '</div>' +
                 '</div>';
             return;
         }
 
         var html = '<div class="nutrition-widget">' +
-            '<input type="text" id="nutrition-search" data-nutrition-search placeholder="Search food...">' +
+            '<input type="text" id="nutrition-search" data-nutrition-search placeholder="' + nutritionSearchPlaceholder + '">' +
             '<div class="nutrition-result">' +
                 '<h4 class="nutrition-name">' + escapeHtml(data.name) + '</h4>' +
-                (data.serving_size ? '<div class="nutrition-serving">Per 100g</div>' : '') +
+                (data.serving_size ? '<div class="nutrition-serving">' + nutritionServingSize + '</div>' : '') +
                 '<div class="nutrition-facts">';
 
         (data.nutrients || []).slice(0, 8).forEach(function(n) {
@@ -3312,65 +3483,82 @@
     }
 
     function renderQRCodeWidget(container, data, settings) {
+        var qrTextPlaceholder = escapeHtml(t('widgets_ui.qr_text_placeholder', 'Enter text or URL...'));
+        var qrEmptyPlaceholder = escapeHtml(t('widgets_ui.qr_empty_placeholder', 'Enter text to generate QR code'));
+        var qrGenerateButton = escapeHtml(t('widgets_ui.qr_generate_button', 'Generate QR Code'));
         container.innerHTML =
             '<div class="qrcode-widget">' +
-                '<input type="text" id="qr-text" data-qr-text placeholder="Enter text or URL...">' +
+                '<input type="text" id="qr-text" data-qr-text placeholder="' + qrTextPlaceholder + '">' +
                 '<div id="qr-canvas" class="qr-canvas">' +
-                    '<div class="qr-placeholder">Enter text to generate QR code</div>' +
+                    '<div class="qr-placeholder">' + qrEmptyPlaceholder + '</div>' +
                 '</div>' +
-                '<button data-action="generate-qr">Generate QR Code</button>' +
+                '<button data-action="generate-qr">' + qrGenerateButton + '</button>' +
             '</div>';
     }
 
     function renderTimerWidget(container, data, settings) {
+        var timerStart = escapeHtml(t('widgets_ui.timer_start', 'Start'));
+        var timerPause = escapeHtml(t('widgets_ui.timer_pause', 'Pause'));
+        var timerReset = escapeHtml(t('widgets_ui.timer_reset', 'Reset'));
+        var timerPresetOneMinute = escapeHtml(t('widgets_ui.timer_preset_1_minute', '1 min'));
+        var timerPresetFiveMinutes = escapeHtml(t('widgets_ui.timer_preset_5_minutes', '5 min'));
+        var timerPresetTenMinutes = escapeHtml(t('widgets_ui.timer_preset_10_minutes', '10 min'));
+        var timerPresetTwentyFiveMinutes = escapeHtml(t('widgets_ui.timer_preset_25_minutes', '25 min'));
         container.innerHTML =
             '<div class="timer-widget">' +
                 '<div class="timer-display" id="timer-display">00:00:00</div>' +
                 '<div class="timer-buttons">' +
-                    '<button data-timer-action="start">Start</button>' +
-                    '<button data-timer-action="pause">Pause</button>' +
-                    '<button data-timer-action="reset">Reset</button>' +
+                    '<button data-timer-action="start">' + timerStart + '</button>' +
+                    '<button data-timer-action="pause">' + timerPause + '</button>' +
+                    '<button data-timer-action="reset">' + timerReset + '</button>' +
                 '</div>' +
                 '<div class="timer-presets">' +
-                    '<button data-timer-preset="60">1 min</button>' +
-                    '<button data-timer-preset="300">5 min</button>' +
-                    '<button data-timer-preset="600">10 min</button>' +
-                    '<button data-timer-preset="1500">25 min</button>' +
+                    '<button data-timer-preset="60">' + timerPresetOneMinute + '</button>' +
+                    '<button data-timer-preset="300">' + timerPresetFiveMinutes + '</button>' +
+                    '<button data-timer-preset="600">' + timerPresetTenMinutes + '</button>' +
+                    '<button data-timer-preset="1500">' + timerPresetTwentyFiveMinutes + '</button>' +
                 '</div>' +
             '</div>';
     }
 
     function renderLoremWidget(container, data, settings) {
         var loremText = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.';
+        var loremParagraphs = escapeHtml(t('widgets_ui.lorem_paragraphs', 'Paragraphs'));
+        var loremSentences = escapeHtml(t('widgets_ui.lorem_sentences', 'Sentences'));
+        var loremWords = escapeHtml(t('widgets_ui.lorem_words', 'Words'));
+        var loremGenerate = escapeHtml(t('widgets_ui.lorem_generate', 'Generate'));
+        var loremCopy = escapeHtml(t('widgets_ui.lorem_copy', 'Copy'));
 
         container.innerHTML =
             '<div class="lorem-widget">' +
                 '<div class="lorem-options">' +
                     '<select id="lorem-type" data-lorem-type>' +
-                        '<option value="paragraphs">Paragraphs</option>' +
-                        '<option value="sentences">Sentences</option>' +
-                        '<option value="words">Words</option>' +
+                        '<option value="paragraphs">' + loremParagraphs + '</option>' +
+                        '<option value="sentences">' + loremSentences + '</option>' +
+                        '<option value="words">' + loremWords + '</option>' +
                     '</select>' +
                     '<input type="number" id="lorem-count" data-lorem-count value="3" min="1" max="20">' +
-                    '<button data-action="generate-lorem">Generate</button>' +
+                    '<button data-action="generate-lorem">' + loremGenerate + '</button>' +
                 '</div>' +
                 '<div id="lorem-output" class="lorem-output">' + loremText + '</div>' +
-                '<button class="lorem-copy" data-action="copy-lorem">Copy</button>' +
+                '<button class="lorem-copy" data-action="copy-lorem">' + loremCopy + '</button>' +
             '</div>';
     }
 
     function renderDictionaryWidget(container, data, settings) {
+        var dictionaryWordPlaceholder = escapeHtml(t('widgets_ui.dictionary_word_placeholder', 'Enter a word...'));
+        var dictionaryEmptyPlaceholder = escapeHtml(t('widgets_ui.dictionary_empty_placeholder', 'Search for a word definition'));
         if (!data || data.error) {
             container.innerHTML =
                 '<div class="dictionary-widget">' +
-                    '<input type="text" id="dict-word" data-dict-word placeholder="Enter a word...">' +
-                    '<div class="dict-placeholder">Search for a word definition</div>' +
+                    '<input type="text" id="dict-word" data-dict-word placeholder="' + dictionaryWordPlaceholder + '">' +
+                    '<div class="dict-placeholder">' + dictionaryEmptyPlaceholder + '</div>' +
                 '</div>';
             return;
         }
 
         var html = '<div class="dictionary-widget">' +
-            '<input type="text" id="dict-word" data-dict-word placeholder="Enter a word...">' +
+            '<input type="text" id="dict-word" data-dict-word placeholder="' + dictionaryWordPlaceholder + '">' +
             '<div class="dict-result">' +
                 '<h4 class="dict-word">' + escapeHtml(data.word) + '</h4>' +
                 (data.phonetic ? '<span class="dict-phonetic">' + escapeHtml(data.phonetic) + '</span>' : '');
@@ -3392,37 +3580,44 @@
     }
 
     function renderIPAddressWidget(container, data, settings) {
+        var ipLabel = escapeHtml(t('widgets_ui.ip_label', 'Your IP Address'));
+        var ipCopy = escapeHtml(t('widgets_ui.ip_copy', 'Copy'));
+        var ipError = escapeHtml(t('widgets_ui.ip_error', 'Unable to detect IP address'));
         // Get IP info - this is client-side detectable
         fetch('https://api.ipify.org?format=json')
             .then(function(r) { return r.json(); })
             .then(function(ipData) {
                 container.innerHTML =
                     '<div class="ip-widget">' +
-                        '<div class="ip-label">Your IP Address</div>' +
+                        '<div class="ip-label">' + ipLabel + '</div>' +
                         '<div class="ip-value">' + escapeHtml(ipData.ip) + '</div>' +
-                        '<button class="ip-copy" data-action="copy-ip" data-ip="' + escapeHtml(ipData.ip) + '">Copy</button>' +
+                        '<button class="ip-copy" data-action="copy-ip" data-ip="' + escapeHtml(ipData.ip) + '">' + ipCopy + '</button>' +
                     '</div>';
             })
             .catch(function() {
                 container.innerHTML =
                     '<div class="ip-widget">' +
-                        '<div class="ip-error">Unable to detect IP address</div>' +
+                        '<div class="ip-error">' + ipError + '</div>' +
                     '</div>';
             });
     }
 
     function renderColorPickerWidget(container, data, settings) {
         var currentColor = settings.color || '#1e90ff';
+        var colorHEX = escapeHtml(t('widgets_ui.color_hex', 'HEX'));
+        var colorRGB = escapeHtml(t('widgets_ui.color_rgb', 'RGB'));
+        var colorHSL = escapeHtml(t('widgets_ui.color_hsl', 'HSL'));
+        var colorCopyHEX = escapeHtml(t('widgets_ui.color_copy_hex', 'Copy HEX'));
 
         container.innerHTML =
             '<div class="colorpicker-widget">' +
                 '<input type="color" id="color-input" data-color-input value="' + currentColor + '">' +
                 '<div class="color-values">' +
-                    '<div class="color-row"><label>HEX</label><input type="text" id="color-hex" data-color-hex value="' + currentColor + '" readonly></div>' +
-                    '<div class="color-row"><label>RGB</label><input type="text" id="color-rgb" data-color-rgb readonly></div>' +
-                    '<div class="color-row"><label>HSL</label><input type="text" id="color-hsl" data-color-hsl readonly></div>' +
+                    '<div class="color-row"><label>' + colorHEX + '</label><input type="text" id="color-hex" data-color-hex value="' + currentColor + '" readonly></div>' +
+                    '<div class="color-row"><label>' + colorRGB + '</label><input type="text" id="color-rgb" data-color-rgb readonly></div>' +
+                    '<div class="color-row"><label>' + colorHSL + '</label><input type="text" id="color-hsl" data-color-hsl readonly></div>' +
                 '</div>' +
-                '<button data-action="copy-color">Copy HEX</button>' +
+                '<button data-action="copy-color">' + colorCopyHEX + '</button>' +
             '</div>';
 
         // Update color values
@@ -3703,6 +3898,8 @@
             var self = this;
             var grid = document.getElementById('widget-grid');
             if (!grid) return;
+            var widgetOptionsTitle = escapeHtml(t('widgets_ui.widget_options', 'Widget options'));
+            var widgetLoadingText = escapeHtml(t('common.loading', 'Loading...'));
 
             Object.values(this.intervals).forEach(clearInterval);
             this.intervals = {};
@@ -3720,10 +3917,10 @@
                 div.innerHTML =
                     '<div class="widget-header">' +
                         '<span class="widget-title">' + widget.name + '</span>' +
-                        '<button class="widget-menu" title="Widget options">&#8942;</button>' +
+                        '<button class="widget-menu" title="' + widgetOptionsTitle + '">&#8942;</button>' +
                     '</div>' +
                     '<div class="widget-content" id="widget-content-' + widgetType + '">' +
-                        '<div class="widget-loading">Loading...</div>' +
+                        '<div class="widget-loading">' + widgetLoadingText + '</div>' +
                     '</div>';
                 grid.appendChild(div);
 
@@ -3782,6 +3979,23 @@
             }
         },
 
+        getWidgetDisplayName: function(widgetType) {
+            switch (widgetType) {
+                case 'weather':
+                    return t('widgets.weather', WIDGETS[widgetType]?.name || widgetType);
+                case 'clock':
+                    return t('widgets.clock', WIDGETS[widgetType]?.name || widgetType);
+                case 'stocks':
+                    return t('widgets_ui.widget_name_stocks', WIDGETS[widgetType]?.name || widgetType);
+                case 'crypto':
+                    return t('widgets_ui.widget_name_crypto', WIDGETS[widgetType]?.name || widgetType);
+                case 'rss':
+                    return t('widgets_ui.widget_name_rss', WIDGETS[widgetType]?.name || widgetType);
+                default:
+                    return WIDGETS[widgetType]?.name || widgetType;
+            }
+        },
+
         showMenu: function(widgetType) {
             var existingMenu = document.querySelector('.widget-dropdown-menu');
             if (existingMenu) existingMenu.remove();
@@ -3792,10 +4006,13 @@
             var self = this;
             var menu = document.createElement('div');
             menu.className = 'widget-dropdown-menu';
+            var refreshLabel = escapeHtml(t('widgets_ui.menu_refresh', 'Refresh'));
+            var settingsLabel = escapeHtml(t('nav.settings', 'Settings'));
+            var removeLabel = escapeHtml(t('widgets_ui.menu_remove', 'Remove'));
             menu.innerHTML =
-                '<button data-menu-action="refresh">Refresh</button>' +
-                '<button data-menu-action="settings">Settings</button>' +
-                '<button data-menu-action="remove" class="danger">Remove</button>';
+                '<button data-menu-action="refresh">' + refreshLabel + '</button>' +
+                '<button data-menu-action="settings">' + settingsLabel + '</button>' +
+                '<button data-menu-action="remove" class="danger">' + removeLabel + '</button>';
 
             menu.addEventListener('click', function(e) {
                 var action = e.target.dataset.menuAction;
@@ -3829,53 +4046,73 @@
             var self = this;
             var settings = getWidgetSettings(widgetType);
             var content = '';
+            var settingsTitle = escapeHtml(this.getWidgetDisplayName(widgetType) + ' ' + t('nav.settings', 'Settings'));
+            var cancelLabel = escapeHtml(t('common.cancel', 'Cancel'));
+            var saveLabel = escapeHtml(t('common.save', 'Save'));
 
             switch (widgetType) {
                 case 'weather':
                     var useGeolocation = settings.useGeolocation || false;
+                    var useLocationLabel = escapeHtml(t('widgets_ui.settings_weather_use_current_location', 'Use current location (requires HTTPS)'));
+                    var usingLocationText = escapeHtml(t('widgets_ui.settings_weather_using_location', 'Using your location'));
+                    var cityHintText = escapeHtml(t('widgets_ui.settings_weather_city_hint', 'Enter a city (e.g., "Albany, NY" or "Paris, France")'));
+                    var cityLabel = escapeHtml(t('widgets_ui.settings_weather_city_label', 'City'));
+                    var cityPlaceholder = escapeHtml(t('widgets_ui.settings_weather_city_placeholder', 'Albany, NY or Paris, France'));
+                    var unitsLabel = escapeHtml(t('widgets_ui.settings_weather_units_label', 'Units'));
+                    var unitsMetric = escapeHtml(t('widgets_ui.settings_weather_units_metric', 'Celsius'));
+                    var unitsImperial = escapeHtml(t('widgets_ui.settings_weather_units_imperial', 'Fahrenheit'));
                     content =
                         '<div class="setting-group">' +
-                            '<label class="setting-checkbox"><input type="checkbox" id="setting-use-location"' + (useGeolocation ? ' checked' : '') + '> Use current location (requires HTTPS)</label>' +
-                            '<p class="setting-help" id="geolocation-status">' + (useGeolocation && settings.lat ? 'Using your location' : 'Enter city name (e.g., "Albany, NY" or "Paris, France")') + '</p>' +
+                            '<label class="setting-checkbox"><input type="checkbox" id="setting-use-location"' + (useGeolocation ? ' checked' : '') + '> ' + useLocationLabel + '</label>' +
+                            '<p class="setting-help" id="geolocation-status">' + (useGeolocation && settings.lat ? usingLocationText : cityHintText) + '</p>' +
                         '</div>' +
-                        '<label>City:<input type="text" id="setting-city" value="' + escapeHtml(settings.city || '') + '" placeholder="Albany, NY or Paris, France"' + (useGeolocation ? ' disabled' : '') + '></label>' +
-                        '<label>Units:<select id="setting-units">' +
-                            '<option value="metric"' + (settings.units !== 'imperial' ? ' selected' : '') + '>Celsius</option>' +
-                            '<option value="imperial"' + (settings.units === 'imperial' ? ' selected' : '') + '>Fahrenheit</option>' +
+                        '<label>' + cityLabel + ':<input type="text" id="setting-city" value="' + escapeHtml(settings.city || '') + '" placeholder="' + cityPlaceholder + '"' + (useGeolocation ? ' disabled' : '') + '></label>' +
+                        '<label>' + unitsLabel + ':<select id="setting-units">' +
+                            '<option value="metric"' + (settings.units !== 'imperial' ? ' selected' : '') + '>' + unitsMetric + '</option>' +
+                            '<option value="imperial"' + (settings.units === 'imperial' ? ' selected' : '') + '>' + unitsImperial + '</option>' +
                         '</select></label>' +
                         '<input type="hidden" id="setting-lat" value="' + (settings.lat || '') + '">' +
                         '<input type="hidden" id="setting-lon" value="' + (settings.lon || '') + '">';
                     break;
                 case 'clock':
+                    var formatLabel = escapeHtml(t('widgets_ui.settings_clock_format_label', 'Format'));
+                    var format24h = escapeHtml(t('widgets_ui.settings_clock_format_24h', '24-hour'));
+                    var format12h = escapeHtml(t('widgets_ui.settings_clock_format_12h', '12-hour'));
                     content =
-                        '<label>Format:<select id="setting-format">' +
-                            '<option value="24h"' + (settings.format !== '12h' ? ' selected' : '') + '>24-hour</option>' +
-                            '<option value="12h"' + (settings.format === '12h' ? ' selected' : '') + '>12-hour</option>' +
+                        '<label>' + formatLabel + ':<select id="setting-format">' +
+                            '<option value="24h"' + (settings.format !== '12h' ? ' selected' : '') + '>' + format24h + '</option>' +
+                            '<option value="12h"' + (settings.format === '12h' ? ' selected' : '') + '>' + format12h + '</option>' +
                         '</select></label>';
                     break;
                 case 'stocks':
-                    content = '<label>Stock Symbols (comma-separated):<input type="text" id="setting-symbols" value="' + escapeHtml((settings.symbols || ['AAPL', 'GOOGL', 'MSFT']).join(', ')) + '" placeholder="e.g., AAPL, GOOGL, MSFT"></label>';
+                    var stocksLabel = escapeHtml(t('widgets_ui.settings_stocks_symbols_label', 'Stock Symbols (comma-separated)'));
+                    var stocksPlaceholder = escapeHtml(t('widgets_ui.settings_stocks_symbols_placeholder', 'e.g., AAPL, GOOGL, MSFT'));
+                    content = '<label>' + stocksLabel + ':<input type="text" id="setting-symbols" value="' + escapeHtml((settings.symbols || ['AAPL', 'GOOGL', 'MSFT']).join(', ')) + '" placeholder="' + stocksPlaceholder + '"></label>';
                     break;
                 case 'crypto':
-                    content = '<label>Coins (comma-separated):<input type="text" id="setting-coins" value="' + escapeHtml((settings.coins || ['bitcoin', 'ethereum']).join(', ')) + '" placeholder="e.g., bitcoin, ethereum"></label>';
+                    var cryptoLabel = escapeHtml(t('widgets_ui.settings_crypto_coins_label', 'Coins (comma-separated)'));
+                    var cryptoPlaceholder = escapeHtml(t('widgets_ui.settings_crypto_coins_placeholder', 'e.g., bitcoin, ethereum'));
+                    content = '<label>' + cryptoLabel + ':<input type="text" id="setting-coins" value="' + escapeHtml((settings.coins || ['bitcoin', 'ethereum']).join(', ')) + '" placeholder="' + cryptoPlaceholder + '"></label>';
                     break;
                 case 'rss':
-                    content = '<label>RSS Feed URLs (one per line):<textarea id="setting-feeds" rows="4" placeholder="https://example.com/feed.xml">' + escapeHtml((settings.feeds || []).join('\n')) + '</textarea></label>';
+                    var rssLabel = escapeHtml(t('widgets_ui.settings_rss_feeds_label', 'RSS Feed URLs (one per line)'));
+                    var rssPlaceholder = escapeHtml(t('widgets_ui.settings_rss_feeds_placeholder', 'https://example.com/feed.xml'));
+                    content = '<label>' + rssLabel + ':<textarea id="setting-feeds" rows="4" placeholder="' + rssPlaceholder + '">' + escapeHtml((settings.feeds || []).join('\n')) + '</textarea></label>';
                     break;
                 default:
-                    content = '<p>No settings available for this widget.</p>';
+                    content = '<p>' + escapeHtml(t('widgets_ui.settings_unavailable', 'No settings available for this widget.')) + '</p>';
             }
 
             var modal = document.createElement('div');
             modal.className = 'widget-settings-modal';
             modal.innerHTML =
                 '<div class="widget-settings-content">' +
-                    '<h3>' + (WIDGETS[widgetType]?.name || widgetType) + ' Settings</h3>' +
+                    '<h3>' + settingsTitle + '</h3>' +
                     '<form id="widget-settings-form">' +
                         content +
                         '<div class="widget-settings-actions">' +
-                            '<button type="button" data-action="cancel">Cancel</button>' +
-                            '<button type="submit">Save</button>' +
+                            '<button type="button" data-action="cancel">' + cancelLabel + '</button>' +
+                            '<button type="submit">' + saveLabel + '</button>' +
                         '</div>' +
                     '</form>' +
                 '</div>';
@@ -3912,13 +4149,13 @@
 
                             if (!isSecure) {
                                 useLocationCheckbox.checked = false;
-                                statusEl.textContent = 'Location requires HTTPS. Please enter a city (e.g., "London" or "Paris, France").';
+                                statusEl.textContent = t('widgets_ui.settings_weather_location_requires_https', 'Location requires HTTPS. Please enter a city (e.g., "London" or "Paris, France").');
                                 statusEl.style.color = 'var(--accent-warning, #f1c40f)';
                                 return;
                             }
 
                             cityInput.disabled = true;
-                            statusEl.textContent = 'Getting your location...';
+                            statusEl.textContent = t('widgets_ui.settings_weather_getting_location', 'Getting your location...');
                             statusEl.style.color = '';
 
                             if ('geolocation' in navigator) {
@@ -3926,7 +4163,7 @@
                                     function(position) {
                                         latInput.value = position.coords.latitude;
                                         lonInput.value = position.coords.longitude;
-                                        statusEl.textContent = 'Location acquired! (' + position.coords.latitude.toFixed(2) + ', ' + position.coords.longitude.toFixed(2) + ')';
+                                        statusEl.textContent = t('widgets_ui.settings_weather_location_acquired', 'Location acquired!') + ' (' + position.coords.latitude.toFixed(2) + ', ' + position.coords.longitude.toFixed(2) + ')';
                                         statusEl.style.color = 'var(--accent-success, #2ecc71)';
                                     },
                                     function(error) {
@@ -3937,16 +4174,16 @@
                                         statusEl.style.color = 'var(--accent-warning, #f1c40f)';
                                         switch(error.code) {
                                             case error.PERMISSION_DENIED:
-                                                statusEl.textContent = 'Location permission denied. Enter a city (e.g., "Albany, NY").';
+                                                statusEl.textContent = t('widgets_ui.settings_weather_location_permission_denied', 'Location permission denied. Enter a city (e.g., "Albany, NY").');
                                                 break;
                                             case error.POSITION_UNAVAILABLE:
-                                                statusEl.textContent = 'Location unavailable. Enter a city (e.g., "London, UK").';
+                                                statusEl.textContent = t('widgets_ui.settings_weather_location_unavailable', 'Location unavailable. Enter a city (e.g., "London, UK").');
                                                 break;
                                             case error.TIMEOUT:
-                                                statusEl.textContent = 'Location timed out. Enter a city (e.g., "Paris, France").';
+                                                statusEl.textContent = t('widgets_ui.settings_weather_location_timeout', 'Location timed out. Enter a city (e.g., "Paris, France").');
                                                 break;
                                             default:
-                                                statusEl.textContent = 'Could not get location. Enter a city (e.g., "Tokyo, Japan").';
+                                                statusEl.textContent = t('widgets_ui.settings_weather_location_failed', 'Could not get location. Enter a city (e.g., "Tokyo, Japan").');
                                         }
                                     },
                                     { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
@@ -3954,14 +4191,14 @@
                             } else {
                                 useLocationCheckbox.checked = false;
                                 cityInput.disabled = false;
-                                statusEl.textContent = 'Geolocation not supported. Enter a city (e.g., "New York, NY").';
+                                statusEl.textContent = t('widgets_ui.settings_weather_location_unsupported', 'Geolocation not supported. Enter a city (e.g., "New York, NY").');
                                 statusEl.style.color = 'var(--accent-warning, #f1c40f)';
                             }
                         } else {
                             cityInput.disabled = false;
                             latInput.value = '';
                             lonInput.value = '';
-                            statusEl.textContent = 'Enter a city (e.g., "Albany, NY" or "Paris, France")';
+                            statusEl.textContent = t('widgets_ui.settings_weather_city_hint', 'Enter a city (e.g., "Albany, NY" or "Paris, France")');
                             statusEl.style.color = '';
                         }
                     });
@@ -4097,16 +4334,16 @@
 
         // Quick Links
         addQuickLink: async function() {
-            var name = await window.showPrompt('Link name:');
+            var name = await window.showPrompt(t('widgets_ui.quicklinks_prompt_name', 'Link name:'));
             if (!name) return;
 
-            var url = await window.showPrompt('URL (include https://):');
+            var url = await window.showPrompt(t('widgets_ui.quicklinks_prompt_url', 'URL (include https://):'));
             if (!url) return;
 
             try {
                 new URL(url);
             } catch (e) {
-                await window.showAlert('Invalid URL. Please include https://');
+                await window.showAlert(t('widgets_ui.quicklinks_invalid_url', 'Invalid URL. Please include https://'));
                 return;
             }
 
@@ -4618,16 +4855,16 @@
 
     // Advanced search operators
     var OPERATORS = {
-        exact: { label: 'Exact phrase', prefix: '"', suffix: '"', placeholder: 'exact words' },
-        exclude: { label: 'Exclude', prefix: '-', suffix: '', placeholder: 'unwanted term' },
-        site: { label: 'Site', prefix: 'site:', suffix: '', placeholder: 'example.com' },
-        filetype: { label: 'File type', prefix: 'filetype:', suffix: '', placeholder: 'pdf' },
-        intitle: { label: 'In title', prefix: 'intitle:', suffix: '', placeholder: 'title word' },
-        inurl: { label: 'In URL', prefix: 'inurl:', suffix: '', placeholder: 'url part' },
-        intext: { label: 'In text', prefix: 'intext:', suffix: '', placeholder: 'body text' },
-        before: { label: 'Before date', prefix: 'before:', suffix: '', placeholder: '2024-01-01' },
-        after: { label: 'After date', prefix: 'after:', suffix: '', placeholder: '2023-01-01' },
-        or: { label: 'OR search', prefix: '', suffix: '', placeholder: 'term1 OR term2' }
+        exact: { label: t('search.advanced_modal.exact_phrase', 'Exact phrase'), prefix: '"', suffix: '"', placeholder: t('search.advanced_modal.operator_exact_placeholder', 'exact words') },
+        exclude: { label: t('search.advanced_modal.operator_exclude', 'Exclude'), prefix: '-', suffix: '', placeholder: t('search.advanced_modal.operator_exclude_placeholder', 'unwanted term') },
+        site: { label: t('search.advanced_modal.operator_site', 'Site'), prefix: 'site:', suffix: '', placeholder: 'example.com' },
+        filetype: { label: t('search.advanced_modal.file_type', 'File type'), prefix: 'filetype:', suffix: '', placeholder: 'pdf' },
+        intitle: { label: t('search.advanced_modal.operator_in_title', 'In title'), prefix: 'intitle:', suffix: '', placeholder: t('search.advanced_modal.operator_in_title_placeholder', 'title word') },
+        inurl: { label: t('search.advanced_modal.operator_in_url', 'In URL'), prefix: 'inurl:', suffix: '', placeholder: t('search.advanced_modal.operator_in_url_placeholder', 'url part') },
+        intext: { label: t('search.advanced_modal.operator_in_text', 'In text'), prefix: 'intext:', suffix: '', placeholder: t('search.advanced_modal.operator_in_text_placeholder', 'body text') },
+        before: { label: t('search.advanced_modal.before_date', 'Before date'), prefix: 'before:', suffix: '', placeholder: '2024-01-01' },
+        after: { label: t('search.advanced_modal.after_date', 'After date'), prefix: 'after:', suffix: '', placeholder: '2023-01-01' },
+        or: { label: t('search.advanced_modal.operator_or_search', 'OR search'), prefix: '', suffix: '', placeholder: t('search.advanced_modal.operator_or_search_placeholder', 'term1 OR term2') }
     };
 
     function createAdvancedSearchForm() {
@@ -4641,44 +4878,83 @@
         advancedSearchModal.setAttribute('role', 'dialog');
         advancedSearchModal.setAttribute('aria-labelledby', 'advanced-search-title');
 
+        var advancedTitle = escapeHtml(t('search.advanced', 'Advanced Search'));
+        var advancedAllWords = escapeHtml(t('search.advanced_modal.all_words', 'All these words'));
+        var advancedAllWordsPlaceholder = escapeHtml(t('search.advanced_modal.all_words_placeholder', 'search terms'));
+        var advancedExactPhrase = escapeHtml(t('search.advanced_modal.exact_phrase', 'Exact phrase'));
+        var advancedExactPhrasePlaceholder = escapeHtml(t('search.advanced_modal.exact_phrase_placeholder', '"exact phrase"'));
+        var advancedAnyWords = escapeHtml(t('search.advanced_modal.any_words', 'Any of these words'));
+        var advancedAnyWordsPlaceholder = escapeHtml(t('search.advanced_modal.any_words_placeholder', 'word1 OR word2'));
+        var advancedExcludeWords = escapeHtml(t('search.advanced_modal.exclude_words', 'None of these words'));
+        var advancedExcludeWordsPlaceholder = escapeHtml(t('search.advanced_modal.exclude_words_placeholder', '-unwanted'));
+        var advancedSite = escapeHtml(t('search.advanced_modal.site', 'Site/domain'));
+        var advancedFileType = escapeHtml(t('search.advanced_modal.file_type', 'File type'));
+        var advancedAnyFileType = escapeHtml(t('search.advanced_modal.any_file_type', 'Any'));
+        var advancedWordDoc = escapeHtml(t('search.advanced_modal.word_doc', 'Word (doc)'));
+        var advancedWordDocx = escapeHtml(t('search.advanced_modal.word_docx', 'Word (docx)'));
+        var advancedExcelXls = escapeHtml(t('search.advanced_modal.excel_xls', 'Excel (xls)'));
+        var advancedExcelXlsx = escapeHtml(t('search.advanced_modal.excel_xlsx', 'Excel (xlsx)'));
+        var advancedPowerPoint = escapeHtml(t('search.advanced_modal.powerpoint', 'PowerPoint'));
+        var advancedText = escapeHtml(t('search.advanced_modal.text', 'Text'));
+        var advancedTitleWords = escapeHtml(t('search.advanced_modal.title_words', 'Words in title'));
+        var advancedTitleWordsPlaceholder = escapeHtml(t('search.advanced_modal.title_words_placeholder', 'title words'));
+        var advancedURLWords = escapeHtml(t('search.advanced_modal.url_words', 'Words in URL'));
+        var advancedURLWordsPlaceholder = escapeHtml(t('search.advanced_modal.url_words_placeholder', 'url-segment'));
+        var advancedAfterDate = escapeHtml(t('search.advanced_modal.after_date', 'After date'));
+        var advancedBeforeDate = escapeHtml(t('search.advanced_modal.before_date', 'Before date'));
+        var advancedRegion = escapeHtml(t('search.region', 'Region'));
+        var advancedAnyRegion = escapeHtml(t('search.advanced_modal.any_region', 'Any region'));
+        var advancedUnitedStates = escapeHtml(t('search.advanced_modal.region_us', 'United States'));
+        var advancedUnitedKingdom = escapeHtml(t('search.advanced_modal.region_uk', 'United Kingdom'));
+        var advancedGermany = escapeHtml(t('search.advanced_modal.region_de', 'Germany'));
+        var advancedFrance = escapeHtml(t('search.advanced_modal.region_fr', 'France'));
+        var advancedSpain = escapeHtml(t('search.advanced_modal.region_es', 'Spain'));
+        var advancedItaly = escapeHtml(t('search.advanced_modal.region_it', 'Italy'));
+        var advancedJapan = escapeHtml(t('search.advanced_modal.region_jp', 'Japan'));
+        var advancedChina = escapeHtml(t('search.advanced_modal.region_cn', 'China'));
+        var advancedBrazil = escapeHtml(t('search.advanced_modal.region_br', 'Brazil'));
+        var advancedAustralia = escapeHtml(t('search.advanced_modal.region_au', 'Australia'));
+        var advancedCanada = escapeHtml(t('search.advanced_modal.region_ca', 'Canada'));
+        var advancedIndia = escapeHtml(t('search.advanced_modal.region_in', 'India'));
+        var advancedPreview = escapeHtml(t('search.advanced_modal.query_preview', 'Query preview:'));
         var html = '<header>' +
-            '<h2 id="advanced-search-title">Advanced Search</h2>' +
-            '<button type="button" class="close-btn" data-action="close" aria-label="Close">&times;</button>' +
+            '<h2 id="advanced-search-title">' + advancedTitle + '</h2>' +
+            '<button type="button" class="close-btn" data-action="close" aria-label="' + escapeHtml(t('common.close', 'Close')) + '">&times;</button>' +
         '</header>' +
         '<main class="advanced-search-content">' +
             '<form id="advanced-search-form">' +
                 '<div class="advanced-search-group">' +
-                    '<label for="adv-main">All these words</label>' +
-                    '<input type="text" id="adv-main" name="main" placeholder="search terms" autofocus>' +
+                    '<label for="adv-main">' + advancedAllWords + '</label>' +
+                    '<input type="text" id="adv-main" name="main" placeholder="' + advancedAllWordsPlaceholder + '" autofocus>' +
                 '</div>' +
                 '<div class="advanced-search-group">' +
-                    '<label for="adv-exact">Exact phrase</label>' +
-                    '<input type="text" id="adv-exact" name="exact" placeholder="&quot;exact phrase&quot;">' +
+                    '<label for="adv-exact">' + advancedExactPhrase + '</label>' +
+                    '<input type="text" id="adv-exact" name="exact" placeholder="' + advancedExactPhrasePlaceholder + '">' +
                 '</div>' +
                 '<div class="advanced-search-group">' +
-                    '<label for="adv-any">Any of these words</label>' +
-                    '<input type="text" id="adv-any" name="any" placeholder="word1 OR word2">' +
+                    '<label for="adv-any">' + advancedAnyWords + '</label>' +
+                    '<input type="text" id="adv-any" name="any" placeholder="' + advancedAnyWordsPlaceholder + '">' +
                 '</div>' +
                 '<div class="advanced-search-group">' +
-                    '<label for="adv-exclude">None of these words</label>' +
-                    '<input type="text" id="adv-exclude" name="exclude" placeholder="-unwanted">' +
+                    '<label for="adv-exclude">' + advancedExcludeWords + '</label>' +
+                    '<input type="text" id="adv-exclude" name="exclude" placeholder="' + advancedExcludeWordsPlaceholder + '">' +
                 '</div>' +
                 '<div class="advanced-search-row">' +
                     '<div class="advanced-search-group half">' +
-                        '<label for="adv-site">Site/domain</label>' +
+                        '<label for="adv-site">' + advancedSite + '</label>' +
                         '<input type="text" id="adv-site" name="site" placeholder="example.com">' +
                     '</div>' +
                     '<div class="advanced-search-group half">' +
-                        '<label for="adv-filetype">File type</label>' +
+                        '<label for="adv-filetype">' + advancedFileType + '</label>' +
                         '<select id="adv-filetype" name="filetype">' +
-                            '<option value="">Any</option>' +
+                            '<option value="">' + advancedAnyFileType + '</option>' +
                             '<option value="pdf">PDF</option>' +
-                            '<option value="doc">Word (doc)</option>' +
-                            '<option value="docx">Word (docx)</option>' +
-                            '<option value="xls">Excel (xls)</option>' +
-                            '<option value="xlsx">Excel (xlsx)</option>' +
-                            '<option value="ppt">PowerPoint</option>' +
-                            '<option value="txt">Text</option>' +
+                            '<option value="doc">' + advancedWordDoc + '</option>' +
+                            '<option value="docx">' + advancedWordDocx + '</option>' +
+                            '<option value="xls">' + advancedExcelXls + '</option>' +
+                            '<option value="xlsx">' + advancedExcelXlsx + '</option>' +
+                            '<option value="ppt">' + advancedPowerPoint + '</option>' +
+                            '<option value="txt">' + advancedText + '</option>' +
                             '<option value="csv">CSV</option>' +
                             '<option value="json">JSON</option>' +
                             '<option value="xml">XML</option>' +
@@ -4687,44 +4963,44 @@
                 '</div>' +
                 '<div class="advanced-search-row">' +
                     '<div class="advanced-search-group half">' +
-                        '<label for="adv-intitle">Words in title</label>' +
-                        '<input type="text" id="adv-intitle" name="intitle" placeholder="title words">' +
+                        '<label for="adv-intitle">' + advancedTitleWords + '</label>' +
+                        '<input type="text" id="adv-intitle" name="intitle" placeholder="' + advancedTitleWordsPlaceholder + '">' +
                     '</div>' +
                     '<div class="advanced-search-group half">' +
-                        '<label for="adv-inurl">Words in URL</label>' +
-                        '<input type="text" id="adv-inurl" name="inurl" placeholder="url-segment">' +
+                        '<label for="adv-inurl">' + advancedURLWords + '</label>' +
+                        '<input type="text" id="adv-inurl" name="inurl" placeholder="' + advancedURLWordsPlaceholder + '">' +
                     '</div>' +
                 '</div>' +
                 '<div class="advanced-search-row">' +
                     '<div class="advanced-search-group half">' +
-                        '<label for="adv-after">After date</label>' +
+                        '<label for="adv-after">' + advancedAfterDate + '</label>' +
                         '<input type="date" id="adv-after" name="after">' +
                     '</div>' +
                     '<div class="advanced-search-group half">' +
-                        '<label for="adv-before">Before date</label>' +
+                        '<label for="adv-before">' + advancedBeforeDate + '</label>' +
                         '<input type="date" id="adv-before" name="before">' +
                     '</div>' +
                 '</div>' +
                 '<div class="advanced-search-group">' +
-                    '<label for="adv-region">Region</label>' +
+                    '<label for="adv-region">' + advancedRegion + '</label>' +
                     '<select id="adv-region" name="region">' +
-                        '<option value="">Any region</option>' +
-                        '<option value="us">United States</option>' +
-                        '<option value="uk">United Kingdom</option>' +
-                        '<option value="de">Germany</option>' +
-                        '<option value="fr">France</option>' +
-                        '<option value="es">Spain</option>' +
-                        '<option value="it">Italy</option>' +
-                        '<option value="jp">Japan</option>' +
-                        '<option value="cn">China</option>' +
-                        '<option value="br">Brazil</option>' +
-                        '<option value="au">Australia</option>' +
-                        '<option value="ca">Canada</option>' +
-                        '<option value="in">India</option>' +
+                        '<option value="">' + advancedAnyRegion + '</option>' +
+                        '<option value="us">' + advancedUnitedStates + '</option>' +
+                        '<option value="uk">' + advancedUnitedKingdom + '</option>' +
+                        '<option value="de">' + advancedGermany + '</option>' +
+                        '<option value="fr">' + advancedFrance + '</option>' +
+                        '<option value="es">' + advancedSpain + '</option>' +
+                        '<option value="it">' + advancedItaly + '</option>' +
+                        '<option value="jp">' + advancedJapan + '</option>' +
+                        '<option value="cn">' + advancedChina + '</option>' +
+                        '<option value="br">' + advancedBrazil + '</option>' +
+                        '<option value="au">' + advancedAustralia + '</option>' +
+                        '<option value="ca">' + advancedCanada + '</option>' +
+                        '<option value="in">' + advancedIndia + '</option>' +
                     '</select>' +
                 '</div>' +
                 '<div class="advanced-search-preview">' +
-                    '<label>Query preview:</label>' +
+                    '<label>' + advancedPreview + '</label>' +
                     '<code id="adv-preview"></code>' +
                 '</div>' +
             '</form>' +
@@ -4870,7 +5146,7 @@
 
         // Announce for screen readers
         if (window.srAnnounce) {
-            window.srAnnounce('Advanced search dialog opened');
+            window.srAnnounce(t('search.advanced_modal.dialog_opened', 'Advanced search dialog opened'));
         }
     }
 
@@ -4884,8 +5160,8 @@
             trigger.type = 'button';
             trigger.className = 'advanced-search-trigger';
             trigger.innerHTML = '&#8942;'; // Vertical ellipsis
-            trigger.setAttribute('aria-label', 'Advanced search');
-            trigger.setAttribute('title', 'Advanced search');
+            trigger.setAttribute('aria-label', t('search.advanced', 'Advanced Search'));
+            trigger.setAttribute('title', t('search.advanced', 'Advanced Search'));
             trigger.addEventListener('click', showAdvancedSearch);
 
             var searchBtn = form.querySelector('button[type="submit"], .search-btn');

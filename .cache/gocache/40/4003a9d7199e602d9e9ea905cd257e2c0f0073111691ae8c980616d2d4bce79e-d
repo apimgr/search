@@ -1,0 +1,5 @@
+./embed.go
+./i18n.go
+./languages.go
+./i18n_test.go
+./languages_test.go

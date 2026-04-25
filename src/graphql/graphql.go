@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/i18n"
 	"github.com/graphql-go/graphql"
 )
 
@@ -14,6 +15,10 @@ var Schema graphql.Schema
 // initSchemaFunc is used for testing - allows injecting errors
 // By default, this is set to initSchemaImpl
 var initSchemaFunc = initSchemaImpl
+
+func localizedHTTPError(w http.ResponseWriter, r *http.Request, status int, key string, args ...interface{}) {
+	http.Error(w, i18n.RequestString(r, key, args...), status)
+}
 
 // InitSchema initializes the GraphQL schema
 func InitSchema() error {
@@ -25,7 +30,7 @@ func InitSchema() error {
 func initSchemaImpl() error {
 	// Define the SearchResult type
 	searchResultType := graphql.NewObject(graphql.ObjectConfig{
-		Name: "SearchResult",
+		Name:        "SearchResult",
 		Description: "A single search result from an engine",
 		Fields: graphql.Fields{
 			"title": &graphql.Field{
@@ -65,7 +70,7 @@ func initSchemaImpl() error {
 
 	// Define the SearchResponse type
 	searchResponseType := graphql.NewObject(graphql.ObjectConfig{
-		Name: "SearchResponse",
+		Name:        "SearchResponse",
 		Description: "Search query response",
 		Fields: graphql.Fields{
 			"query": &graphql.Field{
@@ -93,7 +98,7 @@ func initSchemaImpl() error {
 
 	// Define the HealthResponse type
 	healthResponseType := graphql.NewObject(graphql.ObjectConfig{
-		Name: "HealthResponse",
+		Name:        "HealthResponse",
 		Description: "Server health status",
 		Fields: graphql.Fields{
 			"status": &graphql.Field{
@@ -377,7 +382,7 @@ func Handler(cfg *config.Config) http.HandlerFunc {
 	if Schema.QueryType() == nil {
 		if err := InitSchema(); err != nil {
 			return func(w http.ResponseWriter, r *http.Request) {
-				http.Error(w, "Failed to initialize GraphQL schema", http.StatusInternalServerError)
+				localizedHTTPError(w, r, http.StatusInternalServerError, "errors.server_error")
 			}
 		}
 	}
@@ -395,7 +400,7 @@ func Handler(cfg *config.Config) http.HandlerFunc {
 			return
 		}
 
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 	}
 }
 
@@ -408,7 +413,7 @@ func handleGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
 		return
 	}
 
@@ -427,9 +432,10 @@ func handleGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 func serveGraphiQL(w http.ResponseWriter, r *http.Request) {
 	// Get theme from cookie or default to dark
 	theme := getTheme(r)
+	lang, dir := i18n.DetectRequestLocale(r)
 
 	html := `<!DOCTYPE html>
-<html lang="en">
+<html lang="` + lang + `" dir="` + dir + `">
 <head>
 	<meta charset="UTF-8">
 	<title>Search API - GraphiQL</title>

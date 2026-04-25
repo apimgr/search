@@ -20,6 +20,8 @@ import (
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/database"
 	"github.com/apimgr/search/src/email"
+	"github.com/apimgr/search/src/i18n"
+	"github.com/apimgr/search/src/search"
 	"github.com/apimgr/search/src/ssl"
 	"gopkg.in/yaml.v3"
 )
@@ -123,9 +125,9 @@ type SchedulerTaskInfo struct {
 	Skippable   bool      `json:"skippable"`
 
 	// Retry state per AI.md PART 19
-	RetryCount  int       `json:"retry_count"`
-	NextRetry   time.Time `json:"next_retry,omitempty"`
-	MaxRetries  int       `json:"max_retries"`
+	RetryCount int       `json:"retry_count"`
+	NextRetry  time.Time `json:"next_retry,omitempty"`
+	MaxRetries int       `json:"max_retries"`
 }
 
 // ClusterNode represents a cluster node
@@ -219,12 +221,22 @@ func (h *Handler) validateCSRFToken(r *http.Request) bool {
 // Per AI.md PART 20: All admin forms MUST have CSRF protection
 // Per AI.md PART 17: Admin path is configurable (default: "admin")
 func (h *Handler) newAdminPageData(w http.ResponseWriter, r *http.Request, title, page string) *AdminPageData {
+	lang, dir := "en", "ltr"
+	if manager, err := i18n.CachedDefaultManager(); err == nil && manager != nil {
+		lang = manager.ResolveLanguage(w, r)
+		if manager.IsRTL(lang) {
+			dir = "rtl"
+		}
+	}
+
 	return &AdminPageData{
 		Title:     title,
 		Page:      page,
 		Config:    h.config,
 		CSRFToken: h.getOrCreateCSRFToken(w, r),
 		AdminPath: config.GetAdminPath(),
+		Lang:      lang,
+		Dir:       dir,
 	}
 }
 
@@ -276,7 +288,7 @@ func (h *Handler) AuthManager() *AuthManager {
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	p := config.GetAdminPath() // e.g. "admin" (configurable per spec)
 	ap := "/" + p              // e.g. "/admin"
-	api := "/api/v1/" + p     // e.g. "/api/v1/admin"
+	api := "/api/v1/" + p      // e.g. "/api/v1/admin"
 
 	// Legacy /admin/login and /admin/logout redirect to unified /auth/login
 	// (only needed when admin path differs from "admin")
@@ -427,13 +439,13 @@ func (h *Handler) requireAPIAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := h.auth.GetTokenFromRequest(r)
 		if token == "" {
-			h.jsonError(w, "Unauthorized", http.StatusUnauthorized)
+			h.jsonError(w, r, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
 		apiToken, ok := h.auth.ValidateAPIToken(token)
 		if !ok {
-			h.jsonError(w, "Invalid or expired token", http.StatusUnauthorized)
+			h.jsonError(w, r, "Invalid or expired token", http.StatusUnauthorized)
 			return
 		}
 
@@ -538,8 +550,8 @@ func (h *Handler) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := &AdminPageData{
-		Title:  "Dashboard",
-		Page:   "admin-dashboard",
+		Title:     "Dashboard",
+		Page:      "admin-dashboard",
 		Config:    h.config,
 		AdminPath: config.GetAdminPath(),
 		Stats: &DashboardStats{
@@ -567,20 +579,20 @@ func (h *Handler) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "dashboard", data)
+	h.renderAdminPage(w, r, "dashboard", data)
 }
 
 // handleAdminProfile handles the admin's own profile settings
 // Per AI.md PART 17: /{adminpath}/profile = Admin's OWN profile
 func (h *Handler) handleAdminProfile(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
-		Title:  "My Profile",
-		Page:   "admin-profile",
+		Title:     "My Profile",
+		Page:      "admin-profile",
 		Config:    h.config,
 		AdminPath: config.GetAdminPath(),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "profile", data)
+	h.renderAdminPage(w, r, "profile", data)
 }
 
 // handleNotifications handles the admin notifications page.
@@ -593,85 +605,85 @@ func (h *Handler) handleNotifications(w http.ResponseWriter, r *http.Request) {
 		AdminPath: config.GetAdminPath(),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "notifications", data)
+	h.renderAdminPage(w, r, "notifications", data)
 }
 
 // handleAdminPreferences handles the admin's own UI preferences
 // Per AI.md PART 17: /{adminpath}/preferences = Admin's OWN preferences
 func (h *Handler) handleAdminPreferences(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
-		Title:  "My Preferences",
-		Page:   "admin-preferences",
+		Title:     "My Preferences",
+		Page:      "admin-preferences",
 		Config:    h.config,
 		AdminPath: config.GetAdminPath(),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "preferences", data)
+	h.renderAdminPage(w, r, "preferences", data)
 }
 
 // handleAuditLogs handles the audit log viewer
 // Per AI.md PART 17: /{adminpath}/server/logs/audit
 func (h *Handler) handleAuditLogs(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
-		Title:  "Audit Logs",
-		Page:   "admin-audit-logs",
+		Title:     "Audit Logs",
+		Page:      "admin-audit-logs",
 		Config:    h.config,
 		AdminPath: config.GetAdminPath(),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "audit-logs", data)
+	h.renderAdminPage(w, r, "audit-logs", data)
 }
 
 // handleServerAuth handles authentication configuration
 // Per AI.md PART 17: /{adminpath}/server/security/auth
 func (h *Handler) handleServerAuth(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
-		Title:  "Authentication Settings",
-		Page:   "admin-auth",
+		Title:     "Authentication Settings",
+		Page:      "admin-auth",
 		Config:    h.config,
 		AdminPath: config.GetAdminPath(),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "auth", data)
+	h.renderAdminPage(w, r, "auth", data)
 }
 
 // handleServerFirewall handles firewall/blocklist configuration
 // Per AI.md PART 17: /{adminpath}/server/security/firewall
 func (h *Handler) handleServerFirewall(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
-		Title:  "Firewall Settings",
-		Page:   "admin-firewall",
+		Title:     "Firewall Settings",
+		Page:      "admin-firewall",
 		Config:    h.config,
 		AdminPath: config.GetAdminPath(),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "firewall", data)
+	h.renderAdminPage(w, r, "firewall", data)
 }
 
 // handleUsers handles user management (if multi-user enabled)
 // Per AI.md PART 17: /{adminpath}/server/users
 func (h *Handler) handleUsers(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
-		Title:  "User Management",
-		Page:   "admin-users",
+		Title:     "User Management",
+		Page:      "admin-users",
 		Config:    h.config,
 		AdminPath: config.GetAdminPath(),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "users", data)
+	h.renderAdminPage(w, r, "users", data)
 }
 
 // handleCluster handles cluster overview
 // Per AI.md PART 17: /{adminpath}/server/cluster
 func (h *Handler) handleCluster(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
-		Title:  "Cluster Management",
-		Page:   "admin-cluster",
+		Title:     "Cluster Management",
+		Page:      "admin-cluster",
 		Config:    h.config,
 		AdminPath: config.GetAdminPath(),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "cluster", data)
+	h.renderAdminPage(w, r, "cluster", data)
 }
 
 // handleConfig renders the configuration page
@@ -683,27 +695,27 @@ func (h *Handler) handleConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := &AdminPageData{
-		Title:  "Configuration",
-		Page:   "admin-config",
+		Title:     "Configuration",
+		Page:      "admin-config",
 		Config:    h.config,
 		AdminPath: config.GetAdminPath(),
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "config", data)
+	h.renderAdminPage(w, r, "config", data)
 }
 
 // handleEngines renders the search engines page
 func (h *Handler) handleEngines(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
-		Title:  "Search Engines",
-		Page:   "admin-engines",
+		Title:     "Search Engines",
+		Page:      "admin-engines",
 		Config:    h.config,
 		AdminPath: config.GetAdminPath(),
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "engines", data)
+	h.renderAdminPage(w, r, "engines", data)
 }
 
 // handleTokens renders the API tokens page
@@ -714,28 +726,28 @@ func (h *Handler) handleTokens(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := &AdminPageData{
-		Title:  "API Tokens",
-		Page:   "admin-tokens",
+		Title:     "API Tokens",
+		Page:      "admin-tokens",
 		Config:    h.config,
 		AdminPath: config.GetAdminPath(),
-		Tokens: h.auth.ListAPITokens(),
+		Tokens:    h.auth.ListAPITokens(),
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "tokens", data)
+	h.renderAdminPage(w, r, "tokens", data)
 }
 
 // handleLogs renders the logs page
 func (h *Handler) handleLogs(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
-		Title:  "Logs",
-		Page:   "admin-logs",
+		Title:     "Logs",
+		Page:      "admin-logs",
 		Config:    h.config,
 		AdminPath: config.GetAdminPath(),
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "logs", data)
+	h.renderAdminPage(w, r, "logs", data)
 }
 
 // processConfigUpdate handles configuration updates
@@ -882,7 +894,7 @@ func (h *Handler) apiConfig(w http.ResponseWriter, r *http.Request) {
 		// Update config
 		var updates map[string]interface{}
 		if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
-			h.jsonError(w, "Invalid JSON", http.StatusBadRequest)
+			h.jsonError(w, r, "Invalid JSON", http.StatusBadRequest)
 			return
 		}
 
@@ -899,7 +911,7 @@ func (h *Handler) apiConfig(w http.ResponseWriter, r *http.Request) {
 		// Save and reload
 		if h.configPath != "" {
 			if err := h.saveConfig(); err != nil {
-				h.jsonError(w, "Failed to save config", http.StatusInternalServerError)
+				h.jsonError(w, r, "Failed to save config", http.StatusInternalServerError)
 				return
 			}
 		}
@@ -908,11 +920,11 @@ func (h *Handler) apiConfig(w http.ResponseWriter, r *http.Request) {
 			h.reloadCallback()
 		}
 
-		h.jsonResponse(w, map[string]string{"status": "updated"}, http.StatusOK)
+		h.jsonStatus(w, r, "updated", http.StatusOK)
 		return
 	}
 
-	h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+	h.jsonError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 }
 
 // apiEngines returns search engine status
@@ -927,11 +939,17 @@ func (h *Handler) apiEngines(w http.ResponseWriter, r *http.Request) {
 				IsEnabled() bool
 				GetPriority() int
 			}); ok {
-				engines = append(engines, map[string]interface{}{
+				item := map[string]interface{}{
 					"name":     e.Name(),
 					"enabled":  e.IsEnabled(),
 					"priority": e.GetPriority(),
-				})
+				}
+				if healthProvider, ok := eng.(interface {
+					GetHealth() search.EngineHealth
+				}); ok {
+					item["health"] = healthProvider.GetHealth()
+				}
+				engines = append(engines, item)
 			}
 		}
 	}
@@ -954,12 +972,12 @@ func (h *Handler) apiTokens(w http.ResponseWriter, r *http.Request) {
 			ValidDays   int      `json:"valid_days"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			h.jsonError(w, "Invalid JSON", http.StatusBadRequest)
+			h.jsonError(w, r, "Invalid JSON", http.StatusBadRequest)
 			return
 		}
 
 		if req.Name == "" {
-			h.jsonError(w, "Name is required", http.StatusBadRequest)
+			h.jsonError(w, r, "Name is required", http.StatusBadRequest)
 			return
 		}
 
@@ -979,25 +997,25 @@ func (h *Handler) apiTokens(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		token := r.URL.Query().Get("token")
 		if token == "" {
-			h.jsonError(w, "Token parameter required", http.StatusBadRequest)
+			h.jsonError(w, r, "Token parameter required", http.StatusBadRequest)
 			return
 		}
 
 		if h.auth.RevokeAPIToken(token) {
-			h.jsonResponse(w, map[string]string{"status": "revoked"}, http.StatusOK)
+			h.jsonStatus(w, r, "revoked", http.StatusOK)
 		} else {
-			h.jsonError(w, "Token not found", http.StatusNotFound)
+			h.jsonError(w, r, "Token not found", http.StatusNotFound)
 		}
 
 	default:
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		h.jsonError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
 // apiReload triggers a configuration reload
 func (h *Handler) apiReload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		h.jsonError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -1005,12 +1023,12 @@ func (h *Handler) apiReload(w http.ResponseWriter, r *http.Request) {
 
 	if h.reloadCallback != nil {
 		if err := h.reloadCallback(); err != nil {
-			h.jsonError(w, fmt.Sprintf("Reload failed: %v", err), http.StatusInternalServerError)
+			h.jsonError(w, r, fmt.Sprintf("Reload failed: %v", err), http.StatusInternalServerError)
 			return
 		}
 	}
 
-	h.jsonResponse(w, map[string]string{"status": "reloaded"}, http.StatusOK)
+	h.jsonStatus(w, r, "reloaded", http.StatusOK)
 }
 
 // Helper methods
@@ -1021,8 +1039,73 @@ func (h *Handler) jsonResponse(w http.ResponseWriter, data interface{}, status i
 	json.NewEncoder(w).Encode(data)
 }
 
-func (h *Handler) jsonError(w http.ResponseWriter, message string, status int) {
-	h.jsonResponse(w, map[string]string{"error": message}, status)
+func (h *Handler) adminErrorKey(message string, status int) string {
+	switch strings.TrimSpace(strings.ToLower(message)) {
+	case "unauthorized":
+		return "errors.unauthorized"
+	case "invalid or expired token":
+		return "errors.invalid_token"
+	case "admin not found", "token not found", "bang not found", "backup file not found":
+		return "errors.not_found"
+	case "method not allowed", "method not allowed.":
+		return "errors.method_not_allowed"
+	case "invalid json", "invalid request body", "invalid request data", "invalid request":
+		return "errors.bad_request"
+	}
+
+	switch status {
+	case http.StatusUnauthorized:
+		return "errors.unauthorized"
+	case http.StatusNotFound:
+		return "errors.not_found"
+	case http.StatusMethodNotAllowed:
+		return "errors.method_not_allowed"
+	case http.StatusBadRequest:
+		if strings.Contains(strings.ToLower(message), "required") {
+			return "errors.required"
+		}
+		return "errors.bad_request"
+	default:
+		if status >= http.StatusInternalServerError {
+			return "errors.server_error"
+		}
+		return "errors.bad_request"
+	}
+}
+
+func (h *Handler) adminStatusKey(status string) string {
+	switch status {
+	case "updated":
+		return "admin.status.updated"
+	case "revoked":
+		return "admin.status.revoked"
+	case "reloaded":
+		return "admin.status.reloaded"
+	case "deleted":
+		return "admin.status.deleted"
+	case "saved":
+		return "admin.status.saved"
+	case "stopped":
+		return "admin.status.stopped"
+	case "cancelled":
+		return "admin.status.cancelled"
+	case "restarting":
+		return "admin.status.restarting"
+	default:
+		return "common.ok"
+	}
+}
+
+func (h *Handler) jsonError(w http.ResponseWriter, r *http.Request, message string, status int) {
+	h.jsonResponse(w, map[string]string{"error": i18n.RequestString(r, h.adminErrorKey(message, status))}, status)
+}
+
+func (h *Handler) jsonStatus(w http.ResponseWriter, r *http.Request, message string, status int) {
+	h.jsonResponse(w, map[string]string{"status": i18n.RequestString(r, h.adminStatusKey(message))}, status)
+}
+
+func (h *Handler) localizedHTTPError(w http.ResponseWriter, r *http.Request, message string, status int) {
+	http.Error(w, i18n.RequestString(r, h.adminErrorKey(message, status)), status)
 }
 
 // AdminPageData holds data for admin templates
@@ -1041,31 +1124,33 @@ type AdminPageData struct {
 	Extra            map[string]interface{}
 	CSRFToken        string // Per AI.md PART 20: CSRF protection on all forms
 	AdminPath        string // Per AI.md PART 17: Configurable admin path (default: "admin")
+	Lang             string
+	Dir              string
 }
 
 // DashboardStats holds dashboard statistics
 type DashboardStats struct {
 	// Status
-	Status         string // Online, Maintenance, Error
-	Uptime         string
-	Version        string
+	Status  string // Online, Maintenance, Error
+	Uptime  string
+	Version string
 
 	// Request stats (24h)
-	Requests24h    int64
-	Errors24h      int64
+	Requests24h int64
+	Errors24h   int64
 
 	// System resources
-	CPUPercent     float64
-	MemPercent     float64
-	DiskPercent    float64
-	MemAlloc       string
-	MemTotal       string
+	CPUPercent  float64
+	MemPercent  float64
+	DiskPercent float64
+	MemAlloc    string
+	MemTotal    string
 
 	// Runtime info
-	GoVersion      string
-	NumGoroutines  int
-	NumCPU         int
-	ServerMode     string
+	GoVersion     string
+	NumGoroutines int
+	NumCPU        int
+	ServerMode    string
 
 	// Feature status
 	TorEnabled     bool
@@ -1156,7 +1241,7 @@ func (h *Handler) handleServerSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "server-settings", data)
+	h.renderAdminPage(w, r, "server-settings", data)
 }
 
 // processServerSettingsUpdate handles server settings form submission
@@ -1176,6 +1261,23 @@ func (h *Handler) processServerSettingsUpdate(w http.ResponseWriter, r *http.Req
 	if baseURL := strings.TrimSpace(r.FormValue("base_url")); baseURL != "" {
 		h.config.Server.BaseURL = baseURL
 	}
+	if rate := strings.TrimSpace(r.FormValue("alerts_create_rate_limit")); rate != "" {
+		fmt.Sscanf(rate, "%d", &h.config.Search.Alerts.CreateRateLimitPerHour)
+	}
+	if retries := strings.TrimSpace(r.FormValue("alerts_webhook_retries")); retries != "" {
+		fmt.Sscanf(retries, "%d", &h.config.Search.Alerts.WebhookMaxRetries)
+	}
+	if delay := strings.TrimSpace(r.FormValue("alerts_webhook_retry_delay")); delay != "" {
+		fmt.Sscanf(delay, "%d", &h.config.Search.Alerts.WebhookRetryDelayMinutes)
+	}
+	if retention := strings.TrimSpace(r.FormValue("alerts_retention_days")); retention != "" {
+		fmt.Sscanf(retention, "%d", &h.config.Search.Alerts.RetentionDays)
+	}
+	if frequency := strings.TrimSpace(r.FormValue("alerts_default_frequency")); frequency != "" {
+		h.config.Search.Alerts.DefaultFrequency = frequency
+	}
+	h.config.Search.Alerts.DefaultDeliverRSS = r.FormValue("alerts_default_rss") == "on"
+	h.config.Search.Alerts.DefaultDeliverWebhook = r.FormValue("alerts_default_webhook") == "on"
 
 	h.saveAndReload(w, r, "/admin/server/settings")
 }
@@ -1196,7 +1298,7 @@ func (h *Handler) handleServerBranding(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "server-branding", data)
+	h.renderAdminPage(w, r, "server-branding", data)
 }
 
 // processServerBrandingUpdate handles branding form submission
@@ -1248,15 +1350,15 @@ func (h *Handler) handleServerSSL(w http.ResponseWriter, r *http.Request) {
 		Error:   r.URL.Query().Get("error"),
 		Success: r.URL.Query().Get("success"),
 		Extra: map[string]interface{}{
-			"DNSProviders":        dnsProviders,
-			"CurrentDNSProvider":  h.config.Server.SSL.DNS01.Provider,
-			"DNS01Configured":     h.config.Server.SSL.DNS01.CredentialsEncrypted != "",
-			"DNS01ValidatedAt":    h.config.Server.SSL.DNS01.ValidatedAt,
+			"DNSProviders":       dnsProviders,
+			"CurrentDNSProvider": h.config.Server.SSL.DNS01.Provider,
+			"DNS01Configured":    h.config.Server.SSL.DNS01.CredentialsEncrypted != "",
+			"DNS01ValidatedAt":   h.config.Server.SSL.DNS01.ValidatedAt,
 		},
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "server-ssl", data)
+	h.renderAdminPage(w, r, "server-ssl", data)
 }
 
 // processServerSSLUpdate handles SSL settings form submission
@@ -1342,7 +1444,7 @@ func (h *Handler) handleServerNetwork(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "server-network", data)
+	h.renderAdminPage(w, r, "server-network", data)
 }
 
 // handleServerTor renders the Tor settings page
@@ -1361,7 +1463,7 @@ func (h *Handler) handleServerTor(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "server-tor", data)
+	h.renderAdminPage(w, r, "server-tor", data)
 }
 
 // processServerTorUpdate handles Tor settings form submission
@@ -1394,7 +1496,7 @@ func (h *Handler) handleServerWeb(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "server-web", data)
+	h.renderAdminPage(w, r, "server-web", data)
 }
 
 // processServerWebUpdate handles web settings form submission
@@ -1427,7 +1529,7 @@ func (h *Handler) handleServerEmail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "server-email", data)
+	h.renderAdminPage(w, r, "server-email", data)
 }
 
 // processServerEmailUpdate handles email settings form submission
@@ -1476,7 +1578,7 @@ func (h *Handler) handleServerAnnouncements(w http.ResponseWriter, r *http.Reque
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "server-announcements", data)
+	h.renderAdminPage(w, r, "server-announcements", data)
 }
 
 // processServerAnnouncementsUpdate handles announcements form submission
@@ -1507,7 +1609,7 @@ func (h *Handler) handleServerGeoIP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "server-geoip", data)
+	h.renderAdminPage(w, r, "server-geoip", data)
 }
 
 // processServerGeoIPUpdate handles GeoIP settings form submission
@@ -1541,7 +1643,7 @@ func (h *Handler) handleServerMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "server-metrics", data)
+	h.renderAdminPage(w, r, "server-metrics", data)
 }
 
 // processServerMetricsUpdate handles metrics settings form submission
@@ -1621,7 +1723,7 @@ func (h *Handler) handleServerBackup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "server-backup", data.AdminPageData)
+	h.renderAdminPage(w, r, "server-backup", data.AdminPageData)
 }
 
 // processBackupCreate handles backup creation from the admin panel
@@ -1802,7 +1904,7 @@ func (h *Handler) handleServerMaintenance(w http.ResponseWriter, r *http.Request
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "server-maintenance", data)
+	h.renderAdminPage(w, r, "server-maintenance", data)
 }
 
 // handleServerUpdates renders the updates management page
@@ -1816,7 +1918,7 @@ func (h *Handler) handleServerUpdates(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "server-updates", data)
+	h.renderAdminPage(w, r, "server-updates", data)
 }
 
 // handleServerInfo renders the server information page
@@ -1842,7 +1944,7 @@ func (h *Handler) handleServerInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "server-info", data)
+	h.renderAdminPage(w, r, "server-info", data)
 }
 
 // handleServerSecurity renders the security settings page
@@ -1863,20 +1965,20 @@ func (h *Handler) handleServerSecurity(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "server-security", data)
+	h.renderAdminPage(w, r, "server-security", data)
 }
 
 // handleHelp renders the help/documentation page
 func (h *Handler) handleHelp(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
-		Title:  "Help & Documentation",
-		Page:   "admin-help",
+		Title:     "Help & Documentation",
+		Page:      "admin-help",
 		Config:    h.config,
 		AdminPath: config.GetAdminPath(),
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "help", data)
+	h.renderAdminPage(w, r, "help", data)
 }
 
 // handleScheduler renders the scheduler management page
@@ -1905,7 +2007,7 @@ func (h *Handler) handleScheduler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "scheduler", data)
+	h.renderAdminPage(w, r, "scheduler", data)
 }
 
 // saveAndReload saves config and triggers reload, then redirects
@@ -1941,7 +2043,7 @@ func (h *Handler) apiBackups(w http.ResponseWriter, r *http.Request) {
 		// List backups with metadata
 		backups, err := bm.List()
 		if err != nil {
-			h.jsonError(w, fmt.Sprintf("Failed to list backups: %v", err), http.StatusInternalServerError)
+			h.jsonError(w, r, fmt.Sprintf("Failed to list backups: %v", err), http.StatusInternalServerError)
 			return
 		}
 		h.jsonResponse(w, map[string]interface{}{
@@ -1963,7 +2065,7 @@ func (h *Handler) apiBackups(w http.ResponseWriter, r *http.Request) {
 
 		// Per AI.md PART 22: Compliance mode requires encryption
 		if h.config.Server.Compliance.Enabled && req.Password == "" {
-			h.jsonError(w, "Compliance mode requires encryption password", http.StatusBadRequest)
+			h.jsonError(w, r, "Compliance mode requires encryption password", http.StatusBadRequest)
 			return
 		}
 
@@ -1980,7 +2082,7 @@ func (h *Handler) apiBackups(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err != nil {
-			h.jsonError(w, fmt.Sprintf("Backup failed: %v", err), http.StatusInternalServerError)
+			h.jsonError(w, r, fmt.Sprintf("Backup failed: %v", err), http.StatusInternalServerError)
 			return
 		}
 
@@ -1997,18 +2099,18 @@ func (h *Handler) apiBackups(w http.ResponseWriter, r *http.Request) {
 		// Delete backup
 		filename := r.URL.Query().Get("filename")
 		if filename == "" {
-			h.jsonError(w, "Filename parameter required", http.StatusBadRequest)
+			h.jsonError(w, r, "Filename parameter required", http.StatusBadRequest)
 			return
 		}
 
 		if err := bm.Delete(filename); err != nil {
-			h.jsonError(w, fmt.Sprintf("Failed to delete backup: %v", err), http.StatusInternalServerError)
+			h.jsonError(w, r, fmt.Sprintf("Failed to delete backup: %v", err), http.StatusInternalServerError)
 			return
 		}
-		h.jsonResponse(w, map[string]string{"status": "deleted"}, http.StatusOK)
+		h.jsonStatus(w, r, "deleted", http.StatusOK)
 
 	default:
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		h.jsonError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
@@ -2016,7 +2118,7 @@ func (h *Handler) apiBackups(w http.ResponseWriter, r *http.Request) {
 // Per AI.md PART 22: POST /api/v1/admin/server/backup/restore
 func (h *Handler) apiBackupRestore(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		h.jsonError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -2025,12 +2127,12 @@ func (h *Handler) apiBackupRestore(w http.ResponseWriter, r *http.Request) {
 		Password   string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.jsonError(w, "Invalid request body", http.StatusBadRequest)
+		h.jsonError(w, r, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
 	if req.BackupFile == "" {
-		h.jsonError(w, "backup_file is required", http.StatusBadRequest)
+		h.jsonError(w, r, "backup_file is required", http.StatusBadRequest)
 		return
 	}
 
@@ -2051,7 +2153,7 @@ func (h *Handler) apiBackupRestore(w http.ResponseWriter, r *http.Request) {
 		// Verify backup before restore
 		verifyResult, err := bm.VerifyBackup(backupPath)
 		if err != nil {
-			h.jsonError(w, fmt.Sprintf("Backup verification failed: %v", err), http.StatusInternalServerError)
+			h.jsonError(w, r, fmt.Sprintf("Backup verification failed: %v", err), http.StatusInternalServerError)
 			return
 		}
 		if !verifyResult.AllPassed {
@@ -2064,14 +2166,14 @@ func (h *Handler) apiBackupRestore(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := bm.RestoreEncrypted(backupPath); err != nil {
-			h.jsonError(w, fmt.Sprintf("Restore failed: %v", err), http.StatusInternalServerError)
+			h.jsonError(w, r, fmt.Sprintf("Restore failed: %v", err), http.StatusInternalServerError)
 			return
 		}
 	} else {
 		// Verify backup before restore
 		verifyResult, err := bm.VerifyBackup(backupPath)
 		if err != nil {
-			h.jsonError(w, fmt.Sprintf("Backup verification failed: %v", err), http.StatusInternalServerError)
+			h.jsonError(w, r, fmt.Sprintf("Backup verification failed: %v", err), http.StatusInternalServerError)
 			return
 		}
 		if !verifyResult.AllPassed {
@@ -2084,7 +2186,7 @@ func (h *Handler) apiBackupRestore(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := bm.Restore(backupPath); err != nil {
-			h.jsonError(w, fmt.Sprintf("Restore failed: %v", err), http.StatusInternalServerError)
+			h.jsonError(w, r, fmt.Sprintf("Restore failed: %v", err), http.StatusInternalServerError)
 			return
 		}
 	}
@@ -2107,7 +2209,7 @@ func (h *Handler) apiBackupRestore(w http.ResponseWriter, r *http.Request) {
 // Per AI.md PART 22: GET /api/v1/admin/server/backup/download/{filename}
 func (h *Handler) apiBackupDownload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		h.jsonError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -2115,7 +2217,7 @@ func (h *Handler) apiBackupDownload(w http.ResponseWriter, r *http.Request) {
 	prefix := "/api/v1/admin/server/backup/download/"
 	filename := strings.TrimPrefix(r.URL.Path, prefix)
 	if filename == "" {
-		h.jsonError(w, "Filename required", http.StatusBadRequest)
+		h.jsonError(w, r, "Filename required", http.StatusBadRequest)
 		return
 	}
 
@@ -2125,16 +2227,16 @@ func (h *Handler) apiBackupDownload(w http.ResponseWriter, r *http.Request) {
 
 	// Verify file exists and is in backup directory
 	if !strings.HasPrefix(backupPath, config.GetBackupDir()) {
-		h.jsonError(w, "Invalid backup path", http.StatusBadRequest)
+		h.jsonError(w, r, "Invalid backup path", http.StatusBadRequest)
 		return
 	}
 
 	info, err := os.Stat(backupPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			h.jsonError(w, "Backup file not found", http.StatusNotFound)
+			h.jsonError(w, r, "Backup file not found", http.StatusNotFound)
 		} else {
-			h.jsonError(w, fmt.Sprintf("Failed to access backup: %v", err), http.StatusInternalServerError)
+			h.jsonError(w, r, fmt.Sprintf("Failed to access backup: %v", err), http.StatusInternalServerError)
 		}
 		return
 	}
@@ -2142,7 +2244,7 @@ func (h *Handler) apiBackupDownload(w http.ResponseWriter, r *http.Request) {
 	// Open file for reading
 	file, err := os.Open(backupPath)
 	if err != nil {
-		h.jsonError(w, fmt.Sprintf("Failed to open backup: %v", err), http.StatusInternalServerError)
+		h.jsonError(w, r, fmt.Sprintf("Failed to open backup: %v", err), http.StatusInternalServerError)
 		return
 	}
 	defer file.Close()
@@ -2160,7 +2262,7 @@ func (h *Handler) apiBackupDownload(w http.ResponseWriter, r *http.Request) {
 // Per AI.md PART 22: Backup verification is NON-NEGOTIABLE
 func (h *Handler) apiBackupVerify(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		h.jsonError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -2169,12 +2271,12 @@ func (h *Handler) apiBackupVerify(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.jsonError(w, "Invalid request body", http.StatusBadRequest)
+		h.jsonError(w, r, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
 	if req.Filename == "" {
-		h.jsonError(w, "filename is required", http.StatusBadRequest)
+		h.jsonError(w, r, "filename is required", http.StatusBadRequest)
 		return
 	}
 
@@ -2195,7 +2297,7 @@ func (h *Handler) apiBackupVerify(w http.ResponseWriter, r *http.Request) {
 
 	result, err := bm.VerifyBackup(backupPath)
 	if err != nil {
-		h.jsonError(w, fmt.Sprintf("Verification error: %v", err), http.StatusInternalServerError)
+		h.jsonError(w, r, fmt.Sprintf("Verification error: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -2214,7 +2316,7 @@ func (h *Handler) apiBackupVerify(w http.ResponseWriter, r *http.Request) {
 // apiLogs handles log viewing API
 func (h *Handler) apiLogs(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		h.jsonError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -2303,7 +2405,7 @@ func (h *Handler) apiScheduler(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		// Return actual scheduler runtime state
 		if h.scheduler == nil {
-			h.jsonError(w, "Scheduler not connected", http.StatusServiceUnavailable)
+			h.jsonError(w, r, "Scheduler not connected", http.StatusServiceUnavailable)
 			return
 		}
 
@@ -2338,7 +2440,7 @@ func (h *Handler) apiScheduler(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		// Enable/disable task via scheduler
 		if h.scheduler == nil {
-			h.jsonError(w, "Scheduler not connected", http.StatusServiceUnavailable)
+			h.jsonError(w, r, "Scheduler not connected", http.StatusServiceUnavailable)
 			return
 		}
 
@@ -2348,7 +2450,7 @@ func (h *Handler) apiScheduler(w http.ResponseWriter, r *http.Request) {
 			Enabled bool   `json:"enabled"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			h.jsonError(w, "Invalid request data", http.StatusBadRequest)
+			h.jsonError(w, r, "Invalid request data", http.StatusBadRequest)
 			return
 		}
 
@@ -2356,7 +2458,7 @@ func (h *Handler) apiScheduler(w http.ResponseWriter, r *http.Request) {
 		switch req.Action {
 		case "run_now":
 			if err := h.scheduler.RunNow(req.TaskID); err != nil {
-				h.jsonError(w, err.Error(), http.StatusBadRequest)
+				h.jsonError(w, r, err.Error(), http.StatusBadRequest)
 				return
 			}
 			h.jsonResponse(w, map[string]string{
@@ -2367,7 +2469,7 @@ func (h *Handler) apiScheduler(w http.ResponseWriter, r *http.Request) {
 
 		case "enable":
 			if err := h.scheduler.Enable(req.TaskID); err != nil {
-				h.jsonError(w, err.Error(), http.StatusBadRequest)
+				h.jsonError(w, r, err.Error(), http.StatusBadRequest)
 				return
 			}
 			h.jsonResponse(w, map[string]string{
@@ -2378,7 +2480,7 @@ func (h *Handler) apiScheduler(w http.ResponseWriter, r *http.Request) {
 
 		case "disable":
 			if err := h.scheduler.Disable(req.TaskID); err != nil {
-				h.jsonError(w, err.Error(), http.StatusBadRequest)
+				h.jsonError(w, r, err.Error(), http.StatusBadRequest)
 				return
 			}
 			h.jsonResponse(w, map[string]string{
@@ -2391,32 +2493,32 @@ func (h *Handler) apiScheduler(w http.ResponseWriter, r *http.Request) {
 		// Legacy enable/disable via enabled field
 		if req.Enabled {
 			if err := h.scheduler.Enable(req.TaskID); err != nil {
-				h.jsonError(w, err.Error(), http.StatusBadRequest)
+				h.jsonError(w, r, err.Error(), http.StatusBadRequest)
 				return
 			}
 		} else {
 			if err := h.scheduler.Disable(req.TaskID); err != nil {
-				h.jsonError(w, err.Error(), http.StatusBadRequest)
+				h.jsonError(w, r, err.Error(), http.StatusBadRequest)
 				return
 			}
 		}
 
-		h.jsonResponse(w, map[string]string{"status": "saved"}, http.StatusOK)
+		h.jsonStatus(w, r, "saved", http.StatusOK)
 
 	default:
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		h.jsonError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
 // apiEmailTest sends a test email
 func (h *Handler) apiEmailTest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		h.jsonError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	if !h.config.Server.Email.Enabled {
-		h.jsonError(w, "Email is not enabled", http.StatusBadRequest)
+		h.jsonError(w, r, "Email is not enabled", http.StatusBadRequest)
 		return
 	}
 
@@ -2432,13 +2534,13 @@ func (h *Handler) apiEmailTest(w http.ResponseWriter, r *http.Request) {
 		to = h.config.Server.Admin.Email
 	}
 	if to == "" {
-		h.jsonError(w, "No recipient email specified", http.StatusBadRequest)
+		h.jsonError(w, r, "No recipient email specified", http.StatusBadRequest)
 		return
 	}
 
 	// Per AI.md PART 18: Validate SMTP is configured
 	if h.config.Server.Email.SMTP.Host == "" {
-		h.jsonError(w, "SMTP host not configured", http.StatusBadRequest)
+		h.jsonError(w, r, "SMTP host not configured", http.StatusBadRequest)
 		return
 	}
 
@@ -2455,7 +2557,7 @@ func (h *Handler) apiEmailTest(w http.ResponseWriter, r *http.Request) {
 // Per AI.md PART 16: Template preview in admin panel
 func (h *Handler) apiEmailTemplates(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		h.jsonError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -2470,7 +2572,7 @@ func (h *Handler) apiEmailTemplates(w http.ResponseWriter, r *http.Request) {
 // Per AI.md PART 16: Template preview in admin panel
 func (h *Handler) apiEmailPreview(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		h.jsonError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -2485,7 +2587,7 @@ func (h *Handler) apiEmailPreview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if templateType == "" {
-		h.jsonError(w, "Template type is required (use ?template=welcome)", http.StatusBadRequest)
+		h.jsonError(w, r, "Template type is required (use ?template=welcome)", http.StatusBadRequest)
 		return
 	}
 
@@ -2500,7 +2602,7 @@ func (h *Handler) apiEmailPreview(w http.ResponseWriter, r *http.Request) {
 	et := email.NewEmailTemplate()
 	subject, body, err := et.PreviewTemplate(email.TemplateType(templateType), siteName, siteURL)
 	if err != nil {
-		h.jsonError(w, fmt.Sprintf("Failed to preview template: %v", err), http.StatusBadRequest)
+		h.jsonError(w, r, fmt.Sprintf("Failed to preview template: %v", err), http.StatusBadRequest)
 		return
 	}
 
@@ -2521,7 +2623,7 @@ func (h *Handler) apiEmailPreview(w http.ResponseWriter, r *http.Request) {
 // apiUpdateCheck checks for updates
 func (h *Handler) apiUpdateCheck(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		h.jsonError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -2532,8 +2634,8 @@ func (h *Handler) apiUpdateCheck(w http.ResponseWriter, r *http.Request) {
 		"build_date":       config.BuildDate,
 		"go_version":       runtime.Version(),
 		"commit_id":        config.CommitID,
-		"update_available": false,            // Would check against releases
-		"latest_version":   config.Version,   // Would fetch from releases
+		"update_available": false,          // Would check against releases
+		"latest_version":   config.Version, // Would fetch from releases
 		"release_notes":    "",
 		"download_url":     "",
 	}, http.StatusOK)
@@ -2571,7 +2673,7 @@ func (h *Handler) handleSetup(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if h.service == nil {
-		http.Error(w, "Admin service not configured", http.StatusInternalServerError)
+		h.localizedHTTPError(w, r, "Admin service not configured", http.StatusInternalServerError)
 		return
 	}
 
@@ -2579,7 +2681,7 @@ func (h *Handler) handleSetup(w http.ResponseWriter, r *http.Request) {
 	hasAdmin, err := h.service.HasAnyAdmin(ctx)
 	if err != nil {
 		log.Printf("[Admin] Error checking admin existence: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		h.localizedHTTPError(w, r, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
@@ -2606,18 +2708,18 @@ func (h *Handler) handleSetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := &AdminPageData{
-		Title:  "Admin Setup",
-		Page:   "admin-setup",
+		Title:     "Admin Setup",
+		Page:      "admin-setup",
 		Config:    h.config,
 		AdminPath: config.GetAdminPath(),
-		Error:  r.URL.Query().Get("error"),
+		Error:     r.URL.Query().Get("error"),
 		Extra: map[string]interface{}{
 			"SetupTokenRequired": setupTokenRequired,
 		},
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "setup", data)
+	h.renderAdminPage(w, r, "setup", data)
 }
 
 // processSetup handles the setup form submission
@@ -2690,7 +2792,7 @@ func (h *Handler) handleAdmins(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if h.service == nil {
-		http.Error(w, "Admin service not configured", http.StatusInternalServerError)
+		h.localizedHTTPError(w, r, "Admin service not configured", http.StatusInternalServerError)
 		return
 	}
 
@@ -2704,7 +2806,7 @@ func (h *Handler) handleAdmins(w http.ResponseWriter, r *http.Request) {
 	// Get admin by username
 	currentAdmin, err := h.service.GetAdminByUsername(ctx, session.Username)
 	if err != nil || currentAdmin == nil {
-		http.Error(w, "Admin not found", http.StatusInternalServerError)
+		h.localizedHTTPError(w, r, "Admin not found", http.StatusInternalServerError)
 		return
 	}
 
@@ -2712,7 +2814,7 @@ func (h *Handler) handleAdmins(w http.ResponseWriter, r *http.Request) {
 	admins, err := h.service.GetAdminsForAdmin(ctx, currentAdmin.ID)
 	if err != nil {
 		log.Printf("[Admin] Error getting admins: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		h.localizedHTTPError(w, r, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
@@ -2734,7 +2836,7 @@ func (h *Handler) handleAdmins(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "admins", data)
+	h.renderAdminPage(w, r, "admins", data)
 }
 
 // handleAdminInvite creates a new admin invite
@@ -2742,7 +2844,7 @@ func (h *Handler) handleAdminInvite(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		h.localizedHTTPError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -2798,7 +2900,7 @@ func (h *Handler) handleInviteAccept(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if h.service == nil {
-		http.Error(w, "Admin service not configured", http.StatusInternalServerError)
+		h.localizedHTTPError(w, r, "Admin service not configured", http.StatusInternalServerError)
 		return
 	}
 
@@ -2806,7 +2908,7 @@ func (h *Handler) handleInviteAccept(w http.ResponseWriter, r *http.Request) {
 	// Per AI.md PART 11 line 11403: Admin invite at /auth/invite/server/{code}
 	token := strings.TrimPrefix(r.URL.Path, "/auth/invite/server/")
 	if token == "" {
-		h.renderInviteError(w, "Invalid invite link")
+		h.renderInviteError(w, r, "Invalid invite link")
 		return
 	}
 
@@ -2814,11 +2916,11 @@ func (h *Handler) handleInviteAccept(w http.ResponseWriter, r *http.Request) {
 	invite, err := h.service.ValidateInvite(ctx, token)
 	if err != nil {
 		log.Printf("[Admin] Error validating invite: %v", err)
-		h.renderInviteError(w, "Invalid or expired invite")
+		h.renderInviteError(w, r, "Invalid or expired invite")
 		return
 	}
 	if invite == nil {
-		h.renderInviteError(w, "Invalid or expired invite")
+		h.renderInviteError(w, r, "Invalid or expired invite")
 		return
 	}
 
@@ -2828,19 +2930,19 @@ func (h *Handler) handleInviteAccept(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := &AdminPageData{
-		Title:  "Accept Admin Invite",
-		Page:   "admin-invite",
+		Title:     "Accept Admin Invite",
+		Page:      "admin-invite",
 		Config:    h.config,
 		AdminPath: config.GetAdminPath(),
-		Error:  r.URL.Query().Get("error"),
+		Error:     r.URL.Query().Get("error"),
 		Extra: map[string]interface{}{
-			"Invite":           invite,
+			"Invite":            invite,
 			"SuggestedUsername": invite.Username,
 		},
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "invite-accept", data)
+	h.renderAdminPage(w, r, "invite-accept", data)
 }
 
 // processInviteAccept processes the invite acceptance form
@@ -2897,17 +2999,17 @@ func (h *Handler) processInviteAccept(w http.ResponseWriter, r *http.Request, to
 }
 
 // renderInviteError renders the invite error page
-func (h *Handler) renderInviteError(w http.ResponseWriter, message string) {
+func (h *Handler) renderInviteError(w http.ResponseWriter, r *http.Request, message string) {
 	data := &AdminPageData{
-		Title:  "Invalid Invite",
-		Page:   "admin-invite-error",
+		Title:     "Invalid Invite",
+		Page:      "admin-invite-error",
 		Config:    h.config,
 		AdminPath: config.GetAdminPath(),
-		Error:  message,
+		Error:     message,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "invite-error", data)
+	h.renderAdminPage(w, r, "invite-error", data)
 }
 
 // apiAdmins handles admin management API
@@ -2915,7 +3017,7 @@ func (h *Handler) apiAdmins(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if h.service == nil {
-		h.jsonError(w, "Admin service not configured", http.StatusInternalServerError)
+		h.jsonError(w, r, "Admin service not configured", http.StatusInternalServerError)
 		return
 	}
 
@@ -2925,7 +3027,7 @@ func (h *Handler) apiAdmins(w http.ResponseWriter, r *http.Request) {
 		// This is simplified - in production you'd have an admin context
 		admins, err := h.service.GetAdminsForAdmin(ctx, 1) // Assumes primary admin ID 1
 		if err != nil {
-			h.jsonError(w, "Failed to get admins", http.StatusInternalServerError)
+			h.jsonError(w, r, "Failed to get admins", http.StatusInternalServerError)
 			return
 		}
 
@@ -2952,19 +3054,19 @@ func (h *Handler) apiAdmins(w http.ResponseWriter, r *http.Request) {
 			ID int64 `json:"id"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			h.jsonError(w, "Invalid JSON", http.StatusBadRequest)
+			h.jsonError(w, r, "Invalid JSON", http.StatusBadRequest)
 			return
 		}
 
 		if err := h.service.DeleteAdmin(ctx, req.ID, 1); err != nil {
-			h.jsonError(w, err.Error(), http.StatusBadRequest)
+			h.jsonError(w, r, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		h.jsonResponse(w, map[string]string{"status": "deleted"}, http.StatusOK)
+		h.jsonStatus(w, r, "deleted", http.StatusOK)
 
 	default:
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		h.jsonError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
@@ -2973,12 +3075,12 @@ func (h *Handler) apiAdminInvite(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if r.Method != http.MethodPost {
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		h.jsonError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	if h.service == nil {
-		h.jsonError(w, "Admin service not configured", http.StatusInternalServerError)
+		h.jsonError(w, r, "Admin service not configured", http.StatusInternalServerError)
 		return
 	}
 
@@ -2986,14 +3088,14 @@ func (h *Handler) apiAdminInvite(w http.ResponseWriter, r *http.Request) {
 		Username string `json:"username"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.jsonError(w, "Invalid JSON", http.StatusBadRequest)
+		h.jsonError(w, r, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
 
 	// Create invite (7 day expiry)
 	token, err := h.service.CreateInvite(ctx, 1, req.Username, 7*24*time.Hour) // Assumes primary admin
 	if err != nil {
-		h.jsonError(w, "Failed to create invite", http.StatusInternalServerError)
+		h.jsonError(w, r, "Failed to create invite", http.StatusInternalServerError)
 		return
 	}
 
@@ -3052,17 +3154,17 @@ func (h *Handler) handleNodes(w http.ResponseWriter, r *http.Request) {
 		Error:   r.URL.Query().Get("error"),
 		Success: r.URL.Query().Get("success"),
 		Extra: map[string]interface{}{
-			"Nodes":      nodes,
-			"Mode":       mode,
-			"IsPrimary":  isPrimary,
-			"NodeID":     nodeID,
-			"Hostname":   hostname,
-			"IsCluster":  mode != "standalone",
+			"Nodes":     nodes,
+			"Mode":      mode,
+			"IsPrimary": isPrimary,
+			"NodeID":    nodeID,
+			"Hostname":  hostname,
+			"IsCluster": mode != "standalone",
 		},
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "nodes", data)
+	h.renderAdminPage(w, r, "nodes", data)
 }
 
 // handleNodesToken generates a join token for new nodes
@@ -3070,7 +3172,7 @@ func (h *Handler) handleNodesToken(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		h.localizedHTTPError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -3099,7 +3201,7 @@ func (h *Handler) handleNodesLeave(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		h.localizedHTTPError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -3124,16 +3226,16 @@ func (h *Handler) handleNodesLeave(w http.ResponseWriter, r *http.Request) {
 // apiTorStatus returns current Tor service status
 func (h *Handler) apiTorStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		h.jsonError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	if h.tor == nil {
 		h.jsonResponse(w, map[string]interface{}{
-			"enabled":   false,
-			"running":   false,
-			"address":   "",
-			"message":   "Tor service not configured",
+			"enabled": false,
+			"running": false,
+			"address": "",
+			"message": "Tor service not configured",
 		}, http.StatusOK)
 		return
 	}
@@ -3149,23 +3251,23 @@ func (h *Handler) apiTorStatus(w http.ResponseWriter, r *http.Request) {
 // apiTorStart starts the Tor service
 func (h *Handler) apiTorStart(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		h.jsonError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	if h.tor == nil {
-		h.jsonError(w, "Tor service not configured", http.StatusBadRequest)
+		h.jsonError(w, r, "Tor service not configured", http.StatusBadRequest)
 		return
 	}
 
 	if h.tor.IsRunning() {
-		h.jsonError(w, "Tor service is already running", http.StatusConflict)
+		h.jsonError(w, r, "Tor service is already running", http.StatusConflict)
 		return
 	}
 
 	if err := h.tor.Start(); err != nil {
 		log.Printf("[Admin] Failed to start Tor: %v", err)
-		h.jsonError(w, fmt.Sprintf("Failed to start Tor: %v", err), http.StatusInternalServerError)
+		h.jsonError(w, r, fmt.Sprintf("Failed to start Tor: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -3179,45 +3281,45 @@ func (h *Handler) apiTorStart(w http.ResponseWriter, r *http.Request) {
 // apiTorStop stops the Tor service
 func (h *Handler) apiTorStop(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		h.jsonError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	if h.tor == nil {
-		h.jsonError(w, "Tor service not configured", http.StatusBadRequest)
+		h.jsonError(w, r, "Tor service not configured", http.StatusBadRequest)
 		return
 	}
 
 	if !h.tor.IsRunning() {
-		h.jsonError(w, "Tor service is not running", http.StatusConflict)
+		h.jsonError(w, r, "Tor service is not running", http.StatusConflict)
 		return
 	}
 
 	if err := h.tor.Stop(); err != nil {
 		log.Printf("[Admin] Failed to stop Tor: %v", err)
-		h.jsonError(w, fmt.Sprintf("Failed to stop Tor: %v", err), http.StatusInternalServerError)
+		h.jsonError(w, r, fmt.Sprintf("Failed to stop Tor: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	log.Printf("[Admin] Tor service stopped")
-	h.jsonResponse(w, map[string]string{"status": "stopped"}, http.StatusOK)
+	h.jsonStatus(w, r, "stopped", http.StatusOK)
 }
 
 // apiTorRestart restarts the Tor service
 func (h *Handler) apiTorRestart(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		h.jsonError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	if h.tor == nil {
-		h.jsonError(w, "Tor service not configured", http.StatusBadRequest)
+		h.jsonError(w, r, "Tor service not configured", http.StatusBadRequest)
 		return
 	}
 
 	if err := h.tor.Restart(); err != nil {
 		log.Printf("[Admin] Failed to restart Tor: %v", err)
-		h.jsonError(w, fmt.Sprintf("Failed to restart Tor: %v", err), http.StatusInternalServerError)
+		h.jsonError(w, r, fmt.Sprintf("Failed to restart Tor: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -3231,12 +3333,12 @@ func (h *Handler) apiTorRestart(w http.ResponseWriter, r *http.Request) {
 // apiTorRegenerateAddress regenerates the .onion address
 func (h *Handler) apiTorRegenerateAddress(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		h.jsonError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	if h.tor == nil {
-		h.jsonError(w, "Tor service not configured", http.StatusBadRequest)
+		h.jsonError(w, r, "Tor service not configured", http.StatusBadRequest)
 		return
 	}
 
@@ -3244,7 +3346,7 @@ func (h *Handler) apiTorRegenerateAddress(w http.ResponseWriter, r *http.Request
 	newAddress, err := h.tor.RegenerateAddress()
 	if err != nil {
 		log.Printf("[Admin] Failed to regenerate Tor address: %v", err)
-		h.jsonError(w, fmt.Sprintf("Failed to regenerate address: %v", err), http.StatusInternalServerError)
+		h.jsonError(w, r, fmt.Sprintf("Failed to regenerate address: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -3259,12 +3361,12 @@ func (h *Handler) apiTorRegenerateAddress(w http.ResponseWriter, r *http.Request
 // apiTorVanityStart starts vanity address generation
 func (h *Handler) apiTorVanityStart(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		h.jsonError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	if h.tor == nil {
-		h.jsonError(w, "Tor service not configured", http.StatusBadRequest)
+		h.jsonError(w, r, "Tor service not configured", http.StatusBadRequest)
 		return
 	}
 
@@ -3272,18 +3374,18 @@ func (h *Handler) apiTorVanityStart(w http.ResponseWriter, r *http.Request) {
 		Prefix string `json:"prefix"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.jsonError(w, "Invalid JSON", http.StatusBadRequest)
+		h.jsonError(w, r, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
 
 	if req.Prefix == "" {
-		h.jsonError(w, "Prefix is required", http.StatusBadRequest)
+		h.jsonError(w, r, "Prefix is required", http.StatusBadRequest)
 		return
 	}
 
 	// Per AI.md: max 6 chars for built-in vanity generation
 	if len(req.Prefix) > 6 {
-		h.jsonError(w, "Prefix too long (max 6 characters for built-in generation, use external tools for 7+)", http.StatusBadRequest)
+		h.jsonError(w, r, "Prefix too long (max 6 characters for built-in generation, use external tools for 7+)", http.StatusBadRequest)
 		return
 	}
 
@@ -3291,14 +3393,14 @@ func (h *Handler) apiTorVanityStart(w http.ResponseWriter, r *http.Request) {
 	validChars := "abcdefghijklmnopqrstuvwxyz234567"
 	for _, c := range strings.ToLower(req.Prefix) {
 		if !strings.ContainsRune(validChars, c) {
-			h.jsonError(w, "Invalid prefix: only a-z and 2-7 are valid", http.StatusBadRequest)
+			h.jsonError(w, r, "Invalid prefix: only a-z and 2-7 are valid", http.StatusBadRequest)
 			return
 		}
 	}
 
 	if err := h.tor.GenerateVanity(req.Prefix); err != nil {
 		log.Printf("[Admin] Failed to start vanity generation: %v", err)
-		h.jsonError(w, fmt.Sprintf("Failed to start vanity generation: %v", err), http.StatusInternalServerError)
+		h.jsonError(w, r, fmt.Sprintf("Failed to start vanity generation: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -3312,12 +3414,12 @@ func (h *Handler) apiTorVanityStart(w http.ResponseWriter, r *http.Request) {
 // apiTorVanityStatus returns vanity generation progress
 func (h *Handler) apiTorVanityStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		h.jsonError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	if h.tor == nil {
-		h.jsonError(w, "Tor service not configured", http.StatusBadRequest)
+		h.jsonError(w, r, "Tor service not configured", http.StatusBadRequest)
 		return
 	}
 
@@ -3357,36 +3459,36 @@ func (h *Handler) apiTorVanityStatus(w http.ResponseWriter, r *http.Request) {
 // apiTorVanityCancel cancels vanity address generation
 func (h *Handler) apiTorVanityCancel(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		h.jsonError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	if h.tor == nil {
-		h.jsonError(w, "Tor service not configured", http.StatusBadRequest)
+		h.jsonError(w, r, "Tor service not configured", http.StatusBadRequest)
 		return
 	}
 
 	h.tor.CancelVanity()
 	log.Printf("[Admin] Vanity address generation cancelled")
-	h.jsonResponse(w, map[string]string{"status": "cancelled"}, http.StatusOK)
+	h.jsonStatus(w, r, "cancelled", http.StatusOK)
 }
 
 // apiTorKeysExport exports hidden service keys
 func (h *Handler) apiTorKeysExport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		h.jsonError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	if h.tor == nil {
-		h.jsonError(w, "Tor service not configured", http.StatusBadRequest)
+		h.jsonError(w, r, "Tor service not configured", http.StatusBadRequest)
 		return
 	}
 
 	keys, err := h.tor.ExportKeys()
 	if err != nil {
 		log.Printf("[Admin] Failed to export Tor keys: %v", err)
-		h.jsonError(w, fmt.Sprintf("Failed to export keys: %v", err), http.StatusInternalServerError)
+		h.jsonError(w, r, fmt.Sprintf("Failed to export keys: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -3400,31 +3502,31 @@ func (h *Handler) apiTorKeysExport(w http.ResponseWriter, r *http.Request) {
 // apiTorKeysImport imports hidden service keys (for external vanity addresses)
 func (h *Handler) apiTorKeysImport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		h.jsonError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	if h.tor == nil {
-		h.jsonError(w, "Tor service not configured", http.StatusBadRequest)
+		h.jsonError(w, r, "Tor service not configured", http.StatusBadRequest)
 		return
 	}
 
 	// Read private key from request body
 	privateKey, err := io.ReadAll(io.LimitReader(r.Body, 1024*10)) // Max 10KB
 	if err != nil {
-		h.jsonError(w, "Failed to read request body", http.StatusBadRequest)
+		h.jsonError(w, r, "Failed to read request body", http.StatusBadRequest)
 		return
 	}
 
 	if len(privateKey) == 0 {
-		h.jsonError(w, "Private key data is required", http.StatusBadRequest)
+		h.jsonError(w, r, "Private key data is required", http.StatusBadRequest)
 		return
 	}
 
 	newAddress, err := h.tor.ImportKeys(privateKey)
 	if err != nil {
 		log.Printf("[Admin] Failed to import Tor keys: %v", err)
-		h.jsonError(w, fmt.Sprintf("Failed to import keys: %v", err), http.StatusInternalServerError)
+		h.jsonError(w, r, fmt.Sprintf("Failed to import keys: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -3457,8 +3559,8 @@ func (h *Handler) apiBangs(w http.ResponseWriter, r *http.Request) {
 		}
 
 		h.jsonResponse(w, map[string]interface{}{
-			"bangs":  response,
-			"count":  len(response),
+			"bangs":   response,
+			"count":   len(response),
 			"enabled": h.config.Search.Bangs.Enabled,
 		}, http.StatusOK)
 
@@ -3474,13 +3576,13 @@ func (h *Handler) apiBangs(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			h.jsonError(w, "Invalid JSON", http.StatusBadRequest)
+			h.jsonError(w, r, "Invalid JSON", http.StatusBadRequest)
 			return
 		}
 
 		// Validate required fields
 		if req.Shortcut == "" || req.Name == "" || req.URL == "" {
-			h.jsonError(w, "Shortcut, name, and URL are required", http.StatusBadRequest)
+			h.jsonError(w, r, "Shortcut, name, and URL are required", http.StatusBadRequest)
 			return
 		}
 
@@ -3515,7 +3617,7 @@ func (h *Handler) apiBangs(w http.ResponseWriter, r *http.Request) {
 		// Delete custom bang by shortcut
 		shortcut := r.URL.Query().Get("shortcut")
 		if shortcut == "" {
-			h.jsonError(w, "Shortcut parameter required", http.StatusBadRequest)
+			h.jsonError(w, r, "Shortcut parameter required", http.StatusBadRequest)
 			return
 		}
 
@@ -3533,14 +3635,14 @@ func (h *Handler) apiBangs(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if !found {
-			h.jsonError(w, "Bang not found", http.StatusNotFound)
+			h.jsonError(w, r, "Bang not found", http.StatusNotFound)
 			return
 		}
 
-		h.jsonResponse(w, map[string]string{"status": "deleted"}, http.StatusOK)
+		h.jsonStatus(w, r, "deleted", http.StatusOK)
 
 	default:
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		h.jsonError(w, r, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
@@ -3552,39 +3654,39 @@ func (h *Handler) apiBangs(w http.ResponseWriter, r *http.Request) {
 // Per AI.md PART 17: /admin/server/security/ratelimit
 func (h *Handler) handleRateLimiting(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
-		Title:  "Rate Limiting",
-		Page:   "admin-ratelimit",
+		Title:     "Rate Limiting",
+		Page:      "admin-ratelimit",
 		Config:    h.config,
 		AdminPath: config.GetAdminPath(),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "ratelimit", data)
+	h.renderAdminPage(w, r, "ratelimit", data)
 }
 
 // handleBlocklists handles IP/domain blocklist management page
 // Per AI.md PART 17: /admin/server/network/blocklists
 func (h *Handler) handleBlocklists(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
-		Title:  "Blocklists",
-		Page:   "admin-blocklists",
+		Title:     "Blocklists",
+		Page:      "admin-blocklists",
 		Config:    h.config,
 		AdminPath: config.GetAdminPath(),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "blocklists", data)
+	h.renderAdminPage(w, r, "blocklists", data)
 }
 
 // handleUserInvites handles user invite management page
 // Per AI.md PART 17 & PART 34: /admin/server/users/invites
 func (h *Handler) handleUserInvites(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
-		Title:  "User Invites",
-		Page:   "admin-user-invites",
+		Title:     "User Invites",
+		Page:      "admin-user-invites",
 		Config:    h.config,
 		AdminPath: config.GetAdminPath(),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "user-invites", data)
+	h.renderAdminPage(w, r, "user-invites", data)
 }
 
 // handleClusterAddNode handles the add node to cluster page
@@ -3593,11 +3695,11 @@ func (h *Handler) handleClusterAddNode(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	data := &AdminPageData{
-		Title:  "Add Cluster Node",
-		Page:   "admin-cluster-add",
+		Title:     "Add Cluster Node",
+		Page:      "admin-cluster-add",
 		Config:    h.config,
 		AdminPath: config.GetAdminPath(),
-		Extra:  make(map[string]interface{}),
+		Extra:     make(map[string]interface{}),
 	}
 
 	// Get join token if cluster is enabled
@@ -3612,140 +3714,140 @@ func (h *Handler) handleClusterAddNode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "cluster-add", data)
+	h.renderAdminPage(w, r, "cluster-add", data)
 }
 
 // handleHelpRoot handles help page at /admin/help
 // Per AI.md PART 17 sidebar: Help should be at /admin/help
 func (h *Handler) handleHelpRoot(w http.ResponseWriter, r *http.Request) {
 	data := &AdminPageData{
-		Title:  "Help & Documentation",
-		Page:   "admin-help",
+		Title:     "Help & Documentation",
+		Page:      "admin-help",
 		Config:    h.config,
 		AdminPath: config.GetAdminPath(),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.renderAdminPage(w, "help", data)
+	h.renderAdminPage(w, r, "help", data)
 }
 
 // apiServerStats returns server statistics per AI.md PART 17
 func (h *Handler) apiServerStats(w http.ResponseWriter, r *http.Request) {
-if r.Method != http.MethodGet {
-h.jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
-return
-}
-var m runtime.MemStats
-runtime.ReadMemStats(&m)
-stats := map[string]interface{}{
-"uptime":     time.Since(h.startTime).String(),
-"goroutines": runtime.NumGoroutine(),
-"memory": map[string]interface{}{
-"alloc_mb": m.Alloc / 1024 / 1024,
-"sys_mb":   m.Sys / 1024 / 1024,
-},
-}
-h.jsonResponse(w, stats, http.StatusOK)
+	if r.Method != http.MethodGet {
+		h.jsonError(w, r, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	stats := map[string]interface{}{
+		"uptime":     time.Since(h.startTime).String(),
+		"goroutines": runtime.NumGoroutine(),
+		"memory": map[string]interface{}{
+			"alloc_mb": m.Alloc / 1024 / 1024,
+			"sys_mb":   m.Sys / 1024 / 1024,
+		},
+	}
+	h.jsonResponse(w, stats, http.StatusOK)
 }
 
 // apiServerRestart triggers a graceful server restart per AI.md PART 17
 func (h *Handler) apiServerRestart(w http.ResponseWriter, r *http.Request) {
-if r.Method != http.MethodPost {
-h.jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
-return
-}
-h.jsonResponse(w, map[string]string{"status": "restarting"}, http.StatusAccepted)
-if h.reloadCallback != nil {
-go func() {
-time.Sleep(500 * time.Millisecond)
-if err := h.reloadCallback(); err != nil {
-log.Printf("[Admin API] restart error: %v", err)
-}
-}()
-}
+	if r.Method != http.MethodPost {
+		h.jsonError(w, r, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	h.jsonStatus(w, r, "restarting", http.StatusAccepted)
+	if h.reloadCallback != nil {
+		go func() {
+			time.Sleep(500 * time.Millisecond)
+			if err := h.reloadCallback(); err != nil {
+				log.Printf("[Admin API] restart error: %v", err)
+			}
+		}()
+	}
 }
 
 // apiAdminProfile handles GET/PATCH for admin's own profile per AI.md PART 17
 func (h *Handler) apiAdminProfile(w http.ResponseWriter, r *http.Request) {
-session, ok := h.auth.GetSessionFromRequest(r)
-if !ok{
-h.jsonError(w, "unauthorized", http.StatusUnauthorized)
-return
-}
-switch r.Method {
-case http.MethodGet:
-h.jsonResponse(w, map[string]interface{}{
-"id":       session.UserID,
-"username": session.Username,
-}, http.StatusOK)
-case http.MethodPatch:
-h.jsonResponse(w, map[string]string{"status": "ok"}, http.StatusOK)
-default:
-h.jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
-}
+	session, ok := h.auth.GetSessionFromRequest(r)
+	if !ok {
+		h.jsonError(w, r, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		h.jsonResponse(w, map[string]interface{}{
+			"id":       session.UserID,
+			"username": session.Username,
+		}, http.StatusOK)
+	case http.MethodPatch:
+		h.jsonStatus(w, r, "ok", http.StatusOK)
+	default:
+		h.jsonError(w, r, "method not allowed", http.StatusMethodNotAllowed)
+	}
 }
 
 // apiAdminProfilePassword handles POST to change admin password per AI.md PART 17
 func (h *Handler) apiAdminProfilePassword(w http.ResponseWriter, r *http.Request) {
-if r.Method != http.MethodPost {
-h.jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
-return
-}
-_, ok := h.auth.GetSessionFromRequest(r)
-if !ok{
-h.jsonError(w, "unauthorized", http.StatusUnauthorized)
-return
-}
-var req struct {
-CurrentPassword string `json:"current_password"`
-NewPassword     string `json:"new_password"`
-}
-if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-h.jsonError(w, "invalid request", http.StatusBadRequest)
-return
-}
-_ = req
-h.jsonResponse(w, map[string]string{"status": "ok"}, http.StatusOK)
+	if r.Method != http.MethodPost {
+		h.jsonError(w, r, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	_, ok := h.auth.GetSessionFromRequest(r)
+	if !ok {
+		h.jsonError(w, r, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var req struct {
+		CurrentPassword string `json:"current_password"`
+		NewPassword     string `json:"new_password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.jsonError(w, r, "invalid request", http.StatusBadRequest)
+		return
+	}
+	_ = req
+	h.jsonStatus(w, r, "ok", http.StatusOK)
 }
 
 // apiAdminProfileToken handles GET/POST for admin API token per AI.md PART 17
 func (h *Handler) apiAdminProfileToken(w http.ResponseWriter, r *http.Request) {
-_, ok := h.auth.GetSessionFromRequest(r)
-if !ok{
-h.jsonError(w, "unauthorized", http.StatusUnauthorized)
-return
-}
-switch r.Method {
-case http.MethodGet:
-tokens := h.auth.ListAPITokens()
-if len(tokens) > 0 {
-h.jsonResponse(w, map[string]string{"token": maskToken(tokens[0].Token)}, http.StatusOK)
-} else {
-h.jsonResponse(w, map[string]string{"token": ""}, http.StatusOK)
-}
-case http.MethodPost:
-token := h.auth.CreateAPIToken("admin-profile", "Admin profile token", []string{"admin"}, 365)
-h.jsonResponse(w, map[string]string{"token": token.Token}, http.StatusOK)
-default:
-h.jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
-}
+	_, ok := h.auth.GetSessionFromRequest(r)
+	if !ok {
+		h.jsonError(w, r, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		tokens := h.auth.ListAPITokens()
+		if len(tokens) > 0 {
+			h.jsonResponse(w, map[string]string{"token": maskToken(tokens[0].Token)}, http.StatusOK)
+		} else {
+			h.jsonResponse(w, map[string]string{"token": ""}, http.StatusOK)
+		}
+	case http.MethodPost:
+		token := h.auth.CreateAPIToken("admin-profile", "Admin profile token", []string{"admin"}, 365)
+		h.jsonResponse(w, map[string]string{"token": token.Token}, http.StatusOK)
+	default:
+		h.jsonError(w, r, "method not allowed", http.StatusMethodNotAllowed)
+	}
 }
 
 // apiAdminProfilePreferences handles GET/PATCH for admin preferences per AI.md PART 17
 func (h *Handler) apiAdminProfilePreferences(w http.ResponseWriter, r *http.Request) {
-_, ok := h.auth.GetSessionFromRequest(r)
-if !ok{
-h.jsonError(w, "unauthorized", http.StatusUnauthorized)
-return
-}
-switch r.Method {
-case http.MethodGet:
-h.jsonResponse(w, map[string]interface{}{
-"theme":         "dark",
-"notifications": true,
-}, http.StatusOK)
-case http.MethodPatch:
-h.jsonResponse(w, map[string]string{"status": "ok"}, http.StatusOK)
-default:
-h.jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
-}
+	_, ok := h.auth.GetSessionFromRequest(r)
+	if !ok {
+		h.jsonError(w, r, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		h.jsonResponse(w, map[string]interface{}{
+			"theme":         "dark",
+			"notifications": true,
+		}, http.StatusOK)
+	case http.MethodPatch:
+		h.jsonStatus(w, r, "ok", http.StatusOK)
+	default:
+		h.jsonError(w, r, "method not allowed", http.StatusMethodNotAllowed)
+	}
 }

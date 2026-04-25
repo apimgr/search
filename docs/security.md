@@ -34,8 +34,9 @@ Search sets the following security headers:
 
 ### Data Protection
 
-- **No logging** of search queries
-- **No user tracking**
+- **No third-party analytics** unless you configure tracking and users consent
+- **Consent-aware preference cookies**
+- **Access, security, and audit logs stay on your server**
 - **Image proxy** to prevent third-party tracking
 - **Encrypted backups** (AES-256-GCM)
 

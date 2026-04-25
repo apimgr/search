@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/alert"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/direct"
 	"github.com/apimgr/search/src/instant"
@@ -42,6 +43,7 @@ type Handler struct {
 	relatedSearches *search.RelatedSearches
 	torService      *service.TorService // Per AI.md PART 32: Tor service for health status
 	startTime       time.Time
+	alertManager    *alert.Manager
 }
 
 // NewHandler creates a new API handler
@@ -78,6 +80,10 @@ func (h *Handler) SetRelatedSearches(rs *search.RelatedSearches) {
 // Per AI.md PART 32: Tor status is checked via service, not hardcoded
 func (h *Handler) SetTorService(ts *service.TorService) {
 	h.torService = ts
+}
+
+func (h *Handler) SetAlertManager(am *alert.Manager) {
+	h.alertManager = am
 }
 
 // RegisterRoutes registers API routes
@@ -125,6 +131,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	// Favicon proxy - privacy-preserving favicon fetching
 	// Per AI.md PART 16: NO external requests from client, server proxies content
 	mux.HandleFunc("/api/v1/favicon", h.handleFavicon)
+	mux.HandleFunc("/api/v1/alerts", h.handleAlerts)
+	mux.HandleFunc("/api/v1/alerts/", h.handleAlertByToken)
 }
 
 // Response types
@@ -339,13 +347,14 @@ type SearchResult struct {
 
 // EngineInfo represents engine information
 type EngineInfo struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Enabled     bool     `json:"enabled"`
-	Priority    int      `json:"priority"`
-	Categories  []string `json:"categories"`
-	Description string   `json:"description,omitempty"`
-	Homepage    string   `json:"homepage,omitempty"`
+	ID          string               `json:"id"`
+	Name        string               `json:"name"`
+	Enabled     bool                 `json:"enabled"`
+	Priority    int                  `json:"priority"`
+	Categories  []string             `json:"categories"`
+	Description string               `json:"description,omitempty"`
+	Homepage    string               `json:"homepage,omitempty"`
+	Health      *search.EngineHealth `json:"health,omitempty"`
 }
 
 // CategoryInfo represents category information
@@ -736,6 +745,7 @@ func (h *Handler) handleEngines(w http.ResponseWriter, r *http.Request) {
 			Enabled:    eng.IsEnabled(),
 			Priority:   eng.GetPriority(),
 			Categories: categories,
+			Health:     engineHealth(eng),
 		})
 	}
 
@@ -779,9 +789,20 @@ func (h *Handler) handleEngineByID(w http.ResponseWriter, r *http.Request) {
 			Enabled:    engine.IsEnabled(),
 			Priority:   engine.GetPriority(),
 			Categories: categories,
+			Health:     engineHealth(engine),
 		},
 		Meta: &APIMeta{Version: APIVersion},
 	})
+}
+
+func engineHealth(engine search.Engine) *search.EngineHealth {
+	tracker, ok := engine.(interface{ GetHealth() search.EngineHealth })
+	if !ok {
+		return nil
+	}
+
+	health := tracker.GetHealth()
+	return &health
 }
 
 func (h *Handler) handleCategories(w http.ResponseWriter, r *http.Request) {

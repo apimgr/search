@@ -1,0 +1,8 @@
+./alerts.go
+./api.go
+./auth.go
+./graphql.go
+./http_errors.go
+./openapi_handler.go
+./user.go
+./widgets.go

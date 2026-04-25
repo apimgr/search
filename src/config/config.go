@@ -1008,6 +1008,17 @@ type SearchConfig struct {
 	Bangs             BangsConfig      `yaml:"bangs"`
 	OpenSearch        OpenSearchConfig `yaml:"opensearch"`
 	Widgets           WidgetsConfig    `yaml:"widgets"`
+	Alerts            AlertsConfig     `yaml:"alerts"`
+}
+
+type AlertsConfig struct {
+	CreateRateLimitPerHour   int    `yaml:"create_rate_limit_per_hour"`
+	WebhookMaxRetries        int    `yaml:"webhook_max_retries"`
+	WebhookRetryDelayMinutes int    `yaml:"webhook_retry_delay_minutes"`
+	RetentionDays            int    `yaml:"retention_days"`
+	DefaultFrequency         string `yaml:"default_frequency"`
+	DefaultDeliverRSS        bool   `yaml:"default_deliver_rss"`
+	DefaultDeliverWebhook    bool   `yaml:"default_deliver_webhook"`
 }
 
 // WidgetsConfig represents widget system configuration
@@ -1528,6 +1539,15 @@ func DefaultConfig() *Config {
 				Tags:        "search privacy metasearch",
 				LongName:    "", // Uses server.title if empty
 				Image:       "/static/img/favicon.png",
+			},
+			Alerts: AlertsConfig{
+				CreateRateLimitPerHour:   10,
+				WebhookMaxRetries:        3,
+				WebhookRetryDelayMinutes: 5,
+				RetentionDays:            30,
+				DefaultFrequency:         "daily",
+				DefaultDeliverRSS:        true,
+				DefaultDeliverWebhook:    false,
 			},
 			Widgets: WidgetsConfig{
 				Enabled:        true,

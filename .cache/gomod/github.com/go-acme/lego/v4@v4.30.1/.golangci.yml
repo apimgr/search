@@ -1,0 +1,281 @@
+version: "2"
+
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+    - goimports
+  settings:
+    gofumpt:
+      extra-rules: true
+    gofmt:
+      rewrite-rules:
+        - pattern: 'interface{}'
+          replacement: 'any'
+
+linters:
+  default: all
+  disable:
+    - wsl # Deprecated
+    - bodyclose
+    - canonicalheader
+    - contextcheck
+    - cyclop # duplicate of gocyclo
+    - dupl # not relevant
+    - err113 # not relevant
+    - errchkjson
+    - errname
+    - exhaustive # not relevant
+    - exhaustruct # not relevant
+    - forbidigo
+    - forcetypeassert
+    - gosec
+    - gosmopolitan # not relevant
+    - ireturn # not relevant
+    - lll
+    - makezero # not relevant
+    - mnd
+    - musttag # false-positive https://github.com/junk1tm/musttag/issues/17
+    - nestif # too many false-positive
+    - nilnil # not relevant
+    - nlreturn # not relevant
+    - noctx
+    - noinlineerr # too strict
+    - nonamedreturns
+    - paralleltest # not relevant
+    - prealloc # too many false-positive
+    - rowserrcheck # not relevant (SQL)
+    - sqlclosecheck # not relevant (SQL)
+    - tagliatelle
+    - testpackage # not relevant
+    - tparallel # not relevant
+    - varnamelen # not relevant
+    - wrapcheck
+
+  settings:
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: github.com/instana/testify
+              desc: not allowed
+            - pkg: github.com/pkg/errors
+              desc: Should be replaced by standard lib errors package
+    funlen:
+      lines: -1
+      statements: 50
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+    gocritic:
+      disabled-checks:
+        - paramTypeCombine # already handle by gofumpt.extra-rules
+        - whyNoLint # already handle by nonolint
+        - unnamedResult
+        - hugeParam
+        - sloppyReassign
+        - rangeValCopy
+        - octalLiteral
+        - ptrToRefParam
+        - appendAssign
+        - ruleguard
+        - httpNoBody
+        - exposedSyncMutex
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+    gocyclo:
+      min-complexity: 12
+    godox:
+      keywords:
+        - FIXME
+    govet:
+      disable:
+        - fieldalignment
+      enable-all: true
+      settings:
+        printf:
+          funcs:
+            - Print
+            - Printf
+            - Warn
+            - Warnf
+            - Fatal
+            - Fatalf
+    misspell:
+      locale: US
+      ignore-rules:
+        - internetbs
+    perfsprint:
+      err-error: true
+      errorf: true
+      sprintf1: true
+      strconcat: false
+    revive:
+      rules:
+        - name: struct-tag
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+          disabled: true
+        - name: if-return
+        - name: increment-decrement
+        - name: var-naming
+        - name: var-declaration
+        - name: package-comments
+          disabled: true
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unused-parameter
+          disabled: true
+        - name: unreachable-code
+        - name: redefines-builtin-id
+    tagalign:
+      align: false
+      order:
+        - xml
+        - json
+        - yaml
+        - yml
+        - toml
+        - mapstructure
+        - url
+    testifylint:
+      disable:
+        - require-error
+        - go-require
+    usetesting:
+      os-setenv: false # we already have a test "framework" to handle env vars
+    funcorder:
+      struct-method: false
+
+  exclusions:
+    warn-unused: true
+    presets:
+      - comments
+      - std-error-handling
+    paths:
+      # Those elements are related to code borrowed from the official HuaweiCloud API client.
+      - providers/dns/huaweicloud/internal
+    rules:
+      - path: (.+)_test.go
+        linters:
+          - funlen
+          - goconst
+          - maintidx
+      - path: (.+)_test.go
+        text: Error return value of `fmt.Fprintln` is not checked
+        linters:
+          - errcheck
+      - text: "var-naming: avoid meaningless package names"
+        linters:
+          - revive
+      - path: certcrypto/crypto.go
+        text: (tlsFeatureExtensionOID|ocspMustStapleFeature) is a global variable
+        linters:
+          - gochecknoglobals
+      - path: challenge/dns01/nameserver.go
+        text: (defaultNameservers|recursiveNameservers|fqdnSoaCache|muFqdnSoaCache) is a global variable
+        linters:
+          - gochecknoglobals
+      - path: challenge/dns01/nameserver_.+.go
+        text: dnsTimeout is a global variable
+        linters:
+          - gochecknoglobals
+      - path: challenge/dns01/precheck.go
+        text: defaultNameserverPort is a global variable
+        linters:
+          - gochecknoglobals
+      - path: challenge/http01/domain_matcher.go
+        text: cyclomatic complexity \d+ of func `parseForwardedHeader` is high
+        linters:
+          - gocyclo
+      - path: challenge/http01/domain_matcher.go
+        text: Function 'parseForwardedHeader' has too many statements
+        linters:
+          - funlen
+      - path: challenge/tlsalpn01/tls_alpn_challenge.go
+        text: idPeAcmeIdentifierV1 is a global variable
+        linters:
+          - gochecknoglobals
+      - path: log/logger.go
+        text: Logger is a global variable
+        linters:
+          - gochecknoglobals
+      - path: e2e/(dnschallenge/)?[\d\w]+_test.go
+        text: load is a global variable
+        linters:
+          - gochecknoglobals
+      - path: providers/(dns|http)/([\d\w]+/)*[\d\w]+_test.go
+        text: envTest is a global variable
+        linters:
+          - gochecknoglobals
+      - path: providers/dns/namecheap/namecheap_test.go
+        text: testCases is a global variable
+        linters:
+          - gochecknoglobals
+      - path: providers/dns/namecheap/transport.go
+        text: (envProxyOnce|envProxyFuncValue) is a global variable
+        linters:
+          - gochecknoglobals
+      - path: providers/dns/acmedns/mock_test.go
+        text: egTestAccount is a global variable
+        linters:
+          - gochecknoglobals
+      - path: providers/http/memcached/memcached_test.go
+        text: memcachedHosts is a global variable
+        linters:
+          - gochecknoglobals
+      - path: providers/dns/checkdomain/internal/types.go
+        text: '`payed` is a misspelling of `paid`'
+        linters:
+          - misspell
+      - path: platform/tester/env_test.go
+        linters:
+          - thelper
+      - path: providers/dns/oraclecloud/oraclecloud_test.go
+        text: 'SA1019: x509.EncryptPEMBlock has been deprecated since Go 1.16'
+        linters:
+          - staticcheck
+      - path: providers/dns/sakuracloud/wrapper.go
+        text: mu is a global variable
+        linters:
+          - gochecknoglobals
+      - path: cmd/cmd_renew.go
+        text: cyclomatic complexity \d+ of func `(renewForDomains|renewForCSR)` is high
+        linters:
+          - gocyclo
+      - path: cmd/cmd_renew.go
+        text: Function 'renewForDomains' has too many statements
+        linters:
+          - funlen
+      - path: providers/dns/cpanel/cpanel.go
+        text: cyclomatic complexity 13 of func `\(\*DNSProvider\)\.CleanUp` is high
+        linters:
+          - gocyclo
+      - path: providers/dns/manual/manual.go
+        text: 'SA1019: dns01.DNSProviderManual is deprecated'
+        linters:
+          - staticcheck
+      # Those elements have been replaced by non-exposed structures.
+      - path: providers/dns/linode/linode_test.go
+        text: 'SA1019: linodego\.(DomainsPagedResponse|DomainRecordsPagedResponse) is deprecated'
+        linters:
+          - staticcheck
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

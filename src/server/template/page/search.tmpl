@@ -1,36 +1,39 @@
 {{define "content"}}
-<div class="search-results-page" data-query="{{.Query}}" data-category="{{.Category}}" data-page="{{if .Pagination}}{{.Pagination.CurrentPage}}{{else}}1{{end}}" data-per-page="{{.PerPage}}" data-safe-search="{{.SafeSearch}}"{{if .PrefsQuery}} data-prefs="{{.PrefsQuery}}"{{end}}>
-    {{/* Category tabs */}}
-    <div class="search-categories">
+    <div class="search-results-page" data-query="{{.Query}}" data-category="{{.Category}}" data-page="{{if .Pagination}}{{.Pagination.CurrentPage}}{{else}}1{{end}}" data-per-page="{{.PerPage}}" data-safe-search="{{.SafeSearch}}"{{if .PrefsQuery}} data-prefs="{{.PrefsQuery}}"{{end}}>
+        <div class="search-actions">
+            <a class="create-alert-link" href="/alerts/new?q={{urlquery .Query}}&category={{.Category}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}">{{t "alerts.create_title"}}</a>
+        </div>
+        {{/* Category tabs */}}
+        <div class="search-categories">
         <a href="/search?q={{urlquery .Query}}&category=general&per_page={{.PerPage}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}" class="category-link{{if eq .Category "general"}} active{{end}}">
-            <span class="cat-icon">🌐</span> Web
+            <span class="cat-icon">🌐</span> {{t "preferences.default_category_general"}}
         </a>
         <a href="/search?q={{urlquery .Query}}&category=images&per_page={{.PerPage}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}" class="category-link{{if eq .Category "images"}} active{{end}}">
-            <span class="cat-icon">🖼️</span> Images
+            <span class="cat-icon">🖼️</span> {{t "search.categories.images"}}
         </a>
         <a href="/search?q={{urlquery .Query}}&category=videos&per_page={{.PerPage}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}" class="category-link{{if eq .Category "videos"}} active{{end}}">
-            <span class="cat-icon">🎥</span> Videos
+            <span class="cat-icon">🎥</span> {{t "search.categories.videos"}}
         </a>
         <a href="/search?q={{urlquery .Query}}&category=news&per_page={{.PerPage}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}" class="category-link{{if eq .Category "news"}} active{{end}}">
-            <span class="cat-icon">📰</span> News
+            <span class="cat-icon">📰</span> {{t "search.categories.news"}}
         </a>
         <a href="/search?q={{urlquery .Query}}&category=maps&per_page={{.PerPage}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}" class="category-link{{if eq .Category "maps"}} active{{end}}">
-            <span class="cat-icon">🗺️</span> Maps
+            <span class="cat-icon">🗺️</span> {{t "search.categories.maps"}}
         </a>
         <a href="/search?q={{urlquery .Query}}&category=files&per_page={{.PerPage}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}" class="category-link{{if eq .Category "files"}} active{{end}}">
-            <span class="cat-icon">📁</span> Files
+            <span class="cat-icon">📁</span> {{t "search.categories.files"}}
         </a>
         <a href="/search?q={{urlquery .Query}}&category=music&per_page={{.PerPage}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}" class="category-link{{if eq .Category "music"}} active{{end}}">
-            <span class="cat-icon">🎵</span> Music
+            <span class="cat-icon">🎵</span> {{t "preferences.default_category_music"}}
         </a>
         <a href="/search?q={{urlquery .Query}}&category=science&per_page={{.PerPage}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}" class="category-link{{if eq .Category "science"}} active{{end}}">
-            <span class="cat-icon">🔬</span> Science
+            <span class="cat-icon">🔬</span> {{t "search.categories.science"}}
         </a>
         <a href="/search?q={{urlquery .Query}}&category=it&per_page={{.PerPage}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}" class="category-link{{if eq .Category "it"}} active{{end}}">
-            <span class="cat-icon">💻</span> IT
+            <span class="cat-icon">💻</span> {{t "search.categories.it"}}
         </a>
         <a href="/search?q={{urlquery .Query}}&category=social&per_page={{.PerPage}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}" class="category-link{{if eq .Category "social"}} active{{end}}">
-            <span class="cat-icon">💬</span> Social
+            <span class="cat-icon">💬</span> {{t "search.categories.social"}}
         </a>
     </div>
 
@@ -55,13 +58,13 @@
     </div>
     {{else if .Results}}
     <div class="search-info">
-        <span class="result-count">{{.TotalResults}} results</span>
+        <span class="result-count">{{if eq .TotalResults 1}}{{t "search.result_count_one" .TotalResults}}{{else}}{{t "search.result_count_other" .TotalResults}}{{end}}</span>
         <span class="search-info-sep">·</span>
         {{if .Engines}}
-        <span class="search-engines">{{len .Engines}} {{if eq (len .Engines) 1}}engine{{else}}engines{{end}}: {{join .Engines ", "}}</span>
+        <span class="search-engines">{{if eq (len .Engines) 1}}{{t "search.engines_used_one" (len .Engines) (join .Engines ", ")}}{{else}}{{t "search.engines_used_other" (len .Engines) (join .Engines ", ")}}{{end}}</span>
         <span class="search-info-sep">·</span>
         {{end}}
-        <span class="search-time">{{printf "%.2f" .SearchTime}}s</span>
+        <span class="search-time">{{t "search.search_time_compact" (printf "%.2f" .SearchTime)}}</span>
     </div>
 
     {{if eq .Category "images"}}
@@ -110,7 +113,7 @@
                 <div class="video-meta">
                     <span class="video-engine">{{.Engine}}</span>
                     {{if .ViewCount}}
-                    <span class="video-views">{{formatViewCount .ViewCount}} views</span>
+                    <span class="video-views">{{t "search.views_count" (formatViewCount .ViewCount)}}</span>
                     {{end}}
                     {{if .Author}}
                     <span class="video-author">{{.Author}}</span>
@@ -146,7 +149,7 @@
                 <div class="result-meta">
                     <span class="result-engine">{{.Engine}}</span>
                     {{if not (.PublishedAt.IsZero)}}
-                    <span class="result-date">{{.PublishedAt.Format "Jan 2, 2006"}}</span>
+                    <span class="result-date">{{formatSearchDate .PublishedAt}}</span>
                     {{end}}
                 </div>
             </div>
@@ -159,30 +162,30 @@
     <div class="infinite-scroll-trigger" id="scroll-trigger"></div>
     <div class="loading-more hidden" id="loading-indicator">
         <div class="loading-spinner"></div>
-        <span>Loading more results...</span>
+        <span>{{t "search.loading_more_results"}}</span>
     </div>
     <div class="end-of-results hidden" id="end-indicator">
-        No more results
+        {{t "search.no_more_results"}}
     </div>
 
     {{if and .Pagination (gt .Pagination.TotalPages 1)}}
-    <nav class="pagination" aria-label="Search results pagination">
+    <nav class="pagination" aria-label="{{t "search.pagination_label"}}">
         {{if .Pagination.HasPrev}}
-        <a class="page-link pagination-prev" href="/search?q={{urlquery .Query}}&category={{.Category}}&page={{.Pagination.PrevPage}}&per_page={{.PerPage}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}" rel="prev">Previous</a>
+        <a class="page-link pagination-prev" href="/search?q={{urlquery .Query}}&category={{.Category}}&page={{.Pagination.PrevPage}}&per_page={{.PerPage}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}" rel="prev">{{t "common.previous"}}</a>
         {{end}}
         {{range .Pagination.Pages}}
         <a class="page-link{{if eq . $.Pagination.CurrentPage}} current{{end}}" href="/search?q={{urlquery $.Query}}&category={{$.Category}}&page={{.}}&per_page={{$.PerPage}}&safe_search={{$.SafeSearch}}{{if $.PrefsQuery}}&prefs={{urlquery $.PrefsQuery}}{{end}}"{{if eq . $.Pagination.CurrentPage}} aria-current="page"{{end}}>{{.}}</a>
         {{end}}
         {{if .Pagination.HasNext}}
-        <a class="page-link pagination-next" href="/search?q={{urlquery .Query}}&category={{.Category}}&page={{.Pagination.NextPage}}&per_page={{.PerPage}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}" rel="next">Next</a>
+        <a class="page-link pagination-next" href="/search?q={{urlquery .Query}}&category={{.Category}}&page={{.Pagination.NextPage}}&per_page={{.PerPage}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}" rel="next">{{t "common.next"}}</a>
         {{end}}
     </nav>
     {{end}}
 
     {{else}}
     <div class="no-results">
-        <p>No results found for "<strong>{{.Query}}</strong>"</p>
-        <p class="no-results-hint">Try different keywords or check your spelling.</p>
+        <p>{{t "search.no_results_for" .Query}}</p>
+        <p class="no-results-hint">{{t "search.no_results_hint"}}</p>
     </div>
     {{end}}
 </div>

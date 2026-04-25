@@ -302,7 +302,7 @@ type SwaggerUIData struct {
 func (h *Handler) ServeSwaggerUI(w http.ResponseWriter, r *http.Request) {
 	tmpl, err := template.New("swagger").Parse(swaggerUIHTML)
 	if err != nil {
-		http.Error(w, "Template error", http.StatusInternalServerError)
+		localizedHTTPError(w, r, http.StatusInternalServerError, "errors.server_error")
 		return
 	}
 
@@ -324,7 +324,7 @@ func (h *Handler) ServeSwaggerUI(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
 	if err := tmpl.Execute(w, data); err != nil {
-		http.Error(w, "Template execution error", http.StatusInternalServerError)
+		localizedHTTPError(w, r, http.StatusInternalServerError, "errors.server_error")
 		return
 	}
 }

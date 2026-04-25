@@ -13,6 +13,7 @@ import (
 
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/database"
+	"github.com/apimgr/search/src/ssl"
 )
 
 // Tests for AuthManager
@@ -613,11 +614,11 @@ func TestMaskToken(t *testing.T) {
 
 func TestGetClientIP(t *testing.T) {
 	tests := []struct {
-		name           string
-		remoteAddr     string
-		xForwardedFor  string
-		xRealIP        string
-		expectedIP     string
+		name          string
+		remoteAddr    string
+		xForwardedFor string
+		xRealIP       string
+		expectedIP    string
 	}{
 		{
 			name:       "from RemoteAddr with port",
@@ -1903,6 +1904,8 @@ func TestAdminPageDataStruct(t *testing.T) {
 		Title:     "Dashboard",
 		Page:      "dashboard",
 		CSRFToken: "token123",
+		Lang:      "de",
+		Dir:       "ltr",
 		Error:     "",
 		Success:   "Settings saved",
 	}
@@ -1915,6 +1918,12 @@ func TestAdminPageDataStruct(t *testing.T) {
 	}
 	if data.CSRFToken != "token123" {
 		t.Errorf("CSRFToken = %q, want token123", data.CSRFToken)
+	}
+	if data.Lang != "de" {
+		t.Errorf("Lang = %q, want de", data.Lang)
+	}
+	if data.Dir != "ltr" {
+		t.Errorf("Dir = %q, want ltr", data.Dir)
 	}
 	if data.Success != "Settings saved" {
 		t.Errorf("Success = %q, want Settings saved", data.Success)
@@ -2753,7 +2762,7 @@ func TestNewAdminPageData(t *testing.T) {
 	cfg.Server.Security.CSRF.CookieName = "csrf_token"
 	handler := NewHandler(cfg, nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
 	w := httptest.NewRecorder()
 
 	data := handler.newAdminPageData(w, req, "Test Title", "test-page")
@@ -2769,6 +2778,1222 @@ func TestNewAdminPageData(t *testing.T) {
 	}
 	if data.CSRFToken == "" {
 		t.Error("CSRFToken should be generated")
+	}
+	if data.Lang != "de" {
+		t.Errorf("Lang = %q, want de", data.Lang)
+	}
+	if data.Dir != "ltr" {
+		t.Errorf("Dir = %q, want ltr", data.Dir)
+	}
+
+	foundLangCookie := false
+	for _, cookie := range w.Result().Cookies() {
+		if cookie.Name == "lang" {
+			foundLangCookie = true
+			if cookie.Value != "de" {
+				t.Errorf("lang cookie = %q, want de", cookie.Value)
+			}
+		}
+	}
+	if !foundLangCookie {
+		t.Error("expected lang cookie to be set")
+	}
+}
+
+func TestRenderAdminPageUsesRequestLocale(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "Dashboard", "dashboard")
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "dashboard", data)
+
+	body := page.Body.String()
+	if !strings.Contains(body, `<html lang="de" dir="ltr" data-theme="dark">`) {
+		t.Fatalf("expected localized html tag, got %q", body)
+	}
+	if !strings.Contains(body, ">Abmelden</a>") {
+		t.Fatalf("expected translated logout label, got %q", body)
+	}
+	if !strings.Contains(body, `<h1>Dashboard</h1>`) {
+		t.Fatalf("expected translated dashboard title, got %q", body)
+	}
+}
+
+func TestRenderAdminDashboardLocalizedContent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "Dashboard", "dashboard")
+	data.Stats = &DashboardStats{
+		Status:         "Maintenance",
+		Uptime:         "1h",
+		Version:        "v1.0.0",
+		Requests24h:    12,
+		Errors24h:      1,
+		CPUPercent:     10,
+		MemPercent:     20,
+		DiskPercent:    30,
+		MemAlloc:       "10 MB",
+		MemTotal:       "20 MB",
+		GoVersion:      "go1.24",
+		NumGoroutines:  8,
+		NumCPU:         4,
+		ServerMode:     "production",
+		TorEnabled:     false,
+		SSLEnabled:     true,
+		EnginesEnabled: 3,
+	}
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "dashboard", data)
+
+	body := page.Body.String()
+	for _, expected := range []string{
+		"Schnellaktionen",
+		"Konfiguration neu laden",
+		"Letzte Aktivitäten",
+		"Keine aktuellen Aktivitäten",
+		"Keine geplanten Aufgaben",
+		"Systeminformationen",
+		"Wartung",
+		"3 aktiviert",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected localized dashboard content %q, got %q", expected, body)
+		}
+	}
+}
+
+func TestRenderAdminTokensLocalizedContent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "API Tokens", "tokens")
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "tokens", data)
+
+	body := page.Body.String()
+	for _, expected := range []string{
+		"Neues Token erstellen",
+		"Token-Name *",
+		"Mein API-Token",
+		"Wofür dieses Token verwendet wird",
+		"Aktive Token",
+		"Keine API-Token erstellt",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected localized tokens content %q, got %q", expected, body)
+		}
+	}
+}
+
+func TestRenderAdminLogsLocalizedContent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "Logs", "logs")
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "logs", data)
+
+	body := page.Body.String()
+	for _, expected := range []string{
+		"Serverprotokolle",
+		"Protokollspeicherort",
+		"HTTP-Anfrageprotokolle",
+		"Verwenden Sie diese Befehle, um Protokolle anzuzeigen:",
+		"Audit-Protokolle anzeigen",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected localized logs content %q, got %q", expected, body)
+		}
+	}
+}
+
+func TestRenderAdminAuditLogsLocalizedContent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "Audit Logs", "audit-logs")
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "audit-logs", data)
+
+	body := page.Body.String()
+	for _, expected := range []string{
+		"Audit-Protokolle",
+		"Sicherheitsprotokoll für administrative Aktionen.",
+		"Zeitstempel",
+		"Datenbank nicht verfügbar.",
+		"Audit-Protokolle erfassen sicherheitsrelevante Ereignisse:",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected localized audit logs content %q, got %q", expected, body)
+		}
+	}
+}
+
+func TestRenderAdminSetupLocalizedContent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "Admin Setup", "setup")
+	data.Extra = map[string]interface{}{
+		"SetupTokenRequired": true,
+	}
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "setup", data)
+
+	body := page.Body.String()
+	for _, expected := range []string{
+		"Admin-Konto erstellen",
+		"Setup-Token",
+		"Geben Sie das Setup-Token aus der Konsole ein",
+		"Willkommen! Erstellen Sie das primäre Administratorkonto, um zu beginnen.",
+		"Mindestens 8 Zeichen",
+		"Passwort wiederholen",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected localized setup content %q, got %q", expected, body)
+		}
+	}
+}
+
+func TestRenderAdminAdminsLocalizedContent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "Server Admins", "admins")
+	lastLogin := time.Date(2026, time.January, 2, 15, 4, 0, 0, time.UTC)
+	data.Extra = map[string]interface{}{
+		"Admins": []*Admin{
+			{
+				ID:          2,
+				Username:    "alice",
+				Email:       "alice@example.com",
+				IsPrimary:   false,
+				Source:      "local",
+				TOTPEnabled: true,
+				LastLoginAt: &lastLogin,
+			},
+		},
+		"TotalCount": 1,
+		"IsPrimary":  true,
+	}
+	data.Success = "https://example.com/invite"
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "admins", data)
+
+	body := page.Body.String()
+	for _, expected := range []string{
+		"Einladung erstellt",
+		"Diesen Link mit dem neuen Admin teilen:",
+		"Neuen Admin einladen",
+		"Vorgeschlagener Benutzername (optional)",
+		"Server-Administratoren (1 gesamt)",
+		"Rolle",
+		"Zuletzt angemeldet",
+		"Diesen Admin löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
+		"Löschen",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected localized admins content %q, got %q", expected, body)
+		}
+	}
+}
+
+func TestRenderAdminInviteAcceptLocalizedContent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "Accept Invite", "invite-accept")
+	data.Extra = map[string]interface{}{
+		"SuggestedUsername": "alice",
+	}
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "invite-accept", data)
+
+	body := page.Body.String()
+	for _, expected := range []string{
+		"Admin-Einladung annehmen",
+		"Sie wurden eingeladen, Serveradministrator zu werden. Erstellen Sie unten Ihr Konto.",
+		"alice",
+		"Mindestens 8 Zeichen",
+		"Passwort wiederholen",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected localized invite accept content %q, got %q", expected, body)
+		}
+	}
+}
+
+func TestRenderAdminInviteErrorLocalizedContent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "Invite Error", "invite-error")
+	data.Error = "Einladung abgelaufen"
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "invite-error", data)
+
+	body := page.Body.String()
+	for _, expected := range []string{
+		"Ungültige Einladung",
+		"Einladung abgelaufen",
+		"Bitte kontaktieren Sie den Serveradministrator für einen neuen Einladungslink.",
+		"Zum Login",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected localized invite error content %q, got %q", expected, body)
+		}
+	}
+}
+
+func TestRenderAdminConfigLocalizedContent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.Description = "Desc"
+	cfg.Server.Port = 8080
+	cfg.Server.Mode = "development"
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "Configuration", "config")
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "config", data)
+
+	body := page.Body.String()
+	for _, expected := range []string{
+		"Serverkonfiguration",
+		"Seitentitel",
+		"Beschreibung",
+		"Port",
+		"Modus",
+		"Produktion",
+		"Entwicklung",
+		"Änderungen speichern",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected localized config content %q, got %q", expected, body)
+		}
+	}
+}
+
+func TestRenderAdminEnginesLocalizedContent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "Search Engines", "engines")
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "engines", data)
+
+	body := page.Body.String()
+	for _, expected := range []string{
+		"Suchmaschinen",
+		"Suchmaschine",
+		"Status",
+		"Priorität",
+		"Kategorie",
+		"Aktionen",
+		"Aktiviert",
+		"Allgemein, Bilder, Videos, Nachrichten",
+		"Deaktivieren",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected localized engines content %q, got %q", expected, body)
+		}
+	}
+}
+
+func TestRenderAdminSchedulerLocalizedContent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "Scheduler", "scheduler")
+	now := time.Date(2026, time.January, 2, 15, 4, 0, 0, time.UTC)
+	data.SchedulerTasks = map[string]*SchedulerTaskInfo{
+		"backup":        {Enabled: true, LastRun: time.Time{}, NextRun: now},
+		"cache_cleanup": {Enabled: false, LastRun: now, NextRun: now.Add(time.Hour)},
+		"log_rotation":  {Enabled: true, LastRun: now, NextRun: now.Add(2 * time.Hour)},
+		"geoip_update":  {Enabled: true, LastRun: now, NextRun: now.Add(3 * time.Hour)},
+		"engine_health": {Enabled: true, LastRun: now, NextRun: now.Add(15 * time.Minute)},
+	}
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "scheduler", data)
+
+	body := page.Body.String()
+	for _, expected := range []string{
+		"Geplante Aufgaben",
+		"Verwalten Sie Hintergrundaufgaben, die nach einem Zeitplan ausgeführt werden.",
+		"Aufgabe",
+		"Zeitplan",
+		"Letzter Lauf",
+		"Nächster Lauf",
+		"Jetzt ausführen",
+		"Aufgabenverlauf",
+		"Verlauf wird geladen...",
+		`Aufgabe „%s“ jetzt ausführen?`,
+		"Geplante Aufgabe ausführen",
+		"Aufgabe erfolgreich gestartet",
+		"Keine Aufgabenhistorie verfügbar",
+		"Fehler beim Laden des Verlaufs",
+		"Sicherung",
+		"Cache-Bereinigung",
+		"Nie",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected localized scheduler content %q, got %q", expected, body)
+		}
+	}
+}
+
+func TestRenderAdminNodesLocalizedContent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "Cluster Nodes", "nodes")
+	data.Extra = map[string]interface{}{
+		"Nodes": []ClusterNode{
+			{
+				ID:        "node-1",
+				Hostname:  "alpha",
+				IsPrimary: true,
+				Status:    "healthy",
+				LastSeen:  time.Date(2026, time.January, 2, 15, 4, 0, 0, time.UTC),
+				JoinedAt:  time.Date(2025, time.December, 1, 0, 0, 0, 0, time.UTC),
+			},
+			{
+				ID:        "node-2",
+				Hostname:  "beta",
+				IsPrimary: false,
+				Status:    "offline",
+				LastSeen:  time.Time{},
+				JoinedAt:  time.Time{},
+			},
+		},
+		"IsPrimary": false,
+		"NodeID":    "node-2",
+		"Hostname":  "beta",
+		"IsCluster": true,
+	}
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "nodes", data)
+
+	body := page.Body.String()
+	for _, expected := range []string{
+		"Cluster-Status",
+		"Modus",
+		"Dieser Knoten",
+		"Hostname",
+		"Rolle",
+		"Sekundär",
+		"Knotenaktionen",
+		"Cluster verlassen",
+		"Cluster verlassen? Dieser Knoten wird eigenständig.",
+		"Verlassen",
+		"Cluster-Knoten (2)",
+		"Knoten-ID",
+		"Zuletzt gesehen",
+		"Beigetreten",
+		"Gesund",
+		"Offline",
+		" (dieser Knoten)",
+		"Nie",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected localized nodes content %q, got %q", expected, body)
+		}
+	}
+}
+
+func TestRenderAdminBackupLocalizedContent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "Backup", "server-backup")
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "server-backup", data)
+
+	body := page.Body.String()
+	for _, expected := range []string{
+		"Sicherung erstellen",
+		"Erstellen Sie eine Sicherung Ihrer Datenbank, Konfiguration und Datendateien.",
+		"Jetzt Sicherung erstellen",
+		"Verfügbare Sicherungen",
+		"Dateiname",
+		"Keine Sicherungen verfügbar",
+		"Sicherungseinstellungen",
+		"Automatische Sicherungen",
+		"Täglich um 02:00",
+		"Wöchentlich am Sonntag",
+		"Einstellungen speichern",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected localized backup content %q, got %q", expected, body)
+		}
+	}
+}
+
+func TestRenderAdminMaintenanceLocalizedContent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.MaintenanceMode = true
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "Maintenance", "server-maintenance")
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "server-maintenance", data)
+
+	body := page.Body.String()
+	for _, expected := range []string{
+		"Wartungsmodus",
+		"Wenn aktiviert, sehen alle Benutzer eine Wartungsseite. Administratoren können weiterhin auf das Admin-Panel zugreifen.",
+		"Wartungsmodus aktivieren",
+		"Änderungen speichern",
+		"Schnellaktionen",
+		"Konfiguration neu laden",
+		"Sicherung erstellen",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected localized maintenance content %q, got %q", expected, body)
+		}
+	}
+}
+
+func TestRenderAdminUpdatesLocalizedContent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "Updates", "server-updates")
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "server-updates", data)
+
+	body := page.Body.String()
+	for _, expected := range []string{
+		"Aktuelle Version",
+		"Commit",
+		"Build-Datum",
+		"Nach Updates suchen",
+		"Prüfen, ob eine neuere Version verfügbar ist.",
+		"Auf Updates prüfen...",
+		"Update verfügbar",
+		"Jetzt aktualisieren",
+		"Sie verwenden die neueste Version.",
+		"Fehler beim Suchen nach Updates.",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected localized updates content %q, got %q", expected, body)
+		}
+	}
+}
+
+func TestRenderAdminInfoLocalizedContent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "Info", "server-info")
+	data.Stats = &DashboardStats{
+		Version:       "1.0.0",
+		GoVersion:     "go1.24.0",
+		Uptime:        "24h",
+		NumCPU:        4,
+		NumGoroutines: 12,
+		MemAlloc:      "32 MB",
+		MemTotal:      "64 MB",
+	}
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "server-info", data)
+
+	body := page.Body.String()
+	for _, expected := range []string{
+		"Anwendung",
+		"Version",
+		"Go-Version",
+		"Betriebszeit",
+		"System",
+		"CPUs",
+		"Speicher belegt",
+		"Gesamtspeicher",
+		"Pfade",
+		"Konfigurationsverzeichnis",
+		"Datenverzeichnis",
+		"Log-Verzeichnis",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected localized info content %q, got %q", expected, body)
+		}
+	}
+}
+
+func TestRenderAdminSecurityLocalizedContent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	cfg.Server.RateLimit.Enabled = true
+	cfg.Server.RateLimit.RequestsPerMinute = 120
+	cfg.Server.RateLimit.BurstSize = 12
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "Security", "server-security")
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "server-security", data)
+
+	body := page.Body.String()
+	for _, expected := range []string{
+		"Ratenbegrenzung",
+		"Ratenbegrenzung aktivieren",
+		"Anfragen pro Minute",
+		"Burst-Größe",
+		"Sicherheitseinstellungen speichern",
+		"Sicherheitsheader",
+		"Verwandte Einstellungen",
+		"SSL/TLS-Einstellungen",
+		"GeoIP-Blockierung",
+		"API-Tokens",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected localized security content %q, got %q", expected, body)
+		}
+	}
+}
+
+func TestRenderAdminHelpLocalizedContent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.Branding.SourceCodeURL = "https://example.com/repo"
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "Help", "help")
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "help", data)
+
+	body := page.Body.String()
+	for _, expected := range []string{
+		"Dokumentation",
+		"Offizielle Dokumentation",
+		"Vollständige Anleitungen und Referenz",
+		"Quellcode-Repository",
+		"Quellcode und Probleme",
+		"Schnelllinks",
+		"API-Dokumentation",
+		"GraphQL-Explorer",
+		"Logs anzeigen",
+		"Tastenkürzel",
+		"Zum Dashboard gehen",
+		"Hilfe anzeigen",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected localized help content %q, got %q", expected, body)
+		}
+	}
+}
+
+func TestRenderAdminBrandingLocalizedContent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.Branding.Title = "Search"
+	cfg.Server.Branding.Theme = "auto"
+	cfg.Server.Branding.PrimaryColor = "#123456"
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "Branding", "server-branding")
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "server-branding", data)
+
+	body := page.Body.String()
+	for _, expected := range []string{
+		"Branding-Einstellungen",
+		"Anwendungsname",
+		"Logo-URL",
+		"Favicon-URL",
+		"Quellcode-URL",
+		"Fußzeilentext",
+		"Design",
+		"Dunkel",
+		"Hell",
+		"Automatisch (Systemeinstellung)",
+		"Primärfarbe",
+		"Branding speichern",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected localized branding content %q, got %q", expected, body)
+		}
+	}
+}
+
+func TestRenderAdminNetworkLocalizedContent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "Network", "server-network")
+	data.Extra = map[string]interface{}{
+		"TorStatus": map[string]interface{}{
+			"running": true,
+			"enabled": true,
+		},
+		"GeoIPStatus": map[string]interface{}{
+			"enabled": false,
+		},
+	}
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "server-network", data)
+
+	body := page.Body.String()
+	for _, expected := range []string{
+		"Konfigurieren Sie netzwerkbezogene Einstellungen einschließlich Tor Hidden Service und GeoIP-Filterung.",
+		"Tor Hidden Service",
+		"Laufend",
+		"Tor für datenschutzbewusste Benutzer aktivieren. Bietet eine .onion-Adresse für anonymen Zugriff.",
+		"Tor konfigurieren",
+		"GeoIP-Filterung",
+		"Deaktiviert",
+		"Zugriff basierend auf dem geografischen Standort blockieren oder erlauben. Verwendet MaxMind-kompatible MMDB-Datenbanken.",
+		"GeoIP konfigurieren",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected localized network content %q, got %q", expected, body)
+		}
+	}
+}
+
+func TestRenderAdminGeoIPLocalizedContent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	cfg.Server.GeoIP.Enabled = true
+	cfg.Server.GeoIP.Dir = "/data/geoip"
+	cfg.Server.GeoIP.Update = "monthly"
+	cfg.Server.GeoIP.ASN = true
+	cfg.Server.GeoIP.Country = true
+	cfg.Server.GeoIP.City = true
+	cfg.Server.GeoIP.DenyCountries = []string{"CN", "RU"}
+	cfg.Server.GeoIP.AllowedCountries = []string{"US", "CA"}
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "GeoIP", "server-geoip")
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "server-geoip", data)
+
+	body := page.Body.String()
+	for _, expected := range []string{
+		"GeoIP-Konfiguration",
+		"Verwendet MMDB-Datenbanken von sapics/ip-location-db (kostenlos, kein API-Schlüssel erforderlich).",
+		"GeoIP aktivieren",
+		"Datenbankverzeichnis",
+		"Aktualisierungshäufigkeit",
+		"Monatlich",
+		"ASN-Lookups aktivieren",
+		"Länder-Lookups aktivieren",
+		"Städte-Lookups aktivieren (größerer Download)",
+		"GeoIP-Einstellungen speichern",
+		"Länderbeschränkungen",
+		"Länder sperren (ISO 3166-1 alpha-2, kommagetrennt)",
+		"Nur Länder erlauben (leer lassen für keine Einschränkung)",
+		"Beschränkungen speichern",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected localized geoip content %q, got %q", expected, body)
+		}
+	}
+}
+
+func TestRenderAdminMetricsLocalizedContent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	cfg.Server.Metrics.Enabled = true
+	cfg.Server.Metrics.Endpoint = "/metrics"
+	cfg.Server.Metrics.IncludeSystem = true
+	cfg.Server.Metrics.Token = "secret"
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "Metrics", "server-metrics")
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "server-metrics", data)
+
+	body := page.Body.String()
+	for _, expected := range []string{
+		"Prometheus-Metriken",
+		"Prometheus-kompatiblen Metrik-Endpunkt für Monitoring bereitstellen.",
+		"Metrik-Endpunkt aktivieren",
+		"Endpunktpfad",
+		"Systemmetriken einschließen (CPU, Speicher, Festplatte)",
+		"Bearer-Token (leer = keine Authentifizierung)",
+		"Leer lassen für keine Authentifizierung",
+		"Falls gesetzt, müssen Anfragen Folgendes enthalten: Authorization: Bearer <token>",
+		"Metrik-Einstellungen speichern",
+		"Verfügbare Metriken",
+		"Metrik",
+		"Typ",
+		"Beschreibung",
+		"Gesamte Suchanfragen",
+		"Anfragedauer in Sekunden",
+		"Cache-Trefferanzahl",
+		"Speichernutzung (wenn Systemmetriken aktiviert sind)",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected localized metrics content %q, got %q", expected, body)
+		}
+	}
+}
+
+func TestRenderAdminAnnouncementsLocalizedContent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	cfg.Server.Web.Announcements.Enabled = true
+	cfg.Server.Web.Announcements.Messages = []config.Announcement{
+		{
+			ID:          "notice-1",
+			Type:        "warning",
+			Title:       "Planned Maintenance",
+			Message:     "Service will restart tonight.",
+			Dismissible: true,
+		},
+	}
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "Announcements", "server-announcements")
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "server-announcements", data)
+
+	body := page.Body.String()
+	for _, expected := range []string{
+		"Ankündigungen",
+		"Ankündigungen aktivieren",
+		"Neuen Hinweis hinzufügen",
+		"ID (eindeutiger Bezeichner)",
+		"Typ",
+		"Hinweis",
+		"Warnung",
+		"Titel",
+		"Nachricht",
+		"Startdatum (optional)",
+		"Enddatum (optional)",
+		"Benutzer kann ausblenden",
+		"Hinweis hinzufügen",
+		"Aktive Ankündigungen",
+		"Aktionen",
+		"Immer",
+		"Löschen",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected localized announcements content %q, got %q", expected, body)
+		}
+	}
+}
+
+func TestRenderAdminWebLocalizedContent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	cfg.Server.Web.Robots.Allow = []string{"/", "/api"}
+	cfg.Server.Web.Robots.Deny = []string{"/admin"}
+	cfg.Server.Web.Security.Contact = "mailto:security@example.com"
+	cfg.Server.Web.Security.Expires = "2026-12-31T00:00:00Z"
+	cfg.Server.Web.CookieConsent.Enabled = true
+	cfg.Server.Web.CookieConsent.Message = "Use cookies?"
+	cfg.Server.Web.CookieConsent.PolicyURL = "/privacy"
+	cfg.Server.Web.CORS = "https://example.com"
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "Web", "server-web")
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "server-web", data)
+
+	body := page.Body.String()
+	for _, expected := range []string{
+		"robots.txt-Konfiguration",
+		"Erlaubte Pfade (einer pro Zeile)",
+		"Verweigerte Pfade (einer pro Zeile)",
+		"robots.txt speichern",
+		"security.txt-Konfiguration",
+		"Kontakt",
+		"Läuft ab",
+		"security.txt speichern",
+		"Cookie-Einwilligung",
+		"Cookie-Einwilligungs-Popup aktivieren",
+		"Nachricht",
+		"Datenschutzerklärung-URL",
+		"Cookie-Einstellungen speichern",
+		"CORS-Einstellungen",
+		"Erlaubte Ursprünge",
+		"CORS-Einstellungen speichern",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected localized web content %q, got %q", expected, body)
+		}
+	}
+}
+
+func TestRenderAdminEmailLocalizedContent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	cfg.Server.Email.SMTP.Host = "smtp.example.com"
+	cfg.Server.Email.SMTP.Port = 587
+	cfg.Server.Email.SMTP.Username = "user@example.com"
+	cfg.Server.Email.SMTP.Password = "secret-password"
+	cfg.Server.Email.SMTP.TLS = "auto"
+	cfg.Server.Email.From.Name = "Search"
+	cfg.Server.Email.From.Email = "noreply@example.com"
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "Email", "server-email")
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "server-email", data)
+
+	body := page.Body.String()
+	for _, expected := range []string{
+		"E-Mail- / SMTP-Konfiguration",
+		"E-Mail wird automatisch aktiviert, wenn ein SMTP-Host konfiguriert ist.",
+		"SMTP-Server",
+		"SMTP-Host",
+		"Leer lassen, um den lokalen SMTP-Server automatisch zu erkennen",
+		"SMTP-Port",
+		"SMTP-Benutzername",
+		"SMTP-Passwort",
+		"Leer lassen, um den aktuellen Wert beizubehalten",
+		"TLS-Modus",
+		"Automatisch (STARTTLS versuchen)",
+		"STARTTLS",
+		"TLS (direkt)",
+		"Keine (unsicher)",
+		"Absenderadresse",
+		"Absendername",
+		"Search (standardmäßig App-Name)",
+		"Absender-E-Mail",
+		"noreply@example.com (standardmäßig no-reply@fqdn)",
+		"E-Mail-Einstellungen speichern",
+		"Test-E-Mail senden",
+		"Test-E-Mail gesendet!",
+		"Senden der Test-E-Mail fehlgeschlagen:",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected localized email content %q, got %q", expected, body)
+		}
+	}
+}
+
+func TestRenderAdminSSLLocalizedContent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	cfg.Server.SSL.Enabled = true
+	cfg.Server.SSL.AutoTLS = true
+	cfg.Server.SSL.CertFile = "/etc/ssl/cert.pem"
+	cfg.Server.SSL.KeyFile = "/etc/ssl/key.pem"
+	cfg.Server.SSL.LetsEncrypt.Enabled = true
+	cfg.Server.SSL.LetsEncrypt.Email = "admin@example.com"
+	cfg.Server.SSL.LetsEncrypt.Domains = []string{"example.com", "www.example.com"}
+	cfg.Server.SSL.LetsEncrypt.Staging = true
+	cfg.Server.SSL.LetsEncrypt.Challenge = "dns-01"
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "SSL", "server-ssl")
+	data.Extra = map[string]interface{}{
+		"DNSProviders": []ssl.DNSProviderInfo{
+			{
+				ID:   "cloudflare",
+				Name: "Cloudflare",
+				Fields: []ssl.Field{
+					{
+						Name:        "api_token",
+						Label:       "API Token",
+						Type:        "password",
+						Required:    true,
+						Placeholder: "token",
+						Help:        "Use a scoped API token",
+					},
+				},
+			},
+		},
+		"CurrentDNSProvider": "cloudflare",
+		"DNS01Configured":    true,
+		"DNS01ValidatedAt":   "2026-01-15",
+	}
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "server-ssl", data)
+
+	body := page.Body.String()
+	for _, expected := range []string{
+		"SSL/TLS-Konfiguration",
+		"SSL/TLS aktivieren",
+		"Automatisches TLS (automatische Zertifikatsverwaltung)",
+		"Zertifikatsdatei",
+		"Pfad zur SSL-Zertifikatsdatei (PEM-Format)",
+		"Schlüsseldatei",
+		"Pfad zur privaten Schlüsseldatei (PEM-Format)",
+		"Let's Encrypt aktivieren",
+		"E-Mail-Adresse",
+		"Erforderlich für Benachrichtigungen über ablaufende Zertifikate",
+		"Domains (eine pro Zeile)",
+		"Domains, für die Zertifikate angefordert werden sollen",
+		"Staging-Server verwenden (zum Testen)",
+		"ACME-Challenge-Typ",
+		"HTTP-01 (erfordert Port 80)",
+		"TLS-ALPN-01 (erfordert Port 443)",
+		"DNS-01 (Wildcard-Zertifikate, keine Portanforderungen)",
+		"Wählen Sie aus, wie Let's Encrypt den Domainbesitz verifiziert",
+		"DNS-Provider-Konfiguration",
+		"DNS-Provider",
+		"Provider auswählen...",
+		"Wählen Sie Ihren DNS-Provider für die DNS-01-Challenge aus",
+		"DNS-01 mit cloudflare konfiguriert (validiert: 2026-01-15)",
+		"SSL-Einstellungen speichern",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected localized SSL content %q, got %q", expected, body)
+		}
+	}
+}
+
+func TestRenderAdminTorLocalizedContent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	cfg.Server.Tor.Enabled = true
+	cfg.Server.Tor.OnionAddress = "abc123def456.onion"
+	cfg.Server.Tor.Binary = "/usr/bin/tor"
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "Tor", "server-tor")
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "server-tor", data)
+
+	body := page.Body.String()
+	for _, expected := range []string{
+		"Tor Hidden Service",
+		"Gemäß AI.md TEIL 32 wird Tor automatisch aktiviert, wenn das Tor-Binary gefunden wird.",
+		"Status",
+		"Laufend: abc123def456.onion",
+		"Onion-Adresse",
+		"Pfad zum Tor-Binary (optional)",
+		"Automatisch aus PATH erkennen",
+		"Leer lassen für automatische Erkennung. Häufige Speicherorte: /usr/bin/tor, /usr/local/bin/tor",
+		"Pfad aktualisieren",
+		"Dienststeuerung",
+		"Tor starten",
+		"Tor stoppen",
+		"Tor neu starten",
+		"Vanity-Adressgenerierung",
+		"Erstellen Sie eine benutzerdefinierte .onion-Adresse mit einem einprägsamen Präfix (maximal 6 Zeichen für die integrierte Generierung).",
+		"Präfix (nur a-z, 2-7)",
+		"Generierung starten",
+		"Abbrechen",
+		"Versuche",
+		"Wird gestartet...",
+		"Schlüsselverwaltung",
+		"Schlüssel exportieren",
+		"Schlüssel importieren",
+		"Adresse neu erzeugen",
+		"Warnung",
+		"Das Neuerzeugen erstellt eine neue .onion-Adresse. Die alte Adresse funktioniert dann nicht mehr.",
+		"Tor gestartet: %s",
+		"Fehlgeschlagen: %s",
+		"Tor gestoppt",
+		"Tor neu gestartet: %s",
+		"Ungültiges Präfix: Verwenden Sie nur a-z und 2-7",
+		"Vanity-Generierung gestartet",
+		"Vanity-Generierung abgebrochen",
+		"Gefunden: %s",
+		"Vanity-Adresse gefunden: %s",
+		"Suche läuft...",
+		"Schlüssel importiert, neue Adresse: %s",
+		"Import fehlgeschlagen",
+		"Sind Sie sicher? Dadurch wird eine neue .onion-Adresse erstellt und die alte Adresse funktioniert nicht mehr.",
+		"Neue Adresse: %s",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected localized Tor content %q, got %q", expected, body)
+		}
+	}
+}
+
+func TestRenderAdminSettingsLocalizedContent(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Server"
+	cfg.Server.Description = "Server description"
+	cfg.Server.BaseURL = "https://example.com"
+	cfg.Server.Port = 8080
+	cfg.Server.HTTPSPort = 8443
+	cfg.Server.Address = "[::]"
+	cfg.Server.Mode = "development"
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	cfg.Server.RateLimit.Enabled = true
+	cfg.Server.RateLimit.RequestsPerMinute = 60
+	cfg.Server.RateLimit.RequestsPerHour = 1000
+	cfg.Server.RateLimit.RequestsPerDay = 5000
+	cfg.Server.RateLimit.BurstSize = 20
+	cfg.Search.Alerts.CreateRateLimitPerHour = 5
+	cfg.Search.Alerts.WebhookMaxRetries = 3
+	cfg.Search.Alerts.WebhookRetryDelayMinutes = 15
+	cfg.Search.Alerts.RetentionDays = 30
+	cfg.Search.Alerts.DefaultFrequency = "daily"
+	cfg.Search.Alerts.DefaultDeliverRSS = true
+	cfg.Search.Alerts.DefaultDeliverWebhook = true
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	data := handler.newAdminPageData(w, req, "Settings", "server-settings")
+
+	page := httptest.NewRecorder()
+	handler.renderAdminPage(page, req, "server-settings", data)
+
+	body := page.Body.String()
+	for _, expected := range []string{
+		"Allgemeine Servereinstellungen",
+		"Instanztitel",
+		"Beschreibung",
+		"Basis-URL",
+		"Port",
+		"0 = zufälliger Port im Bereich 64000-64999",
+		"HTTPS-Port (optional, für Dual-Port-Modus)",
+		"Bind-Adresse",
+		"Modus",
+		"Produktion",
+		"Entwicklung",
+		"Suchbenachrichtigungen",
+		"Benachrichtigungserstellungen pro IP und Stunde",
+		"Maximale Webhook-Wiederholungen",
+		"Webhook-Wiederholungsverzögerung (Minuten)",
+		"Aufbewahrung gespeicherter Ergebnisse (Tage)",
+		"Standard-Benachrichtigungsfrequenz",
+		"Sofort",
+		"Täglich",
+		"Wöchentlich",
+		"RSS standardmäßig aktivieren",
+		"Webhook standardmäßig aktivieren",
+		"Änderungen speichern",
+		"Ratenbegrenzung",
+		"Ratenbegrenzung aktivieren",
+		"Anfragen pro Minute",
+		"Anfragen pro Stunde",
+		"Anfragen pro Tag",
+		"Burst-Größe",
+		"Ratenlimits speichern",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected localized settings content %q, got %q", expected, body)
+		}
 	}
 }
 
@@ -2815,17 +4040,19 @@ type mockTorManager struct {
 	address string
 }
 
-func (m *mockTorManager) IsRunning() bool                          { return m.running }
-func (m *mockTorManager) GetOnionAddress() string                  { return m.address }
-func (m *mockTorManager) GetTorStatus() map[string]interface{}     { return map[string]interface{}{"enabled": true} }
-func (m *mockTorManager) Start() error                             { return nil }
-func (m *mockTorManager) Stop() error                              { return nil }
-func (m *mockTorManager) Restart() error                           { return nil }
-func (m *mockTorManager) RegenerateAddress() (string, error)       { return "newaddress", nil }
-func (m *mockTorManager) GenerateVanity(prefix string) error       { return nil }
-func (m *mockTorManager) CancelVanity()                            {}
-func (m *mockTorManager) GetVanityProgress() *VanityProgress       { return &VanityProgress{} }
-func (m *mockTorManager) ExportKeys() ([]byte, error)              { return []byte("keys"), nil }
+func (m *mockTorManager) IsRunning() bool         { return m.running }
+func (m *mockTorManager) GetOnionAddress() string { return m.address }
+func (m *mockTorManager) GetTorStatus() map[string]interface{} {
+	return map[string]interface{}{"enabled": true}
+}
+func (m *mockTorManager) Start() error                                 { return nil }
+func (m *mockTorManager) Stop() error                                  { return nil }
+func (m *mockTorManager) Restart() error                               { return nil }
+func (m *mockTorManager) RegenerateAddress() (string, error)           { return "newaddress", nil }
+func (m *mockTorManager) GenerateVanity(prefix string) error           { return nil }
+func (m *mockTorManager) CancelVanity()                                {}
+func (m *mockTorManager) GetVanityProgress() *VanityProgress           { return &VanityProgress{} }
+func (m *mockTorManager) ExportKeys() ([]byte, error)                  { return []byte("keys"), nil }
 func (m *mockTorManager) ImportKeys(privateKey []byte) (string, error) { return "imported", nil }
 
 func TestHandlerSetTorManager(t *testing.T) {
@@ -2881,14 +4108,16 @@ type mockClusterManager struct {
 	isPrimary bool
 }
 
-func (m *mockClusterManager) Mode() string                                      { return m.mode }
-func (m *mockClusterManager) IsClusterMode() bool                               { return m.mode != "standalone" }
-func (m *mockClusterManager) IsPrimary() bool                                   { return m.isPrimary }
-func (m *mockClusterManager) NodeID() string                                    { return "node-1" }
-func (m *mockClusterManager) Hostname() string                                  { return "localhost" }
+func (m *mockClusterManager) Mode() string                                        { return m.mode }
+func (m *mockClusterManager) IsClusterMode() bool                                 { return m.mode != "standalone" }
+func (m *mockClusterManager) IsPrimary() bool                                     { return m.isPrimary }
+func (m *mockClusterManager) NodeID() string                                      { return "node-1" }
+func (m *mockClusterManager) Hostname() string                                    { return "localhost" }
 func (m *mockClusterManager) GetNodes(ctx context.Context) ([]ClusterNode, error) { return nil, nil }
-func (m *mockClusterManager) GenerateJoinToken(ctx context.Context) (string, error) { return "token", nil }
-func (m *mockClusterManager) LeaveCluster(ctx context.Context) error            { return nil }
+func (m *mockClusterManager) GenerateJoinToken(ctx context.Context) (string, error) {
+	return "token", nil
+}
+func (m *mockClusterManager) LeaveCluster(ctx context.Context) error { return nil }
 
 func TestHandlerSetClusterManager(t *testing.T) {
 	cfg := &config.Config{}
@@ -4196,10 +5425,12 @@ func (m *mockSchedulerManagerWithTasks) GetTasks() []*SchedulerTaskInfo {
 		{ID: "task-1", Name: "Test Task", Enabled: true},
 	}
 }
-func (m *mockSchedulerManagerWithTasks) GetTask(id string) (*SchedulerTaskInfo, error) { return nil, nil }
-func (m *mockSchedulerManagerWithTasks) Enable(id string) error                        { return nil }
-func (m *mockSchedulerManagerWithTasks) Disable(id string) error                       { return nil }
-func (m *mockSchedulerManagerWithTasks) RunNow(id string) error                        { return nil }
+func (m *mockSchedulerManagerWithTasks) GetTask(id string) (*SchedulerTaskInfo, error) {
+	return nil, nil
+}
+func (m *mockSchedulerManagerWithTasks) Enable(id string) error  { return nil }
+func (m *mockSchedulerManagerWithTasks) Disable(id string) error { return nil }
+func (m *mockSchedulerManagerWithTasks) RunNow(id string) error  { return nil }
 
 func TestApiEmailTestNotEnabled(t *testing.T) {
 	cfg := &config.Config{
@@ -5937,14 +7168,47 @@ func TestJsonError(t *testing.T) {
 	cfg := &config.Config{}
 	handler := NewHandler(cfg, nil)
 
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
 	w := httptest.NewRecorder()
-	handler.jsonError(w, "Test error", http.StatusBadRequest)
+	handler.jsonError(w, req, "Test error", http.StatusBadRequest)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("Status code = %d, want %d", w.Code, http.StatusBadRequest)
 	}
-	if !strings.Contains(w.Body.String(), "Test error") {
-		t.Error("Response should contain error message")
+	if !strings.Contains(w.Body.String(), "Ungültige Anfrage") {
+		t.Error("Response should contain localized error message")
+	}
+}
+
+func TestJsonStatus(t *testing.T) {
+	cfg := &config.Config{}
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	handler.jsonStatus(w, req, "deleted", http.StatusOK)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Status code = %d, want %d", w.Code, http.StatusOK)
+	}
+	if !strings.Contains(w.Body.String(), "Gelöscht") {
+		t.Error("Response should contain localized status message")
+	}
+}
+
+func TestLocalizedHTTPError(t *testing.T) {
+	cfg := &config.Config{}
+	handler := NewHandler(cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin?lang=de", nil)
+	w := httptest.NewRecorder()
+	handler.localizedHTTPError(w, req, "Method not allowed", http.StatusMethodNotAllowed)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("Status code = %d, want %d", w.Code, http.StatusMethodNotAllowed)
+	}
+	if !strings.Contains(w.Body.String(), "Methode nicht erlaubt") {
+		t.Error("Response should contain localized HTTP error message")
 	}
 }
 

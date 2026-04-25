@@ -19,37 +19,37 @@
     <div class="status-banner {{if eq .Health.Status "healthy"}}status-ok{{else if eq .Health.Status "degraded"}}status-warning{{else}}status-error{{end}}">
         {{if eq .Health.Status "healthy"}}
         <span class="status-icon">✅</span>
-        <span class="status-text">All Systems Operational</span>
+        <span class="status-text">{{t "health.banner_healthy"}}</span>
         {{else if eq .Health.Status "degraded"}}
         <span class="status-icon">⚠️</span>
-        <span class="status-text">Degraded Performance</span>
+        <span class="status-text">{{t "health.banner_degraded"}}</span>
         {{else}}
         <span class="status-icon">❌</span>
-        <span class="status-text">System Unhealthy</span>
+        <span class="status-text">{{t "health.banner_unhealthy"}}</span>
         {{end}}
     </div>
 
     <div class="health-grid">
         {{/* Version & Build per AI.md PART 13 */}}
         <section class="section-card">
-            <h2>ℹ️ Version</h2>
+            <h2>ℹ️ {{t "health.version_heading"}}</h2>
             <dl class="health-info">
                 <div class="info-row">
-                    <dt>Version</dt>
-                    <dd><code>{{or (version) "dev"}}</code></dd>
+                    <dt>{{t "health.version"}}</dt>
+                    <dd><code>{{if eq (version) "dev"}}{{t "health.dev_build"}}{{else}}{{version}}{{end}}</code></dd>
                 </div>
                 <div class="info-row">
-                    <dt>Go Version</dt>
-                    <dd><code>{{or .Health.GoVersion "unknown"}}</code></dd>
+                    <dt>{{t "health.go_version"}}</dt>
+                    <dd><code>{{if .Health.GoVersion}}{{.Health.GoVersion}}{{else}}{{t "health.unknown"}}{{end}}</code></dd>
                 </div>
                 {{if .Health.Build}}
                 <div class="info-row">
-                    <dt>Commit</dt>
-                    <dd><code>{{or .Health.Build.Commit "dev"}}</code></dd>
+                    <dt>{{t "health.commit"}}</dt>
+                    <dd><code>{{if .Health.Build.Commit}}{{.Health.Build.Commit}}{{else}}{{t "health.dev_build"}}{{end}}</code></dd>
                 </div>
                 <div class="info-row">
-                    <dt>Build Date</dt>
-                    <dd>{{or .Health.Build.Date "local"}}</dd>
+                    <dt>{{t "health.build_date"}}</dt>
+                    <dd>{{if .Health.Build.Date}}{{.Health.Build.Date}}{{else}}{{t "health.local_build"}}{{end}}</dd>
                 </div>
                 {{end}}
             </dl>
@@ -57,24 +57,24 @@
 
         {{/* Runtime per AI.md PART 13 */}}
         <section class="section-card">
-            <h2>⏱️ Runtime</h2>
+            <h2>⏱️ {{t "health.runtime_heading"}}</h2>
             <dl class="health-info">
                 <div class="info-row">
-                    <dt>Uptime</dt>
+                    <dt>{{t "health.uptime"}}</dt>
                     <dd>{{.Health.Uptime}}</dd>
                 </div>
                 <div class="info-row">
-                    <dt>Mode</dt>
+                    <dt>{{t "health.mode"}}</dt>
                     <dd>
                         {{if eq .Health.Mode "production"}}
-                        <span class="badge badge-production">Production</span>
+                        <span class="badge badge-production">{{t "health.mode_production"}}</span>
                         {{else}}
-                        <span class="badge badge-development">Development</span>
+                        <span class="badge badge-development">{{t "health.mode_development"}}</span>
                         {{end}}
                     </dd>
                 </div>
                 <div class="info-row">
-                    <dt>Last Check</dt>
+                    <dt>{{t "health.last_check"}}</dt>
                     <dd><time datetime="{{.Health.Timestamp}}">{{.Health.Timestamp}}</time></dd>
                 </div>
             </dl>
@@ -83,21 +83,21 @@
         {{/* Component Status per AI.md PART 13 */}}
         {{if .Health.Checks}}
         <section class="section-card">
-            <h2>🔧 Component Status</h2>
+            <h2>🔧 {{t "health.component_status_heading"}}</h2>
             <ul class="component-list">
                 {{range $name, $status := .Health.Checks}}
                 <li class="component-item {{if eq $status "ok"}}component-ok{{else}}component-error{{end}}">
                     <span class="component-icon">{{if eq $status "ok"}}✓{{else}}✕{{end}}</span>
                     <span class="component-name">
-                        {{if eq $name "database"}}Database
-                        {{else if eq $name "cache"}}Cache
-                        {{else if eq $name "disk"}}Disk Space
-                        {{else if eq $name "scheduler"}}Scheduler
-                        {{else if eq $name "cluster"}}Cluster
-                        {{else if eq $name "tor"}}Tor
+                        {{if eq $name "database"}}{{t "health.components.database"}}
+                        {{else if eq $name "cache"}}{{t "health.components.cache"}}
+                        {{else if eq $name "disk"}}{{t "health.components.disk_space"}}
+                        {{else if eq $name "scheduler"}}{{t "health.components.scheduler"}}
+                        {{else if eq $name "cluster"}}{{t "health.components.cluster"}}
+                        {{else if eq $name "tor"}}{{t "health.components.tor"}}
                         {{else}}{{$name}}{{end}}
                     </span>
-                    <span class="component-status">{{if eq $status "ok"}}Operational{{else}}Error{{end}}</span>
+                    <span class="component-status">{{if eq $status "ok"}}{{t "health.component_operational"}}{{else}}{{t "health.component_error"}}</span>
                 </li>
                 {{end}}
             </ul>
@@ -106,26 +106,26 @@
 
         {{/* Features per AI.md PART 13 */}}
         <section class="section-card">
-            <h2>🎛️ Features</h2>
+            <h2>🎛️ {{t "health.features_heading"}}</h2>
             <ul class="feature-list">
                 {{if .Health.Features.Tor}}
                 {{if .Health.Features.Tor.Enabled}}
                 <li class="feature-item feature-enabled">
                     <span class="feature-icon">🧅</span>
-                    <span class="feature-name">Tor Hidden Service</span>
+                    <span class="feature-name">{{t "health.tor_hidden_service"}}</span>
                     {{if .Health.Features.Tor.Running}}
-                    <span class="feature-status status-ok">Active</span>
+                    <span class="feature-status status-ok">{{t "health.active"}}</span>
                     {{else}}
-                    <span class="feature-status status-warning">Starting</span>
+                    <span class="feature-status status-warning">{{t "health.starting"}}</span>
                     {{end}}
                 </li>
                 {{if .Health.Features.Tor.Hostname}}
                 <li class="feature-detail">
                     <div class="code-block">
                         <code class="code-content onion-address">{{.Health.Features.Tor.Hostname}}</code>
-                        <button type="button" class="copy-btn" data-copy="{{.Health.Features.Tor.Hostname}}" aria-label="Copy to clipboard">
+                        <button type="button" class="copy-btn" data-copy="{{.Health.Features.Tor.Hostname}}" aria-label="{{t "accessibility.copy_to_clipboard"}}">
                             <span class="copy-icon">📋</span>
-                            <span class="copy-text">Copy</span>
+                            <span class="copy-text">{{t "common.copy"}}</span>
                         </button>
                     </div>
                 </li>
@@ -136,32 +136,32 @@
                 {{if .Health.Features.GeoIP}}
                 <li class="feature-item feature-enabled">
                     <span class="feature-icon">🌍</span>
-                    <span class="feature-name">GeoIP</span>
-                    <span class="feature-status status-ok">Enabled</span>
+                    <span class="feature-name">{{t "health.geoip"}}</span>
+                    <span class="feature-status status-ok">{{t "common.enabled"}}</span>
                 </li>
                 {{end}}
 
                 {{if .Health.Features.MultiUser}}
                 <li class="feature-item feature-enabled">
                     <span class="feature-icon">👥</span>
-                    <span class="feature-name">Multi-User</span>
-                    <span class="feature-status status-ok">Enabled</span>
+                    <span class="feature-name">{{t "health.multi_user"}}</span>
+                    <span class="feature-status status-ok">{{t "common.enabled"}}</span>
                 </li>
                 {{end}}
 
                 {{if .Health.Features.Organizations}}
                 <li class="feature-item feature-enabled">
                     <span class="feature-icon">🏢</span>
-                    <span class="feature-name">Organizations</span>
-                    <span class="feature-status status-ok">Enabled</span>
+                    <span class="feature-name">{{t "health.organizations"}}</span>
+                    <span class="feature-status status-ok">{{t "common.enabled"}}</span>
                 </li>
                 {{end}}
 
                 {{if .Health.Features.Metrics}}
                 <li class="feature-item feature-enabled">
                     <span class="feature-icon">📊</span>
-                    <span class="feature-name">Metrics</span>
-                    <span class="feature-status status-ok">Enabled</span>
+                    <span class="feature-name">{{t "health.metrics"}}</span>
+                    <span class="feature-status status-ok">{{t "common.enabled"}}</span>
                 </li>
                 {{end}}
             </ul>
@@ -171,37 +171,37 @@
         {{if .Health.Cluster}}
         {{if .Health.Cluster.Enabled}}
         <section class="section-card">
-            <h2>🔗 Cluster</h2>
+            <h2>🔗 {{t "health.cluster_heading"}}</h2>
             <dl class="health-info">
                 <div class="info-row">
-                    <dt>Status</dt>
+                    <dt>{{t "health.status"}}</dt>
                     <dd>
                         {{if eq .Health.Cluster.Status "connected"}}
-                        <span class="badge badge-success">Connected</span>
+                        <span class="badge badge-success">{{t "health.connected"}}</span>
                         {{else}}
-                        <span class="badge badge-error">Disconnected</span>
+                        <span class="badge badge-error">{{t "health.disconnected"}}</span>
                         {{end}}
                     </dd>
                 </div>
                 <div class="info-row">
-                    <dt>Role</dt>
+                    <dt>{{t "health.role"}}</dt>
                     <dd>
                         {{if eq .Health.Cluster.Role "primary"}}
-                        <span class="badge badge-primary">Primary</span>
+                        <span class="badge badge-primary">{{t "health.primary_role"}}</span>
                         {{else}}
-                        <span class="badge">Member</span>
+                        <span class="badge">{{t "health.member_role"}}</span>
                         {{end}}
                     </dd>
                 </div>
                 {{if .Health.Cluster.Primary}}
                 <div class="info-row">
-                    <dt>Primary</dt>
+                    <dt>{{t "health.primary_label"}}</dt>
                     <dd><code>{{.Health.Cluster.Primary}}</code></dd>
                 </div>
                 {{end}}
                 {{if .Health.Cluster.NodeCount}}
                 <div class="info-row">
-                    <dt>Nodes</dt>
+                    <dt>{{t "health.nodes"}}</dt>
                     <dd>{{.Health.Cluster.NodeCount}}</dd>
                 </div>
                 {{end}}
@@ -213,18 +213,18 @@
         {{/* Statistics per AI.md PART 13 */}}
         {{if .Health.Stats}}
         <section class="section-card">
-            <h2>📈 Server Statistics</h2>
+            <h2>📈 {{t "health.statistics_heading"}}</h2>
             <dl class="health-info stats-info">
                 <div class="info-row">
-                    <dt>Total Requests</dt>
+                    <dt>{{t "health.total_requests"}}</dt>
                     <dd>{{.Health.Stats.RequestsTotal}}</dd>
                 </div>
                 <div class="info-row">
-                    <dt>Requests (24h)</dt>
+                    <dt>{{t "health.requests_24h"}}</dt>
                     <dd>{{.Health.Stats.Requests24h}}</dd>
                 </div>
                 <div class="info-row">
-                    <dt>Active Connections</dt>
+                    <dt>{{t "health.active_connections"}}</dt>
                     <dd>{{.Health.Stats.ActiveConnections}}</dd>
                 </div>
             </dl>
@@ -234,10 +234,10 @@
 
     {{/* Footer */}}
     <footer class="health-footer">
-        <p>Last updated: <time datetime="{{.Health.Timestamp}}">{{.Health.Timestamp}}</time></p>
+        <p>{{t "health.last_updated"}} <time datetime="{{.Health.Timestamp}}">{{.Health.Timestamp}}</time></p>
         <p class="auto-refresh">
             <span class="refresh-indicator"></span>
-            Auto-refresh in <span id="countdown">30</span>s
+            {{t "health.auto_refresh_in"}} <span id="countdown">30</span>s
         </p>
     </footer>
 </div>

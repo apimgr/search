@@ -1,0 +1,3 @@
+./detect.go
+./detect_unix.go
+./mode.go

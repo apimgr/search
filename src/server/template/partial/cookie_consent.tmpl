@@ -9,15 +9,15 @@
             {{ if .CookieConsent.Message }}
                 {{ .CookieConsent.Message }}
             {{ else }}
-                We use cookies to enhance your browsing experience. By continuing to use this site, you agree to our use of cookies.
+                {{t "cookie_consent.default_message"}}
             {{ end }}
             {{ if .CookieConsent.PolicyURL }}
-            <a href="{{ .CookieConsent.PolicyURL }}" class="cookie-consent-link">Learn more</a>
+            <a href="{{ .CookieConsent.PolicyURL }}" class="cookie-consent-link">{{t "cookie_consent.learn_more"}}</a>
             {{ end }}
         </p>
         <div class="cookie-consent-actions">
-            <button class="cookie-consent-accept">Accept</button>
-            <button class="cookie-consent-decline">Decline</button>
+            <button class="cookie-consent-accept">{{t "common.accept"}}</button>
+            <button class="cookie-consent-decline">{{t "common.decline"}}</button>
         </div>
     </div>
 </div>

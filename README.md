@@ -12,9 +12,10 @@ Search is a privacy-respecting metasearch engine that aggregates results from mu
 
 ## ✨ Features
 
-- **🔒 Privacy First**: No tracking, no logging, no data collection
+- **🔒 Privacy First**: No third-party analytics by default, consent-aware preferences, self-hosted data control
 - **🧅 Tor Support**: Full Tor integration with SOCKS5, circuit rotation, and .onion service
 - **💾 Portable Preferences**: Save settings locally, export/import them, or share them with portable `prefs` links
+- **🔔 Search Alerts**: Accountless alerts with email verification plus private RSS and webhook delivery
 - **🚀 Fast & Efficient**: Written in Go with concurrent engine queries
 - **🔍 Multiple Engines**: Aggregate results from Google, Bing, DuckDuckGo, and more
 - **💡 Instant Answers**: Calculator, unit/currency converter, weather, dictionary, and more
@@ -320,6 +321,7 @@ Features:
 - Clean, ad-free search results
 - Category tabs (Web, Images, Videos, News, Maps, Files, Music, Science, IT, Social)
 - Advanced search options
+- Create accountless alerts from the current query
 - Dark/Light theme toggle
 - Mobile-responsive design
 
@@ -493,6 +495,26 @@ curl "http://localhost:PORT/api/v1/autocomplete?q=gol"
 curl "http://localhost:PORT/api/v1/engines"
 ```
 
+```bash
+# Create an alert
+curl -X POST "http://localhost:PORT/api/v1/alerts" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "golang release notes",
+    "category": "news",
+    "language": "en",
+    "frequency": "daily",
+    "email": "alerts@example.com",
+    "deliver_rss": true
+  }'
+
+# Inspect or update an alert later with the returned manage token
+curl "http://localhost:PORT/api/v1/alerts/MANAGE_TOKEN"
+curl -X PATCH "http://localhost:PORT/api/v1/alerts/MANAGE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"deliver_webhook": true, "webhook_url": "https://example.com/search-alerts"}'
+```
+
 ### Admin API
 
 Manage the server via REST API:
@@ -544,13 +566,13 @@ Currently supported search engines:
 
 Search is designed with privacy as the top priority:
 
-- ✅ **No tracking**: No cookies, no analytics, no fingerprinting
-- ✅ **No logging**: Search queries are not logged by default
+- ✅ **No third-party tracking by default**: Analytics scripts stay off unless you configure tracking and users consent
+- ✅ **Consent-aware cookies**: Essential cookies keep auth/CSRF working, and preference cookies are optional
 - ✅ **No data sharing**: Your data never leaves your server
 - ✅ **No ads**: Clean, ad-free results
 - ✅ **Clean result links**: Common tracking parameters are stripped from result URLs
 - ✅ **Tor support**: Full Tor integration with circuit rotation and .onion service
-- ✅ **Local storage**: User preferences stored in browser only (no server-side tracking)
+- ✅ **Client-side preferences**: Settings live in localStorage or portable links, not server-side profiles
 - ✅ **Proxy support**: Route requests through SOCKS5/HTTP/Tor proxies
 - ✅ **Stream isolation**: Each engine query uses separate Tor circuit
 - ✅ **Image proxy**: Optional image proxying for extra privacy
@@ -616,21 +638,20 @@ search --tor --hidden-service
 search --tor-status
 ```
 
-## 💾 User Preferences (Local Storage)
+## 💾 User Preferences
 
-User preferences stay **client-side**. They can live in browser localStorage, be exported/imported as JSON, or be encoded into portable `?prefs=` links. Nothing is stored on the server.
+User preferences stay **client-side**. Most settings live in browser localStorage, can be exported/imported as JSON, or can be encoded into portable `?prefs=` links. Export/import covers the full browser-side preference set, while portable links currently carry the core search/display defaults. With consent, Search may also persist the active theme in a preference cookie for server-rendered pages. Nothing is stored in a server-side profile.
 
 ### Stored Preferences
 
-- ✅ Selected search engines (Google, Bing, etc.)
 - ✅ Default category (web, images, videos, etc.)
 - ✅ Safe search level (off, moderate, strict)
-- ✅ Language preference
 - ✅ Theme preference (dark, light, auto)
 - ✅ Results per page (10, 20, 50, 100)
-- ✅ Display mode (cards, list, compact)
 - ✅ Infinite scroll vs pagination
-- ✅ Advanced search defaults
+- ✅ Open results in a new tab
+- ✅ Keyboard shortcuts
+- ✅ Homepage widgets and custom bangs
 
 ### Managing Preferences
 
@@ -644,10 +665,21 @@ All preferences can be managed in the web UI:
 6. **Generate Link** to create a shareable `?prefs=` URL or QR code
 7. **Clear All** to reset to defaults
 
+Portable `?prefs=` links currently encode:
+
+- theme
+- default category
+- safe search
+- results per page
+- open in new tab
+- infinite scroll vs pagination
+- keyboard shortcuts
+
 ### Privacy Notes
 
-- **No cookies**: Preferences use localStorage, not cookies
-- **No server storage**: Nothing stored on server
+- **Client-side first**: Preferences use localStorage and portable links
+- **Consent-aware cookies**: Theme cookies are optional and cleared when cookie preferences are declined
+- **No server storage**: Nothing stored in a server-side profile
 - **No tracking**: Your settings never leave your browser
 - **Portable**: Export/import JSON to move between browsers
 - **Optional**: Use default settings without saving anything
@@ -723,9 +755,9 @@ services:
 
 ## 🌍 Internationalization
 
-Supported languages:
-- English (default)
-- More coming soon...
+Use the header language selector or `?lang=de` to choose a language. The server resolves language in this order: `?lang=` query param, `lang` cookie, `Accept-Language` header, then English.
+
+Supported languages include English, German, French, Spanish, Italian, Portuguese, Dutch, Polish, Russian, Japanese, Chinese, Korean, Arabic, Hebrew, Persian, Urdu, Turkish, and Vietnamese.
 
 ## 📝 License
 

@@ -23,9 +23,9 @@ type Migrator struct {
 
 // DatabaseMigrator handles migrations for both databases per AI.md PART 24
 type DatabaseMigrator struct {
-	dm              *DatabaseManager
-	serverMigrator  *Migrator
-	usersMigrator   *Migrator
+	dm             *DatabaseManager
+	serverMigrator *Migrator
+	usersMigrator  *Migrator
 }
 
 // NewDatabaseMigrator creates a new migrator for both databases
@@ -411,6 +411,96 @@ func (dbm *DatabaseMigrator) registerServerMigrations() {
 			CREATE INDEX idx_external_admins_external ON external_admins(external_id);
 		`,
 		Down: `DROP TABLE IF EXISTS external_admins`,
+	})
+
+	m.Register(Migration{
+		Version:     16,
+		Description: "Create search alert tables",
+		Up: `
+			CREATE TABLE IF NOT EXISTS search_alerts (
+				id TEXT PRIMARY KEY,
+				email TEXT NOT NULL,
+				query TEXT NOT NULL,
+				category TEXT NOT NULL,
+				safe_search INTEGER NOT NULL DEFAULT 1,
+				frequency TEXT NOT NULL,
+				deliver_email INTEGER NOT NULL DEFAULT 0,
+				deliver_rss INTEGER NOT NULL DEFAULT 1,
+				deliver_webhook INTEGER NOT NULL DEFAULT 0,
+				webhook_url TEXT,
+				webhook_secret_encrypted TEXT,
+				email_verified INTEGER NOT NULL DEFAULT 0,
+				status TEXT NOT NULL DEFAULT 'pending',
+				verify_token_hash TEXT,
+				verify_token_expires DATETIME,
+				manage_token_hash TEXT NOT NULL,
+				rss_token_hash TEXT NOT NULL,
+				base_url TEXT,
+				last_checked_at DATETIME,
+				last_sent_at DATETIME,
+				last_error TEXT,
+				created_from_ip TEXT,
+				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				verified_at DATETIME,
+				paused_at DATETIME
+			);
+			CREATE UNIQUE INDEX idx_search_alerts_manage_token ON search_alerts(manage_token_hash);
+			CREATE UNIQUE INDEX idx_search_alerts_rss_token ON search_alerts(rss_token_hash);
+			CREATE INDEX idx_search_alerts_verify_token ON search_alerts(verify_token_hash);
+			CREATE INDEX idx_search_alerts_status_frequency ON search_alerts(status, frequency);
+
+			CREATE TABLE IF NOT EXISTS search_alert_results (
+				id TEXT PRIMARY KEY,
+				alert_id TEXT NOT NULL,
+				fingerprint TEXT NOT NULL,
+				title TEXT NOT NULL,
+				url TEXT NOT NULL,
+				content TEXT,
+				engine TEXT,
+				published_at DATETIME,
+				first_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				notified_email_at DATETIME,
+				notified_webhook_at DATETIME,
+				FOREIGN KEY (alert_id) REFERENCES search_alerts(id) ON DELETE CASCADE,
+				UNIQUE(alert_id, fingerprint)
+			);
+			CREATE INDEX idx_search_alert_results_alert ON search_alert_results(alert_id, first_seen_at);
+		`,
+		Down: `
+			DROP TABLE IF EXISTS search_alert_results;
+			DROP TABLE IF EXISTS search_alerts;
+		`,
+	})
+
+	m.Register(Migration{
+		Version:     17,
+		Description: "Add search alert filter fields",
+		Up: `
+			ALTER TABLE search_alerts ADD COLUMN language TEXT NOT NULL DEFAULT 'en';
+			ALTER TABLE search_alerts ADD COLUMN region TEXT NOT NULL DEFAULT '';
+			ALTER TABLE search_alerts ADD COLUMN engines_json TEXT NOT NULL DEFAULT '[]';
+		`,
+		Down: ``,
+	})
+
+	m.Register(Migration{
+		Version:     18,
+		Description: "Add encrypted search alert tokens",
+		Up: `
+			ALTER TABLE search_alerts ADD COLUMN manage_token_encrypted TEXT NOT NULL DEFAULT '';
+			ALTER TABLE search_alerts ADD COLUMN rss_token_encrypted TEXT NOT NULL DEFAULT '';
+		`,
+		Down: ``,
+	})
+
+	m.Register(Migration{
+		Version:     18,
+		Description: "Add encrypted search alert tokens",
+		Up: `
+			ALTER TABLE search_alerts ADD COLUMN manage_token_encrypted TEXT NOT NULL DEFAULT '';
+			ALTER TABLE search_alerts ADD COLUMN rss_token_encrypted TEXT NOT NULL DEFAULT '';
+		`,
+		Down: ``,
 	})
 
 	// Sort migrations by version

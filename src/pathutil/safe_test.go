@@ -3,6 +3,7 @@ package pathutil
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -334,6 +335,9 @@ func TestPathSecurityMiddleware_RawPathTraversal(t *testing.T) {
 
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want %d for RawPath traversal", rec.Code, http.StatusBadRequest)
+	}
+	if body := strings.TrimSpace(rec.Body.String()); body != "Bad request" {
+		t.Errorf("body = %q, want %q", body, "Bad request")
 	}
 }
 

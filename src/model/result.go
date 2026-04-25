@@ -188,6 +188,9 @@ type SearchResults struct {
 	Engines      []string  `json:"engines" xml:"engines"`
 	Suggestions  []string  `json:"suggestions,omitempty" xml:"suggestions,omitempty"`
 	SortedBy     SortOrder `json:"sorted_by,omitempty" xml:"sortedBy,omitempty"`
+	FromCache    bool      `json:"from_cache,omitempty" xml:"fromCache,omitempty"`
+	Stale        bool      `json:"stale,omitempty" xml:"stale,omitempty"`
+	CacheAgeSec  int64     `json:"cache_age_sec,omitempty" xml:"cacheAgeSec,omitempty"`
 
 	// Facets for filtering - populated by aggregator when results contain domain/language metadata
 	Domains   map[string]int `json:"domains,omitempty" xml:"-"`

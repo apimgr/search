@@ -86,8 +86,8 @@ func TestManagerT(t *testing.T) {
 		{"de", "hello", nil, "Hallo"},
 		{"en", "welcome", []interface{}{"User"}, "Welcome, User!"},
 		{"de", "welcome", []interface{}{"Benutzer"}, "Willkommen, Benutzer!"},
-		{"en", "missing", nil, "missing"},               // Missing key returns key
-		{"xx", "hello", nil, "Hello"},                   // Unknown lang falls back to default
+		{"en", "missing", nil, "missing"}, // Missing key returns key
+		{"xx", "hello", nil, "Hello"},     // Unknown lang falls back to default
 	}
 
 	for _, tt := range tests {
@@ -121,22 +121,30 @@ func TestManagerDetectLanguage(t *testing.T) {
 
 	tests := []struct {
 		name           string
+		query          string
 		cookie         string
 		acceptLanguage string
 		want           string
 	}{
-		{"cookie en", "en", "", "en"},
-		{"cookie de", "de", "", "de"},
-		{"cookie invalid", "xx", "de,en;q=0.9", "de"},
-		{"header only", "", "de,en;q=0.9", "de"},
-		{"header with quality", "", "en;q=0.5,de;q=0.9", "de"},
-		{"no preference", "", "", "en"},
-		{"unsupported in header", "", "xx,yy", "en"},
+		{"query supported", "fr", "", "de,en;q=0.9", "fr"},
+		{"query invalid", "xx", "de", "fr,en;q=0.9", "en"},
+		{"query normalized", "DE-de", "", "", "de"},
+		{"cookie en", "", "en", "", "en"},
+		{"cookie de", "", "de", "", "de"},
+		{"cookie invalid", "", "xx", "de,en;q=0.9", "de"},
+		{"header only", "", "", "de,en;q=0.9", "de"},
+		{"header with quality", "", "", "en;q=0.5,de;q=0.9", "de"},
+		{"no preference", "", "", "", "en"},
+		{"unsupported in header", "", "", "xx,yy", "en"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest("GET", "/", nil)
+			path := "/"
+			if tt.query != "" {
+				path += "?lang=" + tt.query
+			}
+			req := httptest.NewRequest("GET", path, nil)
 			if tt.cookie != "" {
 				req.AddCookie(&http.Cookie{Name: "lang", Value: tt.cookie})
 			}
@@ -149,6 +157,52 @@ func TestManagerDetectLanguage(t *testing.T) {
 				t.Errorf("DetectLanguage() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestManagerResolveLanguageSetsCookieForSupportedQuery(t *testing.T) {
+	m := NewManager("en", []string{"en", "de", "fr"})
+	req := httptest.NewRequest(http.MethodGet, "/?lang=fr", nil)
+	rec := httptest.NewRecorder()
+
+	got := m.ResolveLanguage(rec, req)
+	if got != "fr" {
+		t.Fatalf("ResolveLanguage() = %q, want %q", got, "fr")
+	}
+
+	cookies := rec.Result().Cookies()
+	if len(cookies) == 0 {
+		t.Fatal("ResolveLanguage() did not set any cookies")
+	}
+
+	found := false
+	for _, cookie := range cookies {
+		if cookie.Name == "lang" {
+			found = true
+			if cookie.Value != "fr" {
+				t.Fatalf("lang cookie = %q, want %q", cookie.Value, "fr")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("ResolveLanguage() did not set the lang cookie")
+	}
+}
+
+func TestManagerResolveLanguageDoesNotPersistInvalidQuery(t *testing.T) {
+	m := NewManager("en", []string{"en", "de", "fr"})
+	req := httptest.NewRequest(http.MethodGet, "/?lang=zz", nil)
+	rec := httptest.NewRecorder()
+
+	got := m.ResolveLanguage(rec, req)
+	if got != "en" {
+		t.Fatalf("ResolveLanguage() = %q, want %q", got, "en")
+	}
+
+	for _, cookie := range rec.Result().Cookies() {
+		if cookie.Name == "lang" {
+			t.Fatalf("ResolveLanguage() unexpectedly set lang cookie %q for invalid query", cookie.Value)
+		}
 	}
 }
 
@@ -409,9 +463,9 @@ func TestSetLanguageCookie(t *testing.T) {
 
 func TestFlattenTranslations(t *testing.T) {
 	tests := []struct {
-		name   string
-		input  interface{}
-		want   map[string]string
+		name  string
+		input interface{}
+		want  map[string]string
 	}{
 		{
 			name: "flat structure",
@@ -871,6 +925,35 @@ func TestDefaultManager(t *testing.T) {
 	result = manager.T("en", "auth.login")
 	if result != "Log In" {
 		t.Errorf("T(en, auth.login) = %q, want %q", result, "Log In")
+	}
+}
+
+func TestCachedDefaultManager(t *testing.T) {
+	first, err := CachedDefaultManager()
+	if err != nil {
+		t.Fatalf("CachedDefaultManager() error = %v", err)
+	}
+
+	second, err := CachedDefaultManager()
+	if err != nil {
+		t.Fatalf("CachedDefaultManager() second error = %v", err)
+	}
+
+	if first == nil || second == nil {
+		t.Fatal("CachedDefaultManager() returned nil")
+	}
+
+	if first != second {
+		t.Fatal("CachedDefaultManager() did not return the cached singleton")
+	}
+}
+
+func TestRequestString(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/test?lang=de", nil)
+
+	result := RequestString(req, "errors.method_not_allowed")
+	if result != "Methode nicht erlaubt" {
+		t.Errorf("RequestString() = %q, want %q", result, "Methode nicht erlaubt")
 	}
 }
 

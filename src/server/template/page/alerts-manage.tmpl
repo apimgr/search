@@ -1,0 +1,96 @@
+{{define "content"}}
+<section class="page-section alert-page">
+    <div class="page-header">
+        <h1>{{t "alerts.manage_title"}}</h1>
+        <p>{{t "alerts.manage_subtitle"}}</p>
+    </div>
+    {{if .Error}}
+    <div class="search-error"><p>{{.Error}}</p></div>
+    {{end}}
+    {{if .Success}}
+    <div class="search-info"><span>{{.Success}}</span></div>
+    {{end}}
+    <form method="POST" action="{{.ManagePath}}/update" class="alert-form">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <div class="form-group">
+            <label for="query">{{t "alerts.search_query_label"}}</label>
+            <input id="query" name="query" type="text" value="{{.Alert.Query}}" required>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="category">{{t "search.category"}}</label>
+                <select id="category" name="category">
+                    <option value="general" {{if eq .Alert.Category "general"}}selected{{end}}>{{t "preferences.default_category_general"}}</option>
+                    <option value="images" {{if eq .Alert.Category "images"}}selected{{end}}>{{t "search.categories.images"}}</option>
+                    <option value="videos" {{if eq .Alert.Category "videos"}}selected{{end}}>{{t "search.categories.videos"}}</option>
+                    <option value="news" {{if eq .Alert.Category "news"}}selected{{end}}>{{t "search.categories.news"}}</option>
+                    <option value="maps" {{if eq .Alert.Category "maps"}}selected{{end}}>{{t "search.categories.maps"}}</option>
+                    <option value="files" {{if eq .Alert.Category "files"}}selected{{end}}>{{t "search.categories.files"}}</option>
+                    <option value="music" {{if eq .Alert.Category "music"}}selected{{end}}>{{t "preferences.default_category_music"}}</option>
+                    <option value="science" {{if eq .Alert.Category "science"}}selected{{end}}>{{t "search.categories.science"}}</option>
+                    <option value="it" {{if eq .Alert.Category "it"}}selected{{end}}>{{t "search.categories.it"}}</option>
+                    <option value="social" {{if eq .Alert.Category "social"}}selected{{end}}>{{t "search.categories.social"}}</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="language">{{t "search.language"}}</label>
+                <input id="language" name="language" type="text" value="{{.Alert.Language}}" placeholder="en" autocapitalize="off" spellcheck="false">
+            </div>
+            <div class="form-group">
+                <label for="region">{{t "search.region"}}</label>
+                <input id="region" name="region" type="text" value="{{.Alert.Region}}" placeholder="us" autocapitalize="off" spellcheck="false">
+            </div>
+            <div class="form-group">
+                <label for="frequency">{{t "alerts.frequency_label"}}</label>
+                <select id="frequency" name="frequency">
+                    <option value="immediate" {{if eq .Alert.Frequency "immediate"}}selected{{end}}>{{t "admin.settings_page.frequency_immediate"}}</option>
+                    <option value="daily" {{if eq .Alert.Frequency "daily"}}selected{{end}}>{{t "admin.settings_page.frequency_daily"}}</option>
+                    <option value="weekly" {{if eq .Alert.Frequency "weekly"}}selected{{end}}>{{t "admin.settings_page.frequency_weekly"}}</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="safe_search">{{t "search.safe_search"}}</label>
+                <select id="safe_search" name="safe_search">
+                    <option value="0" {{if eq .Alert.SafeSearch 0}}selected{{end}}>{{t "search.safe_search_off"}}</option>
+                    <option value="1" {{if eq .Alert.SafeSearch 1}}selected{{end}}>{{t "search.safe_search_moderate"}}</option>
+                    <option value="2" {{if eq .Alert.SafeSearch 2}}selected{{end}}>{{t "search.safe_search_strict"}}</option>
+                </select>
+            </div>
+        </div>
+        <fieldset class="alert-channels">
+            <legend>{{t "alerts.engine_filters_legend"}}</legend>
+            <p class="form-help">{{t "alerts.engine_filters_help"}}</p>
+            <div class="alert-engine-grid">
+                {{range .AvailableEngines}}
+                <label><input type="checkbox" name="engines" value="{{.Name}}" {{if .Selected}}checked{{end}}> {{.DisplayName}}</label>
+                {{end}}
+            </div>
+        </fieldset>
+        <fieldset class="alert-channels">
+            <legend>{{t "alerts.delivery_channels_legend"}}</legend>
+            <label><input type="checkbox" name="deliver_email" {{if .Alert.DeliverEmail}}checked{{end}}> {{t "alerts.delivery_email_digest"}}</label>
+            <label><input type="checkbox" name="deliver_rss" {{if .Alert.DeliverRSS}}checked{{end}}> {{t "alerts.delivery_private_rss"}}</label>
+            <label><input type="checkbox" name="deliver_webhook" {{if .Alert.DeliverWebhook}}checked{{end}}> {{t "alerts.delivery_webhook"}}</label>
+        </fieldset>
+        <div class="form-group">
+            <label for="webhook_url">{{t "alerts.webhook_url_label"}}</label>
+            <input id="webhook_url" name="webhook_url" type="url" value="{{.Alert.WebhookURL}}">
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn-primary">{{t "alerts.save_changes"}}</button>
+            {{if .Alert.DeliverRSS}}
+            <a href="{{.FeedURL}}" class="btn-secondary">{{t "alerts.rss_feed"}}</a>
+            {{end}}
+        </div>
+    </form>
+    <form method="POST" action="{{.ManagePath}}/pause" class="alert-inline-form">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <input type="hidden" name="paused" value="{{if eq .Alert.Status "paused"}}0{{else}}1{{end}}">
+        <button type="submit" class="btn-secondary">{{if eq .Alert.Status "paused"}}{{t "alerts.resume_alert"}}{{else}}{{t "alerts.pause_alert"}}{{end}}</button>
+    </form>
+    <form method="POST" action="{{.ManagePath}}/delete" class="alert-inline-form">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <button type="submit" class="btn-danger">{{t "alerts.delete_alert"}}</button>
+    </form>
+</section>
+{{end}}
