@@ -731,8 +731,8 @@ services:
     ports:
       - "64080:80"
     volumes:
-      - ./rootfs/data/search:/data
-      - ./rootfs/config/search:/config
+      - ./volumes/data/search:/data
+      - ./volumes/config/search:/config
     environment:
       - MODE=production
     restart: unless-stopped
