@@ -3003,7 +3003,7 @@ See IDEA.md for the full project breakdown.
 
 ## Commit Message File
 
-**AI assistants CANNOT run `git add`, `git commit`, or `git push`.** Instead, create/update the commit message file.
+**AI assistants CANNOT run plain `git commit` or plain `git push`.** `git add` is allowed for explicit staging when needed, but commits themselves MUST go through `gitcommit <command>`. Create/update the commit message file before committing.
 
 **File:** `{project_dir}/.git/COMMIT_MESS`
 
@@ -48455,7 +48455,7 @@ When a project includes a client, it provides a terminal-based interface for int
 | `--help` output | Shows actual binary name | - |
 | `--version` output | Shows actual binary name | - |
 | User-Agent | - | `{project_name}-cli/{version}` (hardcoded) |
-| Config paths | - | `/etc/{project_org}/{internal_name}/` (hardcoded) |
+| Config paths | - | User-scope CLI paths under the invoking user's home/profile (see CLI directory rules below) |
 
 ```go
 // Display: use actual binary name
@@ -50148,11 +50148,12 @@ When launched with no arguments in an interactive terminal:
 
 ### Directory Structure
 
-**client ALWAYS runs as user. NEVER as root/administrator. NEVER uses system directories.**
+**client runtime state is always user-scope. The CLI binary may be installed system-wide, but config/data/cache/logs MUST stay in the invoking user's XDG/profile directories.**
 
 The CLI binary:
-- Runs as current user only (no privilege escalation)
-- Uses user home directories exclusively
+- Runs in the invoking user's context without privilege escalation
+- Uses user/home/profile directories exclusively, even if the invoking user happens to be root/Administrator
+- May be installed in a shared system PATH location (for example `/usr/local/bin`) so one binary is available to all users
 - Creates all directories and files itself (no external scripts/installers)
 - Sets permissions and ownership before creating any files
 - Works identically across all platforms (Linux, macOS, Windows)
@@ -50190,12 +50191,12 @@ The client uses the same user directory structure as the server in user mode. Th
 | Cache | API response cache, temp files, thumbnails | No (recreatable) |
 | Logs | `cli.log`, debug logs | Optional |
 
-**NEVER use OS system directories:**
+**NEVER use OS system directories for CLI runtime state:**
 - `/etc/{project_org}/{internal_name}/` (Linux system config)
 - `/var/lib/{project_org}/{internal_name}/` (Linux system data)
 - `/var/log/{project_org}/{internal_name}/` (Linux system logs)
 - `C:\ProgramData\` (Windows system data)
-- Any directory requiring elevated privileges
+- Any other system-owned directory for CLI config/data/cache/logs
 
 #### CLI Startup Sequence
 
@@ -50217,8 +50218,8 @@ On every startup, the CLI MUST:
    - Log files: `0600` (rw-------)
 
 3. **Verify ownership** (current user):
-   - All directories and files owned by running user
-   - No root/admin ownership ever
+   - All directories and files owned by the invoking user account for that run
+   - Never require system ownership or privileged/system directories just because the invoking user is root/admin
 
 ```go
 // src/client/init.go
@@ -52638,15 +52639,15 @@ mode: ""                           # production, development (empty = auto-detec
 
 | Aspect | Client | Agent |
 |--------|------------|-------|
-| **Execution context** | User context | System context |
-| **Runs as** | Current user | root/Administrator |
+| **Execution context** | User-scope context | System context |
+| **Runs as** | Invoking user account (may be root/admin, but still user-scope) | root/Administrator |
 | **Config base path** | `~/` (user home) | `/` (system root) |
 | **Config directory** | `~/.config/{project_org}/{internal_name}/` | `/etc/{project_org}/{internal_name}/` |
 | **Data directory** | `~/.local/share/{project_org}/{internal_name}/` | `/var/lib/{project_org}/{internal_name}/` |
 | **Log directory** | `~/.local/log/{project_org}/{internal_name}/` | `/var/log/{project_org}/{internal_name}/` |
 | **Cache directory** | `~/.cache/{project_org}/{internal_name}/` | `/var/cache/{project_org}/{internal_name}/` |
-| **Privilege level** | Normal user | Elevated (root/admin) |
-| **System access** | User files only | Full system access |
+| **Privilege requirement** | No escalation required | Elevated (root/admin) |
+| **System access** | User-scope files/dirs only | Full system access |
 
 **Why Different Contexts?**
 
@@ -60667,7 +60668,7 @@ Implement the required client, then any project-specific optional features:
 ### Foundation (Must Complete First)
 
 - [ ] Directory structure created per spec
-- [ ] AI.md created and customized
+- [ ] AI.md present as the read-only spec, and IDEA.md created/updated with project variables and business logic
 - [ ] If `CLAUDE.md` or `.claude/CLAUDE.md` existed, IDEA.md was created/migrated before other work
 - [ ] go.mod initialized
 - [ ] .gitignore created with proper rules
