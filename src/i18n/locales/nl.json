@@ -1428,6 +1428,59 @@
       "prev_next_page": "Ga naar de vorige of volgende resultatenpagina",
       "first_last": "Spring naar het eerste of laatste resultaat",
       "open_n": "Open resultaat nummer 1 tot en met 9"
+    },
+    "privacy": {
+      "heading": "Privacyfuncties",
+      "no_tracking_label": "Geen tracking:",
+      "no_tracking_text": "We volgen uw zoekopdrachten niet en maken geen gebruikersprofielen",
+      "no_history_label": "Geen zoekgeschiedenis:",
+      "no_history_text": "Uw zoekopdrachten worden niet op onze servers opgeslagen",
+      "sanitized_links_label": "Opgeschoonde resultaatlinks:",
+      "sanitized_links_text": "Gangbare trackingparameters worden uit resultaat-URL's verwijderd voordat ze worden getoond",
+      "tor_support_label": "Tor-ondersteuning:",
+      "tor_support_prefix": "Toegang via Tor verborgen dienst voor maximale anonimiteit",
+      "tor_support_see_below": "zie hieronder",
+      "minimal_cookies_label": "Minimale cookies:",
+      "minimal_cookies_text": "Alleen essentiële cookies voor voorkeuren (geen analyse)",
+      "no_js_label": "JavaScript niet vereist:",
+      "no_js_text": "Kernzoekfunctie werkt zonder JavaScript",
+      "open_source_label": "Open source:",
+      "open_source_text": "Volledige broncode beschikbaar voor controle"
+    },
+    "tor": {
+      "heading": "Tor-toegang",
+      "intro": "Deze applicatie is beschikbaar als Tor verborgen dienst voor extra privacy.",
+      "onion_heading": "Onion-adres",
+      "copy_label": "Kopiëren",
+      "copy_aria": "Naar het klembord kopiëren",
+      "pending_note": "Het Tor-adres is beschikbaar zodra de verborgen dienst verbinding maakt met het Tor-netwerk.",
+      "how_to_heading": "Hoe te verbinden",
+      "step_download": "Download",
+      "step_open": "Open Tor Browser en wacht tot deze verbinding heeft",
+      "step_paste": "Kopieer het bovenstaande onion-adres en plak het in de adresbalk van Tor Browser",
+      "footer_note": "Tor gebruiken biedt extra privacy door uw IP-adres te verbergen en uw verbinding via het Tor-netwerk te versleutelen."
+    },
+    "faq": {
+      "heading": "Veelgestelde vragen",
+      "q_results_diff": "Waarom verschillen de resultaten van Google?",
+      "a_results_diff": "We aggregeren resultaten uit meerdere bronnen zonder personalisatie. Resultaten worden niet gefilterd op basis van uw geschiedenis, locatie of profiel, dus ze kunnen afwijken van wat u op gepersonaliseerde zoekmachines ziet.",
+      "q_tor_access_summary": "Hoe gebruik ik Tor?",
+      "a_tor_access_prefix": "Installeer",
+      "a_tor_access_suffix": "en gebruik ons .onion-adres.",
+      "a_tor_access_see_section": "Zie het gedeelte Tor-toegang hierboven voor het adres en instructies.",
+      "q_self_host": "Kan ik dit zelf hosten?",
+      "a_self_host_prefix": "Ja! Dit is vrije en open source-software.",
+      "a_self_host_repo": "Raadpleeg onze broncode-repository voor installatie-instructies.",
+      "q_engines": "Welke zoekmachines gebruiken jullie?",
+      "a_engines": "We aggregeren resultaten van meerdere zoekmachines, waaronder Google, Bing, DuckDuckGo, Brave, Qwant, Mojeek, Yahoo, Yandex, Baidu, Startpage, Wikipedia, arXiv, PubMed, GitHub, Hacker News, Reddit, YouTube, OpenStreetMap en Wolfram Alpha.",
+      "q_instant": "Hoe werken directe antwoorden?",
+      "a_instant": "Veel directe antwoorden worden lokaal gegenereerd voor berekeningen, opmaak, conversies, parsing en tekstgereedschappen. Sommige opzoekingen raadplegen externe bronnen of uw geconfigureerde zoekbackends wanneer dat nodig is voor de functie."
+    },
+    "need_more": {
+      "heading": "Meer hulp nodig?",
+      "text_prefix": "Als u vragen heeft of hulp nodig heeft,",
+      "link": "neem contact met ons op",
+      "text_suffix": "."
     }
   }
 }

@@ -610,82 +610,82 @@ curl "{{.ServerURL}}/api/v1/direct/rules/34"</code></pre>
 
         {{/* Privacy Features */}}
         <section id="privacy" class="help-section">
-            <h2>Privacy Features</h2>
+            <h2>{{t "help.privacy.heading"}}</h2>
             <ul class="privacy-list">
-                <li><strong>No tracking:</strong> We don't track your searches or create user profiles</li>
-                <li><strong>No search history:</strong> Your searches are not stored on our servers</li>
-                <li><strong>Sanitized result links:</strong> Common tracking parameters are stripped from result URLs before they are shown</li>
-                <li><strong>Tor support:</strong> Access via Tor hidden service for maximum anonymity{{if .Config.Server.Tor.Enabled}} (<a href="#tor-access">see below</a>){{end}}</li>
-                <li><strong>Minimal cookies:</strong> Only essential cookies for preferences (no analytics)</li>
-                <li><strong>No JavaScript required:</strong> Core search works without JavaScript</li>
-                <li><strong>Open source:</strong> Full source code available for audit</li>
+                <li><strong>{{t "help.privacy.no_tracking_label"}}</strong> {{t "help.privacy.no_tracking_text"}}</li>
+                <li><strong>{{t "help.privacy.no_history_label"}}</strong> {{t "help.privacy.no_history_text"}}</li>
+                <li><strong>{{t "help.privacy.sanitized_links_label"}}</strong> {{t "help.privacy.sanitized_links_text"}}</li>
+                <li><strong>{{t "help.privacy.tor_support_label"}}</strong> {{t "help.privacy.tor_support_prefix"}}{{if .Config.Server.Tor.Enabled}} (<a href="#tor-access">{{t "help.privacy.tor_support_see_below"}}</a>){{end}}</li>
+                <li><strong>{{t "help.privacy.minimal_cookies_label"}}</strong> {{t "help.privacy.minimal_cookies_text"}}</li>
+                <li><strong>{{t "help.privacy.no_js_label"}}</strong> {{t "help.privacy.no_js_text"}}</li>
+                <li><strong>{{t "help.privacy.open_source_label"}}</strong> {{t "help.privacy.open_source_text"}}</li>
             </ul>
         </section>
 
         {{/* Tor Access - only shown if Tor is enabled */}}
         {{if .Config.Server.Tor.Enabled}}
         <section id="tor-access" class="help-section tor-access">
-            <h2>Tor Access</h2>
-            <p>This application is available as a Tor hidden service for enhanced privacy.</p>
+            <h2>{{t "help.tor.heading"}}</h2>
+            <p>{{t "help.tor.intro"}}</p>
 
             {{if .TorAddress}}
-            <h3>Onion Address</h3>
+            <h3>{{t "help.tor.onion_heading"}}</h3>
             <div class="onion-address-box">
                 <code id="onion-addr" class="onion-address">{{.TorAddress}}</code>
-                <button class="btn-copy" data-copy-target="onion-addr" aria-label="Copy to clipboard">
+                <button class="btn-copy" data-copy-target="onion-addr" aria-label="{{t "help.tor.copy_aria"}}">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                     </svg>
-                    Copy
+                    {{t "help.tor.copy_label"}}
                 </button>
             </div>
             {{else}}
-            <p class="tor-note">Tor address will be available once the hidden service connects to the Tor network.</p>
+            <p class="tor-note">{{t "help.tor.pending_note"}}</p>
             {{end}}
 
-            <h3>How to Connect</h3>
+            <h3>{{t "help.tor.how_to_heading"}}</h3>
             <ol>
-                <li>Download <a href="https://www.torproject.org/download/" target="_blank" rel="noopener">Tor Browser</a></li>
-                <li>Open Tor Browser and wait for it to connect</li>
-                <li>Copy the onion address above and paste it into the Tor Browser address bar</li>
+                <li>{{t "help.tor.step_download"}} <a href="https://www.torproject.org/download/" target="_blank" rel="noopener">Tor Browser</a></li>
+                <li>{{t "help.tor.step_open"}}</li>
+                <li>{{t "help.tor.step_paste"}}</li>
             </ol>
 
-            <p class="tor-note">Using Tor provides additional privacy by hiding your IP address and encrypting your connection through the Tor network.</p>
+            <p class="tor-note">{{t "help.tor.footer_note"}}</p>
         </section>
         {{end}}
 
         {{/* FAQ */}}
         <section id="faq" class="help-section">
-            <h2>Frequently Asked Questions</h2>
+            <h2>{{t "help.faq.heading"}}</h2>
             <div class="faq-list">
                 <details>
-                    <summary>Why are results different from Google?</summary>
-                    <p>We aggregate results from multiple sources without personalization. Results aren't filtered based on your history, location, or profile, so they may differ from what you see on personalized search engines.</p>
+                    <summary>{{t "help.faq.q_results_diff"}}</summary>
+                    <p>{{t "help.faq.a_results_diff"}}</p>
                 </details>
                 <details>
-                    <summary>How do I access via Tor?</summary>
-                    <p>Install <a href="https://www.torproject.org/download/" target="_blank" rel="noopener">Tor Browser</a> and use our .onion address.{{if .Config.Server.Tor.Enabled}} See the <a href="#tor-access">Tor Access section</a> above for the address and instructions.{{end}}</p>
+                    <summary>{{t "help.faq.q_tor_access_summary"}}</summary>
+                    <p>{{t "help.faq.a_tor_access_prefix"}} <a href="https://www.torproject.org/download/" target="_blank" rel="noopener">Tor Browser</a> {{t "help.faq.a_tor_access_suffix"}}{{if .Config.Server.Tor.Enabled}} <a href="#tor-access">{{t "help.faq.a_tor_access_see_section"}}</a>{{end}}</p>
                 </details>
                 <details>
-                    <summary>Can I self-host this?</summary>
-                    <p>Yes! This is free and open source software.{{if .Config.Server.Branding.SourceCodeURL}} Check our <a href="{{.Config.Server.Branding.SourceCodeURL}}" target="_blank" rel="noopener">source code repository</a> for installation instructions.{{end}}</p>
+                    <summary>{{t "help.faq.q_self_host"}}</summary>
+                    <p>{{t "help.faq.a_self_host_prefix"}}{{if .Config.Server.Branding.SourceCodeURL}} <a href="{{.Config.Server.Branding.SourceCodeURL}}" target="_blank" rel="noopener">{{t "help.faq.a_self_host_repo"}}</a>{{end}}</p>
                 </details>
                 <details>
-                    <summary>What search engines do you use?</summary>
-                    <p>We aggregate results from multiple engines including Google, Bing, DuckDuckGo, Brave, Qwant, Mojeek, Yahoo, Yandex, Baidu, Startpage, Wikipedia, arXiv, PubMed, GitHub, Hacker News, Reddit, YouTube, OpenStreetMap, and Wolfram Alpha.</p>
+                    <summary>{{t "help.faq.q_engines"}}</summary>
+                    <p>{{t "help.faq.a_engines"}}</p>
                 </details>
                 <details>
-                    <summary>How do instant answers work?</summary>
-                    <p>Many instant answers are generated locally for calculations, formatting, conversions, parsing, and text tools. Some lookups query remote sources or your configured search backends when that is required for the feature.</p>
+                    <summary>{{t "help.faq.q_instant"}}</summary>
+                    <p>{{t "help.faq.a_instant"}}</p>
                 </details>
             </div>
         </section>
 
         {{/* Need Help */}}
         <section class="help-section">
-            <h2>Need More Help?</h2>
-            <p>If you have questions or need assistance, please <a href="/server/contact">contact us</a>.</p>
+            <h2>{{t "help.need_more.heading"}}</h2>
+            <p>{{t "help.need_more.text_prefix"}} <a href="/server/contact">{{t "help.need_more.link"}}</a>{{t "help.need_more.text_suffix"}}</p>
         </section>
     </div>
     {{end}}

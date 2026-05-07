@@ -1428,6 +1428,59 @@
       "prev_next_page": "Ir a la página anterior o siguiente de resultados",
       "first_last": "Saltar al primer o último resultado",
       "open_n": "Abrir el resultado número 1 al 9"
+    },
+    "privacy": {
+      "heading": "Funciones de privacidad",
+      "no_tracking_label": "Sin rastreo:",
+      "no_tracking_text": "No rastreamos sus búsquedas ni creamos perfiles de usuario",
+      "no_history_label": "Sin historial de búsqueda:",
+      "no_history_text": "Sus búsquedas no se almacenan en nuestros servidores",
+      "sanitized_links_label": "Enlaces de resultados saneados:",
+      "sanitized_links_text": "Los parámetros de rastreo comunes se eliminan de las URL de resultados antes de mostrarlas",
+      "tor_support_label": "Soporte de Tor:",
+      "tor_support_prefix": "Acceso por servicio oculto Tor para máxima anonimidad",
+      "tor_support_see_below": "ver más abajo",
+      "minimal_cookies_label": "Cookies mínimas:",
+      "minimal_cookies_text": "Solo cookies esenciales para preferencias (sin analítica)",
+      "no_js_label": "JavaScript no requerido:",
+      "no_js_text": "La búsqueda principal funciona sin JavaScript",
+      "open_source_label": "Código abierto:",
+      "open_source_text": "Código fuente completo disponible para auditoría"
+    },
+    "tor": {
+      "heading": "Acceso por Tor",
+      "intro": "Esta aplicación está disponible como servicio oculto Tor para mayor privacidad.",
+      "onion_heading": "Dirección onion",
+      "copy_label": "Copiar",
+      "copy_aria": "Copiar al portapapeles",
+      "pending_note": "La dirección Tor estará disponible cuando el servicio oculto se conecte a la red Tor.",
+      "how_to_heading": "Cómo conectarse",
+      "step_download": "Descargar",
+      "step_open": "Abrir Tor Browser y esperar a que se conecte",
+      "step_paste": "Copie la dirección onion de arriba y péguela en la barra de direcciones de Tor Browser",
+      "footer_note": "Usar Tor proporciona privacidad adicional ocultando su dirección IP y cifrando su conexión a través de la red Tor."
+    },
+    "faq": {
+      "heading": "Preguntas frecuentes",
+      "q_results_diff": "¿Por qué los resultados son diferentes a los de Google?",
+      "a_results_diff": "Agregamos resultados de múltiples fuentes sin personalización. Los resultados no se filtran según su historial, ubicación o perfil, por lo que pueden diferir de los que ve en buscadores personalizados.",
+      "q_tor_access_summary": "¿Cómo accedo por Tor?",
+      "a_tor_access_prefix": "Instale",
+      "a_tor_access_suffix": "y use nuestra dirección .onion.",
+      "a_tor_access_see_section": "Vea la sección Acceso por Tor más arriba para la dirección e instrucciones.",
+      "q_self_host": "¿Puedo autoalojarlo?",
+      "a_self_host_prefix": "¡Sí! Este es software libre y de código abierto.",
+      "a_self_host_repo": "Consulte nuestro repositorio de código fuente para instrucciones de instalación.",
+      "q_engines": "¿Qué motores de búsqueda usan?",
+      "a_engines": "Agregamos resultados de múltiples motores, incluidos Google, Bing, DuckDuckGo, Brave, Qwant, Mojeek, Yahoo, Yandex, Baidu, Startpage, Wikipedia, arXiv, PubMed, GitHub, Hacker News, Reddit, YouTube, OpenStreetMap y Wolfram Alpha.",
+      "q_instant": "¿Cómo funcionan las respuestas instantáneas?",
+      "a_instant": "Muchas respuestas instantáneas se generan localmente para cálculos, formateo, conversiones, análisis y herramientas de texto. Algunas búsquedas consultan fuentes remotas o sus motores de búsqueda configurados cuando es necesario para la función."
+    },
+    "need_more": {
+      "heading": "¿Necesita más ayuda?",
+      "text_prefix": "Si tiene preguntas o necesita asistencia, por favor",
+      "link": "contáctenos",
+      "text_suffix": "."
     }
   }
 }

@@ -1428,6 +1428,59 @@
       "prev_next_page": "Go to the previous or next page of results",
       "first_last": "Jump to the first or last result",
       "open_n": "Open result number 1 through 9"
+    },
+    "privacy": {
+      "heading": "Privacy Features",
+      "no_tracking_label": "No tracking:",
+      "no_tracking_text": "We don't track your searches or create user profiles",
+      "no_history_label": "No search history:",
+      "no_history_text": "Your searches are not stored on our servers",
+      "sanitized_links_label": "Sanitized result links:",
+      "sanitized_links_text": "Common tracking parameters are stripped from result URLs before they are shown",
+      "tor_support_label": "Tor support:",
+      "tor_support_prefix": "Access via Tor hidden service for maximum anonymity",
+      "tor_support_see_below": "see below",
+      "minimal_cookies_label": "Minimal cookies:",
+      "minimal_cookies_text": "Only essential cookies for preferences (no analytics)",
+      "no_js_label": "No JavaScript required:",
+      "no_js_text": "Core search works without JavaScript",
+      "open_source_label": "Open source:",
+      "open_source_text": "Full source code available for audit"
+    },
+    "tor": {
+      "heading": "Tor Access",
+      "intro": "This application is available as a Tor hidden service for enhanced privacy.",
+      "onion_heading": "Onion Address",
+      "copy_label": "Copy",
+      "copy_aria": "Copy to clipboard",
+      "pending_note": "Tor address will be available once the hidden service connects to the Tor network.",
+      "how_to_heading": "How to Connect",
+      "step_download": "Download",
+      "step_open": "Open Tor Browser and wait for it to connect",
+      "step_paste": "Copy the onion address above and paste it into the Tor Browser address bar",
+      "footer_note": "Using Tor provides additional privacy by hiding your IP address and encrypting your connection through the Tor network."
+    },
+    "faq": {
+      "heading": "Frequently Asked Questions",
+      "q_results_diff": "Why are results different from Google?",
+      "a_results_diff": "We aggregate results from multiple sources without personalization. Results aren't filtered based on your history, location, or profile, so they may differ from what you see on personalized search engines.",
+      "q_tor_access_summary": "How do I access via Tor?",
+      "a_tor_access_prefix": "Install",
+      "a_tor_access_suffix": "and use our .onion address.",
+      "a_tor_access_see_section": "See the Tor Access section above for the address and instructions.",
+      "q_self_host": "Can I self-host this?",
+      "a_self_host_prefix": "Yes! This is free and open source software.",
+      "a_self_host_repo": "Check our source code repository for installation instructions.",
+      "q_engines": "What search engines do you use?",
+      "a_engines": "We aggregate results from multiple engines including Google, Bing, DuckDuckGo, Brave, Qwant, Mojeek, Yahoo, Yandex, Baidu, Startpage, Wikipedia, arXiv, PubMed, GitHub, Hacker News, Reddit, YouTube, OpenStreetMap, and Wolfram Alpha.",
+      "q_instant": "How do instant answers work?",
+      "a_instant": "Many instant answers are generated locally for calculations, formatting, conversions, parsing, and text tools. Some lookups query remote sources or your configured search backends when that is required for the feature."
+    },
+    "need_more": {
+      "heading": "Need More Help?",
+      "text_prefix": "If you have questions or need assistance, please",
+      "link": "contact us",
+      "text_suffix": "."
     }
   }
 }
