@@ -59,8 +59,9 @@ RUN mkdir -p /config/search /config/search/security /config/search/tor \
              /run/postgresql /run/valkey \
     && chown -R postgres:postgres /data/db/postgres /run/postgresql /data/log/postgres
 
-# Copy configs and entrypoint
-COPY docker/file_system/ /
+# Copy build-time container overlay (entrypoint.sh, postgres/valkey/supervisor configs)
+# Per AI.md PART 27: docker/rootfs/ mirrors the container filesystem layout
+COPY docker/rootfs/ /
 
 # Copy application binary from builder stage
 COPY --from=builder /app /usr/local/bin/search

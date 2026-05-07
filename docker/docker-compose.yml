@@ -28,10 +28,10 @@ services:
       # Production: bound to Docker bridge only (reverse proxy handles external)
       - '172.17.0.1:64580:80'
     volumes:
-      # TEMP DIR WORKFLOW: ./rootfs/ resolves to $TEMP_DIR/rootfs/
-      # NEVER run from project directory - always use temp dir workflow
-      - ./rootfs/config:/config:z
-      - ./rootfs/data:/data:z
+      # Runtime volumes (per AI.md PART 27)
+      # Host ./volumes/{config,data} maps to container /config and /data
+      - ./volumes/config:/config:z
+      - ./volumes/data:/data:z
     healthcheck:
       test: /usr/local/bin/search --status
       interval: 10s

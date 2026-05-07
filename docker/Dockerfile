@@ -73,8 +73,9 @@ RUN apk add --no-cache \
 # Copy binary from builder stage (multi-stage build)
 COPY --from=builder /build/binary/search /usr/local/bin/search
 
-# Copy entrypoint script from ./docker/file_system/
-COPY docker/file_system/ /
+# Copy build-time container overlay (entrypoint.sh, etc.) from docker/rootfs/
+# Per AI.md PART 27: docker/rootfs/ mirrors the container filesystem layout
+COPY docker/rootfs/ /
 
 # Copy Dockerfile to image (for reference and backup)
 COPY docker/Dockerfile /root/Dockerfile
