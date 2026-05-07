@@ -1314,5 +1314,23 @@
     "changes_description": "Możemy od czasu do czasu aktualizować niniejsze Warunki świadczenia usług. O istotnych zmianach poinformujemy użytkowników, aktualizując datę \"Last updated\". Dalsze korzystanie z Service po zmianach oznacza akceptację nowych warunków.",
     "contact_prefix": "Jeśli masz pytania dotyczące niniejszych Warunków świadczenia usług, prosimy ",
     "contact_suffix": "."
+  },
+  "help": {
+    "page_title": "Pomoc",
+    "title": "Pomoc i dokumentacja",
+    "subtitle": "Dowiedz się, jak najlepiej wykorzystać %s",
+    "toc": {
+      "heading": "Spis treści",
+      "getting_started": "Pierwsze kroki",
+      "search_categories": "Kategorie wyszukiwania",
+      "bang_commands": "Polecenia bang",
+      "direct_answers": "Odpowiedzi bezpośrednie",
+      "search_operators": "Operatory wyszukiwania",
+      "keyboard_shortcuts": "Skróty klawiszowe",
+      "api_docs": "Dokumentacja API",
+      "privacy": "Funkcje prywatności",
+      "tor_access": "Dostęp przez Tor",
+      "faq": "Najczęstsze pytania"
+    }
   }
 }

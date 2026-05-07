@@ -1314,5 +1314,23 @@
     "changes_description": "当社は、本利用規約を随時更新することがあります。重要な変更があった場合は、\"Last updated\" 日付を更新することでユーザーに通知します。変更後も Service の利用を継続した場合、新しい規約に同意したものとみなされます。",
     "contact_prefix": "本利用規約についてご質問がある場合は、",
     "contact_suffix": "。"
+  },
+  "help": {
+    "page_title": "Help",
+    "title": "Help & Documentation",
+    "subtitle": "Learn how to get the most out of %s",
+    "toc": {
+      "heading": "Contents",
+      "getting_started": "Getting Started",
+      "search_categories": "Search Categories",
+      "bang_commands": "Bang Commands",
+      "direct_answers": "Direct Answers",
+      "search_operators": "Search Operators",
+      "keyboard_shortcuts": "Keyboard Shortcuts",
+      "api_docs": "API Documentation",
+      "privacy": "Privacy Features",
+      "tor_access": "Tor Access",
+      "faq": "FAQ"
+    }
   }
 }

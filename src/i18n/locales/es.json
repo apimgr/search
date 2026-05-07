@@ -1314,5 +1314,23 @@
     "changes_description": "Podemos actualizar estos Términos de servicio de vez en cuando. Notificaremos a los usuarios de cualquier cambio importante actualizando la fecha \"Last updated\". Tu uso continuado del Service después de los cambios constituye la aceptación de los nuevos términos.",
     "contact_prefix": "Si tienes preguntas sobre estos Términos de servicio, por favor ",
     "contact_suffix": "."
+  },
+  "help": {
+    "page_title": "Ayuda",
+    "title": "Ayuda y documentación",
+    "subtitle": "Aprenda a aprovechar al máximo %s",
+    "toc": {
+      "heading": "Contenido",
+      "getting_started": "Primeros pasos",
+      "search_categories": "Categorías de búsqueda",
+      "bang_commands": "Comandos bang",
+      "direct_answers": "Respuestas directas",
+      "search_operators": "Operadores de búsqueda",
+      "keyboard_shortcuts": "Atajos de teclado",
+      "api_docs": "Documentación de la API",
+      "privacy": "Funciones de privacidad",
+      "tor_access": "Acceso por Tor",
+      "faq": "Preguntas frecuentes"
+    }
   }
 }

@@ -1,8 +1,8 @@
 {{define "content"}}
 <div class="static-page help-page">
     <header class="help-header">
-        <h1>Help & Documentation</h1>
-        <p class="subtitle">Learn how to get the most out of {{.Config.Server.Branding.Title}}</p>
+        <h1>{{t "help.title"}}</h1>
+        <p class="subtitle">{{t "help.subtitle" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}}</p>
     </header>
 
     {{if .Config.Server.Pages.Help.Content}}
@@ -13,18 +13,18 @@
     <div class="page-content">
         {{/* Table of Contents */}}
         <nav class="help-toc">
-            <h2>Contents</h2>
+            <h2>{{t "help.toc.heading"}}</h2>
             <ul>
-                <li><a href="#getting-started">Getting Started</a></li>
-                <li><a href="#search-categories">Search Categories</a></li>
-                <li><a href="#bang-commands">Bang Commands</a></li>
-                <li><a href="#direct-answers">Direct Answers</a></li>
-                <li><a href="#search-operators">Search Operators</a></li>
-                <li><a href="#keyboard-shortcuts">Keyboard Shortcuts</a></li>
-                <li><a href="#api-docs">API Documentation</a></li>
-                <li><a href="#privacy">Privacy Features</a></li>
-                {{if .Config.Server.Tor.Enabled}}<li><a href="#tor-access">Tor Access</a></li>{{end}}
-                <li><a href="#faq">FAQ</a></li>
+                <li><a href="#getting-started">{{t "help.toc.getting_started"}}</a></li>
+                <li><a href="#search-categories">{{t "help.toc.search_categories"}}</a></li>
+                <li><a href="#bang-commands">{{t "help.toc.bang_commands"}}</a></li>
+                <li><a href="#direct-answers">{{t "help.toc.direct_answers"}}</a></li>
+                <li><a href="#search-operators">{{t "help.toc.search_operators"}}</a></li>
+                <li><a href="#keyboard-shortcuts">{{t "help.toc.keyboard_shortcuts"}}</a></li>
+                <li><a href="#api-docs">{{t "help.toc.api_docs"}}</a></li>
+                <li><a href="#privacy">{{t "help.toc.privacy"}}</a></li>
+                {{if .Config.Server.Tor.Enabled}}<li><a href="#tor-access">{{t "help.toc.tor_access"}}</a></li>{{end}}
+                <li><a href="#faq">{{t "help.toc.faq"}}</a></li>
             </ul>
         </nav>
 

@@ -1314,5 +1314,23 @@
     "changes_description": "我们可能会不时更新本服务条款。我们会通过更新 \"Last updated\" 日期来通知用户任何重大变更。您在变更后继续使用 Service 即表示接受新条款。",
     "contact_prefix": "如果您对本服务条款有任何问题，请",
     "contact_suffix": "。"
+  },
+  "help": {
+    "page_title": "Help",
+    "title": "Help & Documentation",
+    "subtitle": "Learn how to get the most out of %s",
+    "toc": {
+      "heading": "Contents",
+      "getting_started": "Getting Started",
+      "search_categories": "Search Categories",
+      "bang_commands": "Bang Commands",
+      "direct_answers": "Direct Answers",
+      "search_operators": "Search Operators",
+      "keyboard_shortcuts": "Keyboard Shortcuts",
+      "api_docs": "API Documentation",
+      "privacy": "Privacy Features",
+      "tor_access": "Tor Access",
+      "faq": "FAQ"
+    }
   }
 }

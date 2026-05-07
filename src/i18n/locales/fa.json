@@ -1308,5 +1308,23 @@
     "changes_description": "ممکن است این شرایط خدمات را از زمان به زمان به‌روزرسانی کنیم. ما با به‌روزرسانی تاریخ \"Last updated\" کاربران را از هر تغییر اساسی مطلع خواهیم کرد. ادامه استفاده شما از Service پس از تغییرات، به‌منزله پذیرش شرایط جدید است.",
     "contact_prefix": "اگر درباره این شرایط خدمات پرسشی دارید، لطفاً ",
     "contact_suffix": "."
+  },
+  "help": {
+    "page_title": "Help",
+    "title": "Help & Documentation",
+    "subtitle": "Learn how to get the most out of %s",
+    "toc": {
+      "heading": "Contents",
+      "getting_started": "Getting Started",
+      "search_categories": "Search Categories",
+      "bang_commands": "Bang Commands",
+      "direct_answers": "Direct Answers",
+      "search_operators": "Search Operators",
+      "keyboard_shortcuts": "Keyboard Shortcuts",
+      "api_docs": "API Documentation",
+      "privacy": "Privacy Features",
+      "tor_access": "Tor Access",
+      "faq": "FAQ"
+    }
   }
 }

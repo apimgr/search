@@ -1308,5 +1308,23 @@
     "changes_description": "ہم وقتاً فوقتاً ان سروس کی شرائط کو اپ ڈیٹ کر سکتے ہیں۔ ہم \"Last updated\" تاریخ کو اپ ڈیٹ کر کے صارفین کو کسی بھی اہم تبدیلی سے آگاہ کریں گے۔ تبدیلیوں کے بعد Service کا آپ کا مسلسل استعمال نئی شرائط کی قبولیت سمجھا جائے گا۔",
     "contact_prefix": "اگر آپ کو ان سروس کی شرائط کے بارے میں سوالات ہوں تو براہِ کرم ",
     "contact_suffix": "."
+  },
+  "help": {
+    "page_title": "Help",
+    "title": "Help & Documentation",
+    "subtitle": "Learn how to get the most out of %s",
+    "toc": {
+      "heading": "Contents",
+      "getting_started": "Getting Started",
+      "search_categories": "Search Categories",
+      "bang_commands": "Bang Commands",
+      "direct_answers": "Direct Answers",
+      "search_operators": "Search Operators",
+      "keyboard_shortcuts": "Keyboard Shortcuts",
+      "api_docs": "API Documentation",
+      "privacy": "Privacy Features",
+      "tor_access": "Tor Access",
+      "faq": "FAQ"
+    }
   }
 }

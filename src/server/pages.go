@@ -146,7 +146,8 @@ func (s *Server) handleContactSubmit(w http.ResponseWriter, r *http.Request) {
 
 // handleHelp renders the help page
 func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
-	data := s.newPageData(w, r, "Help", "help")
+	data := s.newPageData(w, r, "", "help")
+	data.Title = s.getI18nManager().T(data.Lang, "help.page_title")
 	data.CSRFToken = s.getCSRFToken(r)
 	data.ServerURL = s.getBaseURL(r)
 

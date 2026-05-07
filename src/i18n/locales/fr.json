@@ -1314,5 +1314,23 @@
     "changes_description": "Nous pouvons mettre à jour les présentes conditions d'utilisation de temps à autre. Nous informerons les utilisateurs de toute modification importante en mettant à jour la date \"Last updated\". Le fait de continuer à utiliser le Service après des modifications constitue une acceptation des nouvelles conditions.",
     "contact_prefix": "Si vous avez des questions sur les présentes conditions d'utilisation, veuillez ",
     "contact_suffix": "."
+  },
+  "help": {
+    "page_title": "Aide",
+    "title": "Aide et documentation",
+    "subtitle": "Apprenez à tirer le meilleur parti de %s",
+    "toc": {
+      "heading": "Sommaire",
+      "getting_started": "Premiers pas",
+      "search_categories": "Catégories de recherche",
+      "bang_commands": "Commandes bang",
+      "direct_answers": "Réponses directes",
+      "search_operators": "Opérateurs de recherche",
+      "keyboard_shortcuts": "Raccourcis clavier",
+      "api_docs": "Documentation de l'API",
+      "privacy": "Fonctionnalités de confidentialité",
+      "tor_access": "Accès Tor",
+      "faq": "FAQ"
+    }
   }
 }

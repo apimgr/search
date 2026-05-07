@@ -1314,5 +1314,23 @@
   "cookie_consent": {
     "default_message": "We use cookies to enhance your browsing experience. By continuing to use this site, you agree to our use of cookies.",
     "learn_more": "Learn more"
+  },
+  "help": {
+    "page_title": "Help",
+    "title": "Help & Documentation",
+    "subtitle": "Learn how to get the most out of %s",
+    "toc": {
+      "heading": "Contents",
+      "getting_started": "Getting Started",
+      "search_categories": "Search Categories",
+      "bang_commands": "Bang Commands",
+      "direct_answers": "Direct Answers",
+      "search_operators": "Search Operators",
+      "keyboard_shortcuts": "Keyboard Shortcuts",
+      "api_docs": "API Documentation",
+      "privacy": "Privacy Features",
+      "tor_access": "Tor Access",
+      "faq": "FAQ"
+    }
   }
 }

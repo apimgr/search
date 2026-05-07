@@ -1314,5 +1314,23 @@
     "changes_description": "We kunnen deze Servicevoorwaarden van tijd tot tijd bijwerken. We zullen gebruikers op de hoogte stellen van materiële wijzigingen door de datum \"Last updated\" bij te werken. Je voortgezet gebruik van de Service na wijzigingen houdt aanvaarding van de nieuwe voorwaarden in.",
     "contact_prefix": "Als je vragen hebt over deze Servicevoorwaarden, neem dan ",
     "contact_suffix": "."
+  },
+  "help": {
+    "page_title": "Help",
+    "title": "Help en documentatie",
+    "subtitle": "Leer hoe u het meeste uit %s haalt",
+    "toc": {
+      "heading": "Inhoud",
+      "getting_started": "Aan de slag",
+      "search_categories": "Zoekcategorieën",
+      "bang_commands": "Bang-commando's",
+      "direct_answers": "Directe antwoorden",
+      "search_operators": "Zoekoperatoren",
+      "keyboard_shortcuts": "Sneltoetsen",
+      "api_docs": "API-documentatie",
+      "privacy": "Privacyfuncties",
+      "tor_access": "Tor-toegang",
+      "faq": "Veelgestelde vragen"
+    }
   }
 }

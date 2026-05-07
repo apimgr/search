@@ -1314,5 +1314,23 @@
     "changes_description": "Wir können diese Nutzungsbedingungen von Zeit zu Zeit aktualisieren. Wir benachrichtigen Nutzer über wesentliche Änderungen durch Aktualisierung des Datums \"Last updated\". Ihre fortgesetzte Nutzung des Service nach Änderungen gilt als Annahme der neuen Bedingungen.",
     "contact_prefix": "Wenn Sie Fragen zu diesen Nutzungsbedingungen haben, ",
     "contact_suffix": "."
+  },
+  "help": {
+    "page_title": "Hilfe",
+    "title": "Hilfe und Dokumentation",
+    "subtitle": "Lernen Sie, %s optimal zu nutzen",
+    "toc": {
+      "heading": "Inhalt",
+      "getting_started": "Erste Schritte",
+      "search_categories": "Suchkategorien",
+      "bang_commands": "Bang-Befehle",
+      "direct_answers": "Direkte Antworten",
+      "search_operators": "Suchoperatoren",
+      "keyboard_shortcuts": "Tastenkombinationen",
+      "api_docs": "API-Dokumentation",
+      "privacy": "Datenschutzfunktionen",
+      "tor_access": "Tor-Zugang",
+      "faq": "Häufig gestellte Fragen"
+    }
   }
 }

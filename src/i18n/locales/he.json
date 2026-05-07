@@ -1308,5 +1308,23 @@
     "changes_description": "אנו עשויים לעדכן את תנאי השירות הללו מעת לעת. נודיע למשתמשים על כל שינוי מהותי על ידי עדכון התאריך \"Last updated\". המשך השימוש שלך ב-Service לאחר השינויים מהווה קבלה של התנאים החדשים.",
     "contact_prefix": "אם יש לך שאלות לגבי תנאי השירות הללו, אנא ",
     "contact_suffix": "."
+  },
+  "help": {
+    "page_title": "Help",
+    "title": "Help & Documentation",
+    "subtitle": "Learn how to get the most out of %s",
+    "toc": {
+      "heading": "Contents",
+      "getting_started": "Getting Started",
+      "search_categories": "Search Categories",
+      "bang_commands": "Bang Commands",
+      "direct_answers": "Direct Answers",
+      "search_operators": "Search Operators",
+      "keyboard_shortcuts": "Keyboard Shortcuts",
+      "api_docs": "API Documentation",
+      "privacy": "Privacy Features",
+      "tor_access": "Tor Access",
+      "faq": "FAQ"
+    }
   }
 }
