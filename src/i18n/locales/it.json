@@ -1331,6 +1331,56 @@
       "privacy": "Funzioni sulla privacy",
       "tor_access": "Accesso tramite Tor",
       "faq": "Domande frequenti"
+    },
+    "getting_started": {
+      "heading": "Per iniziare",
+      "intro_prefix": "%s è un motore di metaricerca rispettoso della privacy. Basta digitare la query nella casella di ricerca e premere",
+      "intro_suffix": "o fare clic sul pulsante di ricerca.",
+      "no_tracking": "A differenza dei motori di ricerca tradizionali, non ti tracciamo, non memorizziamo la tua cronologia di ricerca e non creiamo un profilo su di te."
+    },
+    "categories": {
+      "heading": "Categorie di ricerca",
+      "intro": "Usa le schede categoria per restringere i motori e i tipi di risultati utilizzati per la tua ricerca.",
+      "general": {
+        "label": "Generale",
+        "description": "Pagine web e articoli"
+      },
+      "images": {
+        "label": "Immagini",
+        "description": "Foto e grafica"
+      },
+      "videos": {
+        "label": "Video",
+        "description": "Contenuti video"
+      },
+      "news": {
+        "label": "Notizie",
+        "description": "Articoli di cronaca recenti"
+      },
+      "maps": {
+        "label": "Mappe",
+        "description": "Luoghi e indicazioni"
+      },
+      "files": {
+        "label": "File",
+        "description": "Documenti, download e directory aperte"
+      },
+      "music": {
+        "label": "Musica",
+        "description": "Canzoni, artisti, album e video musicali"
+      },
+      "it": {
+        "label": "IT",
+        "description": "Fonti tecniche e per sviluppatori"
+      },
+      "science": {
+        "label": "Scienza",
+        "description": "Articoli accademici e ricerca"
+      },
+      "social": {
+        "label": "Social",
+        "description": "Comunità e piattaforme sociali"
+      }
     }
   }
 }

@@ -1331,6 +1331,56 @@
       "privacy": "Datenschutzfunktionen",
       "tor_access": "Tor-Zugang",
       "faq": "Häufig gestellte Fragen"
+    },
+    "getting_started": {
+      "heading": "Erste Schritte",
+      "intro_prefix": "%s ist eine datenschutzfreundliche Metasuchmaschine. Geben Sie einfach Ihre Suchanfrage in das Suchfeld ein und drücken Sie",
+      "intro_suffix": "oder klicken Sie auf die Suchschaltfläche.",
+      "no_tracking": "Anders als herkömmliche Suchmaschinen verfolgen wir Sie nicht, speichern Ihren Suchverlauf nicht und erstellen kein Profil über Sie."
+    },
+    "categories": {
+      "heading": "Suchkategorien",
+      "intro": "Verwenden Sie die Kategorie-Tabs, um die für Ihre Suche verwendeten Suchmaschinen und Ergebnistypen einzugrenzen.",
+      "general": {
+        "label": "Allgemein",
+        "description": "Webseiten und Artikel"
+      },
+      "images": {
+        "label": "Bilder",
+        "description": "Fotos und Grafiken"
+      },
+      "videos": {
+        "label": "Videos",
+        "description": "Videoinhalte"
+      },
+      "news": {
+        "label": "Nachrichten",
+        "description": "Aktuelle Nachrichtenartikel"
+      },
+      "maps": {
+        "label": "Karten",
+        "description": "Orte und Wegbeschreibungen"
+      },
+      "files": {
+        "label": "Dateien",
+        "description": "Dokumente, Downloads und offene Verzeichnisse"
+      },
+      "music": {
+        "label": "Musik",
+        "description": "Lieder, Künstler, Alben und Musikvideos"
+      },
+      "it": {
+        "label": "IT",
+        "description": "Quellen für Entwickler und Technik"
+      },
+      "science": {
+        "label": "Wissenschaft",
+        "description": "Wissenschaftliche Aufsätze und Forschung"
+      },
+      "social": {
+        "label": "Sozial",
+        "description": "Communitys und soziale Plattformen"
+      }
     }
   }
 }

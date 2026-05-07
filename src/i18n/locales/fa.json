@@ -1325,6 +1325,56 @@
       "privacy": "Privacy Features",
       "tor_access": "Tor Access",
       "faq": "FAQ"
+    },
+    "getting_started": {
+      "heading": "Getting Started",
+      "intro_prefix": "%s is a privacy-respecting metasearch engine. Simply type your query in the search box and press",
+      "intro_suffix": "or click the search button.",
+      "no_tracking": "Unlike traditional search engines, we don't track you, store your search history, or create a profile about you."
+    },
+    "categories": {
+      "heading": "Search Categories",
+      "intro": "Use the category tabs to narrow the engines and result types used for your search.",
+      "general": {
+        "label": "General",
+        "description": "Web pages and articles"
+      },
+      "images": {
+        "label": "Images",
+        "description": "Photos and graphics"
+      },
+      "videos": {
+        "label": "Videos",
+        "description": "Video content"
+      },
+      "news": {
+        "label": "News",
+        "description": "Recent news articles"
+      },
+      "maps": {
+        "label": "Maps",
+        "description": "Locations and directions"
+      },
+      "files": {
+        "label": "Files",
+        "description": "Documents, downloads, and open directories"
+      },
+      "music": {
+        "label": "Music",
+        "description": "Songs, artists, albums, and music videos"
+      },
+      "it": {
+        "label": "IT",
+        "description": "Developer and technical sources"
+      },
+      "science": {
+        "label": "Science",
+        "description": "Academic papers and research"
+      },
+      "social": {
+        "label": "Social",
+        "description": "Communities and social platforms"
+      }
     }
   }
 }

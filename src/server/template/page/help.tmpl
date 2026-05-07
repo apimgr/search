@@ -30,65 +30,65 @@
 
         {{/* Getting Started */}}
         <section id="getting-started" class="help-section">
-            <h2>Getting Started</h2>
-            <p>{{.Config.Server.Branding.Title}} is a privacy-respecting metasearch engine. Simply type your query in the search box and press <kbd>Enter</kbd> or click the search button.</p>
-            <p>Unlike traditional search engines, we don't track you, store your search history, or create a profile about you.</p>
+            <h2>{{t "help.getting_started.heading"}}</h2>
+            <p>{{t "help.getting_started.intro_prefix" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}} <kbd>Enter</kbd> {{t "help.getting_started.intro_suffix"}}</p>
+            <p>{{t "help.getting_started.no_tracking"}}</p>
         </section>
 
         {{/* Search Categories */}}
         <section id="search-categories" class="help-section">
-            <h2>Search Categories</h2>
-            <p>Use the category tabs to narrow the engines and result types used for your search.</p>
+            <h2>{{t "help.categories.heading"}}</h2>
+            <p>{{t "help.categories.intro"}}</p>
             <div class="category-grid">
                 <div class="category-item">
                     <span class="category-icon">🌐</span>
-                    <strong>General</strong>
-                    <p>Web pages and articles</p>
+                    <strong>{{t "help.categories.general.label"}}</strong>
+                    <p>{{t "help.categories.general.description"}}</p>
                 </div>
                 <div class="category-item">
                     <span class="category-icon">🖼️</span>
-                    <strong>Images</strong>
-                    <p>Photos and graphics</p>
+                    <strong>{{t "help.categories.images.label"}}</strong>
+                    <p>{{t "help.categories.images.description"}}</p>
                 </div>
                 <div class="category-item">
                     <span class="category-icon">🎬</span>
-                    <strong>Videos</strong>
-                    <p>Video content</p>
+                    <strong>{{t "help.categories.videos.label"}}</strong>
+                    <p>{{t "help.categories.videos.description"}}</p>
                 </div>
                 <div class="category-item">
                     <span class="category-icon">📰</span>
-                    <strong>News</strong>
-                    <p>Recent news articles</p>
+                    <strong>{{t "help.categories.news.label"}}</strong>
+                    <p>{{t "help.categories.news.description"}}</p>
                 </div>
                 <div class="category-item">
                     <span class="category-icon">🗺️</span>
-                    <strong>Maps</strong>
-                    <p>Locations and directions</p>
+                    <strong>{{t "help.categories.maps.label"}}</strong>
+                    <p>{{t "help.categories.maps.description"}}</p>
                 </div>
                 <div class="category-item">
                     <span class="category-icon">📁</span>
-                    <strong>Files</strong>
-                    <p>Documents, downloads, and open directories</p>
+                    <strong>{{t "help.categories.files.label"}}</strong>
+                    <p>{{t "help.categories.files.description"}}</p>
                 </div>
                 <div class="category-item">
                     <span class="category-icon">🎵</span>
-                    <strong>Music</strong>
-                    <p>Songs, artists, albums, and music videos</p>
+                    <strong>{{t "help.categories.music.label"}}</strong>
+                    <p>{{t "help.categories.music.description"}}</p>
                 </div>
                 <div class="category-item">
                     <span class="category-icon">💻</span>
-                    <strong>IT</strong>
-                    <p>Developer and technical sources</p>
+                    <strong>{{t "help.categories.it.label"}}</strong>
+                    <p>{{t "help.categories.it.description"}}</p>
                 </div>
                 <div class="category-item">
                     <span class="category-icon">📚</span>
-                    <strong>Science</strong>
-                    <p>Academic papers and research</p>
+                    <strong>{{t "help.categories.science.label"}}</strong>
+                    <p>{{t "help.categories.science.description"}}</p>
                 </div>
                 <div class="category-item">
                     <span class="category-icon">👥</span>
-                    <strong>Social</strong>
-                    <p>Communities and social platforms</p>
+                    <strong>{{t "help.categories.social.label"}}</strong>
+                    <p>{{t "help.categories.social.description"}}</p>
                 </div>
             </div>
         </section>

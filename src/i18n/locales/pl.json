@@ -1331,6 +1331,56 @@
       "privacy": "Funkcje prywatności",
       "tor_access": "Dostęp przez Tor",
       "faq": "Najczęstsze pytania"
+    },
+    "getting_started": {
+      "heading": "Pierwsze kroki",
+      "intro_prefix": "%s to wyszukiwarka meta szanująca prywatność. Wystarczy wpisać zapytanie w polu wyszukiwania i nacisnąć",
+      "intro_suffix": "lub kliknąć przycisk wyszukiwania.",
+      "no_tracking": "W przeciwieństwie do tradycyjnych wyszukiwarek nie śledzimy Cię, nie przechowujemy historii wyszukiwań ani nie tworzymy Twojego profilu."
+    },
+    "categories": {
+      "heading": "Kategorie wyszukiwania",
+      "intro": "Użyj kart kategorii, aby zawęzić wyszukiwarki i typy wyników używane w wyszukiwaniu.",
+      "general": {
+        "label": "Ogólne",
+        "description": "Strony i artykuły"
+      },
+      "images": {
+        "label": "Obrazy",
+        "description": "Zdjęcia i grafika"
+      },
+      "videos": {
+        "label": "Wideo",
+        "description": "Treści wideo"
+      },
+      "news": {
+        "label": "Wiadomości",
+        "description": "Najnowsze artykuły informacyjne"
+      },
+      "maps": {
+        "label": "Mapy",
+        "description": "Lokalizacje i trasy"
+      },
+      "files": {
+        "label": "Pliki",
+        "description": "Dokumenty, pliki do pobrania i otwarte katalogi"
+      },
+      "music": {
+        "label": "Muzyka",
+        "description": "Utwory, artyści, albumy i teledyski"
+      },
+      "it": {
+        "label": "IT",
+        "description": "Źródła dla programistów i techniczne"
+      },
+      "science": {
+        "label": "Nauka",
+        "description": "Prace naukowe i badania"
+      },
+      "social": {
+        "label": "Społecznościowe",
+        "description": "Społeczności i platformy społecznościowe"
+      }
     }
   }
 }

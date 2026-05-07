@@ -1331,6 +1331,56 @@
       "privacy": "Funciones de privacidad",
       "tor_access": "Acceso por Tor",
       "faq": "Preguntas frecuentes"
+    },
+    "getting_started": {
+      "heading": "Primeros pasos",
+      "intro_prefix": "%s es un metabuscador que respeta la privacidad. Simplemente escriba su consulta en el cuadro de búsqueda y presione",
+      "intro_suffix": "o haga clic en el botón de búsqueda.",
+      "no_tracking": "A diferencia de los buscadores tradicionales, no le rastreamos, no almacenamos su historial de búsqueda ni creamos un perfil sobre usted."
+    },
+    "categories": {
+      "heading": "Categorías de búsqueda",
+      "intro": "Use las pestañas de categoría para acotar los motores y tipos de resultado usados en su búsqueda.",
+      "general": {
+        "label": "General",
+        "description": "Páginas web y artículos"
+      },
+      "images": {
+        "label": "Imágenes",
+        "description": "Fotos y gráficos"
+      },
+      "videos": {
+        "label": "Vídeos",
+        "description": "Contenido de vídeo"
+      },
+      "news": {
+        "label": "Noticias",
+        "description": "Artículos de noticias recientes"
+      },
+      "maps": {
+        "label": "Mapas",
+        "description": "Ubicaciones e indicaciones"
+      },
+      "files": {
+        "label": "Archivos",
+        "description": "Documentos, descargas y directorios abiertos"
+      },
+      "music": {
+        "label": "Música",
+        "description": "Canciones, artistas, álbumes y videos musicales"
+      },
+      "it": {
+        "label": "TI",
+        "description": "Fuentes técnicas y para desarrolladores"
+      },
+      "science": {
+        "label": "Ciencia",
+        "description": "Artículos académicos e investigación"
+      },
+      "social": {
+        "label": "Social",
+        "description": "Comunidades y plataformas sociales"
+      }
     }
   }
 }

@@ -1331,6 +1331,56 @@
       "privacy": "Privacyfuncties",
       "tor_access": "Tor-toegang",
       "faq": "Veelgestelde vragen"
+    },
+    "getting_started": {
+      "heading": "Aan de slag",
+      "intro_prefix": "%s is een metazoekmachine met respect voor uw privacy. Typ uw zoekopdracht eenvoudig in het zoekvak en druk op",
+      "intro_suffix": "of klik op de zoekknop.",
+      "no_tracking": "In tegenstelling tot traditionele zoekmachines volgen we u niet, slaan we uw zoekgeschiedenis niet op en maken we geen profiel van u."
+    },
+    "categories": {
+      "heading": "Zoekcategorieën",
+      "intro": "Gebruik de categorietabbladen om de zoekmachines en resultaattypen voor uw zoekopdracht te beperken.",
+      "general": {
+        "label": "Algemeen",
+        "description": "Webpagina's en artikelen"
+      },
+      "images": {
+        "label": "Afbeeldingen",
+        "description": "Foto's en illustraties"
+      },
+      "videos": {
+        "label": "Video's",
+        "description": "Video-inhoud"
+      },
+      "news": {
+        "label": "Nieuws",
+        "description": "Recente nieuwsartikelen"
+      },
+      "maps": {
+        "label": "Kaarten",
+        "description": "Locaties en routebeschrijvingen"
+      },
+      "files": {
+        "label": "Bestanden",
+        "description": "Documenten, downloads en open directories"
+      },
+      "music": {
+        "label": "Muziek",
+        "description": "Liedjes, artiesten, albums en muziekvideo's"
+      },
+      "it": {
+        "label": "IT",
+        "description": "Bronnen voor ontwikkelaars en techniek"
+      },
+      "science": {
+        "label": "Wetenschap",
+        "description": "Wetenschappelijke artikelen en onderzoek"
+      },
+      "social": {
+        "label": "Sociaal",
+        "description": "Gemeenschappen en sociale platforms"
+      }
     }
   }
 }
