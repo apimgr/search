@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -603,7 +604,7 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	results, err := h.aggregator.Search(ctx, query)
-	if err != nil {
+	if err != nil && !errors.Is(err, model.ErrNoResults) {
 		h.errorResponse(w, http.StatusInternalServerError, "Search failed", err.Error())
 		return
 	}

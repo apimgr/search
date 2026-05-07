@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"html"
 	"log"
@@ -1098,10 +1099,9 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 
 	results, err := s.aggregator.Search(ctx, query)
 
-	// Render results page
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-	if err != nil {
+	if err != nil && !errors.Is(err, model.ErrNoResults) {
 		s.renderSearchError(w, r, queryStr, err)
 		return
 	}

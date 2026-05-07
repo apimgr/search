@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -384,7 +385,7 @@ func (g *GraphQLHandler) resolveSearch(p graphql.ResolveParams) (interface{}, er
 	}
 
 	results, err := g.handler.aggregator.Search(ctx, q)
-	if err != nil {
+	if err != nil && !errors.Is(err, model.ErrNoResults) {
 		return nil, err
 	}
 

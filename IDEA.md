@@ -1,10 +1,12 @@
 # search - Project Idea
 
-## Purpose
+## Project description
+
+### Purpose
 
 Search is a privacy-respecting, self-hosted metasearch engine that aggregates results directly from primary search engines (Google, Bing, DuckDuckGo, Brave, Qwant, Mojeek) without tracking users. It combines the best features from Whoogle, SearX, SearXNG, DuckDuckGo, and major search engines into a single, reliable, always-working solution - but queries source engines directly rather than through proxies or other metasearch engines.
 
-## Target Users
+### Target Users
 
 - Privacy-conscious individuals who want to search the web without being tracked
 - Self-hosters who want to run their own search engine infrastructure
@@ -15,9 +17,111 @@ Search is a privacy-respecting, self-hosted metasearch engine that aggregates re
 
 ---
 
-## Features
 
-### Core Search
+---
+
+## Project variables
+
+    project_name:  search
+    project_org:   apimgr
+    internal_name: search
+
+`internal_name` is FROZEN — set once at first-time setup, never edit. `project_name` may change on rename, but `internal_name` (and every on-disk identifier derived from it: `{config_dir}`, `{data_dir}`, `{log_dir}`, `{cache_dir}`, systemd unit, `{plist_name}`) stays.
+
+`{plist_name}` is derived as `io.github.apimgr.search` (not stored).
+
+---
+
+## Business logic
+
+### Product scope & non-goals
+
+`search` aggregates results from primary search engines (Google, Bing, DuckDuckGo, Brave, Qwant, Mojeek, Yandex, Baidu) plus specialized engines (Wikipedia, YouTube, Reddit, StackOverflow, GitHub, Hacker News, arXiv, PubMed, Wolfram Alpha, OpenStreetMap). The full feature inventory lives in `### Features` below.
+
+**Non-goals:**
+- No proxying through other metasearch engines — we hit primary sources directly.
+- Not included as sources: Ecosia (Bing-powered), SearXNG (metasearch).
+- No user accounts on the public surface; preferences are client-side only (localStorage / portable preference strings).
+- No server-side query or IP logging for end users.
+- No paid tiers, license keys, or feature gating (per AI.md PART 1 — all features free).
+- No SPA / client-rendered core UX — server-side rendered, progressive enhancement, mobile-first (per AI.md PART 16).
+
+### Roles & permissions
+
+| Role | Authentication | Permissions |
+|------|---------------|-------------|
+| Anonymous public user | None | Search, view results, set client-side preferences, create/manage email-verified search alerts via signed manage links |
+| Server Admin (per AI.md PART 17) | Local password (Argon2id), optional TOTP/Passkey | Engine management, server settings, statistics, alert moderation, all admin panel surfaces at `/server/admin` |
+
+PART 34 (regular users), PART 35 (organizations), PART 36 (custom domains) are NOT implemented for this project.
+
+### Data model & sensitivity
+
+Full schemas are documented under `### Data Models` below. Sensitivity classification:
+
+| Data | Sensitivity | Storage | Retention |
+|------|------------|---------|-----------|
+| Search queries (per request) | High (potentially identifying) | Memory only — never logged | Discarded after response |
+| User preferences | Low | Client-side (localStorage / URL param) | User-controlled |
+| Search alerts (email + query + tokens) | Medium (PII: email, signed tokens) | Server DB | Until user deletes; opt-in only with email verification |
+| Alert deduplication state (URL hashes) | Low | Server DB | Lifetime of alert |
+| Engine health metrics (response times, error rates) | None | Server DB / Prometheus | Per metrics retention |
+| Cached search results | None (no user attribution) | Server cache | 5 minutes default, configurable |
+| Server admin credentials, MFA secrets, sessions | High | Server DB (Argon2id, encrypted) | Per AI.md PART 11 / PART 17 |
+
+### Trust boundaries & external services
+
+Full provider list under `### Data Sources`. Trust assumptions and failure modes:
+
+| External service | Trusted for | Failure mode |
+|------------------|-------------|--------------|
+| Primary search engines (Google, Bing, DuckDuckGo, Brave, Qwant, Mojeek, Yandex, Baidu) | Web/image/video/news/maps results | Engine health monitor disables on consecutive failures; failover to remaining engines; results cached briefly to mask transient outages |
+| Specialized engines (Wikipedia, YouTube, Reddit, StackOverflow, GitHub, HN, arXiv, PubMed, Wolfram Alpha, OpenStreetMap) | Domain-specific search/answers | Same as above |
+| Instant-answer providers (OpenWeatherMap/wttr.in, exchangerate.host, Wiktionary, ip-location-db, etc.) | Read-only widget data | Skip widget on failure; never block main search |
+| Outbound HTTP responses from any engine | Untrusted (responses parsed) | All HTML/JSON parsed defensively; user input never embedded in scraping requests; tracking parameters stripped |
+| SMTP for alert delivery | Trusted to deliver | Retry with backoff; pause channel on repeated failures (per AI.md PART 18) |
+| Webhook destinations (per-alert) | Untrusted (user-supplied URL) | Signed payload (HMAC); SSRF defenses on outbound URL (private CIDRs blocked, scheme allowlist); retry with backoff |
+| Tor SOCKS5 proxy (optional, AI.md PART 32) | Privacy-preserving outbound | If unavailable, fall back to direct or surface error per admin config |
+
+### Threat model & abuse cases
+
+**Primary assets:** end-user search queries (must remain unlinkable to user identity), alert subscriptions (signed manage tokens), admin panel, server availability.
+
+**Untrusted inputs:** end-user HTTP requests, alert email addresses, alert webhook URLs, search engine response bodies (HTML/JSON), instant-answer provider responses, ip-location-db downloads.
+
+**Trusted (with controls):** admin panel sessions, signed alert manage tokens, internal scheduler, internal cache.
+
+**Attacker goals & defenses:**
+
+| Goal | Vector | Defense / explicit non-goal |
+|------|--------|-----------------------------|
+| De-anonymize a query to a specific user | Query logs, IP logs | No server-side query/IP logging (per AI.md PART 11). Image proxy strips Referer. |
+| Scrape the public service as free metasearch | High-volume bots | Rate limiting (per AI.md PART 1). Engine rotation. Optional CAPTCHA on abuse signals. |
+| Spam alert subscriptions / abuse for email amplification | Mass alert creation, bogus addresses | Rate limit alert creation. Email verification required before activation. Per-email cap. |
+| Phish via alert manage links | Signed-token forgery, link confusion | Tokens signed with server secret; manage URLs use 256-bit random; emails sent from verified `From`. |
+| SSRF via webhook destinations | User-supplied webhook URL | Validate URL scheme; block private/loopback ranges; signed payload so target can verify origin; outbound timeout. |
+| Inject malicious content into result snippets | Hostile engine response | All result snippets HTML-escaped; CSP headers; result links never auto-clicked; tracking params stripped. |
+| Take over admin panel | Credential stuffing, weak password, session theft | Argon2id (per AI.md PART 11); MFA recommended for admins (PART 17); login rate limits; session cookies HttpOnly/Secure/SameSite. |
+| Deny availability | DDoS, engine bans | Rate limits, engine rotation, cached fallback. Admin-tunable. |
+| Exfiltrate alert subscriber list | Admin DB compromise | Argon2id credentials; MFA; admin audit log; principle of least privilege on service user. |
+| Abuse instant-answer widgets | Crafted query → widget XSS | All widget output server-rendered with HTML escape; no inline script execution from external answer data. |
+| Enumerate alerts publicly | Token guessing | Manage tokens are 256-bit random; RSS feed tokens same; not enumerable. |
+
+### Security decisions & exceptions
+
+- **Anonymous-by-default public surface.** No user accounts on the public side; all preferences are client-side. Trade-off: cannot offer per-user history. Reason: privacy is the product.
+- **Email-verified accountless alerts.** Alerts require email + verification but no account. Reason: keeps the privacy posture while still letting users monitor queries. Manage tokens are signed, single-use confirm + long-term manage links.
+- **Direct scraping of primary engines.** We hit Google/Bing/etc. HTML directly. Trade-off: engines may rate-limit or change HTML. Mitigation: per-engine health monitoring, parser fallback, engine rotation, brief result caching.
+- **Image proxy enabled by default.** Result thumbnails are proxied through this server to strip Referer and prevent third-party tracking when users hover/load images. Trade-off: bandwidth cost on the server. Reason: privacy.
+- **Tor integration is optional, off by default.** When the server detects the Tor binary (per AI.md PART 32) and admin enables it, an `.onion` hidden service is published. Reason: optional anonymity for users on Tor.
+- **Cached results may be stale.** Default cache is 5 minutes (configurable). Reason: reduce engine load and protect against transient failures. Trade-off: results can lag by up to TTL.
+- **Webhook URL is user-supplied.** SSRF mitigations apply but cannot prevent a user from configuring webhooks pointing at private addresses they own. Reason: legitimate self-hosted automation. Mitigation: validate scheme, block reserved/private CIDRs, signed payloads, outbound timeout.
+
+---
+
+### Features
+
+#### Core Search
 
 - **Multi-Engine Aggregation**: Query multiple engines simultaneously, merge and deduplicate results
 - **Smart Ranking**: Weight and rank results based on engine reliability, result position, and frequency across engines
@@ -27,7 +131,7 @@ Search is a privacy-respecting, self-hosted metasearch engine that aggregates re
 - **Infinite Scroll / Pagination**: User choice between continuous loading or page-based navigation
 - **Related Searches**: Suggestions for similar or refined queries
 
-### Reliability ("Always Works")
+#### Reliability ("Always Works")
 
 - **Engine Health Monitoring**: Track response times, error rates, and availability per engine
 - **Automatic Failover**: If primary engines fail, seamlessly switch to backups
@@ -36,7 +140,7 @@ Search is a privacy-respecting, self-hosted metasearch engine that aggregates re
 - **Cached Results Fallback**: Serve stale results if all engines are temporarily down
 - **Self-Healing**: Automatically re-enable recovered engines
 
-### Privacy & Security
+#### Privacy & Security
 
 - **Zero Tracking**: No server-side logging of queries, IPs, or user behavior
 - **No Cookies Required**: Fully functional without cookies
@@ -46,20 +150,20 @@ Search is a privacy-respecting, self-hosted metasearch engine that aggregates re
 - **Request Sanitization**: Strip tracking parameters from outgoing requests
 - **Referrer Hiding**: Never leak search queries to result sites
 
-### User Preferences
+#### User Preferences
 
 Preferences persist across sessions without accounts. Three storage methods:
 
-#### 1. localStorage (Default)
+##### 1. localStorage (Default)
 - Automatic, seamless browser storage
 - Survives browser restarts
 
-#### 2. Import/Export (Backup)
+##### 2. Import/Export (Backup)
 - Download preferences as JSON file
 - Upload to restore on any device/browser
 - Useful for backup and migration
 
-#### 3. Preference String (Portable)
+##### 3. Preference String (Portable)
 Compact URL-safe encoded string for sharing/bookmarking:
 
 ```
@@ -90,7 +194,7 @@ Keys:
 3. On page load, if `prefs` param exists → apply settings
 4. Optional: save to localStorage for persistence
 
-### Search Alerts
+#### Search Alerts
 
 Google Alerts-style monitoring for saved queries without requiring user accounts.
 
@@ -126,13 +230,13 @@ Google Alerts-style monitoring for saved queries without requiring user accounts
 - Watch for new PDF/files matching a research topic
 - Trigger automations through webhook when new results appear
 
-### Instant Answers (Widgets)
+#### Instant Answers (Widgets)
 
 Zero-click answers displayed above search results. Each widget has trigger patterns and displays contextual information.
 
 ---
 
-#### Calculator
+##### Calculator
 **Triggers**: Mathematical expressions
 ```
 2 + 2, 15% of 200, sqrt(144), sin(45), 2^10, (5+3)*2
@@ -142,7 +246,7 @@ Zero-click answers displayed above search results. Each widget has trigger patte
 
 ---
 
-#### Unit Converter
+##### Unit Converter
 **Triggers**: Number + unit, "convert X to Y"
 ```
 5 miles in km, 100 fahrenheit to celsius, 2 cups in ml
@@ -161,7 +265,7 @@ Zero-click answers displayed above search results. Each widget has trigger patte
 
 ---
 
-#### Currency Converter
+##### Currency Converter
 **Triggers**: Amount + currency, "X USD to EUR"
 ```
 100 usd to eur, $50 in pounds, 1000 jpy to usd
@@ -173,7 +277,7 @@ convert 500 euros to dollars
 
 ---
 
-#### Weather
+##### Weather
 **Triggers**: "weather", "weather in [location]", "[location] weather"
 ```
 weather, weather in tokyo, new york weather
@@ -187,7 +291,7 @@ forecast london, temperature paris
 
 ---
 
-#### Dictionary
+##### Dictionary
 **Triggers**: "define [word]", "meaning of [word]", "[word] definition"
 ```
 define ubiquitous, meaning of ephemeral, serendipity definition
@@ -203,7 +307,7 @@ what does "catharsis" mean
 
 ---
 
-#### Thesaurus
+##### Thesaurus
 **Triggers**: "synonyms for [word]", "[word] synonyms", "antonyms of [word]"
 ```
 synonyms for happy, beautiful synonyms, antonyms of good
@@ -214,7 +318,7 @@ words like "important"
 
 ---
 
-#### IP Lookup
+##### IP Lookup
 **Triggers**: IP address, "my ip", "what is my ip", "ip [address]"
 ```
 my ip, what is my ip, 8.8.8.8, ip 1.1.1.1
@@ -230,7 +334,7 @@ ip address, my ip address
 
 ---
 
-#### Color Picker
+##### Color Picker
 **Triggers**: Hex code, RGB, HSL, color name
 ```
 #ff5733, rgb(255,87,51), hsl(11,100%,60%)
@@ -246,7 +350,7 @@ red, dark blue, coral
 
 ---
 
-#### Timezone Converter
+##### Timezone Converter
 **Triggers**: "time in [location]", "[time] [zone] to [zone]", "current time [city]"
 ```
 time in tokyo, current time london
@@ -262,7 +366,7 @@ what time is it in sydney
 
 ---
 
-#### Calendar / Date Calculator
+##### Calendar / Date Calculator
 **Triggers**: "days until [date]", "days between [date] and [date]", "[date] + [days]"
 ```
 days until christmas, days until 2025-12-31
@@ -275,7 +379,7 @@ what day is july 4 2025
 
 ---
 
-#### Hash Generator
+##### Hash Generator
 **Triggers**: "md5 [text]", "sha256 [text]", "hash [text]"
 ```
 md5 hello world, sha256 password123
@@ -287,7 +391,7 @@ hash my string
 
 ---
 
-#### Base64 Encode/Decode
+##### Base64 Encode/Decode
 **Triggers**: "base64 encode [text]", "base64 decode [encoded]"
 ```
 base64 encode hello world
@@ -298,7 +402,7 @@ b64 encode test, b64 decode dGVzdA==
 
 ---
 
-#### URL Encode/Decode
+##### URL Encode/Decode
 **Triggers**: "url encode [text]", "url decode [encoded]", "urlencode [text]"
 ```
 url encode hello world!
@@ -309,7 +413,7 @@ urlencode special chars: &?=
 
 ---
 
-#### UUID Generator
+##### UUID Generator
 **Triggers**: "uuid", "generate uuid", "new uuid", "guid"
 ```
 uuid, generate uuid, new uuid, guid
@@ -323,7 +427,7 @@ random uuid, uuid v4
 
 ---
 
-#### Password Generator
+##### Password Generator
 **Triggers**: "password", "generate password", "random password"
 ```
 password, generate password, random password
@@ -339,7 +443,7 @@ password 16 characters
 
 ---
 
-#### QR Code Generator
+##### QR Code Generator
 **Triggers**: "qr [text/url]", "qr code [text]", "generate qr [url]"
 ```
 qr https://example.com
@@ -354,7 +458,7 @@ generate qr my wifi password
 
 ---
 
-#### Stopwatch / Timer
+##### Stopwatch / Timer
 **Triggers**: "stopwatch", "timer [duration]", "countdown [duration]"
 ```
 stopwatch, timer 5 minutes, countdown 30 seconds
@@ -369,7 +473,7 @@ timer 1h30m, pomodoro timer
 
 ---
 
-#### Random Number
+##### Random Number
 **Triggers**: "random number", "roll dice", "flip coin", "random [min]-[max]"
 ```
 random number, random 1-100, random 1-6
@@ -382,7 +486,7 @@ pick random 1-10
 
 ---
 
-#### Lorem Ipsum
+##### Lorem Ipsum
 **Triggers**: "lorem ipsum", "placeholder text", "dummy text"
 ```
 lorem ipsum, lorem ipsum 3 paragraphs
@@ -394,7 +498,7 @@ dummy text 5 sentences
 
 ---
 
-#### Cryptocurrency Prices
+##### Cryptocurrency Prices
 **Triggers**: "[crypto] price", "bitcoin", "ethereum price", "[amount] btc to usd"
 ```
 bitcoin price, btc, ethereum, eth price
@@ -410,7 +514,7 @@ dogecoin, doge price
 
 ---
 
-#### Stock Prices
+##### Stock Prices
 **Triggers**: "stock [symbol]", "[symbol] stock", "[symbol] price"
 ```
 stock AAPL, TSLA stock, MSFT price
@@ -426,7 +530,7 @@ $GOOGL, $AMZN stock price
 
 ---
 
-#### Package Tracking
+##### Package Tracking
 **Triggers**: "track [number]", "[carrier] [number]", tracking number patterns
 ```
 track 1Z999AA10123456784
@@ -442,7 +546,7 @@ fedex 123456789012
 
 ---
 
-#### Translate
+##### Translate
 **Triggers**: "translate [text] to [language]", "[text] in [language]"
 ```
 translate hello to spanish
@@ -459,7 +563,7 @@ translate こんにちは to english
 
 ---
 
-#### Wikipedia Summary
+##### Wikipedia Summary
 **Triggers**: "wiki [topic]", "[topic] wikipedia", "who is [person]", "what is [thing]"
 ```
 wiki python programming
@@ -475,7 +579,7 @@ what is quantum computing
 
 ---
 
-#### Sports Scores
+##### Sports Scores
 **Triggers**: "[team] score", "[team] game", "[league] scores"
 ```
 lakers score, yankees game
@@ -491,7 +595,7 @@ world cup scores
 
 ---
 
-#### Nutrition Facts
+##### Nutrition Facts
 **Triggers**: "calories in [food]", "[food] nutrition", "how many calories [food]"
 ```
 calories in banana, apple nutrition
@@ -504,7 +608,7 @@ nutrition facts chicken breast
 - Common serving sizes
 **Source**: USDA FoodData Central API
 
-### Direct Answers (Full Page Results)
+#### Direct Answers (Full Page Results)
 
 Unlike Instant Answers (widgets above search results), Direct Answers ARE the result. When a direct answer operator is detected, the response is a full-page dedicated view - no search results list.
 
@@ -512,7 +616,7 @@ Unlike Instant Answers (widgets above search results), Direct Answers ARE the re
 
 ---
 
-#### tldr:{command}
+##### tldr:{command}
 **Purpose**: Quick command reference from tldr-pages
 **Triggers**: `tldr:git`, `tldr:tar`, `tldr: docker`
 ```
@@ -531,7 +635,7 @@ tldr: kubectl
 
 ---
 
-#### man:{page}
+##### man:{page}
 **Purpose**: Unix/Linux manual pages
 **Triggers**: `man:ls`, `man:grep`, `man: awk`
 ```
@@ -554,7 +658,7 @@ man: systemctl
 
 ---
 
-#### cache:{url}
+##### cache:{url}
 **Purpose**: View cached/archived version of a webpage
 **Triggers**: `cache:example.com`, `cache:https://site.com/page`
 ```
@@ -579,7 +683,7 @@ cache:https://news.ycombinator.com/item?id=12345
 
 ---
 
-#### whois:{domain}
+##### whois:{domain}
 **Purpose**: Domain registration and ownership information
 **Triggers**: `whois:google.com`, `whois: example.org`
 ```
@@ -597,7 +701,7 @@ whois:cloudflare.com
 
 ---
 
-#### dns:{domain}
+##### dns:{domain}
 **Purpose**: DNS record lookup
 **Triggers**: `dns:example.com`, `dns: google.com`
 ```
@@ -617,7 +721,7 @@ dns:github.io
 
 ---
 
-#### wiki:{topic}
+##### wiki:{topic}
 **Purpose**: Wikipedia article summary and content
 **Triggers**: `wiki:quantum computing`, `wiki: linux`
 ```
@@ -637,7 +741,7 @@ wiki:solar system
 
 ---
 
-#### dict:{word}
+##### dict:{word}
 **Purpose**: Full dictionary entry (alias for define:, but full-page)
 **Triggers**: `dict:serendipity`, `dict: ephemeral`
 ```
@@ -656,7 +760,7 @@ dict:catharsis
 
 ---
 
-#### thesaurus:{word}
+##### thesaurus:{word}
 **Purpose**: Comprehensive synonym/antonym lookup
 **Triggers**: `thesaurus:happy`, `thesaurus: important`
 ```
@@ -674,7 +778,7 @@ thesaurus:fast
 
 ---
 
-#### pkg:{name}
+##### pkg:{name}
 **Purpose**: Package/library information across registries
 **Triggers**: `pkg:lodash`, `pkg:requests`, `pkg: chi`
 ```
@@ -698,7 +802,7 @@ pkg:go-chi/chi
 
 ---
 
-#### cve:{id}
+##### cve:{id}
 **Purpose**: Security vulnerability details
 **Triggers**: `cve:2021-44228`, `cve: CVE-2023-1234`
 ```
@@ -717,7 +821,7 @@ cve:2014-0160
 
 ---
 
-#### rfc:{number}
+##### rfc:{number}
 **Purpose**: IETF RFC document viewer
 **Triggers**: `rfc:2616`, `rfc: 7231`
 ```
@@ -737,7 +841,7 @@ rfc:7540
 
 ---
 
-#### ascii:{text}
+##### ascii:{text}
 **Purpose**: ASCII art text generator
 **Triggers**: `ascii:hello`, `ascii: SEARCH`
 ```
@@ -753,7 +857,7 @@ ascii:SEARCH
 
 ---
 
-#### qr:{text}
+##### qr:{text}
 **Purpose**: QR code generator (full page with options)
 **Triggers**: `qr:https://example.com`, `qr: wifi:...`
 ```
@@ -771,7 +875,7 @@ qr:WIFI:T:WPA;S:MyNetwork;P:MyPassword;;
 
 ---
 
-#### resolve:{hostname}
+##### resolve:{hostname}
 **Purpose**: Hostname to IP resolution with details
 **Triggers**: `resolve:google.com`, `resolve: cloudflare.com`
 ```
@@ -789,7 +893,7 @@ resolve:api.example.com
 
 ---
 
-#### cert:{domain}
+##### cert:{domain}
 **Purpose**: SSL/TLS certificate information
 **Triggers**: `cert:google.com`, `cert: github.com`
 ```
@@ -808,7 +912,7 @@ cert:example.com
 
 ---
 
-#### headers:{url}
+##### headers:{url}
 **Purpose**: HTTP response headers inspection
 **Triggers**: `headers:example.com`, `headers: https://api.github.com`
 ```
@@ -827,7 +931,7 @@ headers:https://cloudflare.com
 
 ---
 
-#### directory:{term}
+##### directory:{term}
 **Purpose**: Search open directory indexes (servers with directory listing enabled)
 **Triggers**: `directory:music mp3`, `directory:linux iso`, `directory: ebooks pdf`
 ```
@@ -881,7 +985,7 @@ Files are not hosted by search - only indexed.
 
 ---
 
-#### cheat:{command}
+##### cheat:{command}
 **Purpose**: Detailed command cheatsheets from cheat.sh
 **Triggers**: `cheat:tar`, `cheat:curl`, `cheat: git`
 ```
@@ -900,7 +1004,7 @@ cheat:awk
 
 ---
 
-#### http:{code}
+##### http:{code}
 **Purpose**: HTTP status code explanation
 **Triggers**: `http:404`, `http:503`, `http: 418`
 ```
@@ -921,7 +1025,7 @@ http:502
 
 ---
 
-#### port:{number}
+##### port:{number}
 **Purpose**: Port number to service mapping
 **Triggers**: `port:22`, `port:443`, `port: 8080`
 ```
@@ -942,7 +1046,7 @@ port:6379
 
 ---
 
-#### cron:{expression}
+##### cron:{expression}
 **Purpose**: Cron expression explainer and validator
 **Triggers**: `cron:*/5 * * * *`, `cron:0 2 * * 0`
 ```
@@ -962,7 +1066,7 @@ cron:0 9-17 * * 1-5
 
 ---
 
-#### chmod:{permissions}
+##### chmod:{permissions}
 **Purpose**: Unix permission calculator
 **Triggers**: `chmod:755`, `chmod:rwxr-xr-x`, `chmod: 644`
 ```
@@ -983,7 +1087,7 @@ chmod:u+x,g+r
 
 ---
 
-#### regex:{pattern}
+##### regex:{pattern}
 **Purpose**: Regular expression tester and explainer
 **Triggers**: `regex:^[a-z]+$`, `regex:\d{3}-\d{4}`
 ```
@@ -1003,7 +1107,7 @@ regex:(?<=@)\w+
 
 ---
 
-#### jwt:{token}
+##### jwt:{token}
 **Purpose**: JWT (JSON Web Token) decoder
 **Triggers**: `jwt:eyJhbG...`
 ```
@@ -1021,7 +1125,7 @@ jwt:eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J
 
 ---
 
-#### timestamp:{value}
+##### timestamp:{value}
 **Purpose**: Unix timestamp converter
 **Triggers**: `timestamp:1704067200`, `timestamp:2024-01-01`
 ```
@@ -1042,7 +1146,7 @@ timestamp:2025-06-15T14:30:00Z
 
 ---
 
-#### asn:{number}
+##### asn:{number}
 **Purpose**: Autonomous System Number lookup
 **Triggers**: `asn:15169`, `asn:AS13335`, `asn: 32934`
 ```
@@ -1063,7 +1167,7 @@ asn:32934
 
 ---
 
-#### subnet:{cidr}
+##### subnet:{cidr}
 **Purpose**: Subnet/CIDR calculator
 **Triggers**: `subnet:192.168.1.0/24`, `subnet:10.0.0.0/8`
 ```
@@ -1087,7 +1191,7 @@ subnet:172.16.0.0/12
 
 ---
 
-#### robots:{domain}
+##### robots:{domain}
 **Purpose**: Fetch and display robots.txt
 **Triggers**: `robots:google.com`, `robots:github.com`
 ```
@@ -1107,7 +1211,7 @@ robots:reddit.com
 
 ---
 
-#### sitemap:{domain}
+##### sitemap:{domain}
 **Purpose**: Fetch and parse sitemap.xml
 **Triggers**: `sitemap:example.com`, `sitemap:blog.example.com`
 ```
@@ -1126,7 +1230,7 @@ sitemap:news.ycombinator.com
 
 ---
 
-#### tech:{domain}
+##### tech:{domain}
 **Purpose**: Technology stack detection
 **Triggers**: `tech:github.com`, `tech:stripe.com`
 ```
@@ -1149,7 +1253,7 @@ tech:cloudflare.com
 
 ---
 
-#### feed:{domain}
+##### feed:{domain}
 **Purpose**: Discover RSS/Atom feeds on a website
 **Triggers**: `feed:example.com`, `feed:blog.example.com`
 ```
@@ -1169,7 +1273,7 @@ feed:reddit.com/r/programming
 
 ---
 
-#### expand:{url}
+##### expand:{url}
 **Purpose**: Expand shortened URLs and reveal destination
 **Triggers**: `expand:bit.ly/abc123`, `expand:t.co/xyz`
 ```
@@ -1190,7 +1294,7 @@ expand:t.co/abc123
 
 ---
 
-#### safe:{url}
+##### safe:{url}
 **Purpose**: URL safety and reputation check
 **Triggers**: `safe:suspicious-site.com`, `safe:example.com`
 ```
@@ -1212,7 +1316,7 @@ safe:some-unknown-site.xyz
 
 ---
 
-#### html:{text}
+##### html:{text}
 **Purpose**: HTML entity encode/decode
 **Triggers**: `html:encode <script>`, `html:decode &lt;script&gt;`
 ```
@@ -1231,7 +1335,7 @@ html:&copy; &rarr; &mdash;
 
 ---
 
-#### unicode:{char}
+##### unicode:{char}
 **Purpose**: Unicode character information
 **Triggers**: `unicode:U+1F600`, `unicode:😀`, `unicode:A`
 ```
@@ -1254,7 +1358,7 @@ unicode:SNOWMAN
 
 ---
 
-#### emoji:{name}
+##### emoji:{name}
 **Purpose**: Emoji search and information
 **Triggers**: `emoji:smile`, `emoji:heart`, `emoji:flag`
 ```
@@ -1276,7 +1380,7 @@ emoji:cat
 
 ---
 
-#### escape:{text}
+##### escape:{text}
 **Purpose**: String escaper for various languages/formats
 **Triggers**: `escape:json "hello\nworld"`, `escape:sql O'Brien`
 ```
@@ -1304,7 +1408,7 @@ escape:shell $HOME/*.txt
 
 ---
 
-#### json:{data}
+##### json:{data}
 **Purpose**: JSON formatter, validator, and tools
 **Triggers**: `json:{"key":"value"}`, `json:validate {...}`
 ```
@@ -1329,7 +1433,7 @@ json:validate {"test":}
 
 ---
 
-#### yaml:{data}
+##### yaml:{data}
 **Purpose**: YAML formatter, validator, and converter
 **Triggers**: `yaml:key: value`, `yaml:to-json {...}`
 ```
@@ -1354,7 +1458,7 @@ yaml:from-json {"key": "value"}
 
 ---
 
-#### diff:{texts}
+##### diff:{texts}
 **Purpose**: Text/code comparison tool
 **Triggers**: `diff:old|||new` (triple pipe separator)
 ```
@@ -1375,7 +1479,7 @@ diff:function old()|||function new()
 
 ---
 
-#### beautify:{code}
+##### beautify:{code}
 **Purpose**: Code beautifier/formatter
 **Triggers**: `beautify:js {...}`, `beautify:css {...}`
 ```
@@ -1403,7 +1507,7 @@ beautify:sql SELECT * FROM users WHERE id=1
 
 ---
 
-#### case:{text}
+##### case:{text}
 **Purpose**: Text case converter
 **Triggers**: `case:hello world`, `case:camel hello world`
 ```
@@ -1428,7 +1532,7 @@ case:camel hello-world
 
 ---
 
-#### slug:{text}
+##### slug:{text}
 **Purpose**: URL slug generator
 **Triggers**: `slug:Hello World!`, `slug:Café & Résumé`
 ```
@@ -1451,7 +1555,7 @@ slug:日本語テスト
 
 ---
 
-#### lorem:{count}
+##### lorem:{count}
 **Purpose**: Lorem ipsum placeholder text generator
 **Triggers**: `lorem:3`, `lorem:5 paragraphs`, `lorem:100 words`
 ```
@@ -1478,7 +1582,7 @@ lorem:50 sentences
 
 ---
 
-#### word:{text}
+##### word:{text}
 **Purpose**: Word, character, and text statistics
 **Triggers**: `word:The quick brown fox`
 ```
@@ -1501,7 +1605,7 @@ word:This is a longer piece of text to analyze...
 
 ---
 
-#### useragent:{string}
+##### useragent:{string}
 **Purpose**: Parse and explain user agent strings
 **Triggers**: `useragent:Mozilla/5.0...`
 ```
@@ -1523,7 +1627,7 @@ useragent:my (detect current browser)
 
 ---
 
-#### mime:{type}
+##### mime:{type}
 **Purpose**: MIME type information and lookup
 **Triggers**: `mime:application/json`, `mime:pdf`, `mime:.mp4`
 ```
@@ -1547,7 +1651,7 @@ mime:.docx
 
 ---
 
-#### license:{name}
+##### license:{name}
 **Purpose**: Software license information and text
 **Triggers**: `license:MIT`, `license:GPL-3.0`, `license:Apache`
 ```
@@ -1571,7 +1675,7 @@ license:ISC
 
 ---
 
-#### country:{code}
+##### country:{code}
 **Purpose**: Country information lookup
 **Triggers**: `country:US`, `country:Japan`, `country:DE`
 ```
@@ -1599,7 +1703,7 @@ country:276
 
 ---
 
-#### slang:{term}
+##### slang:{term}
 **Purpose**: Slang, internet lingo, and informal language definitions
 **Triggers**: `slang:yeet`, `slang:67`, `slang: bussin`
 ```
@@ -1629,7 +1733,7 @@ slang:rizz
 
 ---
 
-#### rules:{query}
+##### rules:{query}
 **Purpose**: Rules of the Internet lookup (easter egg)
 **Triggers**: `rules:`, `rules:34`, `rules: cat`, `rules:all`
 ```
@@ -1652,7 +1756,7 @@ rules:all
 
 ---
 
-### Direct Answer Behavior
+#### Direct Answer Behavior
 
 **Query Processing Order:**
 1. Check for direct answer operator (`type:term`)
@@ -1678,7 +1782,7 @@ rules:all
 - Timeout: Show cached version if available, else error
 - Rate limited: Queue request, show loading state
 
-### Bang Shortcuts
+#### Bang Shortcuts
 
 Quick redirects to specific sites/engines. 180+ bangs implemented across categories:
 
@@ -1720,7 +1824,7 @@ Quick redirects to specific sites/engines. 180+ bangs implemented across categor
 - **Bang Autocomplete**: Suggestions as you type `!`
 - **Bang Categories**: Organize bangs by type (search, shopping, dev, etc.)
 
-### Keyboard Shortcuts
+#### Keyboard Shortcuts
 
 Vim-inspired navigation for power users:
 
@@ -1740,7 +1844,7 @@ s         → Open settings
 1-9       → Jump to result N
 ```
 
-### Theming & Customization
+#### Theming & Customization
 
 - **Built-in Themes**: Dark (Dracula), Light, Auto (system preference)
 - **Custom CSS**: User-provided stylesheet override
@@ -1749,7 +1853,7 @@ s         → Open settings
 - **Accent Color**: Customizable highlight color
 - **Logo Customization**: Admin can set custom logo/branding
 
-### Filtering & Refinement
+#### Filtering & Refinement
 
 - **Time Filter**: Past hour, day, week, month, year, custom range
 - **Region Filter**: Country/region-specific results
@@ -1759,7 +1863,7 @@ s         → Open settings
 - **Domain Blocklist**: Never show results from blocked domains
 - **Safe Search**: Off, moderate, strict
 
-### Search History (Local Only)
+#### Search History (Local Only)
 
 - Stored in browser localStorage only (never server)
 - Quick access to recent searches
@@ -1767,14 +1871,14 @@ s         → Open settings
 - Disable history option
 - Export/import with preferences
 
-### Browser Integration
+#### Browser Integration
 
 - **OpenSearch**: Add as browser search engine
 - **PWA Support**: Install as standalone app
 - **Browser Extension**: Quick search from any page (future)
 - **Search Bar Widget**: Embeddable search box for other sites
 
-### Video Previews
+#### Video Previews
 
 Interactive video thumbnails without leaving search results:
 
@@ -1798,16 +1902,16 @@ Interactive video thumbnails without leaving search results:
 
 ---
 
-## UI/Layout Specification
+### UI/Layout Specification
 
-### Design Philosophy
+#### Design Philosophy
 
 Google-like simplicity with SearXNG-style preferences:
 - Clean, minimal homepage with centered logo and search bar
 - Results page with left-aligned results, no clutter
 - Preferences accessible via gear icon, organized in tabs
 
-### Homepage Layout
+#### Homepage Layout
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -1828,7 +1932,7 @@ Google-like simplicity with SearXNG-style preferences:
 └─────────────────────────────────────────────────────────┘
 ```
 
-### Search Results Layout
+#### Search Results Layout
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -1856,7 +1960,7 @@ Google-like simplicity with SearXNG-style preferences:
 └─────────────────────────────────────────────────────────┘
 ```
 
-### Image Results Layout
+#### Image Results Layout
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -1882,7 +1986,7 @@ Click image → Side panel with:
 - "Visit page" button
 ```
 
-### Video Results Layout
+#### Video Results Layout
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -1907,7 +2011,7 @@ Hover on thumbnail → animated preview plays
 Click → opens video in embedded player or source site
 ```
 
-### Preferences Page (SearXNG-style Tabs)
+#### Preferences Page (SearXNG-style Tabs)
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -1976,7 +2080,7 @@ Click → opens video in embedded player or source site
 └─────────────────────────────────────────────────────────┘
 ```
 
-### Mobile Responsive
+#### Mobile Responsive
 
 - Hamburger menu for categories on small screens
 - Full-width search bar
@@ -1987,9 +2091,9 @@ Click → opens video in embedded player or source site
 
 ---
 
-## Data Models
+### Data Models
 
-### Search Query
+#### Search Query
 - query: string - Search query text
 - category: enum - web, images, videos, news, maps, files, music, science, it, social
 - page: int - Pagination (1-indexed)
@@ -2002,7 +2106,7 @@ Click → opens video in embedded player or source site
 - engines: []string - Specific engines to query
 - format: enum - html, json, rss, csv
 
-### Search Result
+#### Search Result
 - title: string - Result title
 - url: string - Result URL
 - snippet: string - Text excerpt/description
@@ -2014,19 +2118,19 @@ Click → opens video in embedded player or source site
 - published: date - Publication date (if available)
 - cached_url: string - Link to cached version
 
-### Image Result (extends Search Result)
+#### Image Result (extends Search Result)
 - width: int - Image width
 - height: int - Image height
 - format: string - Image format (jpg, png, gif, webp)
 - file_size: int - File size in bytes
 
-### Video Result (extends Search Result)
+#### Video Result (extends Search Result)
 - duration: int - Video duration in seconds
 - views: int - View count
 - channel: string - Channel/author name
 - embed_url: string - Embeddable player URL
 
-### User Preferences
+#### User Preferences
 - theme: string - dark, light, auto
 - safe_search: string - off, moderate, strict
 - default_category: string - Default search category
@@ -2037,7 +2141,7 @@ Click → opens video in embedded player or source site
 - custom_bangs: map[string]string - Custom bang shortcuts
 - homepage_widgets: []string - Enabled homepage widget types
 
-### Search Alert
+#### Search Alert
 - id: string - Unique alert identifier
 - query: string - Search query being monitored
 - category: string - web, images, videos, news, maps, files, music, science, it, social
@@ -2057,7 +2161,7 @@ Click → opens video in embedded player or source site
 - seen_results: []string - Result URL hashes already delivered
 - manage_token: string - Signed token for accountless management links
 
-### Engine Status
+#### Engine Status
 - name: string - Engine identifier
 - display_name: string - Human-readable name
 - enabled: bool - Admin-enabled
@@ -2069,7 +2173,7 @@ Click → opens video in embedded player or source site
 - rate_limit: int - Requests per minute limit
 - weight: float - Ranking weight multiplier
 
-### Instant Answer
+#### Instant Answer
 - type: string - calculator, weather, dictionary, etc.
 - query: string - Matched query pattern
 - result: any - Answer data (type-specific)
@@ -2078,9 +2182,9 @@ Click → opens video in embedded player or source site
 
 ---
 
-## Business Rules
+### Business Rules
 
-### Privacy
+#### Privacy
 - No server-side logging of user queries, IPs, or behavior
 - No cookies required for core functionality
 - All user preferences stored client-side only
@@ -2089,7 +2193,7 @@ Click → opens video in embedded player or source site
 - Tracking parameters removed from result URLs
 - Search alerts are opt-in and store only the minimum data required for verification, scheduling, deduplication, and delivery
 
-### Search Alerts
+#### Search Alerts
 - Alerts require email verification before activation
 - Alerts may be delivered by email, private RSS, webhook, or any enabled combination
 - Each alert checks for newly matched results only; previously delivered results are suppressed
@@ -2098,20 +2202,20 @@ Click → opens video in embedded player or source site
 - RSS feeds are private and tokenized; they must not be publicly enumerable
 - Immediate alerts should batch closely-timed results to avoid notification spam
 
-### Engine Management
+#### Engine Management
 - Engines automatically disabled after consecutive failures
 - Engines re-enabled after successful health check
 - Request distribution balanced across healthy engines
 - Rate limits respected per engine configuration
 - Results cached briefly to reduce engine load
 
-### Result Ranking
+#### Result Ranking
 - Results weighted by: source engine reliability, position in source, frequency across engines
 - Duplicate URLs merged, keeping best metadata
 - Blocked domains filtered before display
 - Safe search applied at query time
 
-### Caching
+#### Caching
 - Search results cached 5 minutes (configurable)
 - Autocomplete cached 1 hour
 - Instant answers cached by type (weather: 30min, currency: 1hr, etc.)
@@ -2119,9 +2223,9 @@ Click → opens video in embedded player or source site
 
 ---
 
-## Endpoints
+### Endpoints
 
-### Web Interface
+#### Web Interface
 | Method | URL | Description |
 |--------|-----|-------------|
 | GET | / | Homepage with search box |
@@ -2141,7 +2245,7 @@ Click → opens video in embedded player or source site
 | GET | /about | About page |
 | GET | /stats | Public instance statistics |
 
-### API
+#### API
 | Method | URL | Description |
 |--------|-----|-------------|
 | GET | /api/v1/search | JSON search results |
@@ -2161,7 +2265,7 @@ Click → opens video in embedded player or source site
 | GET | /opensearch.xml | OpenSearch descriptor |
 | GET | /search.rss | Search results as RSS feed |
 
-### Admin (see AI.md PART 17)
+#### Admin (see AI.md PART 17)
 | Method | URL | Description |
 |--------|-----|-------------|
 | GET | /admin/dashboard | Admin dashboard |
@@ -2171,9 +2275,9 @@ Click → opens video in embedded player or source site
 
 ---
 
-## Data Sources
+### Data Sources
 
-### Search Engines (Direct Sources Only)
+#### Search Engines (Direct Sources Only)
 
 Primary engines with their own indexes - no proxies or metasearch:
 
@@ -2194,7 +2298,7 @@ Primary engines with their own indexes - no proxies or metasearch:
 
 **Note**: Startpage and Yahoo ARE implemented - they provide alternative access paths.
 
-### Specialized Engines
+#### Specialized Engines
 | Engine | Category | Notes |
 |--------|----------|-------|
 | Wikipedia | web, instant | Instant answers |
@@ -2208,7 +2312,7 @@ Primary engines with their own indexes - no proxies or metasearch:
 | Wolfram Alpha | instant | Computational answers |
 | OpenStreetMap | maps | Open map data |
 
-### Instant Answer Data
+#### Instant Answer Data
 | Type | Source | Update Frequency |
 |------|--------|------------------|
 | Weather | OpenWeatherMap / wttr.in | 30 minutes |

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 	"github.com/apimgr/search/src/search/engines"
 )
@@ -4165,5 +4167,66 @@ func TestGetHostname(t *testing.T) {
 	}
 	if hostname == "" {
 		t.Error("getHostname() returned empty string")
+	}
+}
+
+// emptyResultEngine is a minimal search.Engine that always returns no results.
+// Used to drive aggregator into model.ErrNoResults in regression tests.
+type emptyResultEngine struct {
+	cfg *model.EngineConfig
+}
+
+func (e *emptyResultEngine) Name() string        { return e.cfg.Name }
+func (e *emptyResultEngine) DisplayName() string { return e.cfg.DisplayName }
+func (e *emptyResultEngine) Search(ctx context.Context, q *model.Query) ([]model.Result, error) {
+	return []model.Result{}, nil
+}
+func (e *emptyResultEngine) IsEnabled() bool                          { return e.cfg.Enabled }
+func (e *emptyResultEngine) GetPriority() int                         { return e.cfg.Priority }
+func (e *emptyResultEngine) SupportsCategory(c model.Category) bool   { return e.cfg.SupportsCategory(c) }
+func (e *emptyResultEngine) GetConfig() *model.EngineConfig           { return e.cfg }
+
+func newHandlerWithEmptyResults() *Handler {
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Title:       "Test Search",
+			Description: "Test Description",
+			Mode:        "development",
+		},
+	}
+	registry := engines.NewRegistry()
+	eng := &emptyResultEngine{cfg: model.NewEngineConfig("empty")}
+	aggregator := search.NewAggregatorSimple([]search.Engine{eng}, 5*time.Second)
+	return NewHandler(cfg, registry, aggregator)
+}
+
+// TestSearchEndpointEmptyResultsNotFatal regresses the quotes-500 bug:
+// when a query yields zero results (e.g. q="") the aggregator returns
+// model.ErrNoResults; the API must still respond 200 OK with an empty
+// result set rather than 500 (per AI.md PART 9: recoverable errors and
+// PART 14: API success envelope).
+func TestSearchEndpointEmptyResultsNotFatal(t *testing.T) {
+	handler := newHandlerWithEmptyResults()
+
+	cases := []string{`q=%22%22`, `q=foo`, `q=%22%22%22%22`}
+	for _, qs := range cases {
+		t.Run(qs, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/search?"+qs, nil)
+			w := httptest.NewRecorder()
+
+			handler.handleSearch(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("Expected status %d for empty-results query, got %d", http.StatusOK, w.Code)
+			}
+
+			var response APIResponse
+			if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+				t.Fatalf("Failed to decode response: %v", err)
+			}
+			if !response.OK {
+				t.Errorf("Expected OK=true for empty-results query, got OK=false (error=%q)", response.Error)
+			}
+		})
 	}
 }
