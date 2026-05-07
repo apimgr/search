@@ -1381,6 +1381,53 @@
         "label": "Sociaal",
         "description": "Gemeenschappen en sociale platforms"
       }
+    },
+    "operators": {
+      "heading": "Zoekoperatoren",
+      "intro": "Verfijn uw zoekopdrachten met deze operatoren:",
+      "th_operator": "Operator",
+      "th_example": "Voorbeeld",
+      "th_description": "Beschrijving",
+      "exact_phrase": "Zoek de exacte zinsnede",
+      "exclude_word": "Woord uitsluiten van resultaten",
+      "wildcard": "Jokerteken — komt overeen met elk woord",
+      "or": "Een van beide termen",
+      "and": "Beide termen vereist",
+      "site": "Zoek binnen een specifieke site",
+      "site_exclude": "Sluit een site uit van resultaten",
+      "filetype": "Zoek specifieke bestandstypen",
+      "intitle": "Zoek woord in paginatitel",
+      "inurl": "Zoek woord in URL",
+      "intext": "Zoek woord in paginatekst",
+      "define": "Woordenboekdefinitie",
+      "before": "Resultaten van vóór een datum",
+      "after": "Resultaten van na een datum",
+      "lang": "Filteren op taal",
+      "related": "Sites vergelijkbaar met een opgegeven URL",
+      "cache": "Cache- of gearchiveerde kopieën van een URL",
+      "info": "Informatie over een URL",
+      "define_alt": "Woordenboekachtige definitieopzoeking",
+      "weather": "Weer-specifieke zoekoperator",
+      "stocks": "Beursafkorting opzoeken",
+      "map": "Kaart-/locatiegerichte zoekopdracht",
+      "movie": "Film-/titelgerichte zoekopdracht",
+      "source": "Nieuwsbronfilter"
+    },
+    "shortcuts": {
+      "heading": "Sneltoetsen",
+      "intro": "Sneltoetsen werken het best op de zoek- en resultatenpagina's. Ze vervangen nooit normale navigatie, zodat alles ook zonder JavaScript werkt.",
+      "th_shortcut": "Sneltoets",
+      "th_action": "Actie",
+      "focus_search": "Focus op het zoekvak",
+      "clear_close": "Zoekopdracht wissen / Dialogen sluiten",
+      "cycle_theme": "Thema wisselen (donker → licht → automatisch)",
+      "show_help": "Sneltoetsen tonen",
+      "navigate_results": "Door resultaten navigeren (omlaag/omhoog)",
+      "open_selected": "Het geselecteerde resultaat openen",
+      "open_tab_or_new": "Het geselecteerde resultaat in het huidige tabblad of een nieuw tabblad openen",
+      "prev_next_page": "Ga naar de vorige of volgende resultatenpagina",
+      "first_last": "Spring naar het eerste of laatste resultaat",
+      "open_n": "Open resultaat nummer 1 tot en met 9"
     }
   }
 }

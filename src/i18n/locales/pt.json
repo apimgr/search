@@ -1382,6 +1382,53 @@
         "label": "Social",
         "description": "Comunidades e plataformas sociais"
       }
+    },
+    "operators": {
+      "heading": "Operadores de pesquisa",
+      "intro": "Refine suas pesquisas com estes operadores:",
+      "th_operator": "Operador",
+      "th_example": "Exemplo",
+      "th_description": "Descrição",
+      "exact_phrase": "Buscar a frase exata",
+      "exclude_word": "Excluir palavra dos resultados",
+      "wildcard": "Curinga — corresponde a qualquer palavra",
+      "or": "Qualquer um dos termos",
+      "and": "Ambos os termos exigidos",
+      "site": "Pesquisar em um site específico",
+      "site_exclude": "Excluir um site dos resultados",
+      "filetype": "Encontrar tipos de arquivo específicos",
+      "intitle": "Encontrar palavra no título da página",
+      "inurl": "Encontrar palavra na URL",
+      "intext": "Encontrar palavra no corpo da página",
+      "define": "Definição do dicionário",
+      "before": "Resultados antes de uma data",
+      "after": "Resultados depois de uma data",
+      "lang": "Filtrar por idioma",
+      "related": "Sites semelhantes a uma URL dada",
+      "cache": "Cópias em cache ou arquivadas de uma URL",
+      "info": "Informações sobre uma URL",
+      "define_alt": "Pesquisa de definição estilo dicionário",
+      "weather": "Operador específico para consultas meteorológicas",
+      "stocks": "Consulta de símbolo de ação",
+      "map": "Consulta focada em mapa/local",
+      "movie": "Consulta focada em filme/título",
+      "source": "Filtro por fonte de notícias"
+    },
+    "shortcuts": {
+      "heading": "Atalhos de teclado",
+      "intro": "Os atalhos de teclado funcionam melhor nas páginas de pesquisa e resultados. Eles nunca substituem a navegação normal, então tudo continua funcionando sem JavaScript.",
+      "th_shortcut": "Atalho",
+      "th_action": "Ação",
+      "focus_search": "Focar no campo de pesquisa",
+      "clear_close": "Limpar pesquisa / Fechar diálogos",
+      "cycle_theme": "Alternar tema (escuro → claro → automático)",
+      "show_help": "Mostrar atalhos de teclado",
+      "navigate_results": "Navegar nos resultados (baixo/cima)",
+      "open_selected": "Abrir o resultado selecionado",
+      "open_tab_or_new": "Abrir o resultado selecionado na aba atual ou em uma nova",
+      "prev_next_page": "Ir para a página anterior ou seguinte dos resultados",
+      "first_last": "Saltar para o primeiro ou último resultado",
+      "open_n": "Abrir o resultado número 1 a 9"
     }
   }
 }

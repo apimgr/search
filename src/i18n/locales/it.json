@@ -1381,6 +1381,53 @@
         "label": "Social",
         "description": "Comunità e piattaforme sociali"
       }
+    },
+    "operators": {
+      "heading": "Operatori di ricerca",
+      "intro": "Affina le tue ricerche con questi operatori:",
+      "th_operator": "Operatore",
+      "th_example": "Esempio",
+      "th_description": "Descrizione",
+      "exact_phrase": "Cerca la frase esatta",
+      "exclude_word": "Escludi una parola dai risultati",
+      "wildcard": "Carattere jolly — corrisponde a qualsiasi parola",
+      "or": "Uno dei due termini",
+      "and": "Entrambi i termini richiesti",
+      "site": "Cerca all'interno di un sito specifico",
+      "site_exclude": "Escludi un sito dai risultati",
+      "filetype": "Trova tipi di file specifici",
+      "intitle": "Trova una parola nel titolo della pagina",
+      "inurl": "Trova una parola nell'URL",
+      "intext": "Trova una parola nel corpo della pagina",
+      "define": "Definizione del dizionario",
+      "before": "Risultati prima di una data",
+      "after": "Risultati dopo una data",
+      "lang": "Filtra per lingua",
+      "related": "Siti simili a un URL dato",
+      "cache": "Copie cache o archiviate di un URL",
+      "info": "Informazioni su un URL",
+      "define_alt": "Ricerca di definizione tipo dizionario",
+      "weather": "Operatore specifico per query meteo",
+      "stocks": "Ricerca di simbolo di borsa",
+      "map": "Query incentrata su mappa/luogo",
+      "movie": "Query incentrata su film/titolo",
+      "source": "Filtro per fonte di notizie"
+    },
+    "shortcuts": {
+      "heading": "Scorciatoie da tastiera",
+      "intro": "Le scorciatoie da tastiera funzionano meglio nelle pagine di ricerca e risultati. Non sostituiscono mai la navigazione normale, quindi tutto continua a funzionare senza JavaScript.",
+      "th_shortcut": "Scorciatoia",
+      "th_action": "Azione",
+      "focus_search": "Metti a fuoco il campo di ricerca",
+      "clear_close": "Pulisci ricerca / Chiudi finestre di dialogo",
+      "cycle_theme": "Cambia tema (scuro → chiaro → automatico)",
+      "show_help": "Mostra le scorciatoie da tastiera",
+      "navigate_results": "Naviga tra i risultati (giù/su)",
+      "open_selected": "Apri il risultato selezionato",
+      "open_tab_or_new": "Apri il risultato selezionato nella scheda corrente o in una nuova",
+      "prev_next_page": "Vai alla pagina precedente o successiva dei risultati",
+      "first_last": "Salta al primo o all'ultimo risultato",
+      "open_n": "Apri il risultato numero 1 al 9"
     }
   }
 }

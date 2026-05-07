@@ -1381,6 +1381,53 @@
         "label": "Social",
         "description": "Comunidades y plataformas sociales"
       }
+    },
+    "operators": {
+      "heading": "Operadores de búsqueda",
+      "intro": "Refine sus búsquedas con estos operadores:",
+      "th_operator": "Operador",
+      "th_example": "Ejemplo",
+      "th_description": "Descripción",
+      "exact_phrase": "Buscar la frase exacta",
+      "exclude_word": "Excluir palabra de los resultados",
+      "wildcard": "Comodín — coincide con cualquier palabra",
+      "or": "Cualquiera de los términos",
+      "and": "Ambos términos requeridos",
+      "site": "Buscar dentro de un sitio específico",
+      "site_exclude": "Excluir un sitio de los resultados",
+      "filetype": "Buscar tipos de archivo específicos",
+      "intitle": "Buscar palabra en el título de la página",
+      "inurl": "Buscar palabra en la URL",
+      "intext": "Buscar palabra en el cuerpo de la página",
+      "define": "Definición del diccionario",
+      "before": "Resultados anteriores a una fecha",
+      "after": "Resultados posteriores a una fecha",
+      "lang": "Filtrar por idioma",
+      "related": "Sitios similares a una URL dada",
+      "cache": "Copias en caché o archivadas de una URL",
+      "info": "Información sobre una URL",
+      "define_alt": "Búsqueda de definición tipo diccionario",
+      "weather": "Operador específico de consultas meteorológicas",
+      "stocks": "Búsqueda de símbolo bursátil",
+      "map": "Consulta centrada en mapa o ubicación",
+      "movie": "Consulta centrada en películas o títulos",
+      "source": "Filtro por fuente de noticias"
+    },
+    "shortcuts": {
+      "heading": "Atajos de teclado",
+      "intro": "Los atajos de teclado funcionan mejor en las páginas de búsqueda y resultados. Nunca reemplazan la navegación normal, por lo que todo sigue funcionando sin JavaScript.",
+      "th_shortcut": "Atajo",
+      "th_action": "Acción",
+      "focus_search": "Enfocar el cuadro de búsqueda",
+      "clear_close": "Limpiar búsqueda / Cerrar diálogos",
+      "cycle_theme": "Cambiar tema (oscuro → claro → automático)",
+      "show_help": "Mostrar los atajos de teclado",
+      "navigate_results": "Navegar por los resultados (abajo/arriba)",
+      "open_selected": "Abrir el resultado seleccionado",
+      "open_tab_or_new": "Abrir el resultado seleccionado en la pestaña actual o en una nueva",
+      "prev_next_page": "Ir a la página anterior o siguiente de resultados",
+      "first_last": "Saltar al primer o último resultado",
+      "open_n": "Abrir el resultado número 1 al 9"
     }
   }
 }

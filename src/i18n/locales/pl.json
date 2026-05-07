@@ -1381,6 +1381,53 @@
         "label": "Społecznościowe",
         "description": "Społeczności i platformy społecznościowe"
       }
+    },
+    "operators": {
+      "heading": "Operatory wyszukiwania",
+      "intro": "Doprecyzuj wyszukiwania za pomocą tych operatorów:",
+      "th_operator": "Operator",
+      "th_example": "Przykład",
+      "th_description": "Opis",
+      "exact_phrase": "Wyszukaj dokładną frazę",
+      "exclude_word": "Wyklucz słowo z wyników",
+      "wildcard": "Wieloznacznik — pasuje do dowolnego słowa",
+      "or": "Dowolny z terminów",
+      "and": "Oba terminy wymagane",
+      "site": "Wyszukaj w określonej witrynie",
+      "site_exclude": "Wyklucz witrynę z wyników",
+      "filetype": "Znajdź określone typy plików",
+      "intitle": "Znajdź słowo w tytule strony",
+      "inurl": "Znajdź słowo w adresie URL",
+      "intext": "Znajdź słowo w treści strony",
+      "define": "Definicja słownikowa",
+      "before": "Wyniki sprzed daty",
+      "after": "Wyniki po dacie",
+      "lang": "Filtruj według języka",
+      "related": "Witryny podobne do podanego adresu URL",
+      "cache": "Wersje w pamięci podręcznej lub archiwum adresu URL",
+      "info": "Informacje o adresie URL",
+      "define_alt": "Wyszukiwanie definicji w stylu słownikowym",
+      "weather": "Operator zapytań specyficzny dla pogody",
+      "stocks": "Wyszukiwanie symbolu giełdowego",
+      "map": "Zapytanie skoncentrowane na mapie lub lokalizacji",
+      "movie": "Zapytanie skoncentrowane na filmie lub tytule",
+      "source": "Filtr według źródła wiadomości"
+    },
+    "shortcuts": {
+      "heading": "Skróty klawiszowe",
+      "intro": "Skróty klawiszowe działają najlepiej na stronach wyszukiwania i wyników. Nigdy nie zastępują normalnej nawigacji, więc wszystko działa też bez JavaScript.",
+      "th_shortcut": "Skrót",
+      "th_action": "Akcja",
+      "focus_search": "Ustaw fokus na polu wyszukiwania",
+      "clear_close": "Wyczyść wyszukiwanie / Zamknij okna dialogowe",
+      "cycle_theme": "Zmień motyw (ciemny → jasny → automatyczny)",
+      "show_help": "Pokaż skróty klawiszowe",
+      "navigate_results": "Nawiguj po wynikach (w dół/w górę)",
+      "open_selected": "Otwórz wybrany wynik",
+      "open_tab_or_new": "Otwórz wybrany wynik w bieżącej lub nowej karcie",
+      "prev_next_page": "Przejdź do poprzedniej lub następnej strony wyników",
+      "first_last": "Skocz do pierwszego lub ostatniego wyniku",
+      "open_n": "Otwórz wynik numer 1 do 9"
     }
   }
 }

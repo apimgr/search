@@ -436,186 +436,60 @@
 
         {{/* Search Operators */}}
         <section id="search-operators" class="help-section">
-            <h2>Search Operators</h2>
-            <p>Refine your searches with these operators:</p>
+            <h2>{{t "help.operators.heading"}}</h2>
+            <p>{{t "help.operators.intro"}}</p>
             <table class="operators-table search-operators-table">
                 <thead>
-                    <tr><th>Operator</th><th>Example</th><th>Description</th></tr>
+                    <tr><th>{{t "help.operators.th_operator"}}</th><th>{{t "help.operators.th_example"}}</th><th>{{t "help.operators.th_description"}}</th></tr>
                 </thead>
                 <tbody>
-                    <tr>
-                        <td><code>"..."</code></td>
-                        <td><code>"exact phrase"</code></td>
-                        <td>Search for exact phrase</td>
-                    </tr>
-                    <tr>
-                        <td><code>-word</code></td>
-                        <td><code>apple -fruit</code></td>
-                        <td>Exclude word from results</td>
-                    </tr>
-                    <tr>
-                        <td><code>*</code></td>
-                        <td><code>best * for python</code></td>
-                        <td>Wildcard — matches any word</td>
-                    </tr>
-                    <tr>
-                        <td><code>OR</code></td>
-                        <td><code>cat OR dog</code></td>
-                        <td>Either term</td>
-                    </tr>
-                    <tr>
-                        <td><code>AND</code></td>
-                        <td><code>privacy AND security</code></td>
-                        <td>Both terms required</td>
-                    </tr>
-                    <tr>
-                        <td><code>site:</code></td>
-                        <td><code>site:example.com query</code></td>
-                        <td>Search within a specific site</td>
-                    </tr>
-                    <tr>
-                        <td><code>-site:</code></td>
-                        <td><code>-site:spam.com query</code></td>
-                        <td>Exclude a site from results</td>
-                    </tr>
-                    <tr>
-                        <td><code>filetype:</code></td>
-                        <td><code>filetype:pdf report</code></td>
-                        <td>Find specific file types</td>
-                    </tr>
-                    <tr>
-                        <td><code>intitle:</code></td>
-                        <td><code>intitle:guide</code></td>
-                        <td>Find word in page title</td>
-                    </tr>
-                    <tr>
-                        <td><code>inurl:</code></td>
-                        <td><code>inurl:blog</code></td>
-                        <td>Find word in URL</td>
-                    </tr>
-                    <tr>
-                        <td><code>intext:</code></td>
-                        <td><code>intext:privacy policy</code></td>
-                        <td>Find word in page body text</td>
-                    </tr>
-                    <tr>
-                        <td><code>define:</code></td>
-                        <td><code>define:ephemeral</code></td>
-                        <td>Dictionary definition</td>
-                    </tr>
-                    <tr>
-                        <td><code>before:</code></td>
-                        <td><code>before:2023-01-01 python</code></td>
-                        <td>Results before a date</td>
-                    </tr>
-                    <tr>
-                        <td><code>after:</code></td>
-                        <td><code>after:2024-01-01 python</code></td>
-                        <td>Results after a date</td>
-                    </tr>
-                    <tr>
-                        <td><code>lang:</code></td>
-                        <td><code>lang:en linux</code></td>
-                        <td>Filter by language</td>
-                    </tr>
-                    <tr>
-                        <td><code>related:</code></td>
-                        <td><code>related:github.com</code></td>
-                        <td>Sites similar to a given URL</td>
-                    </tr>
-                    <tr>
-                        <td><code>cache:</code></td>
-                        <td><code>cache:example.com</code></td>
-                        <td>Cached or archived copies of a URL</td>
-                    </tr>
-                    <tr>
-                        <td><code>info:</code></td>
-                        <td><code>info:example.com</code></td>
-                        <td>Information about a URL</td>
-                    </tr>
-                    <tr>
-                        <td><code>define:</code></td>
-                        <td><code>define:ephemeral</code></td>
-                        <td>Dictionary-style definition lookup</td>
-                    </tr>
-                    <tr>
-                        <td><code>weather:</code></td>
-                        <td><code>weather:tokyo</code></td>
-                        <td>Weather-specific query operator</td>
-                    </tr>
-                    <tr>
-                        <td><code>stocks:</code></td>
-                        <td><code>stocks:AAPL</code></td>
-                        <td>Stock symbol lookup</td>
-                    </tr>
-                    <tr>
-                        <td><code>map:</code></td>
-                        <td><code>map:berlin</code></td>
-                        <td>Map/location-focused query</td>
-                    </tr>
-                    <tr>
-                        <td><code>movie:</code></td>
-                        <td><code>movie:arrival</code></td>
-                        <td>Movie/title-focused query</td>
-                    </tr>
-                    <tr>
-                        <td><code>source:</code></td>
-                        <td><code>source:reuters ai</code></td>
-                        <td>News-source filter</td>
-                    </tr>
+                    <tr><td><code>"..."</code></td><td><code>"exact phrase"</code></td><td>{{t "help.operators.exact_phrase"}}</td></tr>
+                    <tr><td><code>-word</code></td><td><code>apple -fruit</code></td><td>{{t "help.operators.exclude_word"}}</td></tr>
+                    <tr><td><code>*</code></td><td><code>best * for python</code></td><td>{{t "help.operators.wildcard"}}</td></tr>
+                    <tr><td><code>OR</code></td><td><code>cat OR dog</code></td><td>{{t "help.operators.or"}}</td></tr>
+                    <tr><td><code>AND</code></td><td><code>privacy AND security</code></td><td>{{t "help.operators.and"}}</td></tr>
+                    <tr><td><code>site:</code></td><td><code>site:example.com query</code></td><td>{{t "help.operators.site"}}</td></tr>
+                    <tr><td><code>-site:</code></td><td><code>-site:spam.com query</code></td><td>{{t "help.operators.site_exclude"}}</td></tr>
+                    <tr><td><code>filetype:</code></td><td><code>filetype:pdf report</code></td><td>{{t "help.operators.filetype"}}</td></tr>
+                    <tr><td><code>intitle:</code></td><td><code>intitle:guide</code></td><td>{{t "help.operators.intitle"}}</td></tr>
+                    <tr><td><code>inurl:</code></td><td><code>inurl:blog</code></td><td>{{t "help.operators.inurl"}}</td></tr>
+                    <tr><td><code>intext:</code></td><td><code>intext:privacy policy</code></td><td>{{t "help.operators.intext"}}</td></tr>
+                    <tr><td><code>define:</code></td><td><code>define:ephemeral</code></td><td>{{t "help.operators.define"}}</td></tr>
+                    <tr><td><code>before:</code></td><td><code>before:2023-01-01 python</code></td><td>{{t "help.operators.before"}}</td></tr>
+                    <tr><td><code>after:</code></td><td><code>after:2024-01-01 python</code></td><td>{{t "help.operators.after"}}</td></tr>
+                    <tr><td><code>lang:</code></td><td><code>lang:en linux</code></td><td>{{t "help.operators.lang"}}</td></tr>
+                    <tr><td><code>related:</code></td><td><code>related:github.com</code></td><td>{{t "help.operators.related"}}</td></tr>
+                    <tr><td><code>cache:</code></td><td><code>cache:example.com</code></td><td>{{t "help.operators.cache"}}</td></tr>
+                    <tr><td><code>info:</code></td><td><code>info:example.com</code></td><td>{{t "help.operators.info"}}</td></tr>
+                    <tr><td><code>define:</code></td><td><code>define:ephemeral</code></td><td>{{t "help.operators.define_alt"}}</td></tr>
+                    <tr><td><code>weather:</code></td><td><code>weather:tokyo</code></td><td>{{t "help.operators.weather"}}</td></tr>
+                    <tr><td><code>stocks:</code></td><td><code>stocks:AAPL</code></td><td>{{t "help.operators.stocks"}}</td></tr>
+                    <tr><td><code>map:</code></td><td><code>map:berlin</code></td><td>{{t "help.operators.map"}}</td></tr>
+                    <tr><td><code>movie:</code></td><td><code>movie:arrival</code></td><td>{{t "help.operators.movie"}}</td></tr>
+                    <tr><td><code>source:</code></td><td><code>source:reuters ai</code></td><td>{{t "help.operators.source"}}</td></tr>
                 </tbody>
             </table>
         </section>
 
         {{/* Keyboard Shortcuts */}}
         <section id="keyboard-shortcuts" class="help-section">
-            <h2>Keyboard Shortcuts</h2>
-            <p>Keyboard shortcuts work best on search and results pages. They never replace normal navigation, so everything still works without JavaScript.</p>
+            <h2>{{t "help.shortcuts.heading"}}</h2>
+            <p>{{t "help.shortcuts.intro"}}</p>
             <table class="shortcuts-table shortcuts-help-table">
                 <thead>
-                    <tr><th>Shortcut</th><th>Action</th></tr>
+                    <tr><th>{{t "help.shortcuts.th_shortcut"}}</th><th>{{t "help.shortcuts.th_action"}}</th></tr>
                 </thead>
                 <tbody>
-                    <tr>
-                        <td><kbd>/</kbd> or <kbd>s</kbd></td>
-                        <td>Focus search box</td>
-                    </tr>
-                    <tr>
-                        <td><kbd>Escape</kbd></td>
-                        <td>Clear search / Close dialogs</td>
-                    </tr>
-                    <tr>
-                        <td><kbd>t</kbd></td>
-                        <td>Cycle theme (dark → light → auto)</td>
-                    </tr>
-                    <tr>
-                        <td><kbd>?</kbd></td>
-                        <td>Show keyboard shortcuts</td>
-                    </tr>
-                    <tr>
-                        <td><kbd>j</kbd> / <kbd>k</kbd></td>
-                        <td>Navigate results (down/up)</td>
-                    </tr>
-                    <tr>
-                        <td><kbd>Enter</kbd></td>
-                        <td>Open selected result</td>
-                    </tr>
-                    <tr>
-                        <td><kbd>o</kbd> / <kbd>O</kbd></td>
-                        <td>Open the selected result in the current tab or a new tab</td>
-                    </tr>
-                    <tr>
-                        <td><kbd>h</kbd> / <kbd>l</kbd></td>
-                        <td>Go to the previous or next page of results</td>
-                    </tr>
-                    <tr>
-                        <td><kbd>g</kbd><kbd>g</kbd> / <kbd>G</kbd></td>
-                        <td>Jump to the first or last result</td>
-                    </tr>
-                    <tr>
-                        <td><kbd>1</kbd>–<kbd>9</kbd></td>
-                        <td>Open result number 1 through 9</td>
-                    </tr>
+                    <tr><td><kbd>/</kbd> or <kbd>s</kbd></td><td>{{t "help.shortcuts.focus_search"}}</td></tr>
+                    <tr><td><kbd>Escape</kbd></td><td>{{t "help.shortcuts.clear_close"}}</td></tr>
+                    <tr><td><kbd>t</kbd></td><td>{{t "help.shortcuts.cycle_theme"}}</td></tr>
+                    <tr><td><kbd>?</kbd></td><td>{{t "help.shortcuts.show_help"}}</td></tr>
+                    <tr><td><kbd>j</kbd> / <kbd>k</kbd></td><td>{{t "help.shortcuts.navigate_results"}}</td></tr>
+                    <tr><td><kbd>Enter</kbd></td><td>{{t "help.shortcuts.open_selected"}}</td></tr>
+                    <tr><td><kbd>o</kbd> / <kbd>O</kbd></td><td>{{t "help.shortcuts.open_tab_or_new"}}</td></tr>
+                    <tr><td><kbd>h</kbd> / <kbd>l</kbd></td><td>{{t "help.shortcuts.prev_next_page"}}</td></tr>
+                    <tr><td><kbd>g</kbd><kbd>g</kbd> / <kbd>G</kbd></td><td>{{t "help.shortcuts.first_last"}}</td></tr>
+                    <tr><td><kbd>1</kbd>–<kbd>9</kbd></td><td>{{t "help.shortcuts.open_n"}}</td></tr>
                 </tbody>
             </table>
         </section>

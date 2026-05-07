@@ -1381,6 +1381,53 @@
         "label": "Social",
         "description": "Communautés et plateformes sociales"
       }
+    },
+    "operators": {
+      "heading": "Opérateurs de recherche",
+      "intro": "Affinez vos recherches avec ces opérateurs :",
+      "th_operator": "Opérateur",
+      "th_example": "Exemple",
+      "th_description": "Description",
+      "exact_phrase": "Rechercher l'expression exacte",
+      "exclude_word": "Exclure un mot des résultats",
+      "wildcard": "Joker — correspond à n'importe quel mot",
+      "or": "L'un ou l'autre terme",
+      "and": "Les deux termes requis",
+      "site": "Rechercher dans un site spécifique",
+      "site_exclude": "Exclure un site des résultats",
+      "filetype": "Trouver des types de fichiers spécifiques",
+      "intitle": "Trouver un mot dans le titre de la page",
+      "inurl": "Trouver un mot dans l'URL",
+      "intext": "Trouver un mot dans le corps de la page",
+      "define": "Définition du dictionnaire",
+      "before": "Résultats avant une date",
+      "after": "Résultats après une date",
+      "lang": "Filtrer par langue",
+      "related": "Sites similaires à une URL donnée",
+      "cache": "Copies en cache ou archivées d'une URL",
+      "info": "Informations sur une URL",
+      "define_alt": "Recherche de définition de type dictionnaire",
+      "weather": "Opérateur de requête spécifique à la météo",
+      "stocks": "Recherche de symbole boursier",
+      "map": "Requête centrée sur une carte ou un lieu",
+      "movie": "Requête centrée sur un film ou un titre",
+      "source": "Filtre par source d'actualité"
+    },
+    "shortcuts": {
+      "heading": "Raccourcis clavier",
+      "intro": "Les raccourcis clavier fonctionnent mieux sur les pages de recherche et de résultats. Ils ne remplacent jamais la navigation normale, donc tout fonctionne sans JavaScript.",
+      "th_shortcut": "Raccourci",
+      "th_action": "Action",
+      "focus_search": "Mettre le focus sur le champ de recherche",
+      "clear_close": "Effacer la recherche / Fermer les boîtes de dialogue",
+      "cycle_theme": "Changer de thème (sombre → clair → auto)",
+      "show_help": "Afficher les raccourcis clavier",
+      "navigate_results": "Naviguer dans les résultats (bas/haut)",
+      "open_selected": "Ouvrir le résultat sélectionné",
+      "open_tab_or_new": "Ouvrir le résultat sélectionné dans l'onglet courant ou dans un nouvel onglet",
+      "prev_next_page": "Aller à la page précédente ou suivante des résultats",
+      "first_last": "Sauter au premier ou au dernier résultat",
+      "open_n": "Ouvrir le résultat numéro 1 à 9"
     }
   }
 }

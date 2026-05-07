@@ -1381,6 +1381,53 @@
         "label": "Social",
         "description": "Communities and social platforms"
       }
+    },
+    "operators": {
+      "heading": "Search Operators",
+      "intro": "Refine your searches with these operators:",
+      "th_operator": "Operator",
+      "th_example": "Example",
+      "th_description": "Description",
+      "exact_phrase": "Search for exact phrase",
+      "exclude_word": "Exclude word from results",
+      "wildcard": "Wildcard — matches any word",
+      "or": "Either term",
+      "and": "Both terms required",
+      "site": "Search within a specific site",
+      "site_exclude": "Exclude a site from results",
+      "filetype": "Find specific file types",
+      "intitle": "Find word in page title",
+      "inurl": "Find word in URL",
+      "intext": "Find word in page body text",
+      "define": "Dictionary definition",
+      "before": "Results before a date",
+      "after": "Results after a date",
+      "lang": "Filter by language",
+      "related": "Sites similar to a given URL",
+      "cache": "Cached or archived copies of a URL",
+      "info": "Information about a URL",
+      "define_alt": "Dictionary-style definition lookup",
+      "weather": "Weather-specific query operator",
+      "stocks": "Stock symbol lookup",
+      "map": "Map/location-focused query",
+      "movie": "Movie/title-focused query",
+      "source": "News-source filter"
+    },
+    "shortcuts": {
+      "heading": "Keyboard Shortcuts",
+      "intro": "Keyboard shortcuts work best on search and results pages. They never replace normal navigation, so everything still works without JavaScript.",
+      "th_shortcut": "Shortcut",
+      "th_action": "Action",
+      "focus_search": "Focus search box",
+      "clear_close": "Clear search / Close dialogs",
+      "cycle_theme": "Cycle theme (dark → light → auto)",
+      "show_help": "Show keyboard shortcuts",
+      "navigate_results": "Navigate results (down/up)",
+      "open_selected": "Open selected result",
+      "open_tab_or_new": "Open the selected result in the current tab or a new tab",
+      "prev_next_page": "Go to the previous or next page of results",
+      "first_last": "Jump to the first or last result",
+      "open_n": "Open result number 1 through 9"
     }
   }
 }

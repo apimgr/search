@@ -1381,6 +1381,53 @@
         "label": "Sozial",
         "description": "Communitys und soziale Plattformen"
       }
+    },
+    "operators": {
+      "heading": "Suchoperatoren",
+      "intro": "Verfeinern Sie Ihre Suchen mit diesen Operatoren:",
+      "th_operator": "Operator",
+      "th_example": "Beispiel",
+      "th_description": "Beschreibung",
+      "exact_phrase": "Nach exakter Wortfolge suchen",
+      "exclude_word": "Wort aus den Ergebnissen ausschließen",
+      "wildcard": "Platzhalter — passt auf beliebiges Wort",
+      "or": "Einer der Begriffe",
+      "and": "Beide Begriffe erforderlich",
+      "site": "Innerhalb einer bestimmten Website suchen",
+      "site_exclude": "Eine Website aus den Ergebnissen ausschließen",
+      "filetype": "Bestimmte Dateitypen finden",
+      "intitle": "Wort im Seitentitel finden",
+      "inurl": "Wort in der URL finden",
+      "intext": "Wort im Seitentext finden",
+      "define": "Wörterbuchdefinition",
+      "before": "Ergebnisse vor einem Datum",
+      "after": "Ergebnisse nach einem Datum",
+      "lang": "Nach Sprache filtern",
+      "related": "Websites ähnlich einer angegebenen URL",
+      "cache": "Zwischengespeicherte oder archivierte Kopien einer URL",
+      "info": "Informationen zu einer URL",
+      "define_alt": "Wörterbuchähnliche Definitionssuche",
+      "weather": "Wetter-spezifischer Abfrageoperator",
+      "stocks": "Suche nach Aktiensymbol",
+      "map": "Karten-/standortbezogene Abfrage",
+      "movie": "Film-/titelbezogene Abfrage",
+      "source": "Nachrichtenquellen-Filter"
+    },
+    "shortcuts": {
+      "heading": "Tastenkombinationen",
+      "intro": "Tastenkombinationen funktionieren am besten auf Such- und Ergebnisseiten. Sie ersetzen nie die normale Navigation, daher funktioniert alles auch ohne JavaScript.",
+      "th_shortcut": "Tastenkombination",
+      "th_action": "Aktion",
+      "focus_search": "Suchfeld fokussieren",
+      "clear_close": "Suche leeren / Dialoge schließen",
+      "cycle_theme": "Design wechseln (dunkel → hell → automatisch)",
+      "show_help": "Tastenkombinationen anzeigen",
+      "navigate_results": "Durch Ergebnisse navigieren (runter/hoch)",
+      "open_selected": "Ausgewähltes Ergebnis öffnen",
+      "open_tab_or_new": "Ausgewähltes Ergebnis im aktuellen Tab oder in neuem Tab öffnen",
+      "prev_next_page": "Zur vorherigen oder nächsten Ergebnisseite",
+      "first_last": "Zum ersten oder letzten Ergebnis springen",
+      "open_n": "Ergebnis Nummer 1 bis 9 öffnen"
     }
   }
 }
