@@ -1509,6 +1509,34 @@
       "example_search": "Пример: API поиска",
       "example_instant": "Пример: мгновенные ответы",
       "example_direct": "Пример: прямые ответы"
+    },
+    "bangs": {
+      "heading": "Bang-команды",
+      "intro_prefix": "Bang-команды отправляют ваш запрос напрямую на другой сайт. Используйте",
+      "intro_or": "или",
+      "intro_suffix": ". Встроенные bang'и доступны; на их основе можно добавлять серверные или пользовательские bang'и.",
+      "popular_heading": "Популярные bang'и",
+      "by_category_heading": "По категориям",
+      "th_category": "Категория",
+      "th_examples": "Примеры",
+      "cat_search": "Поиск",
+      "cat_images": "Изображения",
+      "cat_video": "Видео",
+      "cat_maps": "Карты",
+      "cat_news": "Новости",
+      "cat_social": "Соцсети",
+      "cat_code_dev": "Код и разработка",
+      "cat_shopping": "Покупки",
+      "cat_science": "Наука",
+      "cat_reference": "Справочники",
+      "cat_files": "Файлы",
+      "examples_heading": "Примеры",
+      "ex_g_desc": "Поиск в Google «python tutorial»",
+      "ex_ddg_desc": "Отправить запрос в DuckDuckGo с конца строки поиска",
+      "ex_w_desc": "Перейти к статье в Википедии",
+      "ex_gh_desc": "Поиск в GitHub",
+      "ex_npm_desc": "Поиск пакета npm",
+      "full_list_link": "Посмотреть полный список bang'ов (JSON)"
     }
   }
 }

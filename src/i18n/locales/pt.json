@@ -1510,6 +1510,34 @@
       "example_search": "Exemplo: API de pesquisa",
       "example_instant": "Exemplo: respostas instantâneas",
       "example_direct": "Exemplo: respostas diretas"
+    },
+    "bangs": {
+      "heading": "Comandos bang",
+      "intro_prefix": "Os comandos bang enviam sua pesquisa diretamente para outro site. Use",
+      "intro_or": "ou",
+      "intro_suffix": ". Os bangs integrados estão disponíveis e bangs definidos pelo servidor ou pelo usuário podem ser adicionados.",
+      "popular_heading": "Bangs populares",
+      "by_category_heading": "Por categoria",
+      "th_category": "Categoria",
+      "th_examples": "Exemplos",
+      "cat_search": "Pesquisa",
+      "cat_images": "Imagens",
+      "cat_video": "Vídeo",
+      "cat_maps": "Mapas",
+      "cat_news": "Notícias",
+      "cat_social": "Social",
+      "cat_code_dev": "Código e desenvolvimento",
+      "cat_shopping": "Compras",
+      "cat_science": "Ciência",
+      "cat_reference": "Referência",
+      "cat_files": "Arquivos",
+      "examples_heading": "Exemplos",
+      "ex_g_desc": "Pesquisar \"python tutorial\" no Google",
+      "ex_ddg_desc": "Enviar a consulta para o DuckDuckGo a partir do final da pesquisa",
+      "ex_w_desc": "Ir para o artigo da Wikipédia",
+      "ex_gh_desc": "Pesquisar no GitHub",
+      "ex_npm_desc": "Consultar o pacote npm",
+      "full_list_link": "Ver lista completa de bangs (JSON)"
     }
   }
 }

@@ -9,8 +9,8 @@ This file mirrors the current AI task state in the repository so it survives loc
   - [x] Phase 2: Getting Started + Search Categories (commit `c80ffcae6f06`)
   - [x] Phase 3: Search Operators table + Keyboard Shortcuts table (commit `65f43b4c81c0`)
   - [x] Phase 4: Privacy Features + Tor Access + FAQ + Need More Help (commit `2aeff104b089`)
-  - [x] Phase 5: API Documentation (h2 + intro + 2 link cards + endpoints table + 3 example block headings)
-  - [ ] Phase 6: Bang Commands (~50 keys: heading + intro + Popular Bangs + By Category table + Examples list)
+  - [x] Phase 5: API Documentation (commit `fdfd4b77a44f`)
+  - [x] Phase 6: Bang Commands (h2 + intro + Popular Bangs + By Category table + Examples list)
   - [ ] Phase 7: Direct Answers (~55 keys: 7 sub-section headings + ~50 operator descriptions + Instant answer examples)
 - [ ] `public-help-i18n-translator-review` — Replace English placeholders in `src/i18n/locales/{zh,ja,ar,he,fa,ur}.json` `help.*` keys with proper translations. Per AI.md PART 0 "Never guess or assume", AI used English placeholders for these locales because translation confidence was insufficient. Needs a human translator pass per locale. Cumulative key count after phase 4: ~120 keys (will grow to ~250 once phases 5-7 ship).
 

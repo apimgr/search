@@ -95,10 +95,10 @@
 
         {{/* Bang Commands */}}
         <section id="bang-commands" class="help-section">
-            <h2>Bang Commands</h2>
-            <p>Bang commands send your search directly to another site. Use either <code>!shortcut terms</code> or <code>terms !shortcut</code>. Built-in bangs are available, and server or user-defined bangs can be added on top.</p>
+            <h2>{{t "help.bangs.heading"}}</h2>
+            <p>{{t "help.bangs.intro_prefix"}} <code>!shortcut terms</code> {{t "help.bangs.intro_or"}} <code>terms !shortcut</code>{{t "help.bangs.intro_suffix"}}</p>
 
-            <h3>Popular Bangs</h3>
+            <h3>{{t "help.bangs.popular_heading"}}</h3>
             <div class="bang-grid">
                 <div class="bang-item"><code>!g</code> Google</div>
                 <div class="bang-item"><code>!ddg</code> DuckDuckGo</div>
@@ -125,33 +125,33 @@
                 <div class="bang-item"><code>!spot</code> Spotify</div>
             </div>
 
-            <h3>By Category</h3>
+            <h3>{{t "help.bangs.by_category_heading"}}</h3>
             <table class="operators-table bang-category-table">
-                <thead><tr><th>Category</th><th>Examples</th></tr></thead>
+                <thead><tr><th>{{t "help.bangs.th_category"}}</th><th>{{t "help.bangs.th_examples"}}</th></tr></thead>
                 <tbody>
-                    <tr><td>Search</td><td><code>!g</code> <code>!b</code> <code>!ddg</code> <code>!br</code> <code>!sp</code> <code>!q</code> <code>!kagi</code> <code>!perplexity</code></td></tr>
-                    <tr><td>Images</td><td><code>!gi</code> <code>!bi</code> <code>!fl</code> <code>!pexels</code> <code>!pixabay</code> <code>!pinterest</code> <code>!tineye</code></td></tr>
-                    <tr><td>Video</td><td><code>!yt</code> <code>!v</code> <code>!twitch</code> <code>!tiktok</code> <code>!rumble</code> <code>!pt</code></td></tr>
-                    <tr><td>Maps</td><td><code>!gm</code> <code>!osm</code> <code>!waze</code> <code>!yelp</code> <code>!tripadvisor</code></td></tr>
-                    <tr><td>News</td><td><code>!gn</code> <code>!hn</code> <code>!bbc</code> <code>!techcrunch</code> <code>!verge</code> <code>!reuters</code></td></tr>
-                    <tr><td>Social</td><td><code>!tw</code> <code>!mast</code> <code>!fb</code> <code>!linkedin</code> <code>!bluesky</code> <code>!lb</code></td></tr>
-                    <tr><td>Code &amp; Dev</td><td><code>!gh</code> <code>!gl</code> <code>!so</code> <code>!npm</code> <code>!pypi</code> <code>!gopkg</code> <code>!docker</code> <code>!mdn</code></td></tr>
-                    <tr><td>Shopping</td><td><code>!az</code> <code>!eb</code></td></tr>
-                    <tr><td>Science</td><td><code>!scholar</code> <code>!arxiv</code></td></tr>
-                    <tr><td>Reference</td><td><code>!w</code> <code>!wa</code> <code>!britannica</code></td></tr>
-                    <tr><td>Files</td><td><code>!archive</code></td></tr>
+                    <tr><td>{{t "help.bangs.cat_search"}}</td><td><code>!g</code> <code>!b</code> <code>!ddg</code> <code>!br</code> <code>!sp</code> <code>!q</code> <code>!kagi</code> <code>!perplexity</code></td></tr>
+                    <tr><td>{{t "help.bangs.cat_images"}}</td><td><code>!gi</code> <code>!bi</code> <code>!fl</code> <code>!pexels</code> <code>!pixabay</code> <code>!pinterest</code> <code>!tineye</code></td></tr>
+                    <tr><td>{{t "help.bangs.cat_video"}}</td><td><code>!yt</code> <code>!v</code> <code>!twitch</code> <code>!tiktok</code> <code>!rumble</code> <code>!pt</code></td></tr>
+                    <tr><td>{{t "help.bangs.cat_maps"}}</td><td><code>!gm</code> <code>!osm</code> <code>!waze</code> <code>!yelp</code> <code>!tripadvisor</code></td></tr>
+                    <tr><td>{{t "help.bangs.cat_news"}}</td><td><code>!gn</code> <code>!hn</code> <code>!bbc</code> <code>!techcrunch</code> <code>!verge</code> <code>!reuters</code></td></tr>
+                    <tr><td>{{t "help.bangs.cat_social"}}</td><td><code>!tw</code> <code>!mast</code> <code>!fb</code> <code>!linkedin</code> <code>!bluesky</code> <code>!lb</code></td></tr>
+                    <tr><td>{{t "help.bangs.cat_code_dev"}}</td><td><code>!gh</code> <code>!gl</code> <code>!so</code> <code>!npm</code> <code>!pypi</code> <code>!gopkg</code> <code>!docker</code> <code>!mdn</code></td></tr>
+                    <tr><td>{{t "help.bangs.cat_shopping"}}</td><td><code>!az</code> <code>!eb</code></td></tr>
+                    <tr><td>{{t "help.bangs.cat_science"}}</td><td><code>!scholar</code> <code>!arxiv</code></td></tr>
+                    <tr><td>{{t "help.bangs.cat_reference"}}</td><td><code>!w</code> <code>!wa</code> <code>!britannica</code></td></tr>
+                    <tr><td>{{t "help.bangs.cat_files"}}</td><td><code>!archive</code></td></tr>
                 </tbody>
             </table>
 
-            <h3>Examples</h3>
+            <h3>{{t "help.bangs.examples_heading"}}</h3>
             <ul class="example-list">
-                <li><code>!g python tutorial</code> — Search Google for "python tutorial"</li>
-                <li><code>privacy search !ddg</code> — Send the query to DuckDuckGo from the end of the search</li>
-                <li><code>!w artificial intelligence</code> — Go to Wikipedia article</li>
-                <li><code>!gh octocat</code> — Search GitHub</li>
-                <li><code>!npm express</code> — Look up npm package</li>
+                <li><code>!g python tutorial</code> — {{t "help.bangs.ex_g_desc"}}</li>
+                <li><code>privacy search !ddg</code> — {{t "help.bangs.ex_ddg_desc"}}</li>
+                <li><code>!w artificial intelligence</code> — {{t "help.bangs.ex_w_desc"}}</li>
+                <li><code>!gh octocat</code> — {{t "help.bangs.ex_gh_desc"}}</li>
+                <li><code>!npm express</code> — {{t "help.bangs.ex_npm_desc"}}</li>
             </ul>
-            <p><a href="/api/v1/bangs">View full bang list (JSON)</a></p>
+            <p><a href="/api/v1/bangs">{{t "help.bangs.full_list_link"}}</a></p>
         </section>
 
         {{/* Direct Answers */}}

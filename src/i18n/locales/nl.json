@@ -1509,6 +1509,34 @@
       "example_search": "Voorbeeld: zoek-API",
       "example_instant": "Voorbeeld: directe antwoorden",
       "example_direct": "Voorbeeld: directe antwoorden (type:term)"
+    },
+    "bangs": {
+      "heading": "Bang-commando's",
+      "intro_prefix": "Bang-commando's sturen uw zoekopdracht direct naar een andere site. Gebruik",
+      "intro_or": "of",
+      "intro_suffix": ". Ingebouwde bangs zijn beschikbaar, en door de server of gebruiker gedefinieerde bangs kunnen worden toegevoegd.",
+      "popular_heading": "Populaire bangs",
+      "by_category_heading": "Per categorie",
+      "th_category": "Categorie",
+      "th_examples": "Voorbeelden",
+      "cat_search": "Zoeken",
+      "cat_images": "Afbeeldingen",
+      "cat_video": "Video",
+      "cat_maps": "Kaarten",
+      "cat_news": "Nieuws",
+      "cat_social": "Sociaal",
+      "cat_code_dev": "Code & ontwikkeling",
+      "cat_shopping": "Winkelen",
+      "cat_science": "Wetenschap",
+      "cat_reference": "Referentie",
+      "cat_files": "Bestanden",
+      "examples_heading": "Voorbeelden",
+      "ex_g_desc": "Zoek op Google naar \"python tutorial\"",
+      "ex_ddg_desc": "De zoekopdracht naar DuckDuckGo sturen vanaf het einde",
+      "ex_w_desc": "Ga naar het Wikipedia-artikel",
+      "ex_gh_desc": "Zoek op GitHub",
+      "ex_npm_desc": "Zoek het npm-pakket op",
+      "full_list_link": "Volledige bang-lijst bekijken (JSON)"
     }
   }
 }
