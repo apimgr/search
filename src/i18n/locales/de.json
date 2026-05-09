@@ -1481,6 +1481,34 @@
       "text_prefix": "Wenn Sie Fragen haben oder Hilfe benötigen,",
       "link": "kontaktieren Sie uns",
       "text_suffix": "."
+    },
+    "api": {
+      "heading": "API-Dokumentation",
+      "intro": "Diese Anwendung stellt REST-Endpunkte, Direktantwort-APIs, GraphQL und eine OpenAPI-Beschreibung für Integrationen und Automatisierung bereit.",
+      "openapi_heading": "OpenAPI / Swagger",
+      "openapi_desc": "Interaktiver REST-API-Explorer mit Try-it-out-Funktion",
+      "graphql_heading": "GraphQL Playground",
+      "graphql_desc": "Interaktiver GraphQL-Explorer mit Schema-Dokumentation",
+      "endpoints_heading": "API-Endpunkte",
+      "th_method": "Methode",
+      "th_endpoint": "Endpunkt",
+      "th_description": "Beschreibung",
+      "ep_search": "Suchergebnisse als JSON",
+      "ep_related": "Verwandte Suchvorschläge zu einer Anfrage",
+      "ep_autocomplete": "Autovervollständigungs-Vorschläge",
+      "ep_instant": "Sofortantworten für Anfragen in natürlicher Sprache",
+      "ep_direct_prefix": "Direkte Antworten für Anfragen im Stil",
+      "ep_direct_suffix": "",
+      "ep_engines": "Verfügbare Suchmaschinen und ihr Status",
+      "ep_categories": "Verfügbare Suchkategorien",
+      "ep_bangs": "Verfügbare Bang-Shortcuts",
+      "ep_help_json": "Inhalt der Hilfeseite als JSON",
+      "ep_openapi": "OpenAPI-Oberfläche und rohe OpenAPI-Spezifikation",
+      "ep_graphql": "GraphQL-Explorer und API-Endpunkt",
+      "ep_opensearch": "OpenSearch-Deskriptor für Browser-Integration",
+      "example_search": "Beispiel: Such-API",
+      "example_instant": "Beispiel: Sofortantworten",
+      "example_direct": "Beispiel: direkte Antworten"
     }
   }
 }

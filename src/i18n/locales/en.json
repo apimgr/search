@@ -1481,6 +1481,34 @@
       "text_prefix": "If you have questions or need assistance, please",
       "link": "contact us",
       "text_suffix": "."
+    },
+    "api": {
+      "heading": "API Documentation",
+      "intro": "This application exposes REST endpoints, direct-answer APIs, GraphQL, and an OpenAPI description for integrations and automation.",
+      "openapi_heading": "OpenAPI / Swagger",
+      "openapi_desc": "Interactive REST API explorer with try-it-out functionality",
+      "graphql_heading": "GraphQL Playground",
+      "graphql_desc": "Interactive GraphQL explorer with schema documentation",
+      "endpoints_heading": "API Endpoints",
+      "th_method": "Method",
+      "th_endpoint": "Endpoint",
+      "th_description": "Description",
+      "ep_search": "JSON search results",
+      "ep_related": "Related search suggestions for a query",
+      "ep_autocomplete": "Autocomplete suggestions",
+      "ep_instant": "Instant answers for plain-language queries",
+      "ep_direct_prefix": "Direct answers for",
+      "ep_direct_suffix": "style queries",
+      "ep_engines": "Available engines and status",
+      "ep_categories": "Available search categories",
+      "ep_bangs": "Available bang shortcuts",
+      "ep_help_json": "Help page content as JSON",
+      "ep_openapi": "OpenAPI UI and raw OpenAPI specification",
+      "ep_graphql": "GraphQL explorer and API endpoint",
+      "ep_opensearch": "OpenSearch descriptor for browser integration",
+      "example_search": "Example: Search API",
+      "example_instant": "Example: Instant Answers",
+      "example_direct": "Example: Direct Answers"
     }
   }
 }

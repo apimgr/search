@@ -1481,6 +1481,34 @@
       "text_prefix": "Если у вас есть вопросы или нужна помощь, пожалуйста,",
       "link": "свяжитесь с нами",
       "text_suffix": "."
+    },
+    "api": {
+      "heading": "Документация API",
+      "intro": "Это приложение предоставляет REST-эндпоинты, API прямых ответов, GraphQL и описание OpenAPI для интеграций и автоматизации.",
+      "openapi_heading": "OpenAPI / Swagger",
+      "openapi_desc": "Интерактивный обозреватель REST API с функцией пробного запуска",
+      "graphql_heading": "GraphQL Playground",
+      "graphql_desc": "Интерактивный обозреватель GraphQL с документацией схемы",
+      "endpoints_heading": "Эндпоинты API",
+      "th_method": "Метод",
+      "th_endpoint": "Эндпоинт",
+      "th_description": "Описание",
+      "ep_search": "Результаты поиска в JSON",
+      "ep_related": "Связанные поисковые подсказки для запроса",
+      "ep_autocomplete": "Подсказки автозаполнения",
+      "ep_instant": "Мгновенные ответы для запросов на естественном языке",
+      "ep_direct_prefix": "Прямые ответы для запросов в стиле",
+      "ep_direct_suffix": "",
+      "ep_engines": "Доступные поисковые системы и их статус",
+      "ep_categories": "Доступные категории поиска",
+      "ep_bangs": "Доступные bang-ярлыки",
+      "ep_help_json": "Содержимое страницы помощи в формате JSON",
+      "ep_openapi": "Интерфейс OpenAPI и сырая спецификация OpenAPI",
+      "ep_graphql": "Обозреватель GraphQL и эндпоинт API",
+      "ep_opensearch": "Дескриптор OpenSearch для интеграции в браузер",
+      "example_search": "Пример: API поиска",
+      "example_instant": "Пример: мгновенные ответы",
+      "example_direct": "Пример: прямые ответы"
     }
   }
 }

@@ -496,91 +496,43 @@
 
         {{/* API Documentation */}}
         <section id="api-docs" class="help-section api-docs">
-            <h2>API Documentation</h2>
-            <p>This application exposes REST endpoints, direct-answer APIs, GraphQL, and an OpenAPI description for integrations and automation.</p>
+            <h2>{{t "help.api.heading"}}</h2>
+            <p>{{t "help.api.intro"}}</p>
             <div class="api-links">
                 <a href="/openapi" class="api-link-card">
-                    <h3>OpenAPI / Swagger</h3>
-                    <p>Interactive REST API explorer with try-it-out functionality</p>
+                    <h3>{{t "help.api.openapi_heading"}}</h3>
+                    <p>{{t "help.api.openapi_desc"}}</p>
                 </a>
                 <a href="/graphql" class="api-link-card">
-                    <h3>GraphQL Playground</h3>
-                    <p>Interactive GraphQL explorer with schema documentation</p>
+                    <h3>{{t "help.api.graphql_heading"}}</h3>
+                    <p>{{t "help.api.graphql_desc"}}</p>
                 </a>
             </div>
 
-            <h3>API Endpoints</h3>
+            <h3>{{t "help.api.endpoints_heading"}}</h3>
             <table class="operators-table api-endpoints-table">
                 <thead>
-                    <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+                    <tr><th>{{t "help.api.th_method"}}</th><th>{{t "help.api.th_endpoint"}}</th><th>{{t "help.api.th_description"}}</th></tr>
                 </thead>
                 <tbody>
-                    <tr>
-                        <td><code>GET</code></td>
-                        <td><code>/api/v1/search</code></td>
-                        <td>JSON search results</td>
-                    </tr>
-                    <tr>
-                        <td><code>GET</code></td>
-                        <td><code>/api/v1/search/related</code></td>
-                        <td>Related search suggestions for a query</td>
-                    </tr>
-                    <tr>
-                        <td><code>GET</code></td>
-                        <td><code>/api/v1/autocomplete</code></td>
-                        <td>Autocomplete suggestions</td>
-                    </tr>
-                    <tr>
-                        <td><code>GET</code></td>
-                        <td><code>/api/v1/instant</code></td>
-                        <td>Instant answers for plain-language queries</td>
-                    </tr>
-                    <tr>
-                        <td><code>GET</code></td>
-                        <td><code>/api/v1/direct/{type}/{term}</code></td>
-                        <td>Direct answers for <code>type:term</code> style queries</td>
-                    </tr>
-                    <tr>
-                        <td><code>GET</code></td>
-                        <td><code>/api/v1/engines</code></td>
-                        <td>Available engines and status</td>
-                    </tr>
-                    <tr>
-                        <td><code>GET</code></td>
-                        <td><code>/api/v1/categories</code></td>
-                        <td>Available search categories</td>
-                    </tr>
-                    <tr>
-                        <td><code>GET</code></td>
-                        <td><code>/api/v1/bangs</code></td>
-                        <td>Available bang shortcuts</td>
-                    </tr>
-                    <tr>
-                        <td><code>GET</code></td>
-                        <td><code>/api/v1/server/help</code></td>
-                        <td>Help page content as JSON</td>
-                    </tr>
-                    <tr>
-                        <td><code>GET</code></td>
-                        <td><code>/openapi</code> / <code>/openapi.json</code></td>
-                        <td>OpenAPI UI and raw OpenAPI specification</td>
-                    </tr>
-                    <tr>
-                        <td><code>GET</code> / <code>POST</code></td>
-                        <td><code>/graphql</code></td>
-                        <td>GraphQL explorer and API endpoint</td>
-                    </tr>
+                    <tr><td><code>GET</code></td><td><code>/api/v1/search</code></td><td>{{t "help.api.ep_search"}}</td></tr>
+                    <tr><td><code>GET</code></td><td><code>/api/v1/search/related</code></td><td>{{t "help.api.ep_related"}}</td></tr>
+                    <tr><td><code>GET</code></td><td><code>/api/v1/autocomplete</code></td><td>{{t "help.api.ep_autocomplete"}}</td></tr>
+                    <tr><td><code>GET</code></td><td><code>/api/v1/instant</code></td><td>{{t "help.api.ep_instant"}}</td></tr>
+                    <tr><td><code>GET</code></td><td><code>/api/v1/direct/{type}/{term}</code></td><td>{{t "help.api.ep_direct_prefix"}} <code>type:term</code> {{t "help.api.ep_direct_suffix"}}</td></tr>
+                    <tr><td><code>GET</code></td><td><code>/api/v1/engines</code></td><td>{{t "help.api.ep_engines"}}</td></tr>
+                    <tr><td><code>GET</code></td><td><code>/api/v1/categories</code></td><td>{{t "help.api.ep_categories"}}</td></tr>
+                    <tr><td><code>GET</code></td><td><code>/api/v1/bangs</code></td><td>{{t "help.api.ep_bangs"}}</td></tr>
+                    <tr><td><code>GET</code></td><td><code>/api/v1/server/help</code></td><td>{{t "help.api.ep_help_json"}}</td></tr>
+                    <tr><td><code>GET</code></td><td><code>/openapi</code> / <code>/openapi.json</code></td><td>{{t "help.api.ep_openapi"}}</td></tr>
+                    <tr><td><code>GET</code> / <code>POST</code></td><td><code>/graphql</code></td><td>{{t "help.api.ep_graphql"}}</td></tr>
                     {{if .Config.Search.OpenSearch.Enabled}}
-                    <tr>
-                        <td><code>GET</code></td>
-                        <td><code>/opensearch.xml</code></td>
-                        <td>OpenSearch descriptor for browser integration</td>
-                    </tr>
+                    <tr><td><code>GET</code></td><td><code>/opensearch.xml</code></td><td>{{t "help.api.ep_opensearch"}}</td></tr>
                     {{end}}
                 </tbody>
             </table>
 
-            <h3>Example: Search API</h3>
+            <h3>{{t "help.api.example_search"}}</h3>
             <pre class="code-block"><code># Search for "golang tutorial"
 curl "{{.ServerURL}}/api/v1/search?q=golang+tutorial&category=general&limit=20"
 
@@ -590,7 +542,7 @@ curl "{{.ServerURL}}/api/v1/search?q=nature&category=images&safe_search=2"
 # Get related searches
 curl "{{.ServerURL}}/api/v1/search/related?q=golang+tutorial"</code></pre>
 
-            <h3>Example: Instant Answers</h3>
+            <h3>{{t "help.api.example_instant"}}</h3>
             <pre class="code-block"><code># Calculator
 curl "{{.ServerURL}}/api/v1/instant?q=sqrt(144)"
 
@@ -600,7 +552,7 @@ curl "{{.ServerURL}}/api/v1/instant?q=convert+10+km+to+miles"
 # IP lookup
 curl "{{.ServerURL}}/api/v1/instant?q=what+is+my+ip"</code></pre>
 
-            <h3>Example: Direct Answers</h3>
+            <h3>{{t "help.api.example_direct"}}</h3>
             <pre class="code-block"><code># HTTP status explanation
 curl "{{.ServerURL}}/api/v1/direct/http/404"
 

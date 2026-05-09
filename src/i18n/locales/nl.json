@@ -1481,6 +1481,34 @@
       "text_prefix": "Als u vragen heeft of hulp nodig heeft,",
       "link": "neem contact met ons op",
       "text_suffix": "."
+    },
+    "api": {
+      "heading": "API-documentatie",
+      "intro": "Deze applicatie biedt REST-eindpunten, direct-antwoord-API's, GraphQL en een OpenAPI-beschrijving voor integraties en automatisering.",
+      "openapi_heading": "OpenAPI / Swagger",
+      "openapi_desc": "Interactieve REST API-verkenner met try-it-out-functie",
+      "graphql_heading": "GraphQL Playground",
+      "graphql_desc": "Interactieve GraphQL-verkenner met schema-documentatie",
+      "endpoints_heading": "API-eindpunten",
+      "th_method": "Methode",
+      "th_endpoint": "Eindpunt",
+      "th_description": "Beschrijving",
+      "ep_search": "Zoekresultaten in JSON",
+      "ep_related": "Gerelateerde zoeksuggesties voor een zoekopdracht",
+      "ep_autocomplete": "Autocomplete-suggesties",
+      "ep_instant": "Directe antwoorden voor zoekopdrachten in gewone taal",
+      "ep_direct_prefix": "Directe antwoorden voor zoekopdrachten in de stijl",
+      "ep_direct_suffix": "",
+      "ep_engines": "Beschikbare zoekmachines en status",
+      "ep_categories": "Beschikbare zoekcategorieën",
+      "ep_bangs": "Beschikbare bang-snelkoppelingen",
+      "ep_help_json": "Inhoud van de helppagina als JSON",
+      "ep_openapi": "OpenAPI-interface en ruwe OpenAPI-specificatie",
+      "ep_graphql": "GraphQL-verkenner en API-eindpunt",
+      "ep_opensearch": "OpenSearch-descriptor voor browser-integratie",
+      "example_search": "Voorbeeld: zoek-API",
+      "example_instant": "Voorbeeld: directe antwoorden",
+      "example_direct": "Voorbeeld: directe antwoorden (type:term)"
     }
   }
 }
