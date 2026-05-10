@@ -1537,6 +1537,101 @@
       "ex_gh_desc": "Wyszukaj na GitHub",
       "ex_npm_desc": "Sprawdź pakiet npm",
       "full_list_link": "Zobacz pełną listę bangów (JSON)"
+    },
+    "direct": {
+      "heading": "Odpowiedzi natychmiastowe i bezpośrednie",
+      "intro_da_label": "Odpowiedzi bezpośrednie",
+      "intro_da_text_prefix": "używają formatu",
+      "intro_da_text_suffix": "i otwierają się jako wyniki na pełnej stronie.",
+      "intro_ia_label": "Odpowiedzi natychmiastowe",
+      "intro_ia_text": "są wyzwalane z pola wyszukiwania i dostępne także przez API.",
+      "full_page_heading": "Bezpośrednie odpowiedzi na pełnej stronie",
+      "network": {
+        "heading": "Sieć i bezpieczeństwo",
+        "dns": "Wyszukiwanie rekordów DNS",
+        "whois": "Informacje WHOIS o domenie",
+        "cert": "Informacje o certyfikacie SSL",
+        "headers": "Nagłówki odpowiedzi HTTP",
+        "asn": "Informacje o ASN",
+        "subnet": "Kalkulator podsieci / CIDR",
+        "resolve": "Rozwiązanie nazwy hosta na IP",
+        "robots": "Zawartość robots.txt",
+        "sitemap": "URL-e sitemap",
+        "tech": "Wykrywanie stosu technologicznego",
+        "feed": "Kanały RSS / Atom",
+        "expand": "Rozwiń skrócony URL",
+        "safe": "Sprawdzenie bezpiecznego przeglądania"
+      },
+      "encoding": {
+        "heading": "Kodowanie i konwersja",
+        "qr": "Wygeneruj kod QR",
+        "jwt": "Zdekoduj token JWT",
+        "html": "Koduj/dekoduj encje HTML",
+        "escape": "Escape znaków specjalnych",
+        "ascii": "Tekst w ASCII art",
+        "unicode": "Wyszukiwanie znaku Unicode",
+        "emoji": "Wyszukiwanie emoji"
+      },
+      "dev": {
+        "heading": "Narzędzia dla programistów",
+        "json": "Formatuj / waliduj JSON",
+        "yaml": "Formatuj YAML lub konwertuj między JSON a YAML",
+        "regex": "Wyjaśnij wzorzec regex",
+        "beautify": "Upiększ / sformatuj kod",
+        "cron": "Wyjaśnij wyrażenie cron",
+        "chmod": "Konwerter uprawnień plików",
+        "timestamp": "Konwerter znacznika czasu Unix",
+        "slug": "Wygeneruj slug URL",
+        "case": "Konwersja wielkości liter (duże/małe/tytuł/camel)"
+      },
+      "reference": {
+        "heading": "Referencje",
+        "tldr": "Uproszczona strona man tldr",
+        "man": "Pełna strona man Unix",
+        "cheat": "Ściąga z poleceń",
+        "rfc": "Dokument RFC",
+        "cve": "Informacje o podatności CVE",
+        "pkg": "Informacje o pakiecie (npm / PyPI / Go)",
+        "http": "Wyjaśnienie kodu statusu HTTP",
+        "port": "Informacje o numerze portu"
+      },
+      "content": {
+        "heading": "Treść i wiedza",
+        "wiki": "Streszczenie artykułu Wikipedii",
+        "dict": "Definicja słownikowa",
+        "thesaurus": "Synonimy i antonimy",
+        "slang": "Definicja slangu / slangu internetowego",
+        "country": "Informacje o kraju (kod ISO lub nazwa)",
+        "license": "Streszczenie licencji open source"
+      },
+      "text": {
+        "heading": "Narzędzia tekstowe",
+        "lorem": "Tekst Lorem ipsum (akapity, słowa lub zdania)",
+        "word": "Statystyki tekstu i czas czytania",
+        "diff": "Porównanie różnic tekstu",
+        "useragent": "Parsuj ciąg User-Agent",
+        "mime": "Wyszukiwanie typu MIME"
+      },
+      "directories": {
+        "heading": "Katalogi plików",
+        "linux": "Przeszukaj otwarte listy katalogów",
+        "pdf": "Znajdź katalogi dokumentów",
+        "mp3": "Znajdź katalogi muzyczne"
+      },
+      "cache": {
+        "heading": "Pamięć podręczna i archiwum",
+        "cached": "Wersja strony w pamięci podręcznej",
+        "rotl": "Odpowiedź bezpośrednia: Reguły Internetu"
+      },
+      "instant": {
+        "heading": "Przykłady natychmiastowych odpowiedzi",
+        "calc": "Wynik kalkulatora",
+        "math": "Funkcje i wyrażenia matematyczne",
+        "convert": "Konwersja jednostek",
+        "time": "Aktualny czas i wyszukiwanie strefy czasowej",
+        "ip": "Twój aktualny adres IP",
+        "color": "Podgląd i konwersja koloru"
+      }
     }
   }
 }

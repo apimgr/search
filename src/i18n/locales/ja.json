@@ -1537,6 +1537,101 @@
       "ex_gh_desc": "Search GitHub",
       "ex_npm_desc": "Look up npm package",
       "full_list_link": "View full bang list (JSON)"
+    },
+    "direct": {
+      "heading": "Instant & Direct Answers",
+      "intro_da_label": "Direct answers",
+      "intro_da_text_prefix": "use the",
+      "intro_da_text_suffix": "format and open as full-page results.",
+      "intro_ia_label": "Instant answers",
+      "intro_ia_text": "are triggered from the regular search box and can also be accessed over the API.",
+      "full_page_heading": "Full-page direct answers",
+      "network": {
+        "heading": "Network & Security",
+        "dns": "DNS records lookup",
+        "whois": "Domain WHOIS info",
+        "cert": "SSL certificate info",
+        "headers": "HTTP response headers",
+        "asn": "ASN information",
+        "subnet": "Subnet / CIDR calculator",
+        "resolve": "Hostname to IP resolution",
+        "robots": "robots.txt contents",
+        "sitemap": "Sitemap URLs",
+        "tech": "Technology stack detection",
+        "feed": "RSS / Atom feeds",
+        "expand": "Expand shortened URL",
+        "safe": "Safe browsing check"
+      },
+      "encoding": {
+        "heading": "Encoding & Conversion",
+        "qr": "Generate QR code",
+        "jwt": "Decode JWT token",
+        "html": "HTML entity encode/decode",
+        "escape": "Escape special characters",
+        "ascii": "ASCII art text",
+        "unicode": "Unicode character lookup",
+        "emoji": "Emoji search"
+      },
+      "dev": {
+        "heading": "Developer Tools",
+        "json": "Format / validate JSON",
+        "yaml": "Format YAML or convert JSON and YAML",
+        "regex": "Explain regex pattern",
+        "beautify": "Beautify / format code",
+        "cron": "Explain cron expression",
+        "chmod": "File permission converter",
+        "timestamp": "Unix timestamp converter",
+        "slug": "Generate URL slug",
+        "case": "Case conversion (upper/lower/title/camel)"
+      },
+      "reference": {
+        "heading": "Reference",
+        "tldr": "tldr simplified man page",
+        "man": "Full Unix man page",
+        "cheat": "Command cheatsheet",
+        "rfc": "RFC document",
+        "cve": "CVE vulnerability info",
+        "pkg": "Package info (npm / PyPI / Go)",
+        "http": "HTTP status code explanation",
+        "port": "Port number info"
+      },
+      "content": {
+        "heading": "Content & Knowledge",
+        "wiki": "Wikipedia article summary",
+        "dict": "Dictionary definition",
+        "thesaurus": "Synonyms and antonyms",
+        "slang": "Slang / internet slang definition",
+        "country": "Country information (ISO code or name)",
+        "license": "Open-source license summary"
+      },
+      "text": {
+        "heading": "Text Tools",
+        "lorem": "Lorem ipsum text (paragraphs, words, or sentences)",
+        "word": "Text statistics and reading time",
+        "diff": "Text diff comparison",
+        "useragent": "Parse a User-Agent string",
+        "mime": "MIME type lookup"
+      },
+      "directories": {
+        "heading": "File Directories",
+        "linux": "Search open directory listings",
+        "pdf": "Find document directories",
+        "mp3": "Find music directories"
+      },
+      "cache": {
+        "heading": "Cache & Archive",
+        "cached": "Cached version of a page",
+        "rotl": "Rules of the Internet direct answer"
+      },
+      "instant": {
+        "heading": "Instant answer examples",
+        "calc": "Calculator result",
+        "math": "Math functions and expressions",
+        "convert": "Unit conversion",
+        "time": "Current time and timezone lookups",
+        "ip": "Your current IP address",
+        "color": "Color preview and conversion"
+      }
     }
   }
 }

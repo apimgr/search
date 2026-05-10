@@ -1537,6 +1537,101 @@
       "ex_gh_desc": "Cerca su GitHub",
       "ex_npm_desc": "Cerca il pacchetto npm",
       "full_list_link": "Visualizza l'elenco completo dei bang (JSON)"
+    },
+    "direct": {
+      "heading": "Risposte istantanee e dirette",
+      "intro_da_label": "Le risposte dirette",
+      "intro_da_text_prefix": "usano il formato",
+      "intro_da_text_suffix": "e si aprono come risultati a pagina intera.",
+      "intro_ia_label": "Le risposte istantanee",
+      "intro_ia_text": "vengono attivate dal campo di ricerca e sono accessibili anche tramite l'API.",
+      "full_page_heading": "Risposte dirette a pagina intera",
+      "network": {
+        "heading": "Rete e sicurezza",
+        "dns": "Ricerca di record DNS",
+        "whois": "Informazioni WHOIS del dominio",
+        "cert": "Informazioni sul certificato SSL",
+        "headers": "Intestazioni di risposta HTTP",
+        "asn": "Informazioni sull'ASN",
+        "subnet": "Calcolatore di sottorete / CIDR",
+        "resolve": "Risoluzione del nome host in IP",
+        "robots": "Contenuto di robots.txt",
+        "sitemap": "URL della sitemap",
+        "tech": "Rilevamento dello stack tecnologico",
+        "feed": "Feed RSS / Atom",
+        "expand": "Espandi URL accorciato",
+        "safe": "Controllo navigazione sicura"
+      },
+      "encoding": {
+        "heading": "Codifica e conversione",
+        "qr": "Genera codice QR",
+        "jwt": "Decodifica token JWT",
+        "html": "Codifica/decodifica entità HTML",
+        "escape": "Escape di caratteri speciali",
+        "ascii": "Testo in ASCII art",
+        "unicode": "Ricerca di carattere Unicode",
+        "emoji": "Ricerca di emoji"
+      },
+      "dev": {
+        "heading": "Strumenti per sviluppatori",
+        "json": "Formatta / valida JSON",
+        "yaml": "Formatta YAML o converti tra JSON e YAML",
+        "regex": "Spiega pattern regex",
+        "beautify": "Abbellisci / formatta codice",
+        "cron": "Spiega espressione cron",
+        "chmod": "Convertitore permessi file",
+        "timestamp": "Convertitore timestamp Unix",
+        "slug": "Genera slug URL",
+        "case": "Conversione maiuscole/minuscole (maiuscolo/minuscolo/titolo/camel)"
+      },
+      "reference": {
+        "heading": "Riferimento",
+        "tldr": "Pagina man semplificata tldr",
+        "man": "Pagina man Unix completa",
+        "cheat": "Cheatsheet di comandi",
+        "rfc": "Documento RFC",
+        "cve": "Informazioni vulnerabilità CVE",
+        "pkg": "Informazioni pacchetto (npm / PyPI / Go)",
+        "http": "Spiegazione del codice di stato HTTP",
+        "port": "Informazioni sul numero di porta"
+      },
+      "content": {
+        "heading": "Contenuti e conoscenza",
+        "wiki": "Riassunto di articolo Wikipedia",
+        "dict": "Definizione del dizionario",
+        "thesaurus": "Sinonimi e contrari",
+        "slang": "Definizione di slang / gergo internet",
+        "country": "Informazioni sul paese (codice ISO o nome)",
+        "license": "Riassunto di licenza open source"
+      },
+      "text": {
+        "heading": "Strumenti di testo",
+        "lorem": "Testo Lorem ipsum (paragrafi, parole o frasi)",
+        "word": "Statistiche del testo e tempo di lettura",
+        "diff": "Confronto di differenze di testo",
+        "useragent": "Analizza una stringa User-Agent",
+        "mime": "Ricerca tipo MIME"
+      },
+      "directories": {
+        "heading": "Directory di file",
+        "linux": "Cerca elenchi di directory aperte",
+        "pdf": "Trova directory di documenti",
+        "mp3": "Trova directory di musica"
+      },
+      "cache": {
+        "heading": "Cache e archivio",
+        "cached": "Versione in cache di una pagina",
+        "rotl": "Risposta diretta: Regole di Internet"
+      },
+      "instant": {
+        "heading": "Esempi di risposte istantanee",
+        "calc": "Risultato calcolatrice",
+        "math": "Funzioni ed espressioni matematiche",
+        "convert": "Conversione unità",
+        "time": "Ora attuale e ricerca fuso orario",
+        "ip": "Il tuo indirizzo IP attuale",
+        "color": "Anteprima e conversione colore"
+      }
     }
   }
 }

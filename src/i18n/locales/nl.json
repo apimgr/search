@@ -1537,6 +1537,101 @@
       "ex_gh_desc": "Zoek op GitHub",
       "ex_npm_desc": "Zoek het npm-pakket op",
       "full_list_link": "Volledige bang-lijst bekijken (JSON)"
+    },
+    "direct": {
+      "heading": "Directe en instant antwoorden",
+      "intro_da_label": "Directe antwoorden",
+      "intro_da_text_prefix": "gebruiken het formaat",
+      "intro_da_text_suffix": "en openen als volledige paginaresultaten.",
+      "intro_ia_label": "Instant antwoorden",
+      "intro_ia_text": "worden geactiveerd vanuit het zoekvak en zijn ook toegankelijk via de API.",
+      "full_page_heading": "Directe antwoorden op volledige pagina",
+      "network": {
+        "heading": "Netwerk & beveiliging",
+        "dns": "DNS-recordsopzoeking",
+        "whois": "WHOIS-informatie van domein",
+        "cert": "SSL-certificaatinformatie",
+        "headers": "HTTP-antwoordheaders",
+        "asn": "ASN-informatie",
+        "subnet": "Subnet- / CIDR-calculator",
+        "resolve": "Hostname naar IP-resolutie",
+        "robots": "Inhoud van robots.txt",
+        "sitemap": "Sitemap-URL's",
+        "tech": "Detectie van de tech-stack",
+        "feed": "RSS- / Atom-feeds",
+        "expand": "Verkorte URL uitvouwen",
+        "safe": "Safe-browsing-controle"
+      },
+      "encoding": {
+        "heading": "Codering & conversie",
+        "qr": "QR-code genereren",
+        "jwt": "JWT-token decoderen",
+        "html": "HTML-entiteiten coderen/decoderen",
+        "escape": "Speciale tekens escapen",
+        "ascii": "Tekst als ASCII-art",
+        "unicode": "Unicode-teken opzoeken",
+        "emoji": "Emoji zoeken"
+      },
+      "dev": {
+        "heading": "Hulpmiddelen voor ontwikkelaars",
+        "json": "JSON formatteren / valideren",
+        "yaml": "YAML formatteren of tussen JSON en YAML converteren",
+        "regex": "Regex-patroon uitleggen",
+        "beautify": "Code opmaken / formatteren",
+        "cron": "Cron-expressie uitleggen",
+        "chmod": "Bestandsrechten-converter",
+        "timestamp": "Unix-timestamp-converter",
+        "slug": "URL-slug genereren",
+        "case": "Hoofdletterconversie (hoofd-/kleine letters/titel/camel)"
+      },
+      "reference": {
+        "heading": "Referentie",
+        "tldr": "Vereenvoudigde tldr-manpagina",
+        "man": "Volledige Unix-manpagina",
+        "cheat": "Spiekbriefje voor commando's",
+        "rfc": "RFC-document",
+        "cve": "CVE-kwetsbaarheidsinformatie",
+        "pkg": "Pakketinformatie (npm / PyPI / Go)",
+        "http": "Uitleg van HTTP-statuscode",
+        "port": "Poortnummerinformatie"
+      },
+      "content": {
+        "heading": "Inhoud & kennis",
+        "wiki": "Samenvatting van Wikipedia-artikel",
+        "dict": "Woordenboekdefinitie",
+        "thesaurus": "Synoniemen en antoniemen",
+        "slang": "Slang / internetslang-definitie",
+        "country": "Landinformatie (ISO-code of naam)",
+        "license": "Samenvatting van open-source-licentie"
+      },
+      "text": {
+        "heading": "Tekstgereedschap",
+        "lorem": "Lorem ipsum-tekst (alinea's, woorden of zinnen)",
+        "word": "Tekststatistieken en leestijd",
+        "diff": "Tekstvergelijking",
+        "useragent": "User-Agent-string parsen",
+        "mime": "MIME-type opzoeken"
+      },
+      "directories": {
+        "heading": "Bestandsmappen",
+        "linux": "Open mapindexen doorzoeken",
+        "pdf": "Documentmappen vinden",
+        "mp3": "Muziekmappen vinden"
+      },
+      "cache": {
+        "heading": "Cache & archief",
+        "cached": "Cache-versie van een pagina",
+        "rotl": "Direct antwoord: Regels van het internet"
+      },
+      "instant": {
+        "heading": "Instant-antwoord-voorbeelden",
+        "calc": "Rekenmachine-resultaat",
+        "math": "Wiskundige functies en uitdrukkingen",
+        "convert": "Eenheidsconversie",
+        "time": "Huidige tijd en tijdzone-opzoeking",
+        "ip": "Uw huidige IP-adres",
+        "color": "Kleurvoorbeeld en -conversie"
+      }
     }
   }
 }

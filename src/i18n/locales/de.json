@@ -1537,6 +1537,101 @@
       "ex_gh_desc": "GitHub durchsuchen",
       "ex_npm_desc": "npm-Paket nachschlagen",
       "full_list_link": "Vollständige Bang-Liste anzeigen (JSON)"
+    },
+    "direct": {
+      "heading": "Sofort- und Direktantworten",
+      "intro_da_label": "Direktantworten",
+      "intro_da_text_prefix": "verwenden das Format",
+      "intro_da_text_suffix": "und öffnen sich als Vollseiten-Ergebnisse.",
+      "intro_ia_label": "Sofortantworten",
+      "intro_ia_text": "werden vom Suchfeld ausgelöst und sind auch über die API erreichbar.",
+      "full_page_heading": "Vollseitige Direktantworten",
+      "network": {
+        "heading": "Netzwerk & Sicherheit",
+        "dns": "DNS-Datensatz-Abfrage",
+        "whois": "WHOIS-Informationen zu Domain",
+        "cert": "SSL-Zertifikatsinformationen",
+        "headers": "HTTP-Antwort-Header",
+        "asn": "ASN-Informationen",
+        "subnet": "Subnetz- / CIDR-Rechner",
+        "resolve": "Hostname-zu-IP-Auflösung",
+        "robots": "Inhalt der robots.txt",
+        "sitemap": "Sitemap-URLs",
+        "tech": "Erkennung des Tech-Stacks",
+        "feed": "RSS- / Atom-Feeds",
+        "expand": "Verkürzte URL auflösen",
+        "safe": "Safe-Browsing-Prüfung"
+      },
+      "encoding": {
+        "heading": "Codierung & Konvertierung",
+        "qr": "QR-Code generieren",
+        "jwt": "JWT-Token decodieren",
+        "html": "HTML-Entities codieren/decodieren",
+        "escape": "Sonderzeichen escapen",
+        "ascii": "Text als ASCII-Art",
+        "unicode": "Unicode-Zeichen nachschlagen",
+        "emoji": "Emoji-Suche"
+      },
+      "dev": {
+        "heading": "Entwicklerwerkzeuge",
+        "json": "JSON formatieren / validieren",
+        "yaml": "YAML formatieren oder zwischen JSON und YAML konvertieren",
+        "regex": "Regex-Muster erklären",
+        "beautify": "Code verschönern / formatieren",
+        "cron": "Cron-Ausdruck erklären",
+        "chmod": "Dateiberechtigungs-Konverter",
+        "timestamp": "Unix-Timestamp-Konverter",
+        "slug": "URL-Slug erzeugen",
+        "case": "Groß-/Kleinschreibung-Konvertierung (Groß/Klein/Titel/Camel)"
+      },
+      "reference": {
+        "heading": "Referenz",
+        "tldr": "Vereinfachte tldr-Manpage",
+        "man": "Vollständige Unix-Manpage",
+        "cheat": "Befehls-Spickzettel",
+        "rfc": "RFC-Dokument",
+        "cve": "CVE-Schwachstellen-Info",
+        "pkg": "Paket-Info (npm / PyPI / Go)",
+        "http": "Erklärung zu HTTP-Statuscodes",
+        "port": "Portnummer-Info"
+      },
+      "content": {
+        "heading": "Inhalt & Wissen",
+        "wiki": "Zusammenfassung eines Wikipedia-Artikels",
+        "dict": "Wörterbuchdefinition",
+        "thesaurus": "Synonyme und Antonyme",
+        "slang": "Slang- / Internet-Slang-Definition",
+        "country": "Länderinformationen (ISO-Code oder Name)",
+        "license": "Zusammenfassung einer Open-Source-Lizenz"
+      },
+      "text": {
+        "heading": "Text-Werkzeuge",
+        "lorem": "Lorem-ipsum-Text (Absätze, Wörter oder Sätze)",
+        "word": "Textstatistik und Lesezeit",
+        "diff": "Textvergleich",
+        "useragent": "User-Agent-String parsen",
+        "mime": "MIME-Typ nachschlagen"
+      },
+      "directories": {
+        "heading": "Datei-Verzeichnisse",
+        "linux": "Offene Verzeichnislistings durchsuchen",
+        "pdf": "Dokumentverzeichnisse finden",
+        "mp3": "Musikverzeichnisse finden"
+      },
+      "cache": {
+        "heading": "Cache & Archiv",
+        "cached": "Zwischengespeicherte Version einer Seite",
+        "rotl": "Direktantwort: Regeln des Internets"
+      },
+      "instant": {
+        "heading": "Beispiele für Sofortantworten",
+        "calc": "Taschenrechner-Ergebnis",
+        "math": "Mathematische Funktionen und Ausdrücke",
+        "convert": "Einheitenumrechnung",
+        "time": "Aktuelle Uhrzeit und Zeitzonen-Abfrage",
+        "ip": "Ihre aktuelle IP-Adresse",
+        "color": "Farb-Vorschau und -Konvertierung"
+      }
     }
   }
 }

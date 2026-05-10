@@ -156,281 +156,104 @@
 
         {{/* Direct Answers */}}
         <section id="direct-answers" class="help-section">
-            <h2>Instant &amp; Direct Answers</h2>
-            <p><strong>Direct answers</strong> use the <code>type:term</code> format and open as full-page results. <strong>Instant answers</strong> are triggered from the regular search box and can also be accessed over the API.</p>
+            <h2>{{t "help.direct.heading"}}</h2>
+            <p><strong>{{t "help.direct.intro_da_label"}}</strong> {{t "help.direct.intro_da_text_prefix"}} <code>type:term</code> {{t "help.direct.intro_da_text_suffix"}} <strong>{{t "help.direct.intro_ia_label"}}</strong> {{t "help.direct.intro_ia_text"}}</p>
 
-            <h3>Full-page direct answers (<code>type:term</code>)</h3>
+            <h3>{{t "help.direct.full_page_heading"}} (<code>type:term</code>)</h3>
 
-            <h3>Network & Security</h3>
+            <h3>{{t "help.direct.network.heading"}}</h3>
             <div class="operator-grid">
-                <div class="operator-item">
-                    <code>dns:example.com</code>
-                    <span>DNS records lookup</span>
-                </div>
-                <div class="operator-item">
-                    <code>whois:example.com</code>
-                    <span>Domain WHOIS info</span>
-                </div>
-                <div class="operator-item">
-                    <code>cert:example.com</code>
-                    <span>SSL certificate info</span>
-                </div>
-                <div class="operator-item">
-                    <code>headers:example.com</code>
-                    <span>HTTP response headers</span>
-                </div>
-                <div class="operator-item">
-                    <code>asn:AS15169</code>
-                    <span>ASN information</span>
-                </div>
-                <div class="operator-item">
-                    <code>subnet:192.168.1.0/24</code>
-                    <span>Subnet / CIDR calculator</span>
-                </div>
-                <div class="operator-item">
-                    <code>resolve:example.com</code>
-                    <span>Hostname to IP resolution</span>
-                </div>
-                <div class="operator-item">
-                    <code>robots:example.com</code>
-                    <span>robots.txt contents</span>
-                </div>
-                <div class="operator-item">
-                    <code>sitemap:example.com</code>
-                    <span>Sitemap URLs</span>
-                </div>
-                <div class="operator-item">
-                    <code>tech:example.com</code>
-                    <span>Technology stack detection</span>
-                </div>
-                <div class="operator-item">
-                    <code>feed:example.com</code>
-                    <span>RSS / Atom feeds</span>
-                </div>
-                <div class="operator-item">
-                    <code>expand:short.url/x</code>
-                    <span>Expand shortened URL</span>
-                </div>
-                <div class="operator-item">
-                    <code>safe:example.com</code>
-                    <span>Safe browsing check</span>
-                </div>
+                <div class="operator-item"><code>dns:example.com</code><span>{{t "help.direct.network.dns"}}</span></div>
+                <div class="operator-item"><code>whois:example.com</code><span>{{t "help.direct.network.whois"}}</span></div>
+                <div class="operator-item"><code>cert:example.com</code><span>{{t "help.direct.network.cert"}}</span></div>
+                <div class="operator-item"><code>headers:example.com</code><span>{{t "help.direct.network.headers"}}</span></div>
+                <div class="operator-item"><code>asn:AS15169</code><span>{{t "help.direct.network.asn"}}</span></div>
+                <div class="operator-item"><code>subnet:192.168.1.0/24</code><span>{{t "help.direct.network.subnet"}}</span></div>
+                <div class="operator-item"><code>resolve:example.com</code><span>{{t "help.direct.network.resolve"}}</span></div>
+                <div class="operator-item"><code>robots:example.com</code><span>{{t "help.direct.network.robots"}}</span></div>
+                <div class="operator-item"><code>sitemap:example.com</code><span>{{t "help.direct.network.sitemap"}}</span></div>
+                <div class="operator-item"><code>tech:example.com</code><span>{{t "help.direct.network.tech"}}</span></div>
+                <div class="operator-item"><code>feed:example.com</code><span>{{t "help.direct.network.feed"}}</span></div>
+                <div class="operator-item"><code>expand:short.url/x</code><span>{{t "help.direct.network.expand"}}</span></div>
+                <div class="operator-item"><code>safe:example.com</code><span>{{t "help.direct.network.safe"}}</span></div>
             </div>
 
-            <h3>Encoding & Conversion</h3>
+            <h3>{{t "help.direct.encoding.heading"}}</h3>
             <div class="operator-grid">
-                <div class="operator-item">
-                    <code>qr:https://example.com</code>
-                    <span>Generate QR code</span>
-                </div>
-                <div class="operator-item">
-                    <code>jwt:token</code>
-                    <span>Decode JWT token</span>
-                </div>
-                <div class="operator-item">
-                    <code>html:&lt;b&gt;text&lt;/b&gt;</code>
-                    <span>HTML entity encode/decode</span>
-                </div>
-                <div class="operator-item">
-                    <code>escape:hello &amp; world</code>
-                    <span>Escape special characters</span>
-                </div>
-                <div class="operator-item">
-                    <code>ascii:hello</code>
-                    <span>ASCII art text</span>
-                </div>
-                <div class="operator-item">
-                    <code>unicode:U+1F600</code>
-                    <span>Unicode character lookup</span>
-                </div>
-                <div class="operator-item">
-                    <code>emoji:smile</code>
-                    <span>Emoji search</span>
-                </div>
+                <div class="operator-item"><code>qr:https://example.com</code><span>{{t "help.direct.encoding.qr"}}</span></div>
+                <div class="operator-item"><code>jwt:token</code><span>{{t "help.direct.encoding.jwt"}}</span></div>
+                <div class="operator-item"><code>html:&lt;b&gt;text&lt;/b&gt;</code><span>{{t "help.direct.encoding.html"}}</span></div>
+                <div class="operator-item"><code>escape:hello &amp; world</code><span>{{t "help.direct.encoding.escape"}}</span></div>
+                <div class="operator-item"><code>ascii:hello</code><span>{{t "help.direct.encoding.ascii"}}</span></div>
+                <div class="operator-item"><code>unicode:U+1F600</code><span>{{t "help.direct.encoding.unicode"}}</span></div>
+                <div class="operator-item"><code>emoji:smile</code><span>{{t "help.direct.encoding.emoji"}}</span></div>
             </div>
 
-            <h3>Developer Tools</h3>
+            <h3>{{t "help.direct.dev.heading"}}</h3>
             <div class="operator-grid">
-                <div class="operator-item">
-                    <code>json:format {"key":"val"}</code>
-                    <span>Format / validate JSON</span>
-                </div>
-                <div class="operator-item">
-                    <code>yaml:from-json {"key":"val"}</code>
-                    <span>Format YAML or convert JSON and YAML</span>
-                </div>
-                <div class="operator-item">
-                    <code>regex:[a-z]+</code>
-                    <span>Explain regex pattern</span>
-                </div>
-                <div class="operator-item">
-                    <code>beautify:code</code>
-                    <span>Beautify / format code</span>
-                </div>
-                <div class="operator-item">
-                    <code>cron:* * * * *</code>
-                    <span>Explain cron expression</span>
-                </div>
-                <div class="operator-item">
-                    <code>chmod:755</code>
-                    <span>File permission converter</span>
-                </div>
-                <div class="operator-item">
-                    <code>timestamp:1700000000</code>
-                    <span>Unix timestamp converter</span>
-                </div>
-                <div class="operator-item">
-                    <code>slug:Hello World</code>
-                    <span>Generate URL slug</span>
-                </div>
-                <div class="operator-item">
-                    <code>case:hello world</code>
-                    <span>Case conversion (upper/lower/title/camel)</span>
-                </div>
+                <div class="operator-item"><code>json:format {"key":"val"}</code><span>{{t "help.direct.dev.json"}}</span></div>
+                <div class="operator-item"><code>yaml:from-json {"key":"val"}</code><span>{{t "help.direct.dev.yaml"}}</span></div>
+                <div class="operator-item"><code>regex:[a-z]+</code><span>{{t "help.direct.dev.regex"}}</span></div>
+                <div class="operator-item"><code>beautify:code</code><span>{{t "help.direct.dev.beautify"}}</span></div>
+                <div class="operator-item"><code>cron:* * * * *</code><span>{{t "help.direct.dev.cron"}}</span></div>
+                <div class="operator-item"><code>chmod:755</code><span>{{t "help.direct.dev.chmod"}}</span></div>
+                <div class="operator-item"><code>timestamp:1700000000</code><span>{{t "help.direct.dev.timestamp"}}</span></div>
+                <div class="operator-item"><code>slug:Hello World</code><span>{{t "help.direct.dev.slug"}}</span></div>
+                <div class="operator-item"><code>case:hello world</code><span>{{t "help.direct.dev.case"}}</span></div>
             </div>
 
-            <h3>Reference</h3>
+            <h3>{{t "help.direct.reference.heading"}}</h3>
             <div class="operator-grid">
-                <div class="operator-item">
-                    <code>tldr:git</code>
-                    <span>tldr simplified man page</span>
-                </div>
-                <div class="operator-item">
-                    <code>man:grep</code>
-                    <span>Full Unix man page</span>
-                </div>
-                <div class="operator-item">
-                    <code>cheat:git</code>
-                    <span>Command cheatsheet</span>
-                </div>
-                <div class="operator-item">
-                    <code>rfc:2616</code>
-                    <span>RFC document</span>
-                </div>
-                <div class="operator-item">
-                    <code>cve:CVE-2024-1234</code>
-                    <span>CVE vulnerability info</span>
-                </div>
-                <div class="operator-item">
-                    <code>pkg:express</code>
-                    <span>Package info (npm / PyPI / Go)</span>
-                </div>
-                <div class="operator-item">
-                    <code>http:404</code>
-                    <span>HTTP status code explanation</span>
-                </div>
-                <div class="operator-item">
-                    <code>port:443</code>
-                    <span>Port number info</span>
-                </div>
+                <div class="operator-item"><code>tldr:git</code><span>{{t "help.direct.reference.tldr"}}</span></div>
+                <div class="operator-item"><code>man:grep</code><span>{{t "help.direct.reference.man"}}</span></div>
+                <div class="operator-item"><code>cheat:git</code><span>{{t "help.direct.reference.cheat"}}</span></div>
+                <div class="operator-item"><code>rfc:2616</code><span>{{t "help.direct.reference.rfc"}}</span></div>
+                <div class="operator-item"><code>cve:CVE-2024-1234</code><span>{{t "help.direct.reference.cve"}}</span></div>
+                <div class="operator-item"><code>pkg:express</code><span>{{t "help.direct.reference.pkg"}}</span></div>
+                <div class="operator-item"><code>http:404</code><span>{{t "help.direct.reference.http"}}</span></div>
+                <div class="operator-item"><code>port:443</code><span>{{t "help.direct.reference.port"}}</span></div>
             </div>
 
-            <h3>Content & Knowledge</h3>
+            <h3>{{t "help.direct.content.heading"}}</h3>
             <div class="operator-grid">
-                <div class="operator-item">
-                    <code>wiki:python</code>
-                    <span>Wikipedia article summary</span>
-                </div>
-                <div class="operator-item">
-                    <code>dict:ephemeral</code>
-                    <span>Dictionary definition</span>
-                </div>
-                <div class="operator-item">
-                    <code>thesaurus:happy</code>
-                    <span>Synonyms and antonyms</span>
-                </div>
-                <div class="operator-item">
-                    <code>slang:yolo</code>
-                    <span>Slang / internet slang definition</span>
-                </div>
-                <div class="operator-item">
-                    <code>country:DE</code>
-                    <span>Country information (ISO code or name)</span>
-                </div>
-                <div class="operator-item">
-                    <code>license:MIT</code>
-                    <span>Open-source license summary</span>
-                </div>
+                <div class="operator-item"><code>wiki:python</code><span>{{t "help.direct.content.wiki"}}</span></div>
+                <div class="operator-item"><code>dict:ephemeral</code><span>{{t "help.direct.content.dict"}}</span></div>
+                <div class="operator-item"><code>thesaurus:happy</code><span>{{t "help.direct.content.thesaurus"}}</span></div>
+                <div class="operator-item"><code>slang:yolo</code><span>{{t "help.direct.content.slang"}}</span></div>
+                <div class="operator-item"><code>country:DE</code><span>{{t "help.direct.content.country"}}</span></div>
+                <div class="operator-item"><code>license:MIT</code><span>{{t "help.direct.content.license"}}</span></div>
             </div>
 
-            <h3>Text Tools</h3>
+            <h3>{{t "help.direct.text.heading"}}</h3>
             <div class="operator-grid">
-                <div class="operator-item">
-                    <code>lorem:3</code>
-                    <span>Lorem ipsum text (paragraphs, words, or sentences)</span>
-                </div>
-                <div class="operator-item">
-                    <code>word:hello world</code>
-                    <span>Text statistics and reading time</span>
-                </div>
-                <div class="operator-item">
-                    <code>diff:text1|text2</code>
-                    <span>Text diff comparison</span>
-                </div>
-                <div class="operator-item">
-                    <code>useragent:my</code>
-                    <span>Parse a User-Agent string</span>
-                </div>
-                <div class="operator-item">
-                    <code>mime:application/json</code>
-                    <span>MIME type lookup</span>
-                </div>
+                <div class="operator-item"><code>lorem:3</code><span>{{t "help.direct.text.lorem"}}</span></div>
+                <div class="operator-item"><code>word:hello world</code><span>{{t "help.direct.text.word"}}</span></div>
+                <div class="operator-item"><code>diff:text1|text2</code><span>{{t "help.direct.text.diff"}}</span></div>
+                <div class="operator-item"><code>useragent:my</code><span>{{t "help.direct.text.useragent"}}</span></div>
+                <div class="operator-item"><code>mime:application/json</code><span>{{t "help.direct.text.mime"}}</span></div>
             </div>
 
-            <h3>File Directories</h3>
+            <h3>{{t "help.direct.directories.heading"}}</h3>
             <div class="operator-grid">
-                <div class="operator-item">
-                    <code>directory:linux iso</code>
-                    <span>Search open directory listings</span>
-                </div>
-                <div class="operator-item">
-                    <code>directory:pdf book</code>
-                    <span>Find document directories</span>
-                </div>
-                <div class="operator-item">
-                    <code>directory:mp3 album</code>
-                    <span>Find music directories</span>
-                </div>
+                <div class="operator-item"><code>directory:linux iso</code><span>{{t "help.direct.directories.linux"}}</span></div>
+                <div class="operator-item"><code>directory:pdf book</code><span>{{t "help.direct.directories.pdf"}}</span></div>
+                <div class="operator-item"><code>directory:mp3 album</code><span>{{t "help.direct.directories.mp3"}}</span></div>
             </div>
 
-            <h3>Cache & Archive</h3>
+            <h3>{{t "help.direct.cache.heading"}}</h3>
             <div class="operator-grid">
-                <div class="operator-item">
-                    <code>cache:example.com</code>
-                    <span>Cached version of a page</span>
-                </div>
-                <div class="operator-item">
-                    <code>rotl:34</code>
-                    <span>Rules of the Internet direct answer</span>
-                </div>
+                <div class="operator-item"><code>cache:example.com</code><span>{{t "help.direct.cache.cached"}}</span></div>
+                <div class="operator-item"><code>rotl:34</code><span>{{t "help.direct.cache.rotl"}}</span></div>
             </div>
 
-            <h3>Instant answer examples</h3>
+            <h3>{{t "help.direct.instant.heading"}}</h3>
             <div class="operator-grid">
-                <div class="operator-item">
-                    <code>2 + 2</code>
-                    <span>Calculator result</span>
-                </div>
-                <div class="operator-item">
-                    <code>sqrt(144)</code>
-                    <span>Math functions and expressions</span>
-                </div>
-                <div class="operator-item">
-                    <code>convert 10 km to miles</code>
-                    <span>Unit conversion</span>
-                </div>
-                <div class="operator-item">
-                    <code>time in tokyo</code>
-                    <span>Current time and timezone lookups</span>
-                </div>
-                <div class="operator-item">
-                    <code>what is my ip</code>
-                    <span>Your current IP address</span>
-                </div>
-                <div class="operator-item">
-                    <code>#ff5733</code>
-                    <span>Color preview and conversion</span>
-                </div>
+                <div class="operator-item"><code>2 + 2</code><span>{{t "help.direct.instant.calc"}}</span></div>
+                <div class="operator-item"><code>sqrt(144)</code><span>{{t "help.direct.instant.math"}}</span></div>
+                <div class="operator-item"><code>convert 10 km to miles</code><span>{{t "help.direct.instant.convert"}}</span></div>
+                <div class="operator-item"><code>time in tokyo</code><span>{{t "help.direct.instant.time"}}</span></div>
+                <div class="operator-item"><code>what is my ip</code><span>{{t "help.direct.instant.ip"}}</span></div>
+                <div class="operator-item"><code>#ff5733</code><span>{{t "help.direct.instant.color"}}</span></div>
             </div>
         </section>
 

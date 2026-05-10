@@ -1537,6 +1537,101 @@
       "ex_gh_desc": "Rechercher sur GitHub",
       "ex_npm_desc": "Consulter le paquet npm",
       "full_list_link": "Voir la liste complète des bangs (JSON)"
+    },
+    "direct": {
+      "heading": "Réponses instantanées et directes",
+      "intro_da_label": "Les réponses directes",
+      "intro_da_text_prefix": "utilisent le format",
+      "intro_da_text_suffix": "et s'ouvrent en pleine page.",
+      "intro_ia_label": "Les réponses instantanées",
+      "intro_ia_text": "sont déclenchées depuis le champ de recherche et accessibles également via l'API.",
+      "full_page_heading": "Réponses directes en pleine page",
+      "network": {
+        "heading": "Réseau et sécurité",
+        "dns": "Recherche d'enregistrements DNS",
+        "whois": "Informations WHOIS de domaine",
+        "cert": "Informations de certificat SSL",
+        "headers": "En-têtes de réponse HTTP",
+        "asn": "Informations sur l'ASN",
+        "subnet": "Calculateur de sous-réseau / CIDR",
+        "resolve": "Résolution du nom d'hôte en IP",
+        "robots": "Contenu de robots.txt",
+        "sitemap": "URLs du sitemap",
+        "tech": "Détection de la pile technologique",
+        "feed": "Flux RSS / Atom",
+        "expand": "Développer l'URL raccourcie",
+        "safe": "Vérification de navigation sûre"
+      },
+      "encoding": {
+        "heading": "Encodage et conversion",
+        "qr": "Générer un code QR",
+        "jwt": "Décoder un jeton JWT",
+        "html": "Encoder/décoder des entités HTML",
+        "escape": "Échapper les caractères spéciaux",
+        "ascii": "Texte en ASCII art",
+        "unicode": "Recherche de caractère Unicode",
+        "emoji": "Recherche d'emojis"
+      },
+      "dev": {
+        "heading": "Outils pour développeurs",
+        "json": "Formater / valider du JSON",
+        "yaml": "Formater du YAML ou convertir entre JSON et YAML",
+        "regex": "Expliquer un motif regex",
+        "beautify": "Embellir / formater du code",
+        "cron": "Expliquer une expression cron",
+        "chmod": "Convertisseur de permissions de fichier",
+        "timestamp": "Convertisseur d'horodatage Unix",
+        "slug": "Générer un slug d'URL",
+        "case": "Conversion de casse (majuscules/minuscules/titre/camel)"
+      },
+      "reference": {
+        "heading": "Référence",
+        "tldr": "Page man simplifiée tldr",
+        "man": "Page man Unix complète",
+        "cheat": "Aide-mémoire de commande",
+        "rfc": "Document RFC",
+        "cve": "Information de vulnérabilité CVE",
+        "pkg": "Information de paquet (npm / PyPI / Go)",
+        "http": "Explication du code d'état HTTP",
+        "port": "Information sur le numéro de port"
+      },
+      "content": {
+        "heading": "Contenu et savoir",
+        "wiki": "Résumé d'article Wikipédia",
+        "dict": "Définition du dictionnaire",
+        "thesaurus": "Synonymes et antonymes",
+        "slang": "Définition d'argot / argot internet",
+        "country": "Informations sur le pays (code ISO ou nom)",
+        "license": "Résumé de licence open source"
+      },
+      "text": {
+        "heading": "Outils texte",
+        "lorem": "Texte Lorem ipsum (paragraphes, mots ou phrases)",
+        "word": "Statistiques de texte et temps de lecture",
+        "diff": "Comparaison de différences de texte",
+        "useragent": "Analyser une chaîne User-Agent",
+        "mime": "Recherche de type MIME"
+      },
+      "directories": {
+        "heading": "Répertoires de fichiers",
+        "linux": "Rechercher des listings de répertoires ouverts",
+        "pdf": "Trouver des répertoires de documents",
+        "mp3": "Trouver des répertoires de musique"
+      },
+      "cache": {
+        "heading": "Cache et archive",
+        "cached": "Version en cache d'une page",
+        "rotl": "Réponse directe Règles d'Internet"
+      },
+      "instant": {
+        "heading": "Exemples de réponses instantanées",
+        "calc": "Résultat de calculatrice",
+        "math": "Fonctions et expressions mathématiques",
+        "convert": "Conversion d'unités",
+        "time": "Heure actuelle et recherche de fuseau horaire",
+        "ip": "Votre adresse IP actuelle",
+        "color": "Aperçu et conversion de couleur"
+      }
     }
   }
 }
