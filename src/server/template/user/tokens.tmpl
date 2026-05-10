@@ -2,14 +2,14 @@
 <div class="user-page tokens-page">
     <div class="page-header">
         <h1>{{t "user.tokens.title"}}</h1>
-        <p class="page-subtitle">Manage your API tokens for programmatic access</p>
+        <p class="page-subtitle">{{t "user.tokens.subtitle"}}</p>
     </div>
 
     <div class="user-container">
         <nav class="user-nav">
-            <a href="/users/profile" class="nav-item">{{t "user.profile"}}</a>
-            <a href="/users/security" class="nav-item">{{t "user.security"}}</a>
-            <a href="/users/tokens" class="nav-item active">{{t "user.tokens"}}</a>
+            <a href="/users/profile" class="nav-item">{{t "user.nav.profile"}}</a>
+            <a href="/users/security" class="nav-item">{{t "user.nav.security"}}</a>
+            <a href="/users/tokens" class="nav-item active">{{t "user.nav.tokens"}}</a>
         </nav>
 
         <div class="user-content">
@@ -29,14 +29,14 @@
                     </button>
                 </div>
                 <p class="token-warning">
-                    Make sure to copy this token now. You won't be able to see it again!
+                    {{t "user.tokens.created_warning"}}
                 </p>
             </div>
             {{end}}
 
             <div class="tokens-section">
                 <div class="section-header">
-                    <h2>Your Tokens</h2>
+                    <h2>{{t "user.tokens.heading"}}</h2>
                     <button type="button" class="btn btn-primary btn-sm" id="create-token-btn">
                         {{t "user.tokens.create"}}
                     </button>
@@ -52,9 +52,9 @@
                                 <code>{{.TokenPrefix}}...</code>
                             </div>
                             <div class="token-meta">
-                                <span>Created: {{.CreatedAt | formatDate}}</span>
+                                <span>{{t "user.tokens.created_label"}} {{.CreatedAt | formatDate}}</span>
                                 {{if .ExpiresAt}}
-                                <span>Expires: {{.ExpiresAt | formatDate}}</span>
+                                <span>{{t "user.tokens.expires_label"}} {{.ExpiresAt | formatDate}}</span>
                                 {{else}}
                                 <span>{{t "user.tokens.never"}}</span>
                                 {{end}}
@@ -87,8 +87,8 @@
                 </div>
                 {{else}}
                 <div class="empty-state">
-                    <p>You don't have any API tokens yet.</p>
-                    <p>API tokens allow you to authenticate with the API programmatically.</p>
+                    <p>{{t "user.tokens.empty_title"}}</p>
+                    <p>{{t "user.tokens.empty_description"}}</p>
                 </div>
                 {{end}}
             </div>
@@ -108,7 +108,7 @@
                 <div class="form-group">
                     <label for="token_name">{{t "user.tokens.name"}}</label>
                     <input type="text" id="token_name" name="name" required
-                           placeholder="e.g., My API Client" maxlength="64">
+                           placeholder="{{t "user.tokens.name_placeholder"}}" maxlength="64">
                 </div>
 
                 <div class="form-group">
@@ -116,15 +116,15 @@
                     <div class="permissions-grid">
                         <label class="permission-toggle">
                             <input type="checkbox" name="permissions" value="read" checked>
-                            <span>Read</span>
+                            <span>{{t "user.tokens.perm_read"}}</span>
                         </label>
                         <label class="permission-toggle">
                             <input type="checkbox" name="permissions" value="write">
-                            <span>Write</span>
+                            <span>{{t "user.tokens.perm_write"}}</span>
                         </label>
                         <label class="permission-toggle">
                             <input type="checkbox" name="permissions" value="search">
-                            <span>Search</span>
+                            <span>{{t "user.tokens.perm_search"}}</span>
                         </label>
                     </div>
                 </div>
@@ -133,10 +133,10 @@
                     <label for="token_expires">{{t "user.tokens.expires"}}</label>
                     <select id="token_expires" name="expires">
                         <option value="">{{t "user.tokens.never"}}</option>
-                        <option value="7">7 days</option>
-                        <option value="30" selected>30 days</option>
-                        <option value="90">90 days</option>
-                        <option value="365">1 year</option>
+                        <option value="7">{{t "user.tokens.expires_7d"}}</option>
+                        <option value="30" selected>{{t "user.tokens.expires_30d"}}</option>
+                        <option value="90">{{t "user.tokens.expires_90d"}}</option>
+                        <option value="365">{{t "user.tokens.expires_1y"}}</option>
                     </select>
                 </div>
 

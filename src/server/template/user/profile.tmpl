@@ -2,14 +2,14 @@
 <div class="user-page profile-page">
     <div class="page-header">
         <h1>{{t "user.profile.title"}}</h1>
-        <p class="page-subtitle">Manage your account information</p>
+        <p class="page-subtitle">{{t "user.profile.subtitle"}}</p>
     </div>
 
     <div class="user-container">
         <nav class="user-nav">
-            <a href="/users/profile" class="nav-item active">{{t "user.profile"}}</a>
-            <a href="/users/security" class="nav-item">{{t "user.security"}}</a>
-            <a href="/users/tokens" class="nav-item">{{t "user.tokens"}}</a>
+            <a href="/users/profile" class="nav-item active">{{t "user.nav.profile"}}</a>
+            <a href="/users/security" class="nav-item">{{t "user.nav.security"}}</a>
+            <a href="/users/tokens" class="nav-item">{{t "user.nav.tokens"}}</a>
         </nav>
 
         <div class="user-content">
@@ -23,7 +23,7 @@
                 <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 
                 <div class="profile-section">
-                    <h2>Profile Information</h2>
+                    <h2>{{t "user.profile.section_profile_info"}}</h2>
 
                     <div class="avatar-section">
                         <div class="current-avatar">
@@ -48,10 +48,10 @@
 
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="username">Username</label>
+                            <label for="username">{{t "user.profile.username_label"}}</label>
                             <input type="text" id="username" value="{{.User.Username}}" disabled
                                    class="input-disabled">
-                            <small class="form-help">Username cannot be changed</small>
+                            <small class="form-help">{{t "user.profile.username_help"}}</small>
                         </div>
 
                         <div class="form-group">
@@ -65,40 +65,40 @@
                     <div class="form-group">
                         <label for="bio">{{t "user.profile.bio"}}</label>
                         <textarea id="bio" name="bio" rows="3" maxlength="500"
-                                  placeholder="Tell us about yourself">{{.User.Bio}}</textarea>
+                                  placeholder="{{t "user.profile.bio_placeholder"}}">{{.User.Bio}}</textarea>
                         <small class="form-help char-count"><span id="bio-count">{{len .User.Bio}}</span>/500</small>
                     </div>
                 </div>
 
                 <div class="profile-section">
-                    <h2>Email Settings</h2>
+                    <h2>{{t "user.profile.section_email_settings"}}</h2>
 
                     <div class="form-group">
-                        <label for="email">{{t "user.profile.email"}} (Account)</label>
+                        <label for="email">{{t "user.profile.email"}} {{t "user.profile.email_account_suffix"}}</label>
                         <div class="input-with-badge">
                             <input type="email" id="email" name="email" value="{{.User.Email}}" required>
                             {{if .User.EmailVerified}}
-                            <span class="badge badge-success">Verified</span>
+                            <span class="badge badge-success">{{t "user.profile.verified"}}</span>
                             {{else}}
-                            <span class="badge badge-warning">Unverified</span>
+                            <span class="badge badge-warning">{{t "user.profile.unverified"}}</span>
                             {{end}}
                         </div>
-                        <small class="form-help">Used for security alerts and password recovery</small>
+                        <small class="form-help">{{t "user.profile.email_help"}}</small>
                     </div>
 
                     <div class="form-group">
-                        <label for="notification_email">Notification Email (Optional)</label>
+                        <label for="notification_email">{{t "user.profile.notification_email_label"}}</label>
                         <div class="input-with-badge">
                             <input type="email" id="notification_email" name="notification_email"
                                    value="{{.User.NotificationEmail}}"
-                                   placeholder="Leave empty to use account email">
+                                   placeholder="{{t "user.profile.notification_email_placeholder"}}">
                             {{if and .User.NotificationEmail .User.NotificationEmailVerified}}
-                            <span class="badge badge-success">Verified</span>
+                            <span class="badge badge-success">{{t "user.profile.verified"}}</span>
                             {{else if .User.NotificationEmail}}
-                            <span class="badge badge-warning">Unverified</span>
+                            <span class="badge badge-warning">{{t "user.profile.unverified"}}</span>
                             {{end}}
                         </div>
-                        <small class="form-help">Used for newsletters and general notifications</small>
+                        <small class="form-help">{{t "user.profile.notification_email_help"}}</small>
                     </div>
                 </div>
 

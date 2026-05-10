@@ -40,7 +40,8 @@
     "copy": "Copiar",
     "accept": "Aceitar",
     "decline": "Recusar",
-    "dismiss": "Dispensar"
+    "dismiss": "Dispensar",
+    "upload": "Enviar"
   },
   "auth": {
     "login": "Entrar",
@@ -933,16 +934,114 @@
     }
   },
   "user": {
-    "profile": "Perfil",
-    "security": "Segurança",
-    "tokens": "Tokens da API",
     "sessions": "Sessões",
     "notifications": "Notificações",
     "revoke_token_title": "Revogar token",
     "revoke_token_action": "Revogar",
     "revoke_token_confirm_message": "Tem certeza de que deseja revogar este token? Esta acao nao pode ser desfeita.",
     "revoke_api_token_title": "Revogar token de API",
-    "revoke_api_token_confirm_message": "Tem certeza de que deseja revogar este token?"
+    "revoke_api_token_confirm_message": "Tem certeza de que deseja revogar este token?",
+    "nav": {
+      "profile": "Perfil",
+      "security": "Segurança",
+      "tokens": "Tokens da API"
+    },
+    "profile": {
+      "title": "Perfil",
+      "subtitle": "Gerencie as informações da sua conta",
+      "section_profile_info": "Informações do perfil",
+      "section_email_settings": "Configurações de e-mail",
+      "username_label": "Nome de usuário",
+      "username_help": "O nome de usuário não pode ser alterado",
+      "display_name": "Nome de exibição",
+      "bio": "Biografia",
+      "bio_placeholder": "Conte-nos sobre você",
+      "email": "E-mail",
+      "email_account_suffix": "(Conta)",
+      "email_help": "Usado para alertas de segurança e recuperação de senha",
+      "verified": "Verificado",
+      "unverified": "Não verificado",
+      "notification_email_label": "E-mail de notificações (opcional)",
+      "notification_email_placeholder": "Deixe em branco para usar o e-mail da conta",
+      "notification_email_help": "Usado para boletins e notificações gerais"
+    },
+    "security": {
+      "title": "Segurança",
+      "subtitle": "Gerencie suas configurações de segurança",
+      "change_password": "Alterar senha",
+      "current_password": "Senha atual",
+      "new_password": "Nova senha",
+      "confirm_password": "Confirmar senha",
+      "2fa": "Autenticação de dois fatores",
+      "2fa_enabled": "Autenticação de dois fatores ativada",
+      "2fa_disabled": "Autenticação de dois fatores desativada",
+      "2fa_enabled_text": "Sua conta está protegida com autenticação de dois fatores.",
+      "2fa_disabled_text": "Adicione uma camada extra de segurança à sua conta.",
+      "2fa_enable": "Ativar autenticação de dois fatores",
+      "2fa_disable": "Desativar autenticação de dois fatores",
+      "recovery_keys": "Chaves de recuperação",
+      "recovery_description": "Chaves de recuperação podem ser usadas para acessar sua conta se você perder seu dispositivo 2FA.",
+      "recovery_remaining": "Você tem %d chaves de recuperação restantes.",
+      "recovery_low_warning": "Você tem poucas chaves de recuperação restantes. Considere regenerá-las.",
+      "recovery_note": "As chaves de recuperação são mostradas quando a autenticação de dois fatores é ativada. Guarde-as em local seguro quando exibidas.",
+      "sessions": "Sessões ativas",
+      "sessions_description": "Estes são os dispositivos atualmente conectados à sua conta.",
+      "sessions_current": "Atual",
+      "sessions_revoke": "Revogar",
+      "sessions_revoke_all": "Revogar todas as outras sessões",
+      "sessions_last_active": "Última atividade:"
+    },
+    "tokens": {
+      "title": "Tokens de API",
+      "subtitle": "Gerencie seus tokens de API para acesso programático",
+      "heading": "Seus tokens",
+      "create": "Criar token",
+      "created": "Token criado",
+      "created_warning": "Certifique-se de copiar este token agora. Você não poderá vê-lo novamente!",
+      "created_label": "Criado:",
+      "expires_label": "Expira:",
+      "never": "Nunca",
+      "last_used": "Último uso",
+      "not_used": "Nunca usado",
+      "revoke": "Revogar",
+      "empty_title": "Você ainda não tem tokens de API.",
+      "empty_description": "Tokens de API permitem que você se autentique com a API de forma programática.",
+      "name": "Nome do token",
+      "name_placeholder": "ex., Meu cliente de API",
+      "permissions": "Permissões",
+      "perm_read": "Leitura",
+      "perm_write": "Escrita",
+      "perm_search": "Pesquisa",
+      "expires": "Expira",
+      "expires_7d": "7 dias",
+      "expires_30d": "30 dias",
+      "expires_90d": "90 dias",
+      "expires_1y": "1 ano"
+    },
+    "twofa": {
+      "title": "Autenticação de dois fatores",
+      "subtitle": "Proteja sua conta com um aplicativo de senha temporária.",
+      "scan_heading": "Escaneie o código QR",
+      "scan_description": "Use um aplicativo autenticador para escanear este código, ou insira o segredo manualmente se a leitura não estiver disponível.",
+      "qr_alt": "Código QR para configurar a autenticação de dois fatores",
+      "issuer_label": "Emissor",
+      "account_label": "Conta",
+      "secret_label": "Segredo",
+      "verify_heading": "Verificar configuração",
+      "code_label": "Código de autenticação",
+      "enable_button": "Ativar autenticação de dois fatores",
+      "confirm_heading": "Confirme sua senha",
+      "confirm_description": "Digite sua senha para gerar um código QR e começar a configuração.",
+      "password_label": "Senha",
+      "continue_button": "Continuar"
+    },
+    "recovery": {
+      "title": "Chaves de recuperação",
+      "subtitle": "Salve essas chaves agora. Elas são exibidas apenas uma vez.",
+      "heading": "Guarde-as com segurança",
+      "description": "Cada chave pode ser usada uma vez para recuperar o acesso caso você perca seu dispositivo autenticador.",
+      "return_button": "Voltar às configurações de segurança"
+    }
   },
   "health": {
     "status": "Status",
@@ -1656,5 +1755,9 @@
         "color": "Pré-visualização e conversão de cor"
       }
     }
+  },
+  "form": {
+    "save": "Salvar",
+    "cancel": "Cancelar"
   }
 }

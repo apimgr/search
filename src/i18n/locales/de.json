@@ -40,7 +40,8 @@
     "copy": "Kopieren",
     "accept": "Akzeptieren",
     "decline": "Ablehnen",
-    "dismiss": "Schliessen"
+    "dismiss": "Schliessen",
+    "upload": "Hochladen"
   },
   "auth": {
     "login": "Anmelden",
@@ -932,16 +933,114 @@
     }
   },
   "user": {
-    "profile": "Profil",
-    "security": "Sicherheit",
-    "tokens": "API-Token",
     "sessions": "Sitzungen",
     "notifications": "Benachrichtigungen",
     "revoke_token_title": "Token widerrufen",
     "revoke_token_action": "Widerrufen",
     "revoke_token_confirm_message": "Mochten Sie dieses Token wirklich widerrufen? Diese Aktion kann nicht ruckgangig gemacht werden.",
     "revoke_api_token_title": "API-Token widerrufen",
-    "revoke_api_token_confirm_message": "Mochten Sie dieses Token wirklich widerrufen?"
+    "revoke_api_token_confirm_message": "Mochten Sie dieses Token wirklich widerrufen?",
+    "nav": {
+      "profile": "Profil",
+      "security": "Sicherheit",
+      "tokens": "API-Token"
+    },
+    "profile": {
+      "title": "Profil",
+      "subtitle": "Verwalten Sie Ihre Kontoinformationen",
+      "section_profile_info": "Profilinformationen",
+      "section_email_settings": "E-Mail-Einstellungen",
+      "username_label": "Benutzername",
+      "username_help": "Der Benutzername kann nicht geändert werden",
+      "display_name": "Anzeigename",
+      "bio": "Biografie",
+      "bio_placeholder": "Erzählen Sie etwas über sich",
+      "email": "E-Mail",
+      "email_account_suffix": "(Konto)",
+      "email_help": "Wird für Sicherheitswarnungen und Passwortwiederherstellung verwendet",
+      "verified": "Verifiziert",
+      "unverified": "Nicht verifiziert",
+      "notification_email_label": "Benachrichtigungs-E-Mail (optional)",
+      "notification_email_placeholder": "Leer lassen, um die Konto-E-Mail zu verwenden",
+      "notification_email_help": "Wird für Newsletter und allgemeine Benachrichtigungen verwendet"
+    },
+    "security": {
+      "title": "Sicherheit",
+      "subtitle": "Verwalten Sie Ihre Sicherheitseinstellungen",
+      "change_password": "Passwort ändern",
+      "current_password": "Aktuelles Passwort",
+      "new_password": "Neues Passwort",
+      "confirm_password": "Passwort bestätigen",
+      "2fa": "Zwei-Faktor-Authentifizierung",
+      "2fa_enabled": "Zwei-Faktor-Authentifizierung aktiviert",
+      "2fa_disabled": "Zwei-Faktor-Authentifizierung deaktiviert",
+      "2fa_enabled_text": "Ihr Konto ist mit Zwei-Faktor-Authentifizierung geschützt.",
+      "2fa_disabled_text": "Fügen Sie Ihrem Konto eine zusätzliche Sicherheitsebene hinzu.",
+      "2fa_enable": "Zwei-Faktor-Authentifizierung aktivieren",
+      "2fa_disable": "Zwei-Faktor-Authentifizierung deaktivieren",
+      "recovery_keys": "Wiederherstellungsschlüssel",
+      "recovery_description": "Wiederherstellungsschlüssel können verwendet werden, um auf Ihr Konto zuzugreifen, wenn Sie Ihr 2FA-Gerät verlieren.",
+      "recovery_remaining": "Sie haben noch %d Wiederherstellungsschlüssel übrig.",
+      "recovery_low_warning": "Sie haben nur noch wenige Wiederherstellungsschlüssel. Erwägen Sie, neue zu erstellen.",
+      "recovery_note": "Wiederherstellungsschlüssel werden bei aktivierter Zwei-Faktor-Authentifizierung angezeigt. Bewahren Sie sie an einem sicheren Ort auf, wenn sie angezeigt werden.",
+      "sessions": "Aktive Sitzungen",
+      "sessions_description": "Dies sind die Geräte, die derzeit in Ihrem Konto angemeldet sind.",
+      "sessions_current": "Aktuell",
+      "sessions_revoke": "Widerrufen",
+      "sessions_revoke_all": "Alle anderen Sitzungen widerrufen",
+      "sessions_last_active": "Zuletzt aktiv:"
+    },
+    "tokens": {
+      "title": "API-Token",
+      "subtitle": "Verwalten Sie Ihre API-Token für programmatischen Zugriff",
+      "heading": "Ihre Token",
+      "create": "Token erstellen",
+      "created": "Token erstellt",
+      "created_warning": "Stellen Sie sicher, dass Sie diesen Token jetzt kopieren. Sie können ihn später nicht mehr sehen!",
+      "created_label": "Erstellt:",
+      "expires_label": "Läuft ab:",
+      "never": "Nie",
+      "last_used": "Zuletzt verwendet",
+      "not_used": "Nie verwendet",
+      "revoke": "Widerrufen",
+      "empty_title": "Sie haben noch keine API-Token.",
+      "empty_description": "API-Token ermöglichen die programmatische Authentifizierung bei der API.",
+      "name": "Token-Name",
+      "name_placeholder": "z. B. Mein API-Client",
+      "permissions": "Berechtigungen",
+      "perm_read": "Lesen",
+      "perm_write": "Schreiben",
+      "perm_search": "Suchen",
+      "expires": "Läuft ab",
+      "expires_7d": "7 Tage",
+      "expires_30d": "30 Tage",
+      "expires_90d": "90 Tage",
+      "expires_1y": "1 Jahr"
+    },
+    "twofa": {
+      "title": "Zwei-Faktor-Authentifizierung",
+      "subtitle": "Schützen Sie Ihr Konto mit einer Authenticator-App für zeitbasierte Einmalpasswörter.",
+      "scan_heading": "QR-Code scannen",
+      "scan_description": "Verwenden Sie eine Authenticator-App, um diesen Code zu scannen, oder geben Sie das Geheimnis manuell ein, wenn Scannen nicht möglich ist.",
+      "qr_alt": "QR-Code für die Einrichtung der Zwei-Faktor-Authentifizierung",
+      "issuer_label": "Aussteller",
+      "account_label": "Konto",
+      "secret_label": "Geheimnis",
+      "verify_heading": "Einrichtung verifizieren",
+      "code_label": "Authentifizierungscode",
+      "enable_button": "Zwei-Faktor-Authentifizierung aktivieren",
+      "confirm_heading": "Passwort bestätigen",
+      "confirm_description": "Geben Sie Ihr Passwort ein, um einen QR-Code zu erzeugen und mit der Einrichtung zu beginnen.",
+      "password_label": "Passwort",
+      "continue_button": "Fortfahren"
+    },
+    "recovery": {
+      "title": "Wiederherstellungsschlüssel",
+      "subtitle": "Speichern Sie diese Schlüssel jetzt. Sie werden nur einmal angezeigt.",
+      "heading": "Sicher aufbewahren",
+      "description": "Jeder Schlüssel kann einmal verwendet werden, um den Zugang wiederherzustellen, wenn Sie Ihr Authenticator-Gerät verlieren.",
+      "return_button": "Zurück zu den Sicherheitseinstellungen"
+    }
   },
   "health": {
     "status": "Status",
@@ -1655,5 +1754,9 @@
         "color": "Farb-Vorschau und -Konvertierung"
       }
     }
+  },
+  "form": {
+    "save": "Speichern",
+    "cancel": "Abbrechen"
   }
 }

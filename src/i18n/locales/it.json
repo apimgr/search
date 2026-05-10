@@ -40,7 +40,8 @@
     "copy": "Copiare",
     "accept": "Accetta",
     "decline": "Rifiuta",
-    "dismiss": "Chiudi"
+    "dismiss": "Chiudi",
+    "upload": "Carica"
   },
   "auth": {
     "login": "Accedi",
@@ -932,16 +933,114 @@
     }
   },
   "user": {
-    "profile": "Profilo",
-    "security": "Sicurezza",
-    "tokens": "Token API",
     "sessions": "Sessioni",
     "notifications": "Notifiche",
     "revoke_token_title": "Revoca token",
     "revoke_token_action": "Revoca",
     "revoke_token_confirm_message": "Vuoi davvero revocare questo token? Questa azione non puo essere annullata.",
     "revoke_api_token_title": "Revoca token API",
-    "revoke_api_token_confirm_message": "Vuoi davvero revocare questo token?"
+    "revoke_api_token_confirm_message": "Vuoi davvero revocare questo token?",
+    "nav": {
+      "profile": "Profilo",
+      "security": "Sicurezza",
+      "tokens": "Token API"
+    },
+    "profile": {
+      "title": "Profilo",
+      "subtitle": "Gestisci le informazioni del tuo account",
+      "section_profile_info": "Informazioni del profilo",
+      "section_email_settings": "Impostazioni email",
+      "username_label": "Nome utente",
+      "username_help": "Il nome utente non può essere modificato",
+      "display_name": "Nome visualizzato",
+      "bio": "Biografia",
+      "bio_placeholder": "Raccontaci di te",
+      "email": "Email",
+      "email_account_suffix": "(Account)",
+      "email_help": "Usata per avvisi di sicurezza e recupero password",
+      "verified": "Verificato",
+      "unverified": "Non verificato",
+      "notification_email_label": "Email per notifiche (facoltativo)",
+      "notification_email_placeholder": "Lascia vuoto per usare l'email dell'account",
+      "notification_email_help": "Usata per newsletter e notifiche generali"
+    },
+    "security": {
+      "title": "Sicurezza",
+      "subtitle": "Gestisci le impostazioni di sicurezza",
+      "change_password": "Cambia password",
+      "current_password": "Password attuale",
+      "new_password": "Nuova password",
+      "confirm_password": "Conferma password",
+      "2fa": "Autenticazione a due fattori",
+      "2fa_enabled": "Autenticazione a due fattori attiva",
+      "2fa_disabled": "Autenticazione a due fattori disattivata",
+      "2fa_enabled_text": "Il tuo account è protetto con autenticazione a due fattori.",
+      "2fa_disabled_text": "Aggiungi un livello di sicurezza in più al tuo account.",
+      "2fa_enable": "Attiva autenticazione a due fattori",
+      "2fa_disable": "Disattiva autenticazione a due fattori",
+      "recovery_keys": "Chiavi di recupero",
+      "recovery_description": "Le chiavi di recupero possono essere usate per accedere all'account se perdi il tuo dispositivo 2FA.",
+      "recovery_remaining": "Ti rimangono %d chiavi di recupero.",
+      "recovery_low_warning": "Ti rimangono poche chiavi di recupero. Considera di rigenerarle.",
+      "recovery_note": "Le chiavi di recupero vengono mostrate quando l'autenticazione a due fattori è attiva. Conservale in un luogo sicuro quando vengono mostrate.",
+      "sessions": "Sessioni attive",
+      "sessions_description": "Questi sono i dispositivi attualmente collegati al tuo account.",
+      "sessions_current": "Attuale",
+      "sessions_revoke": "Revoca",
+      "sessions_revoke_all": "Revoca tutte le altre sessioni",
+      "sessions_last_active": "Ultima attività:"
+    },
+    "tokens": {
+      "title": "Token API",
+      "subtitle": "Gestisci i tuoi token API per accesso programmatico",
+      "heading": "I tuoi token",
+      "create": "Crea token",
+      "created": "Token creato",
+      "created_warning": "Assicurati di copiare questo token ora. Non potrai più vederlo!",
+      "created_label": "Creato:",
+      "expires_label": "Scade:",
+      "never": "Mai",
+      "last_used": "Ultimo uso",
+      "not_used": "Mai usato",
+      "revoke": "Revoca",
+      "empty_title": "Non hai ancora token API.",
+      "empty_description": "I token API ti permettono di autenticarti con l'API in modo programmatico.",
+      "name": "Nome del token",
+      "name_placeholder": "Es., Mio client API",
+      "permissions": "Permessi",
+      "perm_read": "Lettura",
+      "perm_write": "Scrittura",
+      "perm_search": "Ricerca",
+      "expires": "Scade",
+      "expires_7d": "7 giorni",
+      "expires_30d": "30 giorni",
+      "expires_90d": "90 giorni",
+      "expires_1y": "1 anno"
+    },
+    "twofa": {
+      "title": "Autenticazione a due fattori",
+      "subtitle": "Proteggi il tuo account con un'app di password temporanea.",
+      "scan_heading": "Scansiona il codice QR",
+      "scan_description": "Usa un'app di autenticazione per scansionare questo codice, o inserisci il segreto manualmente se la scansione non è disponibile.",
+      "qr_alt": "Codice QR per la configurazione dell'autenticazione a due fattori",
+      "issuer_label": "Emittente",
+      "account_label": "Account",
+      "secret_label": "Segreto",
+      "verify_heading": "Verifica configurazione",
+      "code_label": "Codice di autenticazione",
+      "enable_button": "Attiva autenticazione a due fattori",
+      "confirm_heading": "Conferma la password",
+      "confirm_description": "Inserisci la tua password per generare un codice QR e iniziare la configurazione.",
+      "password_label": "Password",
+      "continue_button": "Continua"
+    },
+    "recovery": {
+      "title": "Chiavi di recupero",
+      "subtitle": "Salva queste chiavi ora. Vengono mostrate una sola volta.",
+      "heading": "Conservale in sicurezza",
+      "description": "Ogni chiave può essere usata una volta per riottenere l'accesso se perdi il dispositivo autenticatore.",
+      "return_button": "Torna alle impostazioni di sicurezza"
+    }
   },
   "health": {
     "status": "Stato",
@@ -1655,5 +1754,9 @@
         "color": "Anteprima e conversione colore"
       }
     }
+  },
+  "form": {
+    "save": "Salva",
+    "cancel": "Annulla"
   }
 }

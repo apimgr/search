@@ -40,7 +40,8 @@
     "copy": "コピー",
     "accept": "承諾",
     "decline": "拒否",
-    "dismiss": "閉じる"
+    "dismiss": "閉じる",
+    "upload": "Upload"
   },
   "auth": {
     "login": "ログイン",
@@ -932,16 +933,114 @@
     }
   },
   "user": {
-    "profile": "プロフィール",
-    "security": "セキュリティ",
-    "tokens": "APIトークン",
     "sessions": "セッション",
     "notifications": "通知",
     "revoke_token_title": "トークンを取り消す",
     "revoke_token_action": "取り消す",
     "revoke_token_confirm_message": "このトークンを本当に取り消しますか？この操作は元に戻せません。",
     "revoke_api_token_title": "API トークンを取り消す",
-    "revoke_api_token_confirm_message": "このトークンを本当に取り消しますか？"
+    "revoke_api_token_confirm_message": "このトークンを本当に取り消しますか？",
+    "nav": {
+      "profile": "プロフィール",
+      "security": "セキュリティ",
+      "tokens": "APIトークン"
+    },
+    "profile": {
+      "title": "Profile",
+      "subtitle": "Manage your account information",
+      "section_profile_info": "Profile Information",
+      "section_email_settings": "Email Settings",
+      "username_label": "Username",
+      "username_help": "Username cannot be changed",
+      "display_name": "Display Name",
+      "bio": "Bio",
+      "bio_placeholder": "Tell us about yourself",
+      "email": "Email",
+      "email_account_suffix": "(Account)",
+      "email_help": "Used for security alerts and password recovery",
+      "verified": "Verified",
+      "unverified": "Unverified",
+      "notification_email_label": "Notification Email (Optional)",
+      "notification_email_placeholder": "Leave empty to use account email",
+      "notification_email_help": "Used for newsletters and general notifications"
+    },
+    "security": {
+      "title": "Security",
+      "subtitle": "Manage your security settings",
+      "change_password": "Change Password",
+      "current_password": "Current Password",
+      "new_password": "New Password",
+      "confirm_password": "Confirm Password",
+      "2fa": "Two-Factor Authentication",
+      "2fa_enabled": "Two-factor authentication enabled",
+      "2fa_disabled": "Two-factor authentication disabled",
+      "2fa_enabled_text": "Your account is protected with two-factor authentication.",
+      "2fa_disabled_text": "Add an extra layer of security to your account.",
+      "2fa_enable": "Enable Two-Factor Authentication",
+      "2fa_disable": "Disable Two-Factor Authentication",
+      "recovery_keys": "Recovery Keys",
+      "recovery_description": "Recovery keys can be used to access your account if you lose your 2FA device.",
+      "recovery_remaining": "You have %d recovery keys remaining.",
+      "recovery_low_warning": "You have few recovery keys remaining. Consider regenerating them.",
+      "recovery_note": "Recovery keys are shown when two-factor authentication is enabled. Store them somewhere safe when they are displayed.",
+      "sessions": "Active Sessions",
+      "sessions_description": "These are the devices currently logged into your account.",
+      "sessions_current": "Current",
+      "sessions_revoke": "Revoke",
+      "sessions_revoke_all": "Revoke All Other Sessions",
+      "sessions_last_active": "Last active:"
+    },
+    "tokens": {
+      "title": "API Tokens",
+      "subtitle": "Manage your API tokens for programmatic access",
+      "heading": "Your Tokens",
+      "create": "Create Token",
+      "created": "Token created",
+      "created_warning": "Make sure to copy this token now. You won't be able to see it again!",
+      "created_label": "Created:",
+      "expires_label": "Expires:",
+      "never": "Never",
+      "last_used": "Last used",
+      "not_used": "Never used",
+      "revoke": "Revoke",
+      "empty_title": "You don't have any API tokens yet.",
+      "empty_description": "API tokens allow you to authenticate with the API programmatically.",
+      "name": "Token Name",
+      "name_placeholder": "e.g., My API Client",
+      "permissions": "Permissions",
+      "perm_read": "Read",
+      "perm_write": "Write",
+      "perm_search": "Search",
+      "expires": "Expires",
+      "expires_7d": "7 days",
+      "expires_30d": "30 days",
+      "expires_90d": "90 days",
+      "expires_1y": "1 year"
+    },
+    "twofa": {
+      "title": "Two-Factor Authentication",
+      "subtitle": "Protect your account with a time-based one-time password app.",
+      "scan_heading": "Scan the QR Code",
+      "scan_description": "Use an authenticator app to scan this code, or enter the secret manually if scanning is not available.",
+      "qr_alt": "QR code for two-factor authentication setup",
+      "issuer_label": "Issuer",
+      "account_label": "Account",
+      "secret_label": "Secret",
+      "verify_heading": "Verify Setup",
+      "code_label": "Authentication Code",
+      "enable_button": "Enable Two-Factor Authentication",
+      "confirm_heading": "Confirm Your Password",
+      "confirm_description": "Enter your password to generate a QR code and begin setup.",
+      "password_label": "Password",
+      "continue_button": "Continue"
+    },
+    "recovery": {
+      "title": "Recovery Keys",
+      "subtitle": "Save these keys now. They are only shown once.",
+      "heading": "Store These Safely",
+      "description": "Each key can be used once to regain access if you lose your authenticator device.",
+      "return_button": "Return to Security Settings"
+    }
   },
   "health": {
     "status": "ステータス",
@@ -1655,5 +1754,9 @@
         "color": "Color preview and conversion"
       }
     }
+  },
+  "form": {
+    "save": "Save",
+    "cancel": "Cancel"
   }
 }

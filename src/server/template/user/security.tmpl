@@ -2,14 +2,14 @@
 <div class="user-page security-page">
     <div class="page-header">
         <h1>{{t "user.security.title"}}</h1>
-        <p class="page-subtitle">Manage your security settings</p>
+        <p class="page-subtitle">{{t "user.security.subtitle"}}</p>
     </div>
 
     <div class="user-container">
         <nav class="user-nav">
-            <a href="/users/profile" class="nav-item">{{t "user.profile"}}</a>
-            <a href="/users/security" class="nav-item active">{{t "user.security"}}</a>
-            <a href="/users/tokens" class="nav-item">{{t "user.tokens"}}</a>
+            <a href="/users/profile" class="nav-item">{{t "user.nav.profile"}}</a>
+            <a href="/users/security" class="nav-item active">{{t "user.nav.security"}}</a>
+            <a href="/users/tokens" class="nav-item">{{t "user.nav.tokens"}}</a>
         </nav>
 
         <div class="user-content">
@@ -54,31 +54,31 @@
                     {{if .TwoFactorEnabled}}
                     <div class="status-badge status-enabled">
                         <span class="status-icon">&#x2713;</span>
-                        {{t "user.security.2fa.enabled"}}
+                        {{t "user.security.2fa_enabled"}}
                     </div>
-                    <p class="status-text">Your account is protected with two-factor authentication.</p>
+                    <p class="status-text">{{t "user.security.2fa_enabled_text"}}</p>
                     <form method="POST" action="/users/2fa/disable" class="twofa-disable-form">
                         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                         <div class="form-group">
-                            <label for="disable_2fa_password">Password</label>
+                            <label for="disable_2fa_password">{{t "user.twofa.password_label"}}</label>
                             <input type="password" id="disable_2fa_password" name="password" autocomplete="current-password" required>
                         </div>
                         <div class="form-group">
-                            <label for="disable_2fa_code">Authentication Code</label>
+                            <label for="disable_2fa_code">{{t "user.twofa.code_label"}}</label>
                             <input type="text" id="disable_2fa_code" name="code" inputmode="numeric" autocomplete="one-time-code" required>
                         </div>
                         <button type="submit" class="btn btn-danger">
-                            {{t "user.security.2fa.disable"}}
+                            {{t "user.security.2fa_disable"}}
                         </button>
                     </form>
                     {{else}}
                     <div class="status-badge status-disabled">
                         <span class="status-icon">&#x2717;</span>
-                        {{t "user.security.2fa.disabled"}}
+                        {{t "user.security.2fa_disabled"}}
                     </div>
-                    <p class="status-text">Add an extra layer of security to your account.</p>
+                    <p class="status-text">{{t "user.security.2fa_disabled_text"}}</p>
                     <a href="/users/2fa/setup" class="btn btn-primary">
-                        {{t "user.security.2fa.enable"}}
+                        {{t "user.security.2fa_enable"}}
                     </a>
                     {{end}}
                 </div>
@@ -88,22 +88,22 @@
             <div class="security-section">
                 <h2>{{t "user.security.recovery_keys"}}</h2>
                 <p class="section-description">
-                    Recovery keys can be used to access your account if you lose your 2FA device.
-                    {{if .RecoveryStats}}You have <strong>{{.RecoveryStats.Remaining}}</strong> recovery keys remaining.{{end}}
+                    {{t "user.security.recovery_description"}}
+                    {{if .RecoveryStats}}{{t "user.security.recovery_remaining" .RecoveryStats.Remaining}}{{end}}
                 </p>
                 {{if and .RecoveryStats (le .RecoveryStats.Remaining 2)}}
                 <div class="alert alert-warning">
-                    You have few recovery keys remaining. Consider regenerating them.
+                    {{t "user.security.recovery_low_warning"}}
                 </div>
                 {{end}}
-                <p class="section-description">Recovery keys are shown when two-factor authentication is enabled. Store them somewhere safe when they are displayed.</p>
+                <p class="section-description">{{t "user.security.recovery_note"}}</p>
             </div>
             {{end}}
 
             <div class="security-section">
                 <h2>{{t "user.security.sessions"}}</h2>
                 <p class="section-description">
-                    These are the devices currently logged into your account.
+                    {{t "user.security.sessions_description"}}
                 </p>
 
                 <div class="sessions-list">
@@ -114,12 +114,12 @@
                                 <span class="device-icon">&#x1F4BB;</span>
                                 <span class="device-name">{{.DeviceName}}</span>
                                 {{if .IsCurrent}}
-                                <span class="badge badge-primary">{{t "user.security.sessions.current"}}</span>
+                                <span class="badge badge-primary">{{t "user.security.sessions_current"}}</span>
                                 {{end}}
                             </div>
                             <div class="session-meta">
                                 <span class="session-ip">{{.IPAddress}}</span>
-                                <span class="session-time">Last active: {{.LastUsed | formatTime}}</span>
+                                <span class="session-time">{{t "user.security.sessions_last_active"}} {{.LastUsed | formatTime}}</span>
                             </div>
                         </div>
                         {{if not .IsCurrent}}
@@ -128,7 +128,7 @@
                             <input type="hidden" name="action" value="revoke_session">
                             <input type="hidden" name="session_id" value="{{.ID}}">
                             <button type="submit" class="btn btn-danger btn-sm">
-                                {{t "user.security.sessions.revoke"}}
+                                {{t "user.security.sessions_revoke"}}
                             </button>
                         </form>
                         {{end}}
@@ -141,7 +141,7 @@
                     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                     <input type="hidden" name="action" value="revoke_all_sessions">
                     <button type="submit" class="btn btn-danger">
-                        {{t "user.security.sessions.revoke_all"}}
+                        {{t "user.security.sessions_revoke_all"}}
                     </button>
                 </form>
                 {{end}}

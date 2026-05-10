@@ -1,8 +1,8 @@
 {{define "content"}}
 <div class="user-page recovery-keys-page">
     <div class="page-header">
-        <h1>Recovery Keys</h1>
-        <p class="page-subtitle">Save these keys now. They are only shown once.</p>
+        <h1>{{t "user.recovery.title"}}</h1>
+        <p class="page-subtitle">{{t "user.recovery.subtitle"}}</p>
     </div>
 
     <div class="user-content">
@@ -13,15 +13,15 @@
         {{end}}
 
         <section class="security-section">
-            <h2>Store These Safely</h2>
-            <p class="section-description">Each key can be used once to regain access if you lose your authenticator device.</p>
+            <h2>{{t "user.recovery.heading"}}</h2>
+            <p class="section-description">{{t "user.recovery.description"}}</p>
             <ul class="recovery-keys-list">
                 {{range .RecoveryKeys}}
                 <li class="recovery-key-item"><code class="long-string">{{.}}</code></li>
                 {{end}}
             </ul>
             <div class="form-actions">
-                <a href="/users/security" class="btn btn-primary">Return to Security Settings</a>
+                <a href="/users/security" class="btn btn-primary">{{t "user.recovery.return_button"}}</a>
             </div>
         </section>
     </div>

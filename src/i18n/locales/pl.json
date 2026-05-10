@@ -40,7 +40,8 @@
     "copy": "Kopiuj",
     "accept": "Akceptuj",
     "decline": "Odrzuc",
-    "dismiss": "Odrzuc"
+    "dismiss": "Odrzuc",
+    "upload": "Prześlij"
   },
   "auth": {
     "login": "Zaloguj się",
@@ -932,16 +933,114 @@
     }
   },
   "user": {
-    "profile": "Profil",
-    "security": "Bezpieczeństwo",
-    "tokens": "Tokeny API",
     "sessions": "Sesje",
     "notifications": "Powiadomienia",
     "revoke_token_title": "Uniewaznij token",
     "revoke_token_action": "Uniewaznij",
     "revoke_token_confirm_message": "Czy na pewno chcesz uniewaznic ten token? Tej operacji nie mozna cofnac.",
     "revoke_api_token_title": "Uniewaznij token API",
-    "revoke_api_token_confirm_message": "Czy na pewno chcesz uniewaznic ten token?"
+    "revoke_api_token_confirm_message": "Czy na pewno chcesz uniewaznic ten token?",
+    "nav": {
+      "profile": "Profil",
+      "security": "Bezpieczeństwo",
+      "tokens": "Tokeny API"
+    },
+    "profile": {
+      "title": "Profil",
+      "subtitle": "Zarządzaj informacjami o swoim koncie",
+      "section_profile_info": "Informacje o profilu",
+      "section_email_settings": "Ustawienia e-mail",
+      "username_label": "Nazwa użytkownika",
+      "username_help": "Nazwy użytkownika nie można zmienić",
+      "display_name": "Nazwa wyświetlana",
+      "bio": "Bio",
+      "bio_placeholder": "Powiedz nam coś o sobie",
+      "email": "E-mail",
+      "email_account_suffix": "(Konto)",
+      "email_help": "Używany do alertów bezpieczeństwa i odzyskiwania hasła",
+      "verified": "Zweryfikowany",
+      "unverified": "Niezweryfikowany",
+      "notification_email_label": "E-mail powiadomień (opcjonalnie)",
+      "notification_email_placeholder": "Pozostaw puste, aby używać e-maila konta",
+      "notification_email_help": "Używany do biuletynów i ogólnych powiadomień"
+    },
+    "security": {
+      "title": "Bezpieczeństwo",
+      "subtitle": "Zarządzaj ustawieniami bezpieczeństwa",
+      "change_password": "Zmień hasło",
+      "current_password": "Bieżące hasło",
+      "new_password": "Nowe hasło",
+      "confirm_password": "Potwierdź hasło",
+      "2fa": "Uwierzytelnianie dwuskładnikowe",
+      "2fa_enabled": "Uwierzytelnianie dwuskładnikowe włączone",
+      "2fa_disabled": "Uwierzytelnianie dwuskładnikowe wyłączone",
+      "2fa_enabled_text": "Twoje konto jest chronione uwierzytelnianiem dwuskładnikowym.",
+      "2fa_disabled_text": "Dodaj dodatkową warstwę bezpieczeństwa do swojego konta.",
+      "2fa_enable": "Włącz uwierzytelnianie dwuskładnikowe",
+      "2fa_disable": "Wyłącz uwierzytelnianie dwuskładnikowe",
+      "recovery_keys": "Klucze odzyskiwania",
+      "recovery_description": "Kluczy odzyskiwania można użyć do uzyskania dostępu do konta, jeśli utracisz urządzenie 2FA.",
+      "recovery_remaining": "Zostało Ci %d kluczy odzyskiwania.",
+      "recovery_low_warning": "Zostało Ci niewiele kluczy odzyskiwania. Rozważ ich regenerację.",
+      "recovery_note": "Klucze odzyskiwania są pokazywane przy włączaniu uwierzytelniania dwuskładnikowego. Przechowuj je w bezpiecznym miejscu, gdy zostaną wyświetlone.",
+      "sessions": "Aktywne sesje",
+      "sessions_description": "Oto urządzenia obecnie zalogowane na Twoje konto.",
+      "sessions_current": "Bieżąca",
+      "sessions_revoke": "Cofnij",
+      "sessions_revoke_all": "Cofnij wszystkie inne sesje",
+      "sessions_last_active": "Ostatnio aktywna:"
+    },
+    "tokens": {
+      "title": "Tokeny API",
+      "subtitle": "Zarządzaj tokenami API do programatycznego dostępu",
+      "heading": "Twoje tokeny",
+      "create": "Utwórz token",
+      "created": "Token utworzony",
+      "created_warning": "Skopiuj ten token teraz. Nie będziesz mógł go zobaczyć ponownie!",
+      "created_label": "Utworzony:",
+      "expires_label": "Wygasa:",
+      "never": "Nigdy",
+      "last_used": "Ostatnio użyty",
+      "not_used": "Nigdy nie używany",
+      "revoke": "Cofnij",
+      "empty_title": "Nie masz jeszcze żadnych tokenów API.",
+      "empty_description": "Tokeny API pozwalają uwierzytelniać się z API w sposób programatyczny.",
+      "name": "Nazwa tokenu",
+      "name_placeholder": "np. Mój klient API",
+      "permissions": "Uprawnienia",
+      "perm_read": "Odczyt",
+      "perm_write": "Zapis",
+      "perm_search": "Wyszukiwanie",
+      "expires": "Wygasa",
+      "expires_7d": "7 dni",
+      "expires_30d": "30 dni",
+      "expires_90d": "90 dni",
+      "expires_1y": "1 rok"
+    },
+    "twofa": {
+      "title": "Uwierzytelnianie dwuskładnikowe",
+      "subtitle": "Chroń swoje konto aplikacją z hasłami jednorazowymi opartymi na czasie.",
+      "scan_heading": "Zeskanuj kod QR",
+      "scan_description": "Użyj aplikacji uwierzytelniającej, aby zeskanować ten kod, lub wprowadź sekret ręcznie, jeśli skanowanie nie jest dostępne.",
+      "qr_alt": "Kod QR do konfiguracji uwierzytelniania dwuskładnikowego",
+      "issuer_label": "Wydawca",
+      "account_label": "Konto",
+      "secret_label": "Sekret",
+      "verify_heading": "Weryfikacja konfiguracji",
+      "code_label": "Kod uwierzytelniający",
+      "enable_button": "Włącz uwierzytelnianie dwuskładnikowe",
+      "confirm_heading": "Potwierdź swoje hasło",
+      "confirm_description": "Wprowadź hasło, aby wygenerować kod QR i rozpocząć konfigurację.",
+      "password_label": "Hasło",
+      "continue_button": "Kontynuuj"
+    },
+    "recovery": {
+      "title": "Klucze odzyskiwania",
+      "subtitle": "Zapisz te klucze teraz. Są one pokazywane tylko raz.",
+      "heading": "Bezpiecznie je przechowaj",
+      "description": "Każdy klucz może zostać użyty raz do odzyskania dostępu, jeśli zgubisz urządzenie uwierzytelniające.",
+      "return_button": "Powrót do ustawień bezpieczeństwa"
+    }
   },
   "health": {
     "status": "Status",
@@ -1655,5 +1754,9 @@
         "color": "Podgląd i konwersja koloru"
       }
     }
+  },
+  "form": {
+    "save": "Zapisz",
+    "cancel": "Anuluj"
   }
 }
