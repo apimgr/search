@@ -2,8 +2,8 @@
 <div class="auth-page reset-page">
     <div class="auth-container">
         <div class="auth-header">
-            <h1>Reset Password</h1>
-            <p class="auth-subtitle">Enter your new password below</p>
+            <h1>{{t "auth.reset.title"}}</h1>
+            <p class="auth-subtitle">{{t "auth.reset.subtitle"}}</p>
         </div>
 
         {{if .Error}}
@@ -14,17 +14,17 @@
 
         {{if .Success}}
         <div class="alert alert-success" role="alert">
-            Your password has been reset successfully.
+            {{t "auth.reset.success"}}
         </div>
         <div class="auth-footer">
-            <a href="/auth/login" class="btn btn-primary btn-block">Sign In</a>
+            <a href="/auth/login" class="btn btn-primary btn-block">{{t "auth.reset.sign_in_btn"}}</a>
         </div>
         {{else if eq .Token ""}}
         <div class="alert alert-error" role="alert">
-            Invalid or missing reset token. Please request a new password reset link.
+            {{t "auth.reset.invalid_token"}}
         </div>
         <div class="auth-footer">
-            <a href="/auth/password/forgot" class="btn btn-secondary btn-block">Request New Link</a>
+            <a href="/auth/password/forgot" class="btn btn-secondary btn-block">{{t "auth.reset.request_new_btn"}}</a>
         </div>
         {{else}}
         <form method="POST" action="/auth/password/reset" class="auth-form" id="reset-form">
@@ -32,26 +32,26 @@
             <input type="hidden" name="token" value="{{.Token}}">
 
             <div class="form-group">
-                <label for="password">New Password</label>
+                <label for="password">{{t "auth.reset.new_password_label"}}</label>
                 <input type="password" id="password" name="password"
                        autocomplete="new-password" required autofocus
-                       placeholder="At least 8 characters" minlength="8">
+                       placeholder="{{t "auth.reset.password_placeholder"}}" minlength="8">
             </div>
 
             <div class="form-group">
-                <label for="password_confirm">Confirm New Password</label>
+                <label for="password_confirm">{{t "auth.reset.confirm_password_label"}}</label>
                 <input type="password" id="password_confirm" name="password_confirm"
                        autocomplete="new-password" required
-                       placeholder="Repeat your new password">
+                       placeholder="{{t "auth.reset.confirm_placeholder"}}">
             </div>
 
             <button type="submit" class="btn btn-primary btn-block">
-                Reset Password
+                {{t "auth.reset.submit_btn"}}
             </button>
         </form>
 
         <div class="auth-footer">
-            <a href="/auth/login">Back to Sign In</a>
+            <a href="/auth/login">{{t "auth.reset.back_to_login"}}</a>
         </div>
         {{end}}
     </div>

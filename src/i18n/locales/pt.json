@@ -62,7 +62,29 @@
     "verify_email": "Verificar email",
     "two_factor": "Autenticação de dois fatores",
     "enter_code": "Digite o código de verificação",
-    "recovery_code": "Código de recuperação"
+    "recovery_code": "Código de recuperação",
+    "reset": {
+      "title": "Redefinir senha",
+      "subtitle": "Digite sua nova senha abaixo",
+      "success": "Sua senha foi redefinida com sucesso.",
+      "sign_in_btn": "Entrar",
+      "invalid_token": "Token de redefinição inválido ou ausente. Solicite um novo link.",
+      "request_new_btn": "Solicitar novo link",
+      "new_password_label": "Nova senha",
+      "password_placeholder": "Pelo menos 8 caracteres",
+      "confirm_password_label": "Confirmar nova senha",
+      "confirm_placeholder": "Repita sua nova senha",
+      "submit_btn": "Redefinir senha",
+      "back_to_login": "Voltar para o login"
+    },
+    "forgot": {
+      "title": "Senha esquecida",
+      "subtitle": "Digite seu e-mail para receber um link de redefinição",
+      "sent": "Se seu e-mail estiver em nosso sistema, você receberá um link de redefinição em breve.",
+      "back": "Voltar para o login",
+      "email": "E-mail",
+      "submit": "Enviar link"
+    }
   },
   "search": {
     "placeholder": "Pesquisar na web...",

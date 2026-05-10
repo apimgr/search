@@ -62,7 +62,29 @@
     "verify_email": "Verifica email",
     "two_factor": "Autenticazione a due fattori",
     "enter_code": "Inserisci il codice di verifica",
-    "recovery_code": "Codice di recupero"
+    "recovery_code": "Codice di recupero",
+    "reset": {
+      "title": "Reimposta password",
+      "subtitle": "Inserisci la tua nuova password qui sotto",
+      "success": "La tua password è stata reimpostata correttamente.",
+      "sign_in_btn": "Accedi",
+      "invalid_token": "Token di reimpostazione non valido o mancante. Richiedi un nuovo link.",
+      "request_new_btn": "Richiedi nuovo link",
+      "new_password_label": "Nuova password",
+      "password_placeholder": "Almeno 8 caratteri",
+      "confirm_password_label": "Conferma nuova password",
+      "confirm_placeholder": "Ripeti la nuova password",
+      "submit_btn": "Reimposta password",
+      "back_to_login": "Torna all'accesso"
+    },
+    "forgot": {
+      "title": "Password dimenticata",
+      "subtitle": "Inserisci la tua email per ricevere un link di reimpostazione",
+      "sent": "Se la tua email è nel nostro sistema, riceverai a breve un link di reimpostazione.",
+      "back": "Torna all'accesso",
+      "email": "Email",
+      "submit": "Invia link di reimpostazione"
+    }
   },
   "search": {
     "placeholder": "Cerca nel web...",

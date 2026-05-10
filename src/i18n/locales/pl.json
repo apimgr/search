@@ -62,7 +62,29 @@
     "verify_email": "Zweryfikuj email",
     "two_factor": "Uwierzytelnianie dwuskładnikowe",
     "enter_code": "Wprowadź kod weryfikacyjny",
-    "recovery_code": "Kod odzyskiwania"
+    "recovery_code": "Kod odzyskiwania",
+    "reset": {
+      "title": "Zresetuj hasło",
+      "subtitle": "Wprowadź poniżej nowe hasło",
+      "success": "Twoje hasło zostało pomyślnie zresetowane.",
+      "sign_in_btn": "Zaloguj się",
+      "invalid_token": "Nieprawidłowy lub brakujący token resetu. Poproś o nowy link.",
+      "request_new_btn": "Poproś o nowy link",
+      "new_password_label": "Nowe hasło",
+      "password_placeholder": "Co najmniej 8 znaków",
+      "confirm_password_label": "Potwierdź nowe hasło",
+      "confirm_placeholder": "Powtórz nowe hasło",
+      "submit_btn": "Zresetuj hasło",
+      "back_to_login": "Powrót do logowania"
+    },
+    "forgot": {
+      "title": "Zapomniałem hasła",
+      "subtitle": "Wprowadź adres e-mail, aby otrzymać link do resetu hasła",
+      "sent": "Jeśli twój adres e-mail jest w naszym systemie, wkrótce otrzymasz link do resetu.",
+      "back": "Powrót do logowania",
+      "email": "E-mail",
+      "submit": "Wyślij link"
+    }
   },
   "search": {
     "placeholder": "Szukaj w internecie...",

@@ -62,7 +62,29 @@
     "verify_email": "E-Mail bestätigen",
     "two_factor": "Zwei-Faktor-Authentifizierung",
     "enter_code": "Bestätigungscode eingeben",
-    "recovery_code": "Wiederherstellungscode"
+    "recovery_code": "Wiederherstellungscode",
+    "reset": {
+      "title": "Passwort zurücksetzen",
+      "subtitle": "Geben Sie unten Ihr neues Passwort ein",
+      "success": "Ihr Passwort wurde erfolgreich zurückgesetzt.",
+      "sign_in_btn": "Anmelden",
+      "invalid_token": "Ungültiger oder fehlender Reset-Token. Bitte fordern Sie einen neuen Link an.",
+      "request_new_btn": "Neuen Link anfordern",
+      "new_password_label": "Neues Passwort",
+      "password_placeholder": "Mindestens 8 Zeichen",
+      "confirm_password_label": "Neues Passwort bestätigen",
+      "confirm_placeholder": "Neues Passwort wiederholen",
+      "submit_btn": "Passwort zurücksetzen",
+      "back_to_login": "Zurück zur Anmeldung"
+    },
+    "forgot": {
+      "title": "Passwort vergessen",
+      "subtitle": "Geben Sie Ihre E-Mail-Adresse ein, um einen Link zum Zurücksetzen zu erhalten",
+      "sent": "Wenn Ihre E-Mail-Adresse in unserem System ist, erhalten Sie in Kürze einen Link zum Zurücksetzen.",
+      "back": "Zurück zur Anmeldung",
+      "email": "E-Mail",
+      "submit": "Link senden"
+    }
   },
   "search": {
     "placeholder": "Im Web suchen...",

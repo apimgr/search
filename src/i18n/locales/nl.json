@@ -62,7 +62,29 @@
     "verify_email": "E-mail verifiëren",
     "two_factor": "Tweefactorauthenticatie",
     "enter_code": "Voer verificatiecode in",
-    "recovery_code": "Herstelcode"
+    "recovery_code": "Herstelcode",
+    "reset": {
+      "title": "Wachtwoord opnieuw instellen",
+      "subtitle": "Voer hieronder uw nieuwe wachtwoord in",
+      "success": "Uw wachtwoord is succesvol opnieuw ingesteld.",
+      "sign_in_btn": "Aanmelden",
+      "invalid_token": "Ongeldig of ontbrekend resettoken. Vraag een nieuwe resetlink aan.",
+      "request_new_btn": "Nieuwe link aanvragen",
+      "new_password_label": "Nieuw wachtwoord",
+      "password_placeholder": "Minimaal 8 tekens",
+      "confirm_password_label": "Nieuw wachtwoord bevestigen",
+      "confirm_placeholder": "Herhaal uw nieuwe wachtwoord",
+      "submit_btn": "Wachtwoord opnieuw instellen",
+      "back_to_login": "Terug naar aanmelden"
+    },
+    "forgot": {
+      "title": "Wachtwoord vergeten",
+      "subtitle": "Voer uw e-mailadres in om een resetlink te ontvangen",
+      "sent": "Als uw e-mailadres in ons systeem staat, ontvangt u binnenkort een resetlink.",
+      "back": "Terug naar aanmelden",
+      "email": "E-mail",
+      "submit": "Resetlink versturen"
+    }
   },
   "search": {
     "placeholder": "Zoeken op het web...",

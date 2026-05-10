@@ -62,7 +62,29 @@
     "verify_email": "אמת אימייל",
     "two_factor": "אימות דו-שלבי",
     "enter_code": "הזן קוד אימות",
-    "recovery_code": "קוד שחזור"
+    "recovery_code": "קוד שחזור",
+    "reset": {
+      "title": "Reset Password",
+      "subtitle": "Enter your new password below",
+      "success": "Your password has been reset successfully.",
+      "sign_in_btn": "Sign In",
+      "invalid_token": "Invalid or missing reset token. Please request a new password reset link.",
+      "request_new_btn": "Request New Link",
+      "new_password_label": "New Password",
+      "password_placeholder": "At least 8 characters",
+      "confirm_password_label": "Confirm New Password",
+      "confirm_placeholder": "Repeat your new password",
+      "submit_btn": "Reset Password",
+      "back_to_login": "Back to Sign In"
+    },
+    "forgot": {
+      "title": "Forgot Password",
+      "subtitle": "Enter your email to receive a password reset link",
+      "sent": "If your email is in our system, you will receive a password reset link shortly.",
+      "back": "Back to Sign In",
+      "email": "Email",
+      "submit": "Send Reset Link"
+    }
   },
   "search": {
     "placeholder": "חפש באינטרנט...",

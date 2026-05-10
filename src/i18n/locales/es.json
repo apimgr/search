@@ -62,7 +62,29 @@
     "verify_email": "Verificar correo",
     "two_factor": "Autenticación de dos factores",
     "enter_code": "Ingresa el código de verificación",
-    "recovery_code": "Código de recuperación"
+    "recovery_code": "Código de recuperación",
+    "reset": {
+      "title": "Restablecer contraseña",
+      "subtitle": "Introduzca su nueva contraseña a continuación",
+      "success": "Su contraseña se ha restablecido correctamente.",
+      "sign_in_btn": "Iniciar sesión",
+      "invalid_token": "Token de restablecimiento inválido o faltante. Solicite un nuevo enlace de restablecimiento.",
+      "request_new_btn": "Solicitar nuevo enlace",
+      "new_password_label": "Nueva contraseña",
+      "password_placeholder": "Al menos 8 caracteres",
+      "confirm_password_label": "Confirmar nueva contraseña",
+      "confirm_placeholder": "Repita su nueva contraseña",
+      "submit_btn": "Restablecer contraseña",
+      "back_to_login": "Volver al inicio de sesión"
+    },
+    "forgot": {
+      "title": "Contraseña olvidada",
+      "subtitle": "Introduzca su correo para recibir un enlace de restablecimiento",
+      "sent": "Si su correo está en nuestro sistema, recibirá un enlace de restablecimiento en breve.",
+      "back": "Volver al inicio de sesión",
+      "email": "Correo electrónico",
+      "submit": "Enviar enlace de restablecimiento"
+    }
   },
   "search": {
     "placeholder": "Buscar en la web...",

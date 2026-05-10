@@ -62,7 +62,29 @@
     "verify_email": "Vérifier l'e-mail",
     "two_factor": "Authentification à deux facteurs",
     "enter_code": "Entrez le code de vérification",
-    "recovery_code": "Code de récupération"
+    "recovery_code": "Code de récupération",
+    "reset": {
+      "title": "Réinitialiser le mot de passe",
+      "subtitle": "Saisissez votre nouveau mot de passe ci-dessous",
+      "success": "Votre mot de passe a été réinitialisé avec succès.",
+      "sign_in_btn": "Se connecter",
+      "invalid_token": "Jeton de réinitialisation invalide ou manquant. Veuillez demander un nouveau lien.",
+      "request_new_btn": "Demander un nouveau lien",
+      "new_password_label": "Nouveau mot de passe",
+      "password_placeholder": "Au moins 8 caractères",
+      "confirm_password_label": "Confirmer le nouveau mot de passe",
+      "confirm_placeholder": "Répétez votre nouveau mot de passe",
+      "submit_btn": "Réinitialiser le mot de passe",
+      "back_to_login": "Retour à la connexion"
+    },
+    "forgot": {
+      "title": "Mot de passe oublié",
+      "subtitle": "Saisissez votre e-mail pour recevoir un lien de réinitialisation",
+      "sent": "Si votre e-mail est dans notre système, vous recevrez un lien de réinitialisation sous peu.",
+      "back": "Retour à la connexion",
+      "email": "E-mail",
+      "submit": "Envoyer le lien"
+    }
   },
   "search": {
     "placeholder": "Rechercher sur le web...",
