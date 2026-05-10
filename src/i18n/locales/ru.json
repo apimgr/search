@@ -930,31 +930,6 @@
       "mode": "Режим",
       "mode_production": "Продакшен",
       "mode_development": "Разработка"
-    },
-    "nav": {
-      "dashboard": "Панель",
-      "help": "Справка",
-      "section_server": "Сервер",
-      "settings": "Настройки",
-      "branding": "Брендинг",
-      "ssl_tls": "SSL/TLS",
-      "scheduler": "Планировщик",
-      "email": "Электронная почта",
-      "logs": "Журналы",
-      "backup": "Резервное копирование",
-      "section_security": "Безопасность",
-      "authentication": "Аутентификация",
-      "api_tokens": "API-токены",
-      "rate_limiting": "Ограничение частоты",
-      "firewall": "Брандмауэр",
-      "section_network": "Сеть",
-      "tor": "Tor",
-      "geoip": "GeoIP",
-      "blocklists": "Списки блокировок",
-      "section_users": "Пользователи",
-      "user_list": "Список пользователей",
-      "invites": "Приглашения",
-      "roles": "Роли"
     }
   },
   "user": {

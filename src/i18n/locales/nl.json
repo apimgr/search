@@ -930,31 +930,6 @@
       "mode": "Modus",
       "mode_production": "Productie",
       "mode_development": "Ontwikkeling"
-    },
-    "nav": {
-      "dashboard": "Dashboard",
-      "help": "Hulp",
-      "section_server": "Server",
-      "settings": "Instellingen",
-      "branding": "Branding",
-      "ssl_tls": "SSL/TLS",
-      "scheduler": "Planner",
-      "email": "E-mail",
-      "logs": "Logs",
-      "backup": "Back-up",
-      "section_security": "Beveiliging",
-      "authentication": "Authenticatie",
-      "api_tokens": "API-tokens",
-      "rate_limiting": "Snelheidsbeperking",
-      "firewall": "Firewall",
-      "section_network": "Netwerk",
-      "tor": "Tor",
-      "geoip": "GeoIP",
-      "blocklists": "Bloklijsten",
-      "section_users": "Gebruikers",
-      "user_list": "Gebruikerslijst",
-      "invites": "Uitnodigingen",
-      "roles": "Rollen"
     }
   },
   "user": {

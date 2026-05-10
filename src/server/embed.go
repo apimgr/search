@@ -18,7 +18,7 @@ import (
 	"github.com/apimgr/search/src/i18n"
 )
 
-//go:embed template/layout/*.tmpl template/partial/*.tmpl template/partial/admin/*.tmpl template/partial/public/*.tmpl template/component/*.tmpl template/page/*.tmpl template/auth/*.tmpl template/user/*.tmpl static/*
+//go:embed template/layout/*.tmpl template/partial/*.tmpl template/partial/public/*.tmpl template/component/*.tmpl template/page/*.tmpl template/auth/*.tmpl template/user/*.tmpl static/*
 var EmbeddedFS embed.FS
 
 // TemplateRenderer handles template rendering

@@ -930,31 +930,6 @@
       "mode": "Modo",
       "mode_production": "Producción",
       "mode_development": "Desarrollo"
-    },
-    "nav": {
-      "dashboard": "Panel",
-      "help": "Ayuda",
-      "section_server": "Servidor",
-      "settings": "Configuración",
-      "branding": "Marca",
-      "ssl_tls": "SSL/TLS",
-      "scheduler": "Programador",
-      "email": "Correo",
-      "logs": "Registros",
-      "backup": "Copia de seguridad",
-      "section_security": "Seguridad",
-      "authentication": "Autenticación",
-      "api_tokens": "Tokens de API",
-      "rate_limiting": "Límite de tasa",
-      "firewall": "Cortafuegos",
-      "section_network": "Red",
-      "tor": "Tor",
-      "geoip": "GeoIP",
-      "blocklists": "Listas de bloqueo",
-      "section_users": "Usuarios",
-      "user_list": "Lista de usuarios",
-      "invites": "Invitaciones",
-      "roles": "Roles"
     }
   },
   "user": {

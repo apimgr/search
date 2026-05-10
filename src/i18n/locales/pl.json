@@ -930,31 +930,6 @@
       "mode": "Tryb",
       "mode_production": "Produkcyjny",
       "mode_development": "Programistyczny"
-    },
-    "nav": {
-      "dashboard": "Pulpit",
-      "help": "Pomoc",
-      "section_server": "Serwer",
-      "settings": "Ustawienia",
-      "branding": "Branding",
-      "ssl_tls": "SSL/TLS",
-      "scheduler": "Harmonogram",
-      "email": "E-mail",
-      "logs": "Dzienniki",
-      "backup": "Kopia zapasowa",
-      "section_security": "Bezpieczeństwo",
-      "authentication": "Uwierzytelnianie",
-      "api_tokens": "Tokeny API",
-      "rate_limiting": "Ograniczanie częstości",
-      "firewall": "Zapora sieciowa",
-      "section_network": "Sieć",
-      "tor": "Tor",
-      "geoip": "GeoIP",
-      "blocklists": "Listy blokowanych",
-      "section_users": "Użytkownicy",
-      "user_list": "Lista użytkowników",
-      "invites": "Zaproszenia",
-      "roles": "Role"
     }
   },
   "user": {
