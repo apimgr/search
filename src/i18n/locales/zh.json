@@ -930,6 +930,31 @@
       "mode": "模式",
       "mode_production": "生产",
       "mode_development": "开发"
+    },
+    "nav": {
+      "dashboard": "Dashboard",
+      "help": "Help",
+      "section_server": "Server",
+      "settings": "Settings",
+      "branding": "Branding",
+      "ssl_tls": "SSL/TLS",
+      "scheduler": "Scheduler",
+      "email": "Email",
+      "logs": "Logs",
+      "backup": "Backup",
+      "section_security": "Security",
+      "authentication": "Authentication",
+      "api_tokens": "API Tokens",
+      "rate_limiting": "Rate Limiting",
+      "firewall": "Firewall",
+      "section_network": "Network",
+      "tor": "Tor",
+      "geoip": "GeoIP",
+      "blocklists": "Blocklists",
+      "section_users": "Users",
+      "user_list": "User List",
+      "invites": "Invites",
+      "roles": "Roles"
     }
   },
   "user": {

@@ -930,6 +930,31 @@
       "mode": "モード",
       "mode_production": "本番",
       "mode_development": "開発"
+    },
+    "nav": {
+      "dashboard": "Dashboard",
+      "help": "Help",
+      "section_server": "Server",
+      "settings": "Settings",
+      "branding": "Branding",
+      "ssl_tls": "SSL/TLS",
+      "scheduler": "Scheduler",
+      "email": "Email",
+      "logs": "Logs",
+      "backup": "Backup",
+      "section_security": "Security",
+      "authentication": "Authentication",
+      "api_tokens": "API Tokens",
+      "rate_limiting": "Rate Limiting",
+      "firewall": "Firewall",
+      "section_network": "Network",
+      "tor": "Tor",
+      "geoip": "GeoIP",
+      "blocklists": "Blocklists",
+      "section_users": "Users",
+      "user_list": "User List",
+      "invites": "Invites",
+      "roles": "Roles"
     }
   },
   "user": {
