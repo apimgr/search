@@ -150,9 +150,6 @@ type ServerConfig struct {
 	// External Auth (OIDC/LDAP) per AI.md PART 31
 	Auth AuthConfig `yaml:"auth"`
 
-	// Users
-	Users UsersConfig `yaml:"users"`
-
 	// Pages
 	Pages PagesConfig `yaml:"pages"`
 
@@ -569,96 +566,6 @@ type LDAPConfig struct {
 	AdminGroups     []string `yaml:"admin_groups"`
 	GroupFilter     string   `yaml:"group_filter"`
 	GroupMemberAttr string   `yaml:"group_member_attr"`
-}
-
-// UsersConfig represents user management configuration
-type UsersConfig struct {
-	Enabled      bool `yaml:"enabled"`
-	Registration struct {
-		Enabled                  bool     `yaml:"enabled"`
-		RequireEmailVerification bool     `yaml:"require_email_verification"`
-		RequireApproval          bool     `yaml:"require_approval"`
-		AllowedDomains           []string `yaml:"allowed_domains"`
-		BlockedDomains           []string `yaml:"blocked_domains"`
-	} `yaml:"registration"`
-	Roles struct {
-		Available []string `yaml:"available"`
-		Default   string   `yaml:"default"`
-	} `yaml:"roles"`
-	Tokens struct {
-		Enabled        bool `yaml:"enabled"`
-		MaxPerUser     int  `yaml:"max_per_user"`
-		ExpirationDays int  `yaml:"expiration_days"`
-	} `yaml:"tokens"`
-	Profile struct {
-		AllowAvatar      bool `yaml:"allow_avatar"`
-		AllowDisplayName bool `yaml:"allow_display_name"`
-		AllowBio         bool `yaml:"allow_bio"`
-	} `yaml:"profile"`
-	Auth struct {
-		SessionDuration          string `yaml:"session_duration"`
-		SessionDurationDays      int    `yaml:"session_duration_days"` // Parsed from SessionDuration
-		Require2FA               bool   `yaml:"require_2fa"`
-		Allow2FA                 bool   `yaml:"allow_2fa"`
-		PasswordMinLength        int    `yaml:"password_min_length"`
-		PasswordRequireUppercase bool   `yaml:"password_require_uppercase"`
-		PasswordRequireNumber    bool   `yaml:"password_require_number"`
-		PasswordRequireSpecial   bool   `yaml:"password_require_special"`
-	} `yaml:"auth"`
-	Limits struct {
-		RequestsPerMinute int `yaml:"requests_per_minute"`
-		RequestsPerDay    int `yaml:"requests_per_day"`
-	} `yaml:"limits"`
-	SSO struct {
-		Enabled bool `yaml:"enabled"`
-		OIDC    map[string]struct {
-			Name         string `yaml:"name"`
-			ClientID     string `yaml:"client_id"`
-			ClientSecret string `yaml:"client_secret"`
-			Issuer       string `yaml:"issuer"`
-			IconURL      string `yaml:"icon_url"`
-		} `yaml:"oidc"`
-		LDAP struct {
-			Enabled  bool   `yaml:"enabled"`
-			Server   string `yaml:"server"`
-			Port     int    `yaml:"port"`
-			BaseDN   string `yaml:"base_dn"`
-			BindDN   string `yaml:"bind_dn"`
-			BindPass string `yaml:"bind_pass"`
-		} `yaml:"ldap"`
-	} `yaml:"sso"`
-}
-
-// GetSessionDurationDays returns the session duration in days, parsing from string if needed
-func (u *UsersConfig) GetSessionDurationDays() int {
-	// If explicitly set, use it
-	if u.Auth.SessionDurationDays > 0 {
-		return u.Auth.SessionDurationDays
-	}
-
-	// Parse from SessionDuration string (e.g., "30d", "7d")
-	dur := u.Auth.SessionDuration
-	if dur == "" {
-		return 30 // default 30 days
-	}
-
-	// Check suffix to determine unit
-	if strings.HasSuffix(dur, "d") {
-		var days int
-		if n, _ := fmt.Sscanf(dur, "%dd", &days); n == 1 && days > 0 {
-			return days
-		}
-	}
-
-	// Try parsing as hours (e.g., "720h")
-	if strings.HasSuffix(dur, "h") {
-		var hours int
-		if n, _ := fmt.Sscanf(dur, "%dh", &hours); n == 1 && hours > 0 {
-			return hours / 24
-		}
-	}
-
-	return 30 // default
 }
 
 // PagesConfig represents standard pages configuration
@@ -1309,61 +1216,6 @@ func DefaultConfig() *Config {
 					ReferrerPolicy:        "strict-origin-when-cross-origin",
 					ContentSecurityPolicy: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; media-src *",
 					PermissionsPolicy:     "geolocation=(), microphone=(), camera=()",
-				},
-			},
-			Users: UsersConfig{
-				Enabled: true,
-				Registration: struct {
-					Enabled                  bool     `yaml:"enabled"`
-					RequireEmailVerification bool     `yaml:"require_email_verification"`
-					RequireApproval          bool     `yaml:"require_approval"`
-					AllowedDomains           []string `yaml:"allowed_domains"`
-					BlockedDomains           []string `yaml:"blocked_domains"`
-				}{
-					Enabled:                  false,
-					RequireEmailVerification: true,
-					RequireApproval:          false,
-				},
-				Roles: struct {
-					Available []string `yaml:"available"`
-					Default   string   `yaml:"default"`
-				}{
-					Available: []string{"admin", "user"},
-					Default:   "user",
-				},
-				Tokens: struct {
-					Enabled        bool `yaml:"enabled"`
-					MaxPerUser     int  `yaml:"max_per_user"`
-					ExpirationDays int  `yaml:"expiration_days"`
-				}{
-					Enabled:        true,
-					MaxPerUser:     5,
-					ExpirationDays: 0,
-				},
-				Profile: struct {
-					AllowAvatar      bool `yaml:"allow_avatar"`
-					AllowDisplayName bool `yaml:"allow_display_name"`
-					AllowBio         bool `yaml:"allow_bio"`
-				}{
-					AllowAvatar:      true,
-					AllowDisplayName: true,
-					AllowBio:         true,
-				},
-				Auth: struct {
-					SessionDuration          string `yaml:"session_duration"`
-					SessionDurationDays      int    `yaml:"session_duration_days"`
-					Require2FA               bool   `yaml:"require_2fa"`
-					Allow2FA                 bool   `yaml:"allow_2fa"`
-					PasswordMinLength        int    `yaml:"password_min_length"`
-					PasswordRequireUppercase bool   `yaml:"password_require_uppercase"`
-					PasswordRequireNumber    bool   `yaml:"password_require_number"`
-					PasswordRequireSpecial   bool   `yaml:"password_require_special"`
-				}{
-					SessionDuration:     "30d",
-					SessionDurationDays: 30,
-					Require2FA:          false,
-					Allow2FA:            true,
-					PasswordMinLength:   8,
 				},
 			},
 			Pages: PagesConfig{

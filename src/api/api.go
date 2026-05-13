@@ -435,8 +435,9 @@ func (h *Handler) handleHealthz(w http.ResponseWriter, r *http.Request) {
 				Status:   torStatus,
 				Hostname: torHostname,
 			},
-			GeoIP:         h.config.Server.GeoIP.Enabled,
-			MultiUser:     h.config.Server.Users.Enabled,
+			GeoIP: h.config.Server.GeoIP.Enabled,
+			// PART 34 (regular users) and PART 35 (organizations) are not implemented for this project.
+			MultiUser:     false,
 			Organizations: false,
 		},
 		// 7. Checks per spec line 16298-16308
@@ -500,9 +501,10 @@ func (h *Handler) handleAutodiscover(w http.ResponseWriter, r *http.Request) {
 	resp.Server.Name = h.config.Server.Title
 	resp.Server.Version = config.Version
 	resp.Server.URL = serverURL
-	resp.Server.Features.Auth = h.config.Server.Users.Enabled
-	resp.Server.Features.Search = true // Search is always enabled
-	resp.Server.Features.Register = h.config.Server.Users.Enabled && h.config.Server.Users.Registration.Enabled
+	// PART 34 (regular-user registration/auth) is not implemented for this project.
+	resp.Server.Features.Auth = false
+	resp.Server.Features.Search = true
+	resp.Server.Features.Register = false
 
 	// Cluster info - for CLI/agent failover per AI.md PART 36 line 42791-42818
 	resp.Cluster.Primary = serverURL

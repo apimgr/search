@@ -33,7 +33,6 @@ import (
 	"github.com/apimgr/search/src/search/engines"
 	"github.com/apimgr/search/src/service"
 	"github.com/apimgr/search/src/ssl"
-	"github.com/apimgr/search/src/user"
 	"github.com/apimgr/search/src/widget"
 )
 
@@ -68,22 +67,11 @@ type Server struct {
 	alertManager   *alert.Manager
 	configSync     *config.ConfigSync // Per AI.md PART 5: Cluster config sync (NON-NEGOTIABLE)
 
-	// User management
-	userAuthManager     *user.AuthManager
-	totpManager         *user.TOTPManager
-	recoveryManager     *user.RecoveryManager
-	tokenManager        *user.TokenManager
-	verificationManager *user.VerificationManager
-	authAPIHandler      *api.AuthHandler
-	userAPIHandler      *api.UserHandler
-
 	// Internationalization per AI.md PART 32
 	i18nManager *i18n.Manager
 
-	// Per AI.md PART 11: Endpoint-specific rate limiters
-	loginLimiter    *EndpointRateLimiter // 5 attempts / 15 min
-	registerLimiter *EndpointRateLimiter // 5 attempts / 1 hr
-	forgotLimiter   *EndpointRateLimiter // 3 attempts / 1 hr
+	// Per AI.md PART 11: Endpoint-specific rate limiter for /auth/login (admin login)
+	loginLimiter *EndpointRateLimiter // 5 attempts / 15 min
 }
 
 // registryAdapter wraps engines.Registry to implement admin.EngineRegistry
@@ -314,11 +302,6 @@ func New(cfg *config.Config) *Server {
 
 	// Create database manager for server persistence
 	var dbMgr *database.DatabaseManager
-	var userAuthMgr *user.AuthManager
-	var totpMgr *user.TOTPManager
-	var recoveryMgr *user.RecoveryManager
-	var tokenMgr *user.TokenManager
-	var verificationMgr *user.VerificationManager
 	var err error
 
 	dbConfig := &database.Config{
@@ -340,40 +323,8 @@ func New(cfg *config.Config) *Server {
 		}
 	}
 
-	if cfg.Server.Users.Enabled && dbMgr != nil {
-		// Get users database
-		usersDB := dbMgr.UsersDB().SQL()
-		if usersDB != nil {
-			// Create auth manager
-			authCfg := user.AuthConfig{
-				SessionDurationDays: cfg.Server.Users.GetSessionDurationDays(),
-				CookieName:          "user_session",
-				CookieSecure:        cfg.Server.SSL.Enabled,
-			}
-			userAuthMgr = user.NewAuthManager(usersDB, authCfg)
-			log.Printf("[Users] Auth manager initialized")
-
-			// Create TOTP manager if 2FA is allowed
-			if cfg.Server.Users.Auth.Allow2FA {
-				encKey := cfg.GetEncryptionKey()
-				if len(encKey) == 32 {
-					totpMgr, _ = user.NewTOTPManager(usersDB, cfg.Server.Title, encKey)
-					log.Printf("[Users] 2FA manager initialized")
-				}
-			}
-
-			// Create recovery manager
-			recoveryMgr = user.NewRecoveryManager(usersDB, 10)
-
-			// Create token manager
-			tokenMgr = user.NewTokenManager(usersDB)
-			log.Printf("[Users] Token manager initialized")
-
-			// Create verification manager for email verification and password reset tokens
-			verificationMgr = user.NewVerificationManager(usersDB)
-			log.Printf("[Users] Verification manager initialized")
-		}
-	}
+	// Per IDEA.md: PART 34 (regular users) is not implemented for this project.
+	// Admin authentication is handled by src/admin/AuthManager (separate from this package).
 
 	// Create metrics collector
 	metrics := NewMetrics(cfg)
@@ -413,19 +364,12 @@ func New(cfg *config.Config) *Server {
 		geoipLookup:    geoLookup,
 		mailer:         mailer,
 		// scheduler is initialized below after Server creation
-		metrics:             metrics,
-		dbManager:           dbMgr,
-		alertManager:        alertMgr,
-		userAuthManager:     userAuthMgr,
-		totpManager:         totpMgr,
-		recoveryManager:     recoveryMgr,
-		tokenManager:        tokenMgr,
-		verificationManager: verificationMgr,
-		i18nManager:         i18nMgr,
-		// Per AI.md PART 11: Endpoint-specific rate limiters
-		loginLimiter:    NewEndpointRateLimiter(5, 15*time.Minute),
-		registerLimiter: NewEndpointRateLimiter(5, 1*time.Hour),
-		forgotLimiter:   NewEndpointRateLimiter(3, 1*time.Hour),
+		metrics:      metrics,
+		dbManager:    dbMgr,
+		alertManager: alertMgr,
+		i18nManager:  i18nMgr,
+		// Per AI.md PART 11: Endpoint-specific rate limiter for /auth/login (admin login)
+		loginLimiter: NewEndpointRateLimiter(5, 15*time.Minute),
 	}
 
 	// Create admin handler (needs renderer interface)
@@ -483,16 +427,6 @@ func New(cfg *config.Config) *Server {
 	relatedSearches := search.NewRelatedSearches()
 	s.apiHandler.SetRelatedSearches(relatedSearches)
 	s.apiHandler.SetAlertManager(alertMgr)
-
-	// Create auth and user API handlers if user management is enabled
-	if cfg.Server.Users.Enabled && userAuthMgr != nil && dbMgr != nil {
-		usersDB := dbMgr.UsersDB().SQL()
-		if usersDB != nil {
-			s.authAPIHandler = api.NewAuthHandler(cfg, usersDB, userAuthMgr, totpMgr, recoveryMgr, verificationMgr)
-			s.userAPIHandler = api.NewUserHandler(cfg, usersDB, userAuthMgr, totpMgr, recoveryMgr, tokenMgr)
-			log.Printf("[Users] API handlers initialized")
-		}
-	}
 
 	// Initialize scheduler - ALWAYS RUNNING per AI.md PART 19
 	// Use server.db for persistent task state if available
@@ -877,44 +811,11 @@ func (s *Server) setupRoutes() http.Handler {
 		s.adminHandler.RegisterRoutes(mux)
 	}
 
-	// Per AI.md PART 11: /auth/login and /auth/logout are the SINGLE login/logout
-	// endpoints for ALL account types (admin + user). ALWAYS registered regardless
-	// of whether user management is enabled — admins need them.
+	// Per AI.md PART 11: /auth/login and /auth/logout are the unified login/logout
+	// endpoints used by admin accounts. (PART 34 user accounts are not implemented
+	// for this project — see IDEA.md.)
 	mux.HandleFunc("/auth/login", s.handleLogin)
 	mux.HandleFunc("/auth/logout", s.handleLogout)
-
-	// User authentication and profile routes (only if user management is enabled)
-	if s.config.Server.Users.Enabled {
-		mux.HandleFunc("/auth/register", s.handleRegister)
-		// Per AI.md PART 11/50443: password routes use /auth/password/* prefix
-		mux.HandleFunc("/auth/password/forgot", s.handleForgot)
-		mux.HandleFunc("/auth/forgot", s.handleForgot) // legacy alias
-		// Per AI.md: /auth/password/reset/{token} and /auth/password/reset?token=
-		mux.HandleFunc("/auth/password/reset/", s.handleReset)
-		mux.HandleFunc("/auth/password/reset", s.handleReset)
-		// Per AI.md: verification code in path, not query param
-		mux.HandleFunc("/auth/verify/", s.handleVerify)
-		mux.HandleFunc("/auth/verify", s.handleVerify) // no-code fallback
-		mux.HandleFunc("/auth/2fa", s.handle2FA)
-		mux.HandleFunc("/auth/recovery", s.handleRecoveryLogin)
-
-		// User profile routes per AI.md PART 14: plural /users/ not singular /user/
-		mux.HandleFunc("/users/profile", s.handleUserProfile)
-		mux.HandleFunc("/users/security", s.handleUserSecurity)
-		mux.HandleFunc("/users/tokens", s.handleUserTokens)
-		mux.HandleFunc("/users/2fa/setup", s.handle2FASetup)
-		mux.HandleFunc("/users/2fa/disable", s.handle2FADisable)
-
-		// Auth API routes
-		if s.authAPIHandler != nil {
-			s.authAPIHandler.RegisterRoutes(mux)
-		}
-
-		// User API routes
-		if s.userAPIHandler != nil {
-			s.userAPIHandler.RegisterRoutes(mux)
-		}
-	}
 
 	// API routes
 	s.apiHandler.RegisterRoutes(mux)

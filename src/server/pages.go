@@ -271,10 +271,11 @@ func (s *Server) buildHealthInfo() *HealthInfo {
 			Primary: "",
 			Nodes:   []string{},
 		},
-		// Per AI.md PART 13: features with tor as object
+		// Per AI.md PART 13: features with tor as object.
+		// PART 34 (regular users) and PART 35 (organizations) are not implemented for this project.
 		Features: &HealthFeatures{
-			MultiUser:     s.config.Server.Users.Enabled,
-			Organizations: false, // Optional feature (PART 35)
+			MultiUser:     false,
+			Organizations: false,
 			Tor:           torFeature,
 			GeoIP:         s.config.Server.GeoIP.Enabled,
 			Metrics:       s.config.Server.Metrics.Enabled,

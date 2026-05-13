@@ -586,85 +586,6 @@ func TestSessionConfigGetSameSite(t *testing.T) {
 	}
 }
 
-func TestUsersConfigGetSessionDurationDays(t *testing.T) {
-	tests := []struct {
-		name  string
-		users UsersConfig
-		want  int
-	}{
-		{
-			"explicit days set",
-			UsersConfig{Auth: struct {
-				SessionDuration          string `yaml:"session_duration"`
-				SessionDurationDays      int    `yaml:"session_duration_days"`
-				Require2FA               bool   `yaml:"require_2fa"`
-				Allow2FA                 bool   `yaml:"allow_2fa"`
-				PasswordMinLength        int    `yaml:"password_min_length"`
-				PasswordRequireUppercase bool   `yaml:"password_require_uppercase"`
-				PasswordRequireNumber    bool   `yaml:"password_require_number"`
-				PasswordRequireSpecial   bool   `yaml:"password_require_special"`
-			}{SessionDurationDays: 14}},
-			14,
-		},
-		{
-			"duration string in days",
-			UsersConfig{Auth: struct {
-				SessionDuration          string `yaml:"session_duration"`
-				SessionDurationDays      int    `yaml:"session_duration_days"`
-				Require2FA               bool   `yaml:"require_2fa"`
-				Allow2FA                 bool   `yaml:"allow_2fa"`
-				PasswordMinLength        int    `yaml:"password_min_length"`
-				PasswordRequireUppercase bool   `yaml:"password_require_uppercase"`
-				PasswordRequireNumber    bool   `yaml:"password_require_number"`
-				PasswordRequireSpecial   bool   `yaml:"password_require_special"`
-			}{SessionDuration: "7d"}},
-			7,
-		},
-		{
-			"duration string in hours",
-			UsersConfig{Auth: struct {
-				SessionDuration          string `yaml:"session_duration"`
-				SessionDurationDays      int    `yaml:"session_duration_days"`
-				Require2FA               bool   `yaml:"require_2fa"`
-				Allow2FA                 bool   `yaml:"allow_2fa"`
-				PasswordMinLength        int    `yaml:"password_min_length"`
-				PasswordRequireUppercase bool   `yaml:"password_require_uppercase"`
-				PasswordRequireNumber    bool   `yaml:"password_require_number"`
-				PasswordRequireSpecial   bool   `yaml:"password_require_special"`
-			}{SessionDuration: "720h"}},
-			30,
-		},
-		{
-			"default (30 days)",
-			UsersConfig{},
-			30,
-		},
-		{
-			"invalid duration string",
-			UsersConfig{Auth: struct {
-				SessionDuration          string `yaml:"session_duration"`
-				SessionDurationDays      int    `yaml:"session_duration_days"`
-				Require2FA               bool   `yaml:"require_2fa"`
-				Allow2FA                 bool   `yaml:"allow_2fa"`
-				PasswordMinLength        int    `yaml:"password_min_length"`
-				PasswordRequireUppercase bool   `yaml:"password_require_uppercase"`
-				PasswordRequireNumber    bool   `yaml:"password_require_number"`
-				PasswordRequireSpecial   bool   `yaml:"password_require_special"`
-			}{SessionDuration: "invalid"}},
-			30,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := tt.users.GetSessionDurationDays()
-			if got != tt.want {
-				t.Errorf("GetSessionDurationDays() = %d, want %d", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestLimitsConfigGetMaxBodySizeBytes(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -1439,13 +1360,3 @@ func TestAdminConfigDefaults(t *testing.T) {
 	}
 }
 
-func TestUsersConfigDefaults(t *testing.T) {
-	cfg := DefaultConfig()
-
-	if !cfg.Server.Users.Enabled {
-		t.Error("Users.Enabled should be true by default")
-	}
-	if cfg.Server.Users.Auth.PasswordMinLength != 8 {
-		t.Errorf("Users.Auth.PasswordMinLength = %d, want 8", cfg.Server.Users.Auth.PasswordMinLength)
-	}
-}

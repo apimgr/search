@@ -18,7 +18,7 @@ import (
 	"github.com/apimgr/search/src/i18n"
 )
 
-//go:embed template/layout/*.tmpl template/partial/*.tmpl template/partial/public/*.tmpl template/component/*.tmpl template/page/*.tmpl template/auth/*.tmpl template/user/*.tmpl static/*
+//go:embed template/layout/*.tmpl template/partial/*.tmpl template/partial/public/*.tmpl template/component/*.tmpl template/page/*.tmpl template/auth/*.tmpl static/*
 var EmbeddedFS embed.FS
 
 // TemplateRenderer handles template rendering
@@ -169,9 +169,6 @@ func (tr *TemplateRenderer) loadTemplates() error {
 
 		// Load auth pages from template/auth/ (per AI.md: auth/ is sibling of page/)
 		tr.loadPagesRecursive("template/auth", "auth", string(layoutContent), partials, tr.templates[lang], funcMap)
-
-		// Load user pages from template/user/
-		tr.loadPagesRecursive("template/user", "user", string(layoutContent), partials, tr.templates[lang], funcMap)
 	}
 
 	return nil

@@ -10,30 +10,12 @@ import (
 	"github.com/apimgr/search/src/i18n"
 )
 
-// handleWellKnownChangePassword handles /.well-known/change-password
-// Per RFC 8615 and AI.md PART 11: Well-Known URIs
-// Redirects to /users/security if logged in, /auth/password/forgot if not
+// handleWellKnownChangePassword handles /.well-known/change-password per RFC 8615.
+// Per IDEA.md, PART 34 (regular users) is not implemented for this project, so the
+// only password change flow is the admin profile page; the admin panel itself
+// redirects to /auth/login when the visitor is not authenticated.
 func (s *Server) handleWellKnownChangePassword(w http.ResponseWriter, r *http.Request) {
-	// Check if user is logged in
-	var isLoggedIn bool
-
-	if s.userAuthManager != nil {
-		token := s.userAuthManager.GetSessionToken(r)
-		if token != "" {
-			_, _, err := s.userAuthManager.ValidateSession(r.Context(), token)
-			if err == nil {
-				isLoggedIn = true
-			}
-		}
-	}
-
-	// Per AI.md PART 11: redirect based on login state
-	if isLoggedIn {
-		http.Redirect(w, r, "/users/security", http.StatusSeeOther)
-		return
-	}
-
-	http.Redirect(w, r, "/auth/password/forgot", http.StatusSeeOther)
+	http.Redirect(w, r, "/"+config.GetAdminPath()+"/profile", http.StatusSeeOther)
 }
 
 // handleRobotsTxt serves robots.txt per AI.md spec

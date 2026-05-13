@@ -1052,11 +1052,10 @@ func TestGetClientIPSimple(t *testing.T) {
 
 func TestAuthPageDataStruct(t *testing.T) {
 	data := AuthPageData{
-		Error:        "test error",
-		Success:      "test success",
-		Username:     "testuser",
-		Email:        "test@example.com",
-		RequireEmail: true,
+		Error:    "test error",
+		Success:  "test success",
+		Username: "testuser",
+		Redirect: "/admin",
 	}
 
 	if data.Error != "test error" {
@@ -1065,37 +1064,8 @@ func TestAuthPageDataStruct(t *testing.T) {
 	if data.Username != "testuser" {
 		t.Errorf("Username = %q", data.Username)
 	}
-}
-
-func TestSSOProviderStruct(t *testing.T) {
-	provider := SSOProvider{
-		Name:    "Google",
-		ID:      "google",
-		IconURL: "/static/icons/google.svg",
-		URL:     "/auth/sso/google",
-	}
-
-	if provider.Name != "Google" {
-		t.Errorf("Name = %q", provider.Name)
-	}
-	if provider.ID != "google" {
-		t.Errorf("ID = %q", provider.ID)
-	}
-}
-
-func TestTwoFactorPageDataStruct(t *testing.T) {
-	data := TwoFactorPageData{
-		Error:          "test error",
-		SessionID:      "session123",
-		RemainingKeys:  5,
-		UseRecoveryKey: false,
-	}
-
-	if data.SessionID != "session123" {
-		t.Errorf("SessionID = %q", data.SessionID)
-	}
-	if data.RemainingKeys != 5 {
-		t.Errorf("RemainingKeys = %d", data.RemainingKeys)
+	if data.Redirect != "/admin" {
+		t.Errorf("Redirect = %q", data.Redirect)
 	}
 }
 

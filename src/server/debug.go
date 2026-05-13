@@ -60,9 +60,6 @@ func (s *Server) handleDebugConfig(w http.ResponseWriter, r *http.Request) {
 		"ssl": map[string]interface{}{
 			"enabled": s.config.Server.SSL.Enabled,
 		},
-		"users": map[string]interface{}{
-			"enabled": s.config.Server.Users.Enabled,
-		},
 	}
 
 	w.Header().Set("Content-Type", "application/json")

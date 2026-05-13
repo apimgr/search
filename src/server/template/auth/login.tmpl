@@ -43,19 +43,12 @@
                     <input type="checkbox" name="remember" id="remember">
                     <span>{{t "auth.login.remember"}}</span>
                 </label>
-                <a href="/auth/forgot" class="forgot-link">{{t "auth.login.forgot"}}</a>
             </div>
 
             <button type="submit" class="btn btn-primary btn-block">
                 {{t "auth.login.submit"}}
             </button>
         </form>
-
-        {{if .RegistrationEnabled}}
-        <div class="auth-footer">
-            <p>{{t "auth.login.no_account"}} <a href="/auth/register">{{t "auth.register"}}</a></p>
-        </div>
-        {{end}}
 
     </div>
 </div>
