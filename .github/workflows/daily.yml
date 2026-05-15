@@ -2,12 +2,16 @@ name: Daily Build
 
 on:
   schedule:
-    - cron: '0 3 * * *'  # 3am UTC daily
+    - cron: '0 3 * * *'
   push:
     branches:
       - main
       - master
   workflow_dispatch:
+
+concurrency:
+  group: daily-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/devel' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/beta' }}
 
 permissions:
   contents: write
@@ -18,6 +22,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    container: golang:alpine
     strategy:
       matrix:
         include:
@@ -41,20 +46,17 @@ jobs:
             goarch: arm64
 
     steps:
-      - uses: actions/checkout@v6
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: 'stable'
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Set build info
         run: |
-          echo "VERSION=$(date -u +"%Y%m%d%H%M%S")" >> $GITHUB_ENV
+          if [ -f release.txt ]; then
+            echo "VERSION=$(cat release.txt)" >> $GITHUB_ENV
+          else
+            echo "VERSION=$(date -u +"%Y%m%d%H%M%S")" >> $GITHUB_ENV
+          fi
           echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
-          # OFFICIALSITE (optional): Set in repository secrets, or site.txt file, or leave empty
-          # Never guess or assume - must be explicitly defined by user
           if [ -f site.txt ]; then
             echo "OFFICIALSITE=$(cat site.txt)" >> $GITHUB_ENV
           else
@@ -70,7 +72,6 @@ jobs:
           LDFLAGS="-s -w -X 'github.com/apimgr/search/src/config.Version=${{ env.VERSION }}' -X 'github.com/apimgr/search/src/config.CommitID=${{ env.COMMIT_ID }}' -X 'github.com/apimgr/search/src/config.BuildDate=${{ env.BUILD_DATE }}' -X 'github.com/apimgr/search/src/config.OfficialSite=${{ env.OFFICIALSITE }}'"
           go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src
 
-      # CLI build - only if src/client/ directory exists
       - name: Build CLI
         if: hashFiles('src/client/') != ''
         env:
@@ -82,19 +83,18 @@ jobs:
           go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/client
 
       - name: Upload server artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
       - name: Upload CLI artifact
         if: hashFiles('src/client/') != ''
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
-      # Agent build - only if src/agent/ directory exists
       - name: Build Agent
         if: hashFiles('src/agent/') != ''
         env:
@@ -107,7 +107,7 @@ jobs:
 
       - name: Upload Agent artifact
         if: hashFiles('src/agent/') != ''
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
@@ -119,16 +119,21 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
         with:
           path: binaries
           merge-multiple: true
 
       - name: Set version
-        run: echo "VERSION=$(date -u +"%Y%m%d%H%M%S")" >> $GITHUB_ENV
+        run: |
+          if [ -f release.txt ]; then
+            echo "VERSION=$(cat release.txt)" >> $GITHUB_ENV
+          else
+            echo "VERSION=$(date -u +"%Y%m%d%H%M%S")" >> $GITHUB_ENV
+          fi
 
       - name: Create version.txt
         run: echo "${{ env.VERSION }}" > binaries/version.txt
@@ -141,7 +146,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
         with:
           tag_name: daily
           name: "Daily Build ${{ env.VERSION }}"

@@ -3001,6 +3001,44 @@ See IDEA.md for the full project breakdown.
 4. **Verify compliance** - check against the FINAL CHECKPOINT
 5. **Update COMMIT_MESS** - only if files were changed (skip if no changes)
 
+## Self-Validation Loop
+
+**AI MUST verify its own work with real tools before reporting a task as done. Do not rely on "the code looks right."**
+
+**This rule applies to EVERY change type covered by this template — backend logic, API, frontend, CLI binaries, Docker, CI/CD, configuration, schema, documentation, observability, i18n, security — not only frontend or web changes.** Whatever you touched, you verify.
+
+Getting code correct on the first try is much harder than iterating with feedback. Close the loop every time.
+
+**Pick the right verification tool for the change:**
+
+| Change type | How to verify |
+|-------------|---------------|
+| Backend logic / API endpoints | Run `make test`; hit the endpoint with curl/test; compare response body, status, and headers against expected |
+| CLI binary / command | Build with `make build`; run the binary; exercise relevant flags including `--help`/`--version`; check stdout, stderr, and exit code |
+| Behavior-preserving refactor | Diff outputs of old vs. new path on representative inputs (don't just trust the diff "looks right") |
+| Frontend / UI change | Start the dev server, open the page in a browser, exercise the feature; if a design was provided, visually compare and iterate |
+| Performance change | Measure before AND after — don't assume parallelism, caching, or "lighter" code is faster |
+| Bug fix | Reproduce the bug FIRST so you have a failing signal, then verify the fix makes the signal disappear; add a regression test where feasible |
+| Schema / migration | Run forward and rollback against a real DB copy; check row counts and constraints; verify the app boots cleanly against the new schema |
+| Configuration / settings | Start the binary with the new config; verify defaults; verify validation rejects bad input with a useful error |
+| Docker / container build | Build the image; run the container; smoke-test at least one endpoint or command to confirm the image actually starts and serves |
+| CI/CD workflow | Run the workflow on a branch (or via `act`/equivalent dry-run); verify each job's exit status, not just YAML validity |
+| Health / observability | Hit `/healthz`, `/readyz`, `/metrics`; verify scrape format and that new metrics actually appear |
+| Logging / error paths | Trigger the error path; verify the log line/structured event was emitted with expected fields |
+| i18n / translation | Switch each supported locale; verify text renders correctly and no placeholders leak |
+| Security-sensitive change (auth, crypto, input validation) | Test both the success path AND attempted bypass paths; never assume a guard works without exercising it |
+| Documentation / README / Swagger | Render markdown / OpenAPI locally; verify links, code samples, and example commands actually work |
+| Type / lint / build correctness | `make build` plus the project's typecheck/lint targets — green across all |
+
+**Iteration rules:**
+- A failed check is data, not failure — adjust and re-run until green
+- Never report "done" while any verification is still red
+- If verification reveals the change is wrong in a way that can't be patched, revert and re-plan; do not paper over a failing check
+
+**When verification is genuinely impossible in this environment** (e.g., no browser, no DB, no display, no internet for an external API): say so explicitly. Do not imply success — list what was checked and what could not be checked, so the user knows where to look.
+
+**Reference:** based on published guidance about AI coding agent self-validation (Eivind Kjosbakken, Towards Data Science, 2026) — when an AI agent is given verification tools (output diffing, browser MCP, test runners) and allowed to iterate, one-shot success rate, run length, and task complexity all improve substantially.
+
 ## Commit Message File
 
 **AI assistants CANNOT run plain `git commit` or plain `git push`.** `git add` is allowed for explicit staging when needed, but commits themselves MUST go through `gitcommit <command>`. Create/update the commit message file before committing.
@@ -27527,7 +27565,7 @@ message := cfg.Privacy.GetConsentMessage()  // Returns appropriate message based
 ```html
 <!-- Cookie Consent Banner - ALWAYS shown until user responds (we use cookies) -->
 <!-- {message} is dynamically selected based on server.privacy.data.sold -->
-<div id="cookie-consent" class="cookie-banner" data-sold="{data_sold}" style="display: none;">
+<div id="cookie-consent" class="cookie-banner cookie-banner--hidden" data-sold="{data_sold}">
   <div class="cookie-banner-content">
     <span class="cookie-message">
       {message} - <a href="{policy_url}" class="policy-link">{policy_text}</a>
@@ -27555,7 +27593,7 @@ const defaultConsent = {
 
   // No consent yet - show banner
   if (!stored && banner) {
-    banner.style.display = 'block';
+    banner.classList.remove('cookie-banner--hidden');
   }
 
   // Has consent - apply settings
@@ -27566,7 +27604,7 @@ const defaultConsent = {
     } catch (e) {
       // Legacy format or corrupted - show banner again
       localStorage.removeItem('cookieConsent');
-      if (banner) banner.style.display = 'block';
+      if (banner) banner.classList.remove('cookie-banner--hidden');
     }
   }
 })();
@@ -27612,7 +27650,7 @@ function savePreferences() {
 
 function saveAndApplyConsent(consent) {
   localStorage.setItem('cookieConsent', JSON.stringify(consent));
-  document.getElementById('cookie-consent').style.display = 'none';
+  document.getElementById('cookie-consent').classList.add('cookie-banner--hidden');
   applyConsent(consent);
 }
 
@@ -27680,6 +27718,10 @@ initCCPA();
 
 <style>
 /* Cookie Consent Banner - matches reference design */
+.cookie-banner--hidden {
+  display: none;
+}
+
 .cookie-banner {
   position: fixed;
   bottom: 0;
@@ -59278,7 +59320,7 @@ make docker # Build Docker image
 - [ ] API versioning in URL path
 - [ ] No breaking changes without major version bump
 
-### Phase 5: Auth & Security (PARTS 15-16)
+### Phase 5: SSL/TLS & Web Frontend (PARTS 15-16)
 
 **PART 15: SSL/TLS & Let's Encrypt**
 - [ ] Let's Encrypt HTTP-01 challenge
