@@ -408,7 +408,6 @@
       "log_files": "Arquivos de log",
       "access_log_description": "Logs de requisições HTTP",
       "error_log_description": "Mensagens de erro e aviso",
-      "appLogDescription": "Eventos da aplicação",
       "app_log_description": "Eventos da aplicação",
       "view_logs": "Ver logs",
       "view_logs_description": "Use estes comandos para ver os logs:",
