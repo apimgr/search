@@ -3694,7 +3694,6 @@ func nodeStatusClass(status string) string {
 	default:
 		return "disabled"
 	}
-	return "enabled"
 }
 
 func nodeStatusText(data *AdminPageData, status string) string {

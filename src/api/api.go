@@ -1741,8 +1741,27 @@ func (h *Handler) serveFaviconFallback(w http.ResponseWriter) {
 	data, _ := base64.StdEncoding.DecodeString(transparentPNG)
 
 	w.Header().Set("Content-Type", "image/png")
-	w.Header().Set("Cache-Control", "public, max-age=3600") // Cache fallback for 1 hour
+	w.Header().Set("Cache-Control", "public, max-age=3600")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusOK)
 	w.Write(data)
+}
+
+// getClientIP extracts the real client IP from a request, preferring
+// X-Forwarded-For then X-Real-IP before falling back to RemoteAddr.
+func getClientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		ips := strings.Split(xff, ",")
+		if len(ips) > 0 {
+			return strings.TrimSpace(ips[0])
+		}
+	}
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return xri
+	}
+	ip := r.RemoteAddr
+	if colonIdx := strings.LastIndex(ip, ":"); colonIdx != -1 {
+		ip = ip[:colonIdx]
+	}
+	return ip
 }
