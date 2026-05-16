@@ -1,7 +1,0 @@
-./bool.go
-./config.go
-./directories.go
-./env.go
-./ownership_unix.go
-./sync.go
-./validation.go

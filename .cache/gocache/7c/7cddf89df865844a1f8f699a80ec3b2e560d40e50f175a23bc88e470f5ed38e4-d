@@ -1,5 +1,0 @@
-./auth.go
-./external_auth.go
-./handlers.go
-./service.go
-./templates.go

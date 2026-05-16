@@ -1,6 +1,0 @@
-./cluster.go
-./database.go
-./migrations.go
-./mixed.go
-./remote.go
-./repository.go

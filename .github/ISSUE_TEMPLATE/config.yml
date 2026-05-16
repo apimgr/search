@@ -1,0 +1,12 @@
+blank_issues_enabled: false
+
+contact_links:
+  - name: Documentation
+    url: https://apimgr-search.readthedocs.io
+    about: Read the full documentation before opening an issue
+  - name: Discussions / Support
+    url: https://github.com/apimgr/search/discussions
+    about: Ask questions and get support in GitHub Discussions
+  - name: Security Vulnerability
+    url: https://github.com/apimgr/search/security/advisories/new
+    about: Report a security vulnerability privately — do NOT open a public issue for security bugs

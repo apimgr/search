@@ -107,6 +107,9 @@ $RECYCLE.BIN/
 binaries/
 releases/
 
+# Go build cache (should never be committed)
+.cache/
+
 # Runtime volume data (NEVER commit) - per AI.md PART 27
 volumes/
 

@@ -1,9 +1,0 @@
-./batch.go
-./batch_result.go
-./pipeline_request.go
-./pipeline_response.go
-./stmt.go
-./stmt_result.go
-./stream_request.go
-./stream_result.go
-./value.go

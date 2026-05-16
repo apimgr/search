@@ -1,0 +1,196 @@
+name: Build
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches:
+      - main
+      - master
+      - devel
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PROJECTNAME: search
+  PROJECTORG: apimgr
+  CGO_ENABLED: "0"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    container: golang:alpine
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install lint tools
+        run: apk add --no-cache git bash
+
+      - name: Run gofmt
+        run: |
+          UNFMT=$(gofmt -l ./src/ 2>/dev/null)
+          if [ -n "$UNFMT" ]; then
+            echo "::error::The following files are not gofmt formatted:"
+            echo "$UNFMT"
+            exit 1
+          fi
+
+      - name: Run go vet
+        run: go vet ./src/...
+
+  test:
+    runs-on: ubuntu-latest
+    container: golang:alpine
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install test dependencies
+        run: apk add --no-cache git bash
+
+      - name: Run unit tests
+        run: |
+          go test -v -race -count=1 -timeout=120s ./src/...
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    container: golang:alpine
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+            ext: .exe
+          - goos: windows
+            goarch: arm64
+            ext: .exe
+          - goos: freebsd
+            goarch: amd64
+          - goos: freebsd
+            goarch: arm64
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install build dependencies
+        run: apk add --no-cache git bash
+
+      - name: Set build info
+        run: |
+          if [ -f release.txt ]; then
+            echo "VERSION=$(cat release.txt)" >> $GITHUB_ENV
+          else
+            echo "VERSION=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          fi
+          echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
+          if [ -f site.txt ]; then
+            echo "OFFICIALSITE=$(cat site.txt)" >> $GITHUB_ENV
+          else
+            echo "OFFICIALSITE=" >> $GITHUB_ENV
+          fi
+
+      - name: Build server binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          LDFLAGS="-s -w \
+            -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/config.Version=${VERSION}' \
+            -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/config.CommitID=${COMMIT_ID}' \
+            -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/config.BuildDate=${BUILD_DATE}' \
+            -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/config.OfficialSite=${OFFICIALSITE}'"
+          go build -ldflags "$LDFLAGS" \
+            -o binaries/${PROJECTNAME}-${GOOS}-${GOARCH}${{ matrix.ext }} \
+            ./src
+
+      - name: Build client binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          CLI_LDFLAGS="-s -w \
+            -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/client/cmd.ProjectName=${PROJECTNAME}' \
+            -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/client/cmd.Version=${VERSION}' \
+            -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/client/cmd.CommitID=${COMMIT_ID}' \
+            -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/client/cmd.BuildDate=${BUILD_DATE}' \
+            -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/client/cmd.OfficialSite=${OFFICIALSITE}' \
+            -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/client/api.ProjectName=${PROJECTNAME}' \
+            -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/client/api.Version=${VERSION}'"
+          go build -ldflags "$CLI_LDFLAGS" \
+            -o binaries/${PROJECTNAME}-cli-${GOOS}-${GOARCH}${{ matrix.ext }} \
+            ./src/client
+
+      - name: Verify binary
+        if: matrix.goos == 'linux'
+        run: |
+          file binaries/${PROJECTNAME}-${GOOS}-${GOARCH}
+          file binaries/${PROJECTNAME}-cli-${GOOS}-${GOARCH}
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+
+  upload-artifacts:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/devel'
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set build info
+        run: |
+          if [ -f release.txt ]; then
+            echo "VERSION=$(cat release.txt)" >> $GITHUB_ENV
+          else
+            echo "VERSION=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          fi
+          echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $GITHUB_ENV
+          if [ -f site.txt ]; then
+            echo "OFFICIALSITE=$(cat site.txt)" >> $GITHUB_ENV
+          else
+            echo "OFFICIALSITE=" >> $GITHUB_ENV
+          fi
+
+      - name: Build all binaries (devel artifact)
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+
+      - name: Build binaries
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p binaries
+          for PLATFORM in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64 freebsd/amd64 freebsd/arm64; do
+            GOOS="${PLATFORM%/*}"
+            GOARCH="${PLATFORM#*/}"
+            EXT=""
+            [ "$GOOS" = "windows" ] && EXT=".exe"
+            LDFLAGS="-s -w -X 'github.com/apimgr/search/src/config.Version=${VERSION}' -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/config.BuildDate=${BUILD_DATE}' -X 'github.com/apimgr/search/src/config.OfficialSite=${OFFICIALSITE}'"
+            GOOS=$GOOS GOARCH=$GOARCH go build -ldflags "$LDFLAGS" -o "binaries/search-${GOOS}-${GOARCH}${EXT}" ./src
+            CLI_LDFLAGS="-s -w -X 'github.com/apimgr/search/src/client/cmd.ProjectName=search' -X 'github.com/apimgr/search/src/client/cmd.Version=${VERSION}' -X 'github.com/apimgr/search/src/client/cmd.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/client/cmd.BuildDate=${BUILD_DATE}' -X 'github.com/apimgr/search/src/client/cmd.OfficialSite=${OFFICIALSITE}' -X 'github.com/apimgr/search/src/client/api.ProjectName=search' -X 'github.com/apimgr/search/src/client/api.Version=${VERSION}'"
+            GOOS=$GOOS GOARCH=$GOARCH go build -ldflags "$CLI_LDFLAGS" -o "binaries/search-cli-${GOOS}-${GOARCH}${EXT}" ./src/client
+          done
+
+      - name: Upload devel artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: search-devel-${{ github.sha }}
+          path: binaries/
+          retention-days: 7

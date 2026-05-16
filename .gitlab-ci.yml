@@ -1,0 +1,188 @@
+variables:
+  PROJECTNAME: search
+  PROJECTORG: apimgr
+  CGO_ENABLED: "0"
+  GO_IMAGE: golang:alpine
+
+stages:
+  - lint
+  - test
+  - build
+  - security
+  - release
+
+default:
+  image: $GO_IMAGE
+  before_script:
+    - apk add --no-cache git bash
+
+lint:gofmt:
+  stage: lint
+  script:
+    - |
+      UNFMT=$(gofmt -l ./src/ 2>/dev/null)
+      if [ -n "$UNFMT" ]; then
+        echo "The following files are not gofmt formatted:"
+        echo "$UNFMT"
+        exit 1
+      fi
+
+lint:govet:
+  stage: lint
+  script:
+    - go vet ./src/...
+
+test:unit:
+  stage: test
+  script:
+    - go test -v -race -count=1 -timeout=120s ./src/...
+
+.build_template: &build_template
+  stage: build
+  needs: [test:unit]
+  script:
+    - |
+      if [ -f release.txt ]; then
+        VERSION=$(cat release.txt)
+      else
+        VERSION=$(git rev-parse --short HEAD)
+      fi
+      COMMIT_ID=$(git rev-parse --short HEAD)
+      BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")
+      if [ -f site.txt ]; then
+        OFFICIALSITE=$(cat site.txt)
+      else
+        OFFICIALSITE="${OFFICIALSITE:-}"
+      fi
+      mkdir -p binaries
+      LDFLAGS="-s -w \
+        -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/config.Version=${VERSION}' \
+        -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/config.CommitID=${COMMIT_ID}' \
+        -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/config.BuildDate=${BUILD_DATE}' \
+        -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/config.OfficialSite=${OFFICIALSITE}'"
+      go build -ldflags "${LDFLAGS}" \
+        -o binaries/${PROJECTNAME}-${GOOS}-${GOARCH}${EXT} \
+        ./src
+      CLI_LDFLAGS="-s -w \
+        -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/client/cmd.ProjectName=${PROJECTNAME}' \
+        -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/client/cmd.Version=${VERSION}' \
+        -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/client/cmd.CommitID=${COMMIT_ID}' \
+        -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/client/cmd.BuildDate=${BUILD_DATE}' \
+        -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/client/cmd.OfficialSite=${OFFICIALSITE}' \
+        -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/client/api.ProjectName=${PROJECTNAME}' \
+        -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/client/api.Version=${VERSION}'"
+      go build -ldflags "${CLI_LDFLAGS}" \
+        -o binaries/${PROJECTNAME}-cli-${GOOS}-${GOARCH}${EXT} \
+        ./src/client
+  artifacts:
+    paths:
+      - binaries/
+    expire_in: 7 days
+
+build:linux-amd64:
+  <<: *build_template
+  variables:
+    GOOS: linux
+    GOARCH: amd64
+
+build:linux-arm64:
+  <<: *build_template
+  variables:
+    GOOS: linux
+    GOARCH: arm64
+
+build:darwin-amd64:
+  <<: *build_template
+  variables:
+    GOOS: darwin
+    GOARCH: amd64
+
+build:darwin-arm64:
+  <<: *build_template
+  variables:
+    GOOS: darwin
+    GOARCH: arm64
+
+build:windows-amd64:
+  <<: *build_template
+  variables:
+    GOOS: windows
+    GOARCH: amd64
+    EXT: .exe
+
+build:windows-arm64:
+  <<: *build_template
+  variables:
+    GOOS: windows
+    GOARCH: arm64
+    EXT: .exe
+
+build:freebsd-amd64:
+  <<: *build_template
+  variables:
+    GOOS: freebsd
+    GOARCH: amd64
+
+build:freebsd-arm64:
+  <<: *build_template
+  variables:
+    GOOS: freebsd
+    GOARCH: arm64
+
+security:govulncheck:
+  stage: security
+  script:
+    - go install golang.org/x/vuln/cmd/govulncheck@latest
+    - govulncheck ./src/...
+  only:
+    - main
+    - master
+    - devel
+    - schedules
+
+security:staticcheck:
+  stage: security
+  script:
+    - go install honnef.co/go/tools/cmd/staticcheck@latest
+    - staticcheck ./src/...
+  only:
+    - main
+    - master
+    - devel
+    - schedules
+
+security:dependency-check:
+  stage: security
+  script:
+    - go mod verify
+  only:
+    - main
+    - master
+    - devel
+    - schedules
+
+release:publish:
+  stage: release
+  needs:
+    - build:linux-amd64
+    - build:linux-arm64
+    - build:darwin-amd64
+    - build:darwin-arm64
+    - build:windows-amd64
+    - build:windows-arm64
+    - build:freebsd-amd64
+    - build:freebsd-arm64
+  script:
+    - |
+      if [ -f release.txt ]; then
+        VERSION=$(cat release.txt)
+      else
+        VERSION="${CI_COMMIT_TAG#v}"
+      fi
+      echo "Releasing ${PROJECTNAME} ${VERSION}"
+  artifacts:
+    paths:
+      - binaries/
+    expire_in: 30 days
+  only:
+    - tags

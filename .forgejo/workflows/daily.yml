@@ -1,0 +1,155 @@
+name: Daily Build
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: daily-${{ forgejo.ref }}
+  cancel-in-progress: ${{ forgejo.ref == 'refs/heads/main' || forgejo.ref == 'refs/heads/master' || forgejo.ref == 'refs/heads/devel' || forgejo.ref == 'refs/heads/dev' || forgejo.ref == 'refs/heads/beta' }}
+
+permissions:
+  contents: write
+
+env:
+  PROJECTNAME: search
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: golang:alpine
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+            ext: .exe
+          - goos: windows
+            goarch: arm64
+            ext: .exe
+          - goos: freebsd
+            goarch: amd64
+          - goos: freebsd
+            goarch: arm64
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set build info
+        run: |
+          if [ -f release.txt ]; then
+            echo "VERSION=$(cat release.txt)" >> $FORGEJO_ENV
+          else
+            echo "VERSION=$(date -u +"%Y%m%d%H%M%S")" >> $FORGEJO_ENV
+          fi
+          echo "COMMIT_ID=$(git rev-parse --short HEAD)" >> $FORGEJO_ENV
+          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> $FORGEJO_ENV
+          if [ -f site.txt ]; then
+            echo "OFFICIALSITE=$(cat site.txt)" >> $FORGEJO_ENV
+          else
+            echo "OFFICIALSITE=${{ secrets.OFFICIALSITE }}" >> $FORGEJO_ENV
+          fi
+
+      - name: Build server
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          LDFLAGS="-s -w -X 'github.com/apimgr/search/src/config.Version=${{ env.VERSION }}' -X 'github.com/apimgr/search/src/config.CommitID=${{ env.COMMIT_ID }}' -X 'github.com/apimgr/search/src/config.BuildDate=${{ env.BUILD_DATE }}' -X 'github.com/apimgr/search/src/config.OfficialSite=${{ env.OFFICIALSITE }}'"
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src
+
+      - name: Build CLI
+        if: hashFiles('src/client/') != ''
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          LDFLAGS="-s -w -X 'github.com/apimgr/search/src/client/cmd.Version=${{ env.VERSION }}' -X 'github.com/apimgr/search/src/client/cmd.CommitID=${{ env.COMMIT_ID }}' -X 'github.com/apimgr/search/src/client/cmd.BuildDate=${{ env.BUILD_DATE }}' -X 'github.com/apimgr/search/src/client/cmd.OfficialSite=${{ env.OFFICIALSITE }}'"
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/client
+
+      - name: Upload server artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+
+      - name: Upload CLI artifact
+        if: hashFiles('src/client/') != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+
+      - name: Build Agent
+        if: hashFiles('src/agent/') != ''
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          LDFLAGS="-s -w -X 'github.com/apimgr/search/src/config.Version=${{ env.VERSION }}' -X 'github.com/apimgr/search/src/config.CommitID=${{ env.COMMIT_ID }}' -X 'github.com/apimgr/search/src/config.BuildDate=${{ env.BUILD_DATE }}' -X 'github.com/apimgr/search/src/config.OfficialSite=${{ env.OFFICIALSITE }}'"
+          go build -ldflags "${LDFLAGS}" -o ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./src/agent
+
+      - name: Upload Agent artifact
+        if: hashFiles('src/agent/') != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.PROJECTNAME }}-agent-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
+        with:
+          path: binaries
+          merge-multiple: true
+
+      - name: Set version
+        run: |
+          if [ -f release.txt ]; then
+            echo "VERSION=$(cat release.txt)" >> $FORGEJO_ENV
+          else
+            echo "VERSION=$(date -u +"%Y%m%d%H%M%S")" >> $FORGEJO_ENV
+          fi
+
+      - name: Create version.txt
+        run: echo "${{ env.VERSION }}" > binaries/version.txt
+
+      - name: Delete previous daily release
+        run: |
+          curl -X DELETE \
+            -H "Authorization: token ${{ secrets.FORGEJO_TOKEN }}" \
+            "${{ forgejo.server_url }}/api/v1/repos/${{ forgejo.repository }}/releases/tags/daily" 2>/dev/null || true
+          git push origin :refs/tags/daily 2>/dev/null || true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
+        with:
+          tag_name: daily
+          name: "Daily Build ${{ env.VERSION }}"
+          files: binaries/*
+          prerelease: true
+          body: "Daily build: ${{ env.VERSION }}"
