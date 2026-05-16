@@ -133,6 +133,8 @@ If you haven't read AI.md this session → STOP → read it NOW.
 - AI.md last refreshed: 2026-05-06 (from `~/Templates/go/TEMPLATE.md`)
 - IDEA.md format: three-section (migrated 2026-05-06; backup at `IDEA.md.preMigration.bak`)
 - TODO.AI.md: 1 pending (`i18n-translator-review` — zh/ja/ar/he/fa/ur `help.*` keys need human translator)
-- All CI/CD workflows fixed: SHA-pinned, container builds, concurrency, correct artifact action versions
+- All CI/CD workflows passing: SHA-pinned, container builds, concurrency, govulncheck, go vet, docker build
 - `src/instant/utils.go` split into per-concern files (time/hash/base64/url/color/uuid/random/password/ip)
 - go-redis upgraded to v9.7.3 (CVE GO-2025-3540 remediated)
+- PART 34 test leftovers removed from src/api/api_test.go; getClientIP restored to src/api/api.go
+- go.mod tidy'd: skip2/go-qrcode and golang.org/x/text promoted to direct deps, pquerna/otp removed
