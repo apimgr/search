@@ -46,13 +46,8 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Install git
-        run: apk add --no-cache git
-
-      - name: Verify go.sum is tidy
-        run: |
-          go mod tidy
-          git diff --exit-code go.sum
+      - name: Verify module checksums
+        run: go mod verify
 
       - name: Run go vet
         env:
