@@ -3,9 +3,9 @@ name: Docker Build
 on:
   push:
     branches: ['**']
-  tags:
-    - 'v*'
-    - '*.*.*'
+    tags:
+      - 'v*'
+      - '*.*.*'
   workflow_dispatch:
 
 concurrency:
