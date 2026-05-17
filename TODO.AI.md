@@ -24,7 +24,7 @@ These test failures exist in the current codebase and must be resolved before CI
 - TestEvalSimple/2**3: unsupported expression type: *ast.StarExpr (power operator ** not handled in math evaluator)
 - TestMathHandlerHandleError: Handle() returned nil (error path returns nil instead of error result)
 
-### src/search/engines (engines_test.go)
+### src/search/engine (engines_test.go)
 - TestBingTransportConfig: MaxIdleConns = 200, want 100; MaxIdleConnsPerHost = 20, want 10 (transport defaults changed)
 
 ## Remaining bootstrap items
