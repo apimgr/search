@@ -16,7 +16,7 @@ const boxWidth = 72 // Per AI.md PART 14 console output format
 type Config struct {
 	AppName     string
 	Version     string
-	Mode        string   // production/development
+	Mode        string // production/development
 	Debug       bool
 	URLs        []string // Listen URLs
 	ShowSetup   bool     // Show setup token (server only, first run)

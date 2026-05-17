@@ -12,7 +12,7 @@ func TestNormalizePath(t *testing.T) {
 		want  string
 	}{
 		{"empty", "", ""},
-		{"simple path", "/path/to/file", "path/to/file"},     // Strips leading/trailing slashes
+		{"simple path", "/path/to/file", "path/to/file"}, // Strips leading/trailing slashes
 		{"no leading slash", "path/to/file", "path/to/file"},
 		{"double slashes", "path//to//file", "path/to/file"}, // path.Clean handles //
 		{"trailing slash", "/path/to/", "path/to"},           // Strips trailing
@@ -219,8 +219,8 @@ func TestNormalizePathEdgeCases(t *testing.T) {
 		{"mixed dots and slashes", "/./a/./b/./", "a/b"},
 		{"leading double slash", "//path/to/file", "path/to/file"},
 		{"unicode path", "/путь/к/файлу", "путь/к/файлу"},
-		{"unresolvable dotdot", "../../etc", ""},  // Contains .. after clean
-		{"dotdot at root", "/../etc", "etc"},      // path.Clean resolves to /etc, trim gives etc
+		{"unresolvable dotdot", "../../etc", ""}, // Contains .. after clean
+		{"dotdot at root", "/../etc", "etc"},     // path.Clean resolves to /etc, trim gives etc
 	}
 
 	for _, tt := range tests {
@@ -246,7 +246,7 @@ func TestValidatePathEdgeCases(t *testing.T) {
 		{"path with extension", "/path/file.json", nil},
 		{"multiple extensions", "/path/file.tar.gz", ErrInvalidPath}, // Double extension fails regex
 		{"hidden file unix style", "/.hidden", ErrInvalidPath},       // Starts with dot
-		{"just dots", "/path/...", ErrPathTraversal}, // Contains ".." so treated as traversal
+		{"just dots", "/path/...", ErrPathTraversal},                 // Contains ".." so treated as traversal
 	}
 
 	for _, tt := range tests {

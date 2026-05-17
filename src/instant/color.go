@@ -23,8 +23,8 @@ func NewColorHandler() *ColorHandler {
 	}
 }
 
-func (h *ColorHandler) Name() string                { return "color" }
-func (h *ColorHandler) Patterns() []*regexp.Regexp  { return h.patterns }
+func (h *ColorHandler) Name() string               { return "color" }
+func (h *ColorHandler) Patterns() []*regexp.Regexp { return h.patterns }
 
 func (h *ColorHandler) CanHandle(query string) bool {
 	for _, p := range h.patterns {

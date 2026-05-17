@@ -53,7 +53,7 @@ func TestRunStatusHealthy(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/healthz" {
 			// Per AI.md PART 14: Wrapped response format
-		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "data": api.HealthResponse{
+			json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "data": api.HealthResponse{
 				Status:  "healthy",
 				Version: "1.0.0",
 				Uptime:  "24h",
@@ -432,13 +432,13 @@ func TestRunStatusMultipleChecks(t *testing.T) {
 			Status:  "healthy",
 			Version: "1.0.0",
 			Checks: map[string]string{
-				"database":    "connected",
-				"cache":       "ready",
-				"search":      "indexing",
-				"email":       "configured",
-				"storage":     "available",
-				"scheduler":   "running",
-				"auth":        "enabled",
+				"database":  "connected",
+				"cache":     "ready",
+				"search":    "indexing",
+				"email":     "configured",
+				"storage":   "available",
+				"scheduler": "running",
+				"auth":      "enabled",
 			},
 		}})
 	}))

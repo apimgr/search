@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apimgr/search/src/version"
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/version"
 )
 
 // RSSFetcher fetches items from user-configured RSS feeds

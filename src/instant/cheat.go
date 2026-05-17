@@ -34,7 +34,7 @@ func NewCheatHandler() *CheatHandler {
 	}
 }
 
-func (h *CheatHandler) Name() string              { return "cheat" }
+func (h *CheatHandler) Name() string               { return "cheat" }
 func (h *CheatHandler) Patterns() []*regexp.Regexp { return h.patterns }
 
 func (h *CheatHandler) CanHandle(query string) bool {

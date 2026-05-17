@@ -856,11 +856,11 @@ func TestStartHTTPSRedirectNonStandardPort(t *testing.T) {
 func TestHTTPSRedirectHandler(t *testing.T) {
 	// Test the redirect handler directly
 	tests := []struct {
-		name          string
-		httpsPort     int
-		host          string
-		uri           string
-		expectedLoc   string
+		name        string
+		httpsPort   int
+		host        string
+		uri         string
+		expectedLoc string
 	}{
 		{
 			name:        "Standard port 443",
@@ -1411,7 +1411,7 @@ func TestCreateDNSProviderMissingCredentials(t *testing.T) {
 		credentials map[string]string
 	}{
 		{"cloudflare", map[string]string{}},
-		{"cloudflare_legacy", map[string]string{"api_key": "key"}}, // missing email
+		{"cloudflare_legacy", map[string]string{"api_key": "key"}},            // missing email
 		{"cloudflare_legacy", map[string]string{"email": "test@example.com"}}, // missing api_key
 		{"route53", map[string]string{"access_key_id": "id"}},                 // missing secret
 		{"route53", map[string]string{"secret_access_key": "secret"}},         // missing id

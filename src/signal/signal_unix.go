@@ -22,11 +22,11 @@ var findProcessFunc = os.FindProcess
 func setupSignals(cfg ShutdownConfig) {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan,
-		syscall.SIGTERM,  // 15 - kill (default), graceful shutdown
-		syscall.SIGINT,   // 2 - Ctrl+C, graceful shutdown
-		syscall.SIGQUIT,  // 3 - Ctrl+\, graceful shutdown
-		syscall.SIGUSR1,  // 10 - Reopen logs (log rotation)
-		syscall.SIGUSR2,  // 12 - Status dump to log
+		syscall.SIGTERM, // 15 - kill (default), graceful shutdown
+		syscall.SIGINT,  // 2 - Ctrl+C, graceful shutdown
+		syscall.SIGQUIT, // 3 - Ctrl+\, graceful shutdown
+		syscall.SIGUSR1, // 10 - Reopen logs (log rotation)
+		syscall.SIGUSR2, // 12 - Status dump to log
 	)
 
 	// Handle SIGRTMIN+3 (signal 37) - Docker STOPSIGNAL

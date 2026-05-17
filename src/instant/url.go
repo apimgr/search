@@ -25,8 +25,8 @@ func NewURLHandler() *URLHandler {
 	}
 }
 
-func (h *URLHandler) Name() string                { return "url" }
-func (h *URLHandler) Patterns() []*regexp.Regexp  { return h.patterns }
+func (h *URLHandler) Name() string               { return "url" }
+func (h *URLHandler) Patterns() []*regexp.Regexp { return h.patterns }
 
 func (h *URLHandler) CanHandle(query string) bool {
 	for _, p := range h.patterns {

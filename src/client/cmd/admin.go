@@ -28,8 +28,8 @@ var (
 	tokenScopes  string
 	tokenUser    string
 	// Org command flags
-	orgDisplayName  string
-	orgDescription  string
+	orgDisplayName string
+	orgDescription string
 )
 
 // adminCmd is the root admin command

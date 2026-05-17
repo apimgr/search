@@ -135,9 +135,9 @@ func (h *SlangHandler) Handle(ctx context.Context, term string) (*Answer, error)
 		Source:      "Urban Dictionary",
 		SourceURL:   fmt.Sprintf("https://www.urbandictionary.com/define.php?term=%s", url.QueryEscape(term)),
 		Data: map[string]interface{}{
-			"word":            topDefs[0].Word,
+			"word":             topDefs[0].Word,
 			"definition_count": len(data.List),
-			"definitions":     definitions,
+			"definitions":      definitions,
 		},
 	}, nil
 }

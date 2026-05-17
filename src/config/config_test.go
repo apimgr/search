@@ -54,8 +54,8 @@ func TestResolvePort(t *testing.T) {
 		wantSame bool
 	}{
 		{"valid port", 8080, true},
-		{"zero port", 0, false},       // Zero gets random port
-		{"negative port", -1, true},   // Negative passes through unchanged (config validation handles this separately)
+		{"zero port", 0, false},     // Zero gets random port
+		{"negative port", -1, true}, // Negative passes through unchanged (config validation handles this separately)
 	}
 
 	for _, tt := range tests {
@@ -356,9 +356,9 @@ func TestConfigReloadInvalidYAML(t *testing.T) {
 
 func TestSessionConfigGetAdminCookieName(t *testing.T) {
 	tests := []struct {
-		name       string
-		session    SessionConfig
-		want       string
+		name    string
+		session SessionConfig
+		want    string
 	}{
 		{
 			"admin cookie name set",
@@ -889,8 +889,8 @@ func TestValidateAndApplyDefaultsComprehensive(t *testing.T) {
 				Admin: SessionTypeConfig{MaxAge: 0},
 				User:  SessionTypeConfig{MaxAge: 0},
 			},
-			GeoIP: GeoIPConfig{Enabled: true, Dir: ""},
-			Metrics: MetricsConfig{Enabled: true, Endpoint: ""},
+			GeoIP:       GeoIPConfig{Enabled: true, Dir: ""},
+			Metrics:     MetricsConfig{Enabled: true, Endpoint: ""},
 			Compression: CompressionConfig{Level: 15}, // Invalid level
 		},
 		Engines: nil, // Should trigger warning
@@ -1359,4 +1359,3 @@ func TestAdminConfigDefaults(t *testing.T) {
 		t.Error("Admin.Enabled should be true by default")
 	}
 }
-

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apimgr/search/src/version"
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/version"
 )
 
 // NewsFetcher fetches news from RSS feeds
@@ -62,12 +62,12 @@ type AtomFeed struct {
 }
 
 type AtomEntry struct {
-	Title     string     `xml:"title"`
-	Link      AtomLink   `xml:"link"`
-	Summary   string     `xml:"summary"`
-	Published string     `xml:"published"`
-	Updated   string     `xml:"updated"`
-	ID        string     `xml:"id"`
+	Title     string   `xml:"title"`
+	Link      AtomLink `xml:"link"`
+	Summary   string   `xml:"summary"`
+	Published string   `xml:"published"`
+	Updated   string   `xml:"updated"`
+	ID        string   `xml:"id"`
 }
 
 type AtomLink struct {

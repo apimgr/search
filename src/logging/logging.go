@@ -337,35 +337,35 @@ func (l *AccessLogger) formatWithVariables(entry AccessEntry) string {
 
 	// Define all variable replacements
 	replacements := map[string]string{
-		"$remote_addr":           entry.IP,
-		"$remote_user":           orDash(entry.RemoteUser),
-		"$time_local":            entry.Timestamp.Format("02/Jan/2006:15:04:05 -0700"),
-		"$time_iso8601":          entry.Timestamp.Format(time.RFC3339),
-		"$time_unix":             fmt.Sprintf("%d", entry.Timestamp.Unix()),
-		"$time_msec":             fmt.Sprintf("%d.%03d", entry.Timestamp.Unix(), entry.Timestamp.Nanosecond()/1000000),
-		"$request":               request,
-		"$request_method":        entry.Method,
-		"$request_uri":           requestURI,
-		"$request_path":          entry.Path,
-		"$query_string":          entry.QueryString,
-		"$status":                fmt.Sprintf("%d", entry.Status),
-		"$body_bytes_sent":       fmt.Sprintf("%d", entry.Size),
-		"$bytes_sent":            fmt.Sprintf("%d", entry.BytesSent),
-		"$http_referer":          orDash(entry.Referer),
-		"$http_user_agent":       entry.UserAgent,
-		"$http_host":             orDash(entry.Host),
-		"$http_x_forwarded_for":  orDash(entry.XForwardedFor),
-		"$http_x_real_ip":        orDash(entry.XRealIP),
-		"$server_protocol":       entry.Protocol,
-		"$request_time":          fmt.Sprintf("%.3f", float64(entry.Latency)/1000.0),
-		"$request_time_ms":       fmt.Sprintf("%d", entry.Latency),
-		"$request_id":            orDash(entry.RequestID),
-		"$connection":            fmt.Sprintf("%d", entry.Connection),
-		"$connection_requests":   fmt.Sprintf("%d", entry.ConnectionRequests),
-		"$ssl_protocol":          orDash(entry.SSLProtocol),
-		"$ssl_cipher":            orDash(entry.SSLCipher),
-		"$hostname":              getHostname(),
-		"$pid":                   fmt.Sprintf("%d", os.Getpid()),
+		"$remote_addr":          entry.IP,
+		"$remote_user":          orDash(entry.RemoteUser),
+		"$time_local":           entry.Timestamp.Format("02/Jan/2006:15:04:05 -0700"),
+		"$time_iso8601":         entry.Timestamp.Format(time.RFC3339),
+		"$time_unix":            fmt.Sprintf("%d", entry.Timestamp.Unix()),
+		"$time_msec":            fmt.Sprintf("%d.%03d", entry.Timestamp.Unix(), entry.Timestamp.Nanosecond()/1000000),
+		"$request":              request,
+		"$request_method":       entry.Method,
+		"$request_uri":          requestURI,
+		"$request_path":         entry.Path,
+		"$query_string":         entry.QueryString,
+		"$status":               fmt.Sprintf("%d", entry.Status),
+		"$body_bytes_sent":      fmt.Sprintf("%d", entry.Size),
+		"$bytes_sent":           fmt.Sprintf("%d", entry.BytesSent),
+		"$http_referer":         orDash(entry.Referer),
+		"$http_user_agent":      entry.UserAgent,
+		"$http_host":            orDash(entry.Host),
+		"$http_x_forwarded_for": orDash(entry.XForwardedFor),
+		"$http_x_real_ip":       orDash(entry.XRealIP),
+		"$server_protocol":      entry.Protocol,
+		"$request_time":         fmt.Sprintf("%.3f", float64(entry.Latency)/1000.0),
+		"$request_time_ms":      fmt.Sprintf("%d", entry.Latency),
+		"$request_id":           orDash(entry.RequestID),
+		"$connection":           fmt.Sprintf("%d", entry.Connection),
+		"$connection_requests":  fmt.Sprintf("%d", entry.ConnectionRequests),
+		"$ssl_protocol":         orDash(entry.SSLProtocol),
+		"$ssl_cipher":           orDash(entry.SSLCipher),
+		"$hostname":             getHostname(),
+		"$pid":                  fmt.Sprintf("%d", os.Getpid()),
 	}
 
 	// Apply replacements (order by length descending to avoid partial matches)
@@ -675,12 +675,12 @@ func (l LogLevel) String() string {
 
 // ServerLogger logs application events
 type ServerLogger struct {
-	mu       sync.Mutex
-	file     *os.File
-	path     string
-	level    LogLevel
-	format   string // "text", "json"
-	stdout   bool
+	mu     sync.Mutex
+	file   *os.File
+	path   string
+	level  LogLevel
+	format string // "text", "json"
+	stdout bool
 }
 
 // ServerEntry represents a server log entry
@@ -886,14 +886,14 @@ func (w *serverLogWriter) Write(p []byte) (n int, err error) {
 type SecurityEvent string
 
 const (
-	SecurityEventLoginFailed    SecurityEvent = "LOGIN_FAILED"
-	SecurityEventLoginSuccess   SecurityEvent = "LOGIN_SUCCESS"
-	SecurityEventRateLimited    SecurityEvent = "RATE_LIMITED"
-	SecurityEventBlocked        SecurityEvent = "BLOCKED"
-	SecurityEventSuspicious     SecurityEvent = "SUSPICIOUS"
-	SecurityEventBruteForce     SecurityEvent = "BRUTE_FORCE"
-	SecurityEventInvalidToken   SecurityEvent = "INVALID_TOKEN"
-	SecurityEventCSRFViolation  SecurityEvent = "CSRF_VIOLATION"
+	SecurityEventLoginFailed   SecurityEvent = "LOGIN_FAILED"
+	SecurityEventLoginSuccess  SecurityEvent = "LOGIN_SUCCESS"
+	SecurityEventRateLimited   SecurityEvent = "RATE_LIMITED"
+	SecurityEventBlocked       SecurityEvent = "BLOCKED"
+	SecurityEventSuspicious    SecurityEvent = "SUSPICIOUS"
+	SecurityEventBruteForce    SecurityEvent = "BRUTE_FORCE"
+	SecurityEventInvalidToken  SecurityEvent = "INVALID_TOKEN"
+	SecurityEventCSRFViolation SecurityEvent = "CSRF_VIOLATION"
 )
 
 // SecurityLogger logs security events (fail2ban compatible)
@@ -1127,21 +1127,21 @@ const (
 	AuditActionUserRecoveryKeyUsed   AuditAction = "user.recovery_key_used"
 
 	// Organization events (PART 11 lines 11809-11827)
-	AuditActionOrgCreated             AuditAction = "org.created"
-	AuditActionOrgDeleted             AuditAction = "org.deleted"
-	AuditActionOrgSettingsUpdated     AuditAction = "org.settings_updated"
-	AuditActionOrgMemberInvited       AuditAction = "org.member_invited"
-	AuditActionOrgMemberJoined        AuditAction = "org.member_joined"
-	AuditActionOrgMemberRemoved       AuditAction = "org.member_removed"
-	AuditActionOrgMemberLeft          AuditAction = "org.member_left"
-	AuditActionOrgRoleChanged         AuditAction = "org.role_changed"
-	AuditActionOrgRoleCreated         AuditAction = "org.role_created"
-	AuditActionOrgRoleUpdated         AuditAction = "org.role_updated"
-	AuditActionOrgRoleDeleted         AuditAction = "org.role_deleted"
-	AuditActionOrgTokenCreated        AuditAction = "org.token_created"
-	AuditActionOrgTokenRevoked        AuditAction = "org.token_revoked"
-	AuditActionOrgOwnershipTransfer   AuditAction = "org.ownership_transferred"
-	AuditActionOrgBillingUpdated      AuditAction = "org.billing_updated"
+	AuditActionOrgCreated           AuditAction = "org.created"
+	AuditActionOrgDeleted           AuditAction = "org.deleted"
+	AuditActionOrgSettingsUpdated   AuditAction = "org.settings_updated"
+	AuditActionOrgMemberInvited     AuditAction = "org.member_invited"
+	AuditActionOrgMemberJoined      AuditAction = "org.member_joined"
+	AuditActionOrgMemberRemoved     AuditAction = "org.member_removed"
+	AuditActionOrgMemberLeft        AuditAction = "org.member_left"
+	AuditActionOrgRoleChanged       AuditAction = "org.role_changed"
+	AuditActionOrgRoleCreated       AuditAction = "org.role_created"
+	AuditActionOrgRoleUpdated       AuditAction = "org.role_updated"
+	AuditActionOrgRoleDeleted       AuditAction = "org.role_deleted"
+	AuditActionOrgTokenCreated      AuditAction = "org.token_created"
+	AuditActionOrgTokenRevoked      AuditAction = "org.token_revoked"
+	AuditActionOrgOwnershipTransfer AuditAction = "org.ownership_transferred"
+	AuditActionOrgBillingUpdated    AuditAction = "org.billing_updated"
 
 	// Configuration events (PART 11 lines 11884-11897)
 	AuditActionConfigChange         AuditAction = "config.updated"
@@ -1156,14 +1156,14 @@ const (
 	AuditActionConfigAdminGroups    AuditAction = "config.admin_groups_updated"
 
 	// Security events (PART 11 lines 11899-11910)
-	AuditActionRateLimitExceeded   AuditAction = "security.rate_limit_exceeded"
-	AuditActionIPBlocked           AuditAction = "security.ip_blocked"
-	AuditActionIPUnblocked         AuditAction = "security.ip_unblocked"
-	AuditActionCountryBlocked      AuditAction = "security.country_blocked"
-	AuditActionCSRFFailure         AuditAction = "security.csrf_failure"
-	AuditActionInvalidToken        AuditAction = "security.invalid_token"
-	AuditActionBruteForceDetected  AuditAction = "security.brute_force_detected"
-	AuditActionSuspiciousActivity  AuditAction = "security.suspicious_activity"
+	AuditActionRateLimitExceeded  AuditAction = "security.rate_limit_exceeded"
+	AuditActionIPBlocked          AuditAction = "security.ip_blocked"
+	AuditActionIPUnblocked        AuditAction = "security.ip_unblocked"
+	AuditActionCountryBlocked     AuditAction = "security.country_blocked"
+	AuditActionCSRFFailure        AuditAction = "security.csrf_failure"
+	AuditActionInvalidToken       AuditAction = "security.invalid_token"
+	AuditActionBruteForceDetected AuditAction = "security.brute_force_detected"
+	AuditActionSuspiciousActivity AuditAction = "security.suspicious_activity"
 
 	// Token events (PART 11 lines 11912-11919)
 	AuditActionTokenCreate  AuditAction = "token.created"
@@ -1185,16 +1185,16 @@ const (
 	AuditActionSchedulerTaskRun   AuditAction = "scheduler.task_manual_run"
 
 	// Cluster events (PART 11 lines 11937-11945)
-	AuditActionClusterNodeJoined   AuditAction = "cluster.node_joined"
-	AuditActionClusterNodeRemoved  AuditAction = "cluster.node_removed"
-	AuditActionClusterNodeFailed   AuditAction = "cluster.node_failed"
-	AuditActionClusterTokenGen     AuditAction = "cluster.token_generated"
-	AuditActionClusterModeChanged  AuditAction = "cluster.mode_changed"
+	AuditActionClusterNodeJoined  AuditAction = "cluster.node_joined"
+	AuditActionClusterNodeRemoved AuditAction = "cluster.node_removed"
+	AuditActionClusterNodeFailed  AuditAction = "cluster.node_failed"
+	AuditActionClusterTokenGen    AuditAction = "cluster.token_generated"
+	AuditActionClusterModeChanged AuditAction = "cluster.mode_changed"
 
 	// Legacy aliases for backward compatibility
-	AuditActionReload        AuditAction = "config.reload"
-	AuditActionEngineToggle  AuditAction = "config.engine_toggle"
-	AuditActionAdminInvite   AuditAction = "admin.invite"
+	AuditActionReload           AuditAction = "config.reload"
+	AuditActionEngineToggle     AuditAction = "config.engine_toggle"
+	AuditActionAdminInvite      AuditAction = "admin.invite"
 	AuditActionPermissionChange AuditAction = "user.permission_change"
 )
 
@@ -1202,16 +1202,16 @@ const (
 type AuditCategory string
 
 const (
-	AuditCategoryAuth           AuditCategory = "authentication" // Authentication events
-	AuditCategoryAdmin          AuditCategory = "admin"          // Admin panel actions
-	AuditCategoryConfig         AuditCategory = "configuration"  // Configuration changes
-	AuditCategoryUser           AuditCategory = "users"          // User management
-	AuditCategorySecurity       AuditCategory = "security"       // Security-related events
-	AuditCategoryData           AuditCategory = "backup"         // Backup/data operations
-	AuditCategorySystem         AuditCategory = "server"         // Server/system operations
-	AuditCategoryTokens         AuditCategory = "tokens"         // Token events
-	AuditCategoryCluster        AuditCategory = "cluster"        // Cluster events
-	AuditCategoryOrganization   AuditCategory = "organization"   // Organization events
+	AuditCategoryAuth         AuditCategory = "authentication" // Authentication events
+	AuditCategoryAdmin        AuditCategory = "admin"          // Admin panel actions
+	AuditCategoryConfig       AuditCategory = "configuration"  // Configuration changes
+	AuditCategoryUser         AuditCategory = "users"          // User management
+	AuditCategorySecurity     AuditCategory = "security"       // Security-related events
+	AuditCategoryData         AuditCategory = "backup"         // Backup/data operations
+	AuditCategorySystem       AuditCategory = "server"         // Server/system operations
+	AuditCategoryTokens       AuditCategory = "tokens"         // Token events
+	AuditCategoryCluster      AuditCategory = "cluster"        // Cluster events
+	AuditCategoryOrganization AuditCategory = "organization"   // Organization events
 )
 
 // AuditSeverity represents audit event severity per AI.md PART 11 lines 11998-12005
@@ -1242,26 +1242,26 @@ type AuditTarget struct {
 
 // AuditLogger logs administrative actions
 type AuditLogger struct {
-	mu     sync.Mutex
-	file   *os.File
-	path   string
+	mu      sync.Mutex
+	file    *os.File
+	path    string
 	entropy io.Reader
 }
 
 // AuditEntry represents an audit log entry per AI.md PART 11 lines 11947-11997
 // Uses ULID format IDs: audit_01HQXYZ123ABC
 type AuditEntry struct {
-	ID       string        `json:"id"`                   // ULID format: audit_01HQXYZ...
-	Time     time.Time     `json:"time"`                 // ISO 8601 timestamp with milliseconds, UTC
-	Event    AuditAction   `json:"event"`                // Event type (e.g., admin.login)
-	Category AuditCategory `json:"category"`             // Event category
-	Severity AuditSeverity `json:"severity"`             // info, warn, error, critical
-	Actor    AuditActor    `json:"actor"`                // Who performed the action
-	Target   *AuditTarget  `json:"target,omitempty"`     // What was acted upon
+	ID       string                 `json:"id"`                // ULID format: audit_01HQXYZ...
+	Time     time.Time              `json:"time"`              // ISO 8601 timestamp with milliseconds, UTC
+	Event    AuditAction            `json:"event"`             // Event type (e.g., admin.login)
+	Category AuditCategory          `json:"category"`          // Event category
+	Severity AuditSeverity          `json:"severity"`          // info, warn, error, critical
+	Actor    AuditActor             `json:"actor"`             // Who performed the action
+	Target   *AuditTarget           `json:"target,omitempty"`  // What was acted upon
 	Details  map[string]interface{} `json:"details,omitempty"` // Event-specific details
-	Result   string        `json:"result"`               // "success" or "failure"
-	NodeID   string        `json:"node_id,omitempty"`    // Node ID (cluster mode)
-	Reason   string        `json:"reason,omitempty"`     // Reason for action (if provided)
+	Result   string                 `json:"result"`            // "success" or "failure"
+	NodeID   string                 `json:"node_id,omitempty"` // Node ID (cluster mode)
+	Reason   string                 `json:"reason,omitempty"`  // Reason for action (if provided)
 }
 
 // NewAuditLogger creates a new audit logger
@@ -2417,12 +2417,12 @@ func (l *AuditLogger) GetAuditStats() (*AuditStats, error) {
 
 // AuditStats contains audit log statistics
 type AuditStats struct {
-	TotalEntries int                      `json:"total_entries"`
-	OldestEntry  time.Time                `json:"oldest_entry"`
-	NewestEntry  time.Time                `json:"newest_entry"`
-	ByCategory   map[AuditCategory]int    `json:"by_category"`
-	BySeverity   map[AuditSeverity]int    `json:"by_severity"`
-	ByResult     map[string]int           `json:"by_result"`
+	TotalEntries int                   `json:"total_entries"`
+	OldestEntry  time.Time             `json:"oldest_entry"`
+	NewestEntry  time.Time             `json:"newest_entry"`
+	ByCategory   map[AuditCategory]int `json:"by_category"`
+	BySeverity   map[AuditSeverity]int `json:"by_severity"`
+	ByResult     map[string]int        `json:"by_result"`
 }
 
 // ============================================================

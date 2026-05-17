@@ -24,8 +24,8 @@ func NewIPHandler() *IPHandler {
 	}
 }
 
-func (h *IPHandler) Name() string                { return "ip" }
-func (h *IPHandler) Patterns() []*regexp.Regexp  { return h.patterns }
+func (h *IPHandler) Name() string               { return "ip" }
+func (h *IPHandler) Patterns() []*regexp.Regexp { return h.patterns }
 
 func (h *IPHandler) CanHandle(query string) bool {
 	for _, p := range h.patterns {

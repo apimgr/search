@@ -33,7 +33,7 @@ func NewCVEHandler() *CVEHandler {
 	}
 }
 
-func (h *CVEHandler) Name() string              { return "cve" }
+func (h *CVEHandler) Name() string               { return "cve" }
 func (h *CVEHandler) Patterns() []*regexp.Regexp { return h.patterns }
 
 func (h *CVEHandler) CanHandle(query string) bool {

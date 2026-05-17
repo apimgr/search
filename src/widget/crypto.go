@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apimgr/search/src/version"
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/version"
 )
 
 // CryptoFetcher fetches cryptocurrency prices from CoinGecko API
@@ -26,13 +26,13 @@ type CryptoData struct {
 
 // CoinData represents data for a single cryptocurrency
 type CoinData struct {
-	ID         string  `json:"id"`
-	Name       string  `json:"name"`
-	Symbol     string  `json:"symbol"`
-	Price      float64 `json:"price"`
-	Change24h  float64 `json:"change_24h"`
-	MarketCap  float64 `json:"market_cap,omitempty"`
-	Volume24h  float64 `json:"volume_24h,omitempty"`
+	ID        string  `json:"id"`
+	Name      string  `json:"name"`
+	Symbol    string  `json:"symbol"`
+	Price     float64 `json:"price"`
+	Change24h float64 `json:"change_24h"`
+	MarketCap float64 `json:"market_cap,omitempty"`
+	Volume24h float64 `json:"volume_24h,omitempty"`
 }
 
 // CoinGeckoResponse represents CoinGecko API response
@@ -183,23 +183,23 @@ func (f *CryptoFetcher) Fetch(ctx context.Context, params map[string]string) (*W
 // formatCoinName converts coin ID to display name
 func formatCoinName(id string) string {
 	names := map[string]string{
-		"bitcoin":      "Bitcoin",
-		"ethereum":     "Ethereum",
-		"tether":       "Tether",
-		"binancecoin":  "BNB",
-		"ripple":       "XRP",
-		"usd-coin":     "USD Coin",
-		"solana":       "Solana",
-		"cardano":      "Cardano",
-		"dogecoin":     "Dogecoin",
-		"polkadot":     "Polkadot",
-		"shiba-inu":    "Shiba Inu",
-		"litecoin":     "Litecoin",
-		"avalanche-2":  "Avalanche",
-		"chainlink":    "Chainlink",
-		"stellar":      "Stellar",
-		"monero":       "Monero",
-		"algorand":     "Algorand",
+		"bitcoin":     "Bitcoin",
+		"ethereum":    "Ethereum",
+		"tether":      "Tether",
+		"binancecoin": "BNB",
+		"ripple":      "XRP",
+		"usd-coin":    "USD Coin",
+		"solana":      "Solana",
+		"cardano":     "Cardano",
+		"dogecoin":    "Dogecoin",
+		"polkadot":    "Polkadot",
+		"shiba-inu":   "Shiba Inu",
+		"litecoin":    "Litecoin",
+		"avalanche-2": "Avalanche",
+		"chainlink":   "Chainlink",
+		"stellar":     "Stellar",
+		"monero":      "Monero",
+		"algorand":    "Algorand",
 	}
 	if name, ok := names[id]; ok {
 		return name
@@ -214,23 +214,23 @@ func formatCoinName(id string) string {
 // coinIDToSymbol converts coin ID to symbol
 func coinIDToSymbol(id string) string {
 	symbols := map[string]string{
-		"bitcoin":      "BTC",
-		"ethereum":     "ETH",
-		"tether":       "USDT",
-		"binancecoin":  "BNB",
-		"ripple":       "XRP",
-		"usd-coin":     "USDC",
-		"solana":       "SOL",
-		"cardano":      "ADA",
-		"dogecoin":     "DOGE",
-		"polkadot":     "DOT",
-		"shiba-inu":    "SHIB",
-		"litecoin":     "LTC",
-		"avalanche-2":  "AVAX",
-		"chainlink":    "LINK",
-		"stellar":      "XLM",
-		"monero":       "XMR",
-		"algorand":     "ALGO",
+		"bitcoin":     "BTC",
+		"ethereum":    "ETH",
+		"tether":      "USDT",
+		"binancecoin": "BNB",
+		"ripple":      "XRP",
+		"usd-coin":    "USDC",
+		"solana":      "SOL",
+		"cardano":     "ADA",
+		"dogecoin":    "DOGE",
+		"polkadot":    "DOT",
+		"shiba-inu":   "SHIB",
+		"litecoin":    "LTC",
+		"avalanche-2": "AVAX",
+		"chainlink":   "LINK",
+		"stellar":     "XLM",
+		"monero":      "XMR",
+		"algorand":    "ALGO",
 	}
 	if symbol, ok := symbols[id]; ok {
 		return symbol

@@ -118,7 +118,7 @@ func (h *StopwatchHandler) handleStopwatch(query string) (*Answer, error) {
 <div class="stopwatch-laps"></div>
 </div>`,
 		Data: map[string]interface{}{
-			"type":       "stopwatch",
+			"type":        "stopwatch",
 			"interactive": true,
 		},
 	}, nil
@@ -152,12 +152,12 @@ func (h *StopwatchHandler) handlePomodoro(query string) (*Answer, error) {
 <div class="pomodoro-counter">Pomodoros completed: <span class="count">0</span></div>
 </div>`),
 		Data: map[string]interface{}{
-			"type":              "pomodoro",
-			"workDuration":      int(workDuration.Seconds()),
-			"breakDuration":     int(breakDuration.Seconds()),
-			"longBreakDuration": int(longBreakDuration.Seconds()),
+			"type":                  "pomodoro",
+			"workDuration":          int(workDuration.Seconds()),
+			"breakDuration":         int(breakDuration.Seconds()),
+			"longBreakDuration":     int(longBreakDuration.Seconds()),
 			"pomodorosForLongBreak": 4,
-			"interactive":       true,
+			"interactive":           true,
 		},
 	}, nil
 }
@@ -221,11 +221,11 @@ func (h *StopwatchHandler) createTimerAnswer(query string, duration time.Duratio
 			displayTime,
 			endTime.Format("3:04 PM")),
 		Data: map[string]interface{}{
-			"type":          "timer",
+			"type":            "timer",
 			"durationSeconds": totalSeconds,
-			"displayTime":   displayTime,
-			"endTime":       endTime.Format(time.RFC3339),
-			"interactive":   true,
+			"displayTime":     displayTime,
+			"endTime":         endTime.Format(time.RFC3339),
+			"interactive":     true,
 		},
 	}, nil
 }

@@ -20,7 +20,7 @@ import (
 // Per AI.md PART 17: Admin sessions stored in admin_sessions table (server.db)
 type AuthManager struct {
 	config   *config.Config
-	db       *database.DB // Database for session persistence (server.db)
+	db       *database.DB             // Database for session persistence (server.db)
 	sessions map[string]*AdminSession // Fallback in-memory (only if db is nil)
 	tokens   map[string]*APIToken
 	mu       sync.RWMutex

@@ -92,8 +92,8 @@ type GeocodingResponse struct {
 
 // OpenMeteoResponse represents Open-Meteo weather API response
 type OpenMeteoResponse struct {
-	Latitude  float64 `json:"latitude"`
-	Longitude float64 `json:"longitude"`
+	Latitude       float64 `json:"latitude"`
+	Longitude      float64 `json:"longitude"`
 	CurrentWeather struct {
 		Temperature   float64 `json:"temperature"`
 		WindSpeed     float64 `json:"windspeed"`
@@ -103,7 +103,7 @@ type OpenMeteoResponse struct {
 		Time          string  `json:"time"`
 	} `json:"current_weather"`
 	Hourly struct {
-		RelativeHumidity2m []int     `json:"relativehumidity_2m"`
+		RelativeHumidity2m  []int     `json:"relativehumidity_2m"`
 		ApparentTemperature []float64 `json:"apparent_temperature"`
 	} `json:"hourly"`
 }

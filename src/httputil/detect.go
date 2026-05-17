@@ -112,12 +112,12 @@ func IsBrowser(r *http.Request) bool {
 type ClientType int
 
 const (
-	ClientTypeUnknown ClientType = iota
-	ClientTypeBrowser            // Regular browser - gets full HTML with JS
-	ClientTypeTextBrowser        // Text browser (lynx, w3m) - gets HTML without JS
-	ClientTypeHttpTool           // HTTP tool (curl, wget) - gets formatted text
-	ClientTypeOurCLI             // Our CLI client - gets JSON
-	ClientTypeAPI                // API client - gets JSON
+	ClientTypeUnknown     ClientType = iota
+	ClientTypeBrowser                // Regular browser - gets full HTML with JS
+	ClientTypeTextBrowser            // Text browser (lynx, w3m) - gets HTML without JS
+	ClientTypeHttpTool               // HTTP tool (curl, wget) - gets formatted text
+	ClientTypeOurCLI                 // Our CLI client - gets JSON
+	ClientTypeAPI                    // API client - gets JSON
 )
 
 // String returns the string representation of ClientType

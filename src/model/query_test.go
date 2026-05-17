@@ -157,9 +157,9 @@ func TestQueryHasAdvancedFilters(t *testing.T) {
 
 func TestQueryHasAdvancedFiltersAllFields(t *testing.T) {
 	tests := []struct {
-		name    string
-		setup   func(*Query)
-		want    bool
+		name  string
+		setup func(*Query)
+		want  bool
 	}{
 		{"ExcludeSite", func(q *Query) { q.ExcludeSite = "bad.com" }, true},
 		{"FileTypes", func(q *Query) { q.FileTypes = []string{"pdf", "doc"} }, true},

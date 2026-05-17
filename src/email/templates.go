@@ -29,30 +29,30 @@ const (
 	TemplateUpdateAvailable   TemplateType = "update_available"
 	TemplateMaintenanceNotice TemplateType = "maintenance_notice"
 	// Additional templates per AI.md PART 18
-	TemplateMFAReminder       TemplateType = "mfa_reminder"
-	TemplateBackupFailed      TemplateType = "backup_failed"
-	TemplateSSLExpiring       TemplateType = "ssl_expiring"
-	TemplateSSLRenewed        TemplateType = "ssl_renewed"
-	TemplateSchedulerError    TemplateType = "scheduler_error"
+	TemplateMFAReminder        TemplateType = "mfa_reminder"
+	TemplateBackupFailed       TemplateType = "backup_failed"
+	TemplateSSLExpiring        TemplateType = "ssl_expiring"
+	TemplateSSLRenewed         TemplateType = "ssl_renewed"
+	TemplateSchedulerError     TemplateType = "scheduler_error"
 	TemplateBreachNotification TemplateType = "breach_notification"
-	TemplateBreachAdminAlert  TemplateType = "breach_admin_alert"
-	TemplateTest              TemplateType = "test"
+	TemplateBreachAdminAlert   TemplateType = "breach_admin_alert"
+	TemplateTest               TemplateType = "test"
 )
 
 // TemplateData holds common template data
 type TemplateData struct {
-	SiteName    string
-	SiteURL     string
-	Year        int
+	SiteName     string
+	SiteURL      string
+	Year         int
 	SupportEmail string
 }
 
 // NewTemplateData creates template data with defaults
 func NewTemplateData(siteName, siteURL, supportEmail string) *TemplateData {
 	return &TemplateData{
-		SiteName:    siteName,
-		SiteURL:     siteURL,
-		Year:        time.Now().Year(),
+		SiteName:     siteName,
+		SiteURL:      siteURL,
+		Year:         time.Now().Year(),
 		SupportEmail: supportEmail,
 	}
 }
@@ -67,81 +67,81 @@ type WelcomeData struct {
 // PasswordResetData holds data for password reset email
 type PasswordResetData struct {
 	*TemplateData
-	Username   string
-	ResetLink  string
-	ExpiresIn  string
-	IPAddress  string
+	Username    string
+	ResetLink   string
+	ExpiresIn   string
+	IPAddress   string
 	RequestedAt time.Time
 }
 
 // PasswordChangedData holds data for password changed notification
 type PasswordChangedData struct {
 	*TemplateData
-	Username   string
-	ChangedAt  time.Time
-	IPAddress  string
-	UserAgent  string
+	Username  string
+	ChangedAt time.Time
+	IPAddress string
+	UserAgent string
 }
 
 // LoginNotificationData holds data for login notification
 type LoginNotificationData struct {
 	*TemplateData
-	Username  string
-	LoginTime time.Time
-	IPAddress string
-	UserAgent string
-	Location  string
+	Username    string
+	LoginTime   time.Time
+	IPAddress   string
+	UserAgent   string
+	Location    string
 	IsNewDevice bool
 }
 
 // EmailVerificationData holds data for email verification
 type EmailVerificationData struct {
 	*TemplateData
-	Username       string
-	Email          string
+	Username         string
+	Email            string
 	VerificationLink string
-	ExpiresIn      string
+	ExpiresIn        string
 }
 
 // AccountLockedData holds data for account locked notification
 type AccountLockedData struct {
 	*TemplateData
-	Username    string
-	Reason      string
-	LockedAt    time.Time
+	Username           string
+	Reason             string
+	LockedAt           time.Time
 	UnlockInstructions string
 }
 
 // AdminAlertData holds data for admin alert
 type AdminAlertData struct {
 	*TemplateData
-	AlertType   string
-	AlertLevel  string
-	Message     string
-	Details     map[string]string
-	OccurredAt  time.Time
+	AlertType  string
+	AlertLevel string
+	Message    string
+	Details    map[string]string
+	OccurredAt time.Time
 }
 
 // WeeklyReportData holds data for weekly report
 type WeeklyReportData struct {
 	*TemplateData
-	PeriodStart    time.Time
-	PeriodEnd      time.Time
-	TotalSearches  int
-	UniqueUsers    int
-	TopQueries     []string
-	EngineStats    map[string]int
-	ErrorCount     int
+	PeriodStart   time.Time
+	PeriodEnd     time.Time
+	TotalSearches int
+	UniqueUsers   int
+	TopQueries    []string
+	EngineStats   map[string]int
+	ErrorCount    int
 }
 
 // SecurityAlertData holds data for security alert
 type SecurityAlertData struct {
 	*TemplateData
-	Event      string
-	Severity   string
-	IPAddress  string
-	Details    string
-	OccurredAt time.Time
+	Event          string
+	Severity       string
+	IPAddress      string
+	Details        string
+	OccurredAt     time.Time
 	ActionRequired string
 }
 
@@ -168,29 +168,29 @@ type AdminInviteData struct {
 // TwoFactorEnabledData holds data for 2FA enabled notification
 type TwoFactorEnabledData struct {
 	*TemplateData
-	Username    string
-	EnabledAt   time.Time
-	IPAddress   string
-	Method      string
+	Username  string
+	EnabledAt time.Time
+	IPAddress string
+	Method    string
 }
 
 // TwoFactorDisabledData holds data for 2FA disabled notification
 type TwoFactorDisabledData struct {
 	*TemplateData
-	Username    string
-	DisabledAt  time.Time
-	IPAddress   string
-	Reason      string
+	Username   string
+	DisabledAt time.Time
+	IPAddress  string
+	Reason     string
 }
 
 // BackupCompletedData holds data for backup completion notification
 type BackupCompletedData struct {
 	*TemplateData
-	BackupName  string
-	BackupSize  string
-	CreatedAt   time.Time
-	FileCount   int
-	Duration    string
+	BackupName string
+	BackupSize string
+	CreatedAt  time.Time
+	FileCount  int
+	Duration   string
 }
 
 // UpdateAvailableData holds data for update available notification
@@ -206,9 +206,9 @@ type UpdateAvailableData struct {
 // MaintenanceNoticeData holds data for maintenance notice email
 type MaintenanceNoticeData struct {
 	*TemplateData
-	ScheduledAt  time.Time
-	Duration     string
-	Reason       string
+	ScheduledAt      time.Time
+	Duration         string
+	Reason           string
 	AffectedServices []string
 }
 
@@ -216,8 +216,8 @@ type MaintenanceNoticeData struct {
 // Per AI.md PART 18: Gentle prompt to enable MFA
 type MFAReminderData struct {
 	*TemplateData
-	Username   string
-	SetupLink  string
+	Username    string
+	SetupLink   string
 	DismissLink string
 }
 
@@ -225,28 +225,28 @@ type MFAReminderData struct {
 // Per AI.md PART 18: backup_failed template
 type BackupFailedData struct {
 	*TemplateData
-	BackupName  string
-	Error       string
-	FailedAt    time.Time
+	BackupName string
+	Error      string
+	FailedAt   time.Time
 }
 
 // SSLExpiringData holds data for SSL expiration warning
 // Per AI.md PART 18: ssl_expiring template
 type SSLExpiringData struct {
 	*TemplateData
-	Domain      string
-	ExpiresAt   time.Time
-	DaysLeft    int
-	RenewLink   string
+	Domain    string
+	ExpiresAt time.Time
+	DaysLeft  int
+	RenewLink string
 }
 
 // SSLRenewedData holds data for SSL renewal confirmation
 // Per AI.md PART 18: ssl_renewed template
 type SSLRenewedData struct {
 	*TemplateData
-	Domain      string
-	RenewedAt   time.Time
-	ValidUntil  time.Time
+	Domain     string
+	RenewedAt  time.Time
+	ValidUntil time.Time
 }
 
 // SchedulerErrorData holds data for scheduler error notification
@@ -263,31 +263,31 @@ type SchedulerErrorData struct {
 // Per AI.md PART 18: breach_notification template
 type BreachNotificationData struct {
 	*TemplateData
-	Username         string
-	BreachDate       time.Time
-	BreachDescription string
-	AffectedData     []string
+	Username           string
+	BreachDate         time.Time
+	BreachDescription  string
+	AffectedData       []string
 	RecommendedActions []string
-	SupportContact   string
+	SupportContact     string
 }
 
 // BreachAdminAlertData holds data for breach alert to admins
 // Per AI.md PART 18: breach_admin_alert template
 type BreachAdminAlertData struct {
 	*TemplateData
-	Severity         string
-	DetectedAt       time.Time
+	Severity          string
+	DetectedAt        time.Time
 	BreachDescription string
-	AffectedUsers    int
-	IPAddresses      []string
-	ActionRequired   string
+	AffectedUsers     int
+	IPAddresses       []string
+	ActionRequired    string
 }
 
 // TestEmailData holds data for test email
 // Per AI.md PART 18: test template
 type TestEmailData struct {
 	*TemplateData
-	SentAt      time.Time
+	SentAt time.Time
 }
 
 // EmailTemplate manages email template rendering

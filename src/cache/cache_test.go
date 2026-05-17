@@ -388,7 +388,7 @@ func TestMemoryCacheStatsMemoryUsage(t *testing.T) {
 
 	// Add keys with known sizes
 	c.Set(ctx, "key1", []byte("12345678901234567890"), time.Minute) // 20 bytes
-	c.Set(ctx, "key2", []byte("abcdefghij"), time.Minute)          // 10 bytes
+	c.Set(ctx, "key2", []byte("abcdefghij"), time.Minute)           // 10 bytes
 
 	stats, err := c.Stats(ctx)
 	if err != nil {

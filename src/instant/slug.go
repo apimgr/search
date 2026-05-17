@@ -85,11 +85,11 @@ func (h *SlugHandler) Handle(ctx context.Context, query string) (*Answer, error)
 		Title:   "URL Slug Generator",
 		Content: content,
 		Data: map[string]interface{}{
-			"input":       text,
-			"slug":        basic,
-			"underscore":  underscored,
-			"camel":       camelSlug,
-			"truncated":   maxLen,
+			"input":      text,
+			"slug":       basic,
+			"underscore": underscored,
+			"camel":      camelSlug,
+			"truncated":  maxLen,
 		},
 	}, nil
 }

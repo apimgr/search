@@ -29,8 +29,8 @@ func NewTimeHandler() *TimeHandler {
 	}
 }
 
-func (h *TimeHandler) Name() string                { return "time" }
-func (h *TimeHandler) Patterns() []*regexp.Regexp  { return h.patterns }
+func (h *TimeHandler) Name() string               { return "time" }
+func (h *TimeHandler) Patterns() []*regexp.Regexp { return h.patterns }
 
 func (h *TimeHandler) CanHandle(query string) bool {
 	for _, p := range h.patterns {

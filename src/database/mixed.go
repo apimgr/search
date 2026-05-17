@@ -248,12 +248,12 @@ func (mm *MixedModeManager) GetStatus() map[string]interface{} {
 	defer mm.mu.RUnlock()
 
 	return map[string]interface{}{
-		"mode":              mm.GetMode(),
-		"mixed_mode":        mm.config.ServerDB.Driver != mm.config.UsersDB.Driver,
-		"server_db_driver":  mm.config.ServerDB.Driver,
-		"users_db_driver":   mm.config.UsersDB.Driver,
-		"server_db_ready":   mm.serverDB != nil && mm.serverDB.IsReady(),
-		"users_db_ready":    mm.usersDB != nil && mm.usersDB.IsReady(),
+		"mode":             mm.GetMode(),
+		"mixed_mode":       mm.config.ServerDB.Driver != mm.config.UsersDB.Driver,
+		"server_db_driver": mm.config.ServerDB.Driver,
+		"users_db_driver":  mm.config.UsersDB.Driver,
+		"server_db_ready":  mm.serverDB != nil && mm.serverDB.IsReady(),
+		"users_db_ready":   mm.usersDB != nil && mm.usersDB.IsReady(),
 	}
 }
 

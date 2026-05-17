@@ -38,28 +38,28 @@ const (
 
 // ClusterNode represents a node in the cluster
 type ClusterNode struct {
-	ID          string
-	Hostname    string
-	Address     string
-	Port        int
-	Version     string
-	IsPrimary   bool
-	Status      NodeStatus
-	LastSeen    time.Time
-	JoinedAt    time.Time
-	Metadata    map[string]string
+	ID        string
+	Hostname  string
+	Address   string
+	Port      int
+	Version   string
+	IsPrimary bool
+	Status    NodeStatus
+	LastSeen  time.Time
+	JoinedAt  time.Time
+	Metadata  map[string]string
 }
 
 // ClusterManager manages cluster operations per AI.md PART 24
 type ClusterManager struct {
-	db         *DatabaseManager
-	nodeID     string
-	hostname   string
-	mode       ClusterMode
-	isPrimary  bool
-	mu         sync.RWMutex
-	stopCh     chan struct{}
-	started    bool
+	db        *DatabaseManager
+	nodeID    string
+	hostname  string
+	mode      ClusterMode
+	isPrimary bool
+	mu        sync.RWMutex
+	stopCh    chan struct{}
+	started   bool
 }
 
 // NewClusterManager creates a new cluster manager

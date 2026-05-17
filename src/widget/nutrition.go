@@ -19,16 +19,16 @@ type NutritionFetcher struct {
 
 // NutritionData represents nutrition facts result
 type NutritionData struct {
-	Name         string          `json:"name"`
-	BrandName    string          `json:"brand_name,omitempty"`
-	Category     string          `json:"category,omitempty"`
-	ServingSize  string          `json:"serving_size"`
-	ServingSizes []ServingSize   `json:"serving_sizes,omitempty"`
-	Calories     float64         `json:"calories"`
-	Macros       MacroNutrients  `json:"macros"`
-	Micros       []NutrientInfo  `json:"micros,omitempty"`
-	Source       string          `json:"source"`
-	FDCId        string          `json:"fdc_id,omitempty"`
+	Name         string         `json:"name"`
+	BrandName    string         `json:"brand_name,omitempty"`
+	Category     string         `json:"category,omitempty"`
+	ServingSize  string         `json:"serving_size"`
+	ServingSizes []ServingSize  `json:"serving_sizes,omitempty"`
+	Calories     float64        `json:"calories"`
+	Macros       MacroNutrients `json:"macros"`
+	Micros       []NutrientInfo `json:"micros,omitempty"`
+	Source       string         `json:"source"`
+	FDCId        string         `json:"fdc_id,omitempty"`
 }
 
 // ServingSize represents a common serving size
@@ -294,10 +294,10 @@ func (f *NutritionFetcher) fetchFromUSDA(ctx context.Context, foodItem string) (
 type usdaSearchResponse struct {
 	TotalHits int `json:"totalHits"`
 	Foods     []struct {
-		FDCId        int    `json:"fdcId"`
-		Description  string `json:"description"`
-		DataType     string `json:"dataType"`
-		FoodCategory string `json:"foodCategory"`
+		FDCId         int    `json:"fdcId"`
+		Description   string `json:"description"`
+		DataType      string `json:"dataType"`
+		FoodCategory  string `json:"foodCategory"`
 		FoodNutrients []struct {
 			NutrientID   int     `json:"nutrientId"`
 			NutrientName string  `json:"nutrientName"`
@@ -331,29 +331,29 @@ func (f *NutritionFetcher) fetchFromOpenFoodFacts(ctx context.Context, foodItem 
 
 	var result struct {
 		Products []struct {
-			ProductName   string `json:"product_name"`
-			Brands        string `json:"brands"`
-			ServingSize   string `json:"serving_size"`
-			Categories    string `json:"categories"`
+			ProductName     string  `json:"product_name"`
+			Brands          string  `json:"brands"`
+			ServingSize     string  `json:"serving_size"`
+			Categories      string  `json:"categories"`
 			ServingQuantity float64 `json:"serving_quantity"`
-			Nutriments    struct {
-				EnergyKcal100g       float64 `json:"energy-kcal_100g"`
-				Fat100g              float64 `json:"fat_100g"`
-				SaturatedFat100g     float64 `json:"saturated-fat_100g"`
-				Carbohydrates100g    float64 `json:"carbohydrates_100g"`
-				Sugars100g           float64 `json:"sugars_100g"`
-				Fiber100g            float64 `json:"fiber_100g"`
-				Proteins100g         float64 `json:"proteins_100g"`
-				Salt100g             float64 `json:"salt_100g"`
-				Sodium100g           float64 `json:"sodium_100g"`
-				Calcium100g          float64 `json:"calcium_100g"`
-				Iron100g             float64 `json:"iron_100g"`
-				VitaminA100g         float64 `json:"vitamin-a_100g"`
-				VitaminC100g         float64 `json:"vitamin-c_100g"`
-				Cholesterol100g      float64 `json:"cholesterol_100g"`
-				Potassium100g        float64 `json:"potassium_100g"`
+			Nutriments      struct {
+				EnergyKcal100g    float64 `json:"energy-kcal_100g"`
+				Fat100g           float64 `json:"fat_100g"`
+				SaturatedFat100g  float64 `json:"saturated-fat_100g"`
+				Carbohydrates100g float64 `json:"carbohydrates_100g"`
+				Sugars100g        float64 `json:"sugars_100g"`
+				Fiber100g         float64 `json:"fiber_100g"`
+				Proteins100g      float64 `json:"proteins_100g"`
+				Salt100g          float64 `json:"salt_100g"`
+				Sodium100g        float64 `json:"sodium_100g"`
+				Calcium100g       float64 `json:"calcium_100g"`
+				Iron100g          float64 `json:"iron_100g"`
+				VitaminA100g      float64 `json:"vitamin-a_100g"`
+				VitaminC100g      float64 `json:"vitamin-c_100g"`
+				Cholesterol100g   float64 `json:"cholesterol_100g"`
+				Potassium100g     float64 `json:"potassium_100g"`
 				// Per serving values
-				EnergyKcalServing    float64 `json:"energy-kcal_serving"`
+				EnergyKcalServing float64 `json:"energy-kcal_serving"`
 			} `json:"nutriments"`
 		} `json:"products"`
 		Count json.Number `json:"count"` // Can be string or int from API

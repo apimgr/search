@@ -452,15 +452,15 @@ func TestLookupConcurrency(t *testing.T) {
 
 func TestMmdbMetadataStruct(t *testing.T) {
 	meta := &mmdbMetadata{
-		NodeCount:               1000,
-		RecordSize:              24,
-		IPVersion:               4,
-		DatabaseType:            "GeoLite2-Country",
-		Languages:               []string{"en", "fr"},
+		NodeCount:                1000,
+		RecordSize:               24,
+		IPVersion:                4,
+		DatabaseType:             "GeoLite2-Country",
+		Languages:                []string{"en", "fr"},
 		BinaryFormatMajorVersion: 2,
 		BinaryFormatMinorVersion: 0,
-		BuildEpoch:              1609459200,
-		Description:             map[string]string{"en": "GeoLite2 Country database"},
+		BuildEpoch:               1609459200,
+		Description:              map[string]string{"en": "GeoLite2 Country database"},
 	}
 
 	if meta.NodeCount != 1000 {
@@ -1175,13 +1175,13 @@ func TestCountryByContinent(t *testing.T) {
 	l := NewLookup(DefaultConfig())
 
 	continentTests := map[string][]string{
-		"AF": {"ZA", "NG", "EG", "KE"},     // Africa
-		"AS": {"JP", "CN", "IN", "KR"},     // Asia
-		"EU": {"GB", "DE", "FR", "IT"},     // Europe
-		"NA": {"US", "CA", "MX"},           // North America
-		"SA": {"BR", "AR", "CL", "CO"},     // South America
-		"OC": {"AU", "NZ", "FJ"},           // Oceania
-		"AN": {"AQ"},                       // Antarctica
+		"AF": {"ZA", "NG", "EG", "KE"}, // Africa
+		"AS": {"JP", "CN", "IN", "KR"}, // Asia
+		"EU": {"GB", "DE", "FR", "IT"}, // Europe
+		"NA": {"US", "CA", "MX"},       // North America
+		"SA": {"BR", "AR", "CL", "CO"}, // South America
+		"OC": {"AU", "NZ", "FJ"},       // Oceania
+		"AN": {"AQ"},                   // Antarctica
 	}
 
 	for continent, countries := range continentTests {
@@ -1323,8 +1323,8 @@ func TestLookupMulticastIP(t *testing.T) {
 	l := NewLookup(DefaultConfig())
 
 	tests := []string{
-		"224.0.0.1",      // IPv4 multicast
-		"ff02::1",        // IPv6 multicast
+		"224.0.0.1", // IPv4 multicast
+		"ff02::1",   // IPv6 multicast
 	}
 
 	for _, ip := range tests {
@@ -2468,7 +2468,7 @@ func TestLookupCityNotMap(t *testing.T) {
 func TestLookupWHOISWithAllFields(t *testing.T) {
 	reader := createMockReaderWithData(map[string]interface{}{
 		"autonomous_system_organization": "ARIN",
-		"network":                         "8.0.0.0/8",
+		"network":                        "8.0.0.0/8",
 	})
 
 	org, net := reader.LookupWHOIS(net.ParseIP("8.8.8.8"))
@@ -3011,9 +3011,9 @@ func TestDecodeValueSize30Complete(t *testing.T) {
 
 	// Size 30 encoding: size = 285 + next_2_bytes
 	data := make([]byte, 300)
-	data[0] = 0x5e           // type 2, size marker 30
-	data[1] = 0x00           // high byte of additional size
-	data[2] = 0x01           // low byte = 1, so total size = 285 + 1 = 286
+	data[0] = 0x5e // type 2, size marker 30
+	data[1] = 0x00 // high byte of additional size
+	data[2] = 0x01 // low byte = 1, so total size = 285 + 1 = 286
 	for i := 3; i < 289; i++ {
 		data[i] = 'b'
 	}

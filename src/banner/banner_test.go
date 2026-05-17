@@ -33,11 +33,11 @@ func TestConfigStruct(t *testing.T) {
 
 func TestGetArt(t *testing.T) {
 	tests := []struct {
-		name     string
-		cols     int
-		wantNil  bool
-		wantArt  []string
-		artName  string
+		name    string
+		cols    int
+		wantNil bool
+		wantArt []string
+		artName string
 	}{
 		{
 			name:    "large terminal 80+ cols",
@@ -192,11 +192,11 @@ func TestGetArtWidth(t *testing.T) {
 
 func TestCenterArt(t *testing.T) {
 	tests := []struct {
-		name      string
-		art       []string
-		width     int
-		wantSame  bool // If true, expect returned art to be the same slice
-		checkPad  int  // Expected padding (only if wantSame is false)
+		name     string
+		art      []string
+		width    int
+		wantSame bool // If true, expect returned art to be the same slice
+		checkPad int  // Expected padding (only if wantSame is false)
 	}{
 		{
 			name:     "art wider than width",

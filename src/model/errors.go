@@ -8,15 +8,15 @@ import "errors"
 // These map to HTTP status codes for consistent API responses
 const (
 	// 400 Bad Request
-	ErrCodeBadRequest = "BAD_REQUEST"         // Malformed request syntax
-	ErrCodeValidation = "VALIDATION_FAILED"   // Input validation failed
+	ErrCodeBadRequest = "BAD_REQUEST"       // Malformed request syntax
+	ErrCodeValidation = "VALIDATION_FAILED" // Input validation failed
 
 	// 401 Unauthorized
-	ErrCodeUnauthorized   = "UNAUTHORIZED"  // Authentication required
-	ErrCodeTokenExpired   = "TOKEN_EXPIRED" // Token has expired
-	ErrCodeTokenInvalid   = "TOKEN_INVALID" // Invalid token
-	ErrCode2FARequired    = "2FA_REQUIRED"  // Two-factor authentication required
-	ErrCode2FAInvalid     = "2FA_INVALID"   // Invalid 2FA code
+	ErrCodeUnauthorized = "UNAUTHORIZED"  // Authentication required
+	ErrCodeTokenExpired = "TOKEN_EXPIRED" // Token has expired
+	ErrCodeTokenInvalid = "TOKEN_INVALID" // Invalid token
+	ErrCode2FARequired  = "2FA_REQUIRED"  // Two-factor authentication required
+	ErrCode2FAInvalid   = "2FA_INVALID"   // Invalid 2FA code
 
 	// 403 Forbidden
 	ErrCodeForbidden     = "FORBIDDEN"      // Permission denied

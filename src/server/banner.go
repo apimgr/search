@@ -22,18 +22,18 @@ func color(code, text string) string {
 
 // BannerInfo holds information for the startup banner
 type BannerInfo struct {
-	AppName     string
-	Version     string
-	Mode        string
-	Debug       bool
-	HTTPPort    int
-	HTTPSPort   int
-	HTTPAddr    string
-	HTTPSAddr   string
-	TorAddr     string
-	I2PAddr     string
-	ListenAddr  string
-	IsHTTPS     bool
+	AppName    string
+	Version    string
+	Mode       string
+	Debug      bool
+	HTTPPort   int
+	HTTPSPort  int
+	HTTPAddr   string
+	HTTPSAddr  string
+	TorAddr    string
+	I2PAddr    string
+	ListenAddr string
+	IsHTTPS    bool
 }
 
 // PrintBanner prints a responsive startup banner per AI.md spec

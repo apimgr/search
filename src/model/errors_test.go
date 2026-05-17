@@ -81,10 +81,10 @@ func TestErrorCodeFromHTTP(t *testing.T) {
 		{429, ErrCodeRateLimit},
 		{500, ErrCodeInternal},
 		{503, ErrCodeMaintenance},
-		{418, ErrCodeBadRequest},    // Unknown 4xx defaults to BAD_REQUEST
-		{502, ErrCodeInternal},      // Unknown 5xx defaults to SERVER_ERROR
-		{501, ErrCodeInternal},      // Unknown 5xx defaults to SERVER_ERROR
-		{200, ErrCodeInternal},      // Non-error status defaults to SERVER_ERROR
+		{418, ErrCodeBadRequest}, // Unknown 4xx defaults to BAD_REQUEST
+		{502, ErrCodeInternal},   // Unknown 5xx defaults to SERVER_ERROR
+		{501, ErrCodeInternal},   // Unknown 5xx defaults to SERVER_ERROR
+		{200, ErrCodeInternal},   // Non-error status defaults to SERVER_ERROR
 	}
 
 	for _, tt := range tests {

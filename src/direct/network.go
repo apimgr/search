@@ -223,10 +223,10 @@ func (h *WhoisHandler) Handle(ctx context.Context, term string) (*Answer, error)
 	}
 
 	var rdap struct {
-		Handle   string `json:"handle"`
-		LdhName  string `json:"ldhName"`
-		Status   []string `json:"status"`
-		Events   []struct {
+		Handle  string   `json:"handle"`
+		LdhName string   `json:"ldhName"`
+		Status  []string `json:"status"`
+		Events  []struct {
 			EventAction string `json:"eventAction"`
 			EventDate   string `json:"eventDate"`
 		} `json:"events"`
@@ -234,7 +234,7 @@ func (h *WhoisHandler) Handle(ctx context.Context, term string) (*Answer, error)
 			LdhName string `json:"ldhName"`
 		} `json:"nameservers"`
 		Entities []struct {
-			Roles      []string `json:"roles"`
+			Roles      []string      `json:"roles"`
 			VcardArray []interface{} `json:"vcardArray"`
 		} `json:"entities"`
 	}
@@ -494,17 +494,17 @@ func (h *CertHandler) Handle(ctx context.Context, term string) (*Answer, error) 
 
 	cert := certs[0]
 	data := map[string]interface{}{
-		"subject":    cert.Subject.String(),
-		"issuer":     cert.Issuer.String(),
-		"notBefore":  cert.NotBefore.Format(time.RFC3339),
-		"notAfter":   cert.NotAfter.Format(time.RFC3339),
-		"sans":       cert.DNSNames,
-		"serial":     cert.SerialNumber.String(),
-		"version":    cert.Version,
-		"keyAlgo":    cert.PublicKeyAlgorithm.String(),
-		"sigAlgo":    cert.SignatureAlgorithm.String(),
-		"isCA":       cert.IsCA,
-		"chainLen":   len(certs),
+		"subject":   cert.Subject.String(),
+		"issuer":    cert.Issuer.String(),
+		"notBefore": cert.NotBefore.Format(time.RFC3339),
+		"notAfter":  cert.NotAfter.Format(time.RFC3339),
+		"sans":      cert.DNSNames,
+		"serial":    cert.SerialNumber.String(),
+		"version":   cert.Version,
+		"keyAlgo":   cert.PublicKeyAlgorithm.String(),
+		"sigAlgo":   cert.SignatureAlgorithm.String(),
+		"isCA":      cert.IsCA,
+		"chainLen":  len(certs),
 	}
 
 	// Check validity
@@ -770,15 +770,15 @@ func (h *ASNHandler) Handle(ctx context.Context, term string) (*Answer, error) {
 
 	var result struct {
 		Data struct {
-			ASN            int    `json:"asn"`
-			Name           string `json:"name"`
-			Description    string `json:"description_short"`
-			CountryCode    string `json:"country_code"`
-			EmailContacts  []string `json:"email_contacts"`
-			AbuseContacts  []string `json:"abuse_contacts"`
-			RIRAllocation  struct {
-				RIRName      string `json:"rir_name"`
-				CountryCode  string `json:"country_code"`
+			ASN           int      `json:"asn"`
+			Name          string   `json:"name"`
+			Description   string   `json:"description_short"`
+			CountryCode   string   `json:"country_code"`
+			EmailContacts []string `json:"email_contacts"`
+			AbuseContacts []string `json:"abuse_contacts"`
+			RIRAllocation struct {
+				RIRName       string `json:"rir_name"`
+				CountryCode   string `json:"country_code"`
 				DateAllocated string `json:"date_allocated"`
 			} `json:"rir_allocation"`
 		} `json:"data"`

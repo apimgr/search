@@ -12,8 +12,8 @@ type SearchOperators struct {
 	CleanedQuery  string
 
 	// Site restriction
-	Site       string   // site:example.com
-	Sites      []string // Multiple sites
+	Site        string   // site:example.com
+	Sites       []string // Multiple sites
 	ExcludeSite string   // -site:example.com
 
 	// File type
@@ -43,9 +43,9 @@ type SearchOperators struct {
 	Info    string // info:example.com
 
 	// Date range
-	DateRange  string // daterange:start-end
-	Before     string // before:2024-01-01
-	After      string // after:2023-01-01
+	DateRange string // daterange:start-end
+	Before    string // before:2024-01-01
+	After     string // after:2023-01-01
 
 	// Numeric range
 	NumRange string // $100..$500 or 100..500
@@ -55,14 +55,14 @@ type SearchOperators struct {
 	HasAND bool // Contains AND operator
 
 	// Special operators
-	Define     string // define:word
-	Weather    string // weather:city
-	Stocks     string // stocks:AAPL
-	Map        string // map:location
-	Movie      string // movie:title
-	Source     string // source:nytimes (news)
-	Location   string // loc:city or location:city
-	Language   string // lang:en
+	Define   string // define:word
+	Weather  string // weather:city
+	Stocks   string // stocks:AAPL
+	Map      string // map:location
+	Movie    string // movie:title
+	Source   string // source:nytimes (news)
+	Location string // loc:city or location:city
+	Language string // lang:en
 
 	// Wildcard
 	HasWildcard bool // Contains * wildcard

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apimgr/search/src/version"
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/version"
 )
 
 // StocksFetcher fetches stock prices
@@ -38,14 +38,14 @@ type StockQuote struct {
 type YahooFinanceResponse struct {
 	QuoteResponse struct {
 		Result []struct {
-			Symbol             string  `json:"symbol"`
-			ShortName          string  `json:"shortName"`
-			LongName           string  `json:"longName"`
-			RegularMarketPrice float64 `json:"regularMarketPrice"`
-			RegularMarketChange float64 `json:"regularMarketChange"`
+			Symbol                     string  `json:"symbol"`
+			ShortName                  string  `json:"shortName"`
+			LongName                   string  `json:"longName"`
+			RegularMarketPrice         float64 `json:"regularMarketPrice"`
+			RegularMarketChange        float64 `json:"regularMarketChange"`
 			RegularMarketChangePercent float64 `json:"regularMarketChangePercent"`
-			RegularMarketVolume int64   `json:"regularMarketVolume"`
-			MarketCap          float64 `json:"marketCap"`
+			RegularMarketVolume        int64   `json:"regularMarketVolume"`
+			MarketCap                  float64 `json:"marketCap"`
 		} `json:"result"`
 		Error interface{} `json:"error"`
 	} `json:"quoteResponse"`

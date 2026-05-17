@@ -28,8 +28,8 @@ func NewRandomHandler() *RandomHandler {
 	}
 }
 
-func (h *RandomHandler) Name() string                { return "random" }
-func (h *RandomHandler) Patterns() []*regexp.Regexp  { return h.patterns }
+func (h *RandomHandler) Name() string               { return "random" }
+func (h *RandomHandler) Patterns() []*regexp.Regexp { return h.patterns }
 
 func (h *RandomHandler) CanHandle(query string) bool {
 	for _, p := range h.patterns {

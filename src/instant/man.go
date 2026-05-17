@@ -35,7 +35,7 @@ func NewManHandler() *ManHandler {
 	}
 }
 
-func (h *ManHandler) Name() string              { return "man" }
+func (h *ManHandler) Name() string               { return "man" }
 func (h *ManHandler) Patterns() []*regexp.Regexp { return h.patterns }
 
 func (h *ManHandler) CanHandle(query string) bool {

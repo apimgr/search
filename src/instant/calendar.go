@@ -409,20 +409,20 @@ type dateParser struct {
 func newDateParser() *dateParser {
 	return &dateParser{
 		formats: []string{
-			"2006-01-02",          // ISO format
-			"01/02/2006",          // US format
-			"02/01/2006",          // UK format (try after US)
-			"January 2, 2006",     // Full month name
-			"Jan 2, 2006",         // Abbreviated month
-			"January 2 2006",      // Full month name without comma
-			"Jan 2 2006",          // Abbreviated month without comma
-			"2 January 2006",      // European format
-			"2 Jan 2006",          // European abbreviated
-			"01-02-2006",          // Dashed US format
-			"2006/01/02",          // ISO with slashes
-			"January 2",           // Month day (current year)
-			"Jan 2",               // Abbreviated month day
-			"01/02",               // MM/DD (current year)
+			"2006-01-02",      // ISO format
+			"01/02/2006",      // US format
+			"02/01/2006",      // UK format (try after US)
+			"January 2, 2006", // Full month name
+			"Jan 2, 2006",     // Abbreviated month
+			"January 2 2006",  // Full month name without comma
+			"Jan 2 2006",      // Abbreviated month without comma
+			"2 January 2006",  // European format
+			"2 Jan 2006",      // European abbreviated
+			"01-02-2006",      // Dashed US format
+			"2006/01/02",      // ISO with slashes
+			"January 2",       // Month day (current year)
+			"Jan 2",           // Abbreviated month day
+			"01/02",           // MM/DD (current year)
 		},
 		months: map[string]time.Month{
 			"january":   time.January,
@@ -495,17 +495,17 @@ func (p *dateParser) parse(dateStr string) (time.Time, error) {
 
 	// Handle holidays
 	holidays := map[string]func(int) time.Time{
-		"christmas":      func(y int) time.Time { return time.Date(y, time.December, 25, 0, 0, 0, 0, time.Local) },
-		"christmas day":  func(y int) time.Time { return time.Date(y, time.December, 25, 0, 0, 0, 0, time.Local) },
-		"new year":       func(y int) time.Time { return time.Date(y+1, time.January, 1, 0, 0, 0, 0, time.Local) },
-		"new years":      func(y int) time.Time { return time.Date(y+1, time.January, 1, 0, 0, 0, 0, time.Local) },
-		"new years day":  func(y int) time.Time { return time.Date(y+1, time.January, 1, 0, 0, 0, 0, time.Local) },
-		"new year's day": func(y int) time.Time { return time.Date(y+1, time.January, 1, 0, 0, 0, 0, time.Local) },
-		"valentines":     func(y int) time.Time { return time.Date(y, time.February, 14, 0, 0, 0, 0, time.Local) },
-		"valentines day": func(y int) time.Time { return time.Date(y, time.February, 14, 0, 0, 0, 0, time.Local) },
-		"halloween":      func(y int) time.Time { return time.Date(y, time.October, 31, 0, 0, 0, 0, time.Local) },
+		"christmas":        func(y int) time.Time { return time.Date(y, time.December, 25, 0, 0, 0, 0, time.Local) },
+		"christmas day":    func(y int) time.Time { return time.Date(y, time.December, 25, 0, 0, 0, 0, time.Local) },
+		"new year":         func(y int) time.Time { return time.Date(y+1, time.January, 1, 0, 0, 0, 0, time.Local) },
+		"new years":        func(y int) time.Time { return time.Date(y+1, time.January, 1, 0, 0, 0, 0, time.Local) },
+		"new years day":    func(y int) time.Time { return time.Date(y+1, time.January, 1, 0, 0, 0, 0, time.Local) },
+		"new year's day":   func(y int) time.Time { return time.Date(y+1, time.January, 1, 0, 0, 0, 0, time.Local) },
+		"valentines":       func(y int) time.Time { return time.Date(y, time.February, 14, 0, 0, 0, 0, time.Local) },
+		"valentines day":   func(y int) time.Time { return time.Date(y, time.February, 14, 0, 0, 0, 0, time.Local) },
+		"halloween":        func(y int) time.Time { return time.Date(y, time.October, 31, 0, 0, 0, 0, time.Local) },
 		"independence day": func(y int) time.Time { return time.Date(y, time.July, 4, 0, 0, 0, 0, time.Local) },
-		"july 4th":       func(y int) time.Time { return time.Date(y, time.July, 4, 0, 0, 0, 0, time.Local) },
+		"july 4th":         func(y int) time.Time { return time.Date(y, time.July, 4, 0, 0, 0, 0, time.Local) },
 	}
 
 	for name, holidayFn := range holidays {

@@ -27,7 +27,7 @@ func NewRegexHandler() *RegexHandler {
 	}
 }
 
-func (h *RegexHandler) Name() string              { return "regex" }
+func (h *RegexHandler) Name() string               { return "regex" }
 func (h *RegexHandler) Patterns() []*regexp.Regexp { return h.patterns }
 
 func (h *RegexHandler) CanHandle(query string) bool {

@@ -82,7 +82,7 @@ func NewTLDRHandler() *TLDRHandler {
 	}
 }
 
-func (h *TLDRHandler) Name() string              { return "tldr" }
+func (h *TLDRHandler) Name() string               { return "tldr" }
 func (h *TLDRHandler) Patterns() []*regexp.Regexp { return h.patterns }
 
 func (h *TLDRHandler) CanHandle(query string) bool {
@@ -293,7 +293,7 @@ func NewHTTPCodeHandler() *HTTPCodeHandler {
 	}
 }
 
-func (h *HTTPCodeHandler) Name() string              { return "httpcode" }
+func (h *HTTPCodeHandler) Name() string               { return "httpcode" }
 func (h *HTTPCodeHandler) Patterns() []*regexp.Regexp { return h.patterns }
 
 func (h *HTTPCodeHandler) CanHandle(query string) bool {
@@ -455,7 +455,7 @@ func NewPortHandler() *PortHandler {
 	}
 }
 
-func (h *PortHandler) Name() string              { return "port" }
+func (h *PortHandler) Name() string               { return "port" }
 func (h *PortHandler) Patterns() []*regexp.Regexp { return h.patterns }
 
 func (h *PortHandler) CanHandle(query string) bool {
@@ -542,7 +542,7 @@ func NewCronHandler() *CronHandler {
 	}
 }
 
-func (h *CronHandler) Name() string              { return "cron" }
+func (h *CronHandler) Name() string               { return "cron" }
 func (h *CronHandler) Patterns() []*regexp.Regexp { return h.patterns }
 
 func (h *CronHandler) CanHandle(query string) bool {
@@ -762,7 +762,7 @@ func NewChmodHandler() *ChmodHandler {
 	}
 }
 
-func (h *ChmodHandler) Name() string              { return "chmod" }
+func (h *ChmodHandler) Name() string               { return "chmod" }
 func (h *ChmodHandler) Patterns() []*regexp.Regexp { return h.patterns }
 
 func (h *ChmodHandler) CanHandle(query string) bool {
@@ -987,7 +987,7 @@ func NewTimestampHandler() *TimestampHandler {
 	}
 }
 
-func (h *TimestampHandler) Name() string              { return "timestamp" }
+func (h *TimestampHandler) Name() string               { return "timestamp" }
 func (h *TimestampHandler) Patterns() []*regexp.Regexp { return h.patterns }
 
 func (h *TimestampHandler) CanHandle(query string) bool {
@@ -1109,7 +1109,7 @@ func NewSubnetHandler() *SubnetHandler {
 	}
 }
 
-func (h *SubnetHandler) Name() string              { return "subnet" }
+func (h *SubnetHandler) Name() string               { return "subnet" }
 func (h *SubnetHandler) Patterns() []*regexp.Regexp { return h.patterns }
 
 func (h *SubnetHandler) CanHandle(query string) bool {
@@ -1266,7 +1266,7 @@ func NewJWTHandler() *JWTHandler {
 	}
 }
 
-func (h *JWTHandler) Name() string              { return "jwt" }
+func (h *JWTHandler) Name() string               { return "jwt" }
 func (h *JWTHandler) Patterns() []*regexp.Regexp { return h.patterns }
 
 func (h *JWTHandler) CanHandle(query string) bool {

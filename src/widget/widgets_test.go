@@ -105,7 +105,7 @@ func TestWidgetDataStruct(t *testing.T) {
 
 func TestNewManager(t *testing.T) {
 	cfg := &config.WidgetsConfig{
-		Enabled: true,
+		Enabled:        true,
 		DefaultWidgets: []string{"clock", "weather"},
 	}
 
@@ -269,9 +269,9 @@ func TestManagerIsWidgetEnabled(t *testing.T) {
 		want bool
 	}{
 		{WidgetWeather, true},
-		{WidgetNews, true},       // All widgets enabled (user-controlled)
+		{WidgetNews, true}, // All widgets enabled (user-controlled)
 		{WidgetStocks, true},
-		{WidgetCrypto, true},     // All widgets enabled (user-controlled)
+		{WidgetCrypto, true}, // All widgets enabled (user-controlled)
 		{WidgetSports, true},
 		{WidgetRSS, true},
 		{WidgetClock, true},      // Tool widgets always enabled
@@ -586,9 +586,9 @@ func TestOpenMeteoResponseStruct(t *testing.T) {
 
 func TestWeatherCodeToDescription(t *testing.T) {
 	tests := []struct {
-		code        int
-		wantDesc    string
-		wantCond    string
+		code     int
+		wantDesc string
+		wantCond string
 	}{
 		{0, "Clear sky", "clear"},
 		{1, "Mainly clear", "clear"},
@@ -1302,12 +1302,12 @@ func TestExtractSourceName(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"BBC News - RSS Feed", "BBC"},          // Removes " - RSS Feed" then " News"
-		{"CNN RSS", "CNN"},                      // Removes " RSS"
-		{"Reuters Feed", "Reuters"},             // Removes " Feed"
+		{"BBC News - RSS Feed", "BBC"},            // Removes " - RSS Feed" then " News"
+		{"CNN RSS", "CNN"},                        // Removes " RSS"
+		{"Reuters Feed", "Reuters"},               // Removes " Feed"
 		{"New York Times News", "New York Times"}, // Removes " News"
-		{"Simple Title", "Simple Title"},        // No suffix to remove
-		{"   Padded Title   ", "Padded Title"},  // Trims whitespace
+		{"Simple Title", "Simple Title"},          // No suffix to remove
+		{"   Padded Title   ", "Padded Title"},    // Trims whitespace
 	}
 
 	for _, tt := range tests {
@@ -2859,7 +2859,7 @@ func TestStocksFetcherFetchWithSymbols(t *testing.T) {
 func TestCryptoFetcherFetchEmptyCoins(t *testing.T) {
 	f := NewCryptoFetcher(&config.CryptoWidgetConfig{
 		DefaultCoins: []string{}, // Empty defaults
-		Currency:     "",          // Empty currency triggers default
+		Currency:     "",         // Empty currency triggers default
 	})
 	ctx := context.Background()
 

@@ -25,8 +25,8 @@ func NewUUIDHandler() *UUIDHandler {
 	}
 }
 
-func (h *UUIDHandler) Name() string                { return "uuid" }
-func (h *UUIDHandler) Patterns() []*regexp.Regexp  { return h.patterns }
+func (h *UUIDHandler) Name() string               { return "uuid" }
+func (h *UUIDHandler) Patterns() []*regexp.Regexp { return h.patterns }
 
 func (h *UUIDHandler) CanHandle(query string) bool {
 	for _, p := range h.patterns {

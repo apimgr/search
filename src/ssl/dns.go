@@ -29,10 +29,10 @@ import (
 // DNSProviderInfo contains metadata about a DNS provider
 // Per AI.md PART 17: Admin WebUI provides dropdown with required fields
 type DNSProviderInfo struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Fields      []Field  `json:"fields"`
-	Description string   `json:"description"`
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	Fields      []Field `json:"fields"`
+	Description string  `json:"description"`
 }
 
 // Field represents a credential field for a DNS provider

@@ -36,8 +36,8 @@ func (h *UserAgentHandler) Handle(ctx context.Context, term string) (*Answer, er
 	parsed := parseUserAgent(term)
 
 	data := map[string]interface{}{
-		"raw":     term,
-		"parsed":  parsed,
+		"raw":    term,
+		"parsed": parsed,
 	}
 
 	return &Answer{
@@ -53,14 +53,14 @@ func (h *UserAgentHandler) Handle(ctx context.Context, term string) (*Answer, er
 
 func parseUserAgent(ua string) map[string]string {
 	result := map[string]string{
-		"browser":     "Unknown",
-		"browserVer":  "",
-		"engine":      "Unknown",
-		"os":          "Unknown",
-		"osVer":       "",
-		"device":      "Desktop",
+		"browser":      "Unknown",
+		"browserVer":   "",
+		"engine":       "Unknown",
+		"os":           "Unknown",
+		"osVer":        "",
+		"device":       "Desktop",
 		"architecture": "",
-		"isBot":       "No",
+		"isBot":        "No",
 	}
 
 	uaLower := strings.ToLower(ua)
@@ -216,66 +216,66 @@ var mimeDB = map[string]struct {
 	Binary      bool
 }{
 	// Text
-	"text/plain":             {"text/plain", []string{".txt"}, "Text", "Plain text", false},
-	"text/html":              {"text/html", []string{".html", ".htm"}, "Text", "HTML document", false},
-	"text/css":               {"text/css", []string{".css"}, "Text", "CSS stylesheet", false},
-	"text/javascript":        {"text/javascript", []string{".js", ".mjs"}, "Text", "JavaScript", false},
-	"text/csv":               {"text/csv", []string{".csv"}, "Text", "CSV data", false},
-	"text/xml":               {"text/xml", []string{".xml"}, "Text", "XML document", false},
-	"text/markdown":          {"text/markdown", []string{".md", ".markdown"}, "Text", "Markdown", false},
+	"text/plain":      {"text/plain", []string{".txt"}, "Text", "Plain text", false},
+	"text/html":       {"text/html", []string{".html", ".htm"}, "Text", "HTML document", false},
+	"text/css":        {"text/css", []string{".css"}, "Text", "CSS stylesheet", false},
+	"text/javascript": {"text/javascript", []string{".js", ".mjs"}, "Text", "JavaScript", false},
+	"text/csv":        {"text/csv", []string{".csv"}, "Text", "CSV data", false},
+	"text/xml":        {"text/xml", []string{".xml"}, "Text", "XML document", false},
+	"text/markdown":   {"text/markdown", []string{".md", ".markdown"}, "Text", "Markdown", false},
 
 	// Application
-	"application/json":       {"application/json", []string{".json"}, "Application", "JSON data", false},
-	"application/xml":        {"application/xml", []string{".xml"}, "Application", "XML document", false},
-	"application/pdf":        {"application/pdf", []string{".pdf"}, "Application", "PDF document", true},
-	"application/zip":        {"application/zip", []string{".zip"}, "Application", "ZIP archive", true},
-	"application/gzip":       {"application/gzip", []string{".gz", ".gzip"}, "Application", "Gzip archive", true},
-	"application/x-tar":      {"application/x-tar", []string{".tar"}, "Application", "Tar archive", true},
+	"application/json":             {"application/json", []string{".json"}, "Application", "JSON data", false},
+	"application/xml":              {"application/xml", []string{".xml"}, "Application", "XML document", false},
+	"application/pdf":              {"application/pdf", []string{".pdf"}, "Application", "PDF document", true},
+	"application/zip":              {"application/zip", []string{".zip"}, "Application", "ZIP archive", true},
+	"application/gzip":             {"application/gzip", []string{".gz", ".gzip"}, "Application", "Gzip archive", true},
+	"application/x-tar":            {"application/x-tar", []string{".tar"}, "Application", "Tar archive", true},
 	"application/x-rar-compressed": {"application/x-rar-compressed", []string{".rar"}, "Application", "RAR archive", true},
 	"application/x-7z-compressed":  {"application/x-7z-compressed", []string{".7z"}, "Application", "7-Zip archive", true},
 	"application/octet-stream":     {"application/octet-stream", []string{".bin"}, "Application", "Binary data", true},
 	"application/x-executable":     {"application/x-executable", []string{".exe"}, "Application", "Executable", true},
 
 	// Microsoft Office
-	"application/msword":     {"application/msword", []string{".doc"}, "Application", "MS Word", true},
+	"application/msword": {"application/msword", []string{".doc"}, "Application", "MS Word", true},
 	"application/vnd.openxmlformats-officedocument.wordprocessingml.document": {"application/vnd.openxmlformats-officedocument.wordprocessingml.document", []string{".docx"}, "Application", "MS Word (OOXML)", true},
 	"application/vnd.ms-excel": {"application/vnd.ms-excel", []string{".xls"}, "Application", "MS Excel", true},
-	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", []string{".xlsx"}, "Application", "MS Excel (OOXML)", true},
-	"application/vnd.ms-powerpoint": {"application/vnd.ms-powerpoint", []string{".ppt"}, "Application", "MS PowerPoint", true},
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":         {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", []string{".xlsx"}, "Application", "MS Excel (OOXML)", true},
+	"application/vnd.ms-powerpoint":                                             {"application/vnd.ms-powerpoint", []string{".ppt"}, "Application", "MS PowerPoint", true},
 	"application/vnd.openxmlformats-officedocument.presentationml.presentation": {"application/vnd.openxmlformats-officedocument.presentationml.presentation", []string{".pptx"}, "Application", "MS PowerPoint (OOXML)", true},
 
 	// Images
-	"image/jpeg":             {"image/jpeg", []string{".jpg", ".jpeg"}, "Image", "JPEG image", true},
-	"image/png":              {"image/png", []string{".png"}, "Image", "PNG image", true},
-	"image/gif":              {"image/gif", []string{".gif"}, "Image", "GIF image", true},
-	"image/webp":             {"image/webp", []string{".webp"}, "Image", "WebP image", true},
-	"image/svg+xml":          {"image/svg+xml", []string{".svg"}, "Image", "SVG image", false},
-	"image/bmp":              {"image/bmp", []string{".bmp"}, "Image", "Bitmap image", true},
-	"image/x-icon":           {"image/x-icon", []string{".ico"}, "Image", "Icon", true},
-	"image/tiff":             {"image/tiff", []string{".tiff", ".tif"}, "Image", "TIFF image", true},
-	"image/avif":             {"image/avif", []string{".avif"}, "Image", "AVIF image", true},
+	"image/jpeg":    {"image/jpeg", []string{".jpg", ".jpeg"}, "Image", "JPEG image", true},
+	"image/png":     {"image/png", []string{".png"}, "Image", "PNG image", true},
+	"image/gif":     {"image/gif", []string{".gif"}, "Image", "GIF image", true},
+	"image/webp":    {"image/webp", []string{".webp"}, "Image", "WebP image", true},
+	"image/svg+xml": {"image/svg+xml", []string{".svg"}, "Image", "SVG image", false},
+	"image/bmp":     {"image/bmp", []string{".bmp"}, "Image", "Bitmap image", true},
+	"image/x-icon":  {"image/x-icon", []string{".ico"}, "Image", "Icon", true},
+	"image/tiff":    {"image/tiff", []string{".tiff", ".tif"}, "Image", "TIFF image", true},
+	"image/avif":    {"image/avif", []string{".avif"}, "Image", "AVIF image", true},
 
 	// Audio
-	"audio/mpeg":             {"audio/mpeg", []string{".mp3"}, "Audio", "MP3 audio", true},
-	"audio/ogg":              {"audio/ogg", []string{".ogg"}, "Audio", "Ogg audio", true},
-	"audio/wav":              {"audio/wav", []string{".wav"}, "Audio", "WAV audio", true},
-	"audio/webm":             {"audio/webm", []string{".weba"}, "Audio", "WebM audio", true},
-	"audio/flac":             {"audio/flac", []string{".flac"}, "Audio", "FLAC audio", true},
-	"audio/aac":              {"audio/aac", []string{".aac"}, "Audio", "AAC audio", true},
+	"audio/mpeg": {"audio/mpeg", []string{".mp3"}, "Audio", "MP3 audio", true},
+	"audio/ogg":  {"audio/ogg", []string{".ogg"}, "Audio", "Ogg audio", true},
+	"audio/wav":  {"audio/wav", []string{".wav"}, "Audio", "WAV audio", true},
+	"audio/webm": {"audio/webm", []string{".weba"}, "Audio", "WebM audio", true},
+	"audio/flac": {"audio/flac", []string{".flac"}, "Audio", "FLAC audio", true},
+	"audio/aac":  {"audio/aac", []string{".aac"}, "Audio", "AAC audio", true},
 
 	// Video
-	"video/mp4":              {"video/mp4", []string{".mp4"}, "Video", "MP4 video", true},
-	"video/webm":             {"video/webm", []string{".webm"}, "Video", "WebM video", true},
-	"video/ogg":              {"video/ogg", []string{".ogv"}, "Video", "Ogg video", true},
-	"video/x-matroska":       {"video/x-matroska", []string{".mkv"}, "Video", "Matroska video", true},
-	"video/quicktime":        {"video/quicktime", []string{".mov"}, "Video", "QuickTime video", true},
-	"video/x-msvideo":        {"video/x-msvideo", []string{".avi"}, "Video", "AVI video", true},
+	"video/mp4":        {"video/mp4", []string{".mp4"}, "Video", "MP4 video", true},
+	"video/webm":       {"video/webm", []string{".webm"}, "Video", "WebM video", true},
+	"video/ogg":        {"video/ogg", []string{".ogv"}, "Video", "Ogg video", true},
+	"video/x-matroska": {"video/x-matroska", []string{".mkv"}, "Video", "Matroska video", true},
+	"video/quicktime":  {"video/quicktime", []string{".mov"}, "Video", "QuickTime video", true},
+	"video/x-msvideo":  {"video/x-msvideo", []string{".avi"}, "Video", "AVI video", true},
 
 	// Fonts
-	"font/woff":              {"font/woff", []string{".woff"}, "Font", "WOFF font", true},
-	"font/woff2":             {"font/woff2", []string{".woff2"}, "Font", "WOFF2 font", true},
-	"font/ttf":               {"font/ttf", []string{".ttf"}, "Font", "TrueType font", true},
-	"font/otf":               {"font/otf", []string{".otf"}, "Font", "OpenType font", true},
+	"font/woff":  {"font/woff", []string{".woff"}, "Font", "WOFF font", true},
+	"font/woff2": {"font/woff2", []string{".woff2"}, "Font", "WOFF2 font", true},
+	"font/ttf":   {"font/ttf", []string{".ttf"}, "Font", "TrueType font", true},
+	"font/otf":   {"font/otf", []string{".otf"}, "Font", "OpenType font", true},
 }
 
 // Extension to MIME lookup
@@ -623,14 +623,14 @@ func (h *CountryHandler) Handle(ctx context.Context, term string) (*Answer, erro
 			Common   string `json:"common"`
 			Official string `json:"official"`
 		} `json:"name"`
-		CCA2       string            `json:"cca2"`
-		CCA3       string            `json:"cca3"`
-		CCN3       string            `json:"ccn3"`
-		Capital    []string          `json:"capital"`
-		Region     string            `json:"region"`
-		Subregion  string            `json:"subregion"`
-		Population int               `json:"population"`
-		Area       float64           `json:"area"`
+		CCA2       string   `json:"cca2"`
+		CCA3       string   `json:"cca3"`
+		CCN3       string   `json:"ccn3"`
+		Capital    []string `json:"capital"`
+		Region     string   `json:"region"`
+		Subregion  string   `json:"subregion"`
+		Population int      `json:"population"`
+		Area       float64  `json:"area"`
 		Currencies map[string]struct {
 			Name   string `json:"name"`
 			Symbol string `json:"symbol"`
@@ -689,22 +689,22 @@ func (h *CountryHandler) Handle(ctx context.Context, term string) (*Answer, erro
 	}
 
 	data := map[string]interface{}{
-		"name":       country.Name.Common,
-		"official":   country.Name.Official,
-		"cca2":       country.CCA2,
-		"cca3":       country.CCA3,
-		"capital":    country.Capital,
-		"region":     country.Region,
-		"subregion":  country.Subregion,
-		"population": country.Population,
-		"area":       country.Area,
-		"currencies": currencies,
-		"languages":  languages,
-		"timezones":  country.Timezones,
-		"tld":        country.TLD,
+		"name":        country.Name.Common,
+		"official":    country.Name.Official,
+		"cca2":        country.CCA2,
+		"cca3":        country.CCA3,
+		"capital":     country.Capital,
+		"region":      country.Region,
+		"subregion":   country.Subregion,
+		"population":  country.Population,
+		"area":        country.Area,
+		"currencies":  currencies,
+		"languages":   languages,
+		"timezones":   country.Timezones,
+		"tld":         country.TLD,
 		"callingCode": callingCode,
 		"drivingSide": country.Car.Side,
-		"flag":       country.Flag,
+		"flag":        country.Flag,
 	}
 
 	return &Answer{

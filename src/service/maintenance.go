@@ -629,9 +629,9 @@ func fileChecksum(path string) (string, error) {
 // GracefulDegradation provides fallback behavior when services are unavailable
 // Per AI.md PART 6: Graceful degradation
 type GracefulDegradation struct {
-	mu              sync.RWMutex
+	mu               sync.RWMutex
 	degradedFeatures map[string]bool
-	fallbacks       map[string]func() interface{}
+	fallbacks        map[string]func() interface{}
 }
 
 // NewGracefulDegradation creates a new graceful degradation handler

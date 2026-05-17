@@ -678,9 +678,9 @@ func TestBackupMetadataChecksums(t *testing.T) {
 	metadata := BackupMetadata{
 		Version: "1.0.0",
 		Checksums: map[string]string{
-			"config/server.yml":   "abc123def456",
-			"data/database.db":    "789ghi012jkl",
-			"data/uploads/1.jpg":  "mno345pqr678",
+			"config/server.yml":  "abc123def456",
+			"data/database.db":   "789ghi012jkl",
+			"data/uploads/1.jpg": "mno345pqr678",
 		},
 		Checksum: "sha256:overall_checksum_here",
 	}
@@ -3590,8 +3590,8 @@ func TestBackupInfoFormatSizeExactBoundaries(t *testing.T) {
 	}{
 		{1023, "B"},
 		{1025, "KB"},
-		{1024 * 1024 - 1, "KB"},
-		{1024 * 1024 + 1, "MB"},
+		{1024*1024 - 1, "KB"},
+		{1024*1024 + 1, "MB"},
 	}
 
 	for _, tt := range tests {

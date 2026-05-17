@@ -9,11 +9,11 @@ import (
 // Paths represents OS-specific paths for the application
 type Paths struct {
 	// Runtime paths
-	ConfigDir  string
-	DataDir    string
-	LogDir     string
-	BackupDir  string
-	PIDFile    string
+	ConfigDir string
+	DataDir   string
+	LogDir    string
+	BackupDir string
+	PIDFile   string
 
 	// Specific subdirectories
 	SSLDir      string

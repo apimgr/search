@@ -26,8 +26,8 @@ func NewBase64Handler() *Base64Handler {
 	}
 }
 
-func (h *Base64Handler) Name() string                { return "base64" }
-func (h *Base64Handler) Patterns() []*regexp.Regexp  { return h.patterns }
+func (h *Base64Handler) Name() string               { return "base64" }
+func (h *Base64Handler) Patterns() []*regexp.Regexp { return h.patterns }
 
 func (h *Base64Handler) CanHandle(query string) bool {
 	for _, p := range h.patterns {

@@ -30,10 +30,10 @@ func NewWikipediaEngine() *WikipediaEngine {
 type wikipediaResponse struct {
 	Query struct {
 		Search []struct {
-			Title      string `json:"title"`
-			PageID     int    `json:"pageid"`
-			Snippet    string `json:"snippet"`
-			Timestamp  string `json:"timestamp"`
+			Title     string `json:"title"`
+			PageID    int    `json:"pageid"`
+			Snippet   string `json:"snippet"`
+			Timestamp string `json:"timestamp"`
 		} `json:"search"`
 	} `json:"query"`
 }

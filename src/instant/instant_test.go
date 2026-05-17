@@ -1496,10 +1496,10 @@ func TestFormatNumberScientificNotation(t *testing.T) {
 		n       float64
 		wantSci bool
 	}{
-		{0.00001, true},    // Very small
-		{1e15, true},       // Very large
-		{0.0001, false},    // Just above threshold
-		{1e9, false},       // Large but not huge
+		{0.00001, true}, // Very small
+		{1e15, true},    // Very large
+		{0.0001, false}, // Just above threshold
+		{1e9, false},    // Large but not huge
 	}
 
 	for _, tt := range tests {
@@ -1519,7 +1519,7 @@ func TestFormatNumberEdgeCases(t *testing.T) {
 	}{
 		{0, "0"},
 		{-0, "0"},
-		{1e-5, "1e-05"},       // Very small - scientific
+		{1e-5, "1e-05"},            // Very small - scientific
 		{1e15, "1000000000000000"}, // Large integer
 	}
 

@@ -372,8 +372,8 @@ func (h *CronHandler) Handle(ctx context.Context, term string) (*Answer, error) 
 
 	// Parse cron fields
 	fields := []struct {
-		name  string
-		value string
+		name   string
+		value  string
 		range_ string
 	}{
 		{"Minute", parts[0], "0-59"},
@@ -385,8 +385,8 @@ func (h *CronHandler) Handle(ctx context.Context, term string) (*Answer, error) 
 
 	if len(parts) >= 6 {
 		fields = append(fields, struct {
-			name  string
-			value string
+			name   string
+			value  string
 			range_ string
 		}{"Year", parts[5], "1970-2099"})
 	}
@@ -498,8 +498,8 @@ func calculateNextCronRuns(parts []string, count int) []string {
 }
 
 func formatCronContent(expression string, fields []struct {
-	name  string
-	value string
+	name   string
+	value  string
 	range_ string
 }, description string, nextRuns []string) string {
 	var html strings.Builder
@@ -662,7 +662,10 @@ func formatChmodContent(octal, symbolic string, owner, group, other int) string 
 	html.WriteString("<thead><tr><th></th><th>Read (4)</th><th>Write (2)</th><th>Execute (1)</th><th>Value</th></tr></thead>")
 	html.WriteString("<tbody>")
 
-	for _, row := range []struct{ name string; perm int }{{"Owner", owner}, {"Group", group}, {"Other", other}} {
+	for _, row := range []struct {
+		name string
+		perm int
+	}{{"Owner", owner}, {"Group", group}, {"Other", other}} {
 		html.WriteString("<tr>")
 		html.WriteString(fmt.Sprintf("<td><strong>%s</strong></td>", row.name))
 		html.WriteString(fmt.Sprintf("<td>%s</td>", checkMark(row.perm&4 != 0)))
@@ -735,10 +738,10 @@ func (h *RegexHandler) Handle(ctx context.Context, term string) (*Answer, error)
 	analysis := analyzeRegex(term)
 
 	data := map[string]interface{}{
-		"pattern":    term,
-		"valid":      true,
-		"analysis":   analysis,
-		"numSubexp":  re.NumSubexp(),
+		"pattern":   term,
+		"valid":     true,
+		"analysis":  analysis,
+		"numSubexp": re.NumSubexp(),
 	}
 
 	return &Answer{
@@ -1075,13 +1078,13 @@ func (h *TimestampHandler) Handle(ctx context.Context, term string) (*Answer, er
 	}
 
 	data := map[string]interface{}{
-		"unix":         t.Unix(),
-		"unixMilli":    t.UnixMilli(),
-		"iso8601":      t.Format(time.RFC3339),
-		"rfc2822":      t.Format(time.RFC1123Z),
-		"human":        t.Format("Monday, January 2, 2006 3:04:05 PM MST"),
-		"relative":     relative,
-		"utc":          t.UTC().Format(time.RFC3339),
+		"unix":      t.Unix(),
+		"unixMilli": t.UnixMilli(),
+		"iso8601":   t.Format(time.RFC3339),
+		"rfc2822":   t.Format(time.RFC1123Z),
+		"human":     t.Format("Monday, January 2, 2006 3:04:05 PM MST"),
+		"relative":  relative,
+		"utc":       t.UTC().Format(time.RFC3339),
 	}
 
 	return &Answer{

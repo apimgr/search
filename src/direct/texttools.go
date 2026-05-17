@@ -44,16 +44,16 @@ func (h *CaseHandler) Handle(ctx context.Context, term string) (*Answer, error) 
 
 	// Generate all conversions
 	conversions := map[string]string{
-		"UPPERCASE":           strings.ToUpper(text),
-		"lowercase":           strings.ToLower(text),
-		"Title Case":          toTitleCase(text),
-		"Sentence case":       toSentenceCase(text),
-		"camelCase":           toCamelCase(text),
-		"PascalCase":          toPascalCase(text),
-		"snake_case":          toSnakeCase(text),
-		"kebab-case":          toKebabCase(text),
-		"SCREAMING_SNAKE":     toScreamingSnake(text),
-		"dot.case":            toDotCase(text),
+		"UPPERCASE":       strings.ToUpper(text),
+		"lowercase":       strings.ToLower(text),
+		"Title Case":      toTitleCase(text),
+		"Sentence case":   toSentenceCase(text),
+		"camelCase":       toCamelCase(text),
+		"PascalCase":      toPascalCase(text),
+		"snake_case":      toSnakeCase(text),
+		"kebab-case":      toKebabCase(text),
+		"SCREAMING_SNAKE": toScreamingSnake(text),
+		"dot.case":        toDotCase(text),
 	}
 
 	data := map[string]interface{}{
@@ -189,7 +189,7 @@ func formatCaseContent(text string, conversions map[string]string, target string
 		val := conversions[name]
 		class := ""
 		if strings.EqualFold(target, strings.ReplaceAll(name, " ", "")) ||
-		   strings.EqualFold(target, strings.ReplaceAll(name, "_", "")) {
+			strings.EqualFold(target, strings.ReplaceAll(name, "_", "")) {
 			class = " class=\"highlighted\""
 		}
 		html.WriteString(fmt.Sprintf("<tr%s><td><strong>%s</strong></td><td><code>%s</code></td><td><button class=\"copy-btn\" onclick=\"copyText('%s')\">Copy</button></td></tr>",
@@ -638,9 +638,9 @@ func (h *BeautifyHandler) Handle(ctx context.Context, term string) (*Answer, err
 	beautified := beautifyCode(code, lang)
 
 	data := map[string]interface{}{
-		"input":      code,
-		"output":     beautified,
-		"language":   lang,
+		"input":    code,
+		"output":   beautified,
+		"language": lang,
 	}
 
 	return &Answer{

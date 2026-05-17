@@ -242,10 +242,10 @@ func TestValidateFormat(t *testing.T) {
 		format  string
 		wantLen int
 	}{
-		{"$remote_addr - $status", 0},          // Valid
-		{"$unknown_var", 1},                     // Unknown
-		{"$remote_addr $unknown $status", 1},    // One unknown
-		{"plain text", 0},                       // No variables
+		{"$remote_addr - $status", 0},        // Valid
+		{"$unknown_var", 1},                  // Unknown
+		{"$remote_addr $unknown $status", 1}, // One unknown
+		{"plain text", 0},                    // No variables
 	}
 
 	for _, tt := range tests {
@@ -1900,9 +1900,9 @@ func TestAuditEntryWithAllFields(t *testing.T) {
 			Name: "main_config",
 		},
 		Details: map[string]interface{}{
-			"changed":  "ssl_enabled",
-			"old":      false,
-			"new":      true,
+			"changed": "ssl_enabled",
+			"old":     false,
+			"new":     true,
 		},
 		Result: "success",
 		NodeID: "node-1",

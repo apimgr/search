@@ -11,11 +11,11 @@ import (
 	"time"
 
 	// Database drivers per AI.md PART 5
-	_ "github.com/go-sql-driver/mysql"                            // MySQL/MariaDB
-	_ "github.com/jackc/pgx/v5/stdlib"                             // PostgreSQL
-	_ "github.com/microsoft/go-mssqldb"                            // MSSQL
-	_ "github.com/tursodatabase/libsql-client-go/libsql"           // libSQL/Turso
-	_ "modernc.org/sqlite"                                         // SQLite
+	_ "github.com/go-sql-driver/mysql"                   // MySQL/MariaDB
+	_ "github.com/jackc/pgx/v5/stdlib"                   // PostgreSQL
+	_ "github.com/microsoft/go-mssqldb"                  // MSSQL
+	_ "github.com/tursodatabase/libsql-client-go/libsql" // libSQL/Turso
+	_ "modernc.org/sqlite"                               // SQLite
 )
 
 // normalizeDriver maps user-friendly config values to actual Go driver names.
@@ -39,11 +39,11 @@ func normalizeDriver(driver string) string {
 
 // DB represents a single database connection
 type DB struct {
-	db       *sql.DB
-	driver   string
-	dsn      string
-	mu       sync.RWMutex
-	ready    bool
+	db     *sql.DB
+	driver string
+	dsn    string
+	mu     sync.RWMutex
+	ready  bool
 }
 
 // DatabaseManager manages both server and users databases per AI.md PART 24
@@ -59,12 +59,12 @@ type DatabaseManager struct {
 
 // Config holds database configuration
 type Config struct {
-	Driver   string `yaml:"driver"`    // sqlite, postgres, mysql
-	DSN      string `yaml:"dsn"`       // connection string (for non-sqlite)
-	DataDir  string `yaml:"data_dir"`  // data directory (for sqlite)
-	MaxOpen  int    `yaml:"max_open"`  // max open connections
-	MaxIdle  int    `yaml:"max_idle"`  // max idle connections
-	Lifetime int    `yaml:"lifetime"`  // connection max lifetime in seconds
+	Driver   string `yaml:"driver"`   // sqlite, postgres, mysql
+	DSN      string `yaml:"dsn"`      // connection string (for non-sqlite)
+	DataDir  string `yaml:"data_dir"` // data directory (for sqlite)
+	MaxOpen  int    `yaml:"max_open"` // max open connections
+	MaxIdle  int    `yaml:"max_idle"` // max idle connections
+	Lifetime int    `yaml:"lifetime"` // connection max lifetime in seconds
 }
 
 // DefaultConfig returns default database configuration

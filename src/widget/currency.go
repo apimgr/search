@@ -17,13 +17,13 @@ type CurrencyFetcher struct {
 
 // CurrencyData represents currency conversion result
 type CurrencyData struct {
-	From        string             `json:"from"`
-	To          string             `json:"to"`
-	Amount      float64            `json:"amount"`
-	Result      float64            `json:"result"`
-	Rate        float64            `json:"rate"`
-	RateDate    string             `json:"rate_date"`
-	Rates       map[string]float64 `json:"rates,omitempty"`
+	From     string             `json:"from"`
+	To       string             `json:"to"`
+	Amount   float64            `json:"amount"`
+	Result   float64            `json:"result"`
+	Rate     float64            `json:"rate"`
+	RateDate string             `json:"rate_date"`
+	Rates    map[string]float64 `json:"rates,omitempty"`
 }
 
 // NewCurrencyFetcher creates a new currency fetcher
@@ -65,7 +65,7 @@ func (f *CurrencyFetcher) Fetch(ctx context.Context, params map[string]string) (
 	defer resp.Body.Close()
 
 	var result struct {
-		Success bool    `json:"success"`
+		Success bool `json:"success"`
 		Query   struct {
 			From   string  `json:"from"`
 			To     string  `json:"to"`

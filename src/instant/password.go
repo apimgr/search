@@ -26,8 +26,8 @@ func NewPasswordHandler() *PasswordHandler {
 	}
 }
 
-func (h *PasswordHandler) Name() string                { return "password" }
-func (h *PasswordHandler) Patterns() []*regexp.Regexp  { return h.patterns }
+func (h *PasswordHandler) Name() string               { return "password" }
+func (h *PasswordHandler) Patterns() []*regexp.Regexp { return h.patterns }
 
 func (h *PasswordHandler) CanHandle(query string) bool {
 	for _, p := range h.patterns {

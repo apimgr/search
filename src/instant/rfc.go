@@ -34,7 +34,7 @@ func NewRFCHandler() *RFCHandler {
 	}
 }
 
-func (h *RFCHandler) Name() string              { return "rfc" }
+func (h *RFCHandler) Name() string               { return "rfc" }
 func (h *RFCHandler) Patterns() []*regexp.Regexp { return h.patterns }
 
 func (h *RFCHandler) CanHandle(query string) bool {

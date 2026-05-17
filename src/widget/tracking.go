@@ -294,9 +294,9 @@ var carrierPatterns = []CarrierInfo{
 
 // TrackingConfig holds configuration for the tracking fetcher
 type TrackingConfig struct {
-	APIKey         string        // API key for 17track or similar
-	APIEnabled     bool          // Whether to use API for live tracking
-	RateLimitMax   int           // Max requests per window (default: 10)
+	APIKey          string        // API key for 17track or similar
+	APIEnabled      bool          // Whether to use API for live tracking
+	RateLimitMax    int           // Max requests per window (default: 10)
 	RateLimitWindow time.Duration // Rate limit window (default: 1 minute)
 }
 

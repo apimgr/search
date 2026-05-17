@@ -2129,10 +2129,10 @@ func TestFileChecksumCopyError(t *testing.T) {
 // Table-driven test for MaintenanceMode helper functions
 func TestMaintenanceModeHelperFunctions(t *testing.T) {
 	tests := []struct {
-		name         string
-		mode         MaintenanceMode
-		isNormal     bool
-		isDegraded   bool
+		name          string
+		mode          MaintenanceMode
+		isNormal      bool
+		isDegraded    bool
 		isMaintenance bool
 	}{
 		{"Normal", ModeNormal, true, false, false},

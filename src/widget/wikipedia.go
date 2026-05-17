@@ -18,13 +18,13 @@ type WikipediaFetcher struct {
 
 // WikipediaData represents Wikipedia summary result
 type WikipediaData struct {
-	Title           string            `json:"title"`
-	Extract         string            `json:"extract"`
-	Description     string            `json:"description,omitempty"`
-	Thumbnail       string            `json:"thumbnail,omitempty"`
-	URL             string            `json:"url"`
-	Language        string            `json:"language"`
-	RelatedArticles []RelatedArticle  `json:"related_articles,omitempty"`
+	Title           string           `json:"title"`
+	Extract         string           `json:"extract"`
+	Description     string           `json:"description,omitempty"`
+	Thumbnail       string           `json:"thumbnail,omitempty"`
+	URL             string           `json:"url"`
+	Language        string           `json:"language"`
+	RelatedArticles []RelatedArticle `json:"related_articles,omitempty"`
 }
 
 // RelatedArticle represents a related Wikipedia article

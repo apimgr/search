@@ -122,13 +122,13 @@ func (h *UnicodeHandler) Handle(ctx context.Context, query string) (*Answer, err
 		Title:   fmt.Sprintf("Unicode: %s", codePoint),
 		Content: content.String(),
 		Data: map[string]interface{}{
-			"character":  charStr,
-			"codePoint":  codePoint,
-			"decimal":    int(r),
-			"utf8Bytes":  utf8Hex,
-			"name":       charName,
-			"block":      blockName,
-			"category":   category,
+			"character": charStr,
+			"codePoint": codePoint,
+			"decimal":   int(r),
+			"utf8Bytes": utf8Hex,
+			"name":      charName,
+			"block":     blockName,
+			"category":  category,
 		},
 	}, nil
 }

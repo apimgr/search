@@ -2869,10 +2869,10 @@ func (e *emptyResultEngine) DisplayName() string { return e.cfg.DisplayName }
 func (e *emptyResultEngine) Search(ctx context.Context, q *model.Query) ([]model.Result, error) {
 	return []model.Result{}, nil
 }
-func (e *emptyResultEngine) IsEnabled() bool                          { return e.cfg.Enabled }
-func (e *emptyResultEngine) GetPriority() int                         { return e.cfg.Priority }
-func (e *emptyResultEngine) SupportsCategory(c model.Category) bool   { return e.cfg.SupportsCategory(c) }
-func (e *emptyResultEngine) GetConfig() *model.EngineConfig           { return e.cfg }
+func (e *emptyResultEngine) IsEnabled() bool                        { return e.cfg.Enabled }
+func (e *emptyResultEngine) GetPriority() int                       { return e.cfg.Priority }
+func (e *emptyResultEngine) SupportsCategory(c model.Category) bool { return e.cfg.SupportsCategory(c) }
+func (e *emptyResultEngine) GetConfig() *model.EngineConfig         { return e.cfg }
 
 func newHandlerWithEmptyResults() *Handler {
 	cfg := &config.Config{

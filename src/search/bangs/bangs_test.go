@@ -244,10 +244,10 @@ func TestManagerBuildURL(t *testing.T) {
 	m := NewManager()
 
 	tests := []struct {
-		name     string
-		bang     *Bang
-		query    string
-		wantHas  string
+		name    string
+		bang    *Bang
+		query   string
+		wantHas string
 	}{
 		{
 			name:    "query placeholder",
@@ -746,9 +746,9 @@ func TestManagerIsBangEdgeCases(t *testing.T) {
 		{"!g test", true},
 		{"test !g", true},
 		{"test", false},
-		{"!", false},            // Just exclamation, no shortcut
+		{"!", false},             // Just exclamation, no shortcut
 		{"!unknown12345", false}, // Unknown bang
-		{"   !g   ", true},      // Whitespace around
+		{"   !g   ", true},       // Whitespace around
 	}
 
 	for _, tt := range tests {
@@ -1001,8 +1001,8 @@ func TestManagerParseSpecialCharsInQuery(t *testing.T) {
 	m := NewManager()
 
 	tests := []struct {
-		input       string
-		shouldFind  bool
+		input         string
+		shouldFind    bool
 		expectedQuery string
 	}{
 		{"!g golang & tutorial", true, "golang & tutorial"},
@@ -1104,15 +1104,15 @@ func TestExtractBangEdgeCases(t *testing.T) {
 		query    string
 		expected string
 	}{
-		{"!test", "test"},              // Start bang
-		{"test!", "test"},              // End bang
-		{"query !test more", "test"},   // Middle bang with continuation
-		{"!test123", "test123"},        // Bang with numbers
-		{"123!", "123"},                // Numeric-only bang
-		{"!a", "a"},                    // Single char bang
-		{"a!", "a"},                    // Single char trailing bang
-		{"!abc def !xyz", "abc"},       // Multiple bangs (first wins)
-		{"word word2", ""},             // No bang
+		{"!test", "test"},            // Start bang
+		{"test!", "test"},            // End bang
+		{"query !test more", "test"}, // Middle bang with continuation
+		{"!test123", "test123"},      // Bang with numbers
+		{"123!", "123"},              // Numeric-only bang
+		{"!a", "a"},                  // Single char bang
+		{"a!", "a"},                  // Single char trailing bang
+		{"!abc def !xyz", "abc"},     // Multiple bangs (first wins)
+		{"word word2", ""},           // No bang
 	}
 
 	for _, tt := range tests {

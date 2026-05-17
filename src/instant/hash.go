@@ -29,8 +29,8 @@ func NewHashHandler() *HashHandler {
 	}
 }
 
-func (h *HashHandler) Name() string                { return "hash" }
-func (h *HashHandler) Patterns() []*regexp.Regexp  { return h.patterns }
+func (h *HashHandler) Name() string               { return "hash" }
+func (h *HashHandler) Patterns() []*regexp.Regexp { return h.patterns }
 
 func (h *HashHandler) CanHandle(query string) bool {
 	for _, p := range h.patterns {

@@ -712,16 +712,16 @@ func TestParseCronField(t *testing.T) {
 		{"5,10,15", 0, 59, 3, false},
 		{"5-10", 0, 59, 6, false},
 		{"5-10/2", 0, 59, 3, false},
-		{"100", 0, 59, 0, true},   // Out of range
+		{"100", 0, 59, 0, true}, // Out of range
 		{"invalid", 0, 59, 0, true},
-		{"-5", 0, 59, 0, true},    // Invalid number
-		{"*/0", 0, 59, 0, true},   // Zero step
-		{"*/-1", 0, 59, 0, true},  // Negative step
-		{"*/abc", 0, 59, 0, true}, // Invalid step value
-		{"10-5", 0, 59, 0, true},  // Start > end
-		{"5-100", 0, 59, 0, true}, // End out of range
-		{"-1-5", 0, 59, 0, true},  // Start out of range
-		{"5-10/0", 0, 59, 0, true},  // Zero step in range
+		{"-5", 0, 59, 0, true},       // Invalid number
+		{"*/0", 0, 59, 0, true},      // Zero step
+		{"*/-1", 0, 59, 0, true},     // Negative step
+		{"*/abc", 0, 59, 0, true},    // Invalid step value
+		{"10-5", 0, 59, 0, true},     // Start > end
+		{"5-100", 0, 59, 0, true},    // End out of range
+		{"-1-5", 0, 59, 0, true},     // Start out of range
+		{"5-10/0", 0, 59, 0, true},   // Zero step in range
 		{"5-10/abc", 0, 59, 0, true}, // Invalid step in range
 		{"a-10", 0, 59, 0, true},     // Invalid range start
 		{"5-b", 0, 59, 0, true},      // Invalid range end

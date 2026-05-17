@@ -31,7 +31,7 @@ func NewPubMed() *PubMed {
 	return &PubMed{
 		BaseEngine: search.NewBaseEngine(config),
 		client: &http.Client{
-			Timeout: time.Duration(config.GetTimeout()) * time.Second,
+			Timeout:   time.Duration(config.GetTimeout()) * time.Second,
 			Transport: SharedTransport,
 		},
 	}
@@ -41,11 +41,11 @@ func NewPubMed() *PubMed {
 
 // esearchResult represents the response from esearch.fcgi
 type esearchResult struct {
-	XMLName xml.Name `xml:"eSearchResult"`
-	Count   int      `xml:"Count"`
-	RetMax  int      `xml:"RetMax"`
-	RetStart int     `xml:"RetStart"`
-	IdList  struct {
+	XMLName  xml.Name `xml:"eSearchResult"`
+	Count    int      `xml:"Count"`
+	RetMax   int      `xml:"RetMax"`
+	RetStart int      `xml:"RetStart"`
+	IdList   struct {
 		Ids []string `xml:"Id"`
 	} `xml:"IdList"`
 }
@@ -63,7 +63,7 @@ type pubmedArticle struct {
 		} `xml:"PMID"`
 		Article struct {
 			Journal struct {
-				Title string `xml:"Title"`
+				Title        string `xml:"Title"`
 				JournalIssue struct {
 					PubDate struct {
 						Year  string `xml:"Year"`

@@ -100,9 +100,9 @@ func (h *YAMLHandler) Handle(ctx context.Context, query string) (*Answer, error)
 			lineNum, charPos := getJSONErrorLinePosition(data, err)
 			errorMsg := fmt.Sprintf("%s (line %d, position %d)", err.Error(), lineNum, charPos)
 			return &Answer{
-				Type:    AnswerTypeYAML,
-				Query:   query,
-				Title:   "JSON to YAML Converter",
+				Type:  AnswerTypeYAML,
+				Query: query,
+				Title: "JSON to YAML Converter",
 				Content: fmt.Sprintf(`<div class="yaml-result yaml-error">
 <strong>Status:</strong> <span style="color: red;">Invalid JSON</span><br><br>
 <strong>Error:</strong> %s<br><br>
@@ -134,9 +134,9 @@ func (h *YAMLHandler) Handle(ctx context.Context, query string) (*Answer, error)
 			lineNum, col := getYAMLErrorLineCol(err)
 			errorMsg := formatYAMLError(err, lineNum, col)
 			return &Answer{
-				Type:    AnswerTypeYAML,
-				Query:   query,
-				Title:   "YAML to JSON Converter",
+				Type:  AnswerTypeYAML,
+				Query: query,
+				Title: "YAML to JSON Converter",
 				Content: fmt.Sprintf(`<div class="yaml-result yaml-error">
 <strong>Status:</strong> <span style="color: red;">Invalid YAML</span><br><br>
 <strong>Error:</strong> %s<br><br>
@@ -172,9 +172,9 @@ func (h *YAMLHandler) Handle(ctx context.Context, query string) (*Answer, error)
 				lineNum, col := getYAMLErrorLineCol(err)
 				errorMsg := formatYAMLError(err, lineNum, col)
 				return &Answer{
-					Type:    AnswerTypeYAML,
-					Query:   query,
-					Title:   "YAML Validator",
+					Type:  AnswerTypeYAML,
+					Query: query,
+					Title: "YAML Validator",
 					Content: fmt.Sprintf(`<div class="yaml-result yaml-error">
 <strong>Status:</strong> <span style="color: red;">Invalid YAML/JSON</span><br><br>
 <strong>Error:</strong> %s<br><br>

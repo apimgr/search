@@ -55,12 +55,12 @@ func (h *WikiHandler) Handle(ctx context.Context, term string) (*Answer, error) 
 	}
 
 	var article struct {
-		Title       string `json:"title"`
+		Title        string `json:"title"`
 		DisplayTitle string `json:"displaytitle"`
-		Extract     string `json:"extract"`
-		ExtractHTML string `json:"extract_html"`
-		Description string `json:"description"`
-		Thumbnail   struct {
+		Extract      string `json:"extract"`
+		ExtractHTML  string `json:"extract_html"`
+		Description  string `json:"description"`
+		Thumbnail    struct {
 			Source string `json:"source"`
 			Width  int    `json:"width"`
 			Height int    `json:"height"`
@@ -277,11 +277,11 @@ func (h *DictHandler) Handle(ctx context.Context, term string) (*Answer, error) 
 	}
 
 	data := map[string]interface{}{
-		"word":      entry.Word,
-		"phonetic":  entry.Phonetic,
-		"meanings":  entry.Meanings,
-		"origin":    entry.Origin,
-		"audioURL":  audioURL,
+		"word":     entry.Word,
+		"phonetic": entry.Phonetic,
+		"meanings": entry.Meanings,
+		"origin":   entry.Origin,
+		"audioURL": audioURL,
 	}
 
 	return &Answer{
@@ -629,12 +629,12 @@ func (h *PkgHandler) fetchPyPI(ctx context.Context, name string) (*Answer, error
 
 	var pkg struct {
 		Info struct {
-			Name        string `json:"name"`
-			Summary     string `json:"summary"`
-			Version     string `json:"version"`
-			License     string `json:"license"`
-			ProjectURL  string `json:"project_url"`
-			Homepage    string `json:"home_page"`
+			Name       string `json:"name"`
+			Summary    string `json:"summary"`
+			Version    string `json:"version"`
+			License    string `json:"license"`
+			ProjectURL string `json:"project_url"`
+			Homepage   string `json:"home_page"`
 		} `json:"info"`
 	}
 
@@ -929,10 +929,10 @@ func (h *RFCHandler) Handle(ctx context.Context, term string) (*Answer, error) {
 	}
 
 	var doc struct {
-		Title   string `json:"title"`
-		Name    string `json:"name"`
+		Title    string `json:"title"`
+		Name     string `json:"name"`
 		Abstract string `json:"abstract"`
-		Authors []struct {
+		Authors  []struct {
 			Name string `json:"name"`
 		} `json:"authors"`
 		Time string `json:"time"`

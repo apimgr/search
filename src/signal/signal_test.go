@@ -241,11 +241,11 @@ func TestShutdownConfigStruct(t *testing.T) {
 
 func TestShutdownConfigAllCallbacks(t *testing.T) {
 	var (
-		reopenLogsCalled   bool
-		dumpStatusCalled   bool
+		reopenLogsCalled    bool
+		dumpStatusCalled    bool
 		closeDatabaseCalled bool
-		flushLogsCalled    bool
-		getChildPIDsCalled bool
+		flushLogsCalled     bool
+		getChildPIDsCalled  bool
 	)
 
 	cfg := ShutdownConfig{

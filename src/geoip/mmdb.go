@@ -18,23 +18,23 @@ const (
 
 // mmdbReader is a pure Go MMDB reader
 type mmdbReader struct {
-	mu       sync.RWMutex
-	data     []byte
-	metadata *mmdbMetadata
-	nodeSize int
+	mu         sync.RWMutex
+	data       []byte
+	metadata   *mmdbMetadata
+	nodeSize   int
 	dataOffset int
 }
 
 type mmdbMetadata struct {
-	NodeCount        uint32
-	RecordSize       uint16
-	IPVersion        uint16
-	DatabaseType     string
-	Languages        []string
+	NodeCount                uint32
+	RecordSize               uint16
+	IPVersion                uint16
+	DatabaseType             string
+	Languages                []string
 	BinaryFormatMajorVersion uint16
 	BinaryFormatMinorVersion uint16
-	BuildEpoch       uint64
-	Description      map[string]string
+	BuildEpoch               uint64
+	Description              map[string]string
 }
 
 // openMMDB opens an MMDB database file
@@ -97,10 +97,10 @@ func (r *mmdbReader) parseMetadata() error {
 
 	// Calculate node size and data offset
 	r.nodeSize = int(r.metadata.RecordSize) * 2 / 8
-	if r.metadata.RecordSize % 4 != 0 {
+	if r.metadata.RecordSize%4 != 0 {
 		r.nodeSize++
 	}
-	r.dataOffset = int(r.metadata.NodeCount) * r.nodeSize + 16
+	r.dataOffset = int(r.metadata.NodeCount)*r.nodeSize + 16
 
 	return nil
 }

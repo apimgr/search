@@ -662,11 +662,11 @@ func TestDetectMacOSDisplay(t *testing.T) {
 			wantDisplayType: DisplayTypeMacOS,
 		},
 		{
-			name:            "XPC service with ppid check",
-			isSSH:           false,
-			isMosh:          false,
-			xpcService:      "com.apple.test",
-			wantHasDisplay:  os.Getppid() != 1, // depends on actual ppid
+			name:           "XPC service with ppid check",
+			isSSH:          false,
+			isMosh:         false,
+			xpcService:     "com.apple.test",
+			wantHasDisplay: os.Getppid() != 1, // depends on actual ppid
 			wantDisplayType: func() DisplayType {
 				if os.Getppid() == 1 {
 					return DisplayTypeNone

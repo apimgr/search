@@ -39,7 +39,7 @@ func NewPkgHandler() *PkgHandler {
 	}
 }
 
-func (h *PkgHandler) Name() string              { return "pkg" }
+func (h *PkgHandler) Name() string               { return "pkg" }
 func (h *PkgHandler) Patterns() []*regexp.Regexp { return h.patterns }
 
 func (h *PkgHandler) CanHandle(query string) bool {

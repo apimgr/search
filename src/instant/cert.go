@@ -204,21 +204,21 @@ func (h *CertHandler) Handle(ctx context.Context, query string) (*Answer, error)
 
 	// Build data map
 	data := map[string]interface{}{
-		"domain":             domain,
-		"subject_cn":         cert.Subject.CommonName,
-		"subject_org":        cert.Subject.Organization,
-		"issuer_cn":          cert.Issuer.CommonName,
-		"issuer_org":         cert.Issuer.Organization,
-		"not_before":         cert.NotBefore.Format(time.RFC3339),
-		"not_after":          cert.NotAfter.Format(time.RFC3339),
-		"days_remaining":     daysRemaining,
-		"is_valid":           isValid,
-		"dns_names":          cert.DNSNames,
-		"signature_algo":     cert.SignatureAlgorithm.String(),
-		"public_key_algo":    cert.PublicKeyAlgorithm.String(),
-		"chain_length":       len(certs),
-		"key_usage":          formatKeyUsage(cert.KeyUsage),
-		"ext_key_usage":      formatExtKeyUsage(cert.ExtKeyUsage),
+		"domain":          domain,
+		"subject_cn":      cert.Subject.CommonName,
+		"subject_org":     cert.Subject.Organization,
+		"issuer_cn":       cert.Issuer.CommonName,
+		"issuer_org":      cert.Issuer.Organization,
+		"not_before":      cert.NotBefore.Format(time.RFC3339),
+		"not_after":       cert.NotAfter.Format(time.RFC3339),
+		"days_remaining":  daysRemaining,
+		"is_valid":        isValid,
+		"dns_names":       cert.DNSNames,
+		"signature_algo":  cert.SignatureAlgorithm.String(),
+		"public_key_algo": cert.PublicKeyAlgorithm.String(),
+		"chain_length":    len(certs),
+		"key_usage":       formatKeyUsage(cert.KeyUsage),
+		"ext_key_usage":   formatExtKeyUsage(cert.ExtKeyUsage),
 	}
 
 	return &Answer{

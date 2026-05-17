@@ -162,9 +162,9 @@ func (h *ExpandHandler) Handle(ctx context.Context, query string) (*Answer, erro
 	content.WriteString("</div>")
 
 	data := map[string]interface{}{
-		"original_url": urlStr,
-		"final_url":    finalURL,
-		"hops":         hops,
+		"original_url":   urlStr,
+		"final_url":      finalURL,
+		"hops":           hops,
 		"redirect_count": len(hops) - 1,
 	}
 

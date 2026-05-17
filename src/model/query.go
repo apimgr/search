@@ -21,8 +21,8 @@ type Query struct {
 	// Filters
 	Category   Category `json:"category"`
 	Language   string   `json:"language"`
-	Region     string   `json:"region,omitempty"`     // Region code (us, uk, de, etc.)
-	SafeSearch int      `json:"safe_search"`          // 0: off, 1: moderate, 2: strict
+	Region     string   `json:"region,omitempty"` // Region code (us, uk, de, etc.)
+	SafeSearch int      `json:"safe_search"`      // 0: off, 1: moderate, 2: strict
 
 	// Pagination
 	Page    int `json:"page"`
@@ -51,11 +51,11 @@ type Query struct {
 	DateAfter  string `json:"date_after,omitempty"`  // YYYY-MM-DD
 
 	// Media-specific filters
-	ImageSize   string `json:"image_size,omitempty"`   // small, medium, large, xlarge
-	ImageType   string `json:"image_type,omitempty"`   // photo, clipart, lineart, animated
-	ImageColor  string `json:"image_color,omitempty"`  // color, gray, trans, red, etc.
-	ImageAspect string `json:"image_aspect,omitempty"` // square, wide, tall
-	VideoLength string `json:"video_length,omitempty"` // short, medium, long
+	ImageSize    string `json:"image_size,omitempty"`    // small, medium, large, xlarge
+	ImageType    string `json:"image_type,omitempty"`    // photo, clipart, lineart, animated
+	ImageColor   string `json:"image_color,omitempty"`   // color, gray, trans, red, etc.
+	ImageAspect  string `json:"image_aspect,omitempty"`  // square, wide, tall
+	VideoLength  string `json:"video_length,omitempty"`  // short, medium, long
 	VideoQuality string `json:"video_quality,omitempty"` // hd, 4k
 
 	// News-specific

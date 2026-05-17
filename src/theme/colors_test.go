@@ -87,9 +87,9 @@ func TestThemesMap(t *testing.T) {
 
 func TestGetTheme(t *testing.T) {
 	tests := []struct {
-		name     string
+		name      string
 		themeName string
-		want     string
+		want      string
 	}{
 		{"dark", "dark", "dark"},
 		{"light", "light", "light"},
@@ -385,9 +385,9 @@ func TestCssVarToJSName(t *testing.T) {
 		{"--shadow-color", "shadowColor"},
 		{"--input-bg", "inputBg"},
 		{"--link-hover", "linkHover"},
-		{"simple", "simple"},       // No dashes
-		{"--single", "single"},     // Single word after --
-		{"--a-b-c", "aBC"},         // Multiple parts
+		{"simple", "simple"},   // No dashes
+		{"--single", "single"}, // Single word after --
+		{"--a-b-c", "aBC"},     // Multiple parts
 	}
 
 	for _, tt := range tests {

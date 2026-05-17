@@ -31,9 +31,9 @@ type BackupMetadata struct {
 	Encrypted        bool              `json:"encrypted"`         // Per AI.md PART 25
 	EncryptionMethod string            `json:"encryption_method"` // "AES-256-GCM" if encrypted
 	// Legacy fields for backwards compatibility
-	ServerTitle string `json:"server_title,omitempty"` // Server title (optional)
-	Size        int64  `json:"size,omitempty"`         // Total size in bytes (optional)
-	Files       []string `json:"files,omitempty"`      // Deprecated: use Contents
+	ServerTitle string   `json:"server_title,omitempty"` // Server title (optional)
+	Size        int64    `json:"size,omitempty"`         // Total size in bytes (optional)
+	Files       []string `json:"files,omitempty"`        // Deprecated: use Contents
 }
 
 // Manager handles backup and restore operations
@@ -143,11 +143,11 @@ func (m *Manager) Create(filename string) (string, error) {
 
 	// Create metadata per AI.md PART 25: manifest.json format
 	metadata := BackupMetadata{
-		Version:     "1.0.0",                     // Manifest format version
+		Version:     "1.0.0", // Manifest format version
 		CreatedAt:   time.Now(),
-		CreatedBy:   createdBy,                   // Per PART 25: who created the backup
-		AppVersion:  config.Version,              // Per PART 25: application version
-		Contents:    files,                       // Per PART 25: list of contents
+		CreatedBy:   createdBy,      // Per PART 25: who created the backup
+		AppVersion:  config.Version, // Per PART 25: application version
+		Contents:    files,          // Per PART 25: list of contents
 		Checksums:   checksums,
 		Checksum:    "sha256:" + overallChecksum, // Per PART 25: overall checksum
 		ServerTitle: serverTitle,                 // Legacy/optional
@@ -506,11 +506,11 @@ type RetentionPolicy struct {
 // Per AI.md PART 22: Reasonable defaults
 func DefaultRetentionPolicy() RetentionPolicy {
 	return RetentionPolicy{
-		Count: 10,  // Keep at least 10 backups
-		Day:   7,   // Keep 7 days of daily backups
-		Week:  4,   // Keep 4 weeks of weekly backups
-		Month: 12,  // Keep 12 months of monthly backups
-		Year:  3,   // Keep 3 years of yearly backups
+		Count: 10, // Keep at least 10 backups
+		Day:   7,  // Keep 7 days of daily backups
+		Week:  4,  // Keep 4 weeks of weekly backups
+		Month: 12, // Keep 12 months of monthly backups
+		Year:  3,  // Keep 3 years of yearly backups
 	}
 }
 
@@ -672,13 +672,13 @@ func IsEncrypted(backupPath string) bool {
 // VerificationResult contains the results of backup verification
 // Per AI.md PART 22: Backup verification is NON-NEGOTIABLE
 type VerificationResult struct {
-	FileExists      bool   `json:"file_exists"`
-	SizeValid       bool   `json:"size_valid"`
-	ChecksumValid   bool   `json:"checksum_valid"`
-	ManifestValid   bool   `json:"manifest_valid"`
-	DecryptValid    bool   `json:"decrypt_valid"` // Only for encrypted backups
-	AllPassed       bool   `json:"all_passed"`
-	Errors          []string `json:"errors,omitempty"`
+	FileExists    bool     `json:"file_exists"`
+	SizeValid     bool     `json:"size_valid"`
+	ChecksumValid bool     `json:"checksum_valid"`
+	ManifestValid bool     `json:"manifest_valid"`
+	DecryptValid  bool     `json:"decrypt_valid"` // Only for encrypted backups
+	AllPassed     bool     `json:"all_passed"`
+	Errors        []string `json:"errors,omitempty"`
 }
 
 // VerifyBackup verifies backup integrity immediately after creation

@@ -23,16 +23,16 @@ const (
 
 // Lookup represents a GeoIP lookup service using MMDB format
 type Lookup struct {
-	mu           sync.RWMutex
-	countryDB    *mmdbReader
-	asnDB        *mmdbReader
-	cityDB       *mmdbReader
-	whoisDB      *mmdbReader // WHOIS registrant database (per AI.md PART 20)
-	loaded       bool
-	dbDir        string
-	countries    map[string]*Country
-	lastUpdate   time.Time
-	config       *Config
+	mu         sync.RWMutex
+	countryDB  *mmdbReader
+	asnDB      *mmdbReader
+	cityDB     *mmdbReader
+	whoisDB    *mmdbReader // WHOIS registrant database (per AI.md PART 20)
+	loaded     bool
+	dbDir      string
+	countries  map[string]*Country
+	lastUpdate time.Time
+	config     *Config
 }
 
 // Country represents country information
@@ -44,18 +44,18 @@ type Country struct {
 
 // Result represents a GeoIP lookup result
 type Result struct {
-	IP            string  `json:"ip"`
-	CountryCode   string  `json:"country_code"`
-	CountryName   string  `json:"country_name"`
-	Continent     string  `json:"continent"`
-	City          string  `json:"city,omitempty"`
-	Region        string  `json:"region,omitempty"`
-	PostalCode    string  `json:"postal_code,omitempty"`
-	Latitude      float64 `json:"latitude,omitempty"`
-	Longitude     float64 `json:"longitude,omitempty"`
-	Timezone      string  `json:"timezone,omitempty"`
-	ASN           uint    `json:"asn,omitempty"`
-	ASNOrg        string  `json:"asn_org,omitempty"`
+	IP          string  `json:"ip"`
+	CountryCode string  `json:"country_code"`
+	CountryName string  `json:"country_name"`
+	Continent   string  `json:"continent"`
+	City        string  `json:"city,omitempty"`
+	Region      string  `json:"region,omitempty"`
+	PostalCode  string  `json:"postal_code,omitempty"`
+	Latitude    float64 `json:"latitude,omitempty"`
+	Longitude   float64 `json:"longitude,omitempty"`
+	Timezone    string  `json:"timezone,omitempty"`
+	ASN         uint    `json:"asn,omitempty"`
+	ASNOrg      string  `json:"asn_org,omitempty"`
 	// WHOIS registrant data (per AI.md PART 20)
 	RegistrantOrg string `json:"registrant_org,omitempty"`
 	RegistrantNet string `json:"registrant_net,omitempty"`

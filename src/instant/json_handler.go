@@ -83,9 +83,9 @@ func (h *JSONHandler) Handle(ctx context.Context, query string) (*Answer, error)
 		errorMsg := fmt.Sprintf("%s (line %d, position %d)", err.Error(), lineNum, charPos)
 
 		return &Answer{
-			Type:    AnswerTypeJSON,
-			Query:   query,
-			Title:   "JSON Validator",
+			Type:  AnswerTypeJSON,
+			Query: query,
+			Title: "JSON Validator",
 			Content: fmt.Sprintf(`<div class="json-result json-error">
 <strong>Status:</strong> <span style="color: red;">Invalid JSON</span><br><br>
 <strong>Error:</strong> %s<br><br>
@@ -166,17 +166,17 @@ func (h *JSONHandler) Handle(ctx context.Context, query string) (*Answer, error)
 		Title:   title,
 		Content: content,
 		Data: map[string]interface{}{
-			"valid":       true,
-			"input":       jsonStr,
-			"pretty":      pretty,
-			"minified":    minified,
-			"type":        stats.Type,
-			"depth":       depth,
-			"keys":        totalKeys,
-			"objects":     objectCount,
-			"arrays":      arrayCount,
-			"inputSize":   len(jsonStr),
-			"outputSize":  len(output),
+			"valid":      true,
+			"input":      jsonStr,
+			"pretty":     pretty,
+			"minified":   minified,
+			"type":       stats.Type,
+			"depth":      depth,
+			"keys":       totalKeys,
+			"objects":    objectCount,
+			"arrays":     arrayCount,
+			"inputSize":  len(jsonStr),
+			"outputSize": len(output),
 		},
 	}, nil
 }

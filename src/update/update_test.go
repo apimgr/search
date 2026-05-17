@@ -472,9 +472,9 @@ func TestCompareVersionsMoreCases(t *testing.T) {
 		{"100.200.300", "100.200.299", 1},
 		{"100.200.300", "100.200.301", -1},
 		// Pre-release versions
-		{"1.0.0-alpha", "1.0.0-beta", 0},    // Both parse to 1.0.0.0
-		{"1.0.0-1", "1.0.0-2", -1},          // 1.0.0.1 vs 1.0.0.2
-		{"2.0.0-beta", "1.9.9", 1},          // 2.0.0.0 vs 1.9.9
+		{"1.0.0-alpha", "1.0.0-beta", 0}, // Both parse to 1.0.0.0
+		{"1.0.0-1", "1.0.0-2", -1},       // 1.0.0.1 vs 1.0.0.2
+		{"2.0.0-beta", "1.9.9", 1},       // 2.0.0.0 vs 1.9.9
 	}
 
 	for _, tt := range tests {
@@ -500,8 +500,8 @@ func TestParseVersionMoreCases(t *testing.T) {
 		{"1-2-3", []int{1, 2, 3}},
 		{"1_2_3", []int{1, 2, 3}},
 		{"1.2.3.4.5", []int{1, 2, 3, 4, 5}},
-		{"abc", []int{0}},               // Non-numeric becomes 0
-		{"1.abc.3", []int{1, 0, 3}},     // abc becomes 0
+		{"abc", []int{0}},                 // Non-numeric becomes 0
+		{"1.abc.3", []int{1, 0, 3}},       // abc becomes 0
 		{"v1.2.3-rc1", []int{1, 2, 3, 0}}, // rc1 -> 0
 	}
 
@@ -1554,9 +1554,9 @@ func TestCompareVersionsLengthDifferences(t *testing.T) {
 		v2   string
 		want int
 	}{
-		{"1.0.0.0", "1.0.0", 1},   // longer > shorter when equal prefix
-		{"1.0.0", "1.0.0.0", -1},  // shorter < longer when equal prefix
-		{"1.0.0.1", "1.0.0", 1},   // longer with non-zero suffix
+		{"1.0.0.0", "1.0.0", 1},  // longer > shorter when equal prefix
+		{"1.0.0", "1.0.0.0", -1}, // shorter < longer when equal prefix
+		{"1.0.0.1", "1.0.0", 1},  // longer with non-zero suffix
 		{"1.0.0", "1.0.0.1", -1},
 		{"1", "1.0", -1},
 		{"1.0", "1", 1},
@@ -1582,9 +1582,9 @@ func TestParseVersionEmptyAndSpecial(t *testing.T) {
 	}{
 		{"", 0},
 		{"v", 0},
-		{"...", 0},    // Only separators, no parts
-		{"1..2", 2},   // Empty part becomes nothing (FieldsFunc removes empty)
-		{"1...2", 2},  // Multiple separators
+		{"...", 0},   // Only separators, no parts
+		{"1..2", 2},  // Empty part becomes nothing (FieldsFunc removes empty)
+		{"1...2", 2}, // Multiple separators
 	}
 
 	for _, tt := range tests {

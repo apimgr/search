@@ -444,7 +444,7 @@ func TestLogLevelParsing(t *testing.T) {
 		{"info", slog.LevelInfo},
 		{"warn", slog.LevelWarn},
 		{"error", slog.LevelError},
-		{"", slog.LevelWarn},      // default
+		{"", slog.LevelWarn},        // default
 		{"unknown", slog.LevelWarn}, // default
 	}
 

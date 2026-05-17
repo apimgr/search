@@ -55,18 +55,18 @@ type bgpViewASNResponse struct {
 	Status        string `json:"status"`
 	StatusMessage string `json:"status_message"`
 	Data          struct {
-		ASN              int    `json:"asn"`
-		Name             string `json:"name"`
-		DescriptionShort string `json:"description_short"`
-		CountryCode      string `json:"country_code"`
-		Website          string `json:"website"`
-		EmailContacts    []string `json:"email_contacts"`
-		AbuseContacts    []string `json:"abuse_contacts"`
-		LookingGlass     string `json:"looking_glass"`
-		TrafficEstimation string `json:"traffic_estimation"`
-		TrafficRatio     string `json:"traffic_ratio"`
-		OwnerAddress     []string `json:"owner_address"`
-		RIRAllocation    struct {
+		ASN               int      `json:"asn"`
+		Name              string   `json:"name"`
+		DescriptionShort  string   `json:"description_short"`
+		CountryCode       string   `json:"country_code"`
+		Website           string   `json:"website"`
+		EmailContacts     []string `json:"email_contacts"`
+		AbuseContacts     []string `json:"abuse_contacts"`
+		LookingGlass      string   `json:"looking_glass"`
+		TrafficEstimation string   `json:"traffic_estimation"`
+		TrafficRatio      string   `json:"traffic_ratio"`
+		OwnerAddress      []string `json:"owner_address"`
+		RIRAllocation     struct {
 			RIRName          string `json:"rir_name"`
 			CountryCode      string `json:"country_code"`
 			DateAllocated    string `json:"date_allocated"`

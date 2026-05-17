@@ -71,33 +71,33 @@ type Task struct {
 	ID          TaskID
 	Name        string
 	Description string
-	Schedule    string         // Cron expression or @every interval
-	TaskType    TaskType       // Global or Local
+	Schedule    string   // Cron expression or @every interval
+	TaskType    TaskType // Global or Local
 	Run         func(ctx context.Context) error
-	Skippable   bool           // Can admin disable this task?
-	RunOnStart  bool           // Run immediately on scheduler start?
+	Skippable   bool // Can admin disable this task?
+	RunOnStart  bool // Run immediately on scheduler start?
 
 	// Retry policy per AI.md PART 19
 	// Default: max_retries=3, retry_delay=5m, backoff=exponential (5m, 10m, 20m)
-	MaxRetries  int           // Maximum retry attempts (default: 3)
-	RetryDelay  time.Duration // Base delay between retries (default: 5m)
+	MaxRetries int           // Maximum retry attempts (default: 3)
+	RetryDelay time.Duration // Base delay between retries (default: 5m)
 
 	// Runtime state (persisted to database)
-	LastRun     time.Time
-	LastStatus  TaskStatus
-	LastError   string
-	NextRun     time.Time
-	RunCount    int64
-	FailCount   int64
-	Enabled     bool
+	LastRun    time.Time
+	LastStatus TaskStatus
+	LastError  string
+	NextRun    time.Time
+	RunCount   int64
+	FailCount  int64
+	Enabled    bool
 
 	// Retry state
-	RetryCount  int       // Current retry attempt (0 = first run)
-	NextRetry   time.Time // Scheduled retry time (if retrying)
+	RetryCount int       // Current retry attempt (0 = first run)
+	NextRetry  time.Time // Scheduled retry time (if retrying)
 
 	// Cluster locking
-	LockedBy    string
-	LockedAt    time.Time
+	LockedBy string
+	LockedAt time.Time
 }
 
 // TaskState represents persisted task state in database
@@ -119,12 +119,12 @@ type TaskState struct {
 // TaskFailureNotification contains details about a failed task
 // Per AI.md PART 19: Failed tasks trigger notifications (if configured)
 type TaskFailureNotification struct {
-	TaskID      string
-	TaskName    string
-	Error       string
-	Attempts    int
-	LastRun     time.Time
-	FailCount   int64
+	TaskID    string
+	TaskName  string
+	Error     string
+	Attempts  int
+	LastRun   time.Time
+	FailCount int64
 }
 
 // NotifyFunc is a callback function for task failure notifications
@@ -1186,7 +1186,7 @@ type TaskInfo struct {
 	Skippable   bool      `json:"skippable"`
 
 	// Retry state per AI.md PART 19
-	RetryCount  int       `json:"retry_count"`
-	NextRetry   time.Time `json:"next_retry,omitempty"`
-	MaxRetries  int       `json:"max_retries"`
+	RetryCount int       `json:"retry_count"`
+	NextRetry  time.Time `json:"next_retry,omitempty"`
+	MaxRetries int       `json:"max_retries"`
 }

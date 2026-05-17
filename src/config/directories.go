@@ -16,8 +16,8 @@ const (
 
 // CLI directory overrides (per AI.md PART 17)
 var (
-	cliOverrides   = make(map[string]string)
-	cliOverrideMu  sync.RWMutex
+	cliOverrides  = make(map[string]string)
+	cliOverrideMu sync.RWMutex
 )
 
 // SetConfigDirOverride sets a CLI override for the config directory

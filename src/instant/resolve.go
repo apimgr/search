@@ -160,9 +160,9 @@ func (h *ResolveHandler) Handle(ctx context.Context, query string) (*Answer, err
 	// Check if we got any records
 	if len(records) == 0 {
 		return &Answer{
-			Type:    AnswerTypeResolve,
-			Query:   query,
-			Title:   fmt.Sprintf("DNS Lookup: %s", hostname),
+			Type:  AnswerTypeResolve,
+			Query: query,
+			Title: fmt.Sprintf("DNS Lookup: %s", hostname),
 			Content: fmt.Sprintf("<strong>Error:</strong> No DNS records found for %s<br><br>Errors:<br>%s",
 				escapeHTML(hostname), escapeHTML(strings.Join(errors, "<br>"))),
 			Data: map[string]interface{}{

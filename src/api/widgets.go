@@ -95,8 +95,8 @@ func (h *Handler) handleWidgetData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
-		OK: true,
-		Data:    data,
-		Meta:    &APIMeta{Version: APIVersion},
+		OK:   true,
+		Data: data,
+		Meta: &APIMeta{Version: APIVersion},
 	})
 }

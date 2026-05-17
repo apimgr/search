@@ -11,9 +11,9 @@ import (
 // RedisCache implements Cache interface using Valkey/Redis
 // Per AI.md PART 18: Uses github.com/redis/go-redis/v9
 type RedisCache struct {
-	client  redis.UniversalClient
-	prefix  string
-	stats   Stats
+	client redis.UniversalClient
+	prefix string
+	stats  Stats
 }
 
 // RedisConfig holds Redis/Valkey connection configuration

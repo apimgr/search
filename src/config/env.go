@@ -49,9 +49,9 @@ type EnvConfig struct {
 	SMTPFromEmail string
 
 	// Engines
-	EnableGoogle      bool
-	EnableDuckDuckGo  bool
-	EnableBing        bool
+	EnableGoogle     bool
+	EnableDuckDuckGo bool
+	EnableBing       bool
 }
 
 // LoadFromEnv loads configuration from environment variables

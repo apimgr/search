@@ -181,12 +181,12 @@ func NewMigrationManager(sourceDB *DB, targetDB *RemoteDB, dataDir string) *Migr
 
 // MigrationProgress represents the progress of a migration
 type MigrationProgress struct {
-	Phase       string    `json:"phase"`
-	Table       string    `json:"table"`
-	TotalRows   int64     `json:"total_rows"`
-	MigratedRows int64    `json:"migrated_rows"`
-	StartTime   time.Time `json:"start_time"`
-	Error       string    `json:"error,omitempty"`
+	Phase        string    `json:"phase"`
+	Table        string    `json:"table"`
+	TotalRows    int64     `json:"total_rows"`
+	MigratedRows int64     `json:"migrated_rows"`
+	StartTime    time.Time `json:"start_time"`
+	Error        string    `json:"error,omitempty"`
 }
 
 // MigrateToRemote migrates a SQLite database to the remote database

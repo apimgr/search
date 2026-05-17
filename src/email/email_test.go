@@ -256,9 +256,9 @@ func TestEncodeHeader(t *testing.T) {
 	ml := NewMailer(cfg)
 
 	tests := []struct {
-		name     string
-		input    string
-		encoded  bool
+		name    string
+		input   string
+		encoded bool
 	}{
 		{"ascii", "Hello World", false},
 		{"utf8", "Hello 世界", true},
@@ -592,9 +592,9 @@ func TestFormatAddressEdgeCases(t *testing.T) {
 	ml := NewMailer(cfg)
 
 	tests := []struct {
-		name    string
-		email   string
-		want    string
+		name  string
+		email string
+		want  string
 	}{
 		{"", "test@example.com", "test@example.com"},
 		{"Simple Name", "test@example.com", "Simple Name <test@example.com>"},

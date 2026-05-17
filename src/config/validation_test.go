@@ -127,7 +127,7 @@ func TestIsValidSSLHost(t *testing.T) {
 
 		// Invalid SSL hosts
 		{"onion address", "abcdefghijklmnop.onion", false}, // .onion cannot use Let's Encrypt
-		{"localhost", "localhost", false},                   // dev TLD
+		{"localhost", "localhost", false},                  // dev TLD
 		{"test TLD", "myapp.test", false},                  // reserved TLD
 		{"local TLD", "myapp.local", false},                // dev TLD
 		{"IP address", "192.168.1.1", false},               // IPs always rejected

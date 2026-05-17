@@ -351,13 +351,13 @@ func TestSearchOperatorsHasOperators(t *testing.T) {
 
 func TestSearchOperatorsToGoogleQuery(t *testing.T) {
 	ops := &SearchOperators{
-		CleanedQuery:  "golang tutorial",
-		Site:          "example.com",
-		FileType:      "pdf",
-		ExactPhrases:  []string{"best practices"},
-		ExcludeTerms:  []string{"java"},
-		Before:        "2024-01-01",
-		After:         "2023-01-01",
+		CleanedQuery: "golang tutorial",
+		Site:         "example.com",
+		FileType:     "pdf",
+		ExactPhrases: []string{"best practices"},
+		ExcludeTerms: []string{"java"},
+		Before:       "2024-01-01",
+		After:        "2023-01-01",
 	}
 
 	result := ops.ToGoogleQuery()
