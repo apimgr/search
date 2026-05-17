@@ -195,7 +195,8 @@ func (c *RedisCache) Ping(ctx context.Context) error {
 
 // Stats returns cache statistics
 func (c *RedisCache) Stats(ctx context.Context) (*Stats, error) {
-	stats := c.stats // Copy base stats
+	// Copy base stats
+	stats := c.stats
 
 	// Get key count
 	dbSize, err := c.client.DBSize(ctx).Result()

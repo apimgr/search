@@ -367,7 +367,8 @@ func (f *TranslateFetcher) fetchFromLibreTranslate(ctx context.Context, text, so
 func (f *TranslateFetcher) fetchFromMyMemory(ctx context.Context, text, sourceLang, targetLang string) (*WidgetData, error) {
 	originalSource := sourceLang
 	if sourceLang == "auto" {
-		sourceLang = "en" // Default to English if auto-detect not supported
+		// Default to English if auto-detect not supported
+		sourceLang = "en"
 	}
 
 	langPair := fmt.Sprintf("%s|%s", sourceLang, targetLang)

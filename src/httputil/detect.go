@@ -28,14 +28,22 @@ func IsTextBrowser(r *http.Request) bool {
 	// Text browsers - INTERACTIVE, NO JavaScript support
 	// Format: "browser/" or "browser " (links uses space)
 	textBrowsers := []string{
-		"lynx/",     // Lynx - classic text browser
-		"w3m/",      // w3m - text browser with table support
-		"links ",    // Links - text browser (note: space after)
-		"links/",    // Links alternative format
-		"elinks/",   // ELinks - enhanced links
-		"browsh/",   // Browsh - modern text browser
-		"carbonyl/", // Carbonyl - Chromium in terminal
-		"netsurf",   // NetSurf - lightweight browser (limited JS)
+		// Lynx - classic text browser
+		"lynx/",
+		// w3m - text browser with table support
+		"w3m/",
+		// Links - text browser (note: space after)
+		"links ",
+		// Links alternative format
+		"links/",
+		// ELinks - enhanced links
+		"elinks/",
+		// Browsh - modern text browser
+		"browsh/",
+		// Carbonyl - Chromium in terminal
+		"carbonyl/",
+		// NetSurf - lightweight browser (limited JS)
+		"netsurf",
 	}
 	for _, browser := range textBrowsers {
 		if strings.Contains(ua, browser) {
@@ -112,12 +120,17 @@ func IsBrowser(r *http.Request) bool {
 type ClientType int
 
 const (
-	ClientTypeUnknown     ClientType = iota
-	ClientTypeBrowser                // Regular browser - gets full HTML with JS
-	ClientTypeTextBrowser            // Text browser (lynx, w3m) - gets HTML without JS
-	ClientTypeHttpTool               // HTTP tool (curl, wget) - gets formatted text
-	ClientTypeOurCLI                 // Our CLI client - gets JSON
-	ClientTypeAPI                    // API client - gets JSON
+	ClientTypeUnknown ClientType = iota
+	// Regular browser - gets full HTML with JS
+	ClientTypeBrowser
+	// Text browser (lynx, w3m) - gets HTML without JS
+	ClientTypeTextBrowser
+	// HTTP tool (curl, wget) - gets formatted text
+	ClientTypeHttpTool
+	// Our CLI client - gets JSON
+	ClientTypeOurCLI
+	// API client - gets JSON
+	ClientTypeAPI
 )
 
 // String returns the string representation of ClientType

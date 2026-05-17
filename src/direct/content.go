@@ -327,7 +327,8 @@ func formatDictContent(word, phonetic, audioURL string, meanings []struct {
 
 		for i, def := range meaning.Definitions {
 			if i >= 5 {
-				break // Limit to 5 definitions per part of speech
+				// Limit to 5 definitions per part of speech
+				break
 			}
 			html.WriteString("<li>")
 			html.WriteString(fmt.Sprintf("<p>%s</p>", escapeHTML(def.Definition)))

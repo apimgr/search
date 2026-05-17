@@ -37,9 +37,10 @@ type DNSProviderInfo struct {
 
 // Field represents a credential field for a DNS provider
 type Field struct {
-	Name        string `json:"name"`
-	Label       string `json:"label"`
-	Type        string `json:"type"` // text, password
+	Name  string `json:"name"`
+	Label string `json:"label"`
+	// text, password
+	Type        string `json:"type"`
 	Required    bool   `json:"required"`
 	Placeholder string `json:"placeholder"`
 	Help        string `json:"help"`

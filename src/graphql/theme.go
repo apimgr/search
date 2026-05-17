@@ -7,7 +7,8 @@ func getGraphiQLThemeCSS(theme string) string {
 	if theme == "light" {
 		return graphiqlLightTheme
 	}
-	return graphiqlDarkTheme // Default to dark
+	// Default to dark
+	return graphiqlDarkTheme
 }
 
 // graphiqlDarkTheme provides dark theme CSS for GraphiQL

@@ -27,7 +27,8 @@ var (
 // Config holds email configuration
 // Per AI.md PART 18: Nested SMTP and From blocks
 type Config struct {
-	Enabled     bool // Auto-set based on SMTP availability
+	// Auto-set based on SMTP availability
+	Enabled     bool
 	SMTP        SMTPConfig
 	From        FromConfig
 	AdminEmails []string
@@ -40,7 +41,8 @@ type SMTPConfig struct {
 	Port     int
 	Username string
 	Password string
-	TLS      string // auto, starttls, tls, none
+	// auto, starttls, tls, none
+	TLS string
 }
 
 // FromConfig represents the from address configuration
@@ -61,8 +63,10 @@ func DefaultConfig() *Config {
 			TLS:  "auto",
 		},
 		From: FromConfig{
-			Name:  "", // Default: app title (set at runtime)
-			Email: "", // Default: no-reply@{fqdn} (set at runtime)
+			// Default: app title (set at runtime)
+			Name: "",
+			// Default: no-reply@{fqdn} (set at runtime)
+			Email: "",
 		},
 		AdminEmails: []string{},
 	}
@@ -396,7 +400,8 @@ func DetectSMTP() *DetectedSMTP {
 	hosts := []string{
 		"localhost",
 		"127.0.0.1",
-		"172.17.0.1", // Docker host
+		// Docker host
+		"172.17.0.1",
 	}
 
 	// Try to get gateway IP
@@ -410,9 +415,12 @@ func DetectSMTP() *DetectedSMTP {
 		tls      bool
 		starttls bool
 	}{
-		{25, false, true},  // Standard SMTP
-		{587, false, true}, // Submission with STARTTLS
-		{465, true, false}, // SMTPS (TLS)
+		// Standard SMTP
+		{25, false, true},
+		// Submission with STARTTLS
+		{587, false, true},
+		// SMTPS (TLS)
+		{465, true, false},
 	}
 
 	for _, host := range hosts {

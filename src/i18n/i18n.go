@@ -13,8 +13,9 @@ import (
 
 // Manager handles translations and language detection
 type Manager struct {
-	mu           sync.RWMutex
-	translations map[string]map[string]string // lang -> key -> value
+	mu sync.RWMutex
+	// lang -> key -> value
+	translations map[string]map[string]string
 	defaultLang  string
 	supported    []string
 	rtlLangs     map[string]bool
@@ -23,10 +24,14 @@ type Manager struct {
 // NewManager creates a new i18n manager
 func NewManager(defaultLang string, supported []string) *Manager {
 	rtl := map[string]bool{
-		"ar": true, // Arabic
-		"he": true, // Hebrew
-		"fa": true, // Persian/Farsi
-		"ur": true, // Urdu
+		// Arabic
+		"ar": true,
+		// Hebrew
+		"he": true,
+		// Persian/Farsi
+		"fa": true,
+		// Urdu
+		"ur": true,
 	}
 
 	return &Manager{
@@ -379,10 +384,11 @@ func (m *Manager) TemplateFuncs(lang string) template.FuncMap {
 // SetLanguageCookie sets the language preference cookie
 func SetLanguageCookie(w http.ResponseWriter, lang string) {
 	http.SetCookie(w, &http.Cookie{
-		Name:     "lang",
-		Value:    lang,
-		Path:     "/",
-		MaxAge:   365 * 24 * 60 * 60, // 1 year
+		Name:  "lang",
+		Value: lang,
+		Path:  "/",
+		// 1 year
+		MaxAge:   365 * 24 * 60 * 60,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	})

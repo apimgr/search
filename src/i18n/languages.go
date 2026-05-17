@@ -2,10 +2,14 @@ package i18n
 
 // Language represents a supported language
 type Language struct {
-	Code       string // BCP 47 language code (e.g., "en", "de")
-	Name       string // English name (e.g., "English", "German")
-	NativeName string // Native name (e.g., "English", "Deutsch")
-	RTL        bool   // Right-to-left language
+	// BCP 47 language code (e.g., "en", "de")
+	Code string
+	// English name (e.g., "English", "German")
+	Name string
+	// Native name (e.g., "English", "Deutsch")
+	NativeName string
+	// Right-to-left language
+	RTL bool
 }
 
 // Languages is the map of all supported languages

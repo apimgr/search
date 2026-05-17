@@ -95,7 +95,8 @@ func (h *BeautifyHandler) Handle(ctx context.Context, query string) (*Answer, er
 
 	if err != nil {
 		return &Answer{
-			Type:    AnswerTypeBeautify, // Using JSON type for code formatting
+			// Using JSON type for code formatting
+			Type:    AnswerTypeBeautify,
 			Query:   query,
 			Title:   "Code Beautifier",
 			Content: fmt.Sprintf("Error: %v", err),
@@ -209,7 +210,8 @@ func beautifyCodeWithConfig(code, lang string, config *BeautifyConfig) (string, 
 	case "html":
 		return beautifyHTML(code, indent)
 	case "xml":
-		return beautifyHTML(code, indent) // Reuse HTML beautifier
+		// Reuse HTML beautifier
+		return beautifyHTML(code, indent)
 	case "sql":
 		return beautifySQLCode(code, indent)
 	default:

@@ -19,9 +19,11 @@ import (
 // AuthManager handles admin authentication
 // Per AI.md PART 17: Admin sessions stored in admin_sessions table (server.db)
 type AuthManager struct {
-	config   *config.Config
-	db       *database.DB             // Database for session persistence (server.db)
-	sessions map[string]*AdminSession // Fallback in-memory (only if db is nil)
+	config *config.Config
+	// Database for session persistence (server.db)
+	db *database.DB
+	// Fallback in-memory (only if db is nil)
+	sessions map[string]*AdminSession
 	tokens   map[string]*APIToken
 	mu       sync.RWMutex
 }
@@ -72,8 +74,10 @@ func (am *AuthManager) SetDatabase(db *database.DB) {
 
 // Argon2id parameters per AI.md specification (line 932)
 const (
-	argon2Time    = 3         // iterations
-	argon2Memory  = 64 * 1024 // 64 MB
+	// iterations
+	argon2Time = 3
+	// 64 MB
+	argon2Memory  = 64 * 1024
 	argon2Threads = 4
 	argon2KeyLen  = 32
 	argon2SaltLen = 16
@@ -223,7 +227,8 @@ func (am *AuthManager) GetSession(sessionID string) (*AdminSession, bool) {
 		var s AdminSession
 		err := row.Scan(&s.ID, &s.Username, &s.IP, &s.UserAgent, &s.CreatedAt, &s.ExpiresAt)
 		if err == nil {
-			s.UserID = s.Username // Map to existing field
+			// Map to existing field
+			s.UserID = s.Username
 			// Cache in memory for future lookups
 			am.mu.Lock()
 			am.sessions[sessionID] = &s
@@ -310,7 +315,8 @@ func (am *AuthManager) ValidateAPIToken(token string) (*APIToken, bool) {
 				Name:        "config",
 				Permissions: []string{"*"},
 				CreatedAt:   time.Now(),
-				ExpiresAt:   time.Now().AddDate(100, 0, 0), // Never expires
+				// Never expires
+				ExpiresAt: time.Now().AddDate(100, 0, 0),
 			}, true
 		}
 	}

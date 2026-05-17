@@ -238,8 +238,9 @@ func convert(value float64, from, to string) (float64, error) {
 		"hours":   3600,
 		"days":    86400,
 		"weeks":   604800,
-		"months":  2629746, // average
-		"years":   31556952,
+		// average
+		"months": 2629746,
+		"years":  31556952,
 	}
 
 	// Data (base: bytes)

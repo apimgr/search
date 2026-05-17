@@ -85,7 +85,8 @@ func (cs *ConfigSync) SyncToLocal() error {
 	defer cs.mu.Unlock()
 
 	if !cs.isCluster {
-		return nil // Not needed in standalone mode
+		// Not needed in standalone mode
+		return nil
 	}
 
 	return cs.syncToLocalConfig()
@@ -204,7 +205,8 @@ func (cs *ConfigSync) saveToYml() error {
 // Per AI.md PART 5 lines 5308-5310: Sync periodically (every 5 minutes)
 func (cs *ConfigSync) StartPeriodicSync(interval time.Duration) {
 	if !cs.isCluster {
-		return // Not needed in standalone mode
+		// Not needed in standalone mode
+		return
 	}
 
 	go func() {

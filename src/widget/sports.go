@@ -15,9 +15,10 @@ import (
 
 // SportsFetcher fetches sports scores from TheSportsDB API
 type SportsFetcher struct {
-	client     *http.Client
-	config     *config.SportsWidgetConfig
-	lastStatus GameStatus // Track last fetched game status for cache duration
+	client *http.Client
+	config *config.SportsWidgetConfig
+	// Track last fetched game status for cache duration
+	lastStatus GameStatus
 }
 
 // GameStatus represents the status of a game
@@ -33,33 +34,38 @@ const (
 
 // SportsData represents sports widget data
 type SportsData struct {
-	Games      []GameData `json:"games"`
-	League     string     `json:"league,omitempty"`
-	Team       string     `json:"team,omitempty"`
-	QueryType  string     `json:"query_type"` // "team", "league", or "live"
-	HasLive    bool       `json:"has_live"`   // Whether any games are currently live
-	LastUpdate string     `json:"last_update"`
+	Games  []GameData `json:"games"`
+	League string     `json:"league,omitempty"`
+	Team   string     `json:"team,omitempty"`
+	// "team", "league", or "live"
+	QueryType string `json:"query_type"`
+	// Whether any games are currently live
+	HasLive    bool   `json:"has_live"`
+	LastUpdate string `json:"last_update"`
 }
 
 // GameData represents data for a single game
 type GameData struct {
-	ID            string     `json:"id"`
-	League        string     `json:"league"`
-	LeagueID      string     `json:"league_id,omitempty"`
-	Season        string     `json:"season,omitempty"`
-	HomeTeam      string     `json:"home_team"`
-	HomeTeamID    string     `json:"home_team_id,omitempty"`
-	HomeTeamBadge string     `json:"home_team_badge,omitempty"`
-	AwayTeam      string     `json:"away_team"`
-	AwayTeamID    string     `json:"away_team_id,omitempty"`
-	AwayTeamBadge string     `json:"away_team_badge,omitempty"`
-	HomeScore     *int       `json:"home_score"` // Pointer to distinguish 0 from not played
-	AwayScore     *int       `json:"away_score"`
-	Status        GameStatus `json:"status"`
-	StatusDetail  string     `json:"status_detail,omitempty"` // e.g., "Q3 5:30", "Final", "7:00 PM ET"
-	StartTime     string     `json:"start_time,omitempty"`    // ISO 8601 format
-	Venue         string     `json:"venue,omitempty"`
-	Round         string     `json:"round,omitempty"`
+	ID            string `json:"id"`
+	League        string `json:"league"`
+	LeagueID      string `json:"league_id,omitempty"`
+	Season        string `json:"season,omitempty"`
+	HomeTeam      string `json:"home_team"`
+	HomeTeamID    string `json:"home_team_id,omitempty"`
+	HomeTeamBadge string `json:"home_team_badge,omitempty"`
+	AwayTeam      string `json:"away_team"`
+	AwayTeamID    string `json:"away_team_id,omitempty"`
+	AwayTeamBadge string `json:"away_team_badge,omitempty"`
+	// Pointer to distinguish 0 from not played
+	HomeScore *int       `json:"home_score"`
+	AwayScore *int       `json:"away_score"`
+	Status    GameStatus `json:"status"`
+	// e.g., "Q3 5:30", "Final", "7:00 PM ET"
+	StatusDetail string `json:"status_detail,omitempty"`
+	// ISO 8601 format
+	StartTime string `json:"start_time,omitempty"`
+	Venue     string `json:"venue,omitempty"`
+	Round     string `json:"round,omitempty"`
 	// Additional stats if available
 	HomeStats *TeamStats `json:"home_stats,omitempty"`
 	AwayStats *TeamStats `json:"away_stats,omitempty"`
@@ -69,7 +75,8 @@ type GameData struct {
 type TeamStats struct {
 	Shots       int `json:"shots,omitempty"`
 	ShotsOnGoal int `json:"shots_on_goal,omitempty"`
-	Possession  int `json:"possession,omitempty"` // Percentage
+	// Percentage
+	Possession  int `json:"possession,omitempty"`
 	Corners     int `json:"corners,omitempty"`
 	Fouls       int `json:"fouls,omitempty"`
 	YellowCards int `json:"yellow_cards,omitempty"`
@@ -104,7 +111,8 @@ type sportsDBEvent struct {
 	// Stats
 	IntHomeShots *string `json:"intHomeShots"`
 	IntAwayShots *string `json:"intAwayShots"`
-	StrProgress  string  `json:"strProgress"` // Live match progress
+	// Live match progress
+	StrProgress string `json:"strProgress"`
 }
 
 type sportsDBTeamsResponse struct {
@@ -281,8 +289,9 @@ func NewSportsFetcher(cfg *config.SportsWidgetConfig) *SportsFetcher {
 		client: &http.Client{
 			Timeout: 15 * time.Second,
 		},
-		config:     cfg,
-		lastStatus: GameStatusFinal, // Default to completed games cache duration
+		config: cfg,
+		// Default to completed games cache duration
+		lastStatus: GameStatusFinal,
 	}
 }
 

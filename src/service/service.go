@@ -212,7 +212,8 @@ func (sm *ServiceManager) Enable() error {
 			serviceDir := sm.getRunitServiceDir()
 			activeDir := sm.getRunitActiveDir()
 			linkPath := filepath.Join(activeDir, "search")
-			os.Remove(linkPath) // Remove if exists
+			// Remove if exists
+			os.Remove(linkPath)
 			return os.Symlink(serviceDir, linkPath)
 		}
 		if sm.hasOpenRC() {
@@ -262,7 +263,8 @@ func (sm *ServiceManager) Disable() error {
 // Service starts as root, binary drops to search user after port binding
 const systemdTemplate = `[Unit]
 Description=search service
-Documentation=https://apimgr.github.io/search
+//apimgr.github.io/search
+Documentation=https:
 After=network-online.target
 Wants=network-online.target
 
@@ -329,7 +331,8 @@ func (sm *ServiceManager) ensureSystemUser() error {
 
 	// Check if user already exists
 	if _, err := user.Lookup(userName); err == nil {
-		return nil // User exists
+		// User exists
+		return nil
 	}
 
 	// Create system group first

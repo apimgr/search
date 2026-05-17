@@ -21,19 +21,31 @@ import (
 // BackupMetadata contains information about a backup
 // Per AI.md PART 25: manifest.json format with required fields
 type BackupMetadata struct {
-	Version          string            `json:"version"`           // Manifest format version (e.g., "1.0.0")
-	CreatedAt        time.Time         `json:"created_at"`        // When backup was created
-	CreatedBy        string            `json:"created_by"`        // Who created the backup (per PART 25)
-	AppVersion       string            `json:"app_version"`       // Application version (per PART 25)
-	Contents         []string          `json:"contents"`          // List of files/directories in backup
-	Checksums        map[string]string `json:"checksums"`         // SHA256 checksums per file
-	Checksum         string            `json:"checksum"`          // Overall archive checksum (per PART 25)
-	Encrypted        bool              `json:"encrypted"`         // Per AI.md PART 25
-	EncryptionMethod string            `json:"encryption_method"` // "AES-256-GCM" if encrypted
+	// Manifest format version (e.g., "1.0.0")
+	Version string `json:"version"`
+	// When backup was created
+	CreatedAt time.Time `json:"created_at"`
+	// Who created the backup (per PART 25)
+	CreatedBy string `json:"created_by"`
+	// Application version (per PART 25)
+	AppVersion string `json:"app_version"`
+	// List of files/directories in backup
+	Contents []string `json:"contents"`
+	// SHA256 checksums per file
+	Checksums map[string]string `json:"checksums"`
+	// Overall archive checksum (per PART 25)
+	Checksum string `json:"checksum"`
+	// Per AI.md PART 25
+	Encrypted bool `json:"encrypted"`
+	// "AES-256-GCM" if encrypted
+	EncryptionMethod string `json:"encryption_method"`
 	// Legacy fields for backwards compatibility
-	ServerTitle string   `json:"server_title,omitempty"` // Server title (optional)
-	Size        int64    `json:"size,omitempty"`         // Total size in bytes (optional)
-	Files       []string `json:"files,omitempty"`        // Deprecated: use Contents
+	// Server title (optional)
+	ServerTitle string `json:"server_title,omitempty"`
+	// Total size in bytes (optional)
+	Size int64 `json:"size,omitempty"`
+	// Deprecated: use Contents
+	Files []string `json:"files,omitempty"`
 }
 
 // Manager handles backup and restore operations
@@ -41,8 +53,10 @@ type Manager struct {
 	backupDir string
 	configDir string
 	dataDir   string
-	password  string // Backup encryption password (never stored on disk)
-	createdBy string // Username of who created the backup (per PART 25)
+	// Backup encryption password (never stored on disk)
+	password string
+	// Username of who created the backup (per PART 25)
+	createdBy string
 }
 
 // SetCreatedBy sets the username for backup attribution (per AI.md PART 25)
@@ -134,7 +148,8 @@ func (m *Manager) Create(filename string) (string, error) {
 	// Determine created_by (per AI.md PART 25)
 	createdBy := m.createdBy
 	if createdBy == "" {
-		createdBy = "system" // Default for CLI/scheduled backups
+		// Default for CLI/scheduled backups
+		createdBy = "system"
 	}
 
 	// Calculate overall checksum from individual file checksums (per AI.md PART 25)
@@ -143,16 +158,24 @@ func (m *Manager) Create(filename string) (string, error) {
 
 	// Create metadata per AI.md PART 25: manifest.json format
 	metadata := BackupMetadata{
-		Version:     "1.0.0", // Manifest format version
-		CreatedAt:   time.Now(),
-		CreatedBy:   createdBy,      // Per PART 25: who created the backup
-		AppVersion:  config.Version, // Per PART 25: application version
-		Contents:    files,          // Per PART 25: list of contents
-		Checksums:   checksums,
-		Checksum:    "sha256:" + overallChecksum, // Per PART 25: overall checksum
-		ServerTitle: serverTitle,                 // Legacy/optional
-		Size:        totalSize,                   // Legacy/optional
-		Files:       files,                       // Legacy/deprecated: use Contents
+		// Manifest format version
+		Version:   "1.0.0",
+		CreatedAt: time.Now(),
+		// Per PART 25: who created the backup
+		CreatedBy: createdBy,
+		// Per PART 25: application version
+		AppVersion: config.Version,
+		// Per PART 25: list of contents
+		Contents:  files,
+		Checksums: checksums,
+		// Per PART 25: overall checksum
+		Checksum: "sha256:" + overallChecksum,
+		// Legacy/optional
+		ServerTitle: serverTitle,
+		// Legacy/optional
+		Size: totalSize,
+		// Legacy/deprecated: use Contents
+		Files: files,
 	}
 
 	// Add metadata to archive as manifest.json
@@ -314,7 +337,8 @@ func (m *Manager) Restore(backupPath string) error {
 			relPath := strings.TrimPrefix(header.Name, "data/")
 			targetPath = filepath.Join(m.dataDir, relPath)
 		} else {
-			continue // Skip unknown paths
+			// Skip unknown paths
+			continue
 		}
 
 		// Create parent directories
@@ -495,22 +519,32 @@ func (m *Manager) ScheduledBackup(keepCount int) error {
 // RetentionPolicy defines backup retention rules per AI.md PART 22
 // Per AI.md PART 22: Retention policies (count, day, week, month, year)
 type RetentionPolicy struct {
-	Count int `json:"count" yaml:"count"` // Number of backups to keep
-	Day   int `json:"day" yaml:"day"`     // Days to keep daily backups
-	Week  int `json:"week" yaml:"week"`   // Weeks to keep weekly backups
-	Month int `json:"month" yaml:"month"` // Months to keep monthly backups
-	Year  int `json:"year" yaml:"year"`   // Years to keep yearly backups
+	// Number of backups to keep
+	Count int `json:"count" yaml:"count"`
+	// Days to keep daily backups
+	Day int `json:"day" yaml:"day"`
+	// Weeks to keep weekly backups
+	Week int `json:"week" yaml:"week"`
+	// Months to keep monthly backups
+	Month int `json:"month" yaml:"month"`
+	// Years to keep yearly backups
+	Year int `json:"year" yaml:"year"`
 }
 
 // DefaultRetentionPolicy returns the default retention policy
 // Per AI.md PART 22: Reasonable defaults
 func DefaultRetentionPolicy() RetentionPolicy {
 	return RetentionPolicy{
-		Count: 10, // Keep at least 10 backups
-		Day:   7,  // Keep 7 days of daily backups
-		Week:  4,  // Keep 4 weeks of weekly backups
-		Month: 12, // Keep 12 months of monthly backups
-		Year:  3,  // Keep 3 years of yearly backups
+		// Keep at least 10 backups
+		Count: 10,
+		// Keep 7 days of daily backups
+		Day: 7,
+		// Keep 4 weeks of weekly backups
+		Week: 4,
+		// Keep 12 months of monthly backups
+		Month: 12,
+		// Keep 3 years of yearly backups
+		Year: 3,
 	}
 }
 
@@ -523,7 +557,8 @@ func (m *Manager) ApplyRetention(policy RetentionPolicy) error {
 	}
 
 	if len(backups) <= policy.Count {
-		return nil // Nothing to delete
+		// Nothing to delete
+		return nil
 	}
 
 	now := time.Now()
@@ -672,13 +707,14 @@ func IsEncrypted(backupPath string) bool {
 // VerificationResult contains the results of backup verification
 // Per AI.md PART 22: Backup verification is NON-NEGOTIABLE
 type VerificationResult struct {
-	FileExists    bool     `json:"file_exists"`
-	SizeValid     bool     `json:"size_valid"`
-	ChecksumValid bool     `json:"checksum_valid"`
-	ManifestValid bool     `json:"manifest_valid"`
-	DecryptValid  bool     `json:"decrypt_valid"` // Only for encrypted backups
-	AllPassed     bool     `json:"all_passed"`
-	Errors        []string `json:"errors,omitempty"`
+	FileExists    bool `json:"file_exists"`
+	SizeValid     bool `json:"size_valid"`
+	ChecksumValid bool `json:"checksum_valid"`
+	ManifestValid bool `json:"manifest_valid"`
+	// Only for encrypted backups
+	DecryptValid bool     `json:"decrypt_valid"`
+	AllPassed    bool     `json:"all_passed"`
+	Errors       []string `json:"errors,omitempty"`
 }
 
 // VerifyBackup verifies backup integrity immediately after creation
@@ -690,7 +726,8 @@ type VerificationResult struct {
 // - Decrypt test (if encrypted)
 func (m *Manager) VerifyBackup(backupPath string) (*VerificationResult, error) {
 	result := &VerificationResult{
-		DecryptValid: true, // Default true for non-encrypted
+		// Default true for non-encrypted
+		DecryptValid: true,
 	}
 
 	// Check 1: File exists

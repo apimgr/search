@@ -87,7 +87,8 @@ func DecryptBackup(encrypted []byte, password string) ([]byte, error) {
 	}
 
 	// Check minimum size (salt + nonce + at least some data)
-	minSize := argon2SaltLen + 12 // salt + GCM nonce
+	// salt + GCM nonce
+	minSize := argon2SaltLen + 12
 	if len(encrypted) < minSize {
 		return nil, fmt.Errorf("invalid encrypted data: too short")
 	}

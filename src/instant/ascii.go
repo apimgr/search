@@ -84,7 +84,8 @@ func (h *ASCIIHandler) generateASCII(text string) string {
 		return ""
 	}
 
-	height := 6 // Each character is 6 lines tall
+	// Each character is 6 lines tall
+	height := 6
 	lines := make([]strings.Builder, height)
 
 	for _, char := range text {
@@ -98,7 +99,8 @@ func (h *ASCIIHandler) generateASCII(text string) string {
 			if i < len(charArt) {
 				lines[i].WriteString(charArt[i])
 			}
-			lines[i].WriteString(" ") // Space between characters
+			// Space between characters
+			lines[i].WriteString(" ")
 		}
 	}
 

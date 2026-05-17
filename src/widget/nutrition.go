@@ -53,7 +53,8 @@ type NutrientInfo struct {
 	Name   string  `json:"name"`
 	Amount float64 `json:"amount"`
 	Unit   string  `json:"unit"`
-	DV     float64 `json:"dv,omitempty"` // Daily value percentage
+	// Daily value percentage
+	DV float64 `json:"dv,omitempty"`
 }
 
 // NewNutritionFetcher creates a new nutrition fetcher
@@ -126,7 +127,8 @@ func IsNutritionQuery(query string) bool {
 func (f *NutritionFetcher) Fetch(ctx context.Context, params map[string]string) (*WidgetData, error) {
 	query := params["query"]
 	if query == "" {
-		query = params["food"] // Alternative param name
+		// Alternative param name
+		query = params["food"]
 	}
 	if query == "" {
 		return &WidgetData{
@@ -200,7 +202,8 @@ func (f *NutritionFetcher) fetchFromUSDA(ctx context.Context, foodItem string) (
 	}
 
 	if result.TotalHits == 0 || len(result.Foods) == 0 {
-		return nil, nil // No results, try fallback
+		// No results, try fallback
+		return nil, nil
 	}
 
 	food := result.Foods[0]
@@ -215,45 +218,59 @@ func (f *NutritionFetcher) fetchFromUSDA(ctx context.Context, foodItem string) (
 	// Extract nutrients
 	for _, n := range food.FoodNutrients {
 		switch n.NutrientID {
-		case 1008: // Energy (kcal)
+		// Energy (kcal)
+		case 1008:
 			data.Calories = n.Value
-		case 1003: // Protein
+		// Protein
+		case 1003:
 			data.Macros.Protein = n.Value
-		case 1005: // Carbohydrates
+		// Carbohydrates
+		case 1005:
 			data.Macros.Carbohydrates = n.Value
-		case 1004: // Total lipid (fat)
+		// Total lipid (fat)
+		case 1004:
 			data.Macros.Fat = n.Value
-		case 1079: // Fiber
+		// Fiber
+		case 1079:
 			data.Macros.Fiber = n.Value
-		case 2000: // Sugars
+		// Sugars
+		case 2000:
 			data.Macros.Sugar = n.Value
-		case 1258: // Saturated fat
+		// Saturated fat
+		case 1258:
 			data.Macros.SaturatedFat = n.Value
-		case 1087: // Calcium
+		// Calcium
+		case 1087:
 			data.Micros = append(data.Micros, NutrientInfo{
 				Name: "Calcium", Amount: n.Value, Unit: "mg",
 			})
-		case 1089: // Iron
+		// Iron
+		case 1089:
 			data.Micros = append(data.Micros, NutrientInfo{
 				Name: "Iron", Amount: n.Value, Unit: "mg",
 			})
-		case 1162: // Vitamin C
+		// Vitamin C
+		case 1162:
 			data.Micros = append(data.Micros, NutrientInfo{
 				Name: "Vitamin C", Amount: n.Value, Unit: "mg",
 			})
-		case 1106: // Vitamin A
+		// Vitamin A
+		case 1106:
 			data.Micros = append(data.Micros, NutrientInfo{
 				Name: "Vitamin A", Amount: n.Value, Unit: "mcg",
 			})
-		case 1093: // Sodium
+		// Sodium
+		case 1093:
 			data.Micros = append(data.Micros, NutrientInfo{
 				Name: "Sodium", Amount: n.Value, Unit: "mg",
 			})
-		case 1092: // Potassium
+		// Potassium
+		case 1092:
 			data.Micros = append(data.Micros, NutrientInfo{
 				Name: "Potassium", Amount: n.Value, Unit: "mg",
 			})
-		case 1253: // Cholesterol
+		// Cholesterol
+		case 1253:
 			data.Micros = append(data.Micros, NutrientInfo{
 				Name: "Cholesterol", Amount: n.Value, Unit: "mg",
 			})
@@ -356,7 +373,8 @@ func (f *NutritionFetcher) fetchFromOpenFoodFacts(ctx context.Context, foodItem 
 				EnergyKcalServing float64 `json:"energy-kcal_serving"`
 			} `json:"nutriments"`
 		} `json:"products"`
-		Count json.Number `json:"count"` // Can be string or int from API
+		// Can be string or int from API
+		Count json.Number `json:"count"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {

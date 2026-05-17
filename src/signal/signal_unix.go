@@ -22,11 +22,16 @@ var findProcessFunc = os.FindProcess
 func setupSignals(cfg ShutdownConfig) {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan,
-		syscall.SIGTERM, // 15 - kill (default), graceful shutdown
-		syscall.SIGINT,  // 2 - Ctrl+C, graceful shutdown
-		syscall.SIGQUIT, // 3 - Ctrl+\, graceful shutdown
-		syscall.SIGUSR1, // 10 - Reopen logs (log rotation)
-		syscall.SIGUSR2, // 12 - Status dump to log
+		// 15 - kill (default), graceful shutdown
+		syscall.SIGTERM,
+		// 2 - Ctrl+C, graceful shutdown
+		syscall.SIGINT,
+		// 3 - Ctrl+\, graceful shutdown
+		syscall.SIGQUIT,
+		// 10 - Reopen logs (log rotation)
+		syscall.SIGUSR1,
+		// 12 - Status dump to log
+		syscall.SIGUSR2,
 	)
 
 	// Handle SIGRTMIN+3 (signal 37) - Docker STOPSIGNAL
@@ -86,7 +91,8 @@ func stopChildProcesses(pids []int, timeout time.Duration) {
 			// Signal 0 checks if process exists without sending anything
 			if err := process.Signal(syscall.Signal(0)); err != nil {
 				log.Printf("Process %d has exited", pid)
-				break // Process exited
+				// Process exited
+				break
 			}
 			time.Sleep(100 * time.Millisecond)
 		}

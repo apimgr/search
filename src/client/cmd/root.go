@@ -22,17 +22,20 @@ import (
 var (
 	// Build info - set via -ldflags at build time
 	// Per AI.md PART 26: LDFLAGS must include Version, CommitID, BuildDate, OfficialSite
-	ProjectName  = "search"
-	Version      = "dev"
-	CommitID     = "unknown"
-	BuildDate    = "unknown"
-	OfficialSite = "https://scour.li" // Default server URL
+	ProjectName = "search"
+	Version     = "dev"
+	CommitID    = "unknown"
+	BuildDate   = "unknown"
+	// Default server URL
+	OfficialSite = "https://scour.li"
 
-	cfgFile   string
-	server    string
-	token     string
-	tokenFile string // Per AI.md PART 36: --token-file flag
-	userCtx   string // Per AI.md PART 36: --user flag for user/org context
+	cfgFile string
+	server  string
+	token   string
+	// Per AI.md PART 36: --token-file flag
+	tokenFile string
+	// Per AI.md PART 36: --user flag for user/org context
+	userCtx   string
 	output    string
 	noColor   bool
 	timeout   int
@@ -129,7 +132,8 @@ func initClient() error {
 		return fmt.Errorf(`no server configured
 
 To configure a server, run:
-  %s --server https://your-server.example.com list
+  //your-server.example.com list
+  %s --server https:
 
 This will save the server address for future commands.
 Or edit ~/.config/apimgr/%s/cli.yml directly.`, getBinaryName(), ProjectName)
@@ -275,7 +279,8 @@ func getToken() string {
 		return strings.TrimSpace(string(data))
 	}
 
-	return "" // No token (anonymous access if allowed)
+	// No token (anonymous access if allowed)
+	return ""
 }
 
 func Execute() error {

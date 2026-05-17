@@ -13,8 +13,10 @@ import (
 // HTMLEntityHandler handles HTML entity encoding/decoding
 type HTMLEntityHandler struct {
 	patterns []*regexp.Regexp
-	entities map[string]string // name -> character
-	reverse  map[rune]string   // character -> name
+	// name -> character
+	entities map[string]string
+	// character -> name
+	reverse map[rune]string
 }
 
 // NewHTMLEntityHandler creates a new HTML entity handler

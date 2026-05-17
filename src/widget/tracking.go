@@ -15,8 +15,9 @@ import (
 // TrackingFetcher fetches package tracking info
 // Implements the Fetcher interface for the widget system
 type TrackingFetcher struct {
-	httpClient  *http.Client
-	apiKey      string // Optional: API key for 17track or similar service
+	httpClient *http.Client
+	// Optional: API key for 17track or similar service
+	apiKey      string
 	rateLimiter *trackingRateLimiter
 }
 
@@ -54,7 +55,8 @@ type CarrierInfo struct {
 	Code     string
 	Pattern  *regexp.Regexp
 	TrackURL string
-	Priority int // Higher priority patterns are checked first
+	// Higher priority patterns are checked first
+	Priority int
 }
 
 // trackingRateLimiter implements simple rate limiting for API calls
@@ -152,7 +154,8 @@ var carrierPatterns = []CarrierInfo{
 		Code:     "ups",
 		Pattern:  regexp.MustCompile(`^[0-9]{9,12}$`),
 		TrackURL: "https://www.ups.com/track?tracknum=",
-		Priority: 50, // Lower priority to avoid conflicts
+		// Lower priority to avoid conflicts
+		Priority: 50,
 	},
 	// FedEx: 12 digits (most common)
 	{
@@ -294,10 +297,14 @@ var carrierPatterns = []CarrierInfo{
 
 // TrackingConfig holds configuration for the tracking fetcher
 type TrackingConfig struct {
-	APIKey          string        // API key for 17track or similar
-	APIEnabled      bool          // Whether to use API for live tracking
-	RateLimitMax    int           // Max requests per window (default: 10)
-	RateLimitWindow time.Duration // Rate limit window (default: 1 minute)
+	// API key for 17track or similar
+	APIKey string
+	// Whether to use API for live tracking
+	APIEnabled bool
+	// Max requests per window (default: 10)
+	RateLimitMax int
+	// Rate limit window (default: 1 minute)
+	RateLimitWindow time.Duration
 }
 
 // NewTrackingFetcher creates a basic tracking fetcher without API support
@@ -315,11 +322,13 @@ func NewTrackingFetcherWithConfig(cfg *TrackingConfig) *TrackingFetcher {
 		apiKey = cfg.APIKey
 		maxReq := cfg.RateLimitMax
 		if maxReq <= 0 {
-			maxReq = 10 // Default: 10 requests per window
+			// Default: 10 requests per window
+			maxReq = 10
 		}
 		window := cfg.RateLimitWindow
 		if window <= 0 {
-			window = time.Minute // Default: 1 minute window
+			// Default: 1 minute window
+			window = time.Minute
 		}
 		rateLimiter = newTrackingRateLimiter(maxReq, window)
 	} else {
@@ -630,9 +639,11 @@ func GetSupportedCarriers() []struct {
 // Returns longer duration (15 min) for carrier-detection-only mode
 func (f *TrackingFetcher) CacheDuration() time.Duration {
 	if f.apiKey != "" {
-		return 5 * time.Minute // Shorter TTL when API is enabled for fresher data
+		// Shorter TTL when API is enabled for fresher data
+		return 5 * time.Minute
 	}
-	return 15 * time.Minute // Longer TTL for carrier detection only
+	// Longer TTL for carrier detection only
+	return 15 * time.Minute
 }
 
 // WidgetType returns the widget type

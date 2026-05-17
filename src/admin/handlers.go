@@ -43,18 +43,20 @@ type ReloadCallback func() error
 
 // Handler wraps admin HTTP handlers
 type Handler struct {
-	config         *config.Config
-	auth           *AuthManager
-	service        *AdminService
-	cluster        ClusterManager
-	tor            TorManager
-	scheduler      SchedulerManager // Per AI.md PART 19: Admin panel scheduler integration
+	config  *config.Config
+	auth    *AuthManager
+	service *AdminService
+	cluster ClusterManager
+	tor     TorManager
+	// Per AI.md PART 19: Admin panel scheduler integration
+	scheduler      SchedulerManager
 	renderer       Renderer
 	startTime      time.Time
 	registry       EngineRegistry
 	reloadCallback ReloadCallback
 	configPath     string
-	configSync     *config.ConfigSync // Per AI.md PART 5: Cluster config sync (NON-NEGOTIABLE)
+	// Per AI.md PART 5: Cluster config sync (NON-NEGOTIABLE)
+	configSync *config.ConfigSync
 }
 
 // TorManager interface for Tor operations per AI.md PART 32
@@ -286,9 +288,12 @@ func (h *Handler) AuthManager() *AuthManager {
 // - /{adminpath}/server/* = ALL server management
 // - /api/v1/{adminpath}/* = Admin API endpoints
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
-	p := config.GetAdminPath() // e.g. "admin" (configurable per spec)
-	ap := "/" + p              // e.g. "/admin"
-	api := "/api/v1/" + p      // e.g. "/api/v1/admin"
+	// e.g. "admin" (configurable per spec)
+	p := config.GetAdminPath()
+	// e.g. "/admin"
+	ap := "/" + p
+	// e.g. "/api/v1/admin"
+	api := "/api/v1/" + p
 
 	// Login/logout always at /{admin_path}/login and /{admin_path}/logout.
 	// When admin path is not "admin", also register legacy /admin/login for compatibility.
@@ -556,14 +561,18 @@ func (h *Handler) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		Config:    h.config,
 		AdminPath: config.GetAdminPath(),
 		Stats: &DashboardStats{
-			Status:         status,
-			Uptime:         formatDuration(time.Since(h.startTime)),
-			Version:        config.Version,
-			Requests24h:    0, // Metrics collected per-request by server middleware
-			Errors24h:      0, // Metrics collected per-request by server middleware
-			CPUPercent:     0, // CPU usage requires platform-specific code
-			MemPercent:     memPercent,
-			DiskPercent:    0, // Disk usage requires platform-specific code
+			Status:  status,
+			Uptime:  formatDuration(time.Since(h.startTime)),
+			Version: config.Version,
+			// Metrics collected per-request by server middleware
+			Requests24h: 0,
+			// Metrics collected per-request by server middleware
+			Errors24h: 0,
+			// CPU usage requires platform-specific code
+			CPUPercent: 0,
+			MemPercent: memPercent,
+			// Disk usage requires platform-specific code
+			DiskPercent:    0,
 			MemAlloc:       formatBytes(m.Alloc),
 			MemTotal:       formatBytes(m.TotalAlloc),
 			GoVersion:      runtime.Version(),
@@ -833,7 +842,8 @@ func (h *Handler) processTokenCreate(w http.ResponseWriter, r *http.Request) {
 
 	name := strings.TrimSpace(r.FormValue("name"))
 	description := strings.TrimSpace(r.FormValue("description"))
-	validDays := 365 // Default to 1 year
+	// Default to 1 year
+	validDays := 365
 
 	if name == "" {
 		http.Redirect(w, r, h.ap()+"/tokens?error=Name+is+required", http.StatusSeeOther)
@@ -1111,28 +1121,32 @@ func (h *Handler) localizedHTTPError(w http.ResponseWriter, r *http.Request, mes
 
 // AdminPageData holds data for admin templates
 type AdminPageData struct {
-	Title            string
-	Description      string
-	Page             string
-	Config           *config.Config
-	Stats            *DashboardStats
-	Tokens           []*APIToken
-	Error            string
-	Success          string
-	NewToken         string
-	SchedulerTasks   map[string]*SchedulerTaskInfo
-	SchedulerRunning bool // Per AI.md PART 19: Scheduler is ALWAYS RUNNING
+	Title          string
+	Description    string
+	Page           string
+	Config         *config.Config
+	Stats          *DashboardStats
+	Tokens         []*APIToken
+	Error          string
+	Success        string
+	NewToken       string
+	SchedulerTasks map[string]*SchedulerTaskInfo
+	// Per AI.md PART 19: Scheduler is ALWAYS RUNNING
+	SchedulerRunning bool
 	Extra            map[string]interface{}
-	CSRFToken        string // Per AI.md PART 20: CSRF protection on all forms
-	AdminPath        string // Per AI.md PART 17: Configurable admin path (default: "admin")
-	Lang             string
-	Dir              string
+	// Per AI.md PART 20: CSRF protection on all forms
+	CSRFToken string
+	// Per AI.md PART 17: Configurable admin path (default: "admin")
+	AdminPath string
+	Lang      string
+	Dir       string
 }
 
 // DashboardStats holds dashboard statistics
 type DashboardStats struct {
 	// Status
-	Status  string // Online, Maintenance, Error
+	// Online, Maintenance, Error
+	Status  string
 	Uptime  string
 	Version string
 
@@ -1172,7 +1186,8 @@ type DashboardStats struct {
 type ActivityItem struct {
 	Time    string
 	Message string
-	Type    string // info, success, warning, error
+	// info, success, warning, error
+	Type string
 }
 
 // ScheduledTask represents an upcoming scheduled task
@@ -1184,7 +1199,8 @@ type ScheduledTask struct {
 // AlertItem represents an alert or warning
 type AlertItem struct {
 	Message string
-	Type    string // info, warning, error
+	// info, warning, error
+	Type string
 }
 
 // Helper functions
@@ -2431,7 +2447,8 @@ func (h *Handler) apiScheduler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		h.jsonResponse(w, map[string]interface{}{
-			"always_running":  true, // Per AI.md PART 19
+			// Per AI.md PART 19
+			"always_running":  true,
 			"running":         h.scheduler.IsRunning(),
 			"timezone":        h.config.Server.Scheduler.Timezone,
 			"catch_up_window": h.config.Server.Scheduler.CatchUpWindow,
@@ -2446,8 +2463,9 @@ func (h *Handler) apiScheduler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		var req struct {
-			TaskID  string `json:"task_id"`
-			Action  string `json:"action"` // enable, disable, run_now
+			TaskID string `json:"task_id"`
+			// enable, disable, run_now
+			Action  string `json:"action"`
 			Enabled bool   `json:"enabled"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -2631,14 +2649,16 @@ func (h *Handler) apiUpdateCheck(w http.ResponseWriter, r *http.Request) {
 	// Return current version info
 	// Full update checking would require checking a release API
 	h.jsonResponse(w, map[string]interface{}{
-		"current_version":  config.Version,
-		"build_date":       config.BuildDate,
-		"go_version":       runtime.Version(),
-		"commit_id":        config.CommitID,
-		"update_available": false,          // Would check against releases
-		"latest_version":   config.Version, // Would fetch from releases
-		"release_notes":    "",
-		"download_url":     "",
+		"current_version": config.Version,
+		"build_date":      config.BuildDate,
+		"go_version":      runtime.Version(),
+		"commit_id":       config.CommitID,
+		// Would check against releases
+		"update_available": false,
+		// Would fetch from releases
+		"latest_version": config.Version,
+		"release_notes":  "",
+		"download_url":   "",
 	}, http.StatusOK)
 }
 
@@ -2746,7 +2766,8 @@ func (h *Handler) processSetup(w http.ResponseWriter, r *http.Request, requireTo
 
 	username := strings.TrimSpace(r.FormValue("username"))
 	email := strings.TrimSpace(r.FormValue("email"))
-	password := r.FormValue("password") // Don't trim passwords
+	// Don't trim passwords
+	password := r.FormValue("password")
 	confirmPassword := r.FormValue("confirm_password")
 
 	// Validate input
@@ -2957,7 +2978,8 @@ func (h *Handler) processInviteAccept(w http.ResponseWriter, r *http.Request, to
 
 	username := strings.TrimSpace(r.FormValue("username"))
 	email := strings.TrimSpace(r.FormValue("email"))
-	password := r.FormValue("password") // Don't trim passwords
+	// Don't trim passwords
+	password := r.FormValue("password")
 	confirmPassword := r.FormValue("confirm_password")
 
 	// Validate input
@@ -3026,7 +3048,8 @@ func (h *Handler) apiAdmins(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		// For API, get token-based admin
 		// This is simplified - in production you'd have an admin context
-		admins, err := h.service.GetAdminsForAdmin(ctx, 1) // Assumes primary admin ID 1
+		// Assumes primary admin ID 1
+		admins, err := h.service.GetAdminsForAdmin(ctx, 1)
 		if err != nil {
 			h.jsonError(w, r, "Failed to get admins", http.StatusInternalServerError)
 			return
@@ -3094,7 +3117,8 @@ func (h *Handler) apiAdminInvite(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create invite (7 day expiry)
-	token, err := h.service.CreateInvite(ctx, 1, req.Username, 7*24*time.Hour) // Assumes primary admin
+	// Assumes primary admin
+	token, err := h.service.CreateInvite(ctx, 1, req.Username, 7*24*time.Hour)
 	if err != nil {
 		h.jsonError(w, r, "Failed to create invite", http.StatusInternalServerError)
 		return
@@ -3513,7 +3537,8 @@ func (h *Handler) apiTorKeysImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Read private key from request body
-	privateKey, err := io.ReadAll(io.LimitReader(r.Body, 1024*10)) // Max 10KB
+	// Max 10KB
+	privateKey, err := io.ReadAll(io.LimitReader(r.Body, 1024*10))
 	if err != nil {
 		h.jsonError(w, r, "Failed to read request body", http.StatusBadRequest)
 		return

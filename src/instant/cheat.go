@@ -144,7 +144,8 @@ func (h *CheatHandler) formatCheatsheet(content, topic string) string {
 	// Track if we're in a code block
 	inCode := false
 	codeLines := []string{}
-	maxLines := 50 // Limit output
+	// Limit output
+	maxLines := 50
 
 	lineCount := 0
 	for _, line := range lines {

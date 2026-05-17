@@ -25,7 +25,8 @@ type WolframAlpha struct {
 func NewWolframAlpha() *WolframAlpha {
 	config := model.NewEngineConfig("wolfram")
 	config.DisplayName = "Wolfram Alpha"
-	config.Priority = 75 // High priority for computational queries
+	// High priority for computational queries
+	config.Priority = 75
 	config.Categories = []string{"general", "science"}
 	config.SupportsTor = true
 
@@ -82,7 +83,8 @@ func (e *WolframAlpha) searchWeb(ctx context.Context, query *model.Query) ([]mod
 func (e *WolframAlpha) parseWolframHTML(resp *http.Response, query *model.Query) ([]model.Result, error) {
 	results := make([]model.Result, 0)
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 2*1024*1024)) // 2MB max
+	// 2MB max
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 2*1024*1024))
 	if err != nil {
 		return nil, err
 	}

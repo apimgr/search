@@ -31,7 +31,8 @@ type cachedSearchResults struct {
 // If backend is nil a no-op cache is used (caching effectively disabled).
 func NewResultCache(backend cache.Cache, ttl time.Duration) *ResultCache {
 	if ttl <= 0 {
-		ttl = 5 * time.Minute // PART 9: page cache default
+		// PART 9: page cache default
+		ttl = 5 * time.Minute
 	}
 	return &ResultCache{
 		backend:  backend,

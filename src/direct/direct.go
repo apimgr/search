@@ -87,31 +87,50 @@ const (
 // CacheDurations defines how long to cache each answer type
 // Per IDEA.md Direct Answer Caching rules
 var CacheDurations = map[AnswerType]time.Duration{
-	AnswerTypeTLDR:      7 * 24 * time.Hour,  // 7 days (updated weekly)
-	AnswerTypeMan:       30 * 24 * time.Hour, // 30 days
-	AnswerTypeCheat:     7 * 24 * time.Hour,  // 7 days
-	AnswerTypeDNS:       1 * time.Hour,       // 1 hour
-	AnswerTypeWhois:     1 * time.Hour,       // 1 hour
-	AnswerTypeResolve:   1 * time.Hour,       // 1 hour
-	AnswerTypeCert:      6 * time.Hour,       // 6 hours
-	AnswerTypeHeaders:   1 * time.Hour,       // 1 hour
-	AnswerTypeASN:       24 * time.Hour,      // 24 hours
-	AnswerTypeSubnet:    0,                   // No cache (static calculation)
-	AnswerTypeWiki:      24 * time.Hour,      // 24 hours
-	AnswerTypeDict:      24 * time.Hour,      // 24 hours
-	AnswerTypeThesaurus: 24 * time.Hour,      // 24 hours
-	AnswerTypePkg:       6 * time.Hour,       // 6 hours
-	AnswerTypeCVE:       24 * time.Hour,      // 24 hours
-	AnswerTypeRFC:       30 * 24 * time.Hour, // 30 days (static)
-	AnswerTypeDirectory: 1 * time.Hour,       // 1 hour
-	AnswerTypeCache:     0,                   // No cache (always fetch fresh)
+	// 7 days (updated weekly)
+	AnswerTypeTLDR: 7 * 24 * time.Hour,
+	// 30 days
+	AnswerTypeMan: 30 * 24 * time.Hour,
+	// 7 days
+	AnswerTypeCheat: 7 * 24 * time.Hour,
+	// 1 hour
+	AnswerTypeDNS: 1 * time.Hour,
+	// 1 hour
+	AnswerTypeWhois: 1 * time.Hour,
+	// 1 hour
+	AnswerTypeResolve: 1 * time.Hour,
+	// 6 hours
+	AnswerTypeCert: 6 * time.Hour,
+	// 1 hour
+	AnswerTypeHeaders: 1 * time.Hour,
+	// 24 hours
+	AnswerTypeASN: 24 * time.Hour,
+	// No cache (static calculation)
+	AnswerTypeSubnet: 0,
+	// 24 hours
+	AnswerTypeWiki: 24 * time.Hour,
+	// 24 hours
+	AnswerTypeDict: 24 * time.Hour,
+	// 24 hours
+	AnswerTypeThesaurus: 24 * time.Hour,
+	// 6 hours
+	AnswerTypePkg: 6 * time.Hour,
+	// 24 hours
+	AnswerTypeCVE: 24 * time.Hour,
+	// 30 days (static)
+	AnswerTypeRFC: 30 * 24 * time.Hour,
+	// 1 hour
+	AnswerTypeDirectory: 1 * time.Hour,
+	// No cache (always fetch fresh)
+	AnswerTypeCache: 0,
 	// Encoding/formatting - no cache needed (static transformations)
 	AnswerTypeHTML:    0,
 	AnswerTypeUnicode: 0,
-	AnswerTypeEmoji:   24 * time.Hour, // 24 hours (emoji database)
-	AnswerTypeEscape:  0,
-	AnswerTypeJSON:    0,
-	AnswerTypeYAML:    0,
+	// 24 hours (emoji database)
+	AnswerTypeEmoji:  24 * time.Hour,
+	AnswerTypeEscape: 0,
+	AnswerTypeJSON:   0,
+	AnswerTypeYAML:   0,
 	// Utilities - mostly no cache (static)
 	AnswerTypeHTTP:      0,
 	AnswerTypePort:      0,
@@ -137,10 +156,14 @@ var CacheDurations = map[AnswerType]time.Duration{
 	// Reference
 	AnswerTypeUserAgent: 0,
 	AnswerTypeMIME:      0,
-	AnswerTypeLicense:   30 * 24 * time.Hour, // 30 days
-	AnswerTypeCountry:   30 * 24 * time.Hour, // 30 days
-	AnswerTypeSlang:     1 * time.Hour,       // 1 hour (votes/definitions change)
-	AnswerTypeRules:     0,                   // No cache (static built-in)
+	// 30 days
+	AnswerTypeLicense: 30 * 24 * time.Hour,
+	// 30 days
+	AnswerTypeCountry: 30 * 24 * time.Hour,
+	// 1 hour (votes/definitions change)
+	AnswerTypeSlang: 1 * time.Hour,
+	// No cache (static built-in)
+	AnswerTypeRules: 0,
 	// Generators - no cache
 	AnswerTypeASCII: 0,
 	AnswerTypeQR:    0,

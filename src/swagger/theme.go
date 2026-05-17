@@ -7,7 +7,8 @@ func getSwaggerThemeCSS(theme string) string {
 	if theme == "light" {
 		return swaggerLightTheme
 	}
-	return swaggerDarkTheme // Default to dark
+	// Default to dark
+	return swaggerDarkTheme
 }
 
 // swaggerDarkTheme provides dark theme CSS for Swagger UI

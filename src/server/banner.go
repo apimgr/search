@@ -159,10 +159,12 @@ func printModeLine(info *BannerInfo, innerWidth int) {
 
 	if mode == "production" {
 		modeIcon = display.Emoji("🔒", "[PROD]")
-		modeColor = "\033[32m" // Green
+		// Green
+		modeColor = "\033[32m"
 	} else {
 		modeIcon = display.Emoji("🔧", "[DEV]")
-		modeColor = "\033[33m" // Yellow
+		// Yellow
+		modeColor = "\033[33m"
 	}
 
 	modeLine := fmt.Sprintf("%s %s", modeIcon, color(modeColor, "Running in mode: "+mode))

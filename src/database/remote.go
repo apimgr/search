@@ -16,14 +16,22 @@ import (
 // RemoteDBConfig holds configuration for remote database connections
 // Per AI.md PART 24: Remote database support (PostgreSQL, MySQL/MariaDB)
 type RemoteDBConfig struct {
-	Driver   string `yaml:"driver"`   // postgres, mysql
-	Host     string `yaml:"host"`     // database host
-	Port     int    `yaml:"port"`     // database port
-	Database string `yaml:"database"` // database name
-	Username string `yaml:"username"` // database user
-	Password string `yaml:"password"` // database password
-	SSLMode  string `yaml:"ssl_mode"` // disable, require, verify-ca, verify-full (postgres)
-	Options  string `yaml:"options"`  // additional connection options
+	// postgres, mysql
+	Driver string `yaml:"driver"`
+	// database host
+	Host string `yaml:"host"`
+	// database port
+	Port int `yaml:"port"`
+	// database name
+	Database string `yaml:"database"`
+	// database user
+	Username string `yaml:"username"`
+	// database password
+	Password string `yaml:"password"`
+	// disable, require, verify-ca, verify-full (postgres)
+	SSLMode string `yaml:"ssl_mode"`
+	// additional connection options
+	Options string `yaml:"options"`
 }
 
 // DefaultRemoteDBConfig returns default remote database configuration

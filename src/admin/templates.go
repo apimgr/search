@@ -19,7 +19,8 @@ import (
 // Uses a buffered writer so the configured admin path (default: "admin")
 // can be substituted for the hardcoded "/admin/" placeholders in the template.
 func (h *Handler) renderAdminPage(w http.ResponseWriter, r *http.Request, page string, data *AdminPageData) {
-	ap := "/" + config.GetAdminPath() // e.g. "/admin" or "/manage"
+	// e.g. "/admin" or "/manage"
+	ap := "/" + config.GetAdminPath()
 	bw := &bytes.Buffer{}
 	h.renderAdminPageInner(bw, r, page, data)
 	// Replace hardcoded /admin prefix with the configured admin path
@@ -2964,13 +2965,17 @@ func formatAnnouncementDate(data *AdminPageData, dateStr string) string {
 func announcementTypeClass(t string) string {
 	switch t {
 	case "warning":
-		return "status-badge" // orange-ish
+		// orange-ish
+		return "status-badge"
 	case "error":
-		return "disabled" // red
+		// red
+		return "disabled"
 	case "success":
-		return "enabled" // green
+		// green
+		return "enabled"
 	default:
-		return "" // default/info
+		// default/info
+		return ""
 	}
 }
 

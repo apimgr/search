@@ -321,7 +321,8 @@ func (s *Server) buildHealthInfo() *HealthInfo {
 			health.Checks["database"] = "ok"
 		}
 	} else {
-		health.Checks["database"] = "ok" // No separate DB = embedded SQLite always ok
+		// No separate DB = embedded SQLite always ok
+		health.Checks["database"] = "ok"
 	}
 
 	// Cache check (standalone mode - no external cache)

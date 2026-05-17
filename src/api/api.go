@@ -42,9 +42,10 @@ type Handler struct {
 	instantManager  *instant.Manager
 	directManager   *direct.Manager
 	relatedSearches *search.RelatedSearches
-	torService      *service.TorService // Per AI.md PART 32: Tor service for health status
-	startTime       time.Time
-	alertManager    *alert.Manager
+	// Per AI.md PART 32: Tor service for health status
+	torService   *service.TorService
+	startTime    time.Time
+	alertManager *alert.Manager
 }
 
 // NewHandler creates a new API handler
@@ -94,9 +95,11 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 
 	// Health and info - Per AI.md PART 14: .txt extension support
 	mux.HandleFunc("/api/v1/healthz", h.handleHealthz)
-	mux.HandleFunc("/api/v1/healthz.txt", h.handleHealthz) // Per AI.md PART 14
+	// Per AI.md PART 14
+	mux.HandleFunc("/api/v1/healthz.txt", h.handleHealthz)
 	mux.HandleFunc("/api/v1/info", h.handleInfo)
-	mux.HandleFunc("/api/v1/info.txt", h.handleInfo) // Per AI.md PART 14
+	// Per AI.md PART 14
+	mux.HandleFunc("/api/v1/info.txt", h.handleInfo)
 
 	// Search
 	mux.HandleFunc("/api/v1/search", h.handleSearch)
@@ -143,11 +146,14 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 // Success: {"ok": true, "data": {...}}
 // Error: {"ok": false, "error": "ERROR_CODE", "message": "Human readable message"}
 type APIResponse struct {
-	OK      bool        `json:"ok"`
-	Data    interface{} `json:"data,omitempty"`
-	Error   string      `json:"error,omitempty"`   // Error code (e.g., "BAD_REQUEST", "NOT_FOUND")
-	Message string      `json:"message,omitempty"` // Human-readable error message
-	Meta    *APIMeta    `json:"meta,omitempty"`    // Optional metadata (request_id, process_time_ms)
+	OK   bool        `json:"ok"`
+	Data interface{} `json:"data,omitempty"`
+	// Error code (e.g., "BAD_REQUEST", "NOT_FOUND")
+	Error string `json:"error,omitempty"`
+	// Human-readable error message
+	Message string `json:"message,omitempty"`
+	// Optional metadata (request_id, process_time_ms)
+	Meta *APIMeta `json:"meta,omitempty"`
 }
 
 // APIMeta contains response metadata
@@ -164,19 +170,27 @@ type HealthResponse struct {
 	Project ProjectInfo `json:"project"`
 
 	// 2. Overall status
-	Status         string   `json:"status"`                    // "healthy", "unhealthy", "degraded"
-	PendingRestart bool     `json:"pending_restart,omitempty"` // true if restart needed
-	RestartReason  []string `json:"restart_reason,omitempty"`  // settings that changed
+	// "healthy", "unhealthy", "degraded"
+	Status string `json:"status"`
+	// true if restart needed
+	PendingRestart bool `json:"pending_restart,omitempty"`
+	// settings that changed
+	RestartReason []string `json:"restart_reason,omitempty"`
 
 	// 3. Version & build info (PART 7: binary requirements)
-	Version   string    `json:"version"`    // SemVer "1.0.0"
-	GoVersion string    `json:"go_version"` // "go1.23.0"
+	// SemVer "1.0.0"
+	Version string `json:"version"`
+	// "go1.23.0"
+	GoVersion string    `json:"go_version"`
 	Build     BuildInfo `json:"build"`
 
 	// 4. Runtime info (PART 6: application modes)
-	Uptime    string `json:"uptime"`    // human readable "2d 5h 30m"
-	Mode      string `json:"mode"`      // "production" or "development"
-	Timestamp string `json:"timestamp"` // current UTC time ISO 8601
+	// human readable "2d 5h 30m"
+	Uptime string `json:"uptime"`
+	// "production" or "development"
+	Mode string `json:"mode"`
+	// current UTC time ISO 8601
+	Timestamp string `json:"timestamp"`
 
 	// 5. Cluster info (PART 10: database & cluster)
 	Cluster ClusterInfo `json:"cluster"`
@@ -193,33 +207,47 @@ type HealthResponse struct {
 
 // ProjectInfo represents project identification per AI.md PART 13
 type ProjectInfo struct {
-	Name        string `json:"name"`        // branding.app_name
-	Tagline     string `json:"tagline"`     // branding.tagline (short slogan)
-	Description string `json:"description"` // server.description (longer)
+	// branding.app_name
+	Name string `json:"name"`
+	// branding.tagline (short slogan)
+	Tagline string `json:"tagline"`
+	// server.description (longer)
+	Description string `json:"description"`
 }
 
 // BuildInfo represents build information per AI.md PART 13
 // Note: Fields are "commit" and "date" per spec, not "commit_id" and "build_date"
 type BuildInfo struct {
-	Commit string `json:"commit"` // git short hash (7 chars)
-	Date   string `json:"date"`   // ISO 8601 build timestamp
+	// git short hash (7 chars)
+	Commit string `json:"commit"`
+	// ISO 8601 build timestamp
+	Date string `json:"date"`
 }
 
 // StatsInfo represents health statistics per AI.md PART 13 (line 16310-16317)
 type StatsInfo struct {
-	RequestsTotal int64 `json:"requests_total"`     // Total HTTP requests (lifetime)
-	Requests24h   int64 `json:"requests_24h"`       // Requests in last 24 hours
-	ActiveConns   int   `json:"active_connections"` // Current active connections
+	// Total HTTP requests (lifetime)
+	RequestsTotal int64 `json:"requests_total"`
+	// Requests in last 24 hours
+	Requests24h int64 `json:"requests_24h"`
+	// Current active connections
+	ActiveConns int `json:"active_connections"`
 }
 
 // ChecksInfo represents component health per AI.md PART 13 (line 16298-16308)
 type ChecksInfo struct {
-	Database  string `json:"database"`          // PART 10: "ok" or "error"
-	Cache     string `json:"cache"`             // PART 10: "ok" or "error"
-	Disk      string `json:"disk"`              // Disk space check
-	Scheduler string `json:"scheduler"`         // PART 19: "ok" or "error"
-	Cluster   string `json:"cluster,omitempty"` // PART 10: "ok" or "error" (if enabled)
-	Tor       string `json:"tor,omitempty"`     // PART 32: "ok" or "error" (if enabled)
+	// PART 10: "ok" or "error"
+	Database string `json:"database"`
+	// PART 10: "ok" or "error"
+	Cache string `json:"cache"`
+	// Disk space check
+	Disk string `json:"disk"`
+	// PART 19: "ok" or "error"
+	Scheduler string `json:"scheduler"`
+	// PART 10: "ok" or "error" (if enabled)
+	Cluster string `json:"cluster,omitempty"`
+	// PART 32: "ok" or "error" (if enabled)
+	Tor string `json:"tor,omitempty"`
 }
 
 // NodeInfo represents node information for cluster mode
@@ -230,28 +258,41 @@ type NodeInfo struct {
 
 // ClusterInfo represents cluster status per AI.md PART 13
 type ClusterInfo struct {
-	Enabled   bool     `json:"enabled"`
-	Status    string   `json:"status,omitempty"`     // "connected", "disconnected"
-	Primary   string   `json:"primary,omitempty"`    // primary node public URL
-	Nodes     []string `json:"nodes,omitempty"`      // all node public URLs
-	NodeCount int      `json:"node_count,omitempty"` // total nodes
-	Role      string   `json:"role,omitempty"`       // "primary" or "member"
+	Enabled bool `json:"enabled"`
+	// "connected", "disconnected"
+	Status string `json:"status,omitempty"`
+	// primary node public URL
+	Primary string `json:"primary,omitempty"`
+	// all node public URLs
+	Nodes []string `json:"nodes,omitempty"`
+	// total nodes
+	NodeCount int `json:"node_count,omitempty"`
+	// "primary" or "member"
+	Role string `json:"role,omitempty"`
 }
 
 // FeaturesInfo represents feature status per AI.md PART 13 (line 16269-16288)
 type FeaturesInfo struct {
-	Tor           TorInfo `json:"tor"`                     // PART 32: Tor Hidden Service
-	GeoIP         bool    `json:"geoip"`                   // PART 20: GeoIP enabled
-	MultiUser     bool    `json:"multi_user,omitempty"`    // PART 34: Multi-user mode
-	Organizations bool    `json:"organizations,omitempty"` // PART 35: Organizations
+	// PART 32: Tor Hidden Service
+	Tor TorInfo `json:"tor"`
+	// PART 20: GeoIP enabled
+	GeoIP bool `json:"geoip"`
+	// PART 34: Multi-user mode
+	MultiUser bool `json:"multi_user,omitempty"`
+	// PART 35: Organizations
+	Organizations bool `json:"organizations,omitempty"`
 }
 
 // TorInfo represents Tor status per AI.md PART 13 (line 16290-16296)
 type TorInfo struct {
-	Enabled  bool   `json:"enabled"`  // Tor binary found and config enabled
-	Running  bool   `json:"running"`  // Hidden service active
-	Status   string `json:"status"`   // "healthy", "starting", "error"
-	Hostname string `json:"hostname"` // "abc123...xyz.onion" (56 chars, v3)
+	// Tor binary found and config enabled
+	Enabled bool `json:"enabled"`
+	// Hidden service active
+	Running bool `json:"running"`
+	// "healthy", "starting", "error"
+	Status string `json:"status"`
+	// "abc123...xyz.onion" (56 chars, v3)
+	Hostname string `json:"hostname"`
 }
 
 // AutodiscoverResponse represents /api/autodiscover response
@@ -508,7 +549,8 @@ func (h *Handler) handleAutodiscover(w http.ResponseWriter, r *http.Request) {
 
 	// Cluster info - for CLI/agent failover per AI.md PART 36 line 42791-42818
 	resp.Cluster.Primary = serverURL
-	resp.Cluster.Nodes = []string{serverURL} // Single node cluster by default
+	// Single node cluster by default
+	resp.Cluster.Nodes = []string{serverURL}
 
 	// API info
 	resp.API.Version = APIVersion
@@ -1727,7 +1769,8 @@ func (h *Handler) handleFavicon(w http.ResponseWriter, r *http.Request) {
 
 	// Set response headers
 	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Cache-Control", "public, max-age=86400") // Cache for 24 hours
+	// Cache for 24 hours
+	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusOK)
 	w.Write(body)

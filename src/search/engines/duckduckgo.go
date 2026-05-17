@@ -24,7 +24,8 @@ type DuckDuckGo struct {
 func NewDuckDuckGo() *DuckDuckGo {
 	config := model.NewEngineConfig("duckduckgo")
 	config.DisplayName = "DuckDuckGo"
-	config.Priority = 100 // Highest priority (default engine)
+	// Highest priority (default engine)
+	config.Priority = 100
 	config.Categories = []string{"general", "images", "videos", "news", "files", "music"}
 	config.SupportsTor = true
 
@@ -61,11 +62,14 @@ func (e *DuckDuckGo) searchGeneral(ctx context.Context, query *model.Query) ([]m
 
 	switch query.SafeSearch {
 	case 0:
-		params.Set("kp", "-2") // Off
+		// Off
+		params.Set("kp", "-2")
 	case 2:
-		params.Set("kp", "1") // Strict
+		// Strict
+		params.Set("kp", "1")
 	default:
-		params.Set("kp", "-1") // Moderate
+		// Moderate
+		params.Set("kp", "-1")
 	}
 
 	reqURL := "https://html.duckduckgo.com/html/?" + params.Encode()
@@ -201,11 +205,14 @@ func (e *DuckDuckGo) searchImages(ctx context.Context, query *model.Query) ([]mo
 	// Safe search
 	switch query.SafeSearch {
 	case 0:
-		params.Set("p", "-1") // Off
+		// Off
+		params.Set("p", "-1")
 	case 2:
-		params.Set("p", "1") // Strict
+		// Strict
+		params.Set("p", "1")
 	default:
-		params.Set("p", "1") // Moderate (default)
+		// Moderate (default)
+		params.Set("p", "1")
 	}
 
 	// Image size filter
@@ -256,10 +263,13 @@ func (e *DuckDuckGo) searchImages(ctx context.Context, query *model.Query) ([]mo
 
 	var data struct {
 		Results []struct {
-			Title     string `json:"title"`
-			URL       string `json:"url"`       // Page URL
-			Image     string `json:"image"`     // Full image URL
-			Thumbnail string `json:"thumbnail"` // Thumbnail URL
+			Title string `json:"title"`
+			// Page URL
+			URL string `json:"url"`
+			// Full image URL
+			Image string `json:"image"`
+			// Thumbnail URL
+			Thumbnail string `json:"thumbnail"`
 			Width     int    `json:"width"`
 			Height    int    `json:"height"`
 			Source    string `json:"source"`
@@ -385,9 +395,12 @@ func (e *DuckDuckGo) searchVideos(ctx context.Context, query *model.Query) ([]mo
 	// Video duration filter
 	if query.VideoLength != "" {
 		durationMap := map[string]string{
-			"short":  "short",  // < 5 min
-			"medium": "medium", // 5-20 min
-			"long":   "long",   // > 20 min
+			// < 5 min
+			"short": "short",
+			// 5-20 min
+			"medium": "medium",
+			// > 20 min
+			"long": "long",
 		}
 		if d, ok := durationMap[query.VideoLength]; ok {
 			params.Set("duration", d)
@@ -422,8 +435,9 @@ func (e *DuckDuckGo) searchVideos(ctx context.Context, query *model.Query) ([]mo
 
 	var data struct {
 		Results []struct {
-			Title       string `json:"title"`
-			URL         string `json:"content"` // Video page URL
+			Title string `json:"title"`
+			// Video page URL
+			URL         string `json:"content"`
 			Description string `json:"description"`
 			Duration    string `json:"duration"`
 			ViewCount   int64  `json:"views"`
@@ -523,7 +537,8 @@ func (e *DuckDuckGo) searchNews(ctx context.Context, query *model.Query) ([]mode
 			Excerpt string `json:"excerpt"`
 			Source  string `json:"source"`
 			Image   string `json:"image"`
-			Date    int64  `json:"date"` // Unix timestamp
+			// Unix timestamp
+			Date int64 `json:"date"`
 		} `json:"results"`
 	}
 

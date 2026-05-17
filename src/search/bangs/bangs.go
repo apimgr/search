@@ -20,10 +20,11 @@ type Bang struct {
 
 // BangResult represents the result of bang parsing
 type BangResult struct {
-	Bang       *Bang
-	Query      string
-	TargetURL  string
-	IsBangOnly bool // Query was just the bang with no search terms
+	Bang      *Bang
+	Query     string
+	TargetURL string
+	// Query was just the bang with no search terms
+	IsBangOnly bool
 }
 
 // Manager manages bangs from multiple sources
@@ -31,7 +32,8 @@ type Manager struct {
 	mu       sync.RWMutex
 	builtins map[string]*Bang
 	custom   map[string]*Bang
-	user     map[string]*Bang // per-request user bangs from localStorage
+	// per-request user bangs from localStorage
+	user map[string]*Bang
 }
 
 // NewManager creates a new bang manager with built-in defaults
@@ -118,7 +120,8 @@ func (m *Manager) parseBangPrefix(query string) *BangResult {
 // parseBangSuffix handles "query !g" format
 func (m *Manager) parseBangSuffix(query string, idx int) *BangResult {
 	searchQuery := strings.TrimSpace(query[:idx])
-	bangPart := query[idx+2:] // Skip " !"
+	// Skip " !"
+	bangPart := query[idx+2:]
 
 	// Get shortcut (may have trailing text)
 	parts := strings.SplitN(bangPart, " ", 2)

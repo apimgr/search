@@ -19,7 +19,8 @@ var (
 var (
 	emojiEnabled = true
 	colorEnabled = true
-	colorForce   *bool // nil = auto, true = always, false = never
+	// nil = auto, true = always, false = never
+	colorForce *bool
 )
 
 // InitOutput initializes color and emoji output state based on environment
@@ -101,23 +102,34 @@ const (
 // Env represents the detected display environment
 type Env struct {
 	// Display availability
-	HasDisplay  bool        // X11, Wayland, Windows, macOS display available
-	DisplayType DisplayType // Type of display: x11, wayland, windows, macos, none
+	// X11, Wayland, Windows, macOS display available
+	HasDisplay bool
+	// Type of display: x11, wayland, windows, macos, none
+	DisplayType DisplayType
 
 	// Terminal state
-	IsTerminal bool // stdout is a TTY
-	Cols       int  // Terminal columns (0 if no terminal)
-	Rows       int  // Terminal rows (0 if no terminal)
+	// stdout is a TTY
+	IsTerminal bool
+	// Terminal columns (0 if no terminal)
+	Cols int
+	// Terminal rows (0 if no terminal)
+	Rows int
 
 	// Remote session detection
-	IsSSH    bool // Running over SSH
-	IsMosh   bool // Running over mosh
-	IsScreen bool // Running in GNU screen
-	IsTmux   bool // Running in tmux
+	// Running over SSH
+	IsSSH bool
+	// Running over mosh
+	IsMosh bool
+	// Running in GNU screen
+	IsScreen bool
+	// Running in tmux
+	IsTmux bool
 
 	// Environment
-	OS       string // Runtime OS (linux, darwin, windows, freebsd, etc.)
-	HasColor bool   // Terminal supports colors
+	// Runtime OS (linux, darwin, windows, freebsd, etc.)
+	OS string
+	// Terminal supports colors
+	HasColor bool
 }
 
 // Detect detects the current display environment

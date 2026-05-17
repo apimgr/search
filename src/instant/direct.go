@@ -331,15 +331,20 @@ func (h *HTTPCodeHandler) Handle(ctx context.Context, query string) (*Answer, er
 	categoryColor := "#666"
 	switch {
 	case code >= 100 && code < 200:
-		categoryColor = "#17a2b8" // info blue
+		// info blue
+		categoryColor = "#17a2b8"
 	case code >= 200 && code < 300:
-		categoryColor = "#28a745" // success green
+		// success green
+		categoryColor = "#28a745"
 	case code >= 300 && code < 400:
-		categoryColor = "#ffc107" // redirect yellow
+		// redirect yellow
+		categoryColor = "#ffc107"
 	case code >= 400 && code < 500:
-		categoryColor = "#fd7e14" // client error orange
+		// client error orange
+		categoryColor = "#fd7e14"
 	case code >= 500:
-		categoryColor = "#dc3545" // server error red
+		// server error red
+		categoryColor = "#dc3545"
 	}
 
 	content := fmt.Sprintf(`<div class="http-code-result">
@@ -849,21 +854,24 @@ func octalToSymbolic(octal string) string {
 
 	// Handle special bits
 	runes := []rune(result)
-	if special&4 != 0 { // setuid
+	// setuid
+	if special&4 != 0 {
 		if runes[2] == 'x' {
 			runes[2] = 's'
 		} else {
 			runes[2] = 'S'
 		}
 	}
-	if special&2 != 0 { // setgid
+	// setgid
+	if special&2 != 0 {
 		if runes[5] == 'x' {
 			runes[5] = 's'
 		} else {
 			runes[5] = 'S'
 		}
 	}
-	if special&1 != 0 { // sticky
+	// sticky
+	if special&1 != 0 {
 		if runes[8] == 'x' {
 			runes[8] = 't'
 		} else {

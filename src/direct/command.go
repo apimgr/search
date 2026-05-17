@@ -332,7 +332,8 @@ func (h *CheatHandler) Handle(ctx context.Context, term string) (*Answer, error)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "curl/7.64.1") // cheat.sh prefers curl UA
+	// cheat.sh prefers curl UA
+	req.Header.Set("User-Agent", "curl/7.64.1")
 
 	resp, err := h.client.Do(req)
 	if err != nil {

@@ -128,7 +128,8 @@ func EnsureFile(path string, perm os.FileMode) error {
 // Per AI.md PART 36: --config Flag (Config File Selection)
 func ResolveConfigPath(configFlag string) (string, error) {
 	if configFlag == "" {
-		return ConfigFile(), nil // Default: cli.yml
+		// Default: cli.yml
+		return ConfigFile(), nil
 	}
 
 	// Expand ~ to home directory

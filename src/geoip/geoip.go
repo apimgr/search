@@ -23,11 +23,12 @@ const (
 
 // Lookup represents a GeoIP lookup service using MMDB format
 type Lookup struct {
-	mu         sync.RWMutex
-	countryDB  *mmdbReader
-	asnDB      *mmdbReader
-	cityDB     *mmdbReader
-	whoisDB    *mmdbReader // WHOIS registrant database (per AI.md PART 20)
+	mu        sync.RWMutex
+	countryDB *mmdbReader
+	asnDB     *mmdbReader
+	cityDB    *mmdbReader
+	// WHOIS registrant database (per AI.md PART 20)
+	whoisDB    *mmdbReader
 	loaded     bool
 	dbDir      string
 	countries  map[string]*Country
@@ -64,16 +65,18 @@ type Result struct {
 
 // Config holds GeoIP configuration
 type Config struct {
-	Enabled          bool     `yaml:"enabled"`
-	Dir              string   `yaml:"dir"`
-	Update           string   `yaml:"update"` // never, daily, weekly, monthly
+	Enabled bool   `yaml:"enabled"`
+	Dir     string `yaml:"dir"`
+	// never, daily, weekly, monthly
+	Update           string   `yaml:"update"`
 	DenyCountries    []string `yaml:"deny_countries"`
 	AllowedCountries []string `yaml:"allowed_countries"`
 	// Database toggles
 	ASN     bool `yaml:"asn"`
 	Country bool `yaml:"country"`
 	City    bool `yaml:"city"`
-	WHOIS   bool `yaml:"whois"` // Enable WHOIS registrant data (per AI.md PART 20)
+	// Enable WHOIS registrant data (per AI.md PART 20)
+	WHOIS bool `yaml:"whois"`
 }
 
 // DefaultConfig returns default GeoIP configuration
@@ -87,8 +90,10 @@ func DefaultConfig() *Config {
 		AllowedCountries: []string{},
 		ASN:              true,
 		Country:          true,
-		City:             false, // Larger download, disabled by default
-		WHOIS:            false, // WHOIS registrant data, disabled by default
+		// Larger download, disabled by default
+		City: false,
+		// WHOIS registrant data, disabled by default
+		WHOIS: false,
 	}
 }
 

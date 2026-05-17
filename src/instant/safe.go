@@ -22,16 +22,18 @@ type SafeHandler struct {
 
 // SafetyCheck represents a single safety check result
 type SafetyCheck struct {
-	Name    string `json:"name"`
-	Status  string `json:"status"` // "pass", "warn", "fail", "info"
+	Name string `json:"name"`
+	// "pass", "warn", "fail", "info"
+	Status  string `json:"status"`
 	Message string `json:"message"`
 }
 
 // SafetyResult represents the overall safety assessment
 type SafetyResult struct {
-	URL         string        `json:"url"`
-	Safe        bool          `json:"safe"`
-	Score       int           `json:"score"` // 0-100
+	URL  string `json:"url"`
+	Safe bool   `json:"safe"`
+	// 0-100
+	Score       int           `json:"score"`
 	Checks      []SafetyCheck `json:"checks"`
 	Certificate *CertInfo     `json:"certificate,omitempty"`
 }
@@ -404,7 +406,8 @@ func (h *SafeHandler) checkSSLCertificate(ctx context.Context, host string) (*Ce
 			ValidFrom:  cert.NotBefore,
 			ValidUntil: cert.NotAfter,
 			DaysLeft:   daysLeft,
-			IsValid:    false, // We used InsecureSkipVerify
+			// We used InsecureSkipVerify
+			IsValid: false,
 		}, nil
 	}
 	defer conn.Close()

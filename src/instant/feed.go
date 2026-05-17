@@ -25,7 +25,8 @@ type FeedHandler struct {
 type FeedInfo struct {
 	Title string `json:"title"`
 	URL   string `json:"url"`
-	Type  string `json:"type"` // "rss" or "atom"
+	// "rss" or "atom"
+	Type string `json:"type"`
 }
 
 // NewFeedHandler creates a new feed discovery handler

@@ -12,60 +12,92 @@ type SearchOperators struct {
 	CleanedQuery  string
 
 	// Site restriction
-	Site        string   // site:example.com
-	Sites       []string // Multiple sites
-	ExcludeSite string   // -site:example.com
+	// site:example.com
+	Site string
+	// Multiple sites
+	Sites []string
+	// -site:example.com
+	ExcludeSite string
 
 	// File type
-	FileType  string   // filetype:pdf
-	FileTypes []string // Multiple file types
+	// filetype:pdf
+	FileType string
+	// Multiple file types
+	FileTypes []string
 
 	// URL filters
-	InURL    string // inurl:keyword
-	InTitle  string // intitle:keyword
-	AllInURL string // allinurl:keyword1 keyword2
+	// inurl:keyword
+	InURL string
+	// intitle:keyword
+	InTitle string
+	// allinurl:keyword1 keyword2
+	AllInURL string
 
 	// Content filters
-	InText      string // intext:keyword
-	AllInText   string // allintext:keyword1 keyword2
-	InAnchor    string // inanchor:keyword
-	AllInAnchor string // allinanchor:keyword1 keyword2
+	// intext:keyword
+	InText string
+	// allintext:keyword1 keyword2
+	AllInText string
+	// inanchor:keyword
+	InAnchor string
+	// allinanchor:keyword1 keyword2
+	AllInAnchor string
 
 	// Exact match
-	ExactPhrases []string // "exact phrase"
+	// "exact phrase"
+	ExactPhrases []string
 
 	// Exclusions
-	ExcludeTerms []string // -word
+	// -word
+	ExcludeTerms []string
 
 	// Related/cache
-	Related string // related:example.com
-	Cache   string // cache:example.com
-	Info    string // info:example.com
+	// related:example.com
+	Related string
+	// cache:example.com
+	Cache string
+	// info:example.com
+	Info string
 
 	// Date range
-	DateRange string // daterange:start-end
-	Before    string // before:2024-01-01
-	After     string // after:2023-01-01
+	// daterange:start-end
+	DateRange string
+	// before:2024-01-01
+	Before string
+	// after:2023-01-01
+	After string
 
 	// Numeric range
-	NumRange string // $100..$500 or 100..500
+	// $100..$500 or 100..500
+	NumRange string
 
 	// Boolean operators
-	HasOR  bool // Contains OR operator
-	HasAND bool // Contains AND operator
+	// Contains OR operator
+	HasOR bool
+	// Contains AND operator
+	HasAND bool
 
 	// Special operators
-	Define   string // define:word
-	Weather  string // weather:city
-	Stocks   string // stocks:AAPL
-	Map      string // map:location
-	Movie    string // movie:title
-	Source   string // source:nytimes (news)
-	Location string // loc:city or location:city
-	Language string // lang:en
+	// define:word
+	Define string
+	// weather:city
+	Weather string
+	// stocks:AAPL
+	Stocks string
+	// map:location
+	Map string
+	// movie:title
+	Movie string
+	// source:nytimes (news)
+	Source string
+	// loc:city or location:city
+	Location string
+	// lang:en
+	Language string
 
 	// Wildcard
-	HasWildcard bool // Contains * wildcard
+	// Contains * wildcard
+	HasWildcard bool
 }
 
 // Operator patterns

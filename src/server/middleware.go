@@ -686,7 +686,8 @@ func (w *gzipResponseWriter) Write(b []byte) (int, error) {
 	if !w.wroteHeader {
 		// Set Content-Encoding header before writing
 		w.ResponseWriter.Header().Set("Content-Encoding", "gzip")
-		w.ResponseWriter.Header().Del("Content-Length") // Length changes with compression
+		// Length changes with compression
+		w.ResponseWriter.Header().Del("Content-Length")
 		w.wroteHeader = true
 	}
 	return w.Writer.Write(b)
@@ -944,15 +945,23 @@ func URLNormalizeMiddleware(next http.Handler) http.Handler {
 type TargetType int
 
 const (
-	TargetUnknown     TargetType = iota // Unknown/invalid target
-	TargetPublic                        // Public routes (/, /api/v1/, project-specific like /search)
-	TargetServerPages                   // Server pages - about, help, contact, privacy (/server/*)
-	TargetAuth                          // Auth flows (/auth/*)
-	TargetCurrentUser                   // Current user from token (/users/*)
-	TargetUser                          // Specific user (/users/{username}/*)
-	TargetOrg                           // Organization (/orgs/{slug}/*)
-	TargetAdmin                         // Server admin panel (/admin/*)
-	TargetAdminServer                   // Server settings within admin (/admin/server/*)
+	TargetUnknown TargetType = iota // Unknown/invalid target
+	// Public routes (/, /api/v1/, project-specific like /search)
+	TargetPublic
+	// Server pages - about, help, contact, privacy (/server/*)
+	TargetServerPages
+	// Auth flows (/auth/*)
+	TargetAuth
+	// Current user from token (/users/*)
+	TargetCurrentUser
+	// Specific user (/users/{username}/*)
+	TargetUser
+	// Organization (/orgs/{slug}/*)
+	TargetOrg
+	// Server admin panel (/admin/*)
+	TargetAdmin
+	// Server settings within admin (/admin/server/*)
+	TargetAdminServer
 )
 
 // String returns the string representation of TargetType
@@ -983,7 +992,8 @@ func (t TargetType) String() string {
 // Per AI.md PART 11: Context is determined from URL path, NOT headers
 type RequestContext struct {
 	Type TargetType
-	Name string // Username or org slug when applicable
+	// Username or org slug when applicable
+	Name string
 }
 
 // ContextMiddleware extracts context from URL path and validates token access
@@ -1028,7 +1038,8 @@ func extractContextFromPath(urlPath, adminPath string) *RequestContext {
 		if len(parts) < 3 {
 			return &RequestContext{Type: TargetPublic}
 		}
-		parts = parts[2:] // Remove "api" and version
+		// Remove "api" and version
+		parts = parts[2:]
 		if len(parts) == 0 {
 			return &RequestContext{Type: TargetPublic}
 		}
@@ -1050,7 +1061,8 @@ func extractContextFromPath(urlPath, adminPath string) *RequestContext {
 		return &RequestContext{Type: TargetCurrentUser}
 	case "orgs":
 		if len(parts) < 2 || parts[1] == "" {
-			return &RequestContext{Type: TargetPublic} // Invalid org route
+			// Invalid org route
+			return &RequestContext{Type: TargetPublic}
 		}
 		// /orgs/{slug}/*
 		return &RequestContext{Type: TargetOrg, Name: parts[1]}
@@ -1083,24 +1095,35 @@ func GetRequestContext(r *http.Request) *RequestContext {
 type TokenType int
 
 const (
-	TokenTypeUnknown  TokenType = iota
-	TokenTypeAdmin              // adm_ prefix
-	TokenTypeUser               // usr_ prefix
-	TokenTypeOrg                // org_ prefix
-	TokenTypeAdminAgt           // adm_agt_ prefix (admin agent)
-	TokenTypeUserAgt            // usr_agt_ prefix (user agent)
-	TokenTypeOrgAgt             // org_agt_ prefix (org agent)
+	TokenTypeUnknown TokenType = iota
+	// adm_ prefix
+	TokenTypeAdmin
+	// usr_ prefix
+	TokenTypeUser
+	// org_ prefix
+	TokenTypeOrg
+	// adm_agt_ prefix (admin agent)
+	TokenTypeAdminAgt
+	// usr_agt_ prefix (user agent)
+	TokenTypeUserAgt
+	// org_agt_ prefix (org agent)
+	TokenTypeOrgAgt
 )
 
 // TokenInfo holds validated token information
 // Per AI.md PART 11: Token validation
 type TokenInfo struct {
-	Type     TokenType
-	OwnerID  int64  // admin.id, user.id, or org.id
-	Prefix   string // First 8 chars for display
-	Scope    string // global, read-write, read
-	Username string // For user tokens, the associated username
-	OrgSlug  string // For org tokens, the specific org slug
+	Type TokenType
+	// admin.id, user.id, or org.id
+	OwnerID int64
+	// First 8 chars for display
+	Prefix string
+	// global, read-write, read
+	Scope string
+	// For user tokens, the associated username
+	Username string
+	// For org tokens, the specific org slug
+	OrgSlug string
 }
 
 // getTokenFromRequest extracts the token from Authorization header or cookie

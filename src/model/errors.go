@@ -8,40 +8,56 @@ import "errors"
 // These map to HTTP status codes for consistent API responses
 const (
 	// 400 Bad Request
-	ErrCodeBadRequest = "BAD_REQUEST"       // Malformed request syntax
-	ErrCodeValidation = "VALIDATION_FAILED" // Input validation failed
+	// Malformed request syntax
+	ErrCodeBadRequest = "BAD_REQUEST"
+	// Input validation failed
+	ErrCodeValidation = "VALIDATION_FAILED"
 
 	// 401 Unauthorized
-	ErrCodeUnauthorized = "UNAUTHORIZED"  // Authentication required
-	ErrCodeTokenExpired = "TOKEN_EXPIRED" // Token has expired
-	ErrCodeTokenInvalid = "TOKEN_INVALID" // Invalid token
-	ErrCode2FARequired  = "2FA_REQUIRED"  // Two-factor authentication required
-	ErrCode2FAInvalid   = "2FA_INVALID"   // Invalid 2FA code
+	// Authentication required
+	ErrCodeUnauthorized = "UNAUTHORIZED"
+	// Token has expired
+	ErrCodeTokenExpired = "TOKEN_EXPIRED"
+	// Invalid token
+	ErrCodeTokenInvalid = "TOKEN_INVALID"
+	// Two-factor authentication required
+	ErrCode2FARequired = "2FA_REQUIRED"
+	// Invalid 2FA code
+	ErrCode2FAInvalid = "2FA_INVALID"
 
 	// 403 Forbidden
-	ErrCodeForbidden     = "FORBIDDEN"      // Permission denied
-	ErrCodeAccountLocked = "ACCOUNT_LOCKED" // Account temporarily locked
+	// Permission denied
+	ErrCodeForbidden = "FORBIDDEN"
+	// Account temporarily locked
+	ErrCodeAccountLocked = "ACCOUNT_LOCKED"
 
 	// 404 Not Found
-	ErrCodeNotFound = "NOT_FOUND" // Resource not found
+	// Resource not found
+	ErrCodeNotFound = "NOT_FOUND"
 
 	// 405 Method Not Allowed
-	ErrCodeMethodNotAllowed = "METHOD_NOT_ALLOWED" // HTTP method not supported
+	// HTTP method not supported
+	ErrCodeMethodNotAllowed = "METHOD_NOT_ALLOWED"
 
 	// 409 Conflict
-	ErrCodeConflict = "CONFLICT" // Resource already exists or version conflict
+	// Resource already exists or version conflict
+	ErrCodeConflict = "CONFLICT"
 
 	// 422 Unprocessable Entity (uses same code as 400 validation - semantic validation)
-	ErrCodeUnprocessable = "UNPROCESSABLE" // Semantic validation error
+	// Semantic validation error
+	ErrCodeUnprocessable = "UNPROCESSABLE"
 
 	// 429 Too Many Requests
-	ErrCodeRateLimit = "RATE_LIMITED" // Rate limit exceeded
+	// Rate limit exceeded
+	ErrCodeRateLimit = "RATE_LIMITED"
 
 	// 500 Internal Server Error
-	ErrCodeInternal = "SERVER_ERROR" // Server error
+	// Server error
+	ErrCodeInternal = "SERVER_ERROR"
 
 	// 503 Service Unavailable
-	ErrCodeMaintenance = "MAINTENANCE" // Maintenance mode or overloaded
+	// Maintenance mode or overloaded
+	ErrCodeMaintenance = "MAINTENANCE"
 )
 
 // ErrorCodeToHTTP maps error codes to HTTP status codes
@@ -69,7 +85,8 @@ func HTTPStatusCode(code string) int {
 	if status, ok := ErrorCodeToHTTP[code]; ok {
 		return status
 	}
-	return 500 // Default to internal error
+	// Default to internal error
+	return 500
 }
 
 // HTTPToErrorCode maps HTTP status codes to default error codes

@@ -20,10 +20,12 @@ var Version = "dev"
 // Client is the API client for the search server
 // Per AI.md PART 36 line 42791-42818: Cluster failover support
 type Client struct {
-	BaseURL      string
-	Token        string
-	UserContext  string   // Per AI.md PART 36: --user flag for user/org context
-	ClusterNodes []string // Per AI.md PART 36: cluster nodes for failover
+	BaseURL string
+	Token   string
+	// Per AI.md PART 36: --user flag for user/org context
+	UserContext string
+	// Per AI.md PART 36: cluster nodes for failover
+	ClusterNodes []string
 	HTTPClient   *http.Client
 	mu           sync.RWMutex
 }
@@ -270,7 +272,8 @@ func (c *Client) getWithFailover(path string) (*http.Response, error) {
 
 	for _, node := range nodes {
 		if node == c.BaseURL {
-			continue // Skip primary, already tried
+			// Skip primary, already tried
+			continue
 		}
 		// Try this node
 		resp, nodeErr := c.doRequestToServer(node, "GET", path, nil)

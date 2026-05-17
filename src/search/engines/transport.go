@@ -21,7 +21,8 @@ var SharedTransport = &http.Transport{
 
 // maxBodyBytes is the upper bound for reading an engine response body.
 // Responses larger than this are truncated (parsing handles truncation).
-const maxBodyBytes = 4 * 1024 * 1024 // 4 MB
+// 4 MB
+const maxBodyBytes = 4 * 1024 * 1024
 
 // ReadBody fully reads an HTTP response body up to maxBodyBytes and
 // returns it as a byte slice. Fully draining the body (to EOF) allows

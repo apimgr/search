@@ -576,7 +576,8 @@ func NewHeadersHandler() *HeadersHandler {
 		client: &http.Client{
 			Timeout: 15 * time.Second,
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				return http.ErrUseLastResponse // Don't follow redirects
+				// Don't follow redirects
+				return http.ErrUseLastResponse
 			},
 		},
 	}

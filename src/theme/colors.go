@@ -4,9 +4,12 @@ package theme
 
 // Color represents a color value that can be used in templates and CSS
 type Color struct {
-	Hex  string // Hex color code (e.g., "#bd93f9")
-	RGB  string // RGB value (e.g., "189, 147, 249")
-	Name string // Human-readable name
+	// Hex color code (e.g., "#bd93f9")
+	Hex string
+	// RGB value (e.g., "189, 147, 249")
+	RGB string
+	// Human-readable name
+	Name string
 }
 
 // Theme represents a complete color theme

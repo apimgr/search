@@ -33,8 +33,10 @@ type Manager struct {
 	certManager *autocert.Manager
 	tlsConfig   *tls.Config
 	dataDir     string
-	legoClient  *lego.Client // For DNS-01 challenges
-	secretKey   string       // For credential decryption
+	// For DNS-01 challenges
+	legoClient *lego.Client
+	// For credential decryption
+	secretKey string
 }
 
 // legoUser implements registration.User for lego ACME client
@@ -65,7 +67,8 @@ func NewManagerWithSecret(cfg *config.SSLConfig, dataDir, secretKey string) *Man
 		// Choose challenge type based on config
 		challenge := cfg.LetsEncrypt.Challenge
 		if challenge == "" {
-			challenge = "http-01" // default
+			// default
+			challenge = "http-01"
 		}
 
 		switch challenge {
@@ -319,7 +322,8 @@ func (m *Manager) createTLSConfig(cert tls.Certificate) *tls.Config {
 // Called by scheduler for ssl_renewal task
 func (m *Manager) RenewCertificateDNS01(ctx context.Context) error {
 	if m.legoClient == nil {
-		return nil // Not using DNS-01
+		// Not using DNS-01
+		return nil
 	}
 
 	// Check if renewal is needed

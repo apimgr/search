@@ -20,7 +20,8 @@ import (
 func CheckPIDFile(pidPath string) (bool, int, error) {
 	data, err := os.ReadFile(pidPath)
 	if os.IsNotExist(err) {
-		return false, 0, nil // No PID file, not running
+		// No PID file, not running
+		return false, 0, nil
 	}
 	if err != nil {
 		return false, 0, fmt.Errorf("reading pid file: %w", err)

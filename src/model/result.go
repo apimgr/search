@@ -98,17 +98,24 @@ type Result struct {
 	ImageWidth  int    `json:"image_width,omitempty" xml:"-"`
 	ImageHeight int    `json:"image_height,omitempty" xml:"-"`
 	ImageFormat string `json:"image_format,omitempty" xml:"-"`
-	Duration    int    `json:"duration,omitempty" xml:"-"`   // Video duration in seconds
-	ViewCount   int64  `json:"view_count,omitempty" xml:"-"` // Video view count
-	FileSize    int64  `json:"file_size,omitempty" xml:"-"`  // File size in bytes
-	FileType    string `json:"file_type,omitempty" xml:"-"`  // File extension
+	// Video duration in seconds
+	Duration int `json:"duration,omitempty" xml:"-"`
+	// Video view count
+	ViewCount int64 `json:"view_count,omitempty" xml:"-"`
+	// File size in bytes
+	FileSize int64 `json:"file_size,omitempty" xml:"-"`
+	// File extension
+	FileType string `json:"file_type,omitempty" xml:"-"`
 
 	// Scoring fields
-	Score          float64 `json:"score" xml:"-"`
-	Position       int     `json:"position" xml:"-"`
-	Relevance      float64 `json:"relevance,omitempty" xml:"-"`       // Engine-provided relevance
-	Popularity     float64 `json:"popularity,omitempty" xml:"-"`      // Engagement/popularity score
-	DuplicateCount int     `json:"duplicate_count,omitempty" xml:"-"` // How many engines returned this
+	Score    float64 `json:"score" xml:"-"`
+	Position int     `json:"position" xml:"-"`
+	// Engine-provided relevance
+	Relevance float64 `json:"relevance,omitempty" xml:"-"`
+	// Engagement/popularity score
+	Popularity float64 `json:"popularity,omitempty" xml:"-"`
+	// How many engines returned this
+	DuplicateCount int `json:"duplicate_count,omitempty" xml:"-"`
 
 	// Language detection
 	Language string `json:"language,omitempty" xml:"language,omitempty"`

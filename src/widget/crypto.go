@@ -154,7 +154,8 @@ func (f *CryptoFetcher) Fetch(ctx context.Context, params map[string]string) (*W
 			case "gbp":
 				price = data.GBP
 				change = data.GBPChange24h
-			default: // usd
+			// usd
+			default:
 				price = data.USD
 				change = data.USDChange24h
 				marketCap = data.USDMarketCap

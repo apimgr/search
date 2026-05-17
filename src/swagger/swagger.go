@@ -616,5 +616,6 @@ func getTheme(r *http.Request) string {
 			return cookie.Value
 		}
 	}
-	return "dark" // Default to dark theme
+	// Default to dark theme
+	return "dark"
 }

@@ -87,7 +87,8 @@ func (h *CertHandler) Handle(ctx context.Context, query string) (*Answer, error)
 	// Dial with TLS
 	dialer := &net.Dialer{}
 	conn, err := tls.DialWithDialer(dialer, "tcp", host, &tls.Config{
-		InsecureSkipVerify: true, // We want to see the cert even if invalid
+		// We want to see the cert even if invalid
+		InsecureSkipVerify: true,
 	})
 	if err != nil {
 		return &Answer{

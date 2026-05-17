@@ -111,7 +111,8 @@ func (l *Logger) setupFileLogging(path string) error {
 
 	l.file = file
 	l.output = io.MultiWriter(os.Stdout, file)
-	l.colorOutput = false // Disable color for file output
+	// Disable color for file output
+	l.colorOutput = false
 
 	return nil
 }
@@ -246,15 +247,20 @@ func (l *Logger) writeText(entry LogEntry) {
 		reset = "\033[0m"
 		switch entry.Level {
 		case "DEBUG":
-			color = "\033[36m" // Cyan
+			// Cyan
+			color = "\033[36m"
 		case "INFO":
-			color = "\033[32m" // Green
+			// Green
+			color = "\033[32m"
 		case "WARN":
-			color = "\033[33m" // Yellow
+			// Yellow
+			color = "\033[33m"
 		case "ERROR":
-			color = "\033[31m" // Red
+			// Red
+			color = "\033[31m"
 		case "FATAL":
-			color = "\033[35m" // Magenta
+			// Magenta
+			color = "\033[35m"
 		}
 	}
 

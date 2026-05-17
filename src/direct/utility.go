@@ -561,7 +561,8 @@ func (h *ChmodHandler) Handle(ctx context.Context, term string) (*Answer, error)
 	if len(term) == 3 || len(term) == 4 {
 		octal := term
 		if len(term) == 4 {
-			octal = term[1:] // Skip special bits for now
+			// Skip special bits for now
+			octal = term[1:]
 		}
 		if n, err := strconv.ParseInt(octal, 8, 32); err == nil && n >= 0 && n <= 0777 {
 			owner = int((n >> 6) & 7)

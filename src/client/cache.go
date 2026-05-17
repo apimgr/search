@@ -18,9 +18,12 @@ import (
 // CacheConfig holds cache configuration
 // Per AI.md PART 36 lines 42756-42760
 type CacheConfig struct {
-	Enabled bool // Enable response caching (default: true)
-	TTL     int  // Cache TTL in seconds (default: 300 = 5 minutes)
-	MaxSize int  // Max cache size in MB (default: 100)
+	// Enable response caching (default: true)
+	Enabled bool
+	// Cache TTL in seconds (default: 300 = 5 minutes)
+	TTL int
+	// Max cache size in MB (default: 100)
+	MaxSize int
 }
 
 // GetCacheConfig returns cache configuration from viper
@@ -41,10 +44,11 @@ type CacheEntry struct {
 // CLICache provides in-memory and file-based caching for CLI responses
 // Per AI.md PART 36: Response caching for performance
 type CLICache struct {
-	mu        sync.RWMutex
-	memory    map[string]CacheEntry
-	ttl       time.Duration
-	maxSize   int64 // bytes
+	mu     sync.RWMutex
+	memory map[string]CacheEntry
+	ttl    time.Duration
+	// bytes
+	maxSize   int64
 	cacheDir  string
 	enabled   bool
 	totalSize int64
@@ -79,9 +83,10 @@ func InitCache() error {
 
 	cliCacheOnce.Do(func() {
 		cliCache = &CLICache{
-			memory:   make(map[string]CacheEntry),
-			ttl:      time.Duration(ttl) * time.Second,
-			maxSize:  int64(maxSize) * 1024 * 1024, // MB to bytes
+			memory: make(map[string]CacheEntry),
+			ttl:    time.Duration(ttl) * time.Second,
+			// MB to bytes
+			maxSize:  int64(maxSize) * 1024 * 1024,
 			cacheDir: paths.CacheDir(),
 			enabled:  enabled,
 		}
@@ -149,7 +154,8 @@ func (c *CLICache) Set(key string, data []byte) {
 	c.totalSize += dataSize
 
 	// Also persist to file for larger responses
-	if len(data) > 1024 { // > 1KB
+	// > 1KB
+	if len(data) > 1024 {
 		c.saveToFile(key, entry)
 	}
 }

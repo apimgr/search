@@ -49,7 +49,8 @@ func NewYandex() *Yandex {
 	config.DisplayName = "Yandex"
 	config.Priority = 70
 	config.Categories = []string{"general", "images", "news", "videos", "files", "music"}
-	config.SupportsTor = false // Yandex blocks Tor exit nodes
+	// Yandex blocks Tor exit nodes
+	config.SupportsTor = false
 
 	return &Yandex{
 		BaseEngine: search.NewBaseEngine(config),
@@ -202,22 +203,34 @@ func (e *Yandex) parseResults(html string, category model.Category) ([]model.Res
 // getYandexRegion maps language codes to Yandex region codes.
 func getYandexRegion(lang string) string {
 	regions := map[string]string{
-		"en": "84",  // USA
-		"ru": "225", // Russia
-		"uk": "187", // UK
-		"de": "96",  // Germany
-		"fr": "124", // France
-		"es": "203", // Spain
-		"it": "205", // Italy
-		"tr": "983", // Turkey
-		"kz": "159", // Kazakhstan
-		"by": "149", // Belarus
-		"ua": "187", // Ukraine
+		// USA
+		"en": "84",
+		// Russia
+		"ru": "225",
+		// UK
+		"uk": "187",
+		// Germany
+		"de": "96",
+		// France
+		"fr": "124",
+		// Spain
+		"es": "203",
+		// Italy
+		"it": "205",
+		// Turkey
+		"tr": "983",
+		// Kazakhstan
+		"kz": "159",
+		// Belarus
+		"by": "149",
+		// Ukraine
+		"ua": "187",
 	}
 	if region, ok := regions[lang]; ok {
 		return region
 	}
-	return "84" // default: USA
+	// default: USA
+	return "84"
 }
 
 // extractYandexURL extracts the actual URL from a Yandex /clck/ redirect.

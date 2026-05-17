@@ -45,7 +45,8 @@ func NewBaidu() *Baidu {
 	config.DisplayName = "Baidu"
 	config.Priority = 60
 	config.Categories = []string{"general", "images", "news", "videos", "files", "music"}
-	config.SupportsTor = false // Baidu blocks Tor exit nodes
+	// Baidu blocks Tor exit nodes
+	config.SupportsTor = false
 
 	return &Baidu{
 		BaseEngine: search.NewBaseEngine(config),

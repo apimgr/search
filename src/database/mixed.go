@@ -25,12 +25,18 @@ type MixedModeConfig struct {
 
 // DatabaseBackendConfig represents configuration for a single database backend
 type DatabaseBackendConfig struct {
-	Driver   string `yaml:"driver"`   // sqlite, postgres, mysql
-	DSN      string `yaml:"dsn"`      // connection string (for remote databases)
-	Path     string `yaml:"path"`     // file path (for SQLite)
-	MaxOpen  int    `yaml:"max_open"` // max open connections
-	MaxIdle  int    `yaml:"max_idle"` // max idle connections
-	Lifetime int    `yaml:"lifetime"` // connection max lifetime in seconds
+	// sqlite, postgres, mysql
+	Driver string `yaml:"driver"`
+	// connection string (for remote databases)
+	DSN string `yaml:"dsn"`
+	// file path (for SQLite)
+	Path string `yaml:"path"`
+	// max open connections
+	MaxOpen int `yaml:"max_open"`
+	// max idle connections
+	MaxIdle int `yaml:"max_idle"`
+	// connection max lifetime in seconds
+	Lifetime int `yaml:"lifetime"`
 }
 
 // DefaultMixedModeConfig returns default mixed mode configuration
@@ -386,11 +392,14 @@ func (mdb *MixedDB) SupportsReturning() bool {
 func (mdb *MixedDB) SupportsUpsert() bool {
 	switch mdb.driver {
 	case "postgres":
-		return true // ON CONFLICT
+		// ON CONFLICT
+		return true
 	case "sqlite", "sqlite3":
-		return true // ON CONFLICT
+		// ON CONFLICT
+		return true
 	case "mysql", "mariadb":
-		return true // ON DUPLICATE KEY UPDATE
+		// ON DUPLICATE KEY UPDATE
+		return true
 	default:
 		return false
 	}

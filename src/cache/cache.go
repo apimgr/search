@@ -59,14 +59,16 @@ type Config struct {
 	Prefix string `yaml:"prefix"`
 
 	// Default TTL
-	TTL int `yaml:"ttl"` // seconds
+	// seconds
+	TTL int `yaml:"ttl"`
 
 	// Cluster mode
 	Cluster      bool     `yaml:"cluster"`
 	ClusterNodes []string `yaml:"cluster_nodes"`
 
 	// Memory cache specific
-	MaxSize int `yaml:"max_size"` // Max items for memory cache
+	// Max items for memory cache
+	MaxSize int `yaml:"max_size"`
 }
 
 // DefaultConfig returns default cache configuration
@@ -80,8 +82,9 @@ func DefaultConfig() *Config {
 		MinIdle:  2,
 		Timeout:  5 * time.Second,
 		Prefix:   "apimgr:",
-		TTL:      3600, // 1 hour
-		MaxSize:  10000,
+		// 1 hour
+		TTL:     3600,
+		MaxSize: 10000,
 	}
 }
 

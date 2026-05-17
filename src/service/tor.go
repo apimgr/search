@@ -42,10 +42,14 @@ func findTorBinary(configPath string) string {
 	commonLocations := []string{
 		"/usr/bin/tor",
 		"/usr/local/bin/tor",
-		"/opt/local/bin/tor",         // macOS MacPorts
-		"/opt/homebrew/bin/tor",      // macOS Homebrew (Apple Silicon)
-		"/usr/local/opt/tor/bin/tor", // macOS Homebrew (Intel)
-		"/snap/bin/tor",              // Ubuntu Snap
+		// macOS MacPorts
+		"/opt/local/bin/tor",
+		// macOS Homebrew (Apple Silicon)
+		"/opt/homebrew/bin/tor",
+		// macOS Homebrew (Intel)
+		"/usr/local/opt/tor/bin/tor",
+		// Ubuntu Snap
+		"/snap/bin/tor",
 	}
 
 	for _, loc := range commonLocations {
@@ -68,9 +72,10 @@ var lookPath = func(file string) (string, error) {
 // per AI.md PART 32: TOR HIDDEN SERVICE (NON-NEGOTIABLE)
 // Server binary fully owns and controls the Tor process lifecycle.
 type TorService struct {
-	config    *config.Config
-	tor       *tor.Tor
-	serviceID string // .onion address (without .onion suffix)
+	config *config.Config
+	tor    *tor.Tor
+	// .onion address (without .onion suffix)
+	serviceID string
 	dialer    *tor.Dialer
 	running   bool
 	onionAddr string
@@ -97,9 +102,12 @@ func NewTorService(cfg *config.Config) *TorService {
 // Per AI.md PART 32: Server binary owns all Tor files
 func (t *TorService) ensureTorDirs() error {
 	dirs := []string{
-		t.dataDir,                        // {data_dir}/tor/
-		filepath.Join(t.dataDir, "site"), // {data_dir}/tor/site/ for hidden service keys
-		t.configDir,                      // {config_dir}/tor/ for torrc
+		// {data_dir}/tor/
+		t.dataDir,
+		// {data_dir}/tor/site/ for hidden service keys
+		filepath.Join(t.dataDir, "site"),
+		// {config_dir}/tor/ for torrc
+		t.configDir,
 	}
 
 	for _, dir := range dirs {
@@ -264,7 +272,8 @@ func (t *TorService) Start() error {
 	if torBinary == "" {
 		// Per AI.md PART 32: "NOT FOUND: Log INFO, disable Tor features, continue without Tor"
 		log.Println("[Tor] Tor binary not found, hidden service disabled")
-		return nil // Not an error - Tor is optional
+		// Not an error - Tor is optional
+		return nil
 	}
 
 	torConfig.Enabled = true
@@ -303,10 +312,11 @@ func (t *TorService) Start() error {
 
 	// Build StartConf per AI.md PART 32
 	conf := &tor.StartConf{
-		ExePath:         torBinary,
-		TorrcFile:       torrcPath,
-		DataDir:         t.dataDir,
-		NoAutoSocksPort: true, // SocksPort controlled by torrc, not bine command line
+		ExePath:   torBinary,
+		TorrcFile: torrcPath,
+		DataDir:   t.dataDir,
+		// SocksPort controlled by torrc, not bine command line
+		NoAutoSocksPort: true,
 	}
 
 	// Enable debug output in development mode
@@ -500,7 +510,8 @@ func (t *TorService) GetHTTPClient(useTor bool) *http.Client {
 
 	// Route through Tor network
 	return &http.Client{
-		Timeout: 60 * time.Second, // Tor is slower
+		// Tor is slower
+		Timeout: 60 * time.Second,
 		Transport: &http.Transport{
 			DialContext: dialer.DialContext,
 		},

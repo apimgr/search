@@ -10,20 +10,25 @@ import (
 	"github.com/apimgr/search/src/terminal"
 )
 
-const boxWidth = 72 // Per AI.md PART 14 console output format
+// Per AI.md PART 14 console output format
+const boxWidth = 72
 
 // Config holds banner configuration
 type Config struct {
-	AppName     string
-	Version     string
-	Mode        string // production/development
-	Debug       bool
-	URLs        []string // Listen URLs
-	ShowSetup   bool     // Show setup token (server only, first run)
+	AppName string
+	Version string
+	// production/development
+	Mode  string
+	Debug bool
+	// Listen URLs
+	URLs []string
+	// Show setup token (server only, first run)
+	ShowSetup   bool
 	SetupToken  string
 	AdminPath   string
 	Description string
-	SMTPStatus  string // SMTP status (e.g., "Auto-detected (localhost:25)")
+	// SMTP status (e.g., "Auto-detected (localhost:25)")
+	SMTPStatus string
 }
 
 // Print prints the banner based on terminal size

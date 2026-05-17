@@ -152,7 +152,8 @@ func IsColorEnabled() bool {
 		return true
 	case "never":
 		return false
-	default: // "auto"
+	// "auto"
+	default:
 		// Check if stdout is a terminal
 		return isTerminal()
 	}

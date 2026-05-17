@@ -15,7 +15,8 @@ import (
 // Per AI.md PART 7: Debug endpoints disabled by default, enabled with DEBUG=true
 func (s *Server) registerDebugRoutes(mux *http.ServeMux) {
 	if !s.config.IsDebug() {
-		return // No debug routes unless DEBUG=true
+		// No debug routes unless DEBUG=true
+		return
 	}
 
 	// pprof endpoints

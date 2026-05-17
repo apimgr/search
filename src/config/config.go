@@ -19,17 +19,20 @@ import (
 // Build info - set via -ldflags at build time
 // Per AI.md PART 26: LDFLAGS must include Version, CommitID, BuildDate, OfficialSite
 var (
-	Version      = "dev"
-	CommitID     = "unknown"
-	BuildDate    = "unknown"
-	OfficialSite = "https://scour.li" // Default, can be overridden via -ldflags
+	Version   = "dev"
+	CommitID  = "unknown"
+	BuildDate = "unknown"
+	// Default, can be overridden via -ldflags
+	OfficialSite = "https://scour.li"
 )
 
 // Config represents the complete application configuration
 type Config struct {
-	mu         sync.RWMutex
-	configPath string // Path to config file for reload
-	firstRun   bool   // True if this is first run (no config existed)
+	mu sync.RWMutex
+	// Path to config file for reload
+	configPath string
+	// True if this is first run (no config existed)
+	firstRun bool
 
 	Server  ServerConfig            `yaml:"server"`
 	Search  SearchConfig            `yaml:"search"`
@@ -76,7 +79,8 @@ func (c *Config) Reload() error {
 
 	var newCfg Config
 	decoder := yaml.NewDecoder(file)
-	decoder.KnownFields(true) // Per AI.md PART 5: Unknown keys cause errors
+	// Per AI.md PART 5: Unknown keys cause errors
+	decoder.KnownFields(true)
 
 	if err := decoder.Decode(&newCfg); err != nil {
 		return fmt.Errorf("failed to parse config file: %w", err)
@@ -113,12 +117,14 @@ type ServerConfig struct {
 	// Core settings
 	Title       string `yaml:"title"`
 	Description string `yaml:"description"`
-	Port        int    `yaml:"port"`       // HTTP port (or single port if HTTPSPort not set)
-	HTTPSPort   int    `yaml:"https_port"` // HTTPS port for dual port mode (optional)
-	Address     string `yaml:"address"`
-	Mode        string `yaml:"mode"`
-	SecretKey   string `yaml:"secret_key"`
-	BaseURL     string `yaml:"base_url"`
+	// HTTP port (or single port if HTTPSPort not set)
+	Port int `yaml:"port"`
+	// HTTPS port for dual port mode (optional)
+	HTTPSPort int    `yaml:"https_port"`
+	Address   string `yaml:"address"`
+	Mode      string `yaml:"mode"`
+	SecretKey string `yaml:"secret_key"`
+	BaseURL   string `yaml:"base_url"`
 
 	// SSL/TLS
 	SSL SSLConfig `yaml:"ssl"`
@@ -203,11 +209,12 @@ type SSLConfig struct {
 	CertFile    string `yaml:"cert_file"`
 	KeyFile     string `yaml:"key_file"`
 	LetsEncrypt struct {
-		Enabled   bool     `yaml:"enabled"`
-		Email     string   `yaml:"email"`
-		Domains   []string `yaml:"domains"`
-		Staging   bool     `yaml:"staging"`
-		Challenge string   `yaml:"challenge"` // http-01, tls-alpn-01, dns-01
+		Enabled bool     `yaml:"enabled"`
+		Email   string   `yaml:"email"`
+		Domains []string `yaml:"domains"`
+		Staging bool     `yaml:"staging"`
+		// http-01, tls-alpn-01, dns-01
+		Challenge string `yaml:"challenge"`
 	} `yaml:"letsencrypt"`
 	// DNS-01 provider configuration per AI.md PART 17
 	DNS01 DNS01Config `yaml:"dns01"`
@@ -216,9 +223,12 @@ type SSLConfig struct {
 // DNS01Config represents DNS-01 ACME challenge configuration
 // Per AI.md: ALL DNS providers are supported via go-acme/lego
 type DNS01Config struct {
-	Provider             string `yaml:"provider"`              // Provider identifier (cloudflare, route53, etc.)
-	CredentialsEncrypted string `yaml:"credentials_encrypted"` // AES-256-GCM encrypted JSON
-	ValidatedAt          string `yaml:"validated_at"`          // Timestamp of last successful validation
+	// Provider identifier (cloudflare, route53, etc.)
+	Provider string `yaml:"provider"`
+	// AES-256-GCM encrypted JSON
+	CredentialsEncrypted string `yaml:"credentials_encrypted"`
+	// Timestamp of last successful validation
+	ValidatedAt string `yaml:"validated_at"`
 }
 
 // AdminConfig represents admin configuration
@@ -234,10 +244,14 @@ type AdminConfig struct {
 // BrandingConfig represents branding configuration
 // Per AI.md PART 13/16: branding fields for healthz project info
 type BrandingConfig struct {
-	Title         string `yaml:"title"`           // Per PART 13: project.name source
-	Tagline       string `yaml:"tagline"`         // Per PART 13: project.tagline source
-	Description   string `yaml:"description"`     // Per PART 13: project.description source
-	SourceCodeURL string `yaml:"source_code_url"` // Per AI.md: {PLATFORM_REPO_URL} - repository URL
+	// Per PART 13: project.name source
+	Title string `yaml:"title"`
+	// Per PART 13: project.tagline source
+	Tagline string `yaml:"tagline"`
+	// Per PART 13: project.description source
+	Description string `yaml:"description"`
+	// Per AI.md: {PLATFORM_REPO_URL} - repository URL
+	SourceCodeURL string `yaml:"source_code_url"`
 	LogoURL       string `yaml:"logo_url"`
 	FaviconURL    string `yaml:"favicon_url"`
 	FooterText    string `yaml:"footer_text"`
@@ -260,9 +274,11 @@ type RateLimitConfig struct {
 
 // SessionTypeConfig represents configuration for a specific session type (admin or user)
 type SessionTypeConfig struct {
-	CookieName  string `yaml:"cookie_name"`
-	MaxAge      int    `yaml:"max_age"`      // Absolute session lifetime in seconds
-	IdleTimeout int    `yaml:"idle_timeout"` // Expires after inactivity in seconds
+	CookieName string `yaml:"cookie_name"`
+	// Absolute session lifetime in seconds
+	MaxAge int `yaml:"max_age"`
+	// Expires after inactivity in seconds
+	IdleTimeout int `yaml:"idle_timeout"`
 }
 
 // SessionConfig represents session configuration per AI.md PART 13
@@ -272,10 +288,13 @@ type SessionConfig struct {
 	// User sessions (user.db user_sessions table)
 	User SessionTypeConfig `yaml:"user"`
 	// Common settings
-	ExtendOnActivity bool   `yaml:"extend_on_activity"` // Reset idle timeout on each request
-	Secure           string `yaml:"secure"`             // auto, true, false
-	HTTPOnly         bool   `yaml:"http_only"`
-	SameSite         string `yaml:"same_site"` // strict, lax, none
+	// Reset idle timeout on each request
+	ExtendOnActivity bool `yaml:"extend_on_activity"`
+	// auto, true, false
+	Secure   string `yaml:"secure"`
+	HTTPOnly bool   `yaml:"http_only"`
+	// strict, lax, none
+	SameSite string `yaml:"same_site"`
 
 	// Legacy fields for backward compatibility
 	Duration       string `yaml:"duration,omitempty"`
@@ -312,7 +331,8 @@ func (s *SessionConfig) GetAdminMaxAge() int {
 	if s.Admin.MaxAge > 0 {
 		return s.Admin.MaxAge
 	}
-	return 2592000 // 30 days
+	// 30 days
+	return 2592000
 }
 
 // GetUserMaxAge returns user session max age in seconds (default 7 days)
@@ -320,7 +340,8 @@ func (s *SessionConfig) GetUserMaxAge() int {
 	if s.User.MaxAge > 0 {
 		return s.User.MaxAge
 	}
-	return 604800 // 7 days
+	// 7 days
+	return 604800
 }
 
 // GetIdleTimeout returns idle timeout in seconds (default 24 hours)
@@ -331,7 +352,8 @@ func (s *SessionConfig) GetIdleTimeout() int {
 	if s.User.IdleTimeout > 0 {
 		return s.User.IdleTimeout
 	}
-	return 86400 // 24 hours
+	// 24 hours
+	return 86400
 }
 
 // IsSecure returns whether cookies should be secure
@@ -341,7 +363,8 @@ func (s *SessionConfig) IsSecure(sslEnabled bool) bool {
 		return true
 	case "false", "no", "0":
 		return false
-	default: // "auto" or empty
+	// "auto" or empty
+	default:
 		return sslEnabled || s.CookieSecure
 	}
 }
@@ -419,8 +442,10 @@ type LogsConfig struct {
 // Per AI.md PART 32: "Auto-enabled if tor binary is installed - no enable flag needed"
 type TorConfig struct {
 	// Runtime state - NOT configurable
-	Enabled      bool   `yaml:"-"` // Computed at runtime when Tor binary is found
-	OnionAddress string `yaml:"-"` // Set at runtime when Tor starts
+	// Computed at runtime when Tor binary is found
+	Enabled bool `yaml:"-"`
+	// Set at runtime when Tor starts
+	OnionAddress string `yaml:"-"`
 
 	// Binary path (empty = auto-detect)
 	Binary string `yaml:"binary"`
@@ -467,7 +492,8 @@ type TorConfig struct {
 // Per AI.md PART 18: Nested SMTP and From blocks
 type EmailConfig struct {
 	// Enabled is auto-set based on SMTP availability (no manual toggle)
-	Enabled bool            `yaml:"-"` // Computed, not stored
+	// Computed, not stored
+	Enabled bool            `yaml:"-"`
 	SMTP    SMTPConfig      `yaml:"smtp"`
 	From    EmailFromConfig `yaml:"from"`
 }
@@ -599,12 +625,15 @@ type WebConfig struct {
 		Deny  []string `yaml:"deny"`
 	} `yaml:"robots"`
 	Security struct {
-		Contact string `yaml:"contact"` // Security contact email (mailto: prefix added automatically)
-		Expires string `yaml:"expires"` // Expiration date (auto-calculated 1 year from now if not set)
+		// Security contact email (mailto: prefix added automatically)
+		Contact string `yaml:"contact"`
+		// Expiration date (auto-calculated 1 year from now if not set)
+		Expires string `yaml:"expires"`
 	} `yaml:"security"`
 	Announcements AnnouncementsConfig `yaml:"announcements"`
 	CookieConsent CookieConsentConfig `yaml:"cookie_consent"`
-	CORS          string              `yaml:"cors"` // "*", "origin1,origin2", or ""
+	// "*", "origin1,origin2", or ""
+	CORS string `yaml:"cors"`
 }
 
 // AnnouncementsConfig represents announcement settings (per AI.md)
@@ -615,21 +644,26 @@ type AnnouncementsConfig struct {
 
 // Announcement represents a single announcement message
 type Announcement struct {
-	ID          string `yaml:"id"`
-	Type        string `yaml:"type"` // warning, info, error, success
-	Title       string `yaml:"title"`
-	Message     string `yaml:"message"`
-	Start       string `yaml:"start"`       // ISO 8601 datetime
-	End         string `yaml:"end"`         // ISO 8601 datetime
-	Dismissible bool   `yaml:"dismissible"` // User can dismiss
+	ID string `yaml:"id"`
+	// warning, info, error, success
+	Type    string `yaml:"type"`
+	Title   string `yaml:"title"`
+	Message string `yaml:"message"`
+	// ISO 8601 datetime
+	Start string `yaml:"start"`
+	// ISO 8601 datetime
+	End string `yaml:"end"`
+	// User can dismiss
+	Dismissible bool `yaml:"dismissible"`
 }
 
 // CookieConsentConfig represents cookie consent popup settings
 type CookieConsentConfig struct {
-	Enabled    bool   `yaml:"enabled"`
-	Message    string `yaml:"message"`
-	PolicyURL  string `yaml:"policy_url"`
-	TrackingID string `yaml:"tracking_id"` // Google Analytics ID
+	Enabled   bool   `yaml:"enabled"`
+	Message   string `yaml:"message"`
+	PolicyURL string `yaml:"policy_url"`
+	// Google Analytics ID
+	TrackingID string `yaml:"tracking_id"`
 }
 
 // ActiveAnnouncements returns announcements that are currently active
@@ -649,14 +683,16 @@ func (c *AnnouncementsConfig) ActiveAnnouncements() []Announcement {
 		if a.Start != "" {
 			startTime, err = time.Parse(time.RFC3339, a.Start)
 			if err != nil {
-				startTime = time.Time{} // Zero time means always started
+				// Zero time means always started
+				startTime = time.Time{}
 			}
 		}
 
 		if a.End != "" {
 			endTime, err = time.Parse(time.RFC3339, a.End)
 			if err != nil {
-				endTime = time.Time{} // Zero time means never ends
+				// Zero time means never ends
+				endTime = time.Time{}
 			}
 		}
 
@@ -704,7 +740,8 @@ type SchedulerTasksConfig struct {
 
 // TaskConfig represents configuration for a scheduled task
 type TaskConfig struct {
-	Schedule string `yaml:"schedule"` // Cron expression or @every interval
+	// Cron expression or @every interval
+	Schedule string `yaml:"schedule"`
 	Enabled  bool   `yaml:"enabled"`
 }
 
@@ -727,9 +764,10 @@ type CacheConfig struct {
 	DB       int    `yaml:"db"`
 
 	// Connection pool settings
-	PoolSize int    `yaml:"pool_size"`
-	MinIdle  int    `yaml:"min_idle"`
-	Timeout  string `yaml:"timeout"` // Connection timeout (e.g., "5s")
+	PoolSize int `yaml:"pool_size"`
+	MinIdle  int `yaml:"min_idle"`
+	// Connection timeout (e.g., "5s")
+	Timeout string `yaml:"timeout"`
 
 	// Key prefix to avoid collisions (use unique prefix per app)
 	Prefix string `yaml:"prefix"`
@@ -738,35 +776,50 @@ type CacheConfig struct {
 	TTL int `yaml:"ttl"`
 
 	// Cluster settings (when using Valkey/Redis Cluster)
-	Cluster      bool     `yaml:"cluster"`
-	ClusterNodes []string `yaml:"cluster_nodes"` // e.g., ["node1:6379", "node2:6379"]
+	Cluster bool `yaml:"cluster"`
+	// e.g., ["node1:6379", "node2:6379"]
+	ClusterNodes []string `yaml:"cluster_nodes"`
 }
 
 // GeoIPConfig represents GeoIP configuration (uses MMDB from sapics/ip-location-db)
 // Per AI.md PART 20: GeoIP configuration
 type GeoIPConfig struct {
-	Enabled          bool     `yaml:"enabled"`
-	Dir              string   `yaml:"dir"`               // Directory for MMDB files
-	Update           string   `yaml:"update"`            // never, daily, weekly, monthly
-	DenyCountries    []string `yaml:"deny_countries"`    // Countries to block (ISO 3166-1 alpha-2)
-	AllowedCountries []string `yaml:"allowed_countries"` // If set, only these countries allowed
+	Enabled bool `yaml:"enabled"`
+	// Directory for MMDB files
+	Dir string `yaml:"dir"`
+	// never, daily, weekly, monthly
+	Update string `yaml:"update"`
+	// Countries to block (ISO 3166-1 alpha-2)
+	DenyCountries []string `yaml:"deny_countries"`
+	// If set, only these countries allowed
+	AllowedCountries []string `yaml:"allowed_countries"`
 	// Database toggles per AI.md PART 20
-	ASN     bool `yaml:"asn"`     // Enable ASN lookups
-	Country bool `yaml:"country"` // Enable country lookups
-	City    bool `yaml:"city"`    // Enable city lookups (larger download)
-	WHOIS   bool `yaml:"whois"`   // Enable WHOIS lookups
+	// Enable ASN lookups
+	ASN bool `yaml:"asn"`
+	// Enable country lookups
+	Country bool `yaml:"country"`
+	// Enable city lookups (larger download)
+	City bool `yaml:"city"`
+	// Enable WHOIS lookups
+	WHOIS bool `yaml:"whois"`
 }
 
 // MetricsConfig represents Prometheus-compatible metrics configuration
 // Per AI.md PART 21: Metrics configuration
 type MetricsConfig struct {
-	Enabled         bool      `yaml:"enabled"`
-	Endpoint        string    `yaml:"endpoint"`         // Endpoint path (default: /metrics)
-	IncludeSystem   bool      `yaml:"include_system"`   // Include system metrics (CPU, memory, disk)
-	IncludeRuntime  bool      `yaml:"include_runtime"`  // Include Go runtime metrics
-	Token           string    `yaml:"token"`            // Bearer token for authentication (empty = no auth)
-	DurationBuckets []float64 `yaml:"duration_buckets"` // Histogram buckets for request duration (seconds)
-	SizeBuckets     []float64 `yaml:"size_buckets"`     // Histogram buckets for request size (bytes)
+	Enabled bool `yaml:"enabled"`
+	// Endpoint path (default: /metrics)
+	Endpoint string `yaml:"endpoint"`
+	// Include system metrics (CPU, memory, disk)
+	IncludeSystem bool `yaml:"include_system"`
+	// Include Go runtime metrics
+	IncludeRuntime bool `yaml:"include_runtime"`
+	// Bearer token for authentication (empty = no auth)
+	Token string `yaml:"token"`
+	// Histogram buckets for request duration (seconds)
+	DurationBuckets []float64 `yaml:"duration_buckets"`
+	// Histogram buckets for request size (bytes)
+	SizeBuckets []float64 `yaml:"size_buckets"`
 }
 
 // BackupConfig represents backup configuration
@@ -781,23 +834,30 @@ type BackupConfig struct {
 // BackupEncryptionConfig represents backup encryption settings
 // Per AI.md PART 22: Password is NEVER stored - derived on-demand
 type BackupEncryptionConfig struct {
-	Enabled bool   `yaml:"enabled"` // true if password was set during setup
-	Hint    string `yaml:"hint"`    // Optional password hint (stored, NOT the password)
+	// true if password was set during setup
+	Enabled bool `yaml:"enabled"`
+	// Optional password hint (stored, NOT the password)
+	Hint string `yaml:"hint"`
 }
 
 // BackupRetentionConfig represents backup retention policy
 // Per AI.md PART 22: Retention settings
 type BackupRetentionConfig struct {
-	MaxBackups  int `yaml:"max_backups"`  // Daily full backups to keep (default: 1)
-	KeepWeekly  int `yaml:"keep_weekly"`  // Weekly backups (Sunday) to keep (0 = disabled)
-	KeepMonthly int `yaml:"keep_monthly"` // Monthly backups (1st) to keep (0 = disabled)
-	KeepYearly  int `yaml:"keep_yearly"`  // Yearly backups (Jan 1st) to keep (0 = disabled)
+	// Daily full backups to keep (default: 1)
+	MaxBackups int `yaml:"max_backups"`
+	// Weekly backups (Sunday) to keep (0 = disabled)
+	KeepWeekly int `yaml:"keep_weekly"`
+	// Monthly backups (1st) to keep (0 = disabled)
+	KeepMonthly int `yaml:"keep_monthly"`
+	// Yearly backups (Jan 1st) to keep (0 = disabled)
+	KeepYearly int `yaml:"keep_yearly"`
 }
 
 // ComplianceConfig represents compliance mode configuration
 // Per AI.md PART 22: When enabled, backup encryption is REQUIRED
 type ComplianceConfig struct {
-	Enabled bool `yaml:"enabled"` // HIPAA, SOC2, etc. compliance mode
+	// HIPAA, SOC2, etc. compliance mode
+	Enabled bool `yaml:"enabled"`
 }
 
 // ImageProxyConfig represents image proxy configuration
@@ -823,9 +883,12 @@ type SEOConfig struct {
 	MetaTags           map[string]string `yaml:"meta_tags"`
 	OpenGraph          OpenGraphConfig   `yaml:"opengraph"`
 	Twitter            TwitterConfig     `yaml:"twitter"`
-	Canonical          bool              `yaml:"canonical"` // Include canonical URLs
-	NoIndex            bool              `yaml:"noindex"`   // Set noindex on search results
-	Sitemap            bool              `yaml:"sitemap"`   // Generate sitemap.xml
+	// Include canonical URLs
+	Canonical bool `yaml:"canonical"`
+	// Set noindex on search results
+	NoIndex bool `yaml:"noindex"`
+	// Generate sitemap.xml
+	Sitemap bool `yaml:"sitemap"`
 }
 
 // OpenGraphConfig represents OpenGraph meta tags
@@ -839,36 +902,49 @@ type OpenGraphConfig struct {
 
 // TwitterConfig represents Twitter card meta tags
 type TwitterConfig struct {
-	Enabled bool   `yaml:"enabled"`
-	Card    string `yaml:"card"` // summary, summary_large_image
-	Site    string `yaml:"site"` // @username
+	Enabled bool `yaml:"enabled"`
+	// summary, summary_large_image
+	Card string `yaml:"card"`
+	// @username
+	Site    string `yaml:"site"`
 	Creator string `yaml:"creator"`
 }
 
 // CompressionConfig represents HTTP response compression settings
 type CompressionConfig struct {
-	Enabled      bool     `yaml:"enabled"`
-	Level        int      `yaml:"level"`         // 1-9, higher = more compression, more CPU
-	MinSize      int      `yaml:"min_size"`      // Minimum response size to compress (bytes)
-	MimeTypes    []string `yaml:"mime_types"`    // MIME types to compress
-	Gzip         bool     `yaml:"gzip"`          // Enable gzip compression
-	Brotli       bool     `yaml:"brotli"`        // Enable Brotli compression
-	DisableProxy bool     `yaml:"disable_proxy"` // Disable compression for proxied requests
+	Enabled bool `yaml:"enabled"`
+	// 1-9, higher = more compression, more CPU
+	Level int `yaml:"level"`
+	// Minimum response size to compress (bytes)
+	MinSize int `yaml:"min_size"`
+	// MIME types to compress
+	MimeTypes []string `yaml:"mime_types"`
+	// Enable gzip compression
+	Gzip bool `yaml:"gzip"`
+	// Enable Brotli compression
+	Brotli bool `yaml:"brotli"`
+	// Disable compression for proxied requests
+	DisableProxy bool `yaml:"disable_proxy"`
 }
 
 // LimitsConfig represents request limits configuration per AI.md PART 18
 // Protects against DoS attacks (Slowloris, large uploads)
 type LimitsConfig struct {
-	MaxBodySize  string `yaml:"max_body_size"` // Maximum request body size (e.g., "10MB")
-	ReadTimeout  string `yaml:"read_timeout"`  // HTTP read timeout (e.g., "30s")
-	WriteTimeout string `yaml:"write_timeout"` // HTTP write timeout (e.g., "30s")
-	IdleTimeout  string `yaml:"idle_timeout"`  // HTTP idle connection timeout (e.g., "120s")
+	// Maximum request body size (e.g., "10MB")
+	MaxBodySize string `yaml:"max_body_size"`
+	// HTTP read timeout (e.g., "30s")
+	ReadTimeout string `yaml:"read_timeout"`
+	// HTTP write timeout (e.g., "30s")
+	WriteTimeout string `yaml:"write_timeout"`
+	// HTTP idle connection timeout (e.g., "120s")
+	IdleTimeout string `yaml:"idle_timeout"`
 }
 
 // GetMaxBodySizeBytes parses MaxBodySize and returns bytes
 func (l *LimitsConfig) GetMaxBodySizeBytes() int64 {
 	if l.MaxBodySize == "" {
-		return 10 * 1024 * 1024 // Default 10MB
+		// Default 10MB
+		return 10 * 1024 * 1024
 	}
 	size := l.MaxBodySize
 	multiplier := int64(1)
@@ -893,14 +969,21 @@ func (l *LimitsConfig) GetMaxBodySizeBytes() int64 {
 
 // I18nConfig represents internationalization configuration
 type I18nConfig struct {
-	Enabled            bool     `yaml:"enabled"`
-	DefaultLanguage    string   `yaml:"default_language"`    // BCP 47 language tag (e.g., en, en-US, de)
-	SupportedLanguages []string `yaml:"supported_languages"` // List of supported languages
-	AutoDetect         bool     `yaml:"auto_detect"`         // Detect from Accept-Language header
-	ShowSelector       bool     `yaml:"show_selector"`       // Show language selector in UI
-	RTLLanguages       []string `yaml:"rtl_languages"`       // Right-to-left languages (ar, he, etc.)
-	TranslationsDir    string   `yaml:"translations_dir"`    // Directory for translation files
-	FallbackLanguage   string   `yaml:"fallback_language"`   // Fallback if requested language not available
+	Enabled bool `yaml:"enabled"`
+	// BCP 47 language tag (e.g., en, en-US, de)
+	DefaultLanguage string `yaml:"default_language"`
+	// List of supported languages
+	SupportedLanguages []string `yaml:"supported_languages"`
+	// Detect from Accept-Language header
+	AutoDetect bool `yaml:"auto_detect"`
+	// Show language selector in UI
+	ShowSelector bool `yaml:"show_selector"`
+	// Right-to-left languages (ar, he, etc.)
+	RTLLanguages []string `yaml:"rtl_languages"`
+	// Directory for translation files
+	TranslationsDir string `yaml:"translations_dir"`
+	// Fallback if requested language not available
+	FallbackLanguage string `yaml:"fallback_language"`
 }
 
 // SearchConfig represents search configuration
@@ -932,7 +1015,8 @@ type AlertsConfig struct {
 type WidgetsConfig struct {
 	Enabled        bool     `yaml:"enabled"`
 	DefaultWidgets []string `yaml:"default_widgets"`
-	CacheTTL       int      `yaml:"cache_ttl"` // seconds
+	// seconds
+	CacheTTL int `yaml:"cache_ttl"`
 
 	Weather WeatherWidgetConfig `yaml:"weather"`
 	News    NewsWidgetConfig    `yaml:"news"`
@@ -946,13 +1030,15 @@ type WidgetsConfig struct {
 type WeatherWidgetConfig struct {
 	Enabled     bool   `yaml:"enabled"`
 	DefaultCity string `yaml:"default_city"`
-	Units       string `yaml:"units"` // "metric" or "imperial"
+	// "metric" or "imperial"
+	Units string `yaml:"units"`
 }
 
 // NewsWidgetConfig holds news widget configuration
 type NewsWidgetConfig struct {
-	Enabled  bool     `yaml:"enabled"`
-	Sources  []string `yaml:"sources"` // RSS feed URLs
+	Enabled bool `yaml:"enabled"`
+	// RSS feed URLs
+	Sources  []string `yaml:"sources"`
 	MaxItems int      `yaml:"max_items"`
 }
 
@@ -966,7 +1052,8 @@ type StocksWidgetConfig struct {
 type CryptoWidgetConfig struct {
 	Enabled      bool     `yaml:"enabled"`
 	DefaultCoins []string `yaml:"default_coins"`
-	Currency     string   `yaml:"currency"` // "usd", "eur", etc.
+	// "usd", "eur", etc.
+	Currency string `yaml:"currency"`
 }
 
 // SportsWidgetConfig holds sports widget configuration
@@ -1030,7 +1117,8 @@ func DefaultConfig() *Config {
 			Address:     "[::]",
 			Mode:        "production",
 			SecretKey:   generateSecret(),
-			BaseURL:     "", // Empty = auto-detect from request headers
+			// Empty = auto-detect from request headers
+			BaseURL: "",
 			SSL: SSLConfig{
 				Enabled: false,
 				AutoTLS: false,
@@ -1061,14 +1149,18 @@ func DefaultConfig() *Config {
 			},
 			Session: SessionConfig{
 				Admin: SessionTypeConfig{
-					CookieName:  "admin_session",
-					MaxAge:      2592000, // 30 days
-					IdleTimeout: 86400,   // 24 hours
+					CookieName: "admin_session",
+					// 30 days
+					MaxAge: 2592000,
+					// 24 hours
+					IdleTimeout: 86400,
 				},
 				User: SessionTypeConfig{
-					CookieName:  "user_session",
-					MaxAge:      604800, // 7 days
-					IdleTimeout: 86400,  // 24 hours
+					CookieName: "user_session",
+					// 7 days
+					MaxAge: 604800,
+					// 24 hours
+					IdleTimeout: 86400,
 				},
 				ExtendOnActivity: true,
 				Secure:           "auto",
@@ -1333,13 +1425,15 @@ func DefaultConfig() *Config {
 					Card:    "summary",
 				},
 				Canonical: true,
-				NoIndex:   true, // Don't index search results by default
-				Sitemap:   false,
+				// Don't index search results by default
+				NoIndex: true,
+				Sitemap: false,
 			},
 			Compression: CompressionConfig{
 				Enabled: true,
 				Level:   6,
-				MinSize: 1024, // Only compress responses > 1KB
+				// Only compress responses > 1KB
+				MinSize: 1024,
 				MimeTypes: []string{
 					"text/html",
 					"text/css",
@@ -1349,8 +1443,9 @@ func DefaultConfig() *Config {
 					"application/xml",
 					"text/xml",
 				},
-				Gzip:         true,
-				Brotli:       false, // Brotli requires additional CPU
+				Gzip: true,
+				// Brotli requires additional CPU
+				Brotli:       false,
 				DisableProxy: false,
 			},
 			// Request limits per AI.md PART 18
@@ -1385,12 +1480,15 @@ func DefaultConfig() *Config {
 				Custom:        []BangConfig{},
 			},
 			OpenSearch: OpenSearchConfig{
-				Enabled:     true,
-				ShortName:   "", // Uses server.title if empty
-				Description: "", // Uses server.description if empty
+				Enabled: true,
+				// Uses server.title if empty
+				ShortName: "",
+				// Uses server.description if empty
+				Description: "",
 				Tags:        "search privacy metasearch",
-				LongName:    "", // Uses server.title if empty
-				Image:       "/static/img/favicon.png",
+				// Uses server.title if empty
+				LongName: "",
+				Image:    "/static/img/favicon.png",
 			},
 			Alerts: AlertsConfig{
 				CreateRateLimitPerHour:   10,
@@ -1404,7 +1502,8 @@ func DefaultConfig() *Config {
 			Widgets: WidgetsConfig{
 				Enabled:        true,
 				DefaultWidgets: []string{"clock", "weather", "quicklinks", "calculator"},
-				CacheTTL:       300, // 5 minutes
+				// 5 minutes
+				CacheTTL: 300,
 				Weather: WeatherWidgetConfig{
 					Enabled:     true,
 					DefaultCity: "",
@@ -1528,7 +1627,8 @@ func Load(path string) (*Config, error) {
 
 	var cfg Config
 	decoder := yaml.NewDecoder(file)
-	decoder.KnownFields(true) // Per AI.md PART 5: Unknown keys cause errors
+	// Per AI.md PART 5: Unknown keys cause errors
+	decoder.KnownFields(true)
 
 	if err := decoder.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
@@ -1675,7 +1775,8 @@ func LoadOrCreate(path string) (*Config, bool, error) {
 	// If file doesn't exist, create default
 	if os.IsNotExist(err) {
 		cfg = DefaultConfig()
-		cfg.configPath = path // Store path for reload
+		// Store path for reload
+		cfg.configPath = path
 		if err := cfg.Save(path); err != nil {
 			return nil, false, err
 		}
@@ -2019,10 +2120,12 @@ func (c *Config) ValidateAndApplyDefaults() []ValidationWarning {
 
 	// Session configuration
 	if c.Server.Session.Admin.MaxAge <= 0 {
-		c.Server.Session.Admin.MaxAge = 2592000 // 30 days
+		// 30 days
+		c.Server.Session.Admin.MaxAge = 2592000
 	}
 	if c.Server.Session.User.MaxAge <= 0 {
-		c.Server.Session.User.MaxAge = 604800 // 7 days
+		// 7 days
+		c.Server.Session.User.MaxAge = 604800
 	}
 
 	// GeoIP configuration - just ensure dir is set

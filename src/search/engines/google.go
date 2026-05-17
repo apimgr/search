@@ -50,7 +50,8 @@ func NewGoogle() *Google {
 	config.DisplayName = "Google"
 	config.Priority = 90
 	config.Categories = []string{"general", "images", "news", "videos", "files", "music"}
-	config.SupportsTor = false // Google blocks Tor exit nodes
+	// Google blocks Tor exit nodes
+	config.SupportsTor = false
 
 	return &Google{
 		BaseEngine: search.NewBaseEngine(config),
@@ -90,7 +91,8 @@ func (e *Google) googleDo(ctx context.Context, rawURL string) (*http.Response, e
 	req.Header.Set("Sec-Fetch-Dest", "document")
 	req.Header.Set("Sec-Fetch-Mode", "navigate")
 	req.Header.Set("Sec-Fetch-Site", "none")
-	req.Header.Set("Cookie", "SOCS=CAI") // consent bypass
+	// consent bypass
+	req.Header.Set("Cookie", "SOCS=CAI")
 	return e.client.Do(req)
 }
 

@@ -250,7 +250,8 @@ func (c *MemoryCache) Stats(ctx context.Context) (*Stats, error) {
 	// Calculate approximate memory usage
 	var memUsed int64
 	for _, item := range c.items {
-		memUsed += int64(len(item.value) + 16) // value + overhead
+		// value + overhead
+		memUsed += int64(len(item.value) + 16)
 	}
 	stats.MemoryUsed = memUsed
 

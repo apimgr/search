@@ -456,7 +456,8 @@ func (cm *ClusterManager) tryBecomePrimary(ctx context.Context) {
 		ORDER BY id ASC LIMIT 1
 	`)
 	if err := row.Scan(&lowestID); err != nil || lowestID != cm.nodeID {
-		return // Another node wins, or no eligible nodes
+		// Another node wins, or no eligible nodes
+		return
 	}
 
 	// Use atomic update to prevent race conditions

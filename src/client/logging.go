@@ -25,10 +25,14 @@ var (
 // LogConfig holds logging configuration
 // Per AI.md PART 36 lines 42749-42755
 type LogConfig struct {
-	Level    string // debug, info, warn, error (default: warn)
-	File     string // Log file path (empty = {log_dir}/cli.log)
-	MaxSize  int    // Max log file size in MB (default: 10)
-	MaxFiles int    // Max log files to keep (default: 5)
+	// debug, info, warn, error (default: warn)
+	Level string
+	// Log file path (empty = {log_dir}/cli.log)
+	File string
+	// Max log file size in MB (default: 10)
+	MaxSize int
+	// Max log files to keep (default: 5)
+	MaxFiles int
 }
 
 // GetLogConfig returns logging configuration from viper
@@ -70,19 +74,23 @@ func InitLogging() error {
 		// Per AI.md PART 36: max_size and max_files config
 		maxSize := cfg.MaxSize
 		if maxSize == 0 {
-			maxSize = 10 // Default 10 MB
+			// Default 10 MB
+			maxSize = 10
 		}
 		maxFiles := cfg.MaxFiles
 		if maxFiles == 0 {
-			maxFiles = 5 // Default 5 files
+			// Default 5 files
+			maxFiles = 5
 		}
 
 		rotatingWriter := &lumberjack.Logger{
-			Filename:   logPath,
-			MaxSize:    maxSize, // MB
+			Filename: logPath,
+			// MB
+			MaxSize:    maxSize,
 			MaxBackups: maxFiles,
-			MaxAge:     30, // days
-			Compress:   true,
+			// days
+			MaxAge:   30,
+			Compress: true,
 		}
 
 		// Parse log level
@@ -94,7 +102,8 @@ func InitLogging() error {
 		case "info":
 			level = slog.LevelInfo
 		case "warn", "":
-			level = slog.LevelWarn // Default
+			// Default
+			level = slog.LevelWarn
 		case "error":
 			level = slog.LevelError
 		default:

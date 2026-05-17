@@ -149,7 +149,8 @@ func (f *WikipediaFetcher) fetchArticleSummary(ctx context.Context, title, lang 
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 404 {
-		return nil, nil // Not found, will try search
+		// Not found, will try search
+		return nil, nil
 	}
 
 	if resp.StatusCode != 200 {
@@ -240,7 +241,8 @@ func (f *WikipediaFetcher) searchAndFetch(ctx context.Context, query, lang strin
 	}
 
 	if len(searchResult.Query.Search) == 0 {
-		return nil, nil // No results
+		// No results
+		return nil, nil
 	}
 
 	// Fetch the full summary for the top search result

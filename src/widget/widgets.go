@@ -43,9 +43,12 @@ const (
 type WidgetCategory string
 
 const (
-	CategoryData WidgetCategory = "data" // Requires API calls
-	CategoryTool WidgetCategory = "tool" // Client-side only
-	CategoryUser WidgetCategory = "user" // User-customizable, localStorage
+	// Requires API calls
+	CategoryData WidgetCategory = "data"
+	// Client-side only
+	CategoryTool WidgetCategory = "tool"
+	// User-customizable, localStorage
+	CategoryUser WidgetCategory = "user"
 )
 
 // Widget represents a widget definition

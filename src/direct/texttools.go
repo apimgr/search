@@ -325,7 +325,8 @@ var loremWords = []string{
 func (h *LoremHandler) Handle(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
-		term = "3" // Default to 3 paragraphs
+		// Default to 3 paragraphs
+		term = "3"
 	}
 
 	// Parse count and unit
@@ -337,7 +338,8 @@ func (h *LoremHandler) Handle(ctx context.Context, term string) (*Answer, error)
 		if n, err := strconv.Atoi(parts[0]); err == nil && n > 0 {
 			count = n
 			if count > 100 {
-				count = 100 // Limit
+				// Limit
+				count = 100
 			}
 		}
 	}
@@ -400,7 +402,8 @@ func generateLoremSentences(count int) string {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	sentences := make([]string, count)
 	for i := 0; i < count; i++ {
-		wordCount := 5 + r.Intn(10) // 5-14 words per sentence
+		// 5-14 words per sentence
+		wordCount := 5 + r.Intn(10)
 		words := make([]string, wordCount)
 		for j := 0; j < wordCount; j++ {
 			words[j] = loremWords[r.Intn(len(loremWords))]
@@ -414,7 +417,8 @@ func generateLoremSentences(count int) string {
 func generateLoremParagraphs(count int) string {
 	paragraphs := make([]string, count)
 	for i := 0; i < count; i++ {
-		sentenceCount := 3 + rand.Intn(3) // 3-5 sentences per paragraph
+		// 3-5 sentences per paragraph
+		sentenceCount := 3 + rand.Intn(3)
 		paragraphs[i] = generateLoremSentences(sentenceCount)
 	}
 	return strings.Join(paragraphs, "\n\n")
@@ -878,7 +882,8 @@ func (h *DiffHandler) Handle(ctx context.Context, term string) (*Answer, error) 
 }
 
 type diffLine struct {
-	Type string // "same", "add", "remove"
+	// "same", "add", "remove"
+	Type string
 	Text string
 }
 

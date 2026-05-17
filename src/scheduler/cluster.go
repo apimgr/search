@@ -25,11 +25,12 @@ type ClusterScheduler struct {
 
 // TaskExecution represents a task execution record in the database
 type TaskExecution struct {
-	ID          int64     `json:"id"`
-	TaskName    string    `json:"task_name"`
-	NodeID      string    `json:"node_id"`
-	Hostname    string    `json:"hostname"`
-	Status      string    `json:"status"` // running, completed, failed
+	ID       int64  `json:"id"`
+	TaskName string `json:"task_name"`
+	NodeID   string `json:"node_id"`
+	Hostname string `json:"hostname"`
+	// running, completed, failed
+	Status      string    `json:"status"`
 	StartedAt   time.Time `json:"started_at"`
 	CompletedAt time.Time `json:"completed_at,omitempty"`
 	Error       string    `json:"error,omitempty"`

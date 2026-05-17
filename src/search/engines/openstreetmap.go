@@ -25,7 +25,8 @@ type OpenStreetMap struct {
 func NewOpenStreetMap() *OpenStreetMap {
 	config := model.NewEngineConfig("openstreetmap")
 	config.DisplayName = "OpenStreetMap"
-	config.Priority = 80 // High priority for maps category
+	// High priority for maps category
+	config.Priority = 80
 	config.Categories = []string{"maps"}
 	config.SupportsTor = true
 
@@ -212,7 +213,8 @@ func (e *OpenStreetMap) buildTitle(nr nominatimResult) string {
 func (e *OpenStreetMap) buildOSMURL(nr nominatimResult) string {
 	// Use OSM object URL if we have type and ID
 	if nr.OSMType != "" && nr.OSMID != 0 {
-		osmTypeChar := "n" // node
+		// node
+		osmTypeChar := "n"
 		switch nr.OSMType {
 		case "way":
 			osmTypeChar = "w"

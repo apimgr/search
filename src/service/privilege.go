@@ -13,7 +13,8 @@ import (
 // PrivilegeEscalator handles privilege escalation for service installation
 // Per AI.md PART 24: Privilege Escalation (NON-NEGOTIABLE)
 type PrivilegeEscalator struct {
-	method string // "sudo", "doas", "pkexec", "runas", "none"
+	// "sudo", "doas", "pkexec", "runas", "none"
+	method string
 }
 
 // NewPrivilegeEscalator creates a new privilege escalator
@@ -117,34 +118,62 @@ func FindAvailableSystemID() (int, error) {
 // reservedSystemIDs contains IDs to avoid per AI.md PART 24
 // These are commonly used by system services
 var reservedSystemIDs = map[int]bool{
-	65534: true, // nobody/nogroup
-	999:   true, // docker (common)
-	998:   true, // systemd-coredump
-	997:   true, // systemd-oom
-	996:   true, // systemd-timesync
-	995:   true, // systemd-resolve
-	994:   true, // systemd-network
-	993:   true, // systemd-journal
-	101:   true, // systemd-journal
-	102:   true, // systemd-network
-	103:   true, // systemd-resolve
-	104:   true, // systemd-timesync
-	105:   true, // messagebus
-	106:   true, // sshd
-	107:   true, // tss
-	108:   true, // uuidd
-	109:   true, // tcpdump
-	110:   true, // landscape
-	170:   true, // postgres common
-	171:   true, // redis common
-	172:   true, // mysql common
-	173:   true, // mongodb common
-	174:   true, // elasticsearch
-	175:   true, // kibana
-	176:   true, // logstash
-	177:   true, // nginx
-	178:   true, // www-data
-	179:   true, // apache
+	// nobody/nogroup
+	65534: true,
+	// docker (common)
+	999: true,
+	// systemd-coredump
+	998: true,
+	// systemd-oom
+	997: true,
+	// systemd-timesync
+	996: true,
+	// systemd-resolve
+	995: true,
+	// systemd-network
+	994: true,
+	// systemd-journal
+	993: true,
+	// systemd-journal
+	101: true,
+	// systemd-network
+	102: true,
+	// systemd-resolve
+	103: true,
+	// systemd-timesync
+	104: true,
+	// messagebus
+	105: true,
+	// sshd
+	106: true,
+	// tss
+	107: true,
+	// uuidd
+	108: true,
+	// tcpdump
+	109: true,
+	// landscape
+	110: true,
+	// postgres common
+	170: true,
+	// redis common
+	171: true,
+	// mysql common
+	172: true,
+	// mongodb common
+	173: true,
+	// elasticsearch
+	174: true,
+	// kibana
+	175: true,
+	// logstash
+	176: true,
+	// nginx
+	177: true,
+	// www-data
+	178: true,
+	// apache
+	179: true,
 }
 
 // findAvailableUnixSystemID finds available ID in range 200-899
@@ -420,8 +449,9 @@ func createWindowsVirtualServiceAccount(name string) (*SystemUser, error) {
 	svcAccount := "NT SERVICE\\" + name
 
 	return &SystemUser{
-		Name:  svcAccount,
-		UID:   0, // Not applicable on Windows
+		Name: svcAccount,
+		// Not applicable on Windows
+		UID:   0,
 		GID:   0,
 		Home:  "",
 		Shell: "",
@@ -453,7 +483,8 @@ func GetServiceGroup(serviceName string) string {
 	case "darwin":
 		return "_" + serviceName
 	case "windows":
-		return "" // Not applicable
+		// Not applicable
+		return ""
 	default:
 		return serviceName
 	}

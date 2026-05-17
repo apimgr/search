@@ -75,7 +75,8 @@ func (h *RobotsHandler) Handle(ctx context.Context, term string) (*Answer, error
 		}, nil
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 100*1024)) // Limit to 100KB
+	// Limit to 100KB
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 100*1024))
 	if err != nil {
 		return nil, err
 	}
@@ -253,7 +254,8 @@ func (h *SitemapHandler) Handle(ctx context.Context, term string) (*Answer, erro
 		}, nil
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 500*1024)) // Limit to 500KB
+	// Limit to 500KB
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 500*1024))
 	if err != nil {
 		return nil, err
 	}
@@ -402,7 +404,8 @@ func (h *TechHandler) Handle(ctx context.Context, term string) (*Answer, error) 
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 200*1024)) // Limit to 200KB
+	// Limit to 200KB
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 200*1024))
 
 	// Analyze headers and HTML
 	tech := detectTechnologies(resp.Header, string(body))

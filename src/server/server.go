@@ -38,9 +38,10 @@ import (
 
 // Server represents the HTTP server
 type Server struct {
-	config         *config.Config
-	httpServer     *http.Server
-	httpsServer    *http.Server // For dual port mode
+	config     *config.Config
+	httpServer *http.Server
+	// For dual port mode
+	httpsServer    *http.Server
 	redirectServer *http.Server
 	pidFile        string
 	registry       *engines.Registry
@@ -65,13 +66,15 @@ type Server struct {
 	metrics        *Metrics
 	dbManager      *database.DatabaseManager
 	alertManager   *alert.Manager
-	configSync     *config.ConfigSync // Per AI.md PART 5: Cluster config sync (NON-NEGOTIABLE)
+	// Per AI.md PART 5: Cluster config sync (NON-NEGOTIABLE)
+	configSync *config.ConfigSync
 
 	// Internationalization per AI.md PART 32
 	i18nManager *i18n.Manager
 
 	// Per AI.md PART 11: Endpoint-specific rate limiter for /auth/login (admin login)
-	loginLimiter *EndpointRateLimiter // 5 attempts / 15 min
+	// 5 attempts / 15 min
+	loginLimiter *EndpointRateLimiter
 }
 
 // registryAdapter wraps engines.Registry to implement admin.EngineRegistry
@@ -478,7 +481,8 @@ func (s *Server) Start() error {
 
 	// Banner is printed by main.go per AI.md PART 7/14
 	// Server only logs startup info
-	_ = torAddr // Used for Tor logging above
+	// Used for Tor logging above
+	_ = torAddr
 
 	// Check for dual port mode
 	if s.config.Server.IsDualPortMode() && s.tlsManager != nil && s.tlsManager.IsEnabled() {
@@ -673,7 +677,8 @@ func (s *Server) newPageData(w http.ResponseWriter, r *http.Request, title, page
 	}
 	data.ThemeMode = themeMode
 	if themeMode == ThemeAuto {
-		data.Theme = ThemeDark // server-side fallback; JS handles system preference
+		// server-side fallback; JS handles system preference
+		data.Theme = ThemeDark
 	} else {
 		data.Theme = themeMode
 	}
@@ -853,8 +858,10 @@ func (s *Server) setupRoutes() http.Handler {
 		s.middleware.CORS,
 		s.middleware.GeoBlock(s.geoipLookup),
 		s.middleware.RateLimit(s.rateLimiter),
-		PathSecurityMiddleware, // SECOND - normalizes paths, blocks traversal
-		URLNormalizeMiddleware, // FIRST - removes trailing slashes, redirects to canonical
+		// SECOND - normalizes paths, blocks traversal
+		PathSecurityMiddleware,
+		// FIRST - removes trailing slashes, redirects to canonical
+		URLNormalizeMiddleware,
 	)
 
 	return handler
@@ -863,7 +870,8 @@ func (s *Server) setupRoutes() http.Handler {
 // handleSitemap serves sitemap.xml per AI.md spec
 func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=86400") // Cache for 1 day
+	// Cache for 1 day
+	w.Header().Set("Cache-Control", "public, max-age=86400")
 
 	baseURL := s.getBaseURL(r)
 	lastMod := time.Now().Format("2006-01-02")

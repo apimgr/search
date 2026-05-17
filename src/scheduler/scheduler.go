@@ -71,16 +71,22 @@ type Task struct {
 	ID          TaskID
 	Name        string
 	Description string
-	Schedule    string   // Cron expression or @every interval
-	TaskType    TaskType // Global or Local
-	Run         func(ctx context.Context) error
-	Skippable   bool // Can admin disable this task?
-	RunOnStart  bool // Run immediately on scheduler start?
+	// Cron expression or @every interval
+	Schedule string
+	// Global or Local
+	TaskType TaskType
+	Run      func(ctx context.Context) error
+	// Can admin disable this task?
+	Skippable bool
+	// Run immediately on scheduler start?
+	RunOnStart bool
 
 	// Retry policy per AI.md PART 19
 	// Default: max_retries=3, retry_delay=5m, backoff=exponential (5m, 10m, 20m)
-	MaxRetries int           // Maximum retry attempts (default: 3)
-	RetryDelay time.Duration // Base delay between retries (default: 5m)
+	// Maximum retry attempts (default: 3)
+	MaxRetries int
+	// Base delay between retries (default: 5m)
+	RetryDelay time.Duration
 
 	// Runtime state (persisted to database)
 	LastRun    time.Time
@@ -92,8 +98,10 @@ type Task struct {
 	Enabled    bool
 
 	// Retry state
-	RetryCount int       // Current retry attempt (0 = first run)
-	NextRetry  time.Time // Scheduled retry time (if retrying)
+	// Current retry attempt (0 = first run)
+	RetryCount int
+	// Scheduled retry time (if retrying)
+	NextRetry time.Time
 
 	// Cluster locking
 	LockedBy string
@@ -144,7 +152,8 @@ type Scheduler struct {
 	wg            sync.WaitGroup
 	timezone      *time.Location
 	catchUpWindow time.Duration
-	notifyFunc    NotifyFunc // Per AI.md PART 19: Task failure notifications
+	// Per AI.md PART 19: Task failure notifications
+	notifyFunc NotifyFunc
 }
 
 // New creates a new scheduler
@@ -159,13 +168,14 @@ func New(db *sql.DB, nodeID string) *Scheduler {
 	}
 
 	s := &Scheduler{
-		tasks:         make(map[TaskID]*Task),
-		db:            db,
-		nodeID:        nodeID,
-		ctx:           ctx,
-		cancel:        cancel,
-		timezone:      tz,
-		catchUpWindow: 1 * time.Hour, // Default catch-up window
+		tasks:    make(map[TaskID]*Task),
+		db:       db,
+		nodeID:   nodeID,
+		ctx:      ctx,
+		cancel:   cancel,
+		timezone: tz,
+		// Default catch-up window
+		catchUpWindow: 1 * time.Hour,
 	}
 
 	// Initialize database tables early so Register() can save state
@@ -537,7 +547,8 @@ func (s *Scheduler) runTask(task *Task) {
 	// For global tasks in cluster mode, acquire lock first
 	if task.TaskType == TaskTypeGlobal && s.db != nil {
 		if !s.acquireTaskLock(task) {
-			return // Another node is handling this task
+			// Another node is handling this task
+			return
 		}
 		defer s.releaseTaskLock(task)
 	}
@@ -652,7 +663,8 @@ func (s *Scheduler) calculateNextRun(schedule string) time.Time {
 		d, err := time.ParseDuration(interval)
 		if err != nil {
 			log.Printf("[Scheduler] Invalid interval %s: %v", interval, err)
-			return now.Add(1 * time.Hour) // Default fallback
+			// Default fallback
+			return now.Add(1 * time.Hour)
 		}
 		return now.Add(d)
 	}
@@ -710,7 +722,8 @@ func parseCronExpression(expr string, from time.Time, loc *time.Location) (time.
 		return time.Time{}, fmt.Errorf("invalid month field: %w", err)
 	}
 
-	weekday, err := parseCronField(parts[4], 0, 6) // 0=Sunday, 6=Saturday
+	// 0=Sunday, 6=Saturday
+	weekday, err := parseCronField(parts[4], 0, 6)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("invalid weekday field: %w", err)
 	}
@@ -721,7 +734,8 @@ func parseCronExpression(expr string, from time.Time, loc *time.Location) (time.
 	candidate = time.Date(candidate.Year(), candidate.Month(), candidate.Day(),
 		candidate.Hour(), candidate.Minute(), 0, 0, loc)
 
-	for i := 0; i < 525600; i++ { // Max 1 year of minutes
+	// Max 1 year of minutes
+	for i := 0; i < 525600; i++ {
 		if contains(minute, candidate.Minute()) &&
 			contains(hour, candidate.Hour()) &&
 			contains(day, candidate.Day()) &&

@@ -8,8 +8,9 @@ type EngineConfig struct {
 	Priority    int      `yaml:"priority" json:"priority"`
 	Categories  []string `yaml:"categories" json:"categories"`
 	Language    string   `yaml:"language" json:"language"`
-	Timeout     int      `yaml:"timeout" json:"timeout"` // seconds
-	MaxResults  int      `yaml:"max_results" json:"max_results"`
+	// seconds
+	Timeout    int `yaml:"timeout" json:"timeout"`
+	MaxResults int `yaml:"max_results" json:"max_results"`
 
 	// Tor support
 	SupportsTor bool `yaml:"supports_tor" json:"supports_tor"`
@@ -18,7 +19,8 @@ type EngineConfig struct {
 	// Rate limiting
 	RateLimit struct {
 		Requests int `yaml:"requests" json:"requests"`
-		Window   int `yaml:"window" json:"window"` // seconds
+		// seconds
+		Window int `yaml:"window" json:"window"`
 	} `yaml:"rate_limit" json:"rate_limit"`
 
 	// Engine-specific settings

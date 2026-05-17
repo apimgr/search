@@ -148,7 +148,8 @@ func (r *mmdbReader) decodeValue(data []byte, offset int) (interface{}, int, err
 	}
 
 	switch dataType {
-	case 1: // pointer
+	// pointer
+	case 1:
 		pointerSize := ((int(ctrlByte) >> 3) & 0x03) + 1
 		var pointer int
 		switch pointerSize {
@@ -168,26 +169,30 @@ func (r *mmdbReader) decodeValue(data []byte, offset int) (interface{}, int, err
 		val, _, err := r.decodeValue(data, pointer)
 		return val, offset, err
 
-	case 2: // UTF-8 string
+	// UTF-8 string
+	case 2:
 		if offset+size > len(data) {
 			return "", offset, nil
 		}
 		return string(data[offset : offset+size]), offset + size, nil
 
-	case 3: // double
+	// double
+	case 3:
 		if offset+8 > len(data) {
 			return 0.0, offset, nil
 		}
 		bits := binary.BigEndian.Uint64(data[offset : offset+8])
 		return float64(bits), offset + 8, nil
 
-	case 4: // bytes
+	// bytes
+	case 4:
 		if offset+size > len(data) {
 			return []byte{}, offset, nil
 		}
 		return data[offset : offset+size], offset + size, nil
 
-	case 5: // uint16
+	// uint16
+	case 5:
 		if size == 0 {
 			return uint64(0), offset, nil
 		}
@@ -200,7 +205,8 @@ func (r *mmdbReader) decodeValue(data []byte, offset int) (interface{}, int, err
 		}
 		return val, offset + size, nil
 
-	case 6: // uint32
+	// uint32
+	case 6:
 		if size == 0 {
 			return uint64(0), offset, nil
 		}
@@ -213,7 +219,8 @@ func (r *mmdbReader) decodeValue(data []byte, offset int) (interface{}, int, err
 		}
 		return val, offset + size, nil
 
-	case 7: // map
+	// map
+	case 7:
 		result := make(map[string]interface{})
 		for i := 0; i < size; i++ {
 			key, newOffset, err := r.decodeValue(data, offset)
@@ -234,7 +241,8 @@ func (r *mmdbReader) decodeValue(data []byte, offset int) (interface{}, int, err
 		}
 		return result, offset, nil
 
-	case 8: // int32
+	// int32
+	case 8:
 		if size == 0 {
 			return int64(0), offset, nil
 		}
@@ -251,7 +259,8 @@ func (r *mmdbReader) decodeValue(data []byte, offset int) (interface{}, int, err
 		}
 		return val, offset + size, nil
 
-	case 9: // uint64
+	// uint64
+	case 9:
 		if size == 0 {
 			return uint64(0), offset, nil
 		}
@@ -264,14 +273,16 @@ func (r *mmdbReader) decodeValue(data []byte, offset int) (interface{}, int, err
 		}
 		return val, offset + size, nil
 
-	case 10: // uint128
+	// uint128
+	case 10:
 		if offset+size > len(data) {
 			return big.NewInt(0), offset, nil
 		}
 		val := new(big.Int).SetBytes(data[offset : offset+size])
 		return val, offset + size, nil
 
-	case 11: // array
+	// array
+	case 11:
 		result := make([]interface{}, 0, size)
 		for i := 0; i < size; i++ {
 			val, newOffset, err := r.decodeValue(data, offset)
@@ -283,10 +294,12 @@ func (r *mmdbReader) decodeValue(data []byte, offset int) (interface{}, int, err
 		}
 		return result, offset, nil
 
-	case 14: // bool
+	// bool
+	case 14:
 		return size != 0, offset, nil
 
-	case 15: // float
+	// float
+	case 15:
 		if offset+4 > len(data) {
 			return float32(0), offset, nil
 		}

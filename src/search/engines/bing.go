@@ -95,7 +95,8 @@ func (e *BingEngine) parseResults(html string, query *model.Query) ([]model.Resu
 	matches := resultPattern.FindAllStringSubmatch(html, -1)
 
 	for i, match := range matches {
-		if i >= 20 { // Limit to 20 results
+		// Limit to 20 results
+		if i >= 20 {
 			break
 		}
 

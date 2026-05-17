@@ -101,7 +101,8 @@ func (a *Aggregator) Search(ctx context.Context, query *model.Query) (*model.Sea
 	if a.cacheEnabled && a.cache != nil {
 		if cached := a.cache.Get(cacheKey); cached != nil {
 			// Update search time to indicate cache hit
-			cached.SearchTime = 0.001 // Nearly instant
+			// Nearly instant
+			cached.SearchTime = 0.001
 			cached.FromCache = true
 			cached.Stale = false
 			cached.CacheAgeSec = 0
@@ -582,10 +583,12 @@ func (a *Aggregator) generateCacheKey(query *model.Query) string {
 
 // deduplicateResults removes duplicate results based on URL with improved merging
 func deduplicateResults(results []model.Result) []model.Result {
-	seen := make(map[string]int) // URL -> index in unique slice
+	// URL -> index in unique slice
+	seen := make(map[string]int)
 	unique := make([]model.Result, 0)
 	duplicateCounts := make(map[string]int)
-	engineSources := make(map[string][]string) // URL -> list of engines
+	// URL -> list of engines
+	engineSources := make(map[string][]string)
 
 	// First pass: count duplicates and track sources
 	for _, result := range results {
@@ -642,7 +645,8 @@ func deduplicateResults(results []model.Result) []model.Result {
 			// Add diversity bonus for appearing in multiple engines
 			engineCount := len(engineSources[result.URL])
 			if engineCount > 1 {
-				result.Score += float64(engineCount * 25) // 25 points per additional engine
+				// 25 points per additional engine
+				result.Score += float64(engineCount * 25)
 			}
 
 			unique = append(unique, result)
@@ -666,7 +670,8 @@ func sortResults(results []model.Result, sortBy model.SortOrder) {
 				return true
 			}
 			if results[i].PublishedAt.IsZero() && results[j].PublishedAt.IsZero() {
-				return results[i].Score > results[j].Score // Fall back to score
+				// Fall back to score
+				return results[i].Score > results[j].Score
 			}
 			return results[i].PublishedAt.After(results[j].PublishedAt)
 		})
@@ -694,7 +699,8 @@ func sortResults(results []model.Result, sortBy model.SortOrder) {
 			if popI != popJ {
 				return popI > popJ
 			}
-			return results[i].Score > results[j].Score // Fall back to relevance
+			// Fall back to relevance
+			return results[i].Score > results[j].Score
 		})
 
 	case model.SortRandom:
@@ -703,7 +709,8 @@ func sortResults(results []model.Result, sortBy model.SortOrder) {
 			results[i], results[j] = results[j], results[i]
 		})
 
-	default: // SortRelevance
+	// SortRelevance
+	default:
 		// Default: sort by score (highest first)
 		sort.Slice(results, func(i, j int) bool {
 			return results[i].Score > results[j].Score

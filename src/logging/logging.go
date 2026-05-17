@@ -200,11 +200,13 @@ var AvailableFormatVariables = []FormatVariable{
 
 // AccessLogger logs HTTP access in Combined Log Format
 type AccessLogger struct {
-	mu           sync.Mutex
-	file         *os.File
-	path         string
-	format       string // "combined", "common", "json", "custom"
-	customFormat string // Custom format string with variables
+	mu   sync.Mutex
+	file *os.File
+	path string
+	// "combined", "common", "json", "custom"
+	format string
+	// Custom format string with variables
+	customFormat string
 }
 
 // AccessEntry represents an access log entry with all fields for custom formatting
@@ -283,7 +285,8 @@ func (l *AccessLogger) Log(entry AccessEntry) {
 	case "custom":
 		// Custom format with variable substitution
 		line = l.formatWithVariables(entry)
-	default: // combined
+	// combined
+	default:
 		// Combined Log Format: host ident authuser date request status bytes referer user-agent
 		referer := entry.Referer
 		if referer == "" {
@@ -417,7 +420,8 @@ func (l *AccessLogger) LogRequest(r *http.Request, status int, size int64, laten
 
 	// Strip port from IP
 	if idx := strings.LastIndex(ip, ":"); idx != -1 {
-		if !strings.Contains(ip[idx:], "]") { // Handle IPv6
+		// Handle IPv6
+		if !strings.Contains(ip[idx:], "]") {
 			ip = ip[:idx]
 		}
 	}
@@ -477,7 +481,8 @@ func (l *AccessLogger) LogRequestWithID(r *http.Request, status int, size int64,
 
 	// Strip port from IP
 	if idx := strings.LastIndex(ip, ":"); idx != -1 {
-		if !strings.Contains(ip[idx:], "]") { // Handle IPv6
+		// Handle IPv6
+		if !strings.Contains(ip[idx:], "]") {
 			ip = ip[:idx]
 		}
 	}
@@ -675,11 +680,12 @@ func (l LogLevel) String() string {
 
 // ServerLogger logs application events
 type ServerLogger struct {
-	mu     sync.Mutex
-	file   *os.File
-	path   string
-	level  LogLevel
-	format string // "text", "json"
+	mu    sync.Mutex
+	file  *os.File
+	path  string
+	level LogLevel
+	// "text", "json"
+	format string
 	stdout bool
 }
 
@@ -1202,42 +1208,64 @@ const (
 type AuditCategory string
 
 const (
-	AuditCategoryAuth         AuditCategory = "authentication" // Authentication events
-	AuditCategoryAdmin        AuditCategory = "admin"          // Admin panel actions
-	AuditCategoryConfig       AuditCategory = "configuration"  // Configuration changes
-	AuditCategoryUser         AuditCategory = "users"          // User management
-	AuditCategorySecurity     AuditCategory = "security"       // Security-related events
-	AuditCategoryData         AuditCategory = "backup"         // Backup/data operations
-	AuditCategorySystem       AuditCategory = "server"         // Server/system operations
-	AuditCategoryTokens       AuditCategory = "tokens"         // Token events
-	AuditCategoryCluster      AuditCategory = "cluster"        // Cluster events
-	AuditCategoryOrganization AuditCategory = "organization"   // Organization events
+	// Authentication events
+	AuditCategoryAuth AuditCategory = "authentication"
+	// Admin panel actions
+	AuditCategoryAdmin AuditCategory = "admin"
+	// Configuration changes
+	AuditCategoryConfig AuditCategory = "configuration"
+	// User management
+	AuditCategoryUser AuditCategory = "users"
+	// Security-related events
+	AuditCategorySecurity AuditCategory = "security"
+	// Backup/data operations
+	AuditCategoryData AuditCategory = "backup"
+	// Server/system operations
+	AuditCategorySystem AuditCategory = "server"
+	// Token events
+	AuditCategoryTokens AuditCategory = "tokens"
+	// Cluster events
+	AuditCategoryCluster AuditCategory = "cluster"
+	// Organization events
+	AuditCategoryOrganization AuditCategory = "organization"
 )
 
 // AuditSeverity represents audit event severity per AI.md PART 11 lines 11998-12005
 type AuditSeverity string
 
 const (
-	AuditSeverityInfo     AuditSeverity = "info"     // Successful normal operations
-	AuditSeverityWarning  AuditSeverity = "warn"     // Failed attempts, recoverable issues
-	AuditSeverityError    AuditSeverity = "error"    // Failures requiring attention
-	AuditSeverityCritical AuditSeverity = "critical" // Security incidents, server failures
+	// Successful normal operations
+	AuditSeverityInfo AuditSeverity = "info"
+	// Failed attempts, recoverable issues
+	AuditSeverityWarning AuditSeverity = "warn"
+	// Failures requiring attention
+	AuditSeverityError AuditSeverity = "error"
+	// Security incidents, server failures
+	AuditSeverityCritical AuditSeverity = "critical"
 )
 
 // AuditActor represents who performed the action per AI.md PART 11
 type AuditActor struct {
-	Type      string `json:"type,omitempty"`       // Actor type: admin, user, system
-	ID        string `json:"id,omitempty"`         // Actor's user ID
-	Username  string `json:"username,omitempty"`   // Actor's username (for display)
-	IP        string `json:"ip"`                   // IP address
-	UserAgent string `json:"user_agent,omitempty"` // User agent string
+	// Actor type: admin, user, system
+	Type string `json:"type,omitempty"`
+	// Actor's user ID
+	ID string `json:"id,omitempty"`
+	// Actor's username (for display)
+	Username string `json:"username,omitempty"`
+	// IP address
+	IP string `json:"ip"`
+	// User agent string
+	UserAgent string `json:"user_agent,omitempty"`
 }
 
 // AuditTarget represents what the action was performed on per AI.md PART 11
 type AuditTarget struct {
-	Type string `json:"type"`           // Target type (session, user, config, token, etc.)
-	ID   string `json:"id,omitempty"`   // Target ID
-	Name string `json:"name,omitempty"` // Target name
+	// Target type (session, user, config, token, etc.)
+	Type string `json:"type"`
+	// Target ID
+	ID string `json:"id,omitempty"`
+	// Target name
+	Name string `json:"name,omitempty"`
 }
 
 // AuditLogger logs administrative actions
@@ -1251,17 +1279,28 @@ type AuditLogger struct {
 // AuditEntry represents an audit log entry per AI.md PART 11 lines 11947-11997
 // Uses ULID format IDs: audit_01HQXYZ123ABC
 type AuditEntry struct {
-	ID       string                 `json:"id"`                // ULID format: audit_01HQXYZ...
-	Time     time.Time              `json:"time"`              // ISO 8601 timestamp with milliseconds, UTC
-	Event    AuditAction            `json:"event"`             // Event type (e.g., admin.login)
-	Category AuditCategory          `json:"category"`          // Event category
-	Severity AuditSeverity          `json:"severity"`          // info, warn, error, critical
-	Actor    AuditActor             `json:"actor"`             // Who performed the action
-	Target   *AuditTarget           `json:"target,omitempty"`  // What was acted upon
-	Details  map[string]interface{} `json:"details,omitempty"` // Event-specific details
-	Result   string                 `json:"result"`            // "success" or "failure"
-	NodeID   string                 `json:"node_id,omitempty"` // Node ID (cluster mode)
-	Reason   string                 `json:"reason,omitempty"`  // Reason for action (if provided)
+	// ULID format: audit_01HQXYZ...
+	ID string `json:"id"`
+	// ISO 8601 timestamp with milliseconds, UTC
+	Time time.Time `json:"time"`
+	// Event type (e.g., admin.login)
+	Event AuditAction `json:"event"`
+	// Event category
+	Category AuditCategory `json:"category"`
+	// info, warn, error, critical
+	Severity AuditSeverity `json:"severity"`
+	// Who performed the action
+	Actor AuditActor `json:"actor"`
+	// What was acted upon
+	Target *AuditTarget `json:"target,omitempty"`
+	// Event-specific details
+	Details map[string]interface{} `json:"details,omitempty"`
+	// "success" or "failure"
+	Result string `json:"result"`
+	// Node ID (cluster mode)
+	NodeID string `json:"node_id,omitempty"`
+	// Reason for action (if provided)
+	Reason string `json:"reason,omitempty"`
 }
 
 // NewAuditLogger creates a new audit logger
@@ -2431,10 +2470,11 @@ type AuditStats struct {
 
 // ErrorLogger logs error messages to error.log
 type ErrorLogger struct {
-	mu     sync.Mutex
-	file   *os.File
-	path   string
-	format string // "text", "json"
+	mu   sync.Mutex
+	file *os.File
+	path string
+	// "text", "json"
+	format string
 	stdout bool
 }
 
@@ -2621,10 +2661,11 @@ func (l *ErrorLogger) Close() error {
 
 // DebugLogger logs debug messages to debug.log
 type DebugLogger struct {
-	mu      sync.Mutex
-	file    *os.File
-	path    string
-	format  string // "text", "json"
+	mu   sync.Mutex
+	file *os.File
+	path string
+	// "text", "json"
+	format  string
 	enabled bool
 	stdout  bool
 }
@@ -2643,9 +2684,10 @@ type DebugEntry struct {
 // NewDebugLogger creates a new debug logger
 func NewDebugLogger(path string) *DebugLogger {
 	l := &DebugLogger{
-		path:    path,
-		format:  "text",
-		enabled: false, // Disabled by default per PART 21
+		path:   path,
+		format: "text",
+		// Disabled by default per PART 21
+		enabled: false,
 		stdout:  true,
 	}
 	// Don't open file if disabled

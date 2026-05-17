@@ -68,7 +68,8 @@ func runLogin() error {
 			if err != nil {
 				return fmt.Errorf("failed to read token: %w", err)
 			}
-			fmt.Println() // newline after hidden input
+			// newline after hidden input
+			fmt.Println()
 			tokenVal = strings.TrimSpace(string(tokenBytes))
 		} else {
 			// Read from stdin (pipe)

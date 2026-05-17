@@ -6,11 +6,16 @@ import "strings"
 type SortOrder string
 
 const (
-	SortRelevance  SortOrder = "relevance"  // Default: by score
-	SortDate       SortOrder = "date"       // By date (newest first)
-	SortDateAsc    SortOrder = "date_asc"   // By date (oldest first)
-	SortPopularity SortOrder = "popularity" // By popularity/engagement
-	SortRandom     SortOrder = "random"     // Random order
+	// Default: by score
+	SortRelevance SortOrder = "relevance"
+	// By date (newest first)
+	SortDate SortOrder = "date"
+	// By date (oldest first)
+	SortDateAsc SortOrder = "date_asc"
+	// By popularity/engagement
+	SortPopularity SortOrder = "popularity"
+	// Random order
+	SortRandom SortOrder = "random"
 )
 
 // Query represents a search query
@@ -19,10 +24,12 @@ type Query struct {
 	Text string `json:"text"`
 
 	// Filters
-	Category   Category `json:"category"`
-	Language   string   `json:"language"`
-	Region     string   `json:"region,omitempty"` // Region code (us, uk, de, etc.)
-	SafeSearch int      `json:"safe_search"`      // 0: off, 1: moderate, 2: strict
+	Category Category `json:"category"`
+	Language string   `json:"language"`
+	// Region code (us, uk, de, etc.)
+	Region string `json:"region,omitempty"`
+	// 0: off, 1: moderate, 2: strict
+	SafeSearch int `json:"safe_search"`
 
 	// Pagination
 	Page    int `json:"page"`
@@ -32,7 +39,8 @@ type Query struct {
 	SortBy SortOrder `json:"sort_by,omitempty"`
 
 	// Time range
-	TimeRange string `json:"time_range,omitempty"` // any, day, week, month, year
+	// any, day, week, month, year
+	TimeRange string `json:"time_range,omitempty"`
 
 	// Advanced filters (parsed from operators or set directly)
 	Site         string   `json:"site,omitempty"`
@@ -47,19 +55,28 @@ type Query struct {
 	ExcludeTerms []string `json:"exclude_terms,omitempty"`
 
 	// Date filters
-	DateBefore string `json:"date_before,omitempty"` // YYYY-MM-DD
-	DateAfter  string `json:"date_after,omitempty"`  // YYYY-MM-DD
+	// YYYY-MM-DD
+	DateBefore string `json:"date_before,omitempty"`
+	// YYYY-MM-DD
+	DateAfter string `json:"date_after,omitempty"`
 
 	// Media-specific filters
-	ImageSize    string `json:"image_size,omitempty"`    // small, medium, large, xlarge
-	ImageType    string `json:"image_type,omitempty"`    // photo, clipart, lineart, animated
-	ImageColor   string `json:"image_color,omitempty"`   // color, gray, trans, red, etc.
-	ImageAspect  string `json:"image_aspect,omitempty"`  // square, wide, tall
-	VideoLength  string `json:"video_length,omitempty"`  // short, medium, long
-	VideoQuality string `json:"video_quality,omitempty"` // hd, 4k
+	// small, medium, large, xlarge
+	ImageSize string `json:"image_size,omitempty"`
+	// photo, clipart, lineart, animated
+	ImageType string `json:"image_type,omitempty"`
+	// color, gray, trans, red, etc.
+	ImageColor string `json:"image_color,omitempty"`
+	// square, wide, tall
+	ImageAspect string `json:"image_aspect,omitempty"`
+	// short, medium, long
+	VideoLength string `json:"video_length,omitempty"`
+	// hd, 4k
+	VideoQuality string `json:"video_quality,omitempty"`
 
 	// News-specific
-	NewsSource string `json:"news_source,omitempty"` // source:nytimes
+	// source:nytimes
+	NewsSource string `json:"news_source,omitempty"`
 
 	// Engine selection
 	Engines        []string `json:"engines,omitempty"`
@@ -67,17 +84,19 @@ type Query struct {
 
 	// Parsed operators (internal use)
 	ParsedOperators interface{} `json:"-"`
-	CleanedText     string      `json:"-"` // Text with operators removed
+	// Text with operators removed
+	CleanedText string `json:"-"`
 }
 
 // NewQuery creates a new Query with defaults (sanitizes input)
 func NewQuery(text string) *Query {
 	text = strings.TrimSpace(text)
 	return &Query{
-		Text:        text,
-		Category:    CategoryGeneral,
-		Language:    "en",
-		SafeSearch:  1, // Moderate by default
+		Text:     text,
+		Category: CategoryGeneral,
+		Language: "en",
+		// Moderate by default
+		SafeSearch:  1,
 		Page:        1,
 		PerPage:     20,
 		TimeRange:   "any",

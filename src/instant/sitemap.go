@@ -36,9 +36,10 @@ type SitemapIndex struct {
 
 // Sitemap represents a parsed sitemap
 type Sitemap struct {
-	XMLName  xml.Name       `xml:"urlset"`
-	URLs     []SitemapURL   `xml:"url"`
-	Sitemaps []SitemapIndex `xml:"sitemap"` // for sitemap index
+	XMLName xml.Name     `xml:"urlset"`
+	URLs    []SitemapURL `xml:"url"`
+	// for sitemap index
+	Sitemaps []SitemapIndex `xml:"sitemap"`
 }
 
 // SitemapIndexFile represents a sitemap index file

@@ -17,17 +17,26 @@ type ShutdownConfig struct {
 	Server *http.Server
 	// ShutdownFunc is called to perform shutdown (alternative to Server)
 	// If provided, this is called instead of Server.Shutdown
-	ShutdownFunc    func(ctx context.Context) error
-	PIDFile         string
-	InFlightTimeout time.Duration // Default: 30s
-	ChildTimeout    time.Duration // Default: 10s
-	DatabaseTimeout time.Duration // Default: 5s
-	LogFlushTimeout time.Duration // Default: 2s
-	OnReopenLogs    func()        // Called on SIGUSR1 (Unix only)
-	OnDumpStatus    func()        // Called on SIGUSR2 (Unix only)
-	OnCloseDatabase func()        // Called during shutdown
-	OnFlushLogs     func()        // Called during shutdown
-	GetChildPIDs    func() []int  // Returns child process PIDs
+	ShutdownFunc func(ctx context.Context) error
+	PIDFile      string
+	// Default: 30s
+	InFlightTimeout time.Duration
+	// Default: 10s
+	ChildTimeout time.Duration
+	// Default: 5s
+	DatabaseTimeout time.Duration
+	// Default: 2s
+	LogFlushTimeout time.Duration
+	// Called on SIGUSR1 (Unix only)
+	OnReopenLogs func()
+	// Called on SIGUSR2 (Unix only)
+	OnDumpStatus func()
+	// Called during shutdown
+	OnCloseDatabase func()
+	// Called during shutdown
+	OnFlushLogs func()
+	// Returns child process PIDs
+	GetChildPIDs func() []int
 }
 
 var (

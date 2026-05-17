@@ -86,7 +86,8 @@ type GeocodingResponse struct {
 		Latitude  float64 `json:"latitude"`
 		Longitude float64 `json:"longitude"`
 		Country   string  `json:"country"`
-		Admin1    string  `json:"admin1"` // State/Region
+		// State/Region
+		Admin1 string `json:"admin1"`
 	} `json:"results"`
 }
 
@@ -337,7 +338,8 @@ func (f *WeatherFetcher) geocodeCity(ctx context.Context, city string) (float64,
 	}
 
 	// Find the best match based on state/country filter
-	var result = geoResp.Results[0] // Default to first result
+	// Default to first result
+	var result = geoResp.Results[0]
 	if stateFilter != "" || countryFilter != "" {
 		for _, r := range geoResp.Results {
 			admin1Lower := strings.ToLower(r.Admin1)

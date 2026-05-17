@@ -55,7 +55,8 @@ func (h *YAMLHandler) Handle(ctx context.Context, query string) (*Answer, error)
 	lowerQuery := strings.ToLower(query)
 
 	// Determine mode
-	mode := "format" // default
+	// default
+	mode := "format"
 	if strings.Contains(lowerQuery, "yaml:to-json") || strings.Contains(lowerQuery, "yaml to json") {
 		mode = "to-json"
 	} else if strings.Contains(lowerQuery, "yaml:from-json") || strings.Contains(lowerQuery, "json to yaml") {

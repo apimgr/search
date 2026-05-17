@@ -18,8 +18,10 @@ const AnswerTypeRobots AnswerType = "robots"
 
 // RobotDirective represents a parsed robots.txt directive
 type RobotDirective struct {
-	Type  string `json:"type"`  // "allow", "disallow", "crawl-delay", "sitemap"
-	Value string `json:"value"` // the path or value
+	// "allow", "disallow", "crawl-delay", "sitemap"
+	Type string `json:"type"`
+	// the path or value
+	Value string `json:"value"`
 }
 
 // RobotUserAgent represents rules for a specific user agent
@@ -155,7 +157,8 @@ func (h *RobotsHandler) Handle(ctx context.Context, query string) (*Answer, erro
 	}
 
 	// Read and parse robots.txt
-	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, 1024*1024)) // Limit to 1MB
+	// Limit to 1MB
+	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, 1024*1024))
 	if err != nil {
 		return &Answer{
 			Type:    AnswerTypeRobots,

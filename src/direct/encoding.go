@@ -573,7 +573,8 @@ func (h *JSONHandler) Handle(ctx context.Context, term string) (*Answer, error) 
 	}
 
 	// Check for mode prefix
-	mode := "format" // default
+	// default
+	mode := "format"
 	jsonStr := term
 
 	if strings.HasPrefix(strings.ToLower(term), "minify ") {
@@ -607,7 +608,8 @@ func (h *JSONHandler) Handle(ctx context.Context, term string) (*Answer, error) 
 	case "minify":
 		b, _ := json.Marshal(parsed)
 		output = string(b)
-	default: // format
+	// format
+	default:
 		b, _ := json.MarshalIndent(parsed, "", "  ")
 		output = string(b)
 	}
@@ -714,7 +716,8 @@ func (h *YAMLHandler) Handle(ctx context.Context, term string) (*Answer, error) 
 	}
 
 	// Check for mode prefix
-	mode := "format" // default
+	// default
+	mode := "format"
 	yamlStr := term
 
 	if strings.HasPrefix(strings.ToLower(term), "to-json ") || strings.HasPrefix(strings.ToLower(term), "tojson ") {
