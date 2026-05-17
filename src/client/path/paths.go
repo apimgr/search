@@ -1,6 +1,6 @@
-// Package paths provides CLI directory and file path resolution
+// Package path provides CLI directory and file path resolution
 // Per AI.md PART 36: CLI paths follow XDG on Linux, standard locations on Windows
-package paths
+package path
 
 import (
 	"fmt"

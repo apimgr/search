@@ -12,7 +12,7 @@ import (
 
 	"github.com/spf13/viper"
 
-	"github.com/apimgr/search/src/client/paths"
+	"github.com/apimgr/search/src/client/path"
 )
 
 // CacheConfig holds cache configuration
@@ -87,13 +87,13 @@ func InitCache() error {
 			ttl:    time.Duration(ttl) * time.Second,
 			// MB to bytes
 			maxSize:  int64(maxSize) * 1024 * 1024,
-			cacheDir: paths.CacheDir(),
+			cacheDir: path.CacheDir(),
 			enabled:  enabled,
 		}
 	})
 
 	// Ensure cache directory exists
-	if err := os.MkdirAll(paths.CacheDir(), 0700); err != nil {
+	if err := os.MkdirAll(path.CacheDir(), 0700); err != nil {
 		return err
 	}
 

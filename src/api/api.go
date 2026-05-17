@@ -22,7 +22,7 @@ import (
 	"github.com/apimgr/search/src/instant"
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
-	"github.com/apimgr/search/src/search/engines"
+	"github.com/apimgr/search/src/search/engine"
 	"github.com/apimgr/search/src/service"
 	"github.com/apimgr/search/src/widget"
 )
@@ -36,7 +36,7 @@ const (
 // Handler handles API requests
 type Handler struct {
 	config          *config.Config
-	registry        *engines.Registry
+	registry        *engine.Registry
 	aggregator      *search.Aggregator
 	widgetManager   *widget.Manager
 	instantManager  *instant.Manager
@@ -49,7 +49,7 @@ type Handler struct {
 }
 
 // NewHandler creates a new API handler
-func NewHandler(cfg *config.Config, registry *engines.Registry, aggregator *search.Aggregator) *Handler {
+func NewHandler(cfg *config.Config, registry *engine.Registry, aggregator *search.Aggregator) *Handler {
 	return &Handler{
 		config:     cfg,
 		registry:   registry,
@@ -729,7 +729,7 @@ func (h *Handler) fetchAutocompleteSuggestions(ctx context.Context, query string
 		return []string{}
 	}
 
-	req.Header.Set("User-Agent", engines.UserAgent)
+	req.Header.Set("User-Agent", engine.UserAgent)
 
 	resp, err := client.Do(req)
 	if err != nil {

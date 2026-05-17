@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/apimgr/search/src/client/paths"
+	"github.com/apimgr/search/src/client/path"
 )
 
 // InitCLI initializes the CLI environment.
@@ -17,7 +17,7 @@ import (
 // 4. Initialize cache
 func InitCLI() error {
 	// Step 1: Create directories with correct permissions
-	if err := paths.EnsureDirs(); err != nil {
+	if err := path.EnsureDirs(); err != nil {
 		return fmt.Errorf("init directories: %w", err)
 	}
 

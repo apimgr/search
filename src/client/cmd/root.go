@@ -15,7 +15,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/apimgr/search/src/client/api"
-	"github.com/apimgr/search/src/client/paths"
+	"github.com/apimgr/search/src/client/path"
 	"github.com/apimgr/search/src/client/tui"
 )
 
@@ -208,7 +208,7 @@ func resolveServerAddress() (string, bool) {
 // Per AI.md PART 36 line 42834: Save --server to server.primary
 func saveServerToConfig(serverAddr string) {
 	viper.Set("server.primary", serverAddr)
-	configPath := paths.ConfigFile()
+	configPath := path.ConfigFile()
 	_ = viper.WriteConfigAs(configPath)
 }
 
@@ -244,7 +244,7 @@ func updateClusterConfig(primary string, nodes []string) {
 	}
 
 	// Save to config file (non-blocking)
-	configPath := paths.ConfigFile()
+	configPath := path.ConfigFile()
 	_ = viper.WriteConfigAs(configPath)
 }
 
@@ -274,7 +274,7 @@ func getToken() string {
 	}
 
 	// 5. Default token file: {config_dir}/token
-	tokenPath := filepath.Join(paths.ConfigDir(), "token")
+	tokenPath := filepath.Join(path.ConfigDir(), "token")
 	if data, err := os.ReadFile(tokenPath); err == nil {
 		return strings.TrimSpace(string(data))
 	}
@@ -316,13 +316,13 @@ func init() {
 func initConfig() {
 	// Per AI.md PART 36: CLI Startup Sequence (NON-NEGOTIABLE)
 	// Ensure all CLI directories exist with correct permissions
-	if err := paths.EnsureDirs(); err != nil {
+	if err := path.EnsureDirs(); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to create CLI directories: %v\n", err)
 	}
 
 	if cfgFile != "" {
 		// Resolve config path (handles relative/absolute paths and extensions)
-		resolvedPath, err := paths.ResolveConfigPath(cfgFile)
+		resolvedPath, err := path.ResolveConfigPath(cfgFile)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: invalid config path: %v\n", err)
 		} else {
@@ -330,7 +330,7 @@ func initConfig() {
 		}
 	} else {
 		// Per AI.md PART 36 line 40579: Config at ~/.config/apimgr/search/cli.yml
-		configDir := paths.ConfigDir()
+		configDir := path.ConfigDir()
 		viper.AddConfigPath(configDir)
 		viper.SetConfigName("cli")
 		viper.SetConfigType("yaml")

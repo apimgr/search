@@ -13,7 +13,7 @@ import (
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
-	"github.com/apimgr/search/src/search/engines"
+	"github.com/apimgr/search/src/search/engine"
 )
 
 func newTestHandler() *Handler {
@@ -24,7 +24,7 @@ func newTestHandler() *Handler {
 			Mode:        "development",
 		},
 	}
-	registry := engines.NewRegistry()
+	registry := engine.NewRegistry()
 	aggregator := search.NewAggregatorSimple(nil, 30*time.Second)
 	return NewHandler(cfg, registry, aggregator)
 }
@@ -1632,7 +1632,7 @@ func TestNewHandlerInitialization(t *testing.T) {
 			Title: "Test Server",
 		},
 	}
-	registry := engines.NewRegistry()
+	registry := engine.NewRegistry()
 	aggregator := search.NewAggregatorSimple(nil, 30*time.Second)
 
 	handler := NewHandler(cfg, registry, aggregator)
@@ -2473,7 +2473,7 @@ func TestHealthzMaintenanceMode(t *testing.T) {
 			MaintenanceMode: true,
 		},
 	}
-	registry := engines.NewRegistry()
+	registry := engine.NewRegistry()
 	aggregator := search.NewAggregatorSimple(nil, 30*time.Second)
 	handler := NewHandler(cfg, registry, aggregator)
 
@@ -2508,7 +2508,7 @@ func TestHealthzTextFormatError(t *testing.T) {
 			MaintenanceMode: true,
 		},
 	}
-	registry := engines.NewRegistry()
+	registry := engine.NewRegistry()
 	aggregator := search.NewAggregatorSimple(nil, 30*time.Second)
 	handler := NewHandler(cfg, registry, aggregator)
 
@@ -2713,7 +2713,7 @@ func TestGetRequestsTotalMetricsEnabled(t *testing.T) {
 			},
 		},
 	}
-	registry := engines.NewRegistry()
+	registry := engine.NewRegistry()
 	aggregator := search.NewAggregatorSimple(nil, 30*time.Second)
 	handler := NewHandler(cfg, registry, aggregator)
 
@@ -2735,7 +2735,7 @@ func TestWidgetDataEmptyType(t *testing.T) {
 			Title: "Test Search",
 		},
 	}
-	registry := engines.NewRegistry()
+	registry := engine.NewRegistry()
 	aggregator := search.NewAggregatorSimple(nil, 30*time.Second)
 	handler := NewHandler(cfg, registry, aggregator)
 	// Leave widgetManager as nil
@@ -2882,7 +2882,7 @@ func newHandlerWithEmptyResults() *Handler {
 			Mode:        "development",
 		},
 	}
-	registry := engines.NewRegistry()
+	registry := engine.NewRegistry()
 	eng := &emptyResultEngine{cfg: model.NewEngineConfig("empty")}
 	aggregator := search.NewAggregatorSimple([]search.Engine{eng}, 5*time.Second)
 	return NewHandler(cfg, registry, aggregator)

@@ -30,7 +30,7 @@ import (
 	"github.com/apimgr/search/src/scheduler"
 	"github.com/apimgr/search/src/search"
 	"github.com/apimgr/search/src/search/bangs"
-	"github.com/apimgr/search/src/search/engines"
+	"github.com/apimgr/search/src/search/engine"
 	"github.com/apimgr/search/src/service"
 	"github.com/apimgr/search/src/ssl"
 	"github.com/apimgr/search/src/widget"
@@ -44,7 +44,7 @@ type Server struct {
 	httpsServer    *http.Server
 	redirectServer *http.Server
 	pidFile        string
-	registry       *engines.Registry
+	registry       *engine.Registry
 	aggregator     *search.Aggregator
 	startTime      time.Time
 	middleware     *Middleware
@@ -77,9 +77,9 @@ type Server struct {
 	loginLimiter *EndpointRateLimiter
 }
 
-// registryAdapter wraps engines.Registry to implement admin.EngineRegistry
+// registryAdapter wraps engine.Registry to implement admin.EngineRegistry
 type registryAdapter struct {
-	r *engines.Registry
+	r *engine.Registry
 }
 
 func (a *registryAdapter) Count() int {
@@ -127,7 +127,7 @@ func New(cfg *config.Config) *Server {
 	}
 
 	// Create engine registry with default engines
-	registry := engines.DefaultRegistry()
+	registry := engine.DefaultRegistry()
 
 	// Get all enabled engines (already filtered by IsEnabled())
 	enabledEngines := registry.GetEnabled()

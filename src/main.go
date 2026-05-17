@@ -26,7 +26,7 @@ import (
 	"github.com/apimgr/search/src/mode"
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
-	"github.com/apimgr/search/src/search/engines"
+	"github.com/apimgr/search/src/search/engine"
 	"github.com/apimgr/search/src/server"
 	"github.com/apimgr/search/src/service"
 	sigsvc "github.com/apimgr/search/src/signal"
@@ -1324,7 +1324,7 @@ func runTest() {
 	fmt.Println()
 
 	// Create engine registry
-	registry := engines.DefaultRegistry()
+	registry := engine.DefaultRegistry()
 
 	fmt.Printf(display.Emoji("✅", "[OK]")+" Registered %d engines\n\n", registry.Count())
 

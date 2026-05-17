@@ -13,7 +13,7 @@ import (
 	"github.com/spf13/viper"
 	"gopkg.in/natefinch/lumberjack.v2"
 
-	"github.com/apimgr/search/src/client/paths"
+	"github.com/apimgr/search/src/client/path"
 )
 
 var (
@@ -55,7 +55,7 @@ func InitLogging() error {
 		// Determine log file path
 		logPath := cfg.File
 		if logPath == "" {
-			logPath = paths.LogFile()
+			logPath = path.LogFile()
 		}
 
 		// Expand ~ to home directory
@@ -65,7 +65,7 @@ func InitLogging() error {
 		}
 
 		// Ensure parent directory exists
-		if err := paths.EnsureFile(logPath, 0600); err != nil {
+		if err := path.EnsureFile(logPath, 0600); err != nil {
 			initErr = fmt.Errorf("create log dir: %w", err)
 			return
 		}
