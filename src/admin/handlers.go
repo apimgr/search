@@ -455,7 +455,7 @@ func (h *Handler) requireAPIAuth(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		// Log API access
-		log.Printf("[Admin API] %s %s (token: %s)", r.Method, r.URL.Path, maskToken(apiToken.Token))
+		log.Printf("[Admin API] %s %s (token: %s)", r.Method, r.URL.Path, apiToken.Name)
 
 		next(w, r)
 	}
