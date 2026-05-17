@@ -29,7 +29,7 @@ import (
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/scheduler"
 	"github.com/apimgr/search/src/search"
-	"github.com/apimgr/search/src/search/bangs"
+	"github.com/apimgr/search/src/search/bang"
 	"github.com/apimgr/search/src/search/engine"
 	"github.com/apimgr/search/src/service"
 	"github.com/apimgr/search/src/ssl"
@@ -54,7 +54,7 @@ type Server struct {
 	adminHandler   *admin.Handler
 	apiHandler     *api.Handler
 	torService     *service.TorService
-	bangManager    *bangs.Manager
+	bangManager    *bang.Manager
 	widgetManager  *widget.Manager
 	logManager     *logging.Manager
 	tlsManager     *ssl.Manager
@@ -165,13 +165,13 @@ func New(cfg *config.Config) *Server {
 	apiHandler.SetTorService(torSvc)
 
 	// Create bang manager
-	bangMgr := bangs.NewManager()
+	bangMgr := bang.NewManager()
 
 	// Set custom bangs from config
 	if len(cfg.Search.Bangs.Custom) > 0 {
-		customBangs := make([]*bangs.Bang, 0, len(cfg.Search.Bangs.Custom))
+		customBangs := make([]*bang.Bang, 0, len(cfg.Search.Bangs.Custom))
 		for _, bc := range cfg.Search.Bangs.Custom {
-			customBangs = append(customBangs, &bangs.Bang{
+			customBangs = append(customBangs, &bang.Bang{
 				Shortcut:    bc.Shortcut,
 				Name:        bc.Name,
 				URL:         bc.URL,

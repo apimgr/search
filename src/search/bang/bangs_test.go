@@ -1,4 +1,4 @@
-package bangs
+package bang
 
 import (
 	"strings"

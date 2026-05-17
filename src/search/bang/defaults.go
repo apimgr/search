@@ -1,4 +1,4 @@
-package bangs
+package bang
 
 // defaultBangs contains the built-in bang definitions
 var defaultBangs = []*Bang{
