@@ -184,9 +184,17 @@ func (dm *DatabaseManager) connectDatabase(cfg *Config, dbName string) (*DB, err
 		return nil, fmt.Errorf("unsupported database driver: %s (supported: sqlite, libsql, postgres, mysql, mssql)", cfg.Driver)
 	}
 
-	// Configure connection pool
-	db.db.SetMaxOpenConns(cfg.MaxOpen)
-	db.db.SetMaxIdleConns(cfg.MaxIdle)
+	// Configure connection pool.
+	// SQLite uses a single connection: it does not support concurrent writers and
+	// PRAGMA settings (foreign_keys, journal_mode, busy_timeout) are per-connection.
+	// Using MaxOpenConns(1) ensures PRAGMAs set below apply to all queries.
+	if normalizedDriver == "sqlite" {
+		db.db.SetMaxOpenConns(1)
+		db.db.SetMaxIdleConns(1)
+	} else {
+		db.db.SetMaxOpenConns(cfg.MaxOpen)
+		db.db.SetMaxIdleConns(cfg.MaxIdle)
+	}
 	db.db.SetConnMaxLifetime(time.Duration(cfg.Lifetime) * time.Second)
 
 	// Test connection
@@ -335,9 +343,17 @@ func (db *DB) connect(cfg *Config) error {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
 
-	// Configure connection pool
-	db.db.SetMaxOpenConns(cfg.MaxOpen)
-	db.db.SetMaxIdleConns(cfg.MaxIdle)
+	// Configure connection pool.
+	// SQLite uses a single connection: it does not support concurrent writers and
+	// PRAGMA settings (foreign_keys, journal_mode, busy_timeout) are per-connection.
+	// Using MaxOpenConns(1) ensures PRAGMAs set below apply to all queries.
+	if normalizedDriver == "sqlite" {
+		db.db.SetMaxOpenConns(1)
+		db.db.SetMaxIdleConns(1)
+	} else {
+		db.db.SetMaxOpenConns(cfg.MaxOpen)
+		db.db.SetMaxIdleConns(cfg.MaxIdle)
+	}
 	db.db.SetConnMaxLifetime(time.Duration(cfg.Lifetime) * time.Second)
 
 	// Test connection

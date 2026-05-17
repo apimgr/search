@@ -290,8 +290,10 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	ap := "/" + p              // e.g. "/admin"
 	api := "/api/v1/" + p      // e.g. "/api/v1/admin"
 
-	// Legacy /admin/login and /admin/logout redirect to unified /auth/login
-	// (only needed when admin path differs from "admin")
+	// Login/logout always at /{admin_path}/login and /{admin_path}/logout.
+	// When admin path is not "admin", also register legacy /admin/login for compatibility.
+	mux.HandleFunc(ap+"/login", h.handleLogin)
+	mux.HandleFunc(ap+"/logout", h.handleLogout)
 	if p != "admin" {
 		mux.HandleFunc("/admin/login", h.handleLogin)
 		mux.HandleFunc("/admin/logout", h.handleLogout)
@@ -420,8 +422,6 @@ func (h *Handler) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		session, ok := h.auth.GetSessionFromRequest(r)
 		if !ok {
-			// Per AI.md PART 11: Admin ALWAYS goes to /{admin_path} after login.
-			// ?redirect= param is IGNORED for admins.
 			http.Redirect(w, r, "/auth/login", http.StatusSeeOther)
 			return
 		}
@@ -456,15 +456,16 @@ func (h *Handler) requireAPIAuth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// handleLogin redirects legacy /admin/login to the unified /auth/login form.
+// handleLogin redirects /admin/login to the unified /auth/login handler.
 // Per AI.md PART 11: /auth/login is the single login form for all account types.
-// Use 302 (not 301) to avoid permanent client-side caching.
+// If already authenticated, redirect directly to the admin dashboard.
 func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.auth.GetSessionFromRequest(r); ok {
+		http.Redirect(w, r, h.ap()+"/dashboard", http.StatusSeeOther)
+		return
+	}
 	http.Redirect(w, r, "/auth/login", http.StatusFound)
 }
-
-// processLogin — removed. Admin login is now handled exclusively by /auth/login
-// in server/auth.go per AI.md PART 11 (single login form).
 
 // handleLogout handles admin logout
 func (h *Handler) handleLogout(w http.ResponseWriter, r *http.Request) {

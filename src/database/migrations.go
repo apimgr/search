@@ -493,16 +493,6 @@ func (dbm *DatabaseMigrator) registerServerMigrations() {
 		Down: ``,
 	})
 
-	m.Register(Migration{
-		Version:     18,
-		Description: "Add encrypted search alert tokens",
-		Up: `
-			ALTER TABLE search_alerts ADD COLUMN manage_token_encrypted TEXT NOT NULL DEFAULT '';
-			ALTER TABLE search_alerts ADD COLUMN rss_token_encrypted TEXT NOT NULL DEFAULT '';
-		`,
-		Down: ``,
-	})
-
 	// Sort migrations by version
 	sort.Slice(m.migrations, func(i, j int) bool {
 		return m.migrations[i].Version < m.migrations[j].Version

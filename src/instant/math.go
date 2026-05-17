@@ -110,8 +110,12 @@ func (h *MathHandler) Handle(ctx context.Context, query string) (*Answer, error)
 	// Evaluate expression
 	result, err := h.evaluate(expr)
 	if err != nil {
-		// Return no answer rather than showing an error box
-		return nil, nil
+		return &Answer{
+			Type:    AnswerTypeMath,
+			Query:   query,
+			Title:   "Calculator",
+			Content: fmt.Sprintf("Error: %s", err.Error()),
+		}, nil
 	}
 
 	// Format result
@@ -169,6 +173,9 @@ func (h *MathHandler) evaluate(expr string) (float64, error) {
 		}
 		return result, nil
 	}
+
+	// Replace ** with ^ before parsing; evalNode treats ^ as power (math.Pow).
+	trimmed = strings.ReplaceAll(trimmed, "**", "^")
 
 	// Parse as Go expression using AST
 	// Note: ^ is parsed as XOR by Go but we treat it as power in evalNode

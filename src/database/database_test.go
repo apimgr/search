@@ -738,6 +738,7 @@ func TestClusterNodeStruct(t *testing.T) {
 		Status:    NodeStatusHealthy,
 		LastSeen:  now,
 		JoinedAt:  now.Add(-24 * time.Hour),
+		Metadata:  map[string]string{"region": "us-east"},
 	}
 
 	if node.ID != "node-123" {
@@ -4128,10 +4129,10 @@ func TestClusterManagerTransferPrimary(t *testing.T) {
 		t.Error("transferPrimary() should error when no other nodes available")
 	}
 
-	// Add another node
+	// Add another healthy node (transferPrimary selects from status='healthy'|'degraded')
 	_, err = db.Exec(ctx, `
 		INSERT INTO cluster_nodes (id, hostname, is_primary, status, last_seen, joined_at)
-		VALUES ('other-node', 'other-host', 0, 'online', ?, ?)
+		VALUES ('other-node', 'other-host', 0, 'healthy', ?, ?)
 	`, now, now)
 	if err != nil {
 		t.Fatalf("Insert other node error = %v", err)

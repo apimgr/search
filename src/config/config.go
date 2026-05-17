@@ -1026,7 +1026,7 @@ func DefaultConfig() *Config {
 		Server: ServerConfig{
 			Title:       "Scour",
 			Description: "Privacy-Respecting Metasearch Engine",
-			Port:        0, // 0 = auto-detect: container=80, local=random 64xxx
+			Port:        64580,
 			Address:     "[::]",
 			Mode:        "production",
 			SecretKey:   generateSecret(),
@@ -1783,15 +1783,10 @@ func GetRandomPort() int {
 	return 64000 + int(binary.LittleEndian.Uint16(b[:]))%1000
 }
 
-// ResolvePort resolves the port based on environment
-// Per AI.md PART 27: Container defaults to port 80, local dev to random 64xxx
+// ResolvePort resolves port 0 to a random 64xxx port; non-zero ports pass through.
+// Containers use explicit port configuration (server.yml); the binary never auto-detects.
 func ResolvePort(port int) int {
 	if port == 0 {
-		// Container: default port 80
-		// Local (dev): random 64xxx
-		if IsRunningInContainer() {
-			return 80
-		}
 		return GetRandomPort()
 	}
 	return port

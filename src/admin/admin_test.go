@@ -2213,12 +2213,13 @@ func TestHandleLoginGet(t *testing.T) {
 
 	handler.handleLogin(w, req)
 
-	// Should get 200 OK for login page
-	if w.Code != http.StatusOK {
-		t.Errorf("Status code = %d, want %d", w.Code, http.StatusOK)
+	// Per AI.md PART 11: /auth/login is the unified login form; /admin/login redirects there.
+	if w.Code != http.StatusFound {
+		t.Errorf("Status code = %d, want %d", w.Code, http.StatusFound)
 	}
-	if ct := w.Header().Get("Content-Type"); !strings.Contains(ct, "text/html") {
-		t.Errorf("Content-Type = %q, want text/html", ct)
+	location := w.Header().Get("Location")
+	if location != "/auth/login" {
+		t.Errorf("Location = %q, want /auth/login", location)
 	}
 }
 
@@ -2271,21 +2272,14 @@ func TestHandleLoginPost(t *testing.T) {
 
 	handler.handleLogin(w, req)
 
-	// Should redirect to dashboard
-	if w.Code != http.StatusSeeOther {
-		t.Errorf("Status code = %d, want %d", w.Code, http.StatusSeeOther)
+	// Per AI.md PART 11: POST to /admin/login redirects to /auth/login (unified login).
+	// Credential validation happens at /auth/login, not here.
+	if w.Code != http.StatusFound {
+		t.Errorf("Status code = %d, want %d", w.Code, http.StatusFound)
 	}
-	// Should set session cookie
-	cookies := w.Result().Cookies()
-	found := false
-	for _, c := range cookies {
-		if c.Name == "admin_session" && c.Value != "" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("Session cookie should be set")
+	location := w.Header().Get("Location")
+	if location != "/auth/login" {
+		t.Errorf("Location = %q, want /auth/login", location)
 	}
 }
 
@@ -2312,13 +2306,14 @@ func TestHandleLoginPostInvalidCredentials(t *testing.T) {
 
 	handler.handleLogin(w, req)
 
-	// Should redirect back to login with error
-	if w.Code != http.StatusSeeOther {
-		t.Errorf("Status code = %d, want %d", w.Code, http.StatusSeeOther)
+	// Per AI.md PART 11: /admin/login always redirects to /auth/login regardless of credentials.
+	// Credential validation and error display happen at /auth/login.
+	if w.Code != http.StatusFound {
+		t.Errorf("Status code = %d, want %d", w.Code, http.StatusFound)
 	}
 	location := w.Header().Get("Location")
-	if !strings.Contains(location, "error=") {
-		t.Errorf("Location = %q, should contain error parameter", location)
+	if location != "/auth/login" {
+		t.Errorf("Location = %q, want /auth/login", location)
 	}
 }
 
@@ -2577,8 +2572,8 @@ func TestRequireAuthNoSession(t *testing.T) {
 		t.Errorf("Status code = %d, want %d", w.Code, http.StatusSeeOther)
 	}
 	location := w.Header().Get("Location")
-	if !strings.Contains(location, "/admin/login") {
-		t.Errorf("Location = %q, should redirect to login", location)
+	if location != "/auth/login" {
+		t.Errorf("Location = %q, should redirect to /auth/login", location)
 	}
 }
 
@@ -7266,8 +7261,9 @@ func TestRegisterRoutes(t *testing.T) {
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("Login route status = %d, want %d", w.Code, http.StatusOK)
+	// Per AI.md PART 11: /admin/login redirects to /auth/login (unified login).
+	if w.Code != http.StatusFound {
+		t.Errorf("Login route status = %d, want %d (redirect to /auth/login)", w.Code, http.StatusFound)
 	}
 }
 

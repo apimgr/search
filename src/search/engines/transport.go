@@ -11,8 +11,8 @@ import (
 // prevents file-descriptor exhaustion under load, and avoids the
 // TIME_WAIT accumulation that causes intermittent ERR_CONNECTION_TIMED_OUT.
 var SharedTransport = &http.Transport{
-	MaxIdleConns:          200,
-	MaxIdleConnsPerHost:   20,
+	MaxIdleConns:          100,
+	MaxIdleConnsPerHost:   10,
 	IdleConnTimeout:       90 * time.Second,
 	TLSHandshakeTimeout:   10 * time.Second,
 	ExpectContinueTimeout: 1 * time.Second,

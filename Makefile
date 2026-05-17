@@ -13,8 +13,8 @@ BUILD_DATE := $(shell date +"%a %b %d, %Y at %H:%M:%S %Z")
 COMMIT_ID := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 # COMMIT_ID used directly - no VCS_REF alias
 
-# Official site URL (per AI.md - https://scour.li)
-OFFICIALSITE := https://scour.li
+# Official site URL: site.txt wins, then env var, then empty
+OFFICIALSITE := $(shell [ -f site.txt ] && cat site.txt || echo "$(OFFICIALSITE)")
 
 # Linker flags to embed build info (per AI.md PART 26)
 LDFLAGS := -s -w \
