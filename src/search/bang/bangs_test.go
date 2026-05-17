@@ -86,7 +86,8 @@ func TestManagerSetCustomBangs(t *testing.T) {
 
 	m.SetCustomBangs(customBangs)
 
-	if len(m.custom) != 3 { // 2 bangs + 1 alias
+	// 2 bangs + 1 alias
+	if len(m.custom) != 3 {
 		t.Errorf("custom map size = %d, want 3", len(m.custom))
 	}
 
@@ -746,9 +747,12 @@ func TestManagerIsBangEdgeCases(t *testing.T) {
 		{"!g test", true},
 		{"test !g", true},
 		{"test", false},
-		{"!", false},             // Just exclamation, no shortcut
-		{"!unknown12345", false}, // Unknown bang
-		{"   !g   ", true},       // Whitespace around
+		// Just exclamation, no shortcut
+		{"!", false},
+		// Unknown bang
+		{"!unknown12345", false},
+		// Whitespace around
+		{"   !g   ", true},
 	}
 
 	for _, tt := range tests {
@@ -1104,15 +1108,24 @@ func TestExtractBangEdgeCases(t *testing.T) {
 		query    string
 		expected string
 	}{
-		{"!test", "test"},            // Start bang
-		{"test!", "test"},            // End bang
-		{"query !test more", "test"}, // Middle bang with continuation
-		{"!test123", "test123"},      // Bang with numbers
-		{"123!", "123"},              // Numeric-only bang
-		{"!a", "a"},                  // Single char bang
-		{"a!", "a"},                  // Single char trailing bang
-		{"!abc def !xyz", "abc"},     // Multiple bangs (first wins)
-		{"word word2", ""},           // No bang
+		// Start bang
+		{"!test", "test"},
+		// End bang
+		{"test!", "test"},
+		// Middle bang with continuation
+		{"query !test more", "test"},
+		// Bang with numbers
+		{"!test123", "test123"},
+		// Numeric-only bang
+		{"123!", "123"},
+		// Single char bang
+		{"!a", "a"},
+		// Single char trailing bang
+		{"a!", "a"},
+		// Multiple bangs (first wins)
+		{"!abc def !xyz", "abc"},
+		// No bang
+		{"word word2", ""},
 	}
 
 	for _, tt := range tests {

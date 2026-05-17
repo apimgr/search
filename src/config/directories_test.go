@@ -9,7 +9,8 @@ import (
 func TestSetAndGetConfigDirOverride(t *testing.T) {
 	// Test that setting override changes GetConfigDir result
 	SetConfigDirOverride("/test/config")
-	defer SetConfigDirOverride("") // Reset
+	// Reset
+	defer SetConfigDirOverride("")
 
 	got := GetConfigDir()
 	if got != "/test/config" {

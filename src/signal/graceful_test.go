@@ -168,7 +168,8 @@ func TestGracefulShutdownWithDatabaseTimeoutInSubprocess(t *testing.T) {
 			DatabaseTimeout: 50 * time.Millisecond,
 			LogFlushTimeout: 100 * time.Millisecond,
 			OnCloseDatabase: func() {
-				time.Sleep(200 * time.Millisecond) // Exceed timeout
+				// Exceed timeout
+				time.Sleep(200 * time.Millisecond)
 			},
 		}
 		gracefulShutdown(cfg)
@@ -197,7 +198,8 @@ func TestGracefulShutdownWithLogFlushTimeoutInSubprocess(t *testing.T) {
 			DatabaseTimeout: 100 * time.Millisecond,
 			LogFlushTimeout: 50 * time.Millisecond,
 			OnFlushLogs: func() {
-				time.Sleep(200 * time.Millisecond) // Exceed timeout
+				// Exceed timeout
+				time.Sleep(200 * time.Millisecond)
 			},
 		}
 		gracefulShutdown(cfg)
@@ -288,7 +290,8 @@ func TestGracefulShutdownWithChildPIDsInSubprocess(t *testing.T) {
 			DatabaseTimeout: 100 * time.Millisecond,
 			LogFlushTimeout: 100 * time.Millisecond,
 			GetChildPIDs: func() []int {
-				return []int{999999} // Non-existent PID
+				// Non-existent PID
+				return []int{999999}
 			},
 		}
 		gracefulShutdown(cfg)
@@ -557,8 +560,9 @@ func TestGracefulShutdownWithServerShutdownErrorInSubprocess(t *testing.T) {
 
 		// Use very short timeout to trigger context deadline exceeded
 		cfg := ShutdownConfig{
-			Server:          server,
-			InFlightTimeout: 1 * time.Nanosecond, // Extremely short timeout
+			Server: server,
+			// Extremely short timeout
+			InFlightTimeout: 1 * time.Nanosecond,
 			ChildTimeout:    100 * time.Millisecond,
 			DatabaseTimeout: 100 * time.Millisecond,
 			LogFlushTimeout: 100 * time.Millisecond,
@@ -625,7 +629,8 @@ func TestGracefulShutdownPIDFilePermissionErrorInSubprocess(t *testing.T) {
 		// Try to remove a file we can't remove - use /etc/passwd as example
 		// This is a file that exists but we can't delete
 		cfg := ShutdownConfig{
-			PIDFile:         "/etc/passwd", // Exists but can't be removed
+			// Exists but can't be removed
+			PIDFile:         "/etc/passwd",
 			InFlightTimeout: 100 * time.Millisecond,
 			ChildTimeout:    100 * time.Millisecond,
 			DatabaseTimeout: 100 * time.Millisecond,
@@ -676,8 +681,9 @@ func TestGracefulShutdownWithRunningServerAndTimeoutInSubprocess(t *testing.T) {
 
 		// Use very short timeout to force shutdown error
 		cfg := ShutdownConfig{
-			Server:          server,
-			InFlightTimeout: 1 * time.Nanosecond, // Extremely short
+			Server: server,
+			// Extremely short
+			InFlightTimeout: 1 * time.Nanosecond,
 			ChildTimeout:    100 * time.Millisecond,
 			DatabaseTimeout: 100 * time.Millisecond,
 			LogFlushTimeout: 100 * time.Millisecond,

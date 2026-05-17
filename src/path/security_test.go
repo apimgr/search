@@ -12,12 +12,17 @@ func TestNormalizePath(t *testing.T) {
 		want  string
 	}{
 		{"empty", "", ""},
-		{"simple path", "/path/to/file", "path/to/file"}, // Strips leading/trailing slashes
+		// Strips leading/trailing slashes
+		{"simple path", "/path/to/file", "path/to/file"},
 		{"no leading slash", "path/to/file", "path/to/file"},
-		{"double slashes", "path//to//file", "path/to/file"}, // path.Clean handles //
-		{"trailing slash", "/path/to/", "path/to"},           // Strips trailing
-		{"dot segments", "/path/./to", "path/to"},            // Removes .
-		{"dotdot becomes empty", "../path", ""},              // Contains .. after clean
+		// path.Clean handles //
+		{"double slashes", "path//to//file", "path/to/file"},
+		// Strips trailing
+		{"trailing slash", "/path/to/", "path/to"},
+		// Removes .
+		{"dot segments", "/path/./to", "path/to"},
+		// Contains .. after clean
+		{"dotdot becomes empty", "../path", ""},
 	}
 
 	for _, tt := range tests {
@@ -181,7 +186,8 @@ func TestValidatePathSegmentErrors(t *testing.T) {
 		{"empty segment", "", ErrInvalidPath},
 		{"too long segment", strings.Repeat("a", 65), ErrPathTooLong},
 		{"invalid chars", "file@name", ErrInvalidPath},
-		{"starts with number valid", "1file", nil}, // This is valid per regex
+		// This is valid per regex
+		{"starts with number valid", "1file", nil},
 		{"starts with dash", "-file", ErrInvalidPath},
 		{"dot traversal", "..", ErrPathTraversal},
 		{"single dot", ".", ErrPathTraversal},
@@ -215,12 +221,15 @@ func TestNormalizePathEdgeCases(t *testing.T) {
 		{"root only", "/", ""},
 		{"multiple slashes only", "///", ""},
 		{"dot only", ".", "."},
-		{"complex traversal resolved", "/a/b/../c/../d", "a/d"}, // path.Clean resolves ..
+		// path.Clean resolves ..
+		{"complex traversal resolved", "/a/b/../c/../d", "a/d"},
 		{"mixed dots and slashes", "/./a/./b/./", "a/b"},
 		{"leading double slash", "//path/to/file", "path/to/file"},
 		{"unicode path", "/путь/к/файлу", "путь/к/файлу"},
-		{"unresolvable dotdot", "../../etc", ""}, // Contains .. after clean
-		{"dotdot at root", "/../etc", "etc"},     // path.Clean resolves to /etc, trim gives etc
+		// Contains .. after clean
+		{"unresolvable dotdot", "../../etc", ""},
+		// path.Clean resolves to /etc, trim gives etc
+		{"dotdot at root", "/../etc", "etc"},
 	}
 
 	for _, tt := range tests {
@@ -239,14 +248,18 @@ func TestValidatePathEdgeCases(t *testing.T) {
 		path    string
 		wantErr error
 	}{
-		{"empty path", "", nil}, // Empty path with no segments is valid
+		// Empty path with no segments is valid
+		{"empty path", "", nil},
 		{"slash only", "/", nil},
 		{"multiple slashes", "///", nil},
 		{"valid with numbers", "/path1/file2", nil},
 		{"path with extension", "/path/file.json", nil},
-		{"multiple extensions", "/path/file.tar.gz", ErrInvalidPath}, // Double extension fails regex
-		{"hidden file unix style", "/.hidden", ErrInvalidPath},       // Starts with dot
-		{"just dots", "/path/...", ErrPathTraversal},                 // Contains ".." so treated as traversal
+		// Double extension fails regex
+		{"multiple extensions", "/path/file.tar.gz", ErrInvalidPath},
+		// Starts with dot
+		{"hidden file unix style", "/.hidden", ErrInvalidPath},
+		// Contains ".." so treated as traversal
+		{"just dots", "/path/...", ErrPathTraversal},
 	}
 
 	for _, tt := range tests {
@@ -405,7 +418,8 @@ func TestValidPathSegmentRegex(t *testing.T) {
 		{"uppercase", "FileName", false},
 		{"mixed case", "fileName", false},
 		{"starts with hyphen", "-file", false},
-		{"starts with underscore", "_file", false}, // Valid per regex ^[a-z0-9]
+		// Valid per regex ^[a-z0-9]
+		{"starts with underscore", "_file", false},
 		{"double extension", "file.tar.gz", false},
 		{"empty extension", "file.", false},
 		{"dot only extension", "file..", false},

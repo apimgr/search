@@ -130,7 +130,8 @@ func TestCompareVersions(t *testing.T) {
 		{"2.0.0", "1.9.9", 1},
 		{"v1.0.0", "v1.0.0", 0},
 		{"v1.1.0", "v1.0.0", 1},
-		{"1.0.0-beta", "1.0.0-alpha", 0}, // Pre-release parts become 0
+		// Pre-release parts become 0
+		{"1.0.0-beta", "1.0.0-alpha", 0},
 		{"1.0.0", "0.9.9", 1},
 		{"0.0.1", "0.0.0", 1},
 	}
@@ -155,7 +156,8 @@ func TestParseVersion(t *testing.T) {
 		{"1.2.3", []int{1, 2, 3}},
 		{"10.20.30", []int{10, 20, 30}},
 		{"1.0.0-beta", []int{1, 0, 0, 0}},
-		{"1.0.0-rc1", []int{1, 0, 0, 0}}, // "rc1" doesn't start with digit, so Sscanf returns 0
+		// "rc1" doesn't start with digit, so Sscanf returns 0
+		{"1.0.0-rc1", []int{1, 0, 0, 0}},
 	}
 
 	for _, tt := range tests {
@@ -460,8 +462,10 @@ func TestCompareVersionsMoreCases(t *testing.T) {
 		{"1", "1", 0},
 		{"1", "2", -1},
 		{"2", "1", 1},
-		{"1.0", "1.0.0", -1}, // Shorter version is less
-		{"1.0.0", "1.0", 1},  // Longer version is greater
+		// Shorter version is less
+		{"1.0", "1.0.0", -1},
+		// Longer version is greater
+		{"1.0.0", "1.0", 1},
 		{"1.0.0.0", "1.0.0", 1},
 		// Version with underscores
 		{"1_0_0", "1_0_0", 0},
@@ -472,9 +476,12 @@ func TestCompareVersionsMoreCases(t *testing.T) {
 		{"100.200.300", "100.200.299", 1},
 		{"100.200.300", "100.200.301", -1},
 		// Pre-release versions
-		{"1.0.0-alpha", "1.0.0-beta", 0}, // Both parse to 1.0.0.0
-		{"1.0.0-1", "1.0.0-2", -1},       // 1.0.0.1 vs 1.0.0.2
-		{"2.0.0-beta", "1.9.9", 1},       // 2.0.0.0 vs 1.9.9
+		// Both parse to 1.0.0.0
+		{"1.0.0-alpha", "1.0.0-beta", 0},
+		// 1.0.0.1 vs 1.0.0.2
+		{"1.0.0-1", "1.0.0-2", -1},
+		// 2.0.0.0 vs 1.9.9
+		{"2.0.0-beta", "1.9.9", 1},
 	}
 
 	for _, tt := range tests {
@@ -500,9 +507,12 @@ func TestParseVersionMoreCases(t *testing.T) {
 		{"1-2-3", []int{1, 2, 3}},
 		{"1_2_3", []int{1, 2, 3}},
 		{"1.2.3.4.5", []int{1, 2, 3, 4, 5}},
-		{"abc", []int{0}},                 // Non-numeric becomes 0
-		{"1.abc.3", []int{1, 0, 3}},       // abc becomes 0
-		{"v1.2.3-rc1", []int{1, 2, 3, 0}}, // rc1 -> 0
+		// Non-numeric becomes 0
+		{"abc", []int{0}},
+		// abc becomes 0
+		{"1.abc.3", []int{1, 0, 3}},
+		// rc1 -> 0
+		{"v1.2.3-rc1", []int{1, 2, 3, 0}},
 	}
 
 	for _, tt := range tests {
@@ -1106,9 +1116,10 @@ func TestCheckForUpdatesWithMockServer(t *testing.T) {
 
 	// Test version comparison for update detection
 	tests := []struct {
-		current  string
-		latest   string
-		expected bool // true if update available
+		current string
+		latest  string
+		// true if update available
+		expected bool
 	}{
 		{"1.0.0", "1.1.0", true},
 		{"1.0.0", "1.0.0", false},
@@ -1512,8 +1523,9 @@ func TestBackupCurrentBinaryDirCreateError(t *testing.T) {
 	m := &Manager{
 		currentVersion: "1.0.0",
 		binaryPath:     fakeBinary,
-		backupDir:      filepath.Join(tempDir, "backup", "subdir"), // Will fail because backup is a file
-		tempDir:        tempDir,
+		// Will fail because backup is a file
+		backupDir: filepath.Join(tempDir, "backup", "subdir"),
+		tempDir:   tempDir,
 	}
 
 	err = m.backupCurrentBinary()
@@ -1554,9 +1566,12 @@ func TestCompareVersionsLengthDifferences(t *testing.T) {
 		v2   string
 		want int
 	}{
-		{"1.0.0.0", "1.0.0", 1},  // longer > shorter when equal prefix
-		{"1.0.0", "1.0.0.0", -1}, // shorter < longer when equal prefix
-		{"1.0.0.1", "1.0.0", 1},  // longer with non-zero suffix
+		// longer > shorter when equal prefix
+		{"1.0.0.0", "1.0.0", 1},
+		// shorter < longer when equal prefix
+		{"1.0.0", "1.0.0.0", -1},
+		// longer with non-zero suffix
+		{"1.0.0.1", "1.0.0", 1},
 		{"1.0.0", "1.0.0.1", -1},
 		{"1", "1.0", -1},
 		{"1.0", "1", 1},
@@ -1582,9 +1597,12 @@ func TestParseVersionEmptyAndSpecial(t *testing.T) {
 	}{
 		{"", 0},
 		{"v", 0},
-		{"...", 0},   // Only separators, no parts
-		{"1..2", 2},  // Empty part becomes nothing (FieldsFunc removes empty)
-		{"1...2", 2}, // Multiple separators
+		// Only separators, no parts
+		{"...", 0},
+		// Empty part becomes nothing (FieldsFunc removes empty)
+		{"1..2", 2},
+		// Multiple separators
+		{"1...2", 2},
 	}
 
 	for _, tt := range tests {
@@ -1630,7 +1648,8 @@ func TestDownloadUpdateLargeFile(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	// Create larger content (multiple buffer sizes to test loop)
-	content := make([]byte, 100*1024) // 100KB
+	// 100KB
+	content := make([]byte, 100*1024)
 	for i := range content {
 		content[i] = byte(i % 256)
 	}
@@ -2030,15 +2049,17 @@ func TestCheckForUpdatesReleaseSelection(t *testing.T) {
 	now := time.Now()
 	releases := []Release{
 		{
-			TagName:     "v2.0.0",
-			Draft:       true, // Should be skipped
+			TagName: "v2.0.0",
+			// Should be skipped
+			Draft:       true,
 			Prerelease:  false,
 			PublishedAt: now,
 		},
 		{
-			TagName:     "v1.5.0-beta",
-			Draft:       false,
-			Prerelease:  true, // Should be skipped if includePrerelease=false
+			TagName: "v1.5.0-beta",
+			Draft:   false,
+			// Should be skipped if includePrerelease=false
+			Prerelease:  true,
 			PublishedAt: now.Add(-1 * time.Hour),
 		},
 		{
@@ -2296,13 +2317,15 @@ func TestExtractBinaryIOCopyError(t *testing.T) {
 
 	// Header claims larger size than actual content
 	header := &tar.Header{
-		Name:     binaryName,
-		Mode:     0755,
-		Size:     1000, // Claims 1000 bytes
+		Name: binaryName,
+		Mode: 0755,
+		// Claims 1000 bytes
+		Size:     1000,
 		Typeflag: tar.TypeReg,
 	}
 	tarWriter.WriteHeader(header)
-	tarWriter.Write([]byte("short")) // Only writes 5 bytes
+	// Only writes 5 bytes
+	tarWriter.Write([]byte("short"))
 
 	tarWriter.Close()
 	gzWriter.Close()

@@ -86,8 +86,10 @@ func TestManagerT(t *testing.T) {
 		{"de", "hello", nil, "Hallo"},
 		{"en", "welcome", []interface{}{"User"}, "Welcome, User!"},
 		{"de", "welcome", []interface{}{"Benutzer"}, "Willkommen, Benutzer!"},
-		{"en", "missing", nil, "missing"}, // Missing key returns key
-		{"xx", "hello", nil, "Hello"},     // Unknown lang falls back to default
+		// Missing key returns key
+		{"en", "missing", nil, "missing"},
+		// Unknown lang falls back to default
+		{"xx", "hello", nil, "Hello"},
 	}
 
 	for _, tt := range tests {
@@ -218,7 +220,8 @@ func TestManagerParseAcceptLanguage(t *testing.T) {
 		{"fr;q=1.0,de;q=0.5", "fr"},
 		{"xx,yy,zz", ""},
 		{"", ""},
-		{"en-GB", "en"}, // Regional variant normalized
+		// Regional variant normalized
+		{"en-GB", "en"},
 		{"de-AT,de;q=0.9", "de"},
 	}
 
@@ -639,7 +642,8 @@ func TestParseAcceptLanguageEdgeCases(t *testing.T) {
 		{"mixed case with region", "De-DE,En-US;q=0.8", "de"},
 		{"only whitespace", "   ", ""},
 		{"quality value 0", "en;q=0,de;q=0.5", "de"},
-		{"same quality different order", "de;q=0.9,fr;q=0.9", "de"}, // First one wins in stable sort
+		// First one wins in stable sort
+		{"same quality different order", "de;q=0.9,fr;q=0.9", "de"},
 	}
 
 	for _, tt := range tests {

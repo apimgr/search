@@ -198,7 +198,8 @@ func TestParseBoolExtendedFalsy(t *testing.T) {
 
 	for _, val := range falsyValues {
 		t.Run(val, func(t *testing.T) {
-			result, err := ParseBool(val, true) // default true to verify it returns false
+			// default true to verify it returns false
+			result, err := ParseBool(val, true)
 			if err != nil {
 				t.Errorf("ParseBool(%q) error = %v", val, err)
 			}

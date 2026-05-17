@@ -20,8 +20,10 @@ func TestNormalizePath(t *testing.T) {
 		{"both slashes", "/path/to/file/", "path/to/file"},
 		{"double slashes", "path//to//file", "path/to/file"},
 		{"dot", "path/./to/file", "path/to/file"},
-		{"dotdot cleaned", "path/../to/file", "to/file"}, // path.Clean resolves this
-		{"only dots", "..", ""},                          // Returns empty because it still contains ..
+		// path.Clean resolves this
+		{"dotdot cleaned", "path/../to/file", "to/file"},
+		// Returns empty because it still contains ..
+		{"only dots", "..", ""},
 	}
 
 	for _, tt := range tests {
@@ -44,8 +46,10 @@ func TestValidatePathSegment(t *testing.T) {
 		{"with_underscore", nil},
 		{"abc123", nil},
 		{"", ErrInvalidPath},
-		{".", ErrInvalidPath},  // Fails regex before traversal check
-		{"..", ErrInvalidPath}, // Fails regex before traversal check
+		// Fails regex before traversal check
+		{".", ErrInvalidPath},
+		// Fails regex before traversal check
+		{"..", ErrInvalidPath},
 		{"InvalidUpper", ErrInvalidPath},
 		{"has.dot", ErrInvalidPath},
 		{"has/slash", ErrInvalidPath},
@@ -151,7 +155,8 @@ func TestSafeFilePath(t *testing.T) {
 		{"with path", "path/to/file.txt", "path/to/file.txt", false},
 		{"with slashes", "/path/to/file.txt/", "path/to/file.txt", false},
 		{"traversal", "../etc/passwd", "", true},
-		{"dot alone", ".", ".", false}, // path.Clean returns "."
+		// path.Clean returns "."
+		{"dot alone", ".", ".", false},
 	}
 
 	for _, tt := range tests {
@@ -404,7 +409,8 @@ func TestPathSecurityMiddleware_LeadingSlashAdded(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	// Manually modify the path to test edge case
-	req.URL.Path = "api/users" // No leading slash
+	// No leading slash
+	req.URL.Path = "api/users"
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, req)

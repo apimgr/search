@@ -250,7 +250,8 @@ func TestClusterSchedulerAcquireLockExpired(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClusterScheduler() error = %v", err)
 	}
-	cs1.SetLockTTL(1 * time.Millisecond) // Very short TTL
+	// Very short TTL
+	cs1.SetLockTTL(1 * time.Millisecond)
 
 	cs2, err := NewClusterScheduler(db, "node2")
 	if err != nil {
@@ -810,7 +811,8 @@ func TestClusterSchedulerStartClusterTwice(t *testing.T) {
 	}
 
 	cs.StartCluster()
-	cs.StartCluster() // Second call should be no-op
+	// Second call should be no-op
+	cs.StartCluster()
 
 	if !cs.Scheduler.running {
 		t.Error("Scheduler should still be running")
@@ -1030,7 +1032,8 @@ func TestClusterSchedulerGetExecutionHistoryDefaultLimit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetExecutionHistory() error = %v", err)
 	}
-	if len(history) != 5 { // We only have 5 records
+	// We only have 5 records
+	if len(history) != 5 {
 		t.Errorf("Expected 5 executions, got %d", len(history))
 	}
 }

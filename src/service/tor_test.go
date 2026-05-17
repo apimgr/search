@@ -202,11 +202,16 @@ func TestTorServiceGenerateVanityInvalidChars(t *testing.T) {
 
 	// Invalid characters should fail
 	invalidPrefixes := []string{
-		"ABC",  // uppercase
-		"abc1", // invalid number (1 is not valid base32)
-		"abc_", // underscore
-		"abc-", // hyphen
-		"abc!", // special char
+		// uppercase
+		"ABC",
+		// invalid number (1 is not valid base32)
+		"abc1",
+		// underscore
+		"abc_",
+		// hyphen
+		"abc-",
+		// special char
+		"abc!",
 	}
 
 	for _, prefix := range invalidPrefixes {
@@ -788,21 +793,36 @@ func TestTorServiceGenerateVanityValidation(t *testing.T) {
 		prefix  string
 		wantErr bool
 	}{
-		{"", false},       // Empty is valid
-		{"a", false},      // Single char valid
-		{"abc", false},    // Short valid
-		{"234567", false}, // Numbers 2-7 valid
-		{"abcdef", false}, // 6 chars max for built-in
-		{"abcdefg", true}, // 7 chars too long
-		{"ABC", true},     // Uppercase invalid
-		{"abc1", true},    // 1 invalid in base32
-		{"abc0", true},    // 0 invalid in base32
-		{"abc8", true},    // 8 invalid in base32
-		{"abc9", true},    // 9 invalid in base32
-		{"abc!", true},    // Special char invalid
-		{"abc-", true},    // Hyphen invalid
-		{"abc_", true},    // Underscore invalid
-		{"abc ", true},    // Space invalid
+		// Empty is valid
+		{"", false},
+		// Single char valid
+		{"a", false},
+		// Short valid
+		{"abc", false},
+		// Numbers 2-7 valid
+		{"234567", false},
+		// 6 chars max for built-in
+		{"abcdef", false},
+		// 7 chars too long
+		{"abcdefg", true},
+		// Uppercase invalid
+		{"ABC", true},
+		// 1 invalid in base32
+		{"abc1", true},
+		// 0 invalid in base32
+		{"abc0", true},
+		// 8 invalid in base32
+		{"abc8", true},
+		// 9 invalid in base32
+		{"abc9", true},
+		// Special char invalid
+		{"abc!", true},
+		// Hyphen invalid
+		{"abc-", true},
+		// Underscore invalid
+		{"abc_", true},
+		// Space invalid
+		{"abc ", true},
 	}
 
 	for _, tt := range tests {

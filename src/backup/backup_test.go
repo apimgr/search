@@ -698,14 +698,22 @@ func TestBackupMetadataChecksums(t *testing.T) {
 func TestBackupMetadataPerSpec(t *testing.T) {
 	now := time.Now()
 	metadata := BackupMetadata{
-		Version:          "1.0.0",          // Per PART 25: manifest format version
-		CreatedAt:        now,              // Per PART 25: when backup was created
-		CreatedBy:        "admin",          // Per PART 25: who created the backup
-		AppVersion:       "2.0.0",          // Per PART 25: application version
-		Contents:         []string{"file"}, // Per PART 25: list of contents
-		Checksum:         "sha256:abc123",  // Per PART 25: overall checksum
-		Encrypted:        true,             // Per PART 25: encryption status
-		EncryptionMethod: "AES-256-GCM",    // Per PART 25: encryption method
+		// Per PART 25: manifest format version
+		Version: "1.0.0",
+		// Per PART 25: when backup was created
+		CreatedAt: now,
+		// Per PART 25: who created the backup
+		CreatedBy: "admin",
+		// Per PART 25: application version
+		AppVersion: "2.0.0",
+		// Per PART 25: list of contents
+		Contents: []string{"file"},
+		// Per PART 25: overall checksum
+		Checksum: "sha256:abc123",
+		// Per PART 25: encryption status
+		Encrypted: true,
+		// Per PART 25: encryption method
+		EncryptionMethod: "AES-256-GCM",
 	}
 
 	// All required fields should be non-empty
@@ -733,9 +741,10 @@ func TestBackupMetadataPerSpec(t *testing.T) {
 
 func TestBackupInfoStruct(t *testing.T) {
 	info := BackupInfo{
-		Filename:    "search_backup_2024-01-01_120000.tar.gz",
-		Path:        "/backups/search_backup_2024-01-01_120000.tar.gz",
-		Size:        1024 * 1024, // 1 MB
+		Filename: "search_backup_2024-01-01_120000.tar.gz",
+		Path:     "/backups/search_backup_2024-01-01_120000.tar.gz",
+		// 1 MB
+		Size:        1024 * 1024,
 		CreatedAt:   time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC),
 		Version:     "1.0.0",
 		ServerTitle: "My Search",
@@ -1613,7 +1622,8 @@ func TestManagerRestoreEncryptedNoPassword(t *testing.T) {
 	encryptedPath := filepath.Join(tempDir, "backup.tar.gz.enc")
 	os.WriteFile(encryptedPath, []byte("encrypted content"), 0644)
 
-	m := &Manager{} // No password set
+	// No password set
+	m := &Manager{}
 
 	err := m.RestoreEncrypted(encryptedPath)
 	if err == nil {
@@ -2386,7 +2396,8 @@ func TestManagerApplyRetentionWeekly(t *testing.T) {
 	// Old backup (older than retention)
 	oldBackup := filepath.Join(backupDir, "old.tar.gz")
 	os.WriteFile(oldBackup, createMinimalTarGz(t), 0644)
-	oldTime := now.AddDate(0, 0, -30) // 30 days old
+	// 30 days old
+	oldTime := now.AddDate(0, 0, -30)
 	os.Chtimes(oldBackup, oldTime, oldTime)
 
 	policy := RetentionPolicy{
@@ -2424,7 +2435,8 @@ func TestManagerApplyRetentionDeleteErrors(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		backupFile := filepath.Join(backupDir, fmt.Sprintf("backup%d.tar.gz", i))
 		os.WriteFile(backupFile, createMinimalTarGz(t), 0644)
-		fileTime := now.AddDate(0, 0, -100-i) // Very old
+		// Very old
+		fileTime := now.AddDate(0, 0, -100-i)
 		os.Chtimes(backupFile, fileTime, fileTime)
 	}
 
@@ -3118,7 +3130,8 @@ func TestManagerCreateBackupDirFails(t *testing.T) {
 	os.WriteFile(blockingFile, []byte("blocking"), 0644)
 
 	m := &Manager{
-		backupDir: filepath.Join(blockingFile, "subdir"), // Will fail because backups is a file
+		// Will fail because backups is a file
+		backupDir: filepath.Join(blockingFile, "subdir"),
 		configDir: tempDir,
 		dataDir:   tempDir,
 	}
@@ -3179,7 +3192,8 @@ func TestManagerApplyRetentionSundayBackup(t *testing.T) {
 	if daysUntilSunday == 0 && now.Weekday() != time.Sunday {
 		daysUntilSunday = 7
 	}
-	lastSunday := now.AddDate(0, 0, -daysUntilSunday-7) // Last Sunday
+	// Last Sunday
+	lastSunday := now.AddDate(0, 0, -daysUntilSunday-7)
 
 	// Create backup dated on Sunday
 	sundayBackup := filepath.Join(backupDir, "sunday.tar.gz")
@@ -3188,8 +3202,10 @@ func TestManagerApplyRetentionSundayBackup(t *testing.T) {
 
 	policy := RetentionPolicy{
 		Count: 0,
-		Day:   0, // No daily
-		Week:  4, // Keep 4 weeks
+		// No daily
+		Day: 0,
+		// Keep 4 weeks
+		Week:  4,
 		Month: 0,
 		Year:  0,
 	}
@@ -3225,7 +3241,8 @@ func TestManagerApplyRetentionFirstOfMonth(t *testing.T) {
 		Count: 0,
 		Day:   0,
 		Week:  0,
-		Month: 12, // Keep 12 months
+		// Keep 12 months
+		Month: 12,
 		Year:  0,
 	}
 
@@ -3261,7 +3278,8 @@ func TestManagerApplyRetentionYearly(t *testing.T) {
 		Day:   0,
 		Week:  0,
 		Month: 0,
-		Year:  5, // Keep 5 years
+		// Keep 5 years
+		Year: 5,
 	}
 
 	err := m.ApplyRetention(policy)
@@ -3408,7 +3426,8 @@ func TestManagerScheduledBackupListError(t *testing.T) {
 	os.WriteFile(backupFile, []byte("blocking"), 0644)
 
 	m := &Manager{
-		backupDir: filepath.Join(backupFile, "subdir"), // Will cause issues
+		// Will cause issues
+		backupDir: filepath.Join(backupFile, "subdir"),
 		configDir: tempDir,
 		dataDir:   tempDir,
 	}

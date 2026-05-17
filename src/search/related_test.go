@@ -40,7 +40,8 @@ func TestRelatedSearchesGetRelatedDefaultLimit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
 	defer cancel()
 
-	_, _ = rs.GetRelated(ctx, "test", 0) // 0 should default to 8
+	// 0 should default to 8
+	_, _ = rs.GetRelated(ctx, "test", 0)
 	// Just verifying it doesn't crash with limit=0
 }
 
@@ -146,7 +147,8 @@ func TestRelatedSearchesCacheExpired(t *testing.T) {
 	rs.mu.Lock()
 	rs.cache["expired"] = &relatedCacheEntry{
 		Suggestions: []string{"old"},
-		ExpiresAt:   time.Now().Add(-1 * time.Hour), // Expired
+		// Expired
+		ExpiresAt: time.Now().Add(-1 * time.Hour),
 	}
 	rs.mu.Unlock()
 
@@ -438,7 +440,8 @@ func TestRelatedSearchesGetRelatedWithNegativeLimit(t *testing.T) {
 func TestRelatedSearchesCacheEntryExpiration(t *testing.T) {
 	entry := relatedCacheEntry{
 		Suggestions: []string{"test"},
-		ExpiresAt:   time.Now().Add(-1 * time.Hour), // Already expired
+		// Already expired
+		ExpiresAt: time.Now().Add(-1 * time.Hour),
 	}
 
 	if !time.Now().After(entry.ExpiresAt) {

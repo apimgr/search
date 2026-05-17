@@ -157,7 +157,8 @@ func TestInitCache(t *testing.T) {
 		os.RemoveAll(cliCache.cacheDir)
 	}
 
-	_ = tempDir // Use tempDir to avoid unused variable error
+	// Use tempDir to avoid unused variable error
+	_ = tempDir
 }
 
 func TestInitCacheDefaults(t *testing.T) {
@@ -278,8 +279,9 @@ func TestCLICacheGetExpired(t *testing.T) {
 
 	// Add expired entry
 	cache.memory["expired"] = CacheEntry{
-		Data:      []byte("old data"),
-		ExpiresAt: time.Now().Add(-time.Hour), // expired
+		Data: []byte("old data"),
+		// expired
+		ExpiresAt: time.Now().Add(-time.Hour),
 	}
 
 	data, found := cache.Get("expired")
@@ -334,9 +336,10 @@ func TestCLICacheSetDisabled(t *testing.T) {
 func TestCLICacheSetLargeDataToFile(t *testing.T) {
 	tempDir := t.TempDir()
 	cache := &CLICache{
-		memory:   make(map[string]CacheEntry),
-		ttl:      300 * time.Second,
-		maxSize:  10 * 1024 * 1024, // 10 MB
+		memory: make(map[string]CacheEntry),
+		ttl:    300 * time.Second,
+		// 10 MB
+		maxSize:  10 * 1024 * 1024,
 		enabled:  true,
 		cacheDir: tempDir,
 	}
@@ -516,11 +519,13 @@ func TestCLICacheEvictOldest(t *testing.T) {
 
 	// Add entries with different expiration times
 	cache.memory["oldest"] = CacheEntry{
-		Data:      []byte("1234567890"), // 10 bytes
+		// 10 bytes
+		Data:      []byte("1234567890"),
 		ExpiresAt: time.Now().Add(time.Minute),
 	}
 	cache.memory["newer"] = CacheEntry{
-		Data:      []byte("1234567890"), // 10 bytes
+		// 10 bytes
+		Data:      []byte("1234567890"),
 		ExpiresAt: time.Now().Add(time.Hour),
 	}
 

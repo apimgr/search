@@ -1609,7 +1609,8 @@ func TestExtractDomainEdgeCases(t *testing.T) {
 	}{
 		{"", ""},
 		{"not-a-url", "not-a-url"},
-		{"ftp://ftp.example.com/file", "ftp:"}, // Only http/https schemes are parsed fully
+		// Only http/https schemes are parsed fully
+		{"ftp://ftp.example.com/file", "ftp:"},
 		{"https://sub.domain.example.com/path/to/page?q=test", "sub.domain.example.com"},
 		{"http://localhost:8080/api", "localhost:8080"},
 	}
@@ -2386,10 +2387,14 @@ func TestSearchEndpointLimitBounds(t *testing.T) {
 		limit    string
 		expected int
 	}{
-		{"0", 20},   // Should default to 20
-		{"-1", 20},  // Should default to 20
-		{"200", 20}, // Should cap to 20 (>100 triggers default)
-		{"50", 50},  // Valid limit
+		// Should default to 20
+		{"0", 20},
+		// Should default to 20
+		{"-1", 20},
+		// Should cap to 20 (>100 triggers default)
+		{"200", 20},
+		// Valid limit
+		{"50", 50},
 	}
 
 	for _, tt := range tests {
@@ -2422,9 +2427,12 @@ func TestSearchEndpointPageBounds(t *testing.T) {
 		page     string
 		expected int
 	}{
-		{"0", 1},  // Should default to 1
-		{"-1", 1}, // Should default to 1
-		{"5", 5},  // Valid page
+		// Should default to 1
+		{"0", 1},
+		// Should default to 1
+		{"-1", 1},
+		// Valid page
+		{"5", 5},
 	}
 
 	for _, tt := range tests {

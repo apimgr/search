@@ -112,7 +112,8 @@ func TestQueryIsEmpty(t *testing.T) {
 	}{
 		{"empty string", "", true},
 		{"non-empty string", "test", false},
-		{"whitespace", "  ", true}, // whitespace is trimmed by NewQuery, so it becomes empty
+		// whitespace is trimmed by NewQuery, so it becomes empty
+		{"whitespace", "  ", true},
 	}
 
 	for _, tt := range tests {
@@ -348,7 +349,8 @@ func TestIsValidSortOrder(t *testing.T) {
 		{SortRandom, true},
 		{SortOrder("invalid"), false},
 		{SortOrder(""), false},
-		{SortOrder("RELEVANCE"), false}, // case sensitive
+		// case sensitive
+		{SortOrder("RELEVANCE"), false},
 	}
 
 	for _, tt := range tests {

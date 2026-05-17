@@ -12,7 +12,8 @@ func TestAppModeString(t *testing.T) {
 	}{
 		{Production, "production"},
 		{Development, "development"},
-		{AppMode(99), "production"}, // Invalid mode should return default "production"
+		// Invalid mode should return default "production"
+		{AppMode(99), "production"},
 	}
 
 	for _, tt := range tests {

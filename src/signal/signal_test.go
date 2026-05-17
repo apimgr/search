@@ -76,7 +76,8 @@ func TestReopenLogs(t *testing.T) {
 
 	// Test without callback
 	cfg2 := ShutdownConfig{}
-	reopenLogs(cfg2) // Should not panic
+	// Should not panic
+	reopenLogs(cfg2)
 }
 
 func TestDumpStatus(t *testing.T) {
@@ -94,7 +95,8 @@ func TestDumpStatus(t *testing.T) {
 
 	// Test without callback
 	cfg2 := ShutdownConfig{}
-	dumpStatus(cfg2) // Should not panic
+	// Should not panic
+	dumpStatus(cfg2)
 }
 
 func TestShutdownConfigWithServer(t *testing.T) {
@@ -889,9 +891,11 @@ func TestSetupWithShutdownFunc(t *testing.T) {
 // TestSetupPartialTimeouts verifies Setup applies defaults only for zero values
 func TestSetupPartialTimeouts(t *testing.T) {
 	cfg := ShutdownConfig{
-		InFlightTimeout: 60 * time.Second, // Custom
+		// Custom
+		InFlightTimeout: 60 * time.Second,
 		// ChildTimeout: 0  - should use default
-		DatabaseTimeout: 10 * time.Second, // Custom
+		// Custom
+		DatabaseTimeout: 10 * time.Second,
 		// LogFlushTimeout: 0 - should use default
 	}
 	Setup(cfg)
@@ -934,7 +938,8 @@ func TestGracefulShutdownDatabaseCloseTimeout(t *testing.T) {
 		DatabaseTimeout: 50 * time.Millisecond,
 		OnCloseDatabase: func() {
 			closeCalled = true
-			time.Sleep(200 * time.Millisecond) // Simulate slow close
+			// Simulate slow close
+			time.Sleep(200 * time.Millisecond)
 		},
 	}
 
@@ -995,7 +1000,8 @@ func TestGracefulShutdownLogFlushTimeout(t *testing.T) {
 		LogFlushTimeout: 50 * time.Millisecond,
 		OnFlushLogs: func() {
 			flushCalled = true
-			time.Sleep(200 * time.Millisecond) // Simulate slow flush
+			// Simulate slow flush
+			time.Sleep(200 * time.Millisecond)
 		},
 	}
 
@@ -1110,7 +1116,8 @@ func TestGracefulShutdownPIDFileRemoveSuccess(t *testing.T) {
 	// Verify file is removed
 	if _, err := os.Stat(tmpFile.Name()); !os.IsNotExist(err) {
 		t.Error("PID file should have been removed")
-		os.Remove(tmpFile.Name()) // Cleanup
+		// Cleanup
+		os.Remove(tmpFile.Name())
 	}
 }
 

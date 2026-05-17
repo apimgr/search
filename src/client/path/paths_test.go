@@ -972,9 +972,10 @@ func TestAddExtIfNeededEdgeCases(t *testing.T) {
 			expected: "/path/to/my.config.yml",
 		},
 		{
-			name:     "path with unknown extension",
-			input:    "/path/to/my.config",
-			expected: "/path/to/my.config", // unknown extension - use as-is
+			name:  "path with unknown extension",
+			input: "/path/to/my.config",
+			// unknown extension - use as-is
+			expected: "/path/to/my.config",
 		},
 		{
 			name:     "empty base name with yml",

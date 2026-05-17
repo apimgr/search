@@ -581,7 +581,8 @@ func TestDatabaseManagerPostgresRequiresDSN(t *testing.T) {
 	cfg := &Config{
 		Driver:  "postgres",
 		DataDir: tempDir,
-		DSN:     "", // Empty DSN
+		// Empty DSN
+		DSN: "",
 	}
 
 	_, err := NewDatabaseManager(cfg)
@@ -596,7 +597,8 @@ func TestDatabaseManagerMysqlRequiresDSN(t *testing.T) {
 	cfg := &Config{
 		Driver:  "mysql",
 		DataDir: tempDir,
-		DSN:     "", // Empty DSN
+		// Empty DSN
+		DSN: "",
 	}
 
 	_, err := NewDatabaseManager(cfg)
@@ -611,7 +613,8 @@ func TestDatabaseManagerMssqlRequiresDSN(t *testing.T) {
 	cfg := &Config{
 		Driver:  "mssql",
 		DataDir: tempDir,
-		DSN:     "", // Empty DSN
+		// Empty DSN
+		DSN: "",
 	}
 
 	_, err := NewDatabaseManager(cfg)
@@ -2837,7 +2840,8 @@ func TestRepositoryAdminSessions(t *testing.T) {
 		Token:     "expired-token",
 		IPAddress: "192.168.1.1",
 		UserAgent: "Mozilla/5.0",
-		ExpiresAt: time.Now().Add(-24 * time.Hour), // Expired
+		// Expired
+		ExpiresAt: time.Now().Add(-24 * time.Hour),
 	}
 	repo.CreateAdminSession(ctx, expiredSession)
 
@@ -3199,8 +3203,10 @@ func TestMigratorRollback(t *testing.T) {
 	m.Register(Migration{
 		Version:     1,
 		Description: "Schema version table",
-		Up:          `SELECT 1`, // No-op since table already exists
-		Down:        `SELECT 1`, // Can't drop schema_version
+		// No-op since table already exists
+		Up: `SELECT 1`,
+		// Can't drop schema_version
+		Down: `SELECT 1`,
 	})
 	m.Register(Migration{
 		Version:     2,
@@ -3630,7 +3636,8 @@ func TestDatabaseManagerMariadbRequiresDSN(t *testing.T) {
 	cfg := &Config{
 		Driver:  "mariadb",
 		DataDir: tempDir,
-		DSN:     "", // Empty DSN
+		// Empty DSN
+		DSN: "",
 	}
 
 	_, err := NewDatabaseManager(cfg)
@@ -4268,7 +4275,8 @@ func TestClusterManagerGenerateJoinTokenInClusterMode(t *testing.T) {
 	if token == "" {
 		t.Error("GenerateJoinToken() returned empty token")
 	}
-	if len(token) != 64 { // 32 bytes * 2 hex chars
+	// 32 bytes * 2 hex chars
+	if len(token) != 64 {
 		t.Errorf("Token length = %d, want 64", len(token))
 	}
 }
@@ -4462,7 +4470,8 @@ func TestRepositoryNilUserID(t *testing.T) {
 
 	// Record audit log with nil user ID
 	entry := &AuditLogEntry{
-		UserID:    nil, // nil user ID
+		// nil user ID
+		UserID:    nil,
 		Action:    "test_action",
 		Resource:  "test_resource",
 		Details:   "Test details",
@@ -4569,8 +4578,9 @@ func TestMixedModeConfigWithRemoteDriver(t *testing.T) {
 	cfg := &MixedModeConfig{
 		ServerDB: DatabaseBackendConfig{
 			Driver: "postgres",
-			DSN:    "", // No DSN
-			Path:   filepath.Join(tempDir, "server.db"),
+			// No DSN
+			DSN:  "",
+			Path: filepath.Join(tempDir, "server.db"),
 		},
 		UsersDB: DatabaseBackendConfig{
 			Driver: "sqlite",
@@ -4589,7 +4599,8 @@ func TestHashTokenVariousLengths(t *testing.T) {
 		token    string
 		expected int
 	}{
-		{"short", 64}, // hex encoded 32 bytes
+		// hex encoded 32 bytes
+		{"short", 64},
 		{"medium-length-token", 64},
 		{"a-very-long-token-that-exceeds-32-characters-in-length", 64},
 	}
@@ -4682,7 +4693,8 @@ func TestDBIsRemoteForAllDrivers(t *testing.T) {
 		expected bool
 	}{
 		{"sqlite", false},
-		{"sqlite3", true}, // Per implementation, only "sqlite" is local
+		// Per implementation, only "sqlite" is local
+		{"sqlite3", true},
 		{"postgres", true},
 		{"pgx", true},
 		{"mysql", true},

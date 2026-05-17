@@ -446,8 +446,10 @@ func TestSearchOperatorsToBingQuery(t *testing.T) {
 func TestSearchOperatorsToBasicQuery(t *testing.T) {
 	ops := &SearchOperators{
 		CleanedQuery: "golang tutorial",
-		Site:         "example.com", // Should be ignored
-		FileType:     "pdf",         // Should be ignored
+		// Should be ignored
+		Site: "example.com",
+		// Should be ignored
+		FileType:     "pdf",
 		ExactPhrases: []string{"best practices"},
 	}
 

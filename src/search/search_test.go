@@ -160,7 +160,8 @@ func TestNewAggregator(t *testing.T) {
 
 func TestNewAggregatorDefaults(t *testing.T) {
 	engines := []Engine{newMockEngine("test", model.CategoryGeneral, true)}
-	config := AggregatorConfig{} // All defaults
+	// All defaults
+	config := AggregatorConfig{}
 
 	agg := NewAggregator(engines, config)
 
@@ -505,9 +506,12 @@ func TestSortResultsRelevance(t *testing.T) {
 func TestSortResultsDate(t *testing.T) {
 	now := time.Now()
 	results := []model.Result{
-		{URL: "1", PublishedAt: now.AddDate(0, -1, 0)}, // 1 month ago
-		{URL: "2", PublishedAt: now},                   // Now
-		{URL: "3", PublishedAt: now.AddDate(0, 0, -1)}, // 1 day ago
+		// 1 month ago
+		{URL: "1", PublishedAt: now.AddDate(0, -1, 0)},
+		// Now
+		{URL: "2", PublishedAt: now},
+		// 1 day ago
+		{URL: "3", PublishedAt: now.AddDate(0, 0, -1)},
 	}
 
 	sortResults(results, model.SortDate)
@@ -520,9 +524,12 @@ func TestSortResultsDate(t *testing.T) {
 func TestSortResultsDateAsc(t *testing.T) {
 	now := time.Now()
 	results := []model.Result{
-		{URL: "1", PublishedAt: now.AddDate(0, -1, 0)}, // 1 month ago
-		{URL: "2", PublishedAt: now},                   // Now
-		{URL: "3", PublishedAt: now.AddDate(0, 0, -1)}, // 1 day ago
+		// 1 month ago
+		{URL: "1", PublishedAt: now.AddDate(0, -1, 0)},
+		// Now
+		{URL: "2", PublishedAt: now},
+		// 1 day ago
+		{URL: "3", PublishedAt: now.AddDate(0, 0, -1)},
 	}
 
 	sortResults(results, model.SortDateAsc)
@@ -587,8 +594,9 @@ func TestAggregatorApplyOperators(t *testing.T) {
 	agg := NewAggregatorSimple([]Engine{}, 10*time.Second)
 
 	query := &model.Query{
-		Text:     "test",
-		Language: "en", // default
+		Text: "test",
+		// default
+		Language: "en",
 	}
 
 	ops := &SearchOperators{
@@ -626,9 +634,11 @@ func TestAggregatorApplyOperatorsDoesNotOverwrite(t *testing.T) {
 	agg := NewAggregatorSimple([]Engine{}, 10*time.Second)
 
 	query := &model.Query{
-		Text:     "test",
-		Site:     "original.com", // Already set
-		Language: "fr",           // Not default
+		Text: "test",
+		// Already set
+		Site: "original.com",
+		// Not default
+		Language: "fr",
 	}
 
 	ops := &SearchOperators{
@@ -653,8 +663,9 @@ func TestAggregatorApplyOperatorsAllFields(t *testing.T) {
 	agg := NewAggregatorSimple([]Engine{}, 10*time.Second)
 
 	query := &model.Query{
-		Text:     "test",
-		Language: "en", // default
+		Text: "test",
+		// default
+		Language: "en",
 	}
 
 	ops := &SearchOperators{
@@ -760,8 +771,9 @@ func TestAggregatorApplyFiltersDateBefore(t *testing.T) {
 	}
 
 	query := &model.Query{
-		Text:       "test",
-		DateBefore: now.AddDate(0, -6, 0).Format("2006-01-02"), // 6 months ago
+		Text: "test",
+		// 6 months ago
+		DateBefore: now.AddDate(0, -6, 0).Format("2006-01-02"),
 	}
 
 	filtered := agg.applyFilters(results, query)
@@ -851,7 +863,8 @@ func TestDeduplicateResultsMergesPublishedAtFromZero(t *testing.T) {
 	now := time.Now()
 
 	results := []model.Result{
-		{URL: "https://example.com/1", Title: "Result"}, // Zero PublishedAt
+		// Zero PublishedAt
+		{URL: "https://example.com/1", Title: "Result"},
 		{URL: "https://example.com/1", Title: "Result", PublishedAt: now},
 	}
 
@@ -901,8 +914,10 @@ func TestDeduplicateResultsAccumulatesPopularity(t *testing.T) {
 
 func TestSortResultsDateBothZero(t *testing.T) {
 	results := []model.Result{
-		{URL: "1", Score: 50},  // No date
-		{URL: "2", Score: 100}, // No date
+		// No date
+		{URL: "1", Score: 50},
+		// No date
+		{URL: "2", Score: 100},
 	}
 
 	sortResults(results, model.SortDate)
@@ -915,8 +930,10 @@ func TestSortResultsDateBothZero(t *testing.T) {
 
 func TestSortResultsDateAscBothZero(t *testing.T) {
 	results := []model.Result{
-		{URL: "1", Score: 50},  // No date
-		{URL: "2", Score: 100}, // No date
+		// No date
+		{URL: "1", Score: 50},
+		// No date
+		{URL: "2", Score: 100},
 	}
 
 	sortResults(results, model.SortDateAsc)
@@ -944,9 +961,12 @@ func TestSortResultsPopularityEqualFallbackToScore(t *testing.T) {
 func TestSortResultsDateMixed(t *testing.T) {
 	now := time.Now()
 	results := []model.Result{
-		{URL: "1"},                              // No date, lower score
-		{URL: "2", PublishedAt: now, Score: 50}, // Has date
-		{URL: "3", Score: 200},                  // No date, higher score
+		// No date, lower score
+		{URL: "1"},
+		// Has date
+		{URL: "2", PublishedAt: now, Score: 50},
+		// No date, higher score
+		{URL: "3", Score: 200},
 	}
 
 	sortResults(results, model.SortDate)
@@ -960,9 +980,12 @@ func TestSortResultsDateMixed(t *testing.T) {
 func TestSortResultsDateAscMixed(t *testing.T) {
 	now := time.Now()
 	results := []model.Result{
-		{URL: "1"},                              // No date
-		{URL: "2", PublishedAt: now, Score: 50}, // Has date
-		{URL: "3", Score: 200},                  // No date, higher score
+		// No date
+		{URL: "1"},
+		// Has date
+		{URL: "2", PublishedAt: now, Score: 50},
+		// No date, higher score
+		{URL: "3", Score: 200},
 	}
 
 	sortResults(results, model.SortDateAsc)
@@ -975,7 +998,8 @@ func TestSortResultsDateAscMixed(t *testing.T) {
 
 func TestAggregatorSearchNoResultsFromEngines(t *testing.T) {
 	engine := newMockEngine("test", model.CategoryGeneral, true)
-	engine.SetResults([]model.Result{}) // Empty results
+	// Empty results
+	engine.SetResults([]model.Result{})
 
 	agg := NewAggregatorSimple([]Engine{engine}, 10*time.Second)
 
@@ -989,7 +1013,8 @@ func TestAggregatorSearchNoResultsFromEngines(t *testing.T) {
 
 func TestAggregatorSearchEngineError(t *testing.T) {
 	engine := newMockEngine("test", model.CategoryGeneral, true)
-	engine.SetError(model.ErrEngineTimeout) // Simulate error
+	// Simulate error
+	engine.SetError(model.ErrEngineTimeout)
 
 	agg := NewAggregatorSimple([]Engine{engine}, 10*time.Second)
 
@@ -1083,7 +1108,8 @@ func TestAggregatorFilterEnginesCaseInsensitive(t *testing.T) {
 	query := &model.Query{
 		Text:     "test",
 		Category: model.CategoryGeneral,
-		Engines:  []string{"testengine"}, // lowercase
+		// lowercase
+		Engines: []string{"testengine"},
 	}
 	engines := agg.filterEngines(query)
 
@@ -1099,9 +1125,10 @@ func TestAggregatorFilterEnginesExclusionCaseInsensitive(t *testing.T) {
 
 	// Test case-insensitive engine exclusion
 	query := &model.Query{
-		Text:           "test",
-		Category:       model.CategoryGeneral,
-		ExcludeEngines: []string{"TESTENGINE"}, // uppercase
+		Text:     "test",
+		Category: model.CategoryGeneral,
+		// uppercase
+		ExcludeEngines: []string{"TESTENGINE"},
 	}
 	engines := agg.filterEngines(query)
 
@@ -1176,7 +1203,8 @@ func TestNewAggregatorCacheCreated(t *testing.T) {
 
 func TestAggregatorSearchNoCacheForEmptyResults(t *testing.T) {
 	engine := newMockEngine("test", model.CategoryGeneral, true)
-	engine.SetResults([]model.Result{}) // Empty results
+	// Empty results
+	engine.SetResults([]model.Result{})
 
 	config := AggregatorConfig{
 		Timeout:      10 * time.Second,
@@ -1349,7 +1377,8 @@ func TestAggregatorApplyOperatorsLanguageNonDefault(t *testing.T) {
 func TestDeduplicateResultsZeroRelevance(t *testing.T) {
 	results := []model.Result{
 		{URL: "https://example.com/1", Title: "Result", Relevance: 0.5},
-		{URL: "https://example.com/1", Title: "Result", Relevance: 0}, // Zero relevance
+		// Zero relevance
+		{URL: "https://example.com/1", Title: "Result", Relevance: 0},
 	}
 
 	deduped := deduplicateResults(results)
@@ -1459,7 +1488,8 @@ func TestAggregatorApplyOperatorsFileTypeNotOverwritten(t *testing.T) {
 	query := &model.Query{
 		Text:     "test",
 		Language: "en",
-		FileType: "docx", // Already set
+		// Already set
+		FileType: "docx",
 	}
 
 	ops := &SearchOperators{

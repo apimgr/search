@@ -99,8 +99,10 @@ func TestRegistryGetEnabled(t *testing.T) {
 
 func TestRegistryGetForCategory(t *testing.T) {
 	registry := NewRegistry()
-	registry.Register(NewGoogle())          // supports general, images, news, videos
-	registry.Register(NewWikipediaEngine()) // supports general
+	// supports general, images, news, videos
+	registry.Register(NewGoogle())
+	// supports general
+	registry.Register(NewWikipediaEngine())
 
 	generalEngines := registry.GetForCategory(model.CategoryGeneral)
 	if len(generalEngines) < 2 {
@@ -695,7 +697,8 @@ func TestBraveSupportsCategory(t *testing.T) {
 		{model.CategoryGeneral, true},
 		{model.CategoryImages, true},
 		{model.CategoryNews, true},
-		{model.CategoryVideos, false}, // Brave doesn't support videos
+		// Brave doesn't support videos
+		{model.CategoryVideos, false},
 	}
 
 	for _, tt := range tests {
@@ -717,7 +720,8 @@ func TestYahooSupportsCategory(t *testing.T) {
 		{model.CategoryGeneral, true},
 		{model.CategoryImages, true},
 		{model.CategoryNews, true},
-		{model.CategoryVideos, false}, // Yahoo doesn't support videos
+		// Yahoo doesn't support videos
+		{model.CategoryVideos, false},
 	}
 
 	for _, tt := range tests {
@@ -914,7 +918,8 @@ func TestEngineTorSupport(t *testing.T) {
 		engine      interface{ GetConfig() *model.EngineConfig }
 		supportsTor bool
 	}{
-		{"duckduckgo", NewDuckDuckGo(), true}, // DDG supports Tor
+		// DDG supports Tor
+		{"duckduckgo", NewDuckDuckGo(), true},
 		{"bing", NewBing(), false},
 	}
 
@@ -1326,7 +1331,8 @@ func TestBingParseResults(t *testing.T) {
 			name:      "empty HTML",
 			html:      "",
 			wantCount: 0,
-			wantErr:   true, // ErrNoResults
+			// ErrNoResults
+			wantErr: true,
 		},
 		{
 			name:      "no results",
@@ -1335,9 +1341,10 @@ func TestBingParseResults(t *testing.T) {
 			wantErr:   true,
 		},
 		{
-			name:      "HTML with empty href still adds result",
-			html:      "<li class=\"b_algo\"><h2><a href=\"\"></a></h2></li>",
-			wantCount: 1, // Regex matches, result added with empty values
+			name: "HTML with empty href still adds result",
+			html: "<li class=\"b_algo\"><h2><a href=\"\"></a></h2></li>",
+			// Regex matches, result added with empty values
+			wantCount: 1,
 			wantErr:   false,
 		},
 	}
@@ -1378,9 +1385,10 @@ func TestYouTubeParseHTML(t *testing.T) {
 			wantCount: 2,
 		},
 		{
-			name:      "duplicate video IDs",
-			html:      `<a href="/watch?v=dQw4w9WgXcQ">Video 1</a><a href="/watch?v=dQw4w9WgXcQ">Video 1 again</a>`,
-			wantCount: 1, // Duplicates should be filtered
+			name: "duplicate video IDs",
+			html: `<a href="/watch?v=dQw4w9WgXcQ">Video 1</a><a href="/watch?v=dQw4w9WgXcQ">Video 1 again</a>`,
+			// Duplicates should be filtered
+			wantCount: 1,
 		},
 		{
 			name:      "no video IDs",
@@ -1388,8 +1396,9 @@ func TestYouTubeParseHTML(t *testing.T) {
 			wantCount: 0,
 		},
 		{
-			name:      "invalid video ID format",
-			html:      `<a href="/watch?v=short">Video</a>`, // Too short
+			name: "invalid video ID format",
+			// Too short
+			html:      `<a href="/watch?v=short">Video</a>`,
 			wantCount: 0,
 		},
 	}
@@ -1419,9 +1428,10 @@ func TestYouTubeParseResults(t *testing.T) {
 		wantCount int
 	}{
 		{
-			name:      "no ytInitialData",
-			html:      `<html><body><a href="/watch?v=dQw4w9WgXcQ">Video</a></body></html>`,
-			wantCount: 1, // Falls back to HTML parsing
+			name: "no ytInitialData",
+			html: `<html><body><a href="/watch?v=dQw4w9WgXcQ">Video</a></body></html>`,
+			// Falls back to HTML parsing
+			wantCount: 1,
 		},
 		{
 			name:      "empty",
@@ -1555,8 +1565,9 @@ func TestBraveParseResults(t *testing.T) {
 				</a>
 				<p class="snippet-description">Description here</p>
 			</div>`,
-			category:  model.CategoryGeneral,
-			wantCount: 0, // Regex pattern is very specific, may not match simplified HTML
+			category: model.CategoryGeneral,
+			// Regex pattern is very specific, may not match simplified HTML
+			wantCount: 0,
 		},
 	}
 
@@ -1582,13 +1593,15 @@ func TestParseDurationAdditional(t *testing.T) {
 		expected int
 	}{
 		{"with text", "Duration: 5:30", 330},
-		{"multiple colons ignored", "1:2:3:4", 0}, // More than 3 parts returns 0
+		// More than 3 parts returns 0
+		{"multiple colons ignored", "1:2:3:4", 0},
 		{"large numbers", "99:59:59", 359999},
 		{"zero minutes", "0:30", 30},
 		{"zero seconds", "5:00", 300},
 		{"all zeros", "0:0:0", 0},
 		{"single digit", "5", 5},
-		{"spaces ignored", "1 : 30", 90}, // Numbers are extracted
+		// Numbers are extracted
+		{"spaces ignored", "1 : 30", 90},
 	}
 
 	for _, tt := range tests {
@@ -1814,9 +1827,12 @@ func TestCalculateScoreFormula(t *testing.T) {
 		duplicates int
 		expected   float64
 	}{
-		{100, 0, 1, 10150}, // 100*100 + 100 + 50
-		{50, 50, 0, 5050},  // 50*100 + 50 + 0
-		{0, 100, 2, 100},   // 0*100 + 0 + 100
+		// 100*100 + 100 + 50
+		{100, 0, 1, 10150},
+		// 50*100 + 50 + 0
+		{50, 50, 0, 5050},
+		// 0*100 + 0 + 100
+		{0, 100, 2, 100},
 	}
 
 	for i, tt := range tests {
@@ -2189,7 +2205,8 @@ func TestEngineCategoryStrings(t *testing.T) {
 		}
 	}
 
-	for _, cat := range categories[:4] { // general, images, videos, news should all be supported
+	// general, images, videos, news should all be supported
+	for _, cat := range categories[:4] {
 		if !foundCategories[cat] {
 			t.Errorf("No engine supports category %q", cat)
 		}
@@ -2277,8 +2294,9 @@ func TestGoogleSearchTimeRanges(t *testing.T) {
 			defer cancel()
 
 			query := &model.Query{
-				Text:      "test",
-				Page:      2, // Test pagination
+				Text: "test",
+				// Test pagination
+				Page:      2,
 				Category:  model.CategoryGeneral,
 				TimeRange: tr,
 			}
@@ -2579,8 +2597,9 @@ func TestBraveParseResultsComprehensive(t *testing.T) {
 				</a>
 				<p class="snippet-description">Image desc</p>
 			</div>`,
-			category:  model.CategoryImages,
-			wantCount: 0, // Regex is specific
+			category: model.CategoryImages,
+			// Regex is specific
+			wantCount: 0,
 		},
 	}
 
@@ -2642,10 +2661,11 @@ func TestYahooParseResultsComprehensive(t *testing.T) {
 			wantCount: 1,
 		},
 		{
-			name:      "complex result pattern fallback",
-			html:      `<div class="algo"><a class="ac-algo" href="https://example.com">Example Title</a><p class="s-desc">Description</p></div>`,
-			category:  model.CategoryGeneral,
-			wantCount: 1, // Parser finds the result
+			name:     "complex result pattern fallback",
+			html:     `<div class="algo"><a class="ac-algo" href="https://example.com">Example Title</a><p class="s-desc">Description</p></div>`,
+			category: model.CategoryGeneral,
+			// Parser finds the result
+			wantCount: 1,
 		},
 		{
 			name:      "empty title skipped",
@@ -2896,7 +2916,8 @@ func TestYouTubeParseVideoRendererComprehensive(t *testing.T) {
 				"videoId": "test12345ab",
 				"title":   map[string]interface{}{"runs": []interface{}{}},
 			},
-			wantNil: false, // Still valid, just empty title
+			// Still valid, just empty title
+			wantNil: false,
 		},
 	}
 
@@ -2974,14 +2995,16 @@ func TestYouTubeParseResultsPatterns(t *testing.T) {
 		wantCount int
 	}{
 		{
-			name:      "no ytInitialData",
-			html:      `<html>/watch?v=abc12345678</html>`,
-			wantCount: 1, // Falls back to HTML
+			name: "no ytInitialData",
+			html: `<html>/watch?v=abc12345678</html>`,
+			// Falls back to HTML
+			wantCount: 1,
 		},
 		{
-			name:      "ytInitialData pattern",
-			html:      `var ytInitialData = {"contents":{}};`,
-			wantCount: 0, // Valid JSON but empty
+			name: "ytInitialData pattern",
+			html: `var ytInitialData = {"contents":{}};`,
+			// Valid JSON but empty
+			wantCount: 0,
 		},
 		{
 			name:      "alternative pattern",
@@ -3225,7 +3248,8 @@ func TestMojeekParseResultsComprehensive(t *testing.T) {
 <a class="title" href="">Empty URL</a>
 <p class="u">https://display.url</p>
 </li>`,
-			wantCount: 0, // Title match fails due to empty href
+			// Title match fails due to empty href
+			wantCount: 0,
 		},
 	}
 
@@ -3312,9 +3336,12 @@ func TestGetYandexRegionComprehensive(t *testing.T) {
 		{"kz", "159"},
 		{"by", "149"},
 		{"ua", "187"},
-		{"unknown", "84"}, // Default to USA
-		{"", "84"},        // Empty defaults to USA
-		{"jp", "84"},      // Unknown defaults to USA
+		// Default to USA
+		{"unknown", "84"},
+		// Empty defaults to USA
+		{"", "84"},
+		// Unknown defaults to USA
+		{"jp", "84"},
 	}
 
 	for _, tt := range tests {
@@ -3376,7 +3403,8 @@ func TestYandexParseResultsComprehensive(t *testing.T) {
 <a class="OrganicTitle-Link" href="/clck/?url=https%3A%2F%2Fexample.com"><span>Test Title</span></a>
 <span class="OrganicTextContentSpan">Description</span>
 </li>`,
-			wantCount: 0, // Pattern doesn't match simplified HTML
+			// Pattern doesn't match simplified HTML
+			wantCount: 0,
 		},
 	}
 
@@ -3447,7 +3475,8 @@ func TestBaiduParseResultsComprehensive(t *testing.T) {
 <h3 class="t"><a href="https://example.com">Test <em>Title</em></a></h3>
 <div class="c-abstract">Description <em>text</em></div>
 </div>`,
-			wantCount: 0, // Pattern is specific
+			// Pattern is specific
+			wantCount: 0,
 		},
 	}
 
@@ -3530,12 +3559,18 @@ func TestCalculateScoreFormulaVerification(t *testing.T) {
 		duplicates int
 		expected   float64
 	}{
-		{100, 0, 0, 10100}, // 100*100 + 100 + 0
-		{100, 0, 1, 10150}, // 100*100 + 100 + 50
-		{50, 50, 0, 5050},  // 50*100 + 50 + 0
-		{0, 0, 0, 100},     // 0*100 + 100 + 0
-		{0, 100, 0, 0},     // 0*100 + 0 + 0
-		{10, 10, 5, 1340},  // 10*100 + 90 + 250
+		// 100*100 + 100 + 0
+		{100, 0, 0, 10100},
+		// 100*100 + 100 + 50
+		{100, 0, 1, 10150},
+		// 50*100 + 50 + 0
+		{50, 50, 0, 5050},
+		// 0*100 + 100 + 0
+		{0, 0, 0, 100},
+		// 0*100 + 0 + 0
+		{0, 100, 0, 0},
+		// 10*100 + 90 + 250
+		{10, 10, 5, 1340},
 	}
 
 	for i, tt := range tests {

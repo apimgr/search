@@ -348,7 +348,8 @@ func TestTLSModes(t *testing.T) {
 
 func TestMailerSendAlert(t *testing.T) {
 	cfg := &Config{
-		Enabled:     false, // Will fail but we want to test the path
+		// Will fail but we want to test the path
+		Enabled:     false,
 		AdminEmails: []string{"admin@example.com"},
 	}
 	ml := NewMailer(cfg)
@@ -1513,7 +1514,8 @@ func TestSplitLines(t *testing.T) {
 	}{
 		{"line1\nline2\nline3", 3},
 		{"single line", 1},
-		{"line1\n\nline3", 3}, // empty line in middle
+		// empty line in middle
+		{"line1\n\nline3", 3},
 	}
 
 	for _, tt := range tests {
@@ -3614,7 +3616,8 @@ func TestMailerSendWithUppercaseTLSMode(t *testing.T) {
 		SMTP: SMTPConfig{
 			Host: "invalid.host.example.com",
 			Port: 587,
-			TLS:  "AUTO", // uppercase
+			// uppercase
+			TLS: "AUTO",
 		},
 		From: FromConfig{
 			Email: "sender@example.com",
@@ -3635,7 +3638,8 @@ func TestMailerSendWithUppercaseTLS(t *testing.T) {
 		SMTP: SMTPConfig{
 			Host: "invalid.host.example.com",
 			Port: 465,
-			TLS:  "TLS", // uppercase
+			// uppercase
+			TLS: "TLS",
 		},
 		From: FromConfig{
 			Email: "sender@example.com",
@@ -3656,7 +3660,8 @@ func TestMailerSendWithUppercaseSTARTTLS(t *testing.T) {
 		SMTP: SMTPConfig{
 			Host: "invalid.host.example.com",
 			Port: 587,
-			TLS:  "STARTTLS", // uppercase
+			// uppercase
+			TLS: "STARTTLS",
 		},
 		From: FromConfig{
 			Email: "sender@example.com",

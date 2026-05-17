@@ -1137,10 +1137,12 @@ func TestServiceManagerEnableDisable(t *testing.T) {
 
 	// These require root
 	err := sm.Enable()
-	_ = err // Expected to fail without root
+	// Expected to fail without root
+	_ = err
 
 	err = sm.Disable()
-	_ = err // Expected to fail without root
+	// Expected to fail without root
+	_ = err
 }
 
 func TestServiceManagerReload(t *testing.T) {
@@ -1149,7 +1151,8 @@ func TestServiceManagerReload(t *testing.T) {
 
 	// Reload requires root
 	err := sm.Reload()
-	_ = err // Expected to fail without root
+	// Expected to fail without root
+	_ = err
 }
 
 func TestRunCommandError(t *testing.T) {
@@ -1898,7 +1901,8 @@ func TestMaintenanceServiceRestoreDatabaseNoCurrentDB(t *testing.T) {
 	backupPath := filepath.Join(tempDir, "backup.db")
 	os.WriteFile(backupPath, []byte("backup data"), 0644)
 
-	dbPath := filepath.Join(tempDir, "new.db") // doesn't exist
+	// doesn't exist
+	dbPath := filepath.Join(tempDir, "new.db")
 
 	// Should succeed
 	err = ms.RestoreDatabase(backupPath, dbPath)

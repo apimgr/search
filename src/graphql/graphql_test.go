@@ -501,7 +501,8 @@ func TestBuildBaseURLWithTLSAndForwardedProto(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Host = "localhost:8443"
 	req.TLS = &tls.ConnectionState{}
-	req.Header.Set("X-Forwarded-Proto", "http") // Override to http
+	// Override to http
+	req.Header.Set("X-Forwarded-Proto", "http")
 
 	url := buildBaseURL(req)
 

@@ -54,8 +54,10 @@ func TestResolvePort(t *testing.T) {
 		wantSame bool
 	}{
 		{"valid port", 8080, true},
-		{"zero port", 0, false},     // Zero gets random port
-		{"negative port", -1, true}, // Negative passes through unchanged (config validation handles this separately)
+		// Zero gets random port
+		{"zero port", 0, false},
+		// Negative passes through unchanged (config validation handles this separately)
+		{"negative port", -1, true},
 	}
 
 	for _, tt := range tests {
@@ -287,7 +289,8 @@ func TestConfigReload(t *testing.T) {
 	// Modify the file externally
 	cfg2 := DefaultConfig()
 	cfg2.Server.Title = "Modified Title"
-	cfg2.Server.Port = 9999 // This should NOT change after reload (port requires restart)
+	// This should NOT change after reload (port requires restart)
+	cfg2.Server.Port = 9999
 	err = cfg2.Save(configPath)
 	if err != nil {
 		t.Fatalf("Save() error = %v", err)
@@ -877,23 +880,29 @@ func TestValidateAndApplyDefaultsComprehensive(t *testing.T) {
 	// Test with invalid config to trigger warnings
 	cfg := &Config{
 		Server: ServerConfig{
-			Title: "",     // Should trigger warning
-			Port:  100000, // Invalid port
-			Mode:  "invalid_mode",
+			// Should trigger warning
+			Title: "",
+			// Invalid port
+			Port: 100000,
+			Mode: "invalid_mode",
 			RateLimit: RateLimitConfig{
-				Enabled:           true,
-				RequestsPerMinute: -1, // Invalid
-				BurstSize:         0,  // Invalid
+				Enabled: true,
+				// Invalid
+				RequestsPerMinute: -1,
+				// Invalid
+				BurstSize: 0,
 			},
 			Session: SessionConfig{
 				Admin: SessionTypeConfig{MaxAge: 0},
 				User:  SessionTypeConfig{MaxAge: 0},
 			},
-			GeoIP:       GeoIPConfig{Enabled: true, Dir: ""},
-			Metrics:     MetricsConfig{Enabled: true, Endpoint: ""},
-			Compression: CompressionConfig{Level: 15}, // Invalid level
+			GeoIP:   GeoIPConfig{Enabled: true, Dir: ""},
+			Metrics: MetricsConfig{Enabled: true, Endpoint: ""},
+			// Invalid level
+			Compression: CompressionConfig{Level: 15},
 		},
-		Engines: nil, // Should trigger warning
+		// Should trigger warning
+		Engines: nil,
 	}
 
 	warnings := cfg.ValidateAndApplyDefaults()
@@ -927,9 +936,10 @@ func TestValidateAndApplyDefaultsComprehensive(t *testing.T) {
 func TestValidateAndApplyDefaultsHTTPSPort(t *testing.T) {
 	cfg := &Config{
 		Server: ServerConfig{
-			Title:     "Test",
-			Port:      8080,
-			HTTPSPort: 100000, // Invalid
+			Title: "Test",
+			Port:  8080,
+			// Invalid
+			HTTPSPort: 100000,
 			Mode:      "production",
 			SecretKey: "test",
 		},
@@ -1108,7 +1118,8 @@ func TestGenerateSecret(t *testing.T) {
 	secrets := make(map[string]bool)
 	for i := 0; i < 10; i++ {
 		secret := generateSecret()
-		if len(secret) != 64 { // 32 bytes = 64 hex chars
+		// 32 bytes = 64 hex chars
+		if len(secret) != 64 {
 			t.Errorf("generateSecret() returned %d chars, want 64", len(secret))
 		}
 		secrets[secret] = true

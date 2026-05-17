@@ -183,10 +183,12 @@ func TestNewRedisCacheURLModeWithPoolSettings(t *testing.T) {
 // TestNewRedisCacheURLModeNoPoolSettings tests URL mode without pool settings
 func TestNewRedisCacheURLModeNoPoolSettings(t *testing.T) {
 	cfg := &RedisConfig{
-		URL:      "redis://localhost:16379/0",
-		PoolSize: 0, // Should not override
-		MinIdle:  0, // Should not override
-		Timeout:  100 * time.Millisecond,
+		URL: "redis://localhost:16379/0",
+		// Should not override
+		PoolSize: 0,
+		// Should not override
+		MinIdle: 0,
+		Timeout: 100 * time.Millisecond,
 	}
 
 	cache, err := NewRedisCache(cfg)

@@ -45,7 +45,8 @@ func TestCategoryIsValid(t *testing.T) {
 		{CategorySocial, true},
 		{Category("invalid"), false},
 		{Category(""), false},
-		{Category("GENERAL"), false}, // case sensitive
+		// case sensitive
+		{Category("GENERAL"), false},
 	}
 
 	for _, tt := range tests {

@@ -731,7 +731,8 @@ func TestAutodiscoverEmptyClusterNodes(t *testing.T) {
 		response := AutodiscoverResponse{}
 		response.Server.Name = "search"
 		response.Server.Version = "1.0.0"
-		response.Cluster.Nodes = []string{} // Empty nodes
+		// Empty nodes
+		response.Cluster.Nodes = []string{}
 		json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
@@ -783,7 +784,8 @@ func TestGetWithFailoverSkipPrimaryInNodes(t *testing.T) {
 
 // Test doRequestToServer with network connection refused
 func TestDoRequestToServerConnectionRefused(t *testing.T) {
-	client := NewClient("http://127.0.0.1:59999", "", 1) // Invalid port, connection refused
+	// Invalid port, connection refused
+	client := NewClient("http://127.0.0.1:59999", "", 1)
 	_, err := client.doRequestToServer("http://127.0.0.1:59999", "GET", "/test", nil)
 	if err == nil {
 		t.Error("doRequestToServer() should return error for connection refused")
@@ -893,7 +895,8 @@ func TestDoRequestToServerNoToken(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL, "", 30) // No token
+	// No token
+	client := NewClient(server.URL, "", 30)
 	resp, err := client.doRequestToServer(server.URL, "GET", "/test", nil)
 	if err != nil {
 		t.Fatalf("doRequestToServer() error = %v", err)

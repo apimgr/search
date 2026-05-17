@@ -234,7 +234,8 @@ func TestStopChildProcessesAlreadyExited(t *testing.T) {
 		t.Fatalf("Failed to start child process: %v", err)
 	}
 	pid := cmd.Process.Pid
-	cmd.Wait() // Wait for it to exit
+	// Wait for it to exit
+	cmd.Wait()
 
 	// Should not panic for already-exited process
 	stopChildProcesses([]int{pid}, 100*time.Millisecond)
@@ -613,7 +614,8 @@ func TestStopChildProcessesFindProcessError(t *testing.T) {
 		t.Fatalf("Failed to start process: %v", err)
 	}
 	pid := cmd.Process.Pid
-	cmd.Wait() // Wait for process to exit
+	// Wait for process to exit
+	cmd.Wait()
 
 	// Now try to stop it - the process has already exited
 	stopChildProcesses([]int{pid}, 100*time.Millisecond)
@@ -713,7 +715,8 @@ func TestSetupSignalsSIGUSR1NoCallback(t *testing.T) {
 		ChildTimeout:    10 * time.Second,
 		DatabaseTimeout: 5 * time.Second,
 		LogFlushTimeout: 2 * time.Second,
-		OnReopenLogs:    nil, // No callback configured
+		// No callback configured
+		OnReopenLogs: nil,
 	}
 
 	// Set up signal handlers
@@ -742,7 +745,8 @@ func TestSetupSignalsSIGUSR2NoCallback(t *testing.T) {
 		ChildTimeout:    10 * time.Second,
 		DatabaseTimeout: 5 * time.Second,
 		LogFlushTimeout: 2 * time.Second,
-		OnDumpStatus:    nil, // No callback configured
+		// No callback configured
+		OnDumpStatus: nil,
 	}
 
 	// Set up signal handlers

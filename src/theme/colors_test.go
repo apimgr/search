@@ -385,9 +385,12 @@ func TestCssVarToJSName(t *testing.T) {
 		{"--shadow-color", "shadowColor"},
 		{"--input-bg", "inputBg"},
 		{"--link-hover", "linkHover"},
-		{"simple", "simple"},   // No dashes
-		{"--single", "single"}, // Single word after --
-		{"--a-b-c", "aBC"},     // Multiple parts
+		// No dashes
+		{"simple", "simple"},
+		// Single word after --
+		{"--single", "single"},
+		// Multiple parts
+		{"--a-b-c", "aBC"},
 	}
 
 	for _, tt := range tests {

@@ -45,7 +45,8 @@ func TestResizeHandlerOnResize(t *testing.T) {
 		called = true
 	})
 	// Just verify it doesn't panic
-	_ = called // callback is registered, won't be called unless resize happens
+	// callback is registered, won't be called unless resize happens
+	_ = called
 }
 
 func TestResizeHandlerRefresh(t *testing.T) {
@@ -225,7 +226,8 @@ func TestIsTerminal(t *testing.T) {
 	// This test just verifies the function doesn't panic
 	// In CI environments, this will return false
 	result := IsTerminal()
-	_ = result // Result depends on environment
+	// Result depends on environment
+	_ = result
 }
 
 func TestUnicodeSymbols(t *testing.T) {
@@ -280,7 +282,8 @@ func TestGetSymbols(t *testing.T) {
 func TestSupportsUnicode(t *testing.T) {
 	// This just verifies the function doesn't panic
 	result := supportsUnicode()
-	_ = result // Result depends on environment
+	// Result depends on environment
+	_ = result
 }
 
 func TestSizeStruct(t *testing.T) {

@@ -336,7 +336,8 @@ func TestCSRFGenerateToken(t *testing.T) {
 	if token1 == "" {
 		t.Error("GenerateToken() returned empty string")
 	}
-	if len(token1) != 64 { // 32 bytes hex encoded
+	// 32 bytes hex encoded
+	if len(token1) != 64 {
 		t.Errorf("Token length = %d, want 64", len(token1))
 	}
 	if token1 == token2 {
@@ -1367,8 +1368,10 @@ func TestSetTheme(t *testing.T) {
 		{"dark", "dark"},
 		{"light", "light"},
 		{"auto", "auto"},
-		{"invalid", "dark"}, // Should default to dark
-		{"", "dark"},        // Should default to dark
+		// Should default to dark
+		{"invalid", "dark"},
+		// Should default to dark
+		{"", "dark"},
 	}
 
 	for _, tt := range tests {
@@ -1455,7 +1458,8 @@ func TestGetThemeInfo(t *testing.T) {
 	}{
 		{"dark", true, false, false},
 		{"light", false, true, false},
-		{"auto", true, false, true}, // Auto defaults to dark on server
+		// Auto defaults to dark on server
+		{"auto", true, false, true},
 	}
 
 	for _, tt := range tests {
@@ -1559,7 +1563,8 @@ func TestVisibleLength(t *testing.T) {
 		{"multiple_ansi", "\033[1m\033[32mhi\033[0m", 2},
 		{"empty", "", 0},
 		{"only_ansi", "\033[31m\033[0m", 0},
-		{"emoji", "🚀", 1}, // Note: emojis are counted as 1 rune
+		// Note: emojis are counted as 1 rune
+		{"emoji", "🚀", 1},
 	}
 
 	for _, tt := range tests {
@@ -1659,7 +1664,8 @@ func TestSessionManagerCreate(t *testing.T) {
 	if session.ID == "" {
 		t.Error("Session ID should not be empty")
 	}
-	if len(session.ID) != 64 { // 32 bytes = 64 hex chars
+	// 32 bytes = 64 hex chars
+	if len(session.ID) != 64 {
 		t.Errorf("Session ID length = %d, want 64", len(session.ID))
 	}
 }

@@ -759,9 +759,10 @@ func TestManagerInitDNS01MissingSecretKey(t *testing.T) {
 	cfg.DNS01.CredentialsEncrypted = "encrypted_data"
 
 	m := &Manager{
-		config:    cfg,
-		dataDir:   tempDir,
-		secretKey: "", // empty
+		config:  cfg,
+		dataDir: tempDir,
+		// empty
+		secretKey: "",
 	}
 
 	err = m.initDNS01()
@@ -1106,7 +1107,8 @@ func TestDecryptCredentialsInvalidBase64(t *testing.T) {
 }
 
 func TestDecryptCredentialsTooShort(t *testing.T) {
-	_, err := DecryptCredentials("dGVzdA==", "password") // "test" in base64, too short
+	// "test" in base64, too short
+	_, err := DecryptCredentials("dGVzdA==", "password")
 	if err == nil {
 		t.Error("DecryptCredentials() should error when data is too short")
 	}
@@ -1142,9 +1144,11 @@ func TestIsDevTLD(t *testing.T) {
 		{"app.lan", "", true},
 		{"server.internal", "", true},
 		{"host.localdomain", "", true},
-		{"dev.search", "search", true}, // Project-specific
+		// Project-specific
+		{"dev.search", "search", true},
 		{"prod.search", "search", true},
-		{"search", "search", false}, // Exact match without suffix
+		// Exact match without suffix
+		{"search", "search", false},
 		{"app.home", "", true},
 		{"app.home.arpa", "", true},
 		{"app.intranet", "", true},
@@ -1411,17 +1415,27 @@ func TestCreateDNSProviderMissingCredentials(t *testing.T) {
 		credentials map[string]string
 	}{
 		{"cloudflare", map[string]string{}},
-		{"cloudflare_legacy", map[string]string{"api_key": "key"}},            // missing email
-		{"cloudflare_legacy", map[string]string{"email": "test@example.com"}}, // missing api_key
-		{"route53", map[string]string{"access_key_id": "id"}},                 // missing secret
-		{"route53", map[string]string{"secret_access_key": "secret"}},         // missing id
+		// missing email
+		{"cloudflare_legacy", map[string]string{"api_key": "key"}},
+		// missing api_key
+		{"cloudflare_legacy", map[string]string{"email": "test@example.com"}},
+		// missing secret
+		{"route53", map[string]string{"access_key_id": "id"}},
+		// missing id
+		{"route53", map[string]string{"secret_access_key": "secret"}},
 		{"digitalocean", map[string]string{}},
-		{"godaddy", map[string]string{"api_key": "key"}},                       // missing secret
-		{"godaddy", map[string]string{"api_secret": "secret"}},                 // missing key
-		{"namecheap", map[string]string{"api_user": "user", "api_key": "key"}}, // missing client_ip
-		{"namecheap", map[string]string{"api_user": "user"}},                   // missing api_key and client_ip
-		{"rfc2136", map[string]string{"nameserver": "ns1.example.com:53"}},     // missing tsig
-		{"rfc2136", map[string]string{"nameserver": "ns", "tsig_key": "key"}},  // missing tsig_secret
+		// missing secret
+		{"godaddy", map[string]string{"api_key": "key"}},
+		// missing key
+		{"godaddy", map[string]string{"api_secret": "secret"}},
+		// missing client_ip
+		{"namecheap", map[string]string{"api_user": "user", "api_key": "key"}},
+		// missing api_key and client_ip
+		{"namecheap", map[string]string{"api_user": "user"}},
+		// missing tsig
+		{"rfc2136", map[string]string{"nameserver": "ns1.example.com:53"}},
+		// missing tsig_secret
+		{"rfc2136", map[string]string{"nameserver": "ns", "tsig_key": "key"}},
 	}
 
 	for _, tt := range tests {
@@ -1444,10 +1458,11 @@ func TestCreateDNSProviderUnknown(t *testing.T) {
 func TestCreateDNSProviderRfc2136AlgorithmSuffix(t *testing.T) {
 	// Test that algorithm without suffix gets suffix added
 	creds := map[string]string{
-		"nameserver":     "ns1.example.com:53",
-		"tsig_key":       "testkey",
-		"tsig_secret":    "dGVzdHNlY3JldA==",
-		"tsig_algorithm": "hmac-sha256", // without trailing dot
+		"nameserver":  "ns1.example.com:53",
+		"tsig_key":    "testkey",
+		"tsig_secret": "dGVzdHNlY3JldA==",
+		// without trailing dot
+		"tsig_algorithm": "hmac-sha256",
 	}
 
 	// This will fail to create (no actual server), but we're testing the algorithm handling
@@ -1674,7 +1689,8 @@ func TestGetHostFromRequest(t *testing.T) {
 			name:        "No proxy headers - falls back to GetFQDN",
 			headers:     map[string]string{},
 			projectName: "test",
-			wantHost:    "", // Will be determined by GetFQDN
+			// Will be determined by GetFQDN
+			wantHost: "",
 		},
 	}
 
@@ -1690,7 +1706,8 @@ func TestGetHostFromRequest(t *testing.T) {
 			}
 
 			if tt.wantHost != "" {
-				os.Setenv("DOMAIN", "fallback.com") // Set a fallback
+				// Set a fallback
+				os.Setenv("DOMAIN", "fallback.com")
 				got := GetHostFromRequest(req, tt.projectName)
 				if got != tt.wantHost {
 					t.Errorf("GetHostFromRequest() = %q, want %q", got, tt.wantHost)

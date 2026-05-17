@@ -242,10 +242,14 @@ func TestValidateFormat(t *testing.T) {
 		format  string
 		wantLen int
 	}{
-		{"$remote_addr - $status", 0},        // Valid
-		{"$unknown_var", 1},                  // Unknown
-		{"$remote_addr $unknown $status", 1}, // One unknown
-		{"plain text", 0},                    // No variables
+		// Valid
+		{"$remote_addr - $status", 0},
+		// Unknown
+		{"$unknown_var", 1},
+		// One unknown
+		{"$remote_addr $unknown $status", 1},
+		// No variables
+		{"plain text", 0},
 	}
 
 	for _, tt := range tests {
@@ -285,13 +289,15 @@ func TestServerLogger(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "server.log")
 	logger := NewServerLogger(path)
-	logger.SetStdout(false) // Disable stdout for tests
+	// Disable stdout for tests
+	logger.SetStdout(false)
 	defer logger.Close()
 
 	logger.Info("test info message")
 	logger.Warn("test warning")
 	logger.Error("test error")
-	logger.Debug("test debug") // Shouldn't appear (level is INFO)
+	// Shouldn't appear (level is INFO)
+	logger.Debug("test debug")
 
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -542,7 +548,8 @@ func TestErrorLogger(t *testing.T) {
 	testErr := &testError{msg: "test error"}
 	logger.Error("something went wrong", testErr)
 	logger.ErrorWithStack("stack error", testErr, "stack trace here")
-	logger.Fatal("fatal error", nil) // Won't exit in test
+	// Won't exit in test
+	logger.Fatal("fatal error", nil)
 
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -676,7 +683,8 @@ func TestTLSCipherSuiteName(t *testing.T) {
 	}{
 		{0x1301, "TLS_AES_128_GCM_SHA256"},
 		{0x1302, "TLS_AES_256_GCM_SHA384"},
-		{0x9999, "0x9999"}, // Unknown cipher
+		// Unknown cipher
+		{0x9999, "0x9999"},
 	}
 
 	for _, tt := range tests {
@@ -1043,7 +1051,8 @@ func TestAccessLoggerLogWithRefererEmpty(t *testing.T) {
 		Protocol:  "HTTP/1.1",
 		Status:    200,
 		Size:      100,
-		Referer:   "", // Empty referer
+		// Empty referer
+		Referer:   "",
 		UserAgent: "Agent",
 	}
 	logger.Log(entry)
@@ -1149,7 +1158,8 @@ func TestServerLoggerLevelFiltering(t *testing.T) {
 	path := filepath.Join(tmpDir, "server-level.log")
 	logger := NewServerLogger(path)
 	logger.SetStdout(false)
-	logger.SetLevel(LevelWarn) // Only WARN and above
+	// Only WARN and above
+	logger.SetLevel(LevelWarn)
 	defer logger.Close()
 
 	logger.Debug("debug")
@@ -1328,7 +1338,8 @@ func TestAuditLoggerLogWithoutTarget(t *testing.T) {
 		Severity: AuditSeverityInfo,
 		Actor:    AuditActor{Username: "user", IP: "1.2.3.4"},
 		Result:   "success",
-		Target:   nil, // No target
+		// No target
+		Target: nil,
 	}
 	logger.Log(entry)
 
@@ -2017,7 +2028,8 @@ func TestValidateFormatEdgeCases(t *testing.T) {
 		{"multiple unknowns", "$foo $bar $baz", 3},
 		{"mixed valid invalid", "$remote_addr $invalid $status", 1},
 		{"variable with numbers", "$var123", 1},
-		{"consecutive dollars", "$$remote_addr", 0}, // First $ is skipped (no name), second is valid $remote_addr
+		// First $ is skipped (no name), second is valid $remote_addr
+		{"consecutive dollars", "$$remote_addr", 0},
 	}
 
 	for _, tt := range tests {

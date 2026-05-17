@@ -675,7 +675,8 @@ func TestAuthManagerCleanup(t *testing.T) {
 	cfg := &config.Config{
 		Server: config.ServerConfig{
 			Session: config.SessionConfig{
-				Duration: "1ms", // Very short duration
+				// Very short duration
+				Duration: "1ms",
 			},
 		},
 	}
@@ -683,7 +684,8 @@ func TestAuthManagerCleanup(t *testing.T) {
 
 	// Create session and token
 	session := am.CreateSession("admin", "192.168.1.1", "Mozilla/5.0")
-	token := am.CreateAPIToken("Test", "Test", []string{"read"}, 0) // Expires immediately
+	// Expires immediately
+	token := am.CreateAPIToken("Test", "Test", []string{"read"}, 0)
 
 	// Manually set expiration to past
 	am.mu.Lock()
@@ -1437,7 +1439,8 @@ func TestGenerateStateToken(t *testing.T) {
 
 	// Generate another token to test uniqueness
 	token2 := GenerateStateToken()
-	_ = token2 // Used for demonstration, with mock reader tokens may be same
+	// Used for demonstration, with mock reader tokens may be same
+	_ = token2
 }
 
 func TestGetOIDCAuthURL(t *testing.T) {
@@ -1696,7 +1699,8 @@ func TestHandlerGenerateCSRFToken(t *testing.T) {
 	if token1 == "" {
 		t.Error("generateCSRFToken() returned empty string")
 	}
-	if len(token1) != 64 { // 32 bytes = 64 hex chars
+	// 32 bytes = 64 hex chars
+	if len(token1) != 64 {
 		t.Errorf("Token length = %d, want 64", len(token1))
 	}
 	if token1 == token2 {
@@ -2050,7 +2054,8 @@ func TestAuthManagerExpiredSession(t *testing.T) {
 	cfg := &config.Config{
 		Server: config.ServerConfig{
 			Session: config.SessionConfig{
-				Duration: "1ms", // Very short duration
+				// Very short duration
+				Duration: "1ms",
 			},
 		},
 	}

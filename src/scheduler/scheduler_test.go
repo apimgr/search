@@ -294,7 +294,8 @@ func TestSchedulerStartTwice(t *testing.T) {
 	s := New(nil, "node1")
 
 	s.Start()
-	s.Start() // Should be no-op
+	// Should be no-op
+	s.Start()
 
 	if !s.IsRunning() {
 		t.Error("Scheduler should still be running")
@@ -308,7 +309,8 @@ func TestSchedulerStopTwice(t *testing.T) {
 
 	s.Start()
 	s.Stop()
-	s.Stop() // Should be no-op
+	// Should be no-op
+	s.Stop()
 
 	if s.IsRunning() {
 		t.Error("Scheduler should not be running")
@@ -668,9 +670,12 @@ func TestCalculateNextRunCron(t *testing.T) {
 
 	// Simple cron expressions
 	tests := []string{
-		"0 * * * *",   // Every hour at :00
-		"*/5 * * * *", // Every 5 minutes
-		"0 0 * * *",   // Daily at midnight
+		// Every hour at :00
+		"0 * * * *",
+		// Every 5 minutes
+		"*/5 * * * *",
+		// Daily at midnight
+		"0 0 * * *",
 	}
 
 	for _, schedule := range tests {
@@ -712,20 +717,33 @@ func TestParseCronField(t *testing.T) {
 		{"5,10,15", 0, 59, 3, false},
 		{"5-10", 0, 59, 6, false},
 		{"5-10/2", 0, 59, 3, false},
-		{"100", 0, 59, 0, true}, // Out of range
+		// Out of range
+		{"100", 0, 59, 0, true},
 		{"invalid", 0, 59, 0, true},
-		{"-5", 0, 59, 0, true},       // Invalid number
-		{"*/0", 0, 59, 0, true},      // Zero step
-		{"*/-1", 0, 59, 0, true},     // Negative step
-		{"*/abc", 0, 59, 0, true},    // Invalid step value
-		{"10-5", 0, 59, 0, true},     // Start > end
-		{"5-100", 0, 59, 0, true},    // End out of range
-		{"-1-5", 0, 59, 0, true},     // Start out of range
-		{"5-10/0", 0, 59, 0, true},   // Zero step in range
-		{"5-10/abc", 0, 59, 0, true}, // Invalid step in range
-		{"a-10", 0, 59, 0, true},     // Invalid range start
-		{"5-b", 0, 59, 0, true},      // Invalid range end
-		{"5-10-15", 0, 59, 0, true},  // Multiple dashes without step
+		// Invalid number
+		{"-5", 0, 59, 0, true},
+		// Zero step
+		{"*/0", 0, 59, 0, true},
+		// Negative step
+		{"*/-1", 0, 59, 0, true},
+		// Invalid step value
+		{"*/abc", 0, 59, 0, true},
+		// Start > end
+		{"10-5", 0, 59, 0, true},
+		// End out of range
+		{"5-100", 0, 59, 0, true},
+		// Start out of range
+		{"-1-5", 0, 59, 0, true},
+		// Zero step in range
+		{"5-10/0", 0, 59, 0, true},
+		// Invalid step in range
+		{"5-10/abc", 0, 59, 0, true},
+		// Invalid range start
+		{"a-10", 0, 59, 0, true},
+		// Invalid range end
+		{"5-b", 0, 59, 0, true},
+		// Multiple dashes without step
+		{"5-10-15", 0, 59, 0, true},
 	}
 
 	for _, tt := range tests {
@@ -786,12 +804,18 @@ func TestParseCronExpression(t *testing.T) {
 		expr    string
 		wantErr bool
 	}{
-		{"0 0 * * *", false},    // Valid: daily at midnight
-		{"*/15 * * * *", false}, // Valid: every 15 minutes
-		{"0 3 * * 0", false},    // Valid: Sunday at 3am
-		{"0 0 1 * *", false},    // Valid: first of month
-		{"invalid", true},       // Invalid: not enough fields
-		{"0 0 * * * *", true},   // Invalid: too many fields
+		// Valid: daily at midnight
+		{"0 0 * * *", false},
+		// Valid: every 15 minutes
+		{"*/15 * * * *", false},
+		// Valid: Sunday at 3am
+		{"0 3 * * 0", false},
+		// Valid: first of month
+		{"0 0 1 * *", false},
+		// Invalid: not enough fields
+		{"invalid", true},
+		// Invalid: too many fields
+		{"0 0 * * * *", true},
 	}
 
 	for _, tt := range tests {
@@ -1031,7 +1055,8 @@ func TestSchedulerTaskRetry(t *testing.T) {
 		Schedule:   "@every 1h",
 		TaskType:   TaskTypeLocal,
 		MaxRetries: 2,
-		RetryDelay: 10 * time.Millisecond, // Short delay for testing
+		// Short delay for testing
+		RetryDelay: 10 * time.Millisecond,
 		Run: func(ctx context.Context) error {
 			atomic.AddInt32(&attempts, 1)
 			if atomic.LoadInt32(&attempts) < 3 {
@@ -1101,11 +1126,12 @@ func TestSchedulerTaskFailureNotification(t *testing.T) {
 	})
 
 	task := &Task{
-		ID:         "fail.test",
-		Name:       "Fail Test",
-		Schedule:   "@every 1h",
-		TaskType:   TaskTypeLocal,
-		MaxRetries: 0, // No retries
+		ID:       "fail.test",
+		Name:     "Fail Test",
+		Schedule: "@every 1h",
+		TaskType: TaskTypeLocal,
+		// No retries
+		MaxRetries: 0,
 		RetryDelay: 1 * time.Millisecond,
 		Run: func(ctx context.Context) error {
 			return errors.New("permanent error")
@@ -1134,9 +1160,10 @@ func TestSchedulerCheckAndRunTasks(t *testing.T) {
 
 	ran := make(chan bool, 1)
 	task := &Task{
-		ID:       "check.test",
-		Name:     "Check Test",
-		Schedule: "@every 1ms", // Very short interval
+		ID:   "check.test",
+		Name: "Check Test",
+		// Very short interval
+		Schedule: "@every 1ms",
 		TaskType: TaskTypeLocal,
 		Run: func(ctx context.Context) error {
 			select {
@@ -1446,11 +1473,12 @@ func TestSchedulerLoadTaskStateNonSkippable(t *testing.T) {
 	s2 := New(db, "node1")
 
 	task2 := &Task{
-		ID:        "nonskip.test",
-		Name:      "NonSkip Test",
-		Schedule:  "@every 1h",
-		TaskType:  TaskTypeLocal,
-		Skippable: false, // Now non-skippable
+		ID:       "nonskip.test",
+		Name:     "NonSkip Test",
+		Schedule: "@every 1h",
+		TaskType: TaskTypeLocal,
+		// Now non-skippable
+		Skippable: false,
 		Run:       func(ctx context.Context) error { return nil },
 	}
 
@@ -1508,7 +1536,8 @@ func TestSchedulerGlobalTaskWithLocking(t *testing.T) {
 		ID:       "global.test",
 		Name:     "Global Test",
 		Schedule: "@every 1h",
-		TaskType: TaskTypeGlobal, // Global task requires locking
+		// Global task requires locking
+		TaskType: TaskTypeGlobal,
 		Run: func(ctx context.Context) error {
 			select {
 			case ran <- true:
@@ -1713,11 +1742,12 @@ func TestSchedulerTaskRetryAllExhausted(t *testing.T) {
 	})
 
 	task := &Task{
-		ID:         "exhaust.test",
-		Name:       "Exhaust Test",
-		Schedule:   "@every 1h",
-		TaskType:   TaskTypeLocal,
-		MaxRetries: 1, // Only 1 retry
+		ID:       "exhaust.test",
+		Name:     "Exhaust Test",
+		Schedule: "@every 1h",
+		TaskType: TaskTypeLocal,
+		// Only 1 retry
+		MaxRetries: 1,
 		RetryDelay: 5 * time.Millisecond,
 		Run: func(ctx context.Context) error {
 			atomic.AddInt32(&attempts, 1)

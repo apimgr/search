@@ -1039,7 +1039,8 @@ func TestSearchResultsToCSVMultipleRows(t *testing.T) {
 	}
 
 	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
-	if len(lines) != 3 { // 1 header + 2 data rows
+	// 1 header + 2 data rows
+	if len(lines) != 3 {
 		t.Errorf("CSV should have 3 lines, got %d", len(lines))
 	}
 }

@@ -212,7 +212,8 @@ func TestLookupGetCountry(t *testing.T) {
 		{"GB", "United Kingdom", "EU", true},
 		{"JP", "Japan", "AS", true},
 		{"AU", "Australia", "OC", true},
-		{"us", "United States", "NA", true}, // lowercase
+		// lowercase
+		{"us", "United States", "NA", true},
 		{"XX", "", "", false},
 		{"", "", "", false},
 	}
@@ -759,7 +760,8 @@ func TestDecodeValueOutOfBounds(t *testing.T) {
 
 func TestDecodeValueExtendedType(t *testing.T) {
 	reader := &mmdbReader{
-		data: []byte{0x00}, // Extended type marker
+		// Extended type marker
+		data: []byte{0x00},
 	}
 
 	// Extended type with insufficient data
@@ -841,7 +843,8 @@ func TestDecodeValueBool(t *testing.T) {
 	reader := &mmdbReader{}
 
 	// bool true: extended type 14, size 1
-	data := []byte{0x01, 0x07} // type 0 (extended), next byte + 7 = 14 (bool), size 1 = true
+	// type 0 (extended), next byte + 7 = 14 (bool), size 1 = true
+	data := []byte{0x01, 0x07}
 	val, _, err := reader.decodeValue(data, 0)
 	if err != nil {
 		t.Errorf("decodeValue bool error: %v", err)
@@ -855,7 +858,8 @@ func TestDecodeValueArray(t *testing.T) {
 	reader := &mmdbReader{}
 
 	// Empty array: extended type 11, size 0
-	data := []byte{0x00, 0x04} // type 0 (extended), byte 4 + 7 = 11 (array), size 0
+	// type 0 (extended), byte 4 + 7 = 11 (array), size 0
+	data := []byte{0x00, 0x04}
 	val, _, err := reader.decodeValue(data, 0)
 	if err != nil {
 		t.Errorf("decodeValue array error: %v", err)
@@ -1110,7 +1114,8 @@ func TestConfigUpdateValues(t *testing.T) {
 		{"daily", "daily", true},
 		{"weekly", "weekly", true},
 		{"monthly", "monthly", true},
-		{"custom", "custom", true}, // Any string is technically valid
+		// Any string is technically valid
+		{"custom", "custom", true},
 	}
 
 	for _, tt := range tests {
@@ -1175,13 +1180,20 @@ func TestCountryByContinent(t *testing.T) {
 	l := NewLookup(DefaultConfig())
 
 	continentTests := map[string][]string{
-		"AF": {"ZA", "NG", "EG", "KE"}, // Africa
-		"AS": {"JP", "CN", "IN", "KR"}, // Asia
-		"EU": {"GB", "DE", "FR", "IT"}, // Europe
-		"NA": {"US", "CA", "MX"},       // North America
-		"SA": {"BR", "AR", "CL", "CO"}, // South America
-		"OC": {"AU", "NZ", "FJ"},       // Oceania
-		"AN": {"AQ"},                   // Antarctica
+		// Africa
+		"AF": {"ZA", "NG", "EG", "KE"},
+		// Asia
+		"AS": {"JP", "CN", "IN", "KR"},
+		// Europe
+		"EU": {"GB", "DE", "FR", "IT"},
+		// North America
+		"NA": {"US", "CA", "MX"},
+		// South America
+		"SA": {"BR", "AR", "CL", "CO"},
+		// Oceania
+		"OC": {"AU", "NZ", "FJ"},
+		// Antarctica
+		"AN": {"AQ"},
 	}
 
 	for continent, countries := range continentTests {
@@ -1249,7 +1261,8 @@ func TestParseMetadataNoMarker(t *testing.T) {
 func TestParseMetadataInvalidData(t *testing.T) {
 	// Data with marker but invalid metadata
 	marker := []byte("\xab\xcd\xefMaxMind.com")
-	invalidData := append(marker, 0xff, 0xff, 0xff) // Invalid MMDB format
+	// Invalid MMDB format
+	invalidData := append(marker, 0xff, 0xff, 0xff)
 
 	reader := &mmdbReader{
 		data: invalidData,
@@ -1268,7 +1281,8 @@ func TestDecodeValueSize29(t *testing.T) {
 
 	// UTF-8 string with size 29 encoding: type 2, size marker 29, additional byte
 	// size = 29 + additional_byte
-	data := []byte{0x5d, 0x01, 'a'} // size marker 29, +1 = 30, but data has only 1 byte
+	// size marker 29, +1 = 30, but data has only 1 byte
+	data := []byte{0x5d, 0x01, 'a'}
 	val, _, err := reader.decodeValue(data, 0)
 	// Should handle gracefully
 	if err != nil {
@@ -1283,7 +1297,8 @@ func TestDecodeValueSize30(t *testing.T) {
 	reader := &mmdbReader{}
 
 	// Size 30 encoding uses 2 additional bytes
-	data := []byte{0x5e, 0x00, 0x01} // size marker 30, 2 bytes for size
+	// size marker 30, 2 bytes for size
+	data := []byte{0x5e, 0x00, 0x01}
 	_, _, err := reader.decodeValue(data, 0)
 	// Should handle gracefully (may error due to insufficient data)
 	if err != nil {
@@ -1323,8 +1338,10 @@ func TestLookupMulticastIP(t *testing.T) {
 	l := NewLookup(DefaultConfig())
 
 	tests := []string{
-		"224.0.0.1", // IPv4 multicast
-		"ff02::1",   // IPv6 multicast
+		// IPv4 multicast
+		"224.0.0.1",
+		// IPv6 multicast
+		"ff02::1",
 	}
 
 	for _, ip := range tests {
@@ -1616,7 +1633,8 @@ func TestLoadDatabasesDirectoryCreation(t *testing.T) {
 	cfg := &Config{
 		Enabled: true,
 		Dir:     newDir,
-		Country: false, // Disable to avoid download
+		// Disable to avoid download
+		Country: false,
 		ASN:     false,
 		City:    false,
 		WHOIS:   false,
@@ -1817,7 +1835,8 @@ func TestDecodeValuePointerSize1(t *testing.T) {
 	// Pointer type 1, size 1: 0x20 | pointer_bits
 	// Type 1 = pointer, which is (ctrlByte >> 5) & 0x07 = 1
 	// For pointer, size field (lower 5 bits) is used differently
-	data := []byte{0x21, 0x00} // pointer to offset 0
+	// pointer to offset 0
+	data := []byte{0x21, 0x00}
 	val, _, err := reader.decodeValue(data, 0)
 	t.Logf("Pointer size 1: val=%v, err=%v", val, err)
 }
@@ -1826,7 +1845,8 @@ func TestDecodeValuePointerSize2(t *testing.T) {
 	reader := &mmdbReader{}
 
 	// Pointer with 2-byte offset
-	data := []byte{0x29, 0x00, 0x01} // pointer size 2
+	// pointer size 2
+	data := []byte{0x29, 0x00, 0x01}
 	val, _, err := reader.decodeValue(data, 0)
 	t.Logf("Pointer size 2: val=%v, err=%v", val, err)
 }
@@ -1835,7 +1855,8 @@ func TestDecodeValuePointerSize3(t *testing.T) {
 	reader := &mmdbReader{}
 
 	// Pointer with 3-byte offset
-	data := []byte{0x31, 0x00, 0x00, 0x01} // pointer size 3
+	// pointer size 3
+	data := []byte{0x31, 0x00, 0x00, 0x01}
 	val, _, err := reader.decodeValue(data, 0)
 	t.Logf("Pointer size 3: val=%v, err=%v", val, err)
 }
@@ -1844,7 +1865,8 @@ func TestDecodeValuePointerSize4(t *testing.T) {
 	reader := &mmdbReader{}
 
 	// Pointer with 4-byte offset
-	data := []byte{0x38, 0x00, 0x00, 0x00, 0x01} // pointer size 4
+	// pointer size 4
+	data := []byte{0x38, 0x00, 0x00, 0x00, 0x01}
 	val, _, err := reader.decodeValue(data, 0)
 	t.Logf("Pointer size 4: val=%v, err=%v", val, err)
 }
@@ -1865,7 +1887,8 @@ func TestDecodeValueDoubleOutOfBounds(t *testing.T) {
 	reader := &mmdbReader{}
 
 	// Double with insufficient data
-	data := []byte{0x68, 0x40, 0x09} // Only 3 bytes instead of 8
+	// Only 3 bytes instead of 8
+	data := []byte{0x68, 0x40, 0x09}
 	val, _, err := reader.decodeValue(data, 0)
 	if err != nil {
 		t.Logf("Double out of bounds error: %v", err)
@@ -1895,7 +1918,8 @@ func TestDecodeValueBytesOutOfBounds(t *testing.T) {
 	reader := &mmdbReader{}
 
 	// Bytes with insufficient data
-	data := []byte{0x84, 0xde} // Only 1 byte instead of 4
+	// Only 1 byte instead of 4
+	data := []byte{0x84, 0xde}
 	val, _, err := reader.decodeValue(data, 0)
 	t.Logf("Bytes out of bounds: val=%v, err=%v", val, err)
 }
@@ -1904,7 +1928,8 @@ func TestDecodeValueUint32(t *testing.T) {
 	reader := &mmdbReader{}
 
 	// uint32: type 6, size 4
-	data := []byte{0xc4, 0x00, 0x00, 0x01, 0x00} // 256
+	// 256
+	data := []byte{0xc4, 0x00, 0x00, 0x01, 0x00}
 	val, offset, err := reader.decodeValue(data, 0)
 	if err != nil {
 		t.Errorf("decodeValue uint32 error: %v", err)
@@ -1930,7 +1955,8 @@ func TestDecodeValueUint32OutOfBounds(t *testing.T) {
 	reader := &mmdbReader{}
 
 	// uint32 with insufficient data
-	data := []byte{0xc4, 0x00, 0x00} // Only 2 bytes instead of 4
+	// Only 2 bytes instead of 4
+	data := []byte{0xc4, 0x00, 0x00}
 	val, _, err := reader.decodeValue(data, 0)
 	t.Logf("uint32 out of bounds: val=%v, err=%v", val, err)
 }
@@ -1940,7 +1966,8 @@ func TestDecodeValueInt32(t *testing.T) {
 
 	// int32: extended type 8, size 4
 	// Type 0 = extended, next byte + 7 = 8
-	data := []byte{0x04, 0x01, 0xff, 0xff, 0xff, 0xff} // -1
+	// -1
+	data := []byte{0x04, 0x01, 0xff, 0xff, 0xff, 0xff}
 	val, offset, err := reader.decodeValue(data, 0)
 	t.Logf("int32 value: %v, offset: %d, err: %v", val, offset, err)
 }
@@ -1949,7 +1976,8 @@ func TestDecodeValueInt32Zero(t *testing.T) {
 	reader := &mmdbReader{}
 
 	// int32 with size 0
-	data := []byte{0x00, 0x01} // extended type 8, size 0
+	// extended type 8, size 0
+	data := []byte{0x00, 0x01}
 	val, _, err := reader.decodeValue(data, 0)
 	t.Logf("int32 zero: val=%v, err=%v", val, err)
 }
@@ -1958,7 +1986,8 @@ func TestDecodeValueInt32OutOfBounds(t *testing.T) {
 	reader := &mmdbReader{}
 
 	// int32 with insufficient data
-	data := []byte{0x04, 0x01, 0xff} // Only 1 byte of value
+	// Only 1 byte of value
+	data := []byte{0x04, 0x01, 0xff}
 	val, _, err := reader.decodeValue(data, 0)
 	t.Logf("int32 out of bounds: val=%v, err=%v", val, err)
 }
@@ -1996,7 +2025,8 @@ func TestDecodeValueUint64OutOfBounds(t *testing.T) {
 	reader := &mmdbReader{}
 
 	// uint64 with insufficient data
-	data := []byte{0x08, 0x02, 0x00, 0x00, 0x00} // Only 3 bytes
+	// Only 3 bytes
+	data := []byte{0x08, 0x02, 0x00, 0x00, 0x00}
 	val, _, err := reader.decodeValue(data, 0)
 	t.Logf("uint64 out of bounds: val=%v, err=%v", val, err)
 }
@@ -2006,8 +2036,10 @@ func TestDecodeValueUint128(t *testing.T) {
 
 	// uint128: extended type 10, size 16
 	data := make([]byte, 18)
-	data[0] = 0x10 // extended type, size 16
-	data[1] = 0x03 // type = 3 + 7 = 10
+	// extended type, size 16
+	data[0] = 0x10
+	// type = 3 + 7 = 10
+	data[1] = 0x03
 	for i := 2; i < 18; i++ {
 		data[i] = byte(i)
 	}
@@ -2022,7 +2054,8 @@ func TestDecodeValueUint128OutOfBounds(t *testing.T) {
 	reader := &mmdbReader{}
 
 	// uint128 with insufficient data
-	data := []byte{0x10, 0x03, 0x00, 0x00, 0x00} // Only 3 bytes
+	// Only 3 bytes
+	data := []byte{0x10, 0x03, 0x00, 0x00, 0x00}
 	val, _, err := reader.decodeValue(data, 0)
 	t.Logf("uint128 out of bounds: val=%v, err=%v", val, err)
 }
@@ -2031,7 +2064,8 @@ func TestDecodeValueFloat(t *testing.T) {
 	reader := &mmdbReader{}
 
 	// float: extended type 15, size 4
-	data := []byte{0x04, 0x08, 0x40, 0x48, 0xf5, 0xc3} // 3.14
+	// 3.14
+	data := []byte{0x04, 0x08, 0x40, 0x48, 0xf5, 0xc3}
 	val, offset, err := reader.decodeValue(data, 0)
 	t.Logf("float value: %v, offset: %d, err: %v", val, offset, err)
 }
@@ -2040,7 +2074,8 @@ func TestDecodeValueFloatOutOfBounds(t *testing.T) {
 	reader := &mmdbReader{}
 
 	// float with insufficient data
-	data := []byte{0x04, 0x08, 0x40} // Only 1 byte
+	// Only 1 byte
+	data := []byte{0x04, 0x08, 0x40}
 	val, _, err := reader.decodeValue(data, 0)
 	t.Logf("float out of bounds: val=%v, err=%v", val, err)
 }
@@ -2128,7 +2163,8 @@ func TestDecodeValueDefaultType(t *testing.T) {
 	reader := &mmdbReader{}
 
 	// Unknown/unhandled type (type 12 or 13)
-	data := []byte{0x02, 0x05} // extended type 12
+	// extended type 12
+	data := []byte{0x02, 0x05}
 	val, _, err := reader.decodeValue(data, 0)
 	t.Logf("Default type: val=%v, err=%v", val, err)
 }
@@ -2138,7 +2174,8 @@ func TestDecodeValueSize31(t *testing.T) {
 
 	// Size 31 encoding uses 3 additional bytes
 	// String type 2, size marker 31
-	data := []byte{0x5f, 0x00, 0x00, 0x01, 'a'} // size = 65821 + (0<<16 + 1) = 65822
+	// size = 65821 + (0<<16 + 1) = 65822
+	data := []byte{0x5f, 0x00, 0x00, 0x01, 'a'}
 	_, _, err := reader.decodeValue(data, 0)
 	t.Logf("Size 31 encoding: err=%v", err)
 }
@@ -2176,7 +2213,8 @@ func TestDecodeValueStringOutOfBounds(t *testing.T) {
 	reader := &mmdbReader{}
 
 	// String with declared size larger than available data
-	data := []byte{0x45, 'h', 'e'} // size 5, but only 2 chars
+	// size 5, but only 2 chars
+	data := []byte{0x45, 'h', 'e'}
 	val, _, err := reader.decodeValue(data, 0)
 	t.Logf("String out of bounds: val=%v, err=%v", val, err)
 }
@@ -2185,7 +2223,8 @@ func TestDecodeValueUint16OutOfBounds(t *testing.T) {
 	reader := &mmdbReader{}
 
 	// uint16 with insufficient data
-	data := []byte{0xa2, 0x01} // size 2, but only 1 byte
+	// size 2, but only 1 byte
+	data := []byte{0xa2, 0x01}
 	val, _, err := reader.decodeValue(data, 0)
 	t.Logf("uint16 out of bounds: val=%v, err=%v", val, err)
 }
@@ -2227,8 +2266,9 @@ func TestMmdbReaderLookupUnsupportedRecordSize(t *testing.T) {
 	reader := &mmdbReader{
 		data: make([]byte, 1000),
 		metadata: &mmdbMetadata{
-			NodeCount:  10,
-			RecordSize: 16, // Unsupported
+			NodeCount: 10,
+			// Unsupported
+			RecordSize: 16,
 			IPVersion:  4,
 		},
 		nodeSize:   4,
@@ -2291,7 +2331,8 @@ func TestMmdbReaderLookupIPv4InIPv6DB(t *testing.T) {
 		metadata: &mmdbMetadata{
 			NodeCount:  10,
 			RecordSize: 24,
-			IPVersion:  6, // IPv6 database
+			// IPv6 database
+			IPVersion: 6,
 		},
 		nodeSize:   6,
 		dataOffset: 100,
@@ -2335,7 +2376,8 @@ func TestLookupCountryWithCountryCode(t *testing.T) {
 func TestLookupCountryWithDirectString(t *testing.T) {
 	// Create reader that returns a direct string
 	reader := &mmdbReader{
-		data:       []byte{0x42, 'U', 'S'}, // String "US"
+		// String "US"
+		data:       []byte{0x42, 'U', 'S'},
 		metadata:   &mmdbMetadata{NodeCount: 0, RecordSize: 24, IPVersion: 4},
 		nodeSize:   6,
 		dataOffset: 0,
@@ -2347,7 +2389,8 @@ func TestLookupCountryWithDirectString(t *testing.T) {
 
 func TestLookupCountryDecodeError(t *testing.T) {
 	reader := &mmdbReader{
-		data:       []byte{0xff, 0xff}, // Invalid data
+		// Invalid data
+		data:       []byte{0xff, 0xff},
 		metadata:   &mmdbMetadata{NodeCount: 0, RecordSize: 24, IPVersion: 4},
 		nodeSize:   6,
 		dataOffset: 0,
@@ -2393,7 +2436,8 @@ func TestLookupASNWithNameField(t *testing.T) {
 func TestLookupASNNotMap(t *testing.T) {
 	// Create reader that returns a non-map value
 	reader := &mmdbReader{
-		data:       []byte{0x41, 'x'}, // String "x"
+		// String "x"
+		data:       []byte{0x41, 'x'},
 		metadata:   &mmdbMetadata{NodeCount: 0, RecordSize: 24, IPVersion: 4},
 		nodeSize:   6,
 		dataOffset: 0,
@@ -2452,7 +2496,8 @@ func TestLookupCityPartialData(t *testing.T) {
 
 func TestLookupCityNotMap(t *testing.T) {
 	reader := &mmdbReader{
-		data:       []byte{0x41, 'x'}, // String "x"
+		// String "x"
+		data:       []byte{0x41, 'x'},
 		metadata:   &mmdbMetadata{NodeCount: 0, RecordSize: 24, IPVersion: 4},
 		nodeSize:   6,
 		dataOffset: 0,
@@ -2515,7 +2560,8 @@ func TestLookupWHOISWithName(t *testing.T) {
 
 func TestLookupWHOISNotMap(t *testing.T) {
 	reader := &mmdbReader{
-		data:       []byte{0x41, 'x'}, // String "x"
+		// String "x"
+		data:       []byte{0x41, 'x'},
 		metadata:   &mmdbMetadata{NodeCount: 0, RecordSize: 24, IPVersion: 4},
 		nodeSize:   6,
 		dataOffset: 0,
@@ -2536,7 +2582,8 @@ func TestParseMetadataValid(t *testing.T) {
 	// Entry 1: "node_count" -> 1000
 	// Entry 2: "record_size" -> 24
 	metaData := []byte{
-		0xe2, // map, size 2
+		// map, size 2
+		0xe2,
 		// key: "node_count"
 		0x4a, 'n', 'o', 'd', 'e', '_', 'c', 'o', 'u', 'n', 't',
 		// value: uint 1000 (type 6, size 2)
@@ -2568,22 +2615,28 @@ func TestParseMetadataWithAllFields(t *testing.T) {
 
 	// Metadata with all supported fields
 	metaData := []byte{
-		0xe5, // map, size 5
+		// map, size 5
+		0xe5,
 		// node_count
 		0x4a, 'n', 'o', 'd', 'e', '_', 'c', 'o', 'u', 'n', 't',
-		0xc2, 0x03, 0xe8, // 1000
+		// 1000
+		0xc2, 0x03, 0xe8,
 		// record_size
 		0x4b, 'r', 'e', 'c', 'o', 'r', 'd', '_', 's', 'i', 'z', 'e',
-		0xc1, 0x18, // 24
+		// 24
+		0xc1, 0x18,
 		// ip_version
 		0x4a, 'i', 'p', '_', 'v', 'e', 'r', 's', 'i', 'o', 'n',
-		0xc1, 0x04, // 4
+		// 4
+		0xc1, 0x04,
 		// database_type
 		0x4d, 'd', 'a', 't', 'a', 'b', 'a', 's', 'e', '_', 't', 'y', 'p', 'e',
-		0x47, 'C', 'o', 'u', 'n', 't', 'r', 'y', // "Country"
+		// "Country"
+		0x47, 'C', 'o', 'u', 'n', 't', 'r', 'y',
 		// build_epoch
 		0x4b, 'b', 'u', 'i', 'l', 'd', '_', 'e', 'p', 'o', 'c', 'h',
-		0xc4, 0x60, 0x00, 0x00, 0x00, // some epoch
+		// some epoch
+		0xc4, 0x60, 0x00, 0x00, 0x00,
 	}
 
 	data := append([]byte{}, marker...)
@@ -2601,7 +2654,8 @@ func TestParseMetadataNotMap(t *testing.T) {
 	marker := []byte(metadataStartMarker)
 	// String instead of map
 	data := append([]byte{}, marker...)
-	data = append(data, 0x41, 'x') // String "x"
+	// String "x"
+	data = append(data, 0x41, 'x')
 
 	reader := &mmdbReader{
 		data: data,
@@ -2620,13 +2674,16 @@ func TestParseMetadataRecordSizeNotDivisibleBy4(t *testing.T) {
 	marker := []byte(metadataStartMarker)
 
 	metaData := []byte{
-		0xe2, // map, size 2
+		// map, size 2
+		0xe2,
 		// node_count
 		0x4a, 'n', 'o', 'd', 'e', '_', 'c', 'o', 'u', 'n', 't',
-		0xc2, 0x03, 0xe8, // 1000
+		// 1000
+		0xc2, 0x03, 0xe8,
 		// record_size = 25 (not divisible by 4)
 		0x4b, 'r', 'e', 'c', 'o', 'r', 'd', '_', 's', 'i', 'z', 'e',
-		0xc1, 0x19, // 25
+		// 25
+		0xc1, 0x19,
 	}
 
 	data := append([]byte{}, marker...)
@@ -2699,7 +2756,8 @@ func TestLookupWithUnknownCountry(t *testing.T) {
 	}
 	l.initCountries()
 
-	l.countryDB = createCountryDBReturningCode("XX") // Unknown country
+	// Unknown country
+	l.countryDB = createCountryDBReturningCode("XX")
 
 	result := l.Lookup("8.8.8.8")
 	t.Logf("Lookup with unknown country: CountryCode=%q, CountryName=%q",
@@ -2803,15 +2861,18 @@ func TestMmdbReaderLookupFoundData(t *testing.T) {
 	// With record size 24 (6 bytes per node)
 	data[0] = 0x00
 	data[1] = 0x00
-	data[2] = 0x00 // Left record = 0
+	// Left record = 0
+	data[2] = 0x00
 	data[3] = 0x00
 	data[4] = 0x00
-	data[5] = 0x02 // Right record = 2 (> nodeCount of 1, so it's data)
+	// Right record = 2 (> nodeCount of 1, so it's data)
+	data[5] = 0x02
 
 	// Data at offset: nodeCount * nodeSize + 16 + (record - nodeCount)
 	// = 1 * 6 + 16 + (2 - 1) = 6 + 16 + 1 = 23
 	// Put a simple string there
-	data[23] = 0x42 // String type, size 2
+	// String type, size 2
+	data[23] = 0x42
 	data[24] = 'U'
 	data[25] = 'S'
 
@@ -2822,11 +2883,13 @@ func TestMmdbReaderLookupFoundData(t *testing.T) {
 			RecordSize: 24,
 			IPVersion:  4,
 		},
-		nodeSize:   6,
-		dataOffset: 22, // nodeCount * nodeSize + 16
+		nodeSize: 6,
+		// nodeCount * nodeSize + 16
+		dataOffset: 22,
 	}
 
-	offset, err := reader.lookup(net.ParseIP("128.0.0.1")) // Bit pattern starting with 1
+	// Bit pattern starting with 1
+	offset, err := reader.lookup(net.ParseIP("128.0.0.1"))
 	t.Logf("Lookup found data: offset=%d, err=%v", offset, err)
 }
 
@@ -2836,10 +2899,12 @@ func TestMmdbReaderLookupNotFound(t *testing.T) {
 	// Node 0: both records point to nodeCount (not found)
 	data[0] = 0x00
 	data[1] = 0x00
-	data[2] = 0x01 // Left record = 1 (= nodeCount)
+	// Left record = 1 (= nodeCount)
+	data[2] = 0x01
 	data[3] = 0x00
 	data[4] = 0x00
-	data[5] = 0x01 // Right record = 1 (= nodeCount)
+	// Right record = 1 (= nodeCount)
+	data[5] = 0x01
 
 	reader := &mmdbReader{
 		data: data,
@@ -2889,10 +2954,12 @@ func TestMmdbReaderLookupFollowsNodes(t *testing.T) {
 	// Node 0: left -> node 1, right -> node 1
 	data[0] = 0x00
 	data[1] = 0x00
-	data[2] = 0x00 // Left -> not found (NodeCount)
+	// Left -> not found (NodeCount)
+	data[2] = 0x00
 	data[3] = 0x00
 	data[4] = 0x00
-	data[5] = 0x00 // Right -> not found
+	// Right -> not found
+	data[5] = 0x00
 
 	reader := &mmdbReader{
 		data: data,
@@ -2905,7 +2972,8 @@ func TestMmdbReaderLookupFollowsNodes(t *testing.T) {
 		dataOffset: 22,
 	}
 
-	offset, err := reader.lookup(net.ParseIP("0.0.0.1")) // First bit is 0
+	// First bit is 0
+	offset, err := reader.lookup(net.ParseIP("0.0.0.1"))
 	t.Logf("Lookup follow nodes (bit 0): offset=%d, err=%v", offset, err)
 }
 
@@ -2919,11 +2987,14 @@ func TestMmdbReaderLookup28BitBothPaths(t *testing.T) {
 	// Left record (3 bytes + upper nibble)
 	data[0] = 0x00
 	data[1] = 0x00
-	data[2] = 0x01 // Left = 1 (NodeCount, not found)
-	data[3] = 0x10 // Upper nibble for left, lower for right
+	// Left = 1 (NodeCount, not found)
+	data[2] = 0x01
+	// Upper nibble for left, lower for right
+	data[3] = 0x10
 	data[4] = 0x00
 	data[5] = 0x00
-	data[6] = 0x01 // Right = 1 (NodeCount, not found)
+	// Right = 1 (NodeCount, not found)
+	data[6] = 0x01
 
 	reader := &mmdbReader{
 		data: data,
@@ -2989,8 +3060,10 @@ func TestDecodeValueSize29Complete(t *testing.T) {
 	// Type 2 (string), size marker 29 (0x1d), additional byte = 1
 	// Total size = 29 + 1 = 30 bytes
 	data := make([]byte, 35)
-	data[0] = 0x5d // type 2, size marker 29
-	data[1] = 0x01 // additional byte = 1, so total size = 30
+	// type 2, size marker 29
+	data[0] = 0x5d
+	// additional byte = 1, so total size = 30
+	data[1] = 0x01
 	for i := 2; i < 32; i++ {
 		data[i] = 'a'
 	}
@@ -3011,9 +3084,12 @@ func TestDecodeValueSize30Complete(t *testing.T) {
 
 	// Size 30 encoding: size = 285 + next_2_bytes
 	data := make([]byte, 300)
-	data[0] = 0x5e // type 2, size marker 30
-	data[1] = 0x00 // high byte of additional size
-	data[2] = 0x01 // low byte = 1, so total size = 285 + 1 = 286
+	// type 2, size marker 30
+	data[0] = 0x5e
+	// high byte of additional size
+	data[1] = 0x00
+	// low byte = 1, so total size = 285 + 1 = 286
+	data[2] = 0x01
 	for i := 3; i < 289; i++ {
 		data[i] = 'b'
 	}
@@ -3034,8 +3110,10 @@ func TestDecodeValuePointerToValidData(t *testing.T) {
 
 	// Create data with a pointer at offset 0 pointing to a string at offset 5
 	data := []byte{
-		0x20, 0x02, // Pointer size 1, pointing to offset 2
-		0x42, 'O', 'K', // String "OK" at offset 2
+		// Pointer size 1, pointing to offset 2
+		0x20, 0x02,
+		// String "OK" at offset 2
+		0x42, 'O', 'K',
 	}
 
 	val, offset, err := reader.decodeValue(data, 0)
@@ -3054,9 +3132,12 @@ func TestDecodeValueMapNonStringKey(t *testing.T) {
 
 	// Map with size 1, key is uint (not string), value is string
 	data := []byte{
-		0xe1,       // map, size 1
-		0xc1, 0x01, // key: uint 1 (not a string)
-		0x41, 'v', // value: string "v"
+		// map, size 1
+		0xe1,
+		// key: uint 1 (not a string)
+		0xc1, 0x01,
+		// value: string "v"
+		0x41, 'v',
 	}
 
 	val, _, err := reader.decodeValue(data, 0)
@@ -3118,7 +3199,8 @@ func createMinimalMMDB() []byte {
 
 	// Minimal metadata
 	metaData := []byte{
-		0xe2, // map, size 2
+		// map, size 2
+		0xe2,
 		// node_count = 1
 		0x4a, 'n', 'o', 'd', 'e', '_', 'c', 'o', 'u', 'n', 't',
 		0xc1, 0x01,
@@ -3191,9 +3273,11 @@ func encodeMMDBMap(data map[string]interface{}) []byte {
 	// Map type 7, size
 	size := len(data)
 	if size < 29 {
-		result = append(result, byte(0xe0|size)) // type 7 = 0xe0
+		// type 7 = 0xe0
+		result = append(result, byte(0xe0|size))
 	} else {
-		result = append(result, 0xfd, byte(size-29)) // size 29 encoding
+		// size 29 encoding
+		result = append(result, 0xfd, byte(size-29))
 	}
 
 	for key, val := range data {
@@ -3210,7 +3294,8 @@ func encodeMMDBString(s string) []byte {
 	var result []byte
 	size := len(s)
 	if size < 29 {
-		result = append(result, byte(0x40|size)) // type 2 = 0x40
+		// type 2 = 0x40
+		result = append(result, byte(0x40|size))
 	} else {
 		result = append(result, 0x5d, byte(size-29))
 	}
@@ -3231,13 +3316,15 @@ func encodeMMDBValue(val interface{}) []byte {
 	case []interface{}:
 		return encodeMMDBArray(v)
 	default:
-		return []byte{0x40} // empty string as fallback
+		// empty string as fallback
+		return []byte{0x40}
 	}
 }
 
 func encodeMMDBUint(v uint64) []byte {
 	if v == 0 {
-		return []byte{0xc0} // type 6, size 0
+		// type 6, size 0
+		return []byte{0xc0}
 	}
 	if v < 256 {
 		return []byte{0xc1, byte(v)}
@@ -3272,7 +3359,8 @@ func TestLoadDatabasesDownloadErrors(t *testing.T) {
 	cfg := &Config{
 		Enabled: true,
 		Dir:     tmpDir,
-		Country: true, // Will try to download but fail (no network mock)
+		// Will try to download but fail (no network mock)
+		Country: true,
 		ASN:     true,
 		City:    true,
 		WHOIS:   true,
@@ -3322,7 +3410,8 @@ func TestLookupCityEmptySubdivisions(t *testing.T) {
 				"en": "Tokyo",
 			},
 		},
-		"subdivisions": []interface{}{}, // Empty array
+		// Empty array
+		"subdivisions": []interface{}{},
 	})
 
 	city, region, _, _, _, _ := reader.LookupCity(net.ParseIP("8.8.8.8"))
@@ -3334,7 +3423,8 @@ func TestLookupCitySubdivisionsNoNames(t *testing.T) {
 	reader := createMockReaderWithData(map[string]interface{}{
 		"subdivisions": []interface{}{
 			map[string]interface{}{
-				"iso_code": "CA", // No names field
+				// No names field
+				"iso_code": "CA",
 			},
 		},
 	})
@@ -3401,10 +3491,12 @@ func TestMmdbReaderLookupExhaustsBits(t *testing.T) {
 		metadata: &mmdbMetadata{
 			NodeCount:  100,
 			RecordSize: 24,
-			IPVersion:  6, // IPv6 for 128 bits
+			// IPv6 for 128 bits
+			IPVersion: 6,
 		},
-		nodeSize:   6,
-		dataOffset: 616, // After all nodes
+		nodeSize: 6,
+		// After all nodes
+		dataOffset: 616,
 	}
 
 	offset, err := reader.lookup(net.ParseIP("2001:4860:4860::8888"))
@@ -3442,7 +3534,8 @@ func TestConcurrentLoadAndUpdate(t *testing.T) {
 	cfg := &Config{
 		Enabled: true,
 		Dir:     tmpDir,
-		Country: false, // Disable to avoid network calls
+		// Disable to avoid network calls
+		Country: false,
 		ASN:     false,
 		City:    false,
 		WHOIS:   false,

@@ -387,8 +387,10 @@ func TestMemoryCacheStatsMemoryUsage(t *testing.T) {
 	ctx := context.Background()
 
 	// Add keys with known sizes
-	c.Set(ctx, "key1", []byte("12345678901234567890"), time.Minute) // 20 bytes
-	c.Set(ctx, "key2", []byte("abcdefghij"), time.Minute)           // 10 bytes
+	// 20 bytes
+	c.Set(ctx, "key1", []byte("12345678901234567890"), time.Minute)
+	// 10 bytes
+	c.Set(ctx, "key2", []byte("abcdefghij"), time.Minute)
 
 	stats, err := c.Stats(ctx)
 	if err != nil {
@@ -585,7 +587,8 @@ func TestNewCacheRedisTypeFails(t *testing.T) {
 	cfg := &Config{
 		Type: "redis",
 		Host: "localhost",
-		Port: 16379, // Use non-standard port to ensure failure
+		// Use non-standard port to ensure failure
+		Port: 16379,
 	}
 
 	cache, err := New(cfg)
@@ -606,7 +609,8 @@ func TestNewCacheValkeyTypeFails(t *testing.T) {
 	cfg := &Config{
 		Type: "valkey",
 		Host: "localhost",
-		Port: 16379, // Use non-standard port to ensure failure
+		// Use non-standard port to ensure failure
+		Port: 16379,
 	}
 
 	cache, err := New(cfg)
@@ -886,7 +890,8 @@ func TestMemoryCacheContextCancellation(t *testing.T) {
 	defer c.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // Cancel immediately
+	// Cancel immediately
+	cancel()
 
 	// Operations should still work (memory cache doesn't check context)
 	err := c.Set(ctx, "key", []byte("value"), time.Minute)
@@ -1167,8 +1172,9 @@ func TestNewRedisCacheURLMode(t *testing.T) {
 // TestNewRedisCacheHostPort tests host/port-based connection
 func TestNewRedisCacheHostPort(t *testing.T) {
 	cfg := &RedisConfig{
-		Host:     "localhost",
-		Port:     16379, // Non-standard port
+		Host: "localhost",
+		// Non-standard port
+		Port:     16379,
 		Password: "",
 		DB:       0,
 		PoolSize: 5,

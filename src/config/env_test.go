@@ -146,7 +146,8 @@ func TestParseInt(t *testing.T) {
 		{"empty", "", 10, 10},
 		{"invalid", "abc", 10, 10},
 		{"with spaces", "  42  ", 0, 42},
-		{"float truncates", "3.14", 0, 0}, // strconv.Atoi fails on floats
+		// strconv.Atoi fails on floats
+		{"float truncates", "3.14", 0, 0},
 	}
 
 	for _, tt := range tests {
@@ -635,7 +636,8 @@ func TestParseDurationEdgeCases(t *testing.T) {
 		{"uppercase H", "2H", 7200, false},
 		{"uppercase D", "1D", 86400, false},
 		{"uppercase W", "1W", 604800, false},
-		{"unknown unit defaults to seconds", "30x", 30, false}, // 'x' not recognized, uses val as seconds
+		// 'x' not recognized, uses val as seconds
+		{"unknown unit defaults to seconds", "30x", 30, false},
 	}
 
 	for _, tt := range tests {
@@ -694,7 +696,8 @@ func TestParseIntEdgeCases(t *testing.T) {
 		{"negative", "-100", 0, -100},
 		{"zero", "0", 99, 0},
 		{"leading zeros", "007", 0, 7},
-		{"hex not supported", "0x10", 0, 0}, // strconv.Atoi doesn't parse hex
+		// strconv.Atoi doesn't parse hex
+		{"hex not supported", "0x10", 0, 0},
 	}
 
 	for _, tt := range tests {

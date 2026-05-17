@@ -269,14 +269,19 @@ func TestManagerIsWidgetEnabled(t *testing.T) {
 		want bool
 	}{
 		{WidgetWeather, true},
-		{WidgetNews, true}, // All widgets enabled (user-controlled)
+		// All widgets enabled (user-controlled)
+		{WidgetNews, true},
 		{WidgetStocks, true},
-		{WidgetCrypto, true}, // All widgets enabled (user-controlled)
+		// All widgets enabled (user-controlled)
+		{WidgetCrypto, true},
 		{WidgetSports, true},
 		{WidgetRSS, true},
-		{WidgetClock, true},      // Tool widgets always enabled
-		{WidgetCalculator, true}, // Tool widgets always enabled
-		{WidgetNotes, true},      // User widgets always enabled
+		// Tool widgets always enabled
+		{WidgetClock, true},
+		// Tool widgets always enabled
+		{WidgetCalculator, true},
+		// User widgets always enabled
+		{WidgetNotes, true},
 	}
 
 	for _, tt := range tests {
@@ -797,7 +802,8 @@ func TestManagerFetchWidgetDataContextCancellation(t *testing.T) {
 	m.RegisterFetcher(fetcher)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // Cancel immediately
+	// Cancel immediately
+	cancel()
 
 	// Should still work since mockFetcher doesn't check context
 	result, err := m.FetchWidgetData(ctx, WidgetWeather, nil)
@@ -1302,12 +1308,18 @@ func TestExtractSourceName(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"BBC News - RSS Feed", "BBC"},            // Removes " - RSS Feed" then " News"
-		{"CNN RSS", "CNN"},                        // Removes " RSS"
-		{"Reuters Feed", "Reuters"},               // Removes " Feed"
-		{"New York Times News", "New York Times"}, // Removes " News"
-		{"Simple Title", "Simple Title"},          // No suffix to remove
-		{"   Padded Title   ", "Padded Title"},    // Trims whitespace
+		// Removes " - RSS Feed" then " News"
+		{"BBC News - RSS Feed", "BBC"},
+		// Removes " RSS"
+		{"CNN RSS", "CNN"},
+		// Removes " Feed"
+		{"Reuters Feed", "Reuters"},
+		// Removes " News"
+		{"New York Times News", "New York Times"},
+		// No suffix to remove
+		{"Simple Title", "Simple Title"},
+		// Trims whitespace
+		{"   Padded Title   ", "Padded Title"},
 	}
 
 	for _, tt := range tests {
@@ -1366,7 +1378,8 @@ func TestTruncateSummary(t *testing.T) {
 			got := truncateSummary(tt.input)
 			if len(tt.input) > 200 {
 				// For long input, should be truncated
-				if len(got) > 203 { // 200 + "..."
+				// 200 + "..."
+				if len(got) > 203 {
 					t.Errorf("truncateSummary() result too long: %d chars", len(got))
 				}
 				if !strings.HasSuffix(got, "...") {
@@ -2566,7 +2579,8 @@ func TestCleanTrackingNumber(t *testing.T) {
 		{"1Z 999 AA1 0123 4567 84", "1Z999AA10123456784"},
 		{"1Z-999-AA1-0123-4567-84", "1Z999AA10123456784"},
 		{"  1Z999AA10123456784  ", "1Z999AA10123456784"},
-		{"abc123XYZ", "ABC123XYZ"}, // Normalized to uppercase
+		// Normalized to uppercase
+		{"abc123XYZ", "ABC123XYZ"},
 		{"", ""},
 		{"!@#$%", ""},
 		{"12-34-56", "123456"},
@@ -2598,7 +2612,8 @@ func TestDetectCarrier(t *testing.T) {
 		{"1234567890123456789012", "FedEx", true},
 
 		// UPS Freight (9-12 digits - lower priority but comes first in pattern array)
-		{"123456789012", "UPS", true}, // 12 digits matches UPS Freight
+		// 12 digits matches UPS Freight
+		{"123456789012", "UPS", true},
 
 		// Amazon TBA pattern
 		{"TBA123456789012", "Amazon Logistics", true},
@@ -2693,8 +2708,9 @@ func TestRSSFetcherConvertAtomEntriesFallbackToID(t *testing.T) {
 		Title: "Test Feed",
 		Entries: []AtomEntry{
 			{
-				Title:   "Entry with ID only",
-				Link:    AtomLink{}, // Empty link
+				Title: "Entry with ID only",
+				// Empty link
+				Link:    AtomLink{},
 				ID:      "urn:uuid:12345",
 				Updated: "2024-01-15T12:00:00Z",
 			},
@@ -2807,7 +2823,8 @@ func TestNewsFetcherParseAtomEntries(t *testing.T) {
 
 func TestNewsFetcherFetchDefaultSources(t *testing.T) {
 	f := NewNewsFetcher(&config.NewsWidgetConfig{
-		Sources:  []string{}, // Empty sources triggers default
+		// Empty sources triggers default
+		Sources:  []string{},
 		MaxItems: 5,
 	})
 	ctx := context.Background()
@@ -2826,7 +2843,8 @@ func TestNewsFetcherFetchDefaultSources(t *testing.T) {
 
 func TestStocksFetcherFetchEmptySymbols(t *testing.T) {
 	f := NewStocksFetcher(&config.StocksWidgetConfig{
-		DefaultSymbols: []string{}, // Empty defaults
+		// Empty defaults
+		DefaultSymbols: []string{},
 	})
 	ctx := context.Background()
 
@@ -2861,8 +2879,10 @@ func TestStocksFetcherFetchWithSymbols(t *testing.T) {
 
 func TestCryptoFetcherFetchEmptyCoins(t *testing.T) {
 	f := NewCryptoFetcher(&config.CryptoWidgetConfig{
-		DefaultCoins: []string{}, // Empty defaults
-		Currency:     "",         // Empty currency triggers default
+		// Empty defaults
+		DefaultCoins: []string{},
+		// Empty currency triggers default
+		Currency: "",
 	})
 	ctx := context.Background()
 
@@ -2964,8 +2984,9 @@ func TestWeatherFetcherFetchCityFromParams(t *testing.T) {
 
 func TestManagerGetDefaultWidgetsEmptyConfig(t *testing.T) {
 	cfg := &config.WidgetsConfig{
-		Enabled:        true,
-		DefaultWidgets: []string{}, // Empty defaults
+		Enabled: true,
+		// Empty defaults
+		DefaultWidgets: []string{},
 	}
 	m := NewManager(cfg)
 
@@ -3246,7 +3267,8 @@ func TestAllCarrierPatterns(t *testing.T) {
 		numbers []string
 	}{
 		{"USPS", []string{"9400111899223033336024"}},
-		{"UPS", []string{"1Z999AA10123456784", "123456789012"}}, // 12 digits matches UPS Freight
+		// 12 digits matches UPS Freight
+		{"UPS", []string{"1Z999AA10123456784", "123456789012"}},
 		{"FedEx", []string{"123456789012345", "12345678901234567890"}},
 		// DHL 10-11 digits also matches UPS Freight pattern due to order
 		{"Amazon Logistics", []string{"TBA123456789012"}},

@@ -52,7 +52,8 @@ func TestParse(t *testing.T) {
 		{"", "", ""},
 		{"notacommand", "", ""},
 		{"invalid:", "", ""},
-		{"unknown:term", "", ""}, // unknown type should not match
+		// unknown type should not match
+		{"unknown:term", "", ""},
 	}
 
 	for _, tt := range tests {
@@ -135,9 +136,12 @@ func TestCacheDurations(t *testing.T) {
 		{AnswerTypeTLDR, 7 * 24 * time.Hour, 7 * 24 * time.Hour},
 		{AnswerTypeMan, 30 * 24 * time.Hour, 30 * 24 * time.Hour},
 		{AnswerTypeDNS, 1 * time.Hour, 1 * time.Hour},
-		{AnswerTypeHTTP, 0, 0},  // Static, no cache
-		{AnswerTypeChmod, 0, 0}, // Static, no cache
-		{AnswerTypeCache, 0, 0}, // Never cache
+		// Static, no cache
+		{AnswerTypeHTTP, 0, 0},
+		// Static, no cache
+		{AnswerTypeChmod, 0, 0},
+		// Never cache
+		{AnswerTypeCache, 0, 0},
 		{AnswerTypeWiki, 24 * time.Hour, 24 * time.Hour},
 	}
 
@@ -205,7 +209,8 @@ func TestPortHandler(t *testing.T) {
 		{"25", true},
 		{"3306", true},
 		{"5432", true},
-		{"99999", false}, // Port out of range or unknown
+		// Port out of range or unknown
+		{"99999", false},
 	}
 
 	for _, tt := range tests {

@@ -136,17 +136,20 @@ func TestGetArtWidth(t *testing.T) {
 		{
 			name: "ArtLarge",
 			art:  ArtLarge,
-			want: 32, // Max line width in ArtLarge
+			// Max line width in ArtLarge
+			want: 32,
 		},
 		{
 			name: "ArtMedium",
 			art:  ArtMedium,
-			want: 31, // Max line width in ArtMedium
+			// Max line width in ArtMedium
+			want: 31,
 		},
 		{
 			name: "ArtSmall",
 			art:  ArtSmall,
-			want: 30, // Max line width in ArtSmall
+			// Max line width in ArtSmall
+			want: 30,
 		},
 		{
 			name: "empty array",
@@ -192,11 +195,13 @@ func TestGetArtWidth(t *testing.T) {
 
 func TestCenterArt(t *testing.T) {
 	tests := []struct {
-		name     string
-		art      []string
-		width    int
-		wantSame bool // If true, expect returned art to be the same slice
-		checkPad int  // Expected padding (only if wantSame is false)
+		name  string
+		art   []string
+		width int
+		// If true, expect returned art to be the same slice
+		wantSame bool
+		// Expected padding (only if wantSame is false)
+		checkPad int
 	}{
 		{
 			name:     "art wider than width",
@@ -215,28 +220,32 @@ func TestCenterArt(t *testing.T) {
 			art:      []string{"12345"},
 			width:    15,
 			wantSame: false,
-			checkPad: 5, // (15 - 5) / 2 = 5
+			// (15 - 5) / 2 = 5
+			checkPad: 5,
 		},
 		{
 			name:     "center with odd padding",
 			art:      []string{"12345"},
 			width:    14,
 			wantSame: false,
-			checkPad: 4, // (14 - 5) / 2 = 4 (integer division)
+			// (14 - 5) / 2 = 4 (integer division)
+			checkPad: 4,
 		},
 		{
 			name:     "empty art",
 			art:      []string{},
 			width:    20,
 			wantSame: false,
-			checkPad: 10, // (20 - 0) / 2 = 10
+			// (20 - 0) / 2 = 10
+			checkPad: 10,
 		},
 		{
 			name:     "multi-line art",
 			art:      []string{"12345", "123"},
 			width:    15,
 			wantSame: false,
-			checkPad: 5, // (15 - 5) / 2 = 5
+			// (15 - 5) / 2 = 5
+			checkPad: 5,
 		},
 	}
 

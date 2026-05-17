@@ -158,8 +158,10 @@ func TestResultCacheClearResetsStats(t *testing.T) {
 	rc := newTestCache(time.Minute)
 
 	rc.Set("key1", &model.SearchResults{Query: "test"})
-	rc.Get("key1")        // hit
-	rc.Get("nonexistent") // miss
+	// hit
+	rc.Get("key1")
+	// miss
+	rc.Get("nonexistent")
 
 	rc.Clear()
 
@@ -174,9 +176,12 @@ func TestResultCacheStats(t *testing.T) {
 
 	rc.Set("key1", &model.SearchResults{Query: "test"})
 
-	rc.Get("key1")        // hit
-	rc.Get("key1")        // hit
-	rc.Get("nonexistent") // miss
+	// hit
+	rc.Get("key1")
+	// hit
+	rc.Get("key1")
+	// miss
+	rc.Get("nonexistent")
 
 	stats := rc.Stats()
 
@@ -236,12 +241,17 @@ func TestResultCacheStatsAfterOperations(t *testing.T) {
 
 	rc.Set("key1", &model.SearchResults{Query: "test1"})
 	rc.Set("key2", &model.SearchResults{Query: "test2"})
-	rc.Get("key1") // hit
-	rc.Get("key2") // hit
-	rc.Get("key3") // miss
-	rc.Get("key4") // miss
+	// hit
+	rc.Get("key1")
+	// hit
+	rc.Get("key2")
+	// miss
+	rc.Get("key3")
+	// miss
+	rc.Get("key4")
 	rc.Delete("key1")
-	rc.Get("key1") // miss (after delete)
+	// miss (after delete)
+	rc.Get("key1")
 
 	stats := rc.Stats()
 

@@ -239,7 +239,8 @@ func TestGetTokenFromDefaultFile(t *testing.T) {
 	// Test default token file path
 	// This test may not find the file, which is expected
 	result := getToken()
-	_ = result // May be empty if no token file exists
+	// May be empty if no token file exists
+	_ = result
 }
 
 func TestGetTokenPriority(t *testing.T) {

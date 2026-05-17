@@ -150,7 +150,8 @@ func TestIsValidLanguageCode(t *testing.T) {
 		{"ar", true},
 		{"xx", false},
 		{"", false},
-		{"EN", false}, // Case sensitive
+		// Case sensitive
+		{"EN", false},
 		{"English", false},
 	}
 
