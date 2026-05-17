@@ -88,7 +88,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install build dependencies
-        run: apk add --no-cache git bash
+        run: apk add --no-cache git bash file
 
       - name: Set build info
         run: |
@@ -148,9 +148,13 @@ jobs:
   upload-artifacts:
     needs: build
     runs-on: ubuntu-latest
+    container: golang:alpine
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/devel'
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install build dependencies
+        run: apk add --no-cache git bash
 
       - name: Set build info
         run: |
@@ -167,11 +171,6 @@ jobs:
             echo "OFFICIALSITE=" >> $GITHUB_ENV
           fi
 
-      - name: Build all binaries (devel artifact)
-        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
-        with:
-          go-version-file: go.mod
-
       - name: Build binaries
         env:
           CGO_ENABLED: "0"
@@ -182,15 +181,15 @@ jobs:
             GOARCH="${PLATFORM#*/}"
             EXT=""
             [ "$GOOS" = "windows" ] && EXT=".exe"
-            LDFLAGS="-s -w -X 'github.com/apimgr/search/src/config.Version=${VERSION}' -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/config.BuildDate=${BUILD_DATE}' -X 'github.com/apimgr/search/src/config.OfficialSite=${OFFICIALSITE}'"
-            GOOS=$GOOS GOARCH=$GOARCH go build -ldflags "$LDFLAGS" -o "binaries/search-${GOOS}-${GOARCH}${EXT}" ./src
-            CLI_LDFLAGS="-s -w -X 'github.com/apimgr/search/src/client/cmd.ProjectName=search' -X 'github.com/apimgr/search/src/client/cmd.Version=${VERSION}' -X 'github.com/apimgr/search/src/client/cmd.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/client/cmd.BuildDate=${BUILD_DATE}' -X 'github.com/apimgr/search/src/client/cmd.OfficialSite=${OFFICIALSITE}' -X 'github.com/apimgr/search/src/client/api.ProjectName=search' -X 'github.com/apimgr/search/src/client/api.Version=${VERSION}'"
-            GOOS=$GOOS GOARCH=$GOARCH go build -ldflags "$CLI_LDFLAGS" -o "binaries/search-cli-${GOOS}-${GOARCH}${EXT}" ./src/client
+            LDFLAGS="-s -w -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/config.Version=${VERSION}' -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/config.CommitID=${COMMIT_ID}' -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/config.BuildDate=${BUILD_DATE}' -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/config.OfficialSite=${OFFICIALSITE}'"
+            GOOS=$GOOS GOARCH=$GOARCH go build -ldflags "$LDFLAGS" -o "binaries/${PROJECTNAME}-${GOOS}-${GOARCH}${EXT}" ./src
+            CLI_LDFLAGS="-s -w -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/client/cmd.ProjectName=${PROJECTNAME}' -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/client/cmd.Version=${VERSION}' -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/client/cmd.CommitID=${COMMIT_ID}' -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/client/cmd.BuildDate=${BUILD_DATE}' -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/client/cmd.OfficialSite=${OFFICIALSITE}' -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/client/api.ProjectName=${PROJECTNAME}' -X 'github.com/${PROJECTORG}/${PROJECTNAME}/src/client/api.Version=${VERSION}'"
+            GOOS=$GOOS GOARCH=$GOARCH go build -ldflags "$CLI_LDFLAGS" -o "binaries/${PROJECTNAME}-cli-${GOOS}-${GOARCH}${EXT}" ./src/client
           done
 
       - name: Upload devel artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: search-devel-${{ github.sha }}
+          name: ${{ env.PROJECTNAME }}-devel-${{ github.sha }}
           path: binaries/
           retention-days: 7
