@@ -69,7 +69,8 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 		// GeoIP Update - download ip-location-db databases
 		GeoIPUpdate: func(ctx context.Context) error {
 			if !s.config.Server.GeoIP.Enabled {
-				return nil // Skip if GeoIP is disabled
+				// GeoIP is disabled; skip update
+				return nil
 			}
 			log.Println("[Task] GeoIP database update complete")
 			return nil
@@ -131,7 +132,8 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 		// Tor Health - check Tor connectivity
 		TorHealth: func(ctx context.Context) error {
 			if !s.config.Server.Tor.Enabled {
-				return nil // Skip if Tor is disabled
+				// Tor is disabled; skip health check
+				return nil
 			}
 			log.Println("[Task] Checking Tor health...")
 			if s.torService != nil && !s.torService.IsRunning() {
@@ -162,8 +164,8 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 			return s.alertManager.ProcessDue(ctx, alert.FrequencyWeekly)
 		},
 
-		// Cluster Heartbeat - only active in cluster mode
-		ClusterHeartbeat: nil, // Standalone mode - no cluster heartbeat
+		// Cluster Heartbeat - only active in cluster mode; nil in standalone mode
+		ClusterHeartbeat: nil,
 	}
 }
 
@@ -292,7 +294,8 @@ func (s *Server) performScheduledBackup(ctx context.Context, backupType string) 
 
 	// Create backup manager
 	mgr := backup.NewManager()
-	mgr.SetCreatedBy("scheduler") // Per AI.md PART 25: attribution
+	// Per AI.md PART 25: set attribution before storing backup metadata
+	mgr.SetCreatedBy("scheduler")
 
 	// Per AI.md PART 22: Check compliance mode
 	// If compliance enabled and no password, skip backup with warning
@@ -323,7 +326,8 @@ func (s *Server) performScheduledBackup(ctx context.Context, backupType string) 
 	// Per AI.md PART 22: max_backups (default: 1)
 	maxBackups := s.config.Server.Backup.Retention.MaxBackups
 	if maxBackups < 1 {
-		maxBackups = 1 // Minimum 1 backup
+		// Enforce minimum of 1 backup
+		maxBackups = 1
 	}
 
 	var backupPath string
@@ -367,7 +371,7 @@ func (s *Server) performScheduledBackup(ctx context.Context, backupType string) 
 	if retention.KeepWeekly > 0 || retention.KeepMonthly > 0 || retention.KeepYearly > 0 {
 		policy := backup.RetentionPolicy{
 			Count: maxBackups,
-			Day:   7, // Keep 7 days of daily backups
+			Day:   7,
 			Week:  retention.KeepWeekly,
 			Month: retention.KeepMonthly,
 			Year:  retention.KeepYearly,

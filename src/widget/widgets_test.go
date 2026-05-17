@@ -2399,9 +2399,12 @@ func TestNutritionFetcherFetchWithFoodParam(t *testing.T) {
 
 	// Test that 'food' param is accepted as alternative to 'query'
 	result, err := f.Fetch(ctx, map[string]string{"food": "banana"})
-	// Skip if external API returns unexpected format (not our code's fault)
+	// Skip if external API returns unexpected format or non-JSON (not our code's fault)
 	if err != nil {
-		if strings.Contains(err.Error(), "json: cannot unmarshal") {
+		errStr := err.Error()
+		if strings.Contains(errStr, "json: cannot unmarshal") ||
+			strings.Contains(errStr, "invalid character") ||
+			strings.Contains(errStr, "unexpected end of JSON") {
 			t.Skipf("External API returned unexpected format: %v", err)
 		}
 		t.Fatalf("Fetch() error = %v", err)

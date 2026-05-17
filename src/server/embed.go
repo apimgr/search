@@ -52,7 +52,8 @@ func (tr *TemplateRenderer) newFuncMap(i18nFuncs template.FuncMap) template.Func
 					return tFunc(key, args...)
 				}
 			}
-			return key // Fallback: return key as-is
+			// Key not found in i18n; return key as-is
+			return key
 		},
 		"lang": func() string {
 			if i18nFuncs != nil {
@@ -367,15 +368,19 @@ func GetStaticFile(path string) ([]byte, error) {
 	return fs.ReadFile(EmbeddedFS, filepath.Join("static", path))
 }
 
-// PageData represents common data passed to all page templates
+// PageData represents common data passed to all page templates.
+// Theme is the resolved CSS class ("dark" or "light", never "auto").
+// ThemeMode is the user preference ("dark", "light", or "auto").
+// Lang and Dir are the html lang/dir attributes (defaults: "en" / "ltr").
+// AdminPath is the configurable admin route prefix per AI.md PART 17 (default: "admin").
 type PageData struct {
 	Title              string
 	Description        string
 	Page               string
-	Theme              string // CSS class: "dark" or "light" (resolved, never "auto")
-	ThemeMode          string // User preference: "dark", "light", or "auto"
-	Lang               string // Language code for html lang attribute (default: "en")
-	Dir                string // Text direction for html dir attribute (default: "ltr")
+	Theme              string
+	ThemeMode          string
+	Lang               string
+	Dir                string
 	AvailableLanguages []i18n.Language
 	Config             *config.Config
 	User               interface{}
@@ -386,26 +391,27 @@ type PageData struct {
 	Query              string
 	Category           string
 	BuildDate          string
-	Announcements      []Announcement // Active announcements
-	TorEnabled         bool           // Tor hidden service enabled (binary found)
-	TorStatus          string         // Tor status: "connected", "connecting", "disabled"
-	TorAddress         string         // .onion address (when connected)
+	Announcements      []Announcement
+	TorEnabled         bool
+	TorStatus          string
+	TorAddress         string
 	WidgetsEnabled     bool
-	DefaultWidgets     string // JSON array of default widget types
+	DefaultWidgets     string
 	CookieConsent      *CookieConsentData
 	Extra              map[string]interface{}
-	AdminPath          string // Per AI.md PART 17: Configurable admin path (default: "admin")
-	ServerURL          string // Actual server URL for display in templates
+	AdminPath          string
+	ServerURL          string
 	PrefsQuery         string
 }
 
-// ErrorPageData extends PageData with error-specific fields
+// ErrorPageData extends PageData with error-specific fields.
+// ErrorDetails contains dev-only technical information; omitted in production.
 type ErrorPageData struct {
 	PageData
 	StatusCode   int
 	StatusText   string
 	Message      string
-	ErrorDetails string // dev-only technical details
+	ErrorDetails string
 }
 
 // SearchPageData extends PageData with search-specific fields
@@ -421,7 +427,7 @@ type SearchPageData struct {
 	SafeSearch    int
 	Pagination    *Pagination
 	Error         string
-	InstantAnswer interface{} // Instant answer result (if any)
+	InstantAnswer interface{}
 }
 
 // HealthPageData extends PageData with health-specific fields
@@ -451,11 +457,12 @@ type HealthInfo struct {
 	Maintenance    *MaintenanceInfo  `json:"maintenance,omitempty"`
 }
 
-// ProjectInfo represents project information for healthz per AI.md PART 13
+// ProjectInfo represents project information for healthz per AI.md PART 13.
+// Name maps to branding.app_name or server.title; Tagline is the short slogan.
 type ProjectInfo struct {
-	Name        string `json:"name"`        // branding.app_name or server.title
-	Tagline     string `json:"tagline"`     // branding.tagline (short slogan)
-	Description string `json:"description"` // server.description (longer)
+	Name        string `json:"name"`
+	Tagline     string `json:"tagline"`
+	Description string `json:"description"`
 }
 
 // BuildInfo represents build information per AI.md PART 13
@@ -495,14 +502,15 @@ type NodeInfo struct {
 	Hostname string `json:"hostname"`
 }
 
-// ClusterInfo represents cluster status per AI.md PART 13
+// ClusterInfo represents cluster status per AI.md PART 13.
+// Status is "connected" or "disconnected"; Role is "primary" or "member".
 type ClusterInfo struct {
 	Enabled   bool     `json:"enabled"`
-	Status    string   `json:"status,omitempty"`     // "connected", "disconnected"
-	Primary   string   `json:"primary,omitempty"`    // primary node public URL
-	Nodes     []string `json:"nodes,omitempty"`      // all node public URLs
-	NodeCount int      `json:"node_count,omitempty"` // total nodes
-	Role      string   `json:"role,omitempty"`       // "primary" or "member"
+	Status    string   `json:"status,omitempty"`
+	Primary   string   `json:"primary,omitempty"`
+	Nodes     []string `json:"nodes,omitempty"`
+	NodeCount int      `json:"node_count,omitempty"`
+	Role      string   `json:"role,omitempty"`
 }
 
 // MaintenanceInfo represents maintenance mode status
@@ -574,7 +582,7 @@ func NewPageData(cfg *config.Config, title, page string) *PageData {
 		Dir:         "ltr",
 		Config:      cfg,
 		BuildDate:   time.Now().Format(time.RFC3339),
-		AdminPath:   config.GetAdminPath(), // Per AI.md PART 17: Configurable admin path
+		AdminPath:   config.GetAdminPath(),
 	}
 
 	// Populate active announcements from config

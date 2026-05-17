@@ -56,14 +56,15 @@ func SetTheme(w http.ResponseWriter, theme string) {
 		theme = DefaultTheme
 	}
 
-	// Set cookie (30 days expiry)
+	// Set cookie with 30-day expiry; HttpOnly=false allows JavaScript theme switching;
+	// Secure is set dynamically by the server based on TLS config
 	cookie := &http.Cookie{
 		Name:     "theme",
 		Value:    theme,
 		Path:     "/",
-		MaxAge:   30 * 24 * 60 * 60, // 30 days
-		HttpOnly: false,             // Allow JavaScript access for theme switching
-		Secure:   false,             // Set to true in production with HTTPS
+		MaxAge:   30 * 24 * 60 * 60,
+		HttpOnly: false,
+		Secure:   false,
 		SameSite: http.SameSiteLaxMode,
 	}
 
@@ -81,7 +82,7 @@ func GetThemeClass(theme string) string {
 	case ThemeAuto:
 		return "theme-auto"
 	default:
-		return "theme-dark" // Default
+		return "theme-dark"
 	}
 }
 
@@ -94,13 +95,15 @@ func IsValidTheme(theme string) bool {
 	return false
 }
 
-// ThemeInfo holds theme metadata for template rendering
+// ThemeInfo holds theme metadata for template rendering.
+// Current is the user preference (light, dark, auto).
+// ClassName is the CSS class applied to <html> (theme-light, theme-dark, theme-auto).
 type ThemeInfo struct {
-	Current   string // Current theme (light, dark, auto)
-	ClassName string // CSS class name (theme-light, theme-dark, theme-auto)
-	IsDark    bool   // True if effective theme is dark
-	IsLight   bool   // True if effective theme is light
-	IsAuto    bool   // True if auto mode
+	Current   string
+	ClassName string
+	IsDark    bool
+	IsLight   bool
+	IsAuto    bool
 }
 
 // GetThemeInfo returns complete theme information for template rendering

@@ -800,8 +800,8 @@ func getProcessStartTime(pid int) time.Time {
 		var startTicks int64
 		fmt.Sscanf(fields[21], "%d", &startTicks)
 
-		// Convert to seconds (assuming 100 Hz clock)
-		clkTck := int64(100) // sysconf(_SC_CLK_TCK) is usually 100
+		// Convert to seconds (assuming 100 Hz clock, sysconf(_SC_CLK_TCK) is usually 100)
+		clkTck := int64(100)
 		processStartSeconds := float64(startTicks) / float64(clkTck)
 
 		// Calculate actual start time
@@ -1467,7 +1467,8 @@ func generateAndStoreToken(dbPath string) (string, bool) {
 		expiry, err := time.Parse("2006-01-02 15:04:05", expiresAt)
 		if err == nil && expiry.After(time.Now()) {
 			// Valid token exists, don't regenerate (token only shown once)
-			return "", true // showSetup=true but no token (previously shown)
+			// Return empty token: showSetup=true but token was previously shown
+			return "", true
 		}
 	}
 
@@ -1926,7 +1927,8 @@ func daemonize() error {
 	if runtime.GOOS == "windows" {
 		fmt.Fprintln(os.Stderr, "Warning: --daemon is not supported on Windows")
 		fmt.Fprintln(os.Stderr, "Use --service --install && --service start for Windows Service")
-		return nil // Continue in foreground
+		// Continue in foreground on Windows
+		return nil
 	}
 
 	// Already daemonized? Check if parent is init (PID 1)
