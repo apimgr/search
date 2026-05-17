@@ -862,8 +862,16 @@ func (m *Manager) markResultsDelivered(ctx context.Context, results []AlertResul
 	if len(results) == 0 {
 		return nil
 	}
+	var query string
+	switch column {
+	case "notified_email_at":
+		query = `UPDATE search_alert_results SET notified_email_at = ? WHERE id = ?`
+	case "notified_webhook_at":
+		query = `UPDATE search_alert_results SET notified_webhook_at = ? WHERE id = ?`
+	default:
+		return fmt.Errorf("invalid delivery column: %s", column)
+	}
 	now := time.Now().UTC()
-	query := fmt.Sprintf(`UPDATE search_alert_results SET %s = ? WHERE id = ?`, column)
 	for _, result := range results {
 		if _, err := m.db.ExecContext(ctx, query, now, result.ID); err != nil {
 			return err
