@@ -893,7 +893,15 @@ func (m *Manager) manageURL(ctx context.Context, alert *Alert) (string, error) {
 }
 
 func (m *Manager) alertToken(ctx context.Context, alertID, column string) (string, error) {
-	query := fmt.Sprintf("SELECT %s FROM search_alerts WHERE id = ?", column)
+	var query string
+	switch column {
+	case "rss_token_encrypted":
+		query = "SELECT rss_token_encrypted FROM search_alerts WHERE id = ?"
+	case "manage_token_encrypted":
+		query = "SELECT manage_token_encrypted FROM search_alerts WHERE id = ?"
+	default:
+		return "", fmt.Errorf("invalid token column: %s", column)
+	}
 	var encrypted string
 	if err := m.db.QueryRowContext(ctx, query, alertID).Scan(&encrypted); err != nil {
 		return "", err
