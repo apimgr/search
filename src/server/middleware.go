@@ -945,7 +945,8 @@ func URLNormalizeMiddleware(next http.Handler) http.Handler {
 type TargetType int
 
 const (
-	TargetUnknown TargetType = iota // Unknown/invalid target
+	// TargetUnknown is an unknown/invalid target type
+	TargetUnknown TargetType = iota
 	// Public routes (/, /api/v1/, project-specific like /search)
 	TargetPublic
 	// Server pages - about, help, contact, privacy (/server/*)

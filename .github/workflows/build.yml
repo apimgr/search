@@ -27,7 +27,8 @@ jobs:
     runs-on: ubuntu-latest
     container: golang:alpine
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      # v6.0.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Install lint tools
         run: apk add --no-cache git bash
@@ -48,7 +49,8 @@ jobs:
     runs-on: ubuntu-latest
     container: golang:alpine
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      # v6.0.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Install test dependencies
         run: apk add --no-cache git bash
@@ -85,7 +87,8 @@ jobs:
             goarch: arm64
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      # v6.0.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Install build dependencies
         run: apk add --no-cache git bash file
@@ -151,7 +154,8 @@ jobs:
     container: golang:alpine
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/devel'
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      # v6.0.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Install build dependencies
         run: apk add --no-cache git bash
@@ -188,7 +192,8 @@ jobs:
           done
 
       - name: Upload devel artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        # v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: ${{ env.PROJECTNAME }}-devel-${{ github.sha }}
           path: binaries/

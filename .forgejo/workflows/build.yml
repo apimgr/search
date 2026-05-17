@@ -24,7 +24,8 @@ jobs:
     runs-on: ubuntu-latest
     container: golang:alpine
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+      # v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Install lint tools
         run: apk add --no-cache git bash
@@ -45,7 +46,8 @@ jobs:
     runs-on: ubuntu-latest
     container: golang:alpine
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+      # v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Install test dependencies
         run: apk add --no-cache git bash
@@ -82,7 +84,8 @@ jobs:
             goarch: arm64
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+      # v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Install build dependencies
         run: apk add --no-cache git bash
