@@ -93,10 +93,14 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	// Autodiscover - non-versioned per AI.md PART 36 line 38077-38157
 	mux.HandleFunc("/api/autodiscover", h.handleAutodiscover)
 
-	// Health and info - Per AI.md PART 14: .txt extension support
+	// Health and info - Per AI.md PART 13/14
+	// Canonical API route: /api/v1/server/healthz (JSON default, text via .txt or Accept header)
+	// Alias per PART 14: /api/v1/healthz and /api/healthz mount the same handler
+	mux.HandleFunc("/api/v1/server/healthz", h.handleHealthz)
+	mux.HandleFunc("/api/v1/server/healthz.txt", h.handleHealthz)
 	mux.HandleFunc("/api/v1/healthz", h.handleHealthz)
-	// Per AI.md PART 14
 	mux.HandleFunc("/api/v1/healthz.txt", h.handleHealthz)
+	mux.HandleFunc("/api/healthz", h.handleHealthz)
 	mux.HandleFunc("/api/v1/info", h.handleInfo)
 	// Per AI.md PART 14
 	mux.HandleFunc("/api/v1/info.txt", h.handleInfo)

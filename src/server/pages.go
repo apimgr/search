@@ -212,14 +212,6 @@ func (s *Server) handleLivez(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "ALIVE\n")
 }
 
-// handleAPIHealthz handles /api/v1/healthz endpoint
-// Per AI.md PART 13: API health endpoint ALWAYS returns JSON regardless of Accept header
-func (s *Server) handleAPIHealthz(w http.ResponseWriter, r *http.Request) {
-	health := s.buildHealthInfo()
-	// Always JSON for API endpoint - per spec
-	s.respondHealthJSON(w, health)
-}
-
 // buildHealthInfo constructs the HealthResponse per AI.md PART 13.
 // Field order matches canonical spec: project, status, version, build, runtime,
 // cluster, features, checks, stats.

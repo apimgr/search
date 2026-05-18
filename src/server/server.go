@@ -742,9 +742,12 @@ func (s *Server) removePIDFile() {
 func (s *Server) setupRoutes() http.Handler {
 	mux := http.NewServeMux()
 
-	// Health check endpoints per AI.md PART 11/13
-	// Supports content negotiation: HTML (default), JSON (Accept: application/json), plain text (.txt)
-	// Note: /api/v1/healthz is registered by apiHandler.RegisterRoutes()
+	// Health check endpoints per AI.md PART 13
+	// Canonical frontend route: /server/healthz (content-negotiated HTML/JSON/text)
+	// Root alias: /healthz → /server/healthz (optional; treated as always-on here)
+	// Note: /api/v1/server/healthz and /api/v1/healthz are registered by apiHandler.RegisterRoutes()
+	mux.HandleFunc("/server/healthz", s.handleHealthz)
+	mux.HandleFunc("/server/healthz.txt", s.handleHealthz)
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	mux.HandleFunc("/healthz.txt", s.handleHealthz)
 	mux.HandleFunc("/readyz", s.handleReadyz)
@@ -896,7 +899,7 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 		{"/server/terms", "0.3", "monthly"},
 		{"/openapi", "0.4", "weekly"},
 		{"/graphql", "0.4", "weekly"},
-		{"/healthz", "0.2", "always"},
+		{"/server/healthz", "0.2", "always"},
 	}
 
 	// Add contact page if enabled
