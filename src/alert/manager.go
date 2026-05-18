@@ -45,9 +45,9 @@ var (
 )
 
 type Manager struct {
-	db         *sql.DB
-	cfg        *config.Config
-	aggregator *search.Aggregator
+	db           *sql.DB
+	serverConfig *config.Config
+	aggregator   *search.Aggregator
 	mailer     *email.Mailer
 	templates  *email.EmailTemplate
 	client     *http.Client
@@ -135,10 +135,10 @@ type Feed struct {
 	FeedURL string
 }
 
-func NewManager(db *sql.DB, cfg *config.Config, aggregator *search.Aggregator, mailer *email.Mailer) *Manager {
+func NewManager(db *sql.DB, serverConfig *config.Config, aggregator *search.Aggregator, mailer *email.Mailer) *Manager {
 	return &Manager{
-		db:         db,
-		cfg:        cfg,
+		db:           db,
+		serverConfig: serverConfig,
 		aggregator: aggregator,
 		mailer:     mailer,
 		templates:  email.NewEmailTemplate(),
@@ -158,7 +158,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateRespons
 	req.WebhookURL = strings.TrimSpace(req.WebhookURL)
 	req.BaseURL = strings.TrimRight(strings.TrimSpace(req.BaseURL), "/")
 	if req.BaseURL == "" {
-		req.BaseURL = strings.TrimRight(strings.TrimSpace(m.cfg.Server.BaseURL), "/")
+		req.BaseURL = strings.TrimRight(strings.TrimSpace(m.serverConfig.Server.BaseURL), "/")
 	}
 
 	if req.Query == "" {
@@ -217,11 +217,11 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateRespons
 		return nil, err
 	}
 
-	manageTokenEncrypted, err := encryptAlertToken(manageToken, m.cfg.Server.SecretKey)
+	manageTokenEncrypted, err := encryptAlertToken(manageToken, m.serverConfig.Server.SecretKey)
 	if err != nil {
 		return nil, fmt.Errorf("encrypt manage token: %w", err)
 	}
-	rssTokenEncrypted, err := encryptAlertToken(rssToken, m.cfg.Server.SecretKey)
+	rssTokenEncrypted, err := encryptAlertToken(rssToken, m.serverConfig.Server.SecretKey)
 	if err != nil {
 		return nil, fmt.Errorf("encrypt rss token: %w", err)
 	}
@@ -232,7 +232,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateRespons
 		if err != nil {
 			return nil, err
 		}
-		webhookSecretEncrypted, err = ssl.EncryptCredentials(map[string]string{"secret": secret}, m.cfg.Server.SecretKey)
+		webhookSecretEncrypted, err = ssl.EncryptCredentials(map[string]string{"secret": secret}, m.serverConfig.Server.SecretKey)
 		if err != nil {
 			return nil, fmt.Errorf("encrypt webhook secret: %w", err)
 		}
@@ -561,7 +561,7 @@ func (m *Manager) CleanupResults(ctx context.Context) error {
 	if m.db == nil {
 		return nil
 	}
-	retention := m.cfg.Search.Alerts.RetentionDays
+	retention := m.serverConfig.Search.Alerts.RetentionDays
 	if retention < 1 {
 		retention = 30
 	}
@@ -577,7 +577,7 @@ func (m *Manager) processAlert(ctx context.Context, alert *Alert) error {
 	query.Region = alert.Region
 	query.Engines = append([]string(nil), alert.Engines...)
 	query.SafeSearch = alert.SafeSearch
-	query.PerPage = normalizePerPage(m.cfg.Search.ResultsPerPage)
+	query.PerPage = normalizePerPage(m.serverConfig.Search.ResultsPerPage)
 
 	results, err := m.aggregator.Search(ctx, query)
 	if err != nil && !errors.Is(err, model.ErrNoResults) {
@@ -641,7 +641,7 @@ func (m *Manager) sendVerificationEmail(alert *Alert, verifyToken, manageToken s
 	verifyURL := alert.BaseURL + "/alerts/confirm?token=" + url.QueryEscape(verifyToken)
 	manageURL := alert.BaseURL + "/alerts/manage/" + manageToken
 	subject, body, err := m.templates.Render(email.TemplateEmailVerification, &email.EmailVerificationData{
-		TemplateData:     email.NewTemplateData(siteName(m.cfg), alert.BaseURL, m.cfg.Server.Email.From.Email),
+		TemplateData:     email.NewTemplateData(siteName(m.serverConfig), alert.BaseURL, m.serverConfig.Server.Email.From.Email),
 		Username:         "there",
 		Email:            alert.Email,
 		VerificationLink: verifyURL,
@@ -711,11 +711,11 @@ func (m *Manager) sendWebhook(ctx context.Context, alert *Alert, results []Alert
 	mac.Write(data)
 	signature := hex.EncodeToString(mac.Sum(nil))
 
-	retries := m.cfg.Search.Alerts.WebhookMaxRetries
+	retries := m.serverConfig.Search.Alerts.WebhookMaxRetries
 	if retries < 1 {
 		retries = 3
 	}
-	delay := time.Duration(m.cfg.Search.Alerts.WebhookRetryDelayMinutes)
+	delay := time.Duration(m.serverConfig.Search.Alerts.WebhookRetryDelayMinutes)
 	if delay < 1 {
 		delay = 5
 	}
@@ -744,7 +744,7 @@ func (m *Manager) sendWebhook(ctx context.Context, alert *Alert, results []Alert
 }
 
 func (m *Manager) enforceCreateRateLimit(ctx context.Context, ip string) error {
-	limit := m.cfg.Search.Alerts.CreateRateLimitPerHour
+	limit := m.serverConfig.Search.Alerts.CreateRateLimitPerHour
 	if limit < 1 || ip == "" {
 		return nil
 	}
@@ -885,7 +885,7 @@ func (m *Manager) webhookSecret(alert *Alert) (string, error) {
 	if err := m.db.QueryRow(`SELECT webhook_secret_encrypted FROM search_alerts WHERE id = ?`, alert.ID).Scan(&encrypted); err != nil {
 		return "", err
 	}
-	creds, err := ssl.DecryptCredentials(encrypted, m.cfg.Server.SecretKey)
+	creds, err := ssl.DecryptCredentials(encrypted, m.serverConfig.Server.SecretKey)
 	if err != nil {
 		return "", err
 	}
@@ -914,7 +914,7 @@ func (m *Manager) alertToken(ctx context.Context, alertID, column string) (strin
 	if err := m.db.QueryRowContext(ctx, query, alertID).Scan(&encrypted); err != nil {
 		return "", err
 	}
-	return decryptAlertToken(encrypted, m.cfg.Server.SecretKey)
+	return decryptAlertToken(encrypted, m.serverConfig.Server.SecretKey)
 }
 
 func scanAlert(scanner interface {
