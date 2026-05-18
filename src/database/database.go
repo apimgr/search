@@ -301,8 +301,8 @@ func (dm *DatabaseManager) IsClusterMode() bool {
 	return dm.serverDB.IsRemote()
 }
 
-// New creates a new database connection (legacy single-database mode for migration)
-func New(cfg *Config) (*DB, error) {
+// NewDB creates a new database connection (single-database mode for direct use)
+func NewDB(cfg *Config) (*DB, error) {
 	if cfg == nil {
 		cfg = DefaultConfig()
 	}

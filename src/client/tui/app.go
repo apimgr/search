@@ -177,8 +177,8 @@ func (m model) View() string {
 	return sb.String()
 }
 
-// Run starts the TUI application
-func Run(client *api.Client) error {
+// RunTUIApp starts the TUI application
+func RunTUIApp(client *api.Client) error {
 	p := tea.NewProgram(initialModel(client), tea.WithAltScreen())
 	_, err := p.Run()
 	return err

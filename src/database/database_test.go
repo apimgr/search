@@ -190,14 +190,14 @@ func TestNew(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
 	if db == nil {
-		t.Fatal("New() returned nil")
+		t.Fatal("NewDB() returned nil")
 	}
 	if !db.IsReady() {
 		t.Error("IsReady() should return true")
@@ -212,9 +212,9 @@ func TestNewWithDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.DSN = dbPath
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -232,9 +232,9 @@ func TestDBDriver(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -252,9 +252,9 @@ func TestDBIsRemote(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -272,9 +272,9 @@ func TestDBSQL(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -293,9 +293,9 @@ func TestDBExec(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -331,9 +331,9 @@ func TestDBQuery(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -377,9 +377,9 @@ func TestDBQueryRow(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -410,9 +410,9 @@ func TestDBBegin(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -459,9 +459,9 @@ func TestDBPing(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -527,9 +527,9 @@ func TestDBClose(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 
 	if err := db.Close(); err != nil {
@@ -555,9 +555,9 @@ func TestNewUnsupportedDriver(t *testing.T) {
 		DSN:    "/tmp/test.db",
 	}
 
-	_, err := New(cfg)
+	_, err := NewDB(cfg)
 	if err == nil {
-		t.Error("New() should error for unsupported driver")
+		t.Error("NewDB() should error for unsupported driver")
 	}
 }
 
@@ -680,9 +680,9 @@ func TestDBContextTimeout(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -953,9 +953,9 @@ func TestNewMigrator(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -980,9 +980,9 @@ func TestMigratorRegister(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -1017,9 +1017,9 @@ func TestMigratorMigrate(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -1049,9 +1049,9 @@ func TestMigratorGetVersion(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -2268,9 +2268,9 @@ func TestNewMigrationManager(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -2309,9 +2309,9 @@ func TestMigrationManagerMigrateToRemoteTargetNotReady(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -2337,9 +2337,9 @@ func TestMigrationManagerBackupBeforeMigration(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 
 	// Create a test table to have some data
@@ -2352,9 +2352,9 @@ func TestMigrationManagerBackupBeforeMigration(t *testing.T) {
 	db.Close()
 
 	// Now create a new connection and backup
-	db2, err := New(cfg)
+	db2, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db2.Close()
 
@@ -2396,9 +2396,9 @@ func TestMigrationManagerConvertSchema(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -2459,9 +2459,9 @@ func TestNewRepository(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -2664,9 +2664,9 @@ func TestRepositoryWithMigrations(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -2767,9 +2767,9 @@ func TestRepositoryAdminSessions(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -2864,9 +2864,9 @@ func TestRepositoryAPITokens(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -2963,9 +2963,9 @@ func TestRepositorySearchStats(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -3019,9 +3019,9 @@ func TestRepositoryBlockedIPs(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -3099,9 +3099,9 @@ func TestRepositoryAuditLog(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -3174,9 +3174,9 @@ func TestMigratorRollback(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -3253,9 +3253,9 @@ func TestMigratorRollbackNoMigrations(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -3282,9 +3282,9 @@ func TestMigratorRollbackMigrationNotFound(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -3583,9 +3583,9 @@ func TestDBIsReadyAfterClose(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 
 	// Should be ready before close
@@ -3688,9 +3688,9 @@ func TestMigrationManagerGetSourceTables(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -3731,9 +3731,9 @@ func TestMigrationManagerGetTableSchema(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -3769,9 +3769,9 @@ func TestMigrationManagerCountRows(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -3813,9 +3813,9 @@ func TestMigrationManagerGetTableColumns(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -3863,9 +3863,9 @@ func TestDBConcurrentAccess(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -3949,9 +3949,9 @@ func TestClusterManagerClusterModeOperations(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -4080,9 +4080,9 @@ func TestClusterManagerTransferPrimary(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -4165,9 +4165,9 @@ func TestClusterManagerLeaveClusterInClusterMode(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -4231,9 +4231,9 @@ func TestClusterManagerGenerateJoinTokenInClusterMode(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -4311,15 +4311,15 @@ func TestDatabaseManagerPingWithClosedDB(t *testing.T) {
 }
 
 func TestNewWithNilConfig(t *testing.T) {
-	// New(nil) uses DefaultConfig() which provides default values
+	// NewDB(nil) uses DefaultConfig() which provides default values
 	// The call will fail due to invalid default path, not nil config
-	_, err := New(nil)
+	_, err := NewDB(nil)
 	// An error is expected because the default DataDir is not writable
 	// or the path doesn't exist - but this tests nil config handling
 	if err == nil {
 		// If no error, it means the default path was valid (e.g., in container)
 		// This is acceptable behavior
-		t.Log("New(nil) succeeded with default config")
+		t.Log("NewDB(nil) succeeded with default config")
 	}
 }
 
@@ -4332,9 +4332,9 @@ func TestDBTransactionRollback(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -4441,9 +4441,9 @@ func TestRepositoryNilUserID(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -4494,9 +4494,9 @@ func TestMigrationManagerMigrateToRemoteWithNotReadyTarget(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -4788,9 +4788,9 @@ func TestConvertSchemaVariants(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -4836,9 +4836,9 @@ func TestMigratorRegisterAppends(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 
@@ -5103,9 +5103,9 @@ func TestRepositoryCreateAndGet(t *testing.T) {
 		DSN:    dbPath,
 	}
 
-	db, err := New(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		t.Fatalf("NewDB() error = %v", err)
 	}
 	defer db.Close()
 

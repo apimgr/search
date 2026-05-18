@@ -132,10 +132,10 @@ func TestTaskInfoStruct(t *testing.T) {
 }
 
 func TestNew(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	if s == nil {
-		t.Fatal("New() returned nil")
+		t.Fatal("NewScheduler() returned nil")
 	}
 	if s.nodeID != "node1" {
 		t.Errorf("nodeID = %q, want %q", s.nodeID, "node1")
@@ -152,7 +152,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestSchedulerSetTimezone(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	err := s.SetTimezone("UTC")
 	if err != nil {
@@ -171,7 +171,7 @@ func TestSchedulerSetTimezone(t *testing.T) {
 }
 
 func TestSchedulerSetCatchUpWindow(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	s.SetCatchUpWindow(2 * time.Hour)
 
@@ -184,7 +184,7 @@ func TestSchedulerSetCatchUpWindow(t *testing.T) {
 }
 
 func TestSchedulerSetNotifyFunc(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	var notified bool
 	s.SetNotifyFunc(func(n *TaskFailureNotification) {
@@ -203,7 +203,7 @@ func TestSchedulerSetNotifyFunc(t *testing.T) {
 }
 
 func TestSchedulerRegister(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	task := &Task{
 		ID:       "test.task",
@@ -230,7 +230,7 @@ func TestSchedulerRegister(t *testing.T) {
 }
 
 func TestSchedulerRegisterMissingID(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	task := &Task{
 		Name:     "Test",
@@ -245,7 +245,7 @@ func TestSchedulerRegisterMissingID(t *testing.T) {
 }
 
 func TestSchedulerRegisterMissingSchedule(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	task := &Task{
 		ID:   "test.task",
@@ -260,7 +260,7 @@ func TestSchedulerRegisterMissingSchedule(t *testing.T) {
 }
 
 func TestSchedulerRegisterMissingRun(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	task := &Task{
 		ID:       "test.task",
@@ -275,7 +275,7 @@ func TestSchedulerRegisterMissingRun(t *testing.T) {
 }
 
 func TestSchedulerStartStop(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	s.Start()
 
@@ -291,7 +291,7 @@ func TestSchedulerStartStop(t *testing.T) {
 }
 
 func TestSchedulerStartTwice(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	s.Start()
 	// Should be no-op
@@ -305,7 +305,7 @@ func TestSchedulerStartTwice(t *testing.T) {
 }
 
 func TestSchedulerStopTwice(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	s.Start()
 	s.Stop()
@@ -318,7 +318,7 @@ func TestSchedulerStopTwice(t *testing.T) {
 }
 
 func TestSchedulerStopWithoutStart(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	// Stop without start - should be no-op
 	s.Stop()
@@ -329,7 +329,7 @@ func TestSchedulerStopWithoutStart(t *testing.T) {
 }
 
 func TestSchedulerEnable(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	task := &Task{
 		ID:        "test.task",
@@ -354,7 +354,7 @@ func TestSchedulerEnable(t *testing.T) {
 }
 
 func TestSchedulerEnableNotSkippable(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	task := &Task{
 		ID:        "test.task",
@@ -372,7 +372,7 @@ func TestSchedulerEnableNotSkippable(t *testing.T) {
 }
 
 func TestSchedulerEnableNotFound(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	err := s.Enable("nonexistent")
 	if err == nil {
@@ -381,7 +381,7 @@ func TestSchedulerEnableNotFound(t *testing.T) {
 }
 
 func TestSchedulerDisable(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	task := &Task{
 		ID:        "test.task",
@@ -403,7 +403,7 @@ func TestSchedulerDisable(t *testing.T) {
 }
 
 func TestSchedulerDisableNotSkippable(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	task := &Task{
 		ID:        "test.task",
@@ -421,7 +421,7 @@ func TestSchedulerDisableNotSkippable(t *testing.T) {
 }
 
 func TestSchedulerDisableNotFound(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	err := s.Disable("nonexistent")
 	if err == nil {
@@ -430,7 +430,7 @@ func TestSchedulerDisableNotFound(t *testing.T) {
 }
 
 func TestSchedulerGetTasks(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	task1 := &Task{ID: "task1", Name: "Task 1", Schedule: "@every 1h", Run: func(ctx context.Context) error { return nil }}
 	task2 := &Task{ID: "task2", Name: "Task 2", Schedule: "@every 2h", Run: func(ctx context.Context) error { return nil }}
@@ -446,7 +446,7 @@ func TestSchedulerGetTasks(t *testing.T) {
 }
 
 func TestSchedulerGetTasksWithDefaultMaxRetries(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	// Task with no MaxRetries set (should default to 3)
 	task := &Task{
@@ -468,7 +468,7 @@ func TestSchedulerGetTasksWithDefaultMaxRetries(t *testing.T) {
 }
 
 func TestSchedulerGetTask(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	task := &Task{
 		ID:       "test.task",
@@ -492,7 +492,7 @@ func TestSchedulerGetTask(t *testing.T) {
 }
 
 func TestSchedulerGetTaskWithDefaultMaxRetries(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	// Task with no MaxRetries set
 	task := &Task{
@@ -514,7 +514,7 @@ func TestSchedulerGetTaskWithDefaultMaxRetries(t *testing.T) {
 }
 
 func TestSchedulerGetTaskNotFound(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	_, err := s.GetTask("nonexistent")
 	if err == nil {
@@ -523,7 +523,7 @@ func TestSchedulerGetTaskNotFound(t *testing.T) {
 }
 
 func TestSchedulerRunNow(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	ran := make(chan bool, 1)
 	task := &Task{
@@ -555,7 +555,7 @@ func TestSchedulerRunNow(t *testing.T) {
 }
 
 func TestSchedulerRunNowNotFound(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	err := s.RunNow("nonexistent")
 	if err == nil {
@@ -564,7 +564,7 @@ func TestSchedulerRunNowNotFound(t *testing.T) {
 }
 
 func TestCalculateNextRunEveryInterval(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 	s.SetTimezone("UTC")
 
 	tests := []struct {
@@ -593,7 +593,7 @@ func TestCalculateNextRunEveryInterval(t *testing.T) {
 }
 
 func TestCalculateNextRunEveryInvalidInterval(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 	s.SetTimezone("UTC")
 
 	// Invalid duration should fall back to 1 hour
@@ -608,7 +608,7 @@ func TestCalculateNextRunEveryInvalidInterval(t *testing.T) {
 }
 
 func TestCalculateNextRunPredefined(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 	s.SetTimezone("UTC")
 
 	now := time.Now()
@@ -642,7 +642,7 @@ func TestCalculateNextRunPredefined(t *testing.T) {
 }
 
 func TestCalculateNextRunWeeklyOnSunday(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 	loc, _ := time.LoadLocation("UTC")
 	s.timezone = loc
 
@@ -665,7 +665,7 @@ func TestCalculateNextRunWeeklyOnSunday(t *testing.T) {
 }
 
 func TestCalculateNextRunCron(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 	s.SetTimezone("UTC")
 
 	// Simple cron expressions
@@ -689,7 +689,7 @@ func TestCalculateNextRunCron(t *testing.T) {
 }
 
 func TestCalculateNextRunCronInvalid(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 	s.SetTimezone("UTC")
 
 	// Invalid cron should fall back to 1 hour
@@ -927,7 +927,7 @@ func TestTaskHandlersStruct(t *testing.T) {
 }
 
 func TestRegisterBuiltinTasks(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	handlers := &TaskHandlers{
 		SSLRenewal:      func(ctx context.Context) error { return nil },
@@ -954,7 +954,7 @@ func TestRegisterBuiltinTasks(t *testing.T) {
 }
 
 func TestRegisterBuiltinTasksAllHandlers(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	handlers := &TaskHandlers{
 		SSLRenewal:       func(ctx context.Context) error { return nil },
@@ -989,7 +989,7 @@ func TestRegisterBuiltinTasksAllHandlers(t *testing.T) {
 }
 
 func TestRegisterBuiltinTasksNilHandlers(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	// Register with all nil handlers - should not crash
 	handlers := &TaskHandlers{}
@@ -1046,7 +1046,7 @@ func TestTaskStateStruct(t *testing.T) {
 }
 
 func TestSchedulerTaskRetry(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	var attempts int32
 	task := &Task{
@@ -1083,7 +1083,7 @@ func TestSchedulerTaskRetry(t *testing.T) {
 }
 
 func TestSchedulerTaskRetryWithDefaultValues(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	var attempts int32
 	task := &Task{
@@ -1115,7 +1115,7 @@ func TestSchedulerTaskRetryWithDefaultValues(t *testing.T) {
 }
 
 func TestSchedulerTaskFailureNotification(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	var notificationReceived bool
 	var mu sync.Mutex
@@ -1156,7 +1156,7 @@ func TestSchedulerTaskFailureNotification(t *testing.T) {
 }
 
 func TestSchedulerCheckAndRunTasks(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	ran := make(chan bool, 1)
 	task := &Task{
@@ -1195,7 +1195,7 @@ func TestSchedulerCheckAndRunTasks(t *testing.T) {
 }
 
 func TestSchedulerRunTaskContextCancellation(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	taskStarted := make(chan bool, 1)
 	task := &Task{
@@ -1228,7 +1228,7 @@ func TestSchedulerRunTaskContextCancellation(t *testing.T) {
 }
 
 func TestSchedulerRunStartupTasks(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	ran := make(chan bool, 1)
 	task := &Task{
@@ -1268,7 +1268,7 @@ func TestSchedulerCatchUpMissedTasks(t *testing.T) {
 	}
 	defer db.Close()
 
-	s := New(db, "node1")
+	s := NewScheduler(db, "node1")
 	s.SetCatchUpWindow(2 * time.Hour)
 
 	ran := make(chan bool, 1)
@@ -1308,7 +1308,7 @@ func TestSchedulerCatchUpMissedTasks(t *testing.T) {
 }
 
 func TestSchedulerCatchUpMissedTasksNoDatabase(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	// This should not panic
 	s.catchUpMissedTasks()
@@ -1321,7 +1321,7 @@ func TestSchedulerCatchUpMissedTasksDisabledTask(t *testing.T) {
 	}
 	defer db.Close()
 
-	s := New(db, "node1")
+	s := NewScheduler(db, "node1")
 	s.SetCatchUpWindow(2 * time.Hour)
 
 	task := &Task{
@@ -1363,7 +1363,7 @@ func TestSchedulerWithDatabase(t *testing.T) {
 	}
 	defer db.Close()
 
-	s := New(db, "node1")
+	s := NewScheduler(db, "node1")
 
 	task := &Task{
 		ID:        "db.test",
@@ -1405,7 +1405,7 @@ func TestSchedulerLoadTaskState(t *testing.T) {
 	defer db.Close()
 
 	// First scheduler - create and save state
-	s1 := New(db, "node1")
+	s1 := NewScheduler(db, "node1")
 
 	task := &Task{
 		ID:        "persist.test",
@@ -1425,7 +1425,7 @@ func TestSchedulerLoadTaskState(t *testing.T) {
 	s1.Stop()
 
 	// Second scheduler - should load persisted state
-	s2 := New(db, "node1")
+	s2 := NewScheduler(db, "node1")
 
 	task2 := &Task{
 		ID:        "persist.test",
@@ -1452,7 +1452,7 @@ func TestSchedulerLoadTaskStateNonSkippable(t *testing.T) {
 	}
 	defer db.Close()
 
-	s := New(db, "node1")
+	s := NewScheduler(db, "node1")
 
 	// First register and run a skippable task to create DB state
 	task := &Task{
@@ -1470,7 +1470,7 @@ func TestSchedulerLoadTaskStateNonSkippable(t *testing.T) {
 	s.Stop()
 
 	// Second scheduler with non-skippable version
-	s2 := New(db, "node1")
+	s2 := NewScheduler(db, "node1")
 
 	task2 := &Task{
 		ID:       "nonskip.test",
@@ -1498,7 +1498,7 @@ func TestSchedulerSaveTaskStateWithNextRetry(t *testing.T) {
 	}
 	defer db.Close()
 
-	s := New(db, "node1")
+	s := NewScheduler(db, "node1")
 	s.Start()
 
 	task := &Task{
@@ -1529,7 +1529,7 @@ func TestSchedulerGlobalTaskWithLocking(t *testing.T) {
 	}
 	defer db.Close()
 
-	s := New(db, "node1")
+	s := NewScheduler(db, "node1")
 
 	ran := make(chan bool, 1)
 	task := &Task{
@@ -1570,7 +1570,7 @@ func TestSchedulerAcquireReleaseLock(t *testing.T) {
 	}
 	defer db.Close()
 
-	s := New(db, "node1")
+	s := NewScheduler(db, "node1")
 	s.Start()
 
 	task := &Task{
@@ -1603,7 +1603,7 @@ func TestSchedulerLockTakeoverExpired(t *testing.T) {
 	defer db.Close()
 
 	// First node
-	s1 := New(db, "node1")
+	s1 := NewScheduler(db, "node1")
 	s1.Start()
 
 	task := &Task{
@@ -1626,7 +1626,7 @@ func TestSchedulerLockTakeoverExpired(t *testing.T) {
 	s1.Stop()
 
 	// Second node should be able to take over expired lock
-	s2 := New(db, "node2")
+	s2 := NewScheduler(db, "node2")
 	s2.Start()
 
 	task2 := &Task{
@@ -1654,7 +1654,7 @@ func TestSchedulerReacquireOwnLock(t *testing.T) {
 	}
 	defer db.Close()
 
-	s := New(db, "node1")
+	s := NewScheduler(db, "node1")
 	s.Start()
 
 	task := &Task{
@@ -1683,7 +1683,7 @@ func TestSchedulerReacquireOwnLock(t *testing.T) {
 }
 
 func TestSchedulerRunLoop(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	ran := make(chan bool, 10)
 	task := &Task{
@@ -1729,7 +1729,7 @@ func TestSchedulerRunLoop(t *testing.T) {
 }
 
 func TestSchedulerTaskRetryAllExhausted(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	var attempts int32
 	var notificationReceived bool
@@ -1778,7 +1778,7 @@ func TestSchedulerTaskRetryAllExhausted(t *testing.T) {
 }
 
 func TestSchedulerTaskSuccessNoNotification(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	notificationReceived := false
 	s.SetNotifyFunc(func(n *TaskFailureNotification) {
@@ -1848,7 +1848,7 @@ func TestSchedulerInitDatabaseMigration(t *testing.T) {
 	}
 
 	// Create scheduler - should migrate schema
-	s := New(db, "node1")
+	s := NewScheduler(db, "node1")
 	s.Start()
 	s.Stop()
 
@@ -1862,7 +1862,7 @@ func TestSchedulerInitDatabaseMigration(t *testing.T) {
 // Edge cases and error handling
 
 func TestSchedulerIsRunningConcurrent(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	var wg sync.WaitGroup
 	for i := 0; i < 10; i++ {
@@ -1881,7 +1881,7 @@ func TestSchedulerIsRunningConcurrent(t *testing.T) {
 }
 
 func TestSchedulerConcurrentOperations(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	var wg sync.WaitGroup
 
@@ -1924,7 +1924,7 @@ func TestSchedulerLoadTaskStateWithFutureNextRun(t *testing.T) {
 	}
 	defer db.Close()
 
-	s := New(db, "node1")
+	s := NewScheduler(db, "node1")
 	s.Start()
 
 	task := &Task{
@@ -1948,7 +1948,7 @@ func TestSchedulerLoadTaskStateWithFutureNextRun(t *testing.T) {
 	s.Stop()
 
 	// New scheduler should load the future next_run
-	s2 := New(db, "node1")
+	s2 := NewScheduler(db, "node1")
 
 	task2 := &Task{
 		ID:        "future.test",
@@ -1974,7 +1974,7 @@ func TestSchedulerLoadTaskStateWithPastNextRun(t *testing.T) {
 	}
 	defer db.Close()
 
-	s := New(db, "node1")
+	s := NewScheduler(db, "node1")
 	s.Start()
 
 	task := &Task{
@@ -1998,7 +1998,7 @@ func TestSchedulerLoadTaskStateWithPastNextRun(t *testing.T) {
 	s.Stop()
 
 	// New scheduler should recalculate next_run (not use past time)
-	s2 := New(db, "node1")
+	s2 := NewScheduler(db, "node1")
 
 	task2 := &Task{
 		ID:        "past.test",
@@ -2025,7 +2025,7 @@ func TestSchedulerLoadTaskStateWithAllFields(t *testing.T) {
 	}
 	defer db.Close()
 
-	s := New(db, "node1")
+	s := NewScheduler(db, "node1")
 	s.Start()
 
 	task := &Task{
@@ -2054,7 +2054,7 @@ func TestSchedulerLoadTaskStateWithAllFields(t *testing.T) {
 	s.Stop()
 
 	// New scheduler should load all fields
-	s2 := New(db, "node1")
+	s2 := NewScheduler(db, "node1")
 
 	task2 := &Task{
 		ID:        "allfields.test",
@@ -2086,7 +2086,7 @@ func TestSchedulerLoadTaskStateWithAllFields(t *testing.T) {
 }
 
 func TestSchedulerCheckAndRunTasksNoDueTasks(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	task := &Task{
 		ID:       "future.task",
@@ -2113,7 +2113,7 @@ func TestSchedulerCheckAndRunTasksNoDueTasks(t *testing.T) {
 }
 
 func TestSchedulerCheckAndRunTasksDisabledTask(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	task := &Task{
 		ID:        "disabled.task",
@@ -2144,7 +2144,7 @@ func TestSchedulerCheckAndRunTasksDisabledTask(t *testing.T) {
 }
 
 func TestSchedulerRunStartupTasksDisabled(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	task := &Task{
 		ID:         "startup.disabled",
@@ -2169,7 +2169,7 @@ func TestSchedulerRunStartupTasksDisabled(t *testing.T) {
 }
 
 func TestSchedulerRunStartupTasksNoRunOnStart(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 
 	task := &Task{
 		ID:         "startup.false",

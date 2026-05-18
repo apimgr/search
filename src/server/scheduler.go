@@ -18,7 +18,7 @@ import (
 func (s *Server) initScheduler(db *sql.DB) {
 	// Standalone node ID (single-node mode)
 	nodeID := "standalone"
-	sched := scheduler.New(db, nodeID)
+	sched := scheduler.NewScheduler(db, nodeID)
 
 	// Configure timezone
 	if tz := s.config.Server.Scheduler.Timezone; tz != "" {

@@ -156,9 +156,9 @@ type Scheduler struct {
 	notifyFunc NotifyFunc
 }
 
-// New creates a new scheduler
+// NewScheduler creates a new scheduler
 // Per AI.md PART 19: Scheduler is ALWAYS RUNNING
-func New(db *sql.DB, nodeID string) *Scheduler {
+func NewScheduler(db *sql.DB, nodeID string) *Scheduler {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Default to America/New_York per spec

@@ -107,8 +107,9 @@ $RECYCLE.BIN/
 binaries/
 releases/
 
-# Go build cache (should never be committed)
+# Go build cache and XDG runtime dirs (should never be committed)
 .cache/
+.local/
 
 # Runtime volume data (NEVER commit) - per AI.md PART 27
 volumes/

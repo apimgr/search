@@ -9,7 +9,7 @@ import (
 // NewAdminAdapter tests
 
 func TestNewAdminAdapter(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 	adapter := NewAdminAdapter(s)
 
 	if adapter == nil {
@@ -34,7 +34,7 @@ func TestNewAdminAdapterNilScheduler(t *testing.T) {
 // IsRunning tests
 
 func TestAdminAdapterIsRunning(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 	adapter := NewAdminAdapter(s)
 
 	if adapter.IsRunning() {
@@ -65,7 +65,7 @@ func TestAdminAdapterIsRunningNilScheduler(t *testing.T) {
 // GetTasks tests
 
 func TestAdminAdapterGetTasks(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 	adapter := NewAdminAdapter(s)
 
 	task := &Task{
@@ -113,7 +113,7 @@ func TestAdminAdapterGetTasksNilScheduler(t *testing.T) {
 }
 
 func TestAdminAdapterGetTasksEmpty(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 	adapter := NewAdminAdapter(s)
 
 	tasks := adapter.GetTasks()
@@ -124,7 +124,7 @@ func TestAdminAdapterGetTasksEmpty(t *testing.T) {
 }
 
 func TestAdminAdapterGetTasksMultiple(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 	adapter := NewAdminAdapter(s)
 
 	task1 := &Task{
@@ -151,7 +151,7 @@ func TestAdminAdapterGetTasksMultiple(t *testing.T) {
 }
 
 func TestAdminAdapterGetTasksAllFields(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 	adapter := NewAdminAdapter(s)
 
 	task := &Task{
@@ -200,7 +200,7 @@ func TestAdminAdapterGetTasksAllFields(t *testing.T) {
 // GetTask tests
 
 func TestAdminAdapterGetTask(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 	adapter := NewAdminAdapter(s)
 
 	task := &Task{
@@ -246,7 +246,7 @@ func TestAdminAdapterGetTaskNilScheduler(t *testing.T) {
 }
 
 func TestAdminAdapterGetTaskNotFound(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 	adapter := NewAdminAdapter(s)
 
 	_, err := adapter.GetTask("nonexistent")
@@ -256,7 +256,7 @@ func TestAdminAdapterGetTaskNotFound(t *testing.T) {
 }
 
 func TestAdminAdapterGetTaskAllFields(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 	adapter := NewAdminAdapter(s)
 
 	task := &Task{
@@ -300,7 +300,7 @@ func TestAdminAdapterGetTaskAllFields(t *testing.T) {
 // Enable tests
 
 func TestAdminAdapterEnable(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 	adapter := NewAdminAdapter(s)
 
 	task := &Task{
@@ -337,7 +337,7 @@ func TestAdminAdapterEnableNilScheduler(t *testing.T) {
 }
 
 func TestAdminAdapterEnableNotFound(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 	adapter := NewAdminAdapter(s)
 
 	err := adapter.Enable("nonexistent")
@@ -347,7 +347,7 @@ func TestAdminAdapterEnableNotFound(t *testing.T) {
 }
 
 func TestAdminAdapterEnableNotSkippable(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 	adapter := NewAdminAdapter(s)
 
 	task := &Task{
@@ -368,7 +368,7 @@ func TestAdminAdapterEnableNotSkippable(t *testing.T) {
 // Disable tests
 
 func TestAdminAdapterDisable(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 	adapter := NewAdminAdapter(s)
 
 	task := &Task{
@@ -402,7 +402,7 @@ func TestAdminAdapterDisableNilScheduler(t *testing.T) {
 }
 
 func TestAdminAdapterDisableNotFound(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 	adapter := NewAdminAdapter(s)
 
 	err := adapter.Disable("nonexistent")
@@ -412,7 +412,7 @@ func TestAdminAdapterDisableNotFound(t *testing.T) {
 }
 
 func TestAdminAdapterDisableNotSkippable(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 	adapter := NewAdminAdapter(s)
 
 	task := &Task{
@@ -433,7 +433,7 @@ func TestAdminAdapterDisableNotSkippable(t *testing.T) {
 // RunNow tests
 
 func TestAdminAdapterRunNow(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 	adapter := NewAdminAdapter(s)
 
 	ran := make(chan bool, 1)
@@ -475,7 +475,7 @@ func TestAdminAdapterRunNowNilScheduler(t *testing.T) {
 }
 
 func TestAdminAdapterRunNowNotFound(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 	adapter := NewAdminAdapter(s)
 
 	err := adapter.RunNow("nonexistent")
@@ -487,7 +487,7 @@ func TestAdminAdapterRunNowNotFound(t *testing.T) {
 // Integration tests
 
 func TestAdminAdapterFullWorkflow(t *testing.T) {
-	s := New(nil, "node1")
+	s := NewScheduler(nil, "node1")
 	adapter := NewAdminAdapter(s)
 
 	// Register task

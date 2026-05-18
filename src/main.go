@@ -411,7 +411,7 @@ func runServer() {
 	})
 
 	// Create server
-	srv := server.New(cfg)
+	srv := server.NewServer(cfg)
 
 	// Setup signal handling per AI.md PART 7
 	// Uses platform-dependent signal handling via src/signal package

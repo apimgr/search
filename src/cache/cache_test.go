@@ -566,13 +566,13 @@ func TestNewCacheWithConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cache, err := New(tt.cfg)
+			cache, err := NewCache(tt.cfg)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("New() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("NewCache() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if cache == nil && !tt.wantErr {
-				t.Error("New() returned nil cache")
+				t.Error("NewCache() returned nil cache")
 				return
 			}
 			if cache != nil {
@@ -591,7 +591,7 @@ func TestNewCacheRedisTypeFails(t *testing.T) {
 		Port: 16379,
 	}
 
-	cache, err := New(cfg)
+	cache, err := NewCache(cfg)
 	if err == nil {
 		if cache != nil {
 			cache.Close()
@@ -613,7 +613,7 @@ func TestNewCacheValkeyTypeFails(t *testing.T) {
 		Port: 16379,
 	}
 
-	cache, err := New(cfg)
+	cache, err := NewCache(cfg)
 	if err == nil {
 		if cache != nil {
 			cache.Close()
@@ -1043,9 +1043,9 @@ func TestCacheInterface(t *testing.T) {
 }
 
 func TestNewCacheNilReturnsDefault(t *testing.T) {
-	cache, err := New(nil)
+	cache, err := NewCache(nil)
 	if err != nil {
-		t.Fatalf("New(nil) error: %v", err)
+		t.Fatalf("NewCache(nil) error: %v", err)
 	}
 	defer cache.Close()
 

@@ -715,7 +715,7 @@ func setupTestDB(t *testing.T) *database.DB {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
 
-	db, err := database.New(&database.Config{Driver: "sqlite", DSN: dbPath})
+	db, err := database.NewDB(&database.Config{Driver: "sqlite", DSN: dbPath})
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}

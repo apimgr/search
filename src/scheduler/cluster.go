@@ -54,7 +54,7 @@ func NewClusterScheduler(db *sql.DB, nodeID string) (*ClusterScheduler, error) {
 	}
 
 	cs := &ClusterScheduler{
-		Scheduler:  New(db, nodeID),
+		Scheduler:  NewScheduler(db, nodeID),
 		db:         db,
 		nodeID:     nodeID,
 		hostname:   hostname,

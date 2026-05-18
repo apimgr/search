@@ -88,8 +88,8 @@ func DefaultConfig() *Config {
 	}
 }
 
-// New creates a new cache based on configuration
-func New(cfg *Config) (Cache, error) {
+// NewCache creates a new cache based on configuration
+func NewCache(cfg *Config) (Cache, error) {
 	if cfg == nil {
 		cfg = DefaultConfig()
 	}

@@ -104,8 +104,8 @@ func (a *registryAdapter) GetAll() []interface{} {
 	return result
 }
 
-// New creates a new server instance
-func New(cfg *config.Config) *Server {
+// NewServer creates a new server instance
+func NewServer(cfg *config.Config) *Server {
 	// Create logging manager
 	logDir := config.GetLogDir()
 	logMgr := logging.NewManager(logDir)

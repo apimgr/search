@@ -77,7 +77,7 @@ func runTUI() error {
 	if err := initClient(); err != nil {
 		return fmt.Errorf("failed to initialize client: %w", err)
 	}
-	return tui.Run(apiClient)
+	return tui.RunTUIApp(apiClient)
 }
 
 // runSearch performs a search with the given query

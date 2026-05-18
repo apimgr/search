@@ -506,13 +506,13 @@ func TestModelViewWithError(t *testing.T) {
 	}
 }
 
-// Tests for Run function (note: can't fully test interactive TUI)
+// Tests for RunTUIApp function (note: can't fully test interactive TUI)
 
 func TestRunFunctionExists(t *testing.T) {
-	// Just verify the Run function exists and has correct signature
-	var runFunc func(*api.Client) error = Run
+	// Just verify the RunTUIApp function exists and has correct signature
+	var runFunc func(*api.Client) error = RunTUIApp
 	if runFunc == nil {
-		t.Error("Run function should exist")
+		t.Error("RunTUIApp function should exist")
 	}
 }
 
