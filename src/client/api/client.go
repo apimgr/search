@@ -97,8 +97,8 @@ type HealthResponse struct {
 
 // BuildInfo represents build information
 type BuildInfo struct {
-	CommitID  string `json:"commit_id"`
-	BuildDate string `json:"build_date"`
+	Commit string `json:"commit"`
+	Date   string `json:"date"`
 }
 
 // NodeInfo represents node information

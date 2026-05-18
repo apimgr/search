@@ -271,16 +271,13 @@ type ClusterInfo struct {
 	Role string `json:"role,omitempty"`
 }
 
-// FeaturesInfo represents feature status per AI.md PART 13 (line 16269-16288)
+// FeaturesInfo represents PUBLIC feature status per AI.md PART 13.
+// Only non-optional features are listed; optional features absent until implemented.
 type FeaturesInfo struct {
 	// PART 32: Tor Hidden Service
 	Tor TorInfo `json:"tor"`
 	// PART 20: GeoIP enabled
 	GeoIP bool `json:"geoip"`
-	// PART 34: Multi-user mode
-	MultiUser bool `json:"multi_user,omitempty"`
-	// PART 35: Organizations
-	Organizations bool `json:"organizations,omitempty"`
 }
 
 // TorInfo represents Tor status per AI.md PART 13 (line 16290-16296)
@@ -477,9 +474,6 @@ func (h *Handler) handleHealthz(w http.ResponseWriter, r *http.Request) {
 				Hostname: torHostname,
 			},
 			GeoIP: h.config.Server.GeoIP.Enabled,
-			// PART 34 (regular users) and PART 35 (organizations) are not implemented for this project.
-			MultiUser:     false,
-			Organizations: false,
 		},
 		// 7. Checks per spec line 16298-16308
 		Checks: ChecksInfo{

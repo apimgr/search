@@ -220,142 +220,115 @@ func (s *Server) handleAPIHealthz(w http.ResponseWriter, r *http.Request) {
 	s.respondHealthJSON(w, health)
 }
 
-// buildHealthInfo constructs the health information per AI.md PART 13
-func (s *Server) buildHealthInfo() *HealthInfo {
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-
-	hostname, _ := getHostname()
-
+// buildHealthInfo constructs the HealthResponse per AI.md PART 13.
+// Field order matches canonical spec: project, status, version, build, runtime,
+// cluster, features, checks, stats.
+func (s *Server) buildHealthInfo() *HealthResponse {
 	// Per AI.md PART 13: Build Tor feature status
-	torFeature := &TorFeature{
+	torInfo := TorInfo{
 		Enabled:  s.config.Server.Tor.Enabled,
 		Running:  s.torService != nil && s.torService.IsRunning(),
 		Status:   "",
 		Hostname: "",
 	}
-	if torFeature.Running {
-		torFeature.Status = "healthy"
+	if torInfo.Running {
+		torInfo.Status = "healthy"
 		if s.torService != nil {
-			torFeature.Hostname = s.torService.GetOnionAddress()
+			torInfo.Hostname = s.torService.GetOnionAddress()
 		}
-	} else if torFeature.Enabled {
-		torFeature.Status = "unavailable"
+	} else if torInfo.Enabled {
+		torInfo.Status = "unavailable"
 	}
 
-	health := &HealthInfo{
-		// Per AI.md PART 13: project fields from cfg.Branding per spec line 16324-16326
-		Project: &ProjectInfo{
-			Name:        s.config.Server.Branding.Title,
-			Tagline:     s.config.Server.Branding.Tagline,
-			Description: s.config.Server.Branding.Description,
-		},
-		Status:    "healthy",
-		Version:   getVersion(),
-		GoVersion: runtime.Version(),
-		Mode:      s.config.Server.Mode,
-		Uptime:    formatDuration(time.Since(s.startTime)),
-		Timestamp: time.Now().UTC().Format(time.RFC3339),
-		// Per AI.md PART 13: build.commit and build.date (not commit_id/build_date)
-		Build: &BuildInfo{
-			Commit: config.CommitID,
-			Date:   config.BuildDate,
-		},
-		Node: &NodeInfo{
-			ID:       "standalone",
-			Hostname: hostname,
-		},
-		// Per AI.md PART 13: cluster.primary (string) and cluster.nodes ([]string)
-		Cluster: &ClusterInfo{
-			Enabled: false,
-			Primary: "",
-			Nodes:   []string{},
-		},
-		// Per AI.md PART 13: features with tor as object.
-		// PART 34 (regular users) and PART 35 (organizations) are not implemented for this project.
-		Features: &HealthFeatures{
-			MultiUser:     false,
-			Organizations: false,
-			Tor:           torFeature,
-			GeoIP:         s.config.Server.GeoIP.Enabled,
-			Metrics:       s.config.Server.Metrics.Enabled,
-		},
-		Checks: make(map[string]string),
-		// Per AI.md PART 13: stats (requests_total, requests_24h, active_connections)
-		Stats: &HealthStats{
-			RequestsTotal:     s.getRequestsTotal(),
-			Requests24h:       s.getRequests24h(),
-			ActiveConnections: s.getActiveConnections(),
-		},
-		System: &SystemInfo{
-			GoVersion:    runtime.Version(),
-			NumCPU:       runtime.NumCPU(),
-			NumGoroutine: runtime.NumGoroutine(),
-			MemAlloc:     formatBytes(m.Alloc),
-		},
-	}
+	status := "healthy"
 
 	// Check maintenance mode
 	if s.config.Server.MaintenanceMode {
-		health.Status = "maintenance"
-		health.Maintenance = &MaintenanceInfo{
-			Reason:  "manual",
-			Message: "Server is in maintenance mode",
-			Since:   time.Now().UTC().Format(time.RFC3339),
-		}
+		status = "maintenance"
 	}
 
-	// Per AI.md PART 13: checks (database, cache, disk, scheduler, cluster)
-	health.Checks["search"] = "ok"
+	// Per AI.md PART 13: checks (database, cache, disk, scheduler, cluster, tor)
+	checks := ChecksInfo{
+		Cache:     "disabled",
+		Disk:      "ok",
+		Scheduler: "ok",
+	}
 
 	// Database check
 	if s.dbManager != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := s.dbManager.Ping(ctx); err != nil {
-			health.Checks["database"] = "error"
-			if health.Status == "healthy" {
-				health.Status = "unhealthy"
+			checks.Database = "error"
+			if status == "healthy" {
+				status = "unhealthy"
 			}
 		} else {
-			health.Checks["database"] = "ok"
+			checks.Database = "ok"
 		}
 	} else {
-		// No separate DB = embedded SQLite always ok
-		health.Checks["database"] = "ok"
+		checks.Database = "ok"
 	}
-
-	// Cache check (standalone mode - no external cache)
-	health.Checks["cache"] = "disabled"
 
 	// Disk check - verify data directory is accessible
 	if dataDir := config.GetDataDir(); dataDir != "" {
-		if _, err := os.Stat(dataDir); err == nil {
-			health.Checks["disk"] = "ok"
-		} else {
-			health.Checks["disk"] = "error"
+		if _, err := os.Stat(dataDir); err != nil {
+			checks.Disk = "error"
 		}
-	} else {
-		health.Checks["disk"] = "ok"
 	}
 
 	// Scheduler check
-	if s.scheduler != nil {
-		health.Checks["scheduler"] = "ok"
-	} else {
-		health.Checks["scheduler"] = "disabled"
+	if s.scheduler == nil {
+		checks.Scheduler = "disabled"
 	}
 
-	// Cluster check (standalone mode)
-	health.Checks["cluster"] = "disabled"
-
-	// Tor check
+	// Tor check (only when Tor is configured)
 	if s.config.Server.Tor.Enabled {
 		if s.torService != nil && s.torService.IsRunning() {
-			health.Checks["tor"] = "ok"
+			checks.Tor = "ok"
 		} else {
-			health.Checks["tor"] = "unavailable"
+			checks.Tor = "unavailable"
 		}
+	}
+
+	health := &HealthResponse{
+		// 1. Project identification from cfg.Branding per AI.md PART 13
+		Project: ProjectInfo{
+			Name:        s.config.Server.Branding.Title,
+			Tagline:     s.config.Server.Branding.Tagline,
+			Description: s.config.Server.Branding.Description,
+		},
+		// 2. Overall status
+		Status: status,
+		// 3. Version & build info
+		Version:   getVersion(),
+		GoVersion: runtime.Version(),
+		Build: BuildInfo{
+			Commit: config.CommitID,
+			Date:   config.BuildDate,
+		},
+		// 4. Runtime info
+		Uptime:    formatDuration(time.Since(s.startTime)),
+		Mode:      s.config.Server.Mode,
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		// 5. Cluster info (standalone mode)
+		Cluster: ClusterInfo{
+			Enabled: false,
+			Nodes:   []string{},
+		},
+		// 6. Features - PUBLIC only (PARTS 20, 32)
+		Features: FeaturesInfo{
+			Tor:   torInfo,
+			GeoIP: s.config.Server.GeoIP.Enabled,
+		},
+		// 7. Checks
+		Checks: checks,
+		// 8. Stats per AI.md PART 13: requests_total, requests_24h, active_connections
+		Stats: StatsInfo{
+			RequestsTotal: s.getRequestsTotal(),
+			Requests24h:   s.getRequests24h(),
+			ActiveConns:   s.getActiveConnections(),
+		},
 	}
 
 	return health
@@ -399,7 +372,7 @@ func (s *Server) detectResponseFormat(r *http.Request) string {
 }
 
 // respondHealthJSON responds with JSON health info per AI.md PART 14
-func (s *Server) respondHealthJSON(w http.ResponseWriter, health *HealthInfo) {
+func (s *Server) respondHealthJSON(w http.ResponseWriter, health *HealthResponse) {
 	w.Header().Set("Content-Type", "application/json")
 
 	statusCode := http.StatusOK
@@ -414,9 +387,9 @@ func (s *Server) respondHealthJSON(w http.ResponseWriter, health *HealthInfo) {
 	w.Write([]byte("\n"))
 }
 
-// respondHealthText responds with plain text health info per AI.md PART 13
-// Format: key: value pairs, one per line
-func (s *Server) respondHealthText(w http.ResponseWriter, health *HealthInfo) {
+// respondHealthText responds with plain text health info per AI.md PART 13.
+// Format: key: value pairs, one per line.
+func (s *Server) respondHealthText(w http.ResponseWriter, health *HealthResponse) {
 	w.Header().Set("Content-Type", "text/plain")
 
 	statusCode := http.StatusOK
@@ -433,57 +406,47 @@ func (s *Server) respondHealthText(w http.ResponseWriter, health *HealthInfo) {
 	b.WriteString(fmt.Sprintf("mode: %s\n", health.Mode))
 	b.WriteString(fmt.Sprintf("uptime: %s\n", health.Uptime))
 	b.WriteString(fmt.Sprintf("go_version: %s\n", health.GoVersion))
-
-	// Build info
-	if health.Build != nil {
-		b.WriteString(fmt.Sprintf("build.commit: %s\n", health.Build.Commit))
-	}
+	b.WriteString(fmt.Sprintf("build.commit: %s\n", health.Build.Commit))
 
 	// Component checks
-	for name, status := range health.Checks {
-		b.WriteString(fmt.Sprintf("%s: %s\n", name, status))
+	b.WriteString(fmt.Sprintf("check.database: %s\n", health.Checks.Database))
+	b.WriteString(fmt.Sprintf("check.cache: %s\n", health.Checks.Cache))
+	b.WriteString(fmt.Sprintf("check.disk: %s\n", health.Checks.Disk))
+	b.WriteString(fmt.Sprintf("check.scheduler: %s\n", health.Checks.Scheduler))
+	if health.Checks.Cluster != "" {
+		b.WriteString(fmt.Sprintf("check.cluster: %s\n", health.Checks.Cluster))
+	}
+	if health.Checks.Tor != "" {
+		b.WriteString(fmt.Sprintf("check.tor: %s\n", health.Checks.Tor))
 	}
 
 	// Cluster info
-	if health.Cluster != nil {
-		if health.Cluster.Enabled {
-			b.WriteString(fmt.Sprintf("cluster.primary: %s\n", health.Cluster.Primary))
-			if len(health.Cluster.Nodes) > 0 {
-				b.WriteString(fmt.Sprintf("cluster.nodes: %s\n", strings.Join(health.Cluster.Nodes, ", ")))
-			}
+	if health.Cluster.Enabled {
+		b.WriteString(fmt.Sprintf("cluster.primary: %s\n", health.Cluster.Primary))
+		if len(health.Cluster.Nodes) > 0 {
+			b.WriteString(fmt.Sprintf("cluster.nodes: %s\n", strings.Join(health.Cluster.Nodes, ", ")))
 		}
 	}
 
 	// Features
-	if health.Features != nil {
-		var features []string
-		if health.Features.MultiUser {
-			features = append(features, "multi_user")
-		}
-		if health.Features.Organizations {
-			features = append(features, "organizations")
-		}
-		if health.Features.Tor != nil && health.Features.Tor.Enabled {
-			features = append(features, "tor")
-		}
-		if health.Features.GeoIP {
-			features = append(features, "geoip")
-		}
-		if health.Features.Metrics {
-			features = append(features, "metrics")
-		}
-		if len(features) > 0 {
-			b.WriteString(fmt.Sprintf("features: %s\n", strings.Join(features, ", ")))
-		}
+	var features []string
+	if health.Features.Tor.Enabled {
+		features = append(features, "tor")
+	}
+	if health.Features.GeoIP {
+		features = append(features, "geoip")
+	}
+	if len(features) > 0 {
+		b.WriteString(fmt.Sprintf("features: %s\n", strings.Join(features, ", ")))
+	}
 
-		// Tor details
-		if health.Features.Tor != nil && health.Features.Tor.Enabled {
-			b.WriteString(fmt.Sprintf("features.tor.enabled: %t\n", health.Features.Tor.Enabled))
-			b.WriteString(fmt.Sprintf("features.tor.running: %t\n", health.Features.Tor.Running))
-			b.WriteString(fmt.Sprintf("features.tor.status: %s\n", health.Features.Tor.Status))
-			if health.Features.Tor.Hostname != "" {
-				b.WriteString(fmt.Sprintf("features.tor.hostname: %s\n", health.Features.Tor.Hostname))
-			}
+	// Tor details
+	if health.Features.Tor.Enabled {
+		b.WriteString(fmt.Sprintf("features.tor.enabled: %t\n", health.Features.Tor.Enabled))
+		b.WriteString(fmt.Sprintf("features.tor.running: %t\n", health.Features.Tor.Running))
+		b.WriteString(fmt.Sprintf("features.tor.status: %s\n", health.Features.Tor.Status))
+		if health.Features.Tor.Hostname != "" {
+			b.WriteString(fmt.Sprintf("features.tor.hostname: %s\n", health.Features.Tor.Hostname))
 		}
 	}
 
@@ -491,7 +454,7 @@ func (s *Server) respondHealthText(w http.ResponseWriter, health *HealthInfo) {
 }
 
 // respondHealthHTML responds with HTML health page
-func (s *Server) respondHealthHTML(w http.ResponseWriter, r *http.Request, health *HealthInfo) {
+func (s *Server) respondHealthHTML(w http.ResponseWriter, r *http.Request, health *HealthResponse) {
 	// Use newPageData for TorAddress support per AI.md PART 32
 	baseData := s.newPageData(w, r, "", "healthz")
 	baseData.Title = s.getI18nManager().T(baseData.Lang, "health.page_title")
@@ -607,28 +570,9 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%dm", minutes)
 }
 
-// formatBytes formats bytes in a human-readable format
-func formatBytes(b uint64) string {
-	const unit = 1024
-	if b < unit {
-		return fmt.Sprintf("%d B", b)
-	}
-	div, exp := uint64(unit), 0
-	for n := b / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
-}
-
 // isContactEnabled checks if contact form is enabled
 func (s *Server) isContactEnabled() bool {
 	return s.config.Server.Pages.Contact.Enabled
-}
-
-// getHostname returns the system hostname
-func getHostname() (string, error) {
-	return os.Hostname()
 }
 
 // getVersion returns the application version

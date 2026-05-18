@@ -433,73 +433,83 @@ type SearchPageData struct {
 // HealthPageData extends PageData with health-specific fields
 type HealthPageData struct {
 	PageData
-	Health *HealthInfo
+	Health *HealthResponse
 }
 
-// HealthInfo represents health check information per AI.md PART 13
-type HealthInfo struct {
-	Project        *ProjectInfo      `json:"project,omitempty"`
-	Status         string            `json:"status"`
-	Version        string            `json:"version"`
-	GoVersion      string            `json:"go_version"`
-	Mode           string            `json:"mode"`
-	Uptime         string            `json:"uptime"`
-	Timestamp      string            `json:"timestamp"`
-	Build          *BuildInfo        `json:"build,omitempty"`
-	Node           *NodeInfo         `json:"node,omitempty"`
-	Cluster        *ClusterInfo      `json:"cluster,omitempty"`
-	Features       *HealthFeatures   `json:"features,omitempty"`
-	Checks         map[string]string `json:"checks"`
-	Stats          *HealthStats      `json:"stats,omitempty"`
-	System         *SystemInfo       `json:"system,omitempty"`
-	PendingRestart bool              `json:"pending_restart,omitempty"`
-	RestartReason  []string          `json:"restart_reason,omitempty"`
-	Maintenance    *MaintenanceInfo  `json:"maintenance,omitempty"`
+// HealthResponse represents health check information per AI.md PART 13.
+// All fields use canonical order: project, status, version, build, runtime,
+// cluster, features, checks, stats.
+type HealthResponse struct {
+	// 1. Project identification (PART 16: branding config)
+	Project ProjectInfo `json:"project"`
+	// 2. Overall status
+	Status         string   `json:"status"`
+	PendingRestart bool     `json:"pending_restart,omitempty"`
+	RestartReason  []string `json:"restart_reason,omitempty"`
+	// 3. Version & build info (PART 7)
+	Version   string    `json:"version"`
+	GoVersion string    `json:"go_version"`
+	Build     BuildInfo `json:"build"`
+	// 4. Runtime info (PART 6)
+	Uptime    string `json:"uptime"`
+	Mode      string `json:"mode"`
+	Timestamp string `json:"timestamp"`
+	// 5. Cluster info (PART 10)
+	Cluster ClusterInfo `json:"cluster"`
+	// 6. Features - PUBLIC only (PARTS 20, 32)
+	Features FeaturesInfo `json:"features"`
+	// 7. Component health checks
+	Checks ChecksInfo `json:"checks"`
+	// 8. Statistics (public-safe aggregates)
+	Stats StatsInfo `json:"stats"`
 }
 
-// ProjectInfo represents project information for healthz per AI.md PART 13.
-// Name maps to branding.app_name or server.title; Tagline is the short slogan.
+// ProjectInfo represents project identification per AI.md PART 13.
+// Name maps to branding.title; Tagline is the short slogan.
 type ProjectInfo struct {
 	Name        string `json:"name"`
 	Tagline     string `json:"tagline"`
 	Description string `json:"description"`
 }
 
-// BuildInfo represents build information per AI.md PART 13
-// Note: Fields are "commit" and "date" per spec, not "commit_id" and "build_date"
+// BuildInfo represents build information per AI.md PART 13.
+// Fields are "commit" and "date" per spec.
 type BuildInfo struct {
 	Commit string `json:"commit"`
 	Date   string `json:"date"`
 }
 
-// HealthFeatures represents feature status per AI.md PART 13
-type HealthFeatures struct {
-	MultiUser     bool        `json:"multi_user"`
-	Organizations bool        `json:"organizations"`
-	Tor           *TorFeature `json:"tor"`
-	GeoIP         bool        `json:"geoip"`
-	Metrics       bool        `json:"metrics"`
+// FeaturesInfo represents PUBLIC feature status per AI.md PART 13.
+// Only non-optional features are listed; optional features absent until implemented.
+type FeaturesInfo struct {
+	Tor   TorInfo `json:"tor"`
+	GeoIP bool    `json:"geoip"`
 }
 
-// TorFeature represents Tor status per AI.md PART 13
-type TorFeature struct {
+// TorInfo represents Tor hidden service status per AI.md PART 13.
+type TorInfo struct {
 	Enabled  bool   `json:"enabled"`
 	Running  bool   `json:"running"`
 	Status   string `json:"status"`
 	Hostname string `json:"hostname"`
 }
 
-// HealthStats represents health statistics per AI.md PART 13
-type HealthStats struct {
-	RequestsTotal     int64 `json:"requests_total"`
-	Requests24h       int64 `json:"requests_24h"`
-	ActiveConnections int   `json:"active_connections"`
+// ChecksInfo represents component health per AI.md PART 13.
+// Values are "ok" or "error" (or "disabled" when component not configured).
+type ChecksInfo struct {
+	Database  string `json:"database"`
+	Cache     string `json:"cache"`
+	Disk      string `json:"disk"`
+	Scheduler string `json:"scheduler"`
+	Cluster   string `json:"cluster,omitempty"`
+	Tor       string `json:"tor,omitempty"`
 }
 
-// NodeInfo represents node information for cluster mode
-type NodeInfo struct {
-	ID       string `json:"id"`
-	Hostname string `json:"hostname"`
+// StatsInfo represents public-safe aggregate statistics per AI.md PART 13.
+type StatsInfo struct {
+	RequestsTotal int64 `json:"requests_total"`
+	Requests24h   int64 `json:"requests_24h"`
+	ActiveConns   int   `json:"active_connections"`
 }
 
 // ClusterInfo represents cluster status per AI.md PART 13.
@@ -511,21 +521,6 @@ type ClusterInfo struct {
 	Nodes     []string `json:"nodes,omitempty"`
 	NodeCount int      `json:"node_count,omitempty"`
 	Role      string   `json:"role,omitempty"`
-}
-
-// MaintenanceInfo represents maintenance mode status
-type MaintenanceInfo struct {
-	Reason  string `json:"reason,omitempty"`
-	Message string `json:"message,omitempty"`
-	Since   string `json:"since,omitempty"`
-}
-
-// SystemInfo represents system information
-type SystemInfo struct {
-	GoVersion    string `json:"go_version"`
-	NumCPU       int    `json:"num_cpu"`
-	NumGoroutine int    `json:"num_goroutine"`
-	MemAlloc     string `json:"mem_alloc"`
 }
 
 // Pagination represents pagination information
