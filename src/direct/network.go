@@ -39,7 +39,7 @@ func (h *DNSHandler) Type() AnswerType {
 	return AnswerTypeDNS
 }
 
-func (h *DNSHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *DNSHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("domain name required")
@@ -196,7 +196,7 @@ func (h *WhoisHandler) Type() AnswerType {
 	return AnswerTypeWhois
 }
 
-func (h *WhoisHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *WhoisHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(strings.ToLower(term))
 	if term == "" {
 		return nil, fmt.Errorf("domain name required")
@@ -338,7 +338,7 @@ func (h *ResolveHandler) Type() AnswerType {
 	return AnswerTypeResolve
 }
 
-func (h *ResolveHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *ResolveHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("hostname required")
@@ -451,7 +451,7 @@ func (h *CertHandler) Type() AnswerType {
 	return AnswerTypeCert
 }
 
-func (h *CertHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *CertHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("domain name required")
@@ -587,7 +587,7 @@ func (h *HeadersHandler) Type() AnswerType {
 	return AnswerTypeHeaders
 }
 
-func (h *HeadersHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *HeadersHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("URL required")
@@ -745,7 +745,7 @@ func (h *ASNHandler) Type() AnswerType {
 	return AnswerTypeASN
 }
 
-func (h *ASNHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *ASNHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(strings.ToUpper(term))
 	if term == "" {
 		return nil, fmt.Errorf("ASN number required")
@@ -859,7 +859,7 @@ func (h *SubnetHandler) Type() AnswerType {
 	return AnswerTypeSubnet
 }
 
-func (h *SubnetHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *SubnetHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("CIDR notation required (e.g., 192.168.1.0/24)")

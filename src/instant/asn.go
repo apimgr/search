@@ -97,7 +97,7 @@ type bgpViewPrefixesResponse struct {
 	} `json:"data"`
 }
 
-func (h *ASNHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *ASNHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	// Extract ASN number from query
 	var asnNumber string
 	for _, p := range h.patterns {

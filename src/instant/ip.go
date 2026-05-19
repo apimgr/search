@@ -36,7 +36,7 @@ func (h *IPHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *IPHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *IPHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	// Get local IPs
 	var ips []string
 	addrs, err := net.InterfaceAddrs()

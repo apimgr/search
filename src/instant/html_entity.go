@@ -63,7 +63,7 @@ func (h *HTMLEntityHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *HTMLEntityHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *HTMLEntityHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	lowerQuery := strings.ToLower(query)
 	isDecode := strings.Contains(lowerQuery, "decode")
 

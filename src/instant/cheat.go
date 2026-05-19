@@ -46,7 +46,7 @@ func (h *CheatHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *CheatHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *CheatHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	// Extract topic from query
 	var topic string
 	for _, p := range h.patterns {

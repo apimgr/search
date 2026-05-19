@@ -49,7 +49,7 @@ func (h *SynonymHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *SynonymHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *SynonymHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	word := ""
 	for _, p := range h.patterns {
 		if matches := p.FindStringSubmatch(query); len(matches) > 1 {
@@ -156,7 +156,7 @@ func (h *AntonymHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *AntonymHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *AntonymHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	word := ""
 	for _, p := range h.patterns {
 		if matches := p.FindStringSubmatch(query); len(matches) > 1 {

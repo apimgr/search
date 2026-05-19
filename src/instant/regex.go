@@ -39,7 +39,7 @@ func (h *RegexHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *RegexHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *RegexHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	// Extract pattern from query
 	var pattern string
 	for _, p := range h.patterns {

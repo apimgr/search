@@ -82,7 +82,7 @@ type Handler interface {
 	// CanHandle checks if query matches this handler
 	CanHandle(query string) bool
 	// Handle processes the query and returns an answer
-	Handle(ctx context.Context, query string) (*Answer, error)
+	HandleInstantQuery(ctx context.Context, query string) (*Answer, error)
 }
 
 // Manager manages all instant answer handlers
@@ -177,7 +177,7 @@ func (m *Manager) Process(ctx context.Context, query string) (*Answer, error) {
 
 	for _, handler := range m.handlers {
 		if handler.CanHandle(query) {
-			return handler.Handle(ctx, query)
+			return handler.HandleInstantQuery(ctx, query)
 		}
 	}
 

@@ -44,7 +44,7 @@ func (h *ASCIIHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *ASCIIHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *ASCIIHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	// Extract text from query
 	text := ""
 	for _, p := range h.patterns {

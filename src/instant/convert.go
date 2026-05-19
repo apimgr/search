@@ -42,7 +42,7 @@ func (h *ConvertHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *ConvertHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *ConvertHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	var value float64
 	var fromUnit, toUnit string
 

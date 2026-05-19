@@ -84,7 +84,7 @@ type soaRecord struct {
 	Minimum uint32
 }
 
-func (h *DNSHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *DNSHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	// Extract domain and optional record type from query
 	var domain, recordType string
 	for _, p := range h.patterns {

@@ -47,7 +47,7 @@ func (h *ManHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *ManHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *ManHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	section, command := h.parseQuery(query)
 
 	if command == "" {

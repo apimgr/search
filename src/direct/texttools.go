@@ -23,7 +23,7 @@ func (h *CaseHandler) Type() AnswerType {
 	return AnswerTypeCase
 }
 
-func (h *CaseHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *CaseHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("text required")
@@ -213,7 +213,7 @@ func (h *SlugHandler) Type() AnswerType {
 	return AnswerTypeSlug
 }
 
-func (h *SlugHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *SlugHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("text required")
@@ -322,7 +322,7 @@ var loremWords = []string{
 	"deserunt", "mollit", "anim", "id", "est", "laborum",
 }
 
-func (h *LoremHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *LoremHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		// Default to 3 paragraphs
@@ -457,7 +457,7 @@ func (h *WordHandler) Type() AnswerType {
 	return AnswerTypeWord
 }
 
-func (h *WordHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *WordHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("text required")
@@ -614,7 +614,7 @@ func (h *BeautifyHandler) Type() AnswerType {
 	return AnswerTypeBeautify
 }
 
-func (h *BeautifyHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *BeautifyHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("code required")
@@ -839,7 +839,7 @@ func (h *DiffHandler) Type() AnswerType {
 	return AnswerTypeDiff
 }
 
-func (h *DiffHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *DiffHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("two texts required (separated by |||)")

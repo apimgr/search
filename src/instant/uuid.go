@@ -37,7 +37,7 @@ func (h *UUIDHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *UUIDHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *UUIDHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	id := uuid.New()
 
 	return &Answer{

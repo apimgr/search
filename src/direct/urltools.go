@@ -30,7 +30,7 @@ func (h *RobotsHandler) Type() AnswerType {
 	return AnswerTypeRobots
 }
 
-func (h *RobotsHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *RobotsHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("domain required")
@@ -209,7 +209,7 @@ func (h *SitemapHandler) Type() AnswerType {
 	return AnswerTypeSitemap
 }
 
-func (h *SitemapHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *SitemapHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("domain required")
@@ -374,7 +374,7 @@ func (h *TechHandler) Type() AnswerType {
 	return AnswerTypeTech
 }
 
-func (h *TechHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *TechHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("domain required")
@@ -548,7 +548,7 @@ func (h *FeedHandler) Type() AnswerType {
 	return AnswerTypeFeed
 }
 
-func (h *FeedHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *FeedHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("domain required")
@@ -742,7 +742,7 @@ func (h *ExpandHandler) Type() AnswerType {
 	return AnswerTypeExpand
 }
 
-func (h *ExpandHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *ExpandHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("URL required")
@@ -865,7 +865,7 @@ func (h *SafeHandler) Type() AnswerType {
 	return AnswerTypeSafe
 }
 
-func (h *SafeHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *SafeHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("URL or domain required")
@@ -1034,7 +1034,7 @@ func (h *CacheHandler) Type() AnswerType {
 	return AnswerTypeCache
 }
 
-func (h *CacheHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *CacheHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("URL required")

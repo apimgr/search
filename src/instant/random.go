@@ -40,7 +40,7 @@ func (h *RandomHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *RandomHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *RandomHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	lowerQuery := strings.ToLower(query)
 
 	// Coin flip

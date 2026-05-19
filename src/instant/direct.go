@@ -52,7 +52,7 @@ func (m *DirectAnswerManager) Process(ctx context.Context, query string) (*Answe
 
 	for _, handler := range m.handlers {
 		if handler.CanHandle(query) {
-			return handler.Handle(ctx, query)
+			return handler.HandleInstantQuery(ctx, query)
 		}
 	}
 
@@ -94,7 +94,7 @@ func (h *TLDRHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *TLDRHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *TLDRHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	command := ""
 	for _, p := range h.patterns {
 		if matches := p.FindStringSubmatch(query); len(matches) > 1 {
@@ -305,7 +305,7 @@ func (h *HTTPCodeHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *HTTPCodeHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *HTTPCodeHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	var code int
 	for _, p := range h.patterns {
 		if matches := p.FindStringSubmatch(query); len(matches) > 1 {
@@ -472,7 +472,7 @@ func (h *PortHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *PortHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *PortHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	var port int
 	for _, p := range h.patterns {
 		if matches := p.FindStringSubmatch(query); len(matches) > 1 {
@@ -559,7 +559,7 @@ func (h *CronHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *CronHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *CronHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	expr := ""
 	for _, p := range h.patterns {
 		if matches := p.FindStringSubmatch(query); len(matches) > 1 {
@@ -779,7 +779,7 @@ func (h *ChmodHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *ChmodHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *ChmodHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	perm := ""
 	for _, p := range h.patterns {
 		if matches := p.FindStringSubmatch(query); len(matches) > 1 {
@@ -1007,7 +1007,7 @@ func (h *TimestampHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *TimestampHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *TimestampHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	var timestamp int64
 	for _, p := range h.patterns {
 		if matches := p.FindStringSubmatch(query); len(matches) > 1 {
@@ -1129,7 +1129,7 @@ func (h *SubnetHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *SubnetHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *SubnetHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	cidr := ""
 	for _, p := range h.patterns {
 		if matches := p.FindStringSubmatch(query); len(matches) > 1 {
@@ -1286,7 +1286,7 @@ func (h *JWTHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *JWTHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *JWTHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	token := ""
 	for _, p := range h.patterns {
 		if matches := p.FindStringSubmatch(query); len(matches) > 1 {

@@ -59,7 +59,7 @@ func (h *ExpandHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *ExpandHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *ExpandHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	// Extract URL from query
 	urlStr := ""
 	for _, p := range h.patterns {

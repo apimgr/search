@@ -26,7 +26,7 @@ func (h *HTMLHandler) Type() AnswerType {
 	return AnswerTypeHTML
 }
 
-func (h *HTMLHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *HTMLHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("text required")
@@ -172,7 +172,7 @@ func (h *UnicodeHandler) Type() AnswerType {
 	return AnswerTypeUnicode
 }
 
-func (h *UnicodeHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *UnicodeHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("character or code point required")
@@ -369,7 +369,7 @@ var emojiDB = map[string][]string{
 	"write":    {"✏️", "✒️", "🖊️", "🖋️", "📝", "📒", "📓", "📔", "📕", "📖", "📗", "📘", "📙", "📚"},
 }
 
-func (h *EmojiHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *EmojiHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(strings.ToLower(term))
 	if term == "" {
 		return nil, fmt.Errorf("emoji name or keyword required")
@@ -457,7 +457,7 @@ func (h *EscapeHandler) Type() AnswerType {
 	return AnswerTypeEscape
 }
 
-func (h *EscapeHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *EscapeHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("text required")
@@ -566,7 +566,7 @@ func (h *JSONHandler) Type() AnswerType {
 	return AnswerTypeJSON
 }
 
-func (h *JSONHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *JSONHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("JSON data required")
@@ -709,7 +709,7 @@ func (h *YAMLHandler) Type() AnswerType {
 	return AnswerTypeYAML
 }
 
-func (h *YAMLHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *YAMLHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("YAML data required")

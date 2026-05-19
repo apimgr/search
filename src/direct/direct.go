@@ -189,7 +189,7 @@ type Handler interface {
 	// Type returns the answer type this handler provides
 	Type() AnswerType
 	// Handle processes the term and returns a direct answer
-	Handle(ctx context.Context, term string) (*Answer, error)
+	HandleDirectQuery(ctx context.Context, term string) (*Answer, error)
 }
 
 // Manager manages all direct answer handlers
@@ -334,7 +334,7 @@ func (m *Manager) ProcessType(ctx context.Context, answerType AnswerType, term s
 		}, nil
 	}
 
-	answer, err := handler.Handle(ctx, term)
+	answer, err := handler.HandleDirectQuery(ctx, term)
 	if err != nil {
 		return &Answer{
 			Type:      answerType,

@@ -63,7 +63,7 @@ func (h *StopwatchHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *StopwatchHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *StopwatchHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	lowerQuery := strings.ToLower(query)
 
 	// Handle stopwatch (no duration)

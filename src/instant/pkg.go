@@ -51,7 +51,7 @@ func (h *PkgHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *PkgHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *PkgHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	registry, pkgName := h.parseQuery(query)
 
 	if pkgName == "" {

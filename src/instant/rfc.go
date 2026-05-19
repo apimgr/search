@@ -46,7 +46,7 @@ func (h *RFCHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *RFCHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *RFCHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	// Extract RFC number from query
 	var rfcNum string
 	for _, p := range h.patterns {

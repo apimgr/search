@@ -41,7 +41,7 @@ func (h *TimeHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *TimeHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *TimeHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	now := time.Now()
 	utc := now.UTC()
 

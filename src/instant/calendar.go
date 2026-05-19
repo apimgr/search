@@ -67,7 +67,7 @@ func (h *CalendarHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *CalendarHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *CalendarHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	lowerQuery := strings.ToLower(query)
 
 	// Handle "days until {date}" and "how many days until {date}"

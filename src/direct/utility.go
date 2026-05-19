@@ -102,7 +102,7 @@ var httpStatusCodes = map[int]struct {
 	511: {"Network Authentication Required", "The client needs to authenticate to gain network access.", "Server Error"},
 }
 
-func (h *HTTPHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *HTTPHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("HTTP status code required")
@@ -243,7 +243,7 @@ var portDB = map[int]struct {
 	27017: {"MongoDB", "MongoDB Database", "TCP"},
 }
 
-func (h *PortHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *PortHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("port number required")
@@ -352,7 +352,7 @@ func (h *CronHandler) Type() AnswerType {
 	return AnswerTypeCron
 }
 
-func (h *CronHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *CronHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("cron expression required")
@@ -548,7 +548,7 @@ func (h *ChmodHandler) Type() AnswerType {
 	return AnswerTypeChmod
 }
 
-func (h *ChmodHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *ChmodHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("permissions required")
@@ -716,7 +716,7 @@ func (h *RegexHandler) Type() AnswerType {
 	return AnswerTypeRegex
 }
 
-func (h *RegexHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *RegexHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("regex pattern required")
@@ -851,7 +851,7 @@ func (h *JWTHandler) Type() AnswerType {
 	return AnswerTypeJWT
 }
 
-func (h *JWTHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *JWTHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("JWT token required")
@@ -1016,7 +1016,7 @@ func (h *TimestampHandler) Type() AnswerType {
 	return AnswerTypeTimestamp
 }
 
-func (h *TimestampHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *TimestampHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("timestamp or date required")

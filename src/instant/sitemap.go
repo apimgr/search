@@ -78,7 +78,7 @@ func (h *SitemapHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *SitemapHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *SitemapHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	// Extract domain from query
 	domain := ""
 	for _, p := range h.patterns {

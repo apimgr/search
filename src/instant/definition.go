@@ -50,7 +50,7 @@ func (h *DefinitionHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *DefinitionHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *DefinitionHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	// Extract word from query
 	word := ""
 	for _, p := range h.patterns {

@@ -50,7 +50,7 @@ func (h *CertHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *CertHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *CertHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	// Extract domain from query
 	domain := ""
 	for _, p := range h.patterns {

@@ -41,7 +41,7 @@ func (h *HashHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *HashHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *HashHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	lowerQuery := strings.ToLower(query)
 	var text string
 	var hashType string

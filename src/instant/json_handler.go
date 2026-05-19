@@ -48,7 +48,7 @@ func (h *JSONHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *JSONHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *JSONHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	// Check for mode
 	lowerQuery := strings.ToLower(query)
 	minifyMode := strings.Contains(lowerQuery, "minify")

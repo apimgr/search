@@ -35,7 +35,7 @@ func (h *ColorHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *ColorHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *ColorHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	var r, g, b int
 	var hexColor string
 

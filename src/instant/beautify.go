@@ -55,7 +55,7 @@ func DefaultBeautifyConfig() *BeautifyConfig {
 	}
 }
 
-func (h *BeautifyHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *BeautifyHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	var lang, code string
 	var minify bool
 

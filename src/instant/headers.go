@@ -58,7 +58,7 @@ func (h *HeadersHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *HeadersHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *HeadersHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	// Extract URL from query
 	urlStr := ""
 	for _, p := range h.patterns {

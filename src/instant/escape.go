@@ -51,7 +51,7 @@ func (h *EscapeHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *EscapeHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *EscapeHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	// Extract text from query
 	text := ""
 	for _, p := range h.patterns {

@@ -52,7 +52,7 @@ func (h *EmojiHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *EmojiHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *EmojiHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	var searchTerm string
 	for _, p := range h.patterns {
 		if matches := p.FindStringSubmatch(query); len(matches) > 1 {

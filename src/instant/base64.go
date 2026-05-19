@@ -38,7 +38,7 @@ func (h *Base64Handler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *Base64Handler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *Base64Handler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	lowerQuery := strings.ToLower(query)
 	isDecode := strings.Contains(lowerQuery, "decode")
 

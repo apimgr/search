@@ -64,7 +64,7 @@ func (h *ResolveHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *ResolveHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *ResolveHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	// Extract hostname from query
 	hostname := ""
 	for _, p := range h.patterns {

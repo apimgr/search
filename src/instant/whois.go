@@ -239,7 +239,7 @@ func (h *WHOISHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *WHOISHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *WHOISHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	// Extract domain from query
 	var domain string
 	for _, p := range h.patterns {

@@ -28,7 +28,7 @@ func (h *TLDRHandler) Type() AnswerType {
 	return AnswerTypeTLDR
 }
 
-func (h *TLDRHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *TLDRHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(strings.ToLower(term))
 	if term == "" {
 		return nil, fmt.Errorf("command name required")
@@ -151,7 +151,7 @@ func (h *ManHandler) Type() AnswerType {
 	return AnswerTypeMan
 }
 
-func (h *ManHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *ManHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("man page name required")
@@ -319,7 +319,7 @@ func (h *CheatHandler) Type() AnswerType {
 	return AnswerTypeCheat
 }
 
-func (h *CheatHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *CheatHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("command name required")

@@ -48,7 +48,7 @@ type urbanDictionaryEntry struct {
 	Example     string `json:"example"`
 }
 
-func (h *SlangHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *SlangHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("slang term required")

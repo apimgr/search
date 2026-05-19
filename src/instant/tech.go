@@ -59,7 +59,7 @@ func (h *TechHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *TechHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *TechHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	// Extract domain from query
 	domain := ""
 	for _, p := range h.patterns {

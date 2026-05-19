@@ -50,7 +50,7 @@ func (h *YAMLHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *YAMLHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *YAMLHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	// Extract data from query
 	lowerQuery := strings.ToLower(query)
 

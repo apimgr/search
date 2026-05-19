@@ -235,12 +235,12 @@ func TestMathHandlerHandle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.query, func(t *testing.T) {
-			answer, err := h.Handle(ctx, tt.query)
+			answer, err := h.HandleInstantQuery(ctx, tt.query)
 			if err != nil {
-				t.Fatalf("Handle(%q) error = %v", tt.query, err)
+				t.Fatalf("HandleInstantQuery(%q) error = %v", tt.query, err)
 			}
 			if answer == nil {
-				t.Fatal("Handle() returned nil")
+				t.Fatal("HandleInstantQuery() returned nil")
 			}
 			if answer.Type != AnswerTypeMath {
 				t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeMath)
@@ -437,12 +437,12 @@ func TestConvertHandlerHandle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.query, func(t *testing.T) {
-			answer, err := h.Handle(ctx, tt.query)
+			answer, err := h.HandleInstantQuery(ctx, tt.query)
 			if err != nil {
-				t.Fatalf("Handle(%q) error = %v", tt.query, err)
+				t.Fatalf("HandleInstantQuery(%q) error = %v", tt.query, err)
 			}
 			if answer == nil {
-				t.Fatal("Handle() returned nil")
+				t.Fatal("HandleInstantQuery() returned nil")
 			}
 			if answer.Type != AnswerTypeConvert {
 				t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeConvert)
@@ -587,12 +587,12 @@ func TestTimeHandlerHandle(t *testing.T) {
 	h := NewTimeHandler()
 	ctx := context.Background()
 
-	answer, err := h.Handle(ctx, "time")
+	answer, err := h.HandleInstantQuery(ctx, "time")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer == nil {
-		t.Fatal("Handle() returned nil")
+		t.Fatal("HandleInstantQuery() returned nil")
 	}
 	if answer.Type != AnswerTypeTime {
 		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeTime)
@@ -650,12 +650,12 @@ func TestHashHandlerHandle(t *testing.T) {
 	tests := []string{"md5: hello", "sha256: test", "hash: world"}
 	for _, query := range tests {
 		t.Run(query, func(t *testing.T) {
-			answer, err := h.Handle(ctx, query)
+			answer, err := h.HandleInstantQuery(ctx, query)
 			if err != nil {
-				t.Fatalf("Handle() error = %v", err)
+				t.Fatalf("HandleInstantQuery() error = %v", err)
 			}
 			if answer == nil {
-				t.Fatal("Handle() returned nil")
+				t.Fatal("HandleInstantQuery() returned nil")
 			}
 			if answer.Type != AnswerTypeHash {
 				t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeHash)
@@ -708,12 +708,12 @@ func TestBase64HandlerHandle(t *testing.T) {
 	ctx := context.Background()
 
 	// Test encode
-	answer, err := h.Handle(ctx, "base64 encode: hello")
+	answer, err := h.HandleInstantQuery(ctx, "base64 encode: hello")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer == nil {
-		t.Fatal("Handle() returned nil")
+		t.Fatal("HandleInstantQuery() returned nil")
 	}
 	if answer.Type != AnswerTypeBase64 {
 		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeBase64)
@@ -723,9 +723,9 @@ func TestBase64HandlerHandle(t *testing.T) {
 	}
 
 	// Test decode
-	answer, err = h.Handle(ctx, "base64 decode: aGVsbG8=")
+	answer, err = h.HandleInstantQuery(ctx, "base64 decode: aGVsbG8=")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer.Data["output"] != "hello" {
 		t.Errorf("output = %v, want %v", answer.Data["output"], "hello")
@@ -776,12 +776,12 @@ func TestURLHandlerHandle(t *testing.T) {
 	h := NewURLHandler()
 	ctx := context.Background()
 
-	answer, err := h.Handle(ctx, "url encode: hello world")
+	answer, err := h.HandleInstantQuery(ctx, "url encode: hello world")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer == nil {
-		t.Fatal("Handle() returned nil")
+		t.Fatal("HandleInstantQuery() returned nil")
 	}
 	if answer.Type != AnswerTypeURL {
 		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeURL)
@@ -831,12 +831,12 @@ func TestColorHandlerHandle(t *testing.T) {
 	h := NewColorHandler()
 	ctx := context.Background()
 
-	answer, err := h.Handle(ctx, "#ff0000")
+	answer, err := h.HandleInstantQuery(ctx, "#ff0000")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer == nil {
-		t.Fatal("Handle() returned nil")
+		t.Fatal("HandleInstantQuery() returned nil")
 	}
 	if answer.Type != AnswerTypeColor {
 		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeColor)
@@ -907,12 +907,12 @@ func TestUUIDHandlerHandle(t *testing.T) {
 	h := NewUUIDHandler()
 	ctx := context.Background()
 
-	answer, err := h.Handle(ctx, "uuid")
+	answer, err := h.HandleInstantQuery(ctx, "uuid")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer == nil {
-		t.Fatal("Handle() returned nil")
+		t.Fatal("HandleInstantQuery() returned nil")
 	}
 	if answer.Type != AnswerTypeUUID {
 		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeUUID)
@@ -972,12 +972,12 @@ func TestRandomHandlerHandle(t *testing.T) {
 	tests := []string{"random", "flip coin", "roll dice", "roll d20"}
 	for _, query := range tests {
 		t.Run(query, func(t *testing.T) {
-			answer, err := h.Handle(ctx, query)
+			answer, err := h.HandleInstantQuery(ctx, query)
 			if err != nil {
-				t.Fatalf("Handle() error = %v", err)
+				t.Fatalf("HandleInstantQuery() error = %v", err)
 			}
 			if answer == nil {
-				t.Fatal("Handle() returned nil")
+				t.Fatal("HandleInstantQuery() returned nil")
 			}
 			if answer.Type != AnswerTypeRandom {
 				t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeRandom)
@@ -1031,12 +1031,12 @@ func TestPasswordHandlerHandle(t *testing.T) {
 	h := NewPasswordHandler()
 	ctx := context.Background()
 
-	answer, err := h.Handle(ctx, "password")
+	answer, err := h.HandleInstantQuery(ctx, "password")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer == nil {
-		t.Fatal("Handle() returned nil")
+		t.Fatal("HandleInstantQuery() returned nil")
 	}
 	if answer.Type != AnswerTypePassword {
 		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypePassword)
@@ -1053,9 +1053,9 @@ func TestPasswordHandlerHandleWithLength(t *testing.T) {
 	h := NewPasswordHandler()
 	ctx := context.Background()
 
-	answer, err := h.Handle(ctx, "password 32")
+	answer, err := h.HandleInstantQuery(ctx, "password 32")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer.Data["length"] != 32 {
 		t.Errorf("length = %v, want %v", answer.Data["length"], 32)
@@ -1120,12 +1120,12 @@ func TestIPHandlerHandle(t *testing.T) {
 	h := NewIPHandler()
 	ctx := context.Background()
 
-	answer, err := h.Handle(ctx, "my ip")
+	answer, err := h.HandleInstantQuery(ctx, "my ip")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer == nil {
-		t.Fatal("Handle() returned nil")
+		t.Fatal("HandleInstantQuery() returned nil")
 	}
 	if answer.Type != AnswerTypeIP {
 		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeIP)
@@ -1148,12 +1148,12 @@ func TestConvertHandlerHandleNoMatch(t *testing.T) {
 	ctx := context.Background()
 
 	// Query that matches pattern but has empty units after extraction fails
-	answer, err := h.Handle(ctx, "not a conversion query")
+	answer, err := h.HandleInstantQuery(ctx, "not a conversion query")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer != nil {
-		t.Error("Handle() should return nil for non-matching query")
+		t.Error("HandleInstantQuery() should return nil for non-matching query")
 	}
 }
 
@@ -1162,12 +1162,12 @@ func TestConvertHandlerHandleSecondPattern(t *testing.T) {
 	ctx := context.Background()
 
 	// Test the "X unit = ? unit" pattern
-	answer, err := h.Handle(ctx, "100 km = ? miles")
+	answer, err := h.HandleInstantQuery(ctx, "100 km = ? miles")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer == nil {
-		t.Fatal("Handle() returned nil")
+		t.Fatal("HandleInstantQuery() returned nil")
 	}
 	if answer.Type != AnswerTypeConvert {
 		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeConvert)
@@ -1179,12 +1179,12 @@ func TestConvertHandlerHandleUnknownConversion(t *testing.T) {
 	ctx := context.Background()
 
 	// Test with unknown units that will cause convert() to return error
-	answer, err := h.Handle(ctx, "100 foobar to bazqux")
+	answer, err := h.HandleInstantQuery(ctx, "100 foobar to bazqux")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer == nil {
-		t.Fatal("Handle() returned nil")
+		t.Fatal("HandleInstantQuery() returned nil")
 	}
 	// Should contain error message in content
 	if answer.Content == "" {
@@ -1197,12 +1197,12 @@ func TestConvertHandlerHandleArrowPattern(t *testing.T) {
 	ctx := context.Background()
 
 	// Test the "->" pattern
-	answer, err := h.Handle(ctx, "100 meters -> feet")
+	answer, err := h.HandleInstantQuery(ctx, "100 meters -> feet")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer == nil {
-		t.Fatal("Handle() returned nil")
+		t.Fatal("HandleInstantQuery() returned nil")
 	}
 	if answer.Type != AnswerTypeConvert {
 		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeConvert)
@@ -1544,12 +1544,12 @@ func TestHashHandlerHandleEmptyText(t *testing.T) {
 	ctx := context.Background()
 
 	// Test with query that doesn't extract text
-	answer, err := h.Handle(ctx, "not a hash query")
+	answer, err := h.HandleInstantQuery(ctx, "not a hash query")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer != nil {
-		t.Error("Handle() should return nil for non-matching text")
+		t.Error("HandleInstantQuery() should return nil for non-matching text")
 	}
 }
 
@@ -1570,12 +1570,12 @@ func TestHashHandlerHandleAllTypes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.query, func(t *testing.T) {
-			answer, err := h.Handle(ctx, tt.query)
+			answer, err := h.HandleInstantQuery(ctx, tt.query)
 			if err != nil {
-				t.Fatalf("Handle() error = %v", err)
+				t.Fatalf("HandleInstantQuery() error = %v", err)
 			}
 			if answer == nil {
-				t.Fatal("Handle() returned nil")
+				t.Fatal("HandleInstantQuery() returned nil")
 			}
 			if answer.Type != AnswerTypeHash {
 				t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeHash)
@@ -1596,12 +1596,12 @@ func TestBase64HandlerHandleEmptyText(t *testing.T) {
 	h := NewBase64Handler()
 	ctx := context.Background()
 
-	answer, err := h.Handle(ctx, "not a base64 query")
+	answer, err := h.HandleInstantQuery(ctx, "not a base64 query")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer != nil {
-		t.Error("Handle() should return nil for non-matching text")
+		t.Error("HandleInstantQuery() should return nil for non-matching text")
 	}
 }
 
@@ -1609,12 +1609,12 @@ func TestBase64HandlerHandleInvalidDecode(t *testing.T) {
 	h := NewBase64Handler()
 	ctx := context.Background()
 
-	answer, err := h.Handle(ctx, "base64 decode: !!!invalid!!!")
+	answer, err := h.HandleInstantQuery(ctx, "base64 decode: !!!invalid!!!")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer == nil {
-		t.Fatal("Handle() returned nil")
+		t.Fatal("HandleInstantQuery() returned nil")
 	}
 	// Should contain error message
 	if !contains(answer.Content, "Error") && !contains(answer.Content, "Invalid") {
@@ -1659,12 +1659,12 @@ func TestURLHandlerHandleEmptyText(t *testing.T) {
 	h := NewURLHandler()
 	ctx := context.Background()
 
-	answer, err := h.Handle(ctx, "not a url query")
+	answer, err := h.HandleInstantQuery(ctx, "not a url query")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer != nil {
-		t.Error("Handle() should return nil for non-matching text")
+		t.Error("HandleInstantQuery() should return nil for non-matching text")
 	}
 }
 
@@ -1672,12 +1672,12 @@ func TestURLHandlerHandleParse(t *testing.T) {
 	h := NewURLHandler()
 	ctx := context.Background()
 
-	answer, err := h.Handle(ctx, "parse url: https://example.com/path?query=value#fragment")
+	answer, err := h.HandleInstantQuery(ctx, "parse url: https://example.com/path?query=value#fragment")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer == nil {
-		t.Fatal("Handle() returned nil")
+		t.Fatal("HandleInstantQuery() returned nil")
 	}
 	if answer.Type != AnswerTypeURL {
 		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeURL)
@@ -1697,12 +1697,12 @@ func TestURLHandlerHandleParseInvalid(t *testing.T) {
 
 	// URL with invalid characters that url.Parse will still parse
 	// but with unexpected results - test the path anyway
-	answer, err := h.Handle(ctx, "parse url: ://invalid")
+	answer, err := h.HandleInstantQuery(ctx, "parse url: ://invalid")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer == nil {
-		t.Fatal("Handle() returned nil")
+		t.Fatal("HandleInstantQuery() returned nil")
 	}
 }
 
@@ -1710,12 +1710,12 @@ func TestURLHandlerHandleDecode(t *testing.T) {
 	h := NewURLHandler()
 	ctx := context.Background()
 
-	answer, err := h.Handle(ctx, "url decode: hello%20world")
+	answer, err := h.HandleInstantQuery(ctx, "url decode: hello%20world")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer == nil {
-		t.Fatal("Handle() returned nil")
+		t.Fatal("HandleInstantQuery() returned nil")
 	}
 	if answer.Type != AnswerTypeURL {
 		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeURL)
@@ -1730,12 +1730,12 @@ func TestURLHandlerHandleDecodeInvalid(t *testing.T) {
 	ctx := context.Background()
 
 	// Invalid percent encoding - should still return something
-	answer, err := h.Handle(ctx, "url decode: %ZZ")
+	answer, err := h.HandleInstantQuery(ctx, "url decode: %ZZ")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer == nil {
-		t.Fatal("Handle() returned nil")
+		t.Fatal("HandleInstantQuery() returned nil")
 	}
 }
 
@@ -1775,12 +1775,12 @@ func TestColorHandlerHandleNoColor(t *testing.T) {
 	h := NewColorHandler()
 	ctx := context.Background()
 
-	answer, err := h.Handle(ctx, "not a color query")
+	answer, err := h.HandleInstantQuery(ctx, "not a color query")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer != nil {
-		t.Error("Handle() should return nil for non-matching query")
+		t.Error("HandleInstantQuery() should return nil for non-matching query")
 	}
 }
 
@@ -1788,12 +1788,12 @@ func TestColorHandlerHandle3CharHex(t *testing.T) {
 	h := NewColorHandler()
 	ctx := context.Background()
 
-	answer, err := h.Handle(ctx, "#f00")
+	answer, err := h.HandleInstantQuery(ctx, "#f00")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer == nil {
-		t.Fatal("Handle() returned nil")
+		t.Fatal("HandleInstantQuery() returned nil")
 	}
 	if answer.Type != AnswerTypeColor {
 		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeColor)
@@ -1816,12 +1816,12 @@ func TestColorHandlerHandleRGB(t *testing.T) {
 
 	for _, query := range tests {
 		t.Run(query, func(t *testing.T) {
-			answer, err := h.Handle(ctx, query)
+			answer, err := h.HandleInstantQuery(ctx, query)
 			if err != nil {
-				t.Fatalf("Handle() error = %v", err)
+				t.Fatalf("HandleInstantQuery() error = %v", err)
 			}
 			if answer == nil {
-				t.Fatal("Handle() returned nil")
+				t.Fatal("HandleInstantQuery() returned nil")
 			}
 			if answer.Type != AnswerTypeColor {
 				t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeColor)
@@ -1899,12 +1899,12 @@ func TestRandomHandlerHandleWithRange(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.query, func(t *testing.T) {
-			answer, err := h.Handle(ctx, tt.query)
+			answer, err := h.HandleInstantQuery(ctx, tt.query)
 			if err != nil {
-				t.Fatalf("Handle() error = %v", err)
+				t.Fatalf("HandleInstantQuery() error = %v", err)
 			}
 			if answer == nil {
-				t.Fatal("Handle() returned nil")
+				t.Fatal("HandleInstantQuery() returned nil")
 			}
 			if answer.Type != AnswerTypeRandom {
 				t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeRandom)
@@ -1926,18 +1926,18 @@ func TestPasswordHandlerHandleLengthConstraints(t *testing.T) {
 	ctx := context.Background()
 
 	// Test with length < 8 (should be clamped to 8)
-	answer, err := h.Handle(ctx, "password 4")
+	answer, err := h.HandleInstantQuery(ctx, "password 4")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer.Data["length"] != 8 {
 		t.Errorf("length = %v, want 8 (minimum)", answer.Data["length"])
 	}
 
 	// Test with length > 128 (should be clamped to 128)
-	answer, err = h.Handle(ctx, "password 200")
+	answer, err = h.HandleInstantQuery(ctx, "password 200")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer.Data["length"] != 128 {
 		t.Errorf("length = %v, want 128 (maximum)", answer.Data["length"])
@@ -1988,12 +1988,12 @@ func TestTimeHandlerHandleVariants(t *testing.T) {
 
 	for _, query := range tests {
 		t.Run(query, func(t *testing.T) {
-			answer, err := h.Handle(ctx, query)
+			answer, err := h.HandleInstantQuery(ctx, query)
 			if err != nil {
-				t.Fatalf("Handle() error = %v", err)
+				t.Fatalf("HandleInstantQuery() error = %v", err)
 			}
 			if answer == nil {
-				t.Fatal("Handle() returned nil")
+				t.Fatal("HandleInstantQuery() returned nil")
 			}
 			if answer.Type != AnswerTypeTime {
 				t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeTime)
@@ -2077,12 +2077,12 @@ func TestSynonymHandlerHandleEmptyWord(t *testing.T) {
 	ctx := context.Background()
 
 	// Query that doesn't match any pattern
-	answer, err := h.Handle(ctx, "not a synonym query")
+	answer, err := h.HandleInstantQuery(ctx, "not a synonym query")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer != nil {
-		t.Error("Handle() should return nil for non-matching query")
+		t.Error("HandleInstantQuery() should return nil for non-matching query")
 	}
 }
 
@@ -2189,12 +2189,12 @@ func TestAntonymHandlerHandleEmptyWord(t *testing.T) {
 	ctx := context.Background()
 
 	// Query that doesn't match any pattern
-	answer, err := h.Handle(ctx, "not an antonym query")
+	answer, err := h.HandleInstantQuery(ctx, "not an antonym query")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer != nil {
-		t.Error("Handle() should return nil for non-matching query")
+		t.Error("HandleInstantQuery() should return nil for non-matching query")
 	}
 }
 
@@ -2257,12 +2257,12 @@ func TestDefinitionHandlerHandleEmptyWord(t *testing.T) {
 	ctx := context.Background()
 
 	// Query that doesn't match any pattern
-	answer, err := h.Handle(ctx, "not a definition query")
+	answer, err := h.HandleInstantQuery(ctx, "not a definition query")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer != nil {
-		t.Error("Handle() should return nil for non-matching query")
+		t.Error("HandleInstantQuery() should return nil for non-matching query")
 	}
 }
 
@@ -2350,12 +2350,12 @@ func TestMathHandlerHandleError(t *testing.T) {
 	ctx := context.Background()
 
 	// Test with invalid expression that will cause evaluation error
-	answer, err := h.Handle(ctx, "calc: invalid_expression")
+	answer, err := h.HandleInstantQuery(ctx, "calc: invalid_expression")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer == nil {
-		t.Fatal("Handle() returned nil")
+		t.Fatal("HandleInstantQuery() returned nil")
 	}
 	// Should contain error in content
 	if !strings.Contains(answer.Content, "Error") {
@@ -2491,12 +2491,12 @@ func TestRandomHandlerDiceWithSides(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.query, func(t *testing.T) {
-			answer, err := h.Handle(ctx, tt.query)
+			answer, err := h.HandleInstantQuery(ctx, tt.query)
 			if err != nil {
-				t.Fatalf("Handle() error = %v", err)
+				t.Fatalf("HandleInstantQuery() error = %v", err)
 			}
 			if answer == nil {
-				t.Fatal("Handle() returned nil")
+				t.Fatal("HandleInstantQuery() returned nil")
 			}
 			if answer.Type != AnswerTypeRandom {
 				t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeRandom)
@@ -2565,12 +2565,12 @@ func TestConvertHandlerDecimalValues(t *testing.T) {
 	h := NewConvertHandler()
 	ctx := context.Background()
 
-	answer, err := h.Handle(ctx, "1.5 km to meters")
+	answer, err := h.HandleInstantQuery(ctx, "1.5 km to meters")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer == nil {
-		t.Fatal("Handle() returned nil")
+		t.Fatal("HandleInstantQuery() returned nil")
 	}
 	if answer.Data["result"] != float64(1500) {
 		t.Errorf("result = %v, want 1500", answer.Data["result"])
@@ -2583,12 +2583,12 @@ func TestURLHandlerParseComplete(t *testing.T) {
 	h := NewURLHandler()
 	ctx := context.Background()
 
-	answer, err := h.Handle(ctx, "parse url: https://user:pass@example.com:8080/path?query=value#section")
+	answer, err := h.HandleInstantQuery(ctx, "parse url: https://user:pass@example.com:8080/path?query=value#section")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer == nil {
-		t.Fatal("Handle() returned nil")
+		t.Fatal("HandleInstantQuery() returned nil")
 	}
 	// Should contain all URL parts
 	if !strings.Contains(answer.Content, "https") {
@@ -2605,12 +2605,12 @@ func TestURLHandlerParseSimple(t *testing.T) {
 	h := NewURLHandler()
 	ctx := context.Background()
 
-	answer, err := h.Handle(ctx, "parse url: https://example.com/path")
+	answer, err := h.HandleInstantQuery(ctx, "parse url: https://example.com/path")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer == nil {
-		t.Fatal("Handle() returned nil")
+		t.Fatal("HandleInstantQuery() returned nil")
 	}
 	if !strings.Contains(answer.Content, "Path") {
 		t.Error("Content should contain Path")
@@ -2648,12 +2648,12 @@ func TestIPHandlerHandleContent(t *testing.T) {
 	h := NewIPHandler()
 	ctx := context.Background()
 
-	answer, err := h.Handle(ctx, "my ip")
+	answer, err := h.HandleInstantQuery(ctx, "my ip")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer == nil {
-		t.Fatal("Handle() returned nil")
+		t.Fatal("HandleInstantQuery() returned nil")
 	}
 	// Should contain IP info
 	if !strings.Contains(answer.Content, "IP") {
@@ -2709,12 +2709,12 @@ func TestUUIDHandlerHandleFormat(t *testing.T) {
 	h := NewUUIDHandler()
 	ctx := context.Background()
 
-	answer, err := h.Handle(ctx, "uuid")
+	answer, err := h.HandleInstantQuery(ctx, "uuid")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer == nil {
-		t.Fatal("Handle() returned nil")
+		t.Fatal("HandleInstantQuery() returned nil")
 	}
 	uuid := answer.Data["uuid"].(string)
 	// UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
@@ -2841,12 +2841,12 @@ func TestColorHandlerHexEdgeCases(t *testing.T) {
 
 	for _, query := range tests {
 		t.Run(query, func(t *testing.T) {
-			answer, err := h.Handle(ctx, query)
+			answer, err := h.HandleInstantQuery(ctx, query)
 			if err != nil {
-				t.Fatalf("Handle() error = %v", err)
+				t.Fatalf("HandleInstantQuery() error = %v", err)
 			}
 			if answer == nil {
-				t.Fatal("Handle() returned nil")
+				t.Fatal("HandleInstantQuery() returned nil")
 			}
 			if answer.Type != AnswerTypeColor {
 				t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeColor)
@@ -2873,12 +2873,12 @@ func TestConvertHandlerTimeUnits(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.query, func(t *testing.T) {
-			answer, err := h.Handle(ctx, tt.query)
+			answer, err := h.HandleInstantQuery(ctx, tt.query)
 			if err != nil {
-				t.Fatalf("Handle() error = %v", err)
+				t.Fatalf("HandleInstantQuery() error = %v", err)
 			}
 			if answer == nil {
-				t.Fatal("Handle() returned nil")
+				t.Fatal("HandleInstantQuery() returned nil")
 			}
 			if answer.Type != AnswerTypeConvert {
 				t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeConvert)
@@ -2895,9 +2895,9 @@ func TestRandomHandlerResultInRange(t *testing.T) {
 
 	// Run multiple times to verify randomness stays in range
 	for i := 0; i < 10; i++ {
-		answer, err := h.Handle(ctx, "random 1-10")
+		answer, err := h.HandleInstantQuery(ctx, "random 1-10")
 		if err != nil {
-			t.Fatalf("Handle() error = %v", err)
+			t.Fatalf("HandleInstantQuery() error = %v", err)
 		}
 		result := answer.Data["result"].(int)
 		if result < 1 || result > 10 {
@@ -2914,9 +2914,9 @@ func TestRandomHandlerCoinFlipResult(t *testing.T) {
 
 	// Run multiple times
 	for i := 0; i < 10; i++ {
-		answer, err := h.Handle(ctx, "flip coin")
+		answer, err := h.HandleInstantQuery(ctx, "flip coin")
 		if err != nil {
-			t.Fatalf("Handle() error = %v", err)
+			t.Fatalf("HandleInstantQuery() error = %v", err)
 		}
 		result := answer.Data["result"].(string)
 		if result != "Heads" && result != "Tails" {
@@ -2932,18 +2932,18 @@ func TestBase64HandlerOperations(t *testing.T) {
 	ctx := context.Background()
 
 	// Test encode
-	encoded, err := h.Handle(ctx, "base64 encode: test string")
+	encoded, err := h.HandleInstantQuery(ctx, "base64 encode: test string")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if encoded.Data["operation"] != "encoded" {
 		t.Errorf("operation = %v, want encoded", encoded.Data["operation"])
 	}
 
 	// Test decode
-	decoded, err := h.Handle(ctx, "base64 decode: dGVzdCBzdHJpbmc=")
+	decoded, err := h.HandleInstantQuery(ctx, "base64 decode: dGVzdCBzdHJpbmc=")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if decoded.Data["operation"] != "decoded" {
 		t.Errorf("operation = %v, want decoded", decoded.Data["operation"])
@@ -2960,21 +2960,21 @@ func TestURLHandlerRoundTrip(t *testing.T) {
 	ctx := context.Background()
 
 	// Test encode
-	encoded, err := h.Handle(ctx, "url encode: hello world&foo=bar")
+	encoded, err := h.HandleInstantQuery(ctx, "url encode: hello world&foo=bar")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if encoded == nil {
-		t.Fatal("Handle() returned nil")
+		t.Fatal("HandleInstantQuery() returned nil")
 	}
 
 	// Test decode
-	decoded, err := h.Handle(ctx, "url decode: hello%20world%26foo%3Dbar")
+	decoded, err := h.HandleInstantQuery(ctx, "url decode: hello%20world%26foo%3Dbar")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if decoded == nil {
-		t.Fatal("Handle() returned nil")
+		t.Fatal("HandleInstantQuery() returned nil")
 	}
 }
 
@@ -2985,9 +2985,9 @@ func TestTimeHandlerReturnsCurrentTime(t *testing.T) {
 	ctx := context.Background()
 
 	before := time.Now().Unix()
-	answer, err := h.Handle(ctx, "timestamp")
+	answer, err := h.HandleInstantQuery(ctx, "timestamp")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	after := time.Now().Unix()
 
@@ -3003,12 +3003,12 @@ func TestConvertHandlerDataStructure(t *testing.T) {
 	h := NewConvertHandler()
 	ctx := context.Background()
 
-	answer, err := h.Handle(ctx, "100 meters to feet")
+	answer, err := h.HandleInstantQuery(ctx, "100 meters to feet")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer == nil {
-		t.Fatal("Handle() returned nil")
+		t.Fatal("HandleInstantQuery() returned nil")
 	}
 
 	// Check all data fields
@@ -3032,12 +3032,12 @@ func TestMathHandlerDataStructure(t *testing.T) {
 	h := NewMathHandler()
 	ctx := context.Background()
 
-	answer, err := h.Handle(ctx, "2 + 2")
+	answer, err := h.HandleInstantQuery(ctx, "2 + 2")
 	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
+		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
 	if answer == nil {
-		t.Fatal("Handle() returned nil")
+		t.Fatal("HandleInstantQuery() returned nil")
 	}
 
 	// Check all data fields

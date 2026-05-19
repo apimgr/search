@@ -47,7 +47,7 @@ func (h *SlugHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *SlugHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *SlugHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	// Extract text from query
 	text := ""
 	for _, p := range h.patterns {

@@ -45,7 +45,7 @@ func (h *CVEHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *CVEHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *CVEHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	// Extract CVE ID from query
 	cveID := h.extractCVEID(query)
 	if cveID == "" {

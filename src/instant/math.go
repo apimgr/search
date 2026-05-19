@@ -97,7 +97,7 @@ func (h *MathHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *MathHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *MathHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	// Extract expression from prefix patterns
 	expr := query
 	for _, p := range h.patterns {

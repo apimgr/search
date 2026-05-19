@@ -131,7 +131,7 @@ var rulesOfTheInternet = []Rule{
 	{100, "There's always someone better at the game than you."},
 }
 
-func (h *RulesHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *RulesHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 
 	// Empty or "all" - show all rules

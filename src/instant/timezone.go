@@ -188,7 +188,7 @@ func (h *TimezoneHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *TimezoneHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *TimezoneHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	// Handle "time in {city}" patterns
 	timeInPattern := regexp.MustCompile(`(?i)^(?:time\s+in|what\s+time\s+(?:is\s+it\s+)?in|current\s+time\s+in)\s+(.+?)\??$`)
 	if matches := timeInPattern.FindStringSubmatch(query); len(matches) > 1 {

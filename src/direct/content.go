@@ -28,7 +28,7 @@ func (h *WikiHandler) Type() AnswerType {
 	return AnswerTypeWiki
 }
 
-func (h *WikiHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *WikiHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("topic required")
@@ -196,7 +196,7 @@ func (h *DictHandler) Type() AnswerType {
 	return AnswerTypeDict
 }
 
-func (h *DictHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *DictHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(strings.ToLower(term))
 	if term == "" {
 		return nil, fmt.Errorf("word required")
@@ -383,7 +383,7 @@ func (h *ThesaurusHandler) Type() AnswerType {
 	return AnswerTypeThesaurus
 }
 
-func (h *ThesaurusHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *ThesaurusHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(strings.ToLower(term))
 	if term == "" {
 		return nil, fmt.Errorf("word required")
@@ -499,7 +499,7 @@ func (h *PkgHandler) Type() AnswerType {
 	return AnswerTypePkg
 }
 
-func (h *PkgHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *PkgHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("package name required")
@@ -725,7 +725,7 @@ func (h *CVEHandler) Type() AnswerType {
 	return AnswerTypeCVE
 }
 
-func (h *CVEHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *CVEHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(strings.ToUpper(term))
 	if term == "" {
 		return nil, fmt.Errorf("CVE ID required")
@@ -899,7 +899,7 @@ func (h *RFCHandler) Type() AnswerType {
 	return AnswerTypeRFC
 }
 
-func (h *RFCHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *RFCHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("RFC number required")
@@ -1044,7 +1044,7 @@ func (h *DirectoryHandler) Type() AnswerType {
 	return AnswerTypeDirectory
 }
 
-func (h *DirectoryHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *DirectoryHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("search term required")

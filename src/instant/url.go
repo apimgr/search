@@ -37,7 +37,7 @@ func (h *URLHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *URLHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *URLHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	lowerQuery := strings.ToLower(query)
 	isDecode := strings.Contains(lowerQuery, "decode")
 	isParse := strings.Contains(lowerQuery, "parse")

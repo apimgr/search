@@ -44,7 +44,7 @@ func (h *QRHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *QRHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *QRHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	// Extract text from query
 	text := ""
 	for _, p := range h.patterns {

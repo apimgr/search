@@ -164,9 +164,9 @@ func TestHTTPHandler(t *testing.T) {
 	validCodes := []string{"200", "404", "500", "301", "403"}
 	for _, code := range validCodes {
 		t.Run("code_"+code, func(t *testing.T) {
-			answer, err := h.Handle(ctx, code)
+			answer, err := h.HandleDirectQuery(ctx, code)
 			if err != nil {
-				t.Fatalf("Handle(%s) error: %v", code, err)
+				t.Fatalf("HandleDirectQuery(%s) error: %v", code, err)
 			}
 			if answer == nil {
 				t.Fatal("Handle returned nil answer")
@@ -182,9 +182,9 @@ func TestHTTPHandler(t *testing.T) {
 
 	// Test invalid status code
 	t.Run("invalid_code", func(t *testing.T) {
-		answer, err := h.Handle(ctx, "invalid")
+		answer, err := h.HandleDirectQuery(ctx, "invalid")
 		if err != nil {
-			t.Fatalf("Handle(invalid) error: %v", err)
+			t.Fatalf("HandleDirectQuery(invalid) error: %v", err)
 		}
 		if answer.Error == "" {
 			t.Error("Expected error in answer for invalid code")
@@ -215,9 +215,9 @@ func TestPortHandler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run("port_"+tt.port, func(t *testing.T) {
-			answer, err := h.Handle(ctx, tt.port)
+			answer, err := h.HandleDirectQuery(ctx, tt.port)
 			if err != nil {
-				t.Fatalf("Handle(%s) error: %v", tt.port, err)
+				t.Fatalf("HandleDirectQuery(%s) error: %v", tt.port, err)
 			}
 			if answer == nil {
 				t.Fatal("Handle returned nil answer")
@@ -247,9 +247,9 @@ func TestChmodHandler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run("chmod_"+tt.input, func(t *testing.T) {
-			answer, err := h.Handle(ctx, tt.input)
+			answer, err := h.HandleDirectQuery(ctx, tt.input)
 			if err != nil {
-				t.Fatalf("Handle(%s) error: %v", tt.input, err)
+				t.Fatalf("HandleDirectQuery(%s) error: %v", tt.input, err)
 			}
 			if answer == nil {
 				t.Fatal("Handle returned nil answer")
@@ -280,9 +280,9 @@ func TestCronHandler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run("cron_"+tt.expr, func(t *testing.T) {
-			answer, err := h.Handle(ctx, tt.expr)
+			answer, err := h.HandleDirectQuery(ctx, tt.expr)
 			if err != nil {
-				t.Fatalf("Handle(%s) error: %v", tt.expr, err)
+				t.Fatalf("HandleDirectQuery(%s) error: %v", tt.expr, err)
 			}
 			if answer == nil {
 				t.Fatal("Handle returned nil answer")
@@ -310,9 +310,9 @@ func TestSubnetHandler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run("subnet_"+tt.cidr, func(t *testing.T) {
-			answer, err := h.Handle(ctx, tt.cidr)
+			answer, err := h.HandleDirectQuery(ctx, tt.cidr)
 			if err != nil {
-				t.Fatalf("Handle(%s) error: %v", tt.cidr, err)
+				t.Fatalf("HandleDirectQuery(%s) error: %v", tt.cidr, err)
 			}
 			if answer == nil {
 				t.Fatal("Handle returned nil answer")
@@ -340,9 +340,9 @@ func TestCaseHandler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run("case_"+tt.input, func(t *testing.T) {
-			answer, err := h.Handle(ctx, tt.input)
+			answer, err := h.HandleDirectQuery(ctx, tt.input)
 			if err != nil {
-				t.Fatalf("Handle(%s) error: %v", tt.input, err)
+				t.Fatalf("HandleDirectQuery(%s) error: %v", tt.input, err)
 			}
 			if answer == nil {
 				t.Fatal("Handle returned nil answer")
@@ -370,9 +370,9 @@ func TestSlugHandler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run("slug_"+tt.input, func(t *testing.T) {
-			answer, err := h.Handle(ctx, tt.input)
+			answer, err := h.HandleDirectQuery(ctx, tt.input)
 			if err != nil {
-				t.Fatalf("Handle(%s) error: %v", tt.input, err)
+				t.Fatalf("HandleDirectQuery(%s) error: %v", tt.input, err)
 			}
 			if answer == nil {
 				t.Fatal("Handle returned nil answer")
@@ -401,9 +401,9 @@ func TestLoremHandler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run("lorem_"+tt.input, func(t *testing.T) {
-			answer, err := h.Handle(ctx, tt.input)
+			answer, err := h.HandleDirectQuery(ctx, tt.input)
 			if err != nil {
-				t.Fatalf("Handle(%s) error: %v", tt.input, err)
+				t.Fatalf("HandleDirectQuery(%s) error: %v", tt.input, err)
 			}
 			if answer == nil {
 				t.Fatal("Handle returned nil answer")
@@ -433,9 +433,9 @@ func TestMIMEHandler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run("mime_"+tt.input, func(t *testing.T) {
-			answer, err := h.Handle(ctx, tt.input)
+			answer, err := h.HandleDirectQuery(ctx, tt.input)
 			if err != nil {
-				t.Fatalf("Handle(%s) error: %v", tt.input, err)
+				t.Fatalf("HandleDirectQuery(%s) error: %v", tt.input, err)
 			}
 			if answer == nil {
 				t.Fatal("Handle returned nil answer")
@@ -464,9 +464,9 @@ func TestLicenseHandler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run("license_"+tt.input, func(t *testing.T) {
-			answer, err := h.Handle(ctx, tt.input)
+			answer, err := h.HandleDirectQuery(ctx, tt.input)
 			if err != nil {
-				t.Fatalf("Handle(%s) error: %v", tt.input, err)
+				t.Fatalf("HandleDirectQuery(%s) error: %v", tt.input, err)
 			}
 			if answer == nil {
 				t.Fatal("Handle returned nil answer")
@@ -494,9 +494,9 @@ func TestTimestampHandler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run("timestamp_"+tt.input, func(t *testing.T) {
-			answer, err := h.Handle(ctx, tt.input)
+			answer, err := h.HandleDirectQuery(ctx, tt.input)
 			if err != nil {
-				t.Fatalf("Handle(%s) error: %v", tt.input, err)
+				t.Fatalf("HandleDirectQuery(%s) error: %v", tt.input, err)
 			}
 			if answer == nil {
 				t.Fatal("Handle returned nil answer")

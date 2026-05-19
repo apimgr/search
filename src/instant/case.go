@@ -49,7 +49,7 @@ func (h *CaseHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *CaseHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *CaseHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	// Extract text from query
 	text := ""
 	for _, p := range h.patterns {

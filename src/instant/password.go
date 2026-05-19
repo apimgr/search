@@ -38,7 +38,7 @@ func (h *PasswordHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *PasswordHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *PasswordHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	length := 16
 	lengthPattern := regexp.MustCompile(`(\d+)`)
 	if matches := lengthPattern.FindStringSubmatch(query); len(matches) > 1 {

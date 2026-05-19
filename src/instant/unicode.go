@@ -43,7 +43,7 @@ func (h *UnicodeHandler) CanHandle(query string) bool {
 	return false
 }
 
-func (h *UnicodeHandler) Handle(ctx context.Context, query string) (*Answer, error) {
+func (h *UnicodeHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	var input string
 	for _, p := range h.patterns {
 		if matches := p.FindStringSubmatch(query); len(matches) > 1 {

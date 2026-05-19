@@ -25,7 +25,7 @@ func (h *UserAgentHandler) Type() AnswerType {
 	return AnswerTypeUserAgent
 }
 
-func (h *UserAgentHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *UserAgentHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" || strings.ToLower(term) == "my" {
 		// Return current UA
@@ -289,7 +289,7 @@ func init() {
 	}
 }
 
-func (h *MIMEHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *MIMEHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(strings.ToLower(term))
 	if term == "" {
 		return nil, fmt.Errorf("MIME type or extension required")
@@ -450,7 +450,7 @@ var licenseDB = map[string]struct {
 		true, true},
 }
 
-func (h *LicenseHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *LicenseHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(strings.ToLower(term))
 	if term == "" {
 		return nil, fmt.Errorf("license name required")
@@ -579,7 +579,7 @@ func (h *CountryHandler) Type() AnswerType {
 	return AnswerTypeCountry
 }
 
-func (h *CountryHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *CountryHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("country code or name required")
@@ -853,7 +853,7 @@ var asciiFontBasic = map[rune][]string{
 	'9': {" ███ ", "█   █", "█   █", " ████", "    █", "   █ ", " ██  "},
 }
 
-func (h *ASCIIHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *ASCIIHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("text required")
@@ -933,7 +933,7 @@ func (h *QRHandler) Type() AnswerType {
 	return AnswerTypeQR
 }
 
-func (h *QRHandler) Handle(ctx context.Context, term string) (*Answer, error) {
+func (h *QRHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("text or URL required")
