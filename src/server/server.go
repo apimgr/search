@@ -443,7 +443,7 @@ func NewServer(cfg *config.Config) *Server {
 }
 
 // Start starts the HTTP server
-func (s *Server) Start() error {
+func (s *Server) StartHTTPServer() error {
 	// Create PID file
 	if err := s.createPIDFile(); err != nil {
 		return fmt.Errorf("failed to create PID file: %w", err)
@@ -451,7 +451,7 @@ func (s *Server) Start() error {
 
 	// Start Tor service if enabled
 	if s.torService != nil {
-		if err := s.torService.Start(); err != nil {
+		if err := s.torService.StartTorService(); err != nil {
 			log.Printf("[Tor] Warning: Failed to start Tor service: %v", err)
 		}
 	}
@@ -603,13 +603,13 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 	// Stop scheduler
 	if s.scheduler != nil {
-		s.scheduler.Stop()
+		s.scheduler.StopTaskScheduler()
 		log.Printf("[Scheduler] Stopped")
 	}
 
 	// Stop Tor service
 	if s.torService != nil {
-		s.torService.Stop()
+		s.torService.StopTorService()
 	}
 
 	// Stop HTTP->HTTPS redirect server if running

@@ -257,7 +257,7 @@ func sanitizeTorrcContent(content string, _ string) string {
 
 // Start starts the Tor hidden service using bine
 // Per AI.md PART 32: "Auto-enabled if tor binary is installed - no enable flag needed"
-func (t *TorService) Start() error {
+func (t *TorService) StartTorService() error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -448,7 +448,7 @@ func (t *TorService) Start() error {
 }
 
 // Stop stops the Tor hidden service
-func (t *TorService) Stop() error {
+func (t *TorService) StopTorService() error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -473,11 +473,11 @@ func (t *TorService) Stop() error {
 }
 
 // Restart stops and starts Tor (used for config changes, recovery)
-func (t *TorService) Restart() error {
-	if err := t.Stop(); err != nil {
+func (t *TorService) RestartTorService() error {
+	if err := t.StopTorService(); err != nil {
 		return err
 	}
-	return t.Start()
+	return t.StartTorService()
 }
 
 // IsRunning returns whether Tor is running
@@ -599,7 +599,7 @@ func (t *TorService) monitorTor() {
 			// Check if Tor is still responsive via control connection
 			if _, err := torInstance.Control.GetInfo("version"); err != nil {
 				log.Printf("[Tor] Process unresponsive, restarting: %v", err)
-				if err := t.Restart(); err != nil {
+				if err := t.RestartTorService(); err != nil {
 					log.Printf("[Tor] Failed to restart: %v", err)
 				}
 			}
@@ -641,7 +641,7 @@ func (t *TorService) GetTorStatus() map[string]interface{} {
 // Shutdown gracefully shuts down the Tor service
 func (t *TorService) Shutdown() {
 	t.cancel()
-	t.Stop()
+	t.StopTorService()
 }
 
 // CheckTorConnection tests if Tor is accessible
@@ -858,7 +858,7 @@ func (t *TorService) ImportKeys(privateKey []byte) (string, error) {
 
 	// Restart Tor to apply new keys
 	t.mu.Unlock()
-	err := t.Start()
+	err := t.StartTorService()
 	t.mu.Lock()
 
 	if err != nil {

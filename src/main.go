@@ -421,7 +421,7 @@ func runServer() {
 	})
 
 	// Start server
-	if err := srv.Start(); err != nil {
+	if err := srv.StartHTTPServer(); err != nil {
 		log.Fatalf(display.Emoji("❌", "[ERROR]")+" Server failed: %v", err)
 	}
 }
@@ -875,7 +875,7 @@ func runService(action string) {
 			os.Exit(1)
 		}
 		fmt.Println("Starting service...")
-		if err := sm.Start(); err != nil {
+		if err := sm.StartAllServices(); err != nil {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to start service: %v\n", err)
 			os.Exit(1)
 		}
@@ -887,7 +887,7 @@ func runService(action string) {
 			os.Exit(1)
 		}
 		fmt.Println("Stopping service...")
-		if err := sm.Stop(); err != nil {
+		if err := sm.StopAllServices(); err != nil {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to stop service: %v\n", err)
 			os.Exit(1)
 		}
@@ -907,7 +907,7 @@ func runService(action string) {
 			os.Exit(1)
 		}
 		fmt.Println("Restarting service...")
-		if err := sm.Restart(); err != nil {
+		if err := sm.RestartAllServices(); err != nil {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to restart service: %v\n", err)
 			os.Exit(1)
 		}

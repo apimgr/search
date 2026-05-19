@@ -122,7 +122,7 @@ func (cm *ClusterManager) Start(ctx context.Context) error {
 }
 
 // Stop stops the cluster manager
-func (cm *ClusterManager) Stop() {
+func (cm *ClusterManager) StopClusterNode() {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 

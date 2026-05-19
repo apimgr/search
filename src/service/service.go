@@ -107,7 +107,7 @@ func (sm *ServiceManager) Status() (string, error) {
 }
 
 // Start starts the service
-func (sm *ServiceManager) Start() error {
+func (sm *ServiceManager) StartAllServices() error {
 	switch runtime.GOOS {
 	case "linux":
 		if sm.hasRunit() {
@@ -129,7 +129,7 @@ func (sm *ServiceManager) Start() error {
 }
 
 // Stop stops the service
-func (sm *ServiceManager) Stop() error {
+func (sm *ServiceManager) StopAllServices() error {
 	switch runtime.GOOS {
 	case "linux":
 		if sm.hasRunit() {
@@ -151,7 +151,7 @@ func (sm *ServiceManager) Stop() error {
 }
 
 // Restart restarts the service
-func (sm *ServiceManager) Restart() error {
+func (sm *ServiceManager) RestartAllServices() error {
 	switch runtime.GOOS {
 	case "linux":
 		if sm.hasRunit() {
@@ -162,17 +162,17 @@ func (sm *ServiceManager) Restart() error {
 		}
 		return runCommand("systemctl", "restart", "search")
 	case "darwin":
-		if err := sm.Stop(); err != nil {
+		if err := sm.StopAllServices(); err != nil {
 			// Ignore stop errors
 		}
-		return sm.Start()
+		return sm.StartAllServices()
 	case "freebsd", "openbsd", "netbsd":
 		return runCommand("service", "search", "restart")
 	case "windows":
-		if err := sm.Stop(); err != nil {
+		if err := sm.StopAllServices(); err != nil {
 			// Ignore stop errors
 		}
-		return sm.Start()
+		return sm.StartAllServices()
 	default:
 		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
 	}
@@ -192,12 +192,12 @@ func (sm *ServiceManager) Reload() error {
 		return runCommand("systemctl", "reload", "search")
 	case "darwin":
 		// macOS doesn't have a standard reload, use restart
-		return sm.Restart()
+		return sm.RestartAllServices()
 	case "freebsd", "openbsd", "netbsd":
 		return runCommand("service", "search", "reload")
 	case "windows":
 		// Windows doesn't support reload, use restart
-		return sm.Restart()
+		return sm.RestartAllServices()
 	default:
 		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
 	}

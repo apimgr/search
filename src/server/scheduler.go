@@ -46,7 +46,7 @@ func (s *Server) initScheduler(db *sql.DB) {
 	sched.SetNotifyFunc(s.handleTaskFailureNotification)
 
 	// Start scheduler - it runs continuously until shutdown
-	sched.Start()
+	sched.StartTaskScheduler()
 
 	s.scheduler = sched
 
@@ -138,7 +138,7 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 			log.Println("[Task] Checking Tor health...")
 			if s.torService != nil && !s.torService.IsRunning() {
 				log.Println("[Task] Tor is down, attempting restart...")
-				return s.torService.Restart()
+				return s.torService.RestartTorService()
 			}
 			return nil
 		},

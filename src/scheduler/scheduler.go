@@ -482,7 +482,7 @@ type TaskHandlers struct {
 
 // Start starts the scheduler
 // Per AI.md PART 19: Scheduler is ALWAYS RUNNING
-func (s *Scheduler) Start() {
+func (s *Scheduler) StartTaskScheduler() {
 	s.mu.Lock()
 	if s.running {
 		s.mu.Unlock()
@@ -1094,7 +1094,7 @@ func (s *Scheduler) RunNow(id TaskID) error {
 }
 
 // Stop stops the scheduler
-func (s *Scheduler) Stop() {
+func (s *Scheduler) StopTaskScheduler() {
 	s.mu.Lock()
 	if !s.running {
 		s.mu.Unlock()

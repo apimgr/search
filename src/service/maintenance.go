@@ -98,7 +98,7 @@ func NewMaintenanceService(cfg *config.Config) *MaintenanceService {
 }
 
 // Start starts the maintenance service monitoring
-func (m *MaintenanceService) Start() error {
+func (m *MaintenanceService) StartMaintenanceService() error {
 	m.mu.Lock()
 	if m.running {
 		m.mu.Unlock()
@@ -119,7 +119,7 @@ func (m *MaintenanceService) Start() error {
 }
 
 // Stop stops the maintenance service
-func (m *MaintenanceService) Stop() {
+func (m *MaintenanceService) StopMaintenanceService() {
 	m.cancel()
 	m.mu.Lock()
 	m.running = false

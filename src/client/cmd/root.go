@@ -283,7 +283,7 @@ func getToken() string {
 	return ""
 }
 
-func Execute() error {
+func ExecuteClientCLI() error {
 	return rootCmd.Execute()
 }
 

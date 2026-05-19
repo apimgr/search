@@ -64,9 +64,9 @@ type TorManager interface {
 	IsRunning() bool
 	GetOnionAddress() string
 	GetTorStatus() map[string]interface{}
-	Start() error
-	Stop() error
-	Restart() error
+	StartTorService() error
+	StopTorService() error
+	RestartTorService() error
 	RegenerateAddress() (string, error)
 	GenerateVanity(prefix string) error
 	CancelVanity()
@@ -3290,7 +3290,7 @@ func (h *Handler) apiTorStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.tor.Start(); err != nil {
+	if err := h.tor.StartTorService(); err != nil {
 		log.Printf("[Admin] Failed to start Tor: %v", err)
 		h.jsonError(w, r, fmt.Sprintf("Failed to start Tor: %v", err), http.StatusInternalServerError)
 		return
@@ -3320,7 +3320,7 @@ func (h *Handler) apiTorStop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.tor.Stop(); err != nil {
+	if err := h.tor.StopTorService(); err != nil {
 		log.Printf("[Admin] Failed to stop Tor: %v", err)
 		h.jsonError(w, r, fmt.Sprintf("Failed to stop Tor: %v", err), http.StatusInternalServerError)
 		return
@@ -3342,7 +3342,7 @@ func (h *Handler) apiTorRestart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.tor.Restart(); err != nil {
+	if err := h.tor.RestartTorService(); err != nil {
 		log.Printf("[Admin] Failed to restart Tor: %v", err)
 		h.jsonError(w, r, fmt.Sprintf("Failed to restart Tor: %v", err), http.StatusInternalServerError)
 		return

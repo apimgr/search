@@ -144,7 +144,7 @@ func IsValidSortOrder(s SortOrder) bool {
 }
 
 // Validate checks if the query is valid (sanitizes first)
-func (q *Query) Validate() error {
+func (q *Query) ValidateSearchQuery() error {
 	q.Sanitize()
 	if q.Text == "" {
 		return ErrEmptyQuery

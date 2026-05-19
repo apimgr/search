@@ -80,7 +80,7 @@ func NewAggregatorSimple(engines []Engine, timeout time.Duration) *Aggregator {
 
 // Search performs concurrent searches across all engines
 func (a *Aggregator) Search(ctx context.Context, query *model.Query) (*model.SearchResults, error) {
-	if err := query.Validate(); err != nil {
+	if err := query.ValidateSearchQuery(); err != nil {
 		return nil, err
 	}
 
@@ -325,7 +325,7 @@ func (a *Aggregator) RefreshEngineHealth(ctx context.Context) error {
 			Page:     1,
 			PerPage:  1,
 		}
-		if err := probeQuery.Validate(); err != nil {
+		if err := probeQuery.ValidateSearchQuery(); err != nil {
 			return err
 		}
 

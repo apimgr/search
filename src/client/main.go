@@ -15,7 +15,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := cmd.Execute(); err != nil {
+	if err := cmd.ExecuteClientCLI(); err != nil {
 		os.Exit(1)
 	}
 }
