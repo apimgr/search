@@ -1983,16 +1983,10 @@ func (c *Config) IsProduction() bool {
 	return !c.IsDevelopment()
 }
 
-// IsDebug returns true if debug mode is enabled via DEBUG=true environment variable
-// or if server mode is set to "debug"
+// IsDebug returns true if debug mode is enabled via --debug flag or DEBUG=true env var.
+// Per AI.md PART 6: Debug detection uses config.IsTruthy() (NON-NEGOTIABLE)
 func (c *Config) IsDebug() bool {
-	// Check environment variable
-	debug := os.Getenv("DEBUG")
-	if debug == "true" || debug == "1" || debug == "yes" {
-		return true
-	}
-	// Check server mode
-	return c.Server.Mode == "debug"
+	return IsTruthy(os.Getenv("DEBUG"))
 }
 
 // GetAddress returns the full bind address
