@@ -64,6 +64,7 @@ var (
 	flagAdminPath string
 	flagBaseURL   string
 	flagColor     string
+	flagLang      string
 )
 
 func init() {
@@ -99,6 +100,8 @@ func init() {
 	flag.StringVar(&flagAdminPath, "admin-path", "", "Set admin panel path (default: admin)")
 	flag.StringVar(&flagBaseURL, "baseurl", "", "Set URL path prefix for reverse proxy (default: /)")
 	flag.StringVar(&flagColor, "color", "", "Set color output mode (always|never|auto)")
+	// Per AI.md PART 8: --lang sets language for output (default: auto, from LANG env)
+	flag.StringVar(&flagLang, "lang", "", "Set language for output (default: auto)")
 }
 
 func main() {
@@ -178,7 +181,7 @@ func main() {
 			"--port": true, "--address": true, "--mode": true, "--data": true,
 			"--config": true, "--cache": true, "--log": true, "--backup": true,
 			"--pid": true, "--debug": true, "--daemon": true, "--admin-path": true,
-			"--baseurl": true, "--color": true,
+			"--baseurl": true, "--color": true, "--lang": true,
 		}
 		if !runtimeFlags[os.Args[1]] {
 			handleLegacyArgs()
@@ -256,6 +259,11 @@ func applyCliOverrides() {
 	if flagColor != "" {
 		os.Setenv("SEARCH_COLOR", flagColor)
 		config.SetColorMode(flagColor)
+	}
+	// Per AI.md PART 8: --lang sets language for CLI output
+	if flagLang != "" {
+		os.Setenv("SEARCH_LANG", flagLang)
+		os.Setenv("LANG", flagLang)
 	}
 
 	// Ensure directories exist after CLI overrides are applied
@@ -374,6 +382,22 @@ func runServer() {
 		log.Println("[Startup] Privileges dropped successfully")
 	}
 
+	// Step 11: Check PID file for existing running instance (stale PID detection)
+	// Per AI.md PART 8: Startup sequence step 11 — check before writing
+	pidFile := config.GetPIDFile()
+	if running, existingPID, err := server.CheckPIDFile(pidFile); err != nil {
+		log.Fatalf(display.Emoji("❌", "[ERROR]")+" PID file check failed: %v", err)
+	} else if running {
+		log.Fatalf(display.Emoji("❌", "[ERROR]")+" Server already running (pid %d)", existingPID)
+	}
+
+	// Step 12: Write PID file
+	// Per AI.md PART 8: Startup sequence step 12 — write after stale check passes
+	if err := server.WritePIDFile(pidFile); err != nil {
+		log.Fatalf(display.Emoji("❌", "[ERROR]")+" Failed to write PID file: %v", err)
+	}
+	defer server.RemovePIDFile(pidFile)
+
 	// Initialize configuration
 	cfg, err := config.Initialize()
 	if err != nil {
@@ -465,6 +489,7 @@ Runtime Flags:
   --admin-path <path>      Set admin panel path (default: admin)
   --baseurl <path>         Set URL path prefix for reverse proxy (default: /)
   --color <mode>           Set color output mode (always|never|auto)
+  --lang <code>            Set language for output (default: auto, from LANG env)
   --daemon                 Daemonize (detach from terminal, Unix only)
   --debug                  Enable debug mode (verbose logging, debug endpoints)
 

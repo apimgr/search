@@ -1,26 +1,19 @@
-//go:build !windows
-// +build !windows
-
 package server
 
 import (
 	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 )
 
-// CheckPIDFile checks if PID file exists and if the process is still running
-// Returns: (isRunning bool, pid int, err error)
-// Per AI.md PART 8: Stale PID detection is REQUIRED
+// CheckPIDFile checks if PID file exists and if the process is still running.
+// Returns (isRunning bool, pid int, err error).
+// Per AI.md PART 8: Stale PID detection is REQUIRED on every startup.
 func CheckPIDFile(pidPath string) (bool, int, error) {
 	data, err := os.ReadFile(pidPath)
 	if os.IsNotExist(err) {
-		// No PID file, not running
+		// No PID file — not running
 		return false, 0, nil
 	}
 	if err != nil {
@@ -29,21 +22,21 @@ func CheckPIDFile(pidPath string) (bool, int, error) {
 
 	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
 	if err != nil {
-		// Corrupt PID file - remove it
+		// Corrupt PID file — remove it and continue
 		os.Remove(pidPath)
 		return false, 0, nil
 	}
 
 	// Check if process is running
 	if !isProcessRunning(pid) {
-		// Stale PID file - remove it
+		// Stale PID file — remove it and continue
 		os.Remove(pidPath)
 		return false, 0, nil
 	}
 
-	// Process exists - verify it's actually our process (not PID reuse)
+	// Process exists — verify it's actually our binary (guards against PID reuse)
 	if !isOurProcess(pid) {
-		// PID was reused by another process - remove stale file
+		// PID reused by another process — remove stale file and continue
 		os.Remove(pidPath)
 		return false, 0, nil
 	}
@@ -51,37 +44,26 @@ func CheckPIDFile(pidPath string) (bool, int, error) {
 	return true, pid, nil
 }
 
-// isProcessRunning checks if a process with given PID exists (Unix)
-func isProcessRunning(pid int) bool {
-	process, err := os.FindProcess(pid)
+// WritePIDFile writes the current process PID to the given file.
+// Checks for an existing running instance first and returns an error if found.
+// Per AI.md PART 8: Step 12 in server startup sequence.
+func WritePIDFile(pidPath string) error {
+	// Check for existing running instance first
+	running, existingPID, err := CheckPIDFile(pidPath)
 	if err != nil {
-		return false
+		return err
 	}
-	// On Unix, FindProcess always succeeds - need to send signal 0
-	err = process.Signal(syscall.Signal(0))
-	return err == nil
+	if running {
+		return fmt.Errorf("already running (pid %d)", existingPID)
+	}
+
+	// Write our PID to the file
+	pid := os.Getpid()
+	return os.WriteFile(pidPath, []byte(strconv.Itoa(pid)), 0644)
 }
 
-// isOurProcess verifies the process is actually our binary (Unix)
-func isOurProcess(pid int) bool {
-	// Read /proc/{pid}/exe symlink (Linux)
-	exePath, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid))
-	if err != nil {
-		// On macOS/BSD, use ps command
-		if runtime.GOOS == "darwin" || runtime.GOOS == "freebsd" {
-			return isOurProcessDarwin(pid)
-		}
-		return false
-	}
-	return strings.Contains(filepath.Base(exePath), "search")
-}
-
-// isOurProcessDarwin checks process on macOS/BSD
-func isOurProcessDarwin(pid int) bool {
-	cmd := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "comm=")
-	output, err := cmd.Output()
-	if err != nil {
-		return false
-	}
-	return strings.Contains(string(output), "search")
+// RemovePIDFile removes the PID file on shutdown.
+// Per AI.md PART 8: Must be called in signal handlers and defer.
+func RemovePIDFile(pidPath string) error {
+	return os.Remove(pidPath)
 }

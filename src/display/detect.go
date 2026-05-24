@@ -191,11 +191,17 @@ func detectColorSupport() bool {
 	return true
 }
 
-// GetMode determines the appropriate display mode based on environment
+// GetMode determines the appropriate display mode based on environment.
+// Per AI.md PART 7: TERM=dumb forces CLI mode (no TUI, no ANSI escapes).
 func (e Env) GetMode() Mode {
 	// If not a terminal and no display, we're headless
 	if !e.IsTerminal && !e.HasDisplay {
 		return ModeHeadless
+	}
+
+	// TERM=dumb: force CLI mode — no TUI, no ANSI escapes, no spinners
+	if os.Getenv("TERM") == "dumb" {
+		return ModeCLI
 	}
 
 	// If we have a GUI display and not over SSH, GUI mode is available
