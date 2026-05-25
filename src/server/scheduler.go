@@ -49,12 +49,6 @@ func (s *Server) initScheduler(db *sql.DB) {
 	sched.StartTaskScheduler()
 
 	s.scheduler = sched
-
-	// Connect scheduler to admin panel per AI.md PART 19
-	// Admin panel must show actual scheduler runtime state
-	if s.adminHandler != nil {
-		s.adminHandler.SetScheduler(scheduler.NewAdminAdapter(sched))
-	}
 }
 
 // createTaskHandlers creates handler functions for all built-in tasks
@@ -253,32 +247,9 @@ This is an automated notification from the scheduler.
 		}
 	}
 
-	// Store notification in database for WebUI display
-	if s.dbManager != nil && s.dbManager.ServerDB() != nil {
-		s.storeTaskFailureNotification(notification)
-	}
-}
-
-// storeTaskFailureNotification stores a task failure notification in the database
-// Per AI.md PART 18: WebUI notifications stored in database
-func (s *Server) storeTaskFailureNotification(notification *scheduler.TaskFailureNotification) {
-	// Generate a unique ID for the notification
-	notifID := fmt.Sprintf("task_fail_%s_%d", notification.TaskID, time.Now().UnixNano())
-
-	query := `INSERT INTO admin_notifications (id, admin_id, type, title, message, priority, read, created_at)
-		SELECT ?, id, 'task_failure', ?, ?, 'high', 0, CURRENT_TIMESTAMP
-		FROM admin_credentials LIMIT 1`
-
-	title := fmt.Sprintf("Task Failed: %s", notification.TaskName)
-	message := fmt.Sprintf("Task %s failed after %d attempts: %s",
-		notification.TaskName, notification.Attempts, notification.Error)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if _, err := s.dbManager.ServerDB().Exec(ctx, query, notifID, title, message); err != nil {
-		log.Printf("[Scheduler] Failed to store task failure notification: %v", err)
-	}
+	// Persistent notification storage for a WebUI admin panel was removed
+	// when the panel itself was removed. Operators consume failure events
+	// via the audit log and email notification above.
 }
 
 // performScheduledBackup performs a scheduled backup with verification

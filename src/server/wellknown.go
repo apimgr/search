@@ -6,16 +6,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/i18n"
 )
 
 // handleWellKnownChangePassword handles /.well-known/change-password per RFC 8615.
-// Per IDEA.md, PART 34 (regular users) is not implemented for this project, so the
-// only password change flow is the admin profile page; the admin panel itself
-// redirects to /auth/login when the visitor is not authenticated.
+// Per IDEA.md, this project has no user accounts and no admin web UI — there is
+// nothing for an end user to change. Respond with 404 so clients fall back.
 func (s *Server) handleWellKnownChangePassword(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, "/"+config.GetAdminPath()+"/profile", http.StatusSeeOther)
+	http.NotFound(w, r)
 }
 
 // handleRobotsTxt serves robots.txt per AI.md spec
@@ -43,13 +41,8 @@ func (s *Server) handleRobotsTxt(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Allow: %s\n", path)
 	}
 
-	// Deny paths (default: /{admin_path})
-	// Per AI.md PART 17: Admin path is configurable (default: "admin")
-	denyPaths := web.Robots.Deny
-	if len(denyPaths) == 0 {
-		denyPaths = []string{"/" + config.GetAdminPath()}
-	}
-	for _, path := range denyPaths {
+	// Deny paths (no defaults — there is no admin panel in this project).
+	for _, path := range web.Robots.Deny {
 		fmt.Fprintf(w, "Disallow: %s\n", path)
 	}
 
@@ -73,8 +66,8 @@ func (s *Server) handleSecurityTxtEnhanced(w http.ResponseWriter, r *http.Reques
 	// Contact (REQUIRED per RFC 9116)
 	// Must be a URI (mailto:, https://, or tel:)
 	contact := security.Contact
-	if contact == "" && s.config.Server.Admin.Email != "" {
-		contact = s.config.Server.Admin.Email
+	if contact == "" && s.config.Server.Contact.Email != "" {
+		contact = s.config.Server.Contact.Email
 	}
 	if contact != "" {
 		// Ensure mailto: prefix for email addresses

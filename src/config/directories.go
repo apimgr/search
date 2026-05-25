@@ -62,14 +62,6 @@ func SetBackupDirOverride(dir string) {
 	cliOverrides["backup"] = dir
 }
 
-// SetAdminPathOverride sets a CLI override for the admin panel path
-// Per AI.md PART 8: --admin-path flag to customize admin panel URL
-func SetAdminPathOverride(path string) {
-	cliOverrideMu.Lock()
-	defer cliOverrideMu.Unlock()
-	cliOverrides["admin_path"] = path
-}
-
 // SetColorMode sets the color output mode
 // Per AI.md PART 8: --color {always|never|auto} flag
 // Priority: CLI flag > Config > NO_COLOR env > Auto-detect
@@ -85,23 +77,6 @@ func SetBaseURLOverride(url string) {
 	cliOverrideMu.Lock()
 	defer cliOverrideMu.Unlock()
 	cliOverrides["base_url"] = url
-}
-
-// GetAdminPath returns the admin panel path
-// Per AI.md PART 8: Configurable admin path, defaults to "admin"
-func GetAdminPath() string {
-	// Check CLI override first (--admin-path flag)
-	if path, ok := getOverride("admin_path"); ok && path != "" {
-		return path
-	}
-
-	// Check environment variable
-	if path := os.Getenv("SEARCH_ADMIN_PATH"); path != "" {
-		return path
-	}
-
-	// Default to "admin"
-	return "admin"
 }
 
 // GetColorMode returns the color output mode

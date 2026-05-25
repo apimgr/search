@@ -129,17 +129,16 @@ type ServerConfig struct {
 	// SSL/TLS
 	SSL SSLConfig `yaml:"ssl"`
 
-	// Admin
-	Admin AdminConfig `yaml:"admin"`
+	// Operator/Server bearer token (Authorization: Bearer tok_...)
+	// Auto-generated on first run if empty. Validated by SHA-256 comparison.
+	// Per AI.md: two-tier auth — server.token + per-resource api_tokens.
+	Token string `yaml:"token"`
 
 	// Branding
 	Branding BrandingConfig `yaml:"branding"`
 
 	// Rate Limiting
 	RateLimit RateLimitConfig `yaml:"rate_limit"`
-
-	// Session
-	Session SessionConfig `yaml:"session"`
 
 	// Logs
 	Logs LogsConfig `yaml:"logs"`
@@ -231,16 +230,6 @@ type DNS01Config struct {
 	ValidatedAt string `yaml:"validated_at"`
 }
 
-// AdminConfig represents admin configuration
-type AdminConfig struct {
-	Username string `yaml:"username"`
-	Password string `yaml:"password"`
-	Token    string `yaml:"token"`
-	APIToken string `yaml:"api_token"`
-	Email    string `yaml:"email"`
-	Enabled  bool   `yaml:"enabled"`
-}
-
 // BrandingConfig represents branding configuration
 // Per AI.md PART 13/16: branding fields for healthz project info
 type BrandingConfig struct {
@@ -270,122 +259,6 @@ type RateLimitConfig struct {
 	ByUser            bool     `yaml:"by_user"`
 	Whitelist         []string `yaml:"whitelist"`
 	Blacklist         []string `yaml:"blacklist"`
-}
-
-// SessionTypeConfig represents configuration for a specific session type (admin or user)
-type SessionTypeConfig struct {
-	CookieName string `yaml:"cookie_name"`
-	// Absolute session lifetime in seconds
-	MaxAge int `yaml:"max_age"`
-	// Expires after inactivity in seconds
-	IdleTimeout int `yaml:"idle_timeout"`
-}
-
-// SessionConfig represents session configuration per AI.md PART 13
-type SessionConfig struct {
-	// Admin sessions (server.db admin_sessions table)
-	Admin SessionTypeConfig `yaml:"admin"`
-	// User sessions (user.db user_sessions table)
-	User SessionTypeConfig `yaml:"user"`
-	// Common settings
-	// Reset idle timeout on each request
-	ExtendOnActivity bool `yaml:"extend_on_activity"`
-	// auto, true, false
-	Secure   string `yaml:"secure"`
-	HTTPOnly bool   `yaml:"http_only"`
-	// strict, lax, none
-	SameSite string `yaml:"same_site"`
-
-	// Legacy fields for backward compatibility
-	Duration       string `yaml:"duration,omitempty"`
-	CookieName     string `yaml:"cookie_name,omitempty"`
-	CookieSecure   bool   `yaml:"cookie_secure,omitempty"`
-	CookieHTTPOnly bool   `yaml:"cookie_http_only,omitempty"`
-	CookieSameSite string `yaml:"cookie_same_site,omitempty"`
-}
-
-// GetAdminCookieName returns the admin session cookie name
-func (s *SessionConfig) GetAdminCookieName() string {
-	if s.Admin.CookieName != "" {
-		return s.Admin.CookieName
-	}
-	if s.CookieName != "" {
-		return s.CookieName
-	}
-	return "admin_session"
-}
-
-// GetUserCookieName returns the user session cookie name
-func (s *SessionConfig) GetUserCookieName() string {
-	if s.User.CookieName != "" {
-		return s.User.CookieName
-	}
-	if s.CookieName != "" {
-		return s.CookieName
-	}
-	return "user_session"
-}
-
-// GetAdminMaxAge returns admin session max age in seconds (default 30 days)
-func (s *SessionConfig) GetAdminMaxAge() int {
-	if s.Admin.MaxAge > 0 {
-		return s.Admin.MaxAge
-	}
-	// 30 days
-	return 2592000
-}
-
-// GetUserMaxAge returns user session max age in seconds (default 7 days)
-func (s *SessionConfig) GetUserMaxAge() int {
-	if s.User.MaxAge > 0 {
-		return s.User.MaxAge
-	}
-	// 7 days
-	return 604800
-}
-
-// GetIdleTimeout returns idle timeout in seconds (default 24 hours)
-func (s *SessionConfig) GetIdleTimeout() int {
-	if s.Admin.IdleTimeout > 0 {
-		return s.Admin.IdleTimeout
-	}
-	if s.User.IdleTimeout > 0 {
-		return s.User.IdleTimeout
-	}
-	// 24 hours
-	return 86400
-}
-
-// IsSecure returns whether cookies should be secure
-func (s *SessionConfig) IsSecure(sslEnabled bool) bool {
-	switch s.Secure {
-	case "true", "yes", "1":
-		return true
-	case "false", "no", "0":
-		return false
-	// "auto" or empty
-	default:
-		return sslEnabled || s.CookieSecure
-	}
-}
-
-// IsHTTPOnly returns whether cookies should be HTTP only
-func (s *SessionConfig) IsHTTPOnly() bool {
-	if s.HTTPOnly {
-		return true
-	}
-	return s.CookieHTTPOnly
-}
-
-// GetSameSite returns the SameSite cookie attribute
-func (s *SessionConfig) GetSameSite() string {
-	if s.SameSite != "" {
-		return s.SameSite
-	}
-	if s.CookieSameSite != "" {
-		return s.CookieSameSite
-	}
-	return "lax"
 }
 
 // LogsConfig represents logging configuration
@@ -567,10 +440,8 @@ type OIDCProviderConfig struct {
 	ClientSecret string   `yaml:"client_secret"`
 	RedirectURL  string   `yaml:"redirect_url"`
 	Scopes       []string `yaml:"scopes"`
-	// Admin group mapping per AI.md PART 31
-	AdminGroups []string `yaml:"admin_groups"`
-	GroupsClaim string   `yaml:"groups_claim"`
-	AutoCreate  bool     `yaml:"auto_create"`
+	GroupsClaim  string   `yaml:"groups_claim"`
+	AutoCreate   bool     `yaml:"auto_create"`
 }
 
 // LDAPConfig represents LDAP authentication configuration
@@ -587,9 +458,7 @@ type LDAPConfig struct {
 	BaseDN        string `yaml:"base_dn"`
 	UserFilter    string `yaml:"user_filter"`
 	UsernameAttr  string `yaml:"username_attr"`
-	EmailAttr     string `yaml:"email_attr"`
-	// Admin group mapping per AI.md PART 31
-	AdminGroups     []string `yaml:"admin_groups"`
+	EmailAttr       string   `yaml:"email_attr"`
 	GroupFilter     string   `yaml:"group_filter"`
 	GroupMemberAttr string   `yaml:"group_member_attr"`
 }
@@ -1123,13 +992,9 @@ func DefaultConfig() *Config {
 				Enabled: false,
 				AutoTLS: false,
 			},
-			Admin: AdminConfig{
-				Enabled:  true,
-				Username: "administrator",
-				Password: generateSecret(),
-				Token:    generateSecret(),
-				Email:    "",
-			},
+			// Operator/server bearer token. Treat like a root password.
+			// SHA-256 compared against Authorization: Bearer header.
+			Token: generateSecret(),
 			Branding: BrandingConfig{
 				Title:        "Scour",
 				Tagline:      "Privacy-respecting metasearch",
@@ -1146,26 +1011,6 @@ func DefaultConfig() *Config {
 				ByIP:              true,
 				ByUser:            false,
 				Whitelist:         []string{"127.0.0.1", "::1"},
-			},
-			Session: SessionConfig{
-				Admin: SessionTypeConfig{
-					CookieName: "admin_session",
-					// 30 days
-					MaxAge: 2592000,
-					// 24 hours
-					IdleTimeout: 86400,
-				},
-				User: SessionTypeConfig{
-					CookieName: "user_session",
-					// 7 days
-					MaxAge: 604800,
-					// 24 hours
-					IdleTimeout: 86400,
-				},
-				ExtendOnActivity: true,
-				Secure:           "auto",
-				HTTPOnly:         true,
-				SameSite:         "lax",
 			},
 			Logs: LogsConfig{
 				Level: "warn",
@@ -1345,7 +1190,7 @@ func DefaultConfig() *Config {
 					Deny  []string `yaml:"deny"`
 				}{
 					Allow: []string{"/", "/api"},
-					Deny:  []string{"/admin"},
+					Deny:  []string{},
 				},
 				Security: struct {
 					Contact string `yaml:"contact"`
@@ -1703,10 +1548,9 @@ func addConfigComments(node *yaml.Node) {
 		"secret_key":       "Secret key for session encryption (auto-generated)",
 		"base_url":         "Public URL for this instance",
 		"ssl":              "SSL/TLS configuration",
-		"admin":            "Admin panel settings",
+		"token":            "Operator bearer token (server.token). Auto-generated on first run.",
 		"branding":         "Branding and appearance",
 		"rate_limit":       "Rate limiting configuration",
-		"session":          "Session management settings",
 		"logs":             "Logging configuration",
 		"tor":              "Tor hidden service settings",
 		"email":            "Email/SMTP configuration",
@@ -2110,16 +1954,6 @@ func (c *Config) ValidateAndApplyDefaults() []ValidationWarning {
 		if c.Server.RateLimit.BurstSize <= 0 {
 			c.Server.RateLimit.BurstSize = 100
 		}
-	}
-
-	// Session configuration
-	if c.Server.Session.Admin.MaxAge <= 0 {
-		// 30 days
-		c.Server.Session.Admin.MaxAge = 2592000
-	}
-	if c.Server.Session.User.MaxAge <= 0 {
-		// 7 days
-		c.Server.Session.User.MaxAge = 604800
 	}
 
 	// GeoIP configuration - just ensure dir is set

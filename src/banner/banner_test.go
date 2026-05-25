@@ -13,7 +13,7 @@ func TestConfigStruct(t *testing.T) {
 		URLs:        []string{"http://localhost:8080"},
 		ShowSetup:   true,
 		SetupToken:  "abc123",
-		AdminPath:   "admin",
+
 		Description: "Test app",
 		SMTPStatus:  "Configured",
 	}
@@ -319,7 +319,7 @@ func TestPrint(t *testing.T) {
 				URLs:       []string{"http://localhost:8080", "http://127.0.0.1:8080"},
 				ShowSetup:  true,
 				SetupToken: "setup-123",
-				AdminPath:  "admin",
+
 				SMTPStatus: "Ready",
 			},
 		},
@@ -351,7 +351,7 @@ func TestPrintFull(t *testing.T) {
 				URLs:       []string{"http://localhost:8080"},
 				ShowSetup:  true,
 				SetupToken: "test-token",
-				AdminPath:  "admin",
+
 				SMTPStatus: "Auto-detected",
 			},
 		},
@@ -363,7 +363,7 @@ func TestPrintFull(t *testing.T) {
 				Mode:       "production",
 				URLs:       []string{"http://localhost:8080"},
 				ShowSetup:  false,
-				AdminPath:  "admin",
+
 				SMTPStatus: "Auto-detected",
 			},
 		},
@@ -376,12 +376,12 @@ func TestPrintFull(t *testing.T) {
 				URLs:       []string{},
 				ShowSetup:  true,
 				SetupToken: "test-token",
-				AdminPath:  "admin",
+
 				SMTPStatus: "Auto-detected",
 			},
 		},
 		{
-			name: "without AdminPath",
+			name: "without setup token",
 			cfg: Config{
 				AppName:    "search",
 				Version:    "1.0.0",
@@ -389,7 +389,7 @@ func TestPrintFull(t *testing.T) {
 				URLs:       []string{"http://localhost:8080"},
 				ShowSetup:  true,
 				SetupToken: "test-token",
-				AdminPath:  "",
+
 				SMTPStatus: "Auto-detected",
 			},
 		},
@@ -402,7 +402,7 @@ func TestPrintFull(t *testing.T) {
 				URLs:       []string{"http://localhost:8080"},
 				ShowSetup:  true,
 				SetupToken: "test-token",
-				AdminPath:  "admin",
+
 				SMTPStatus: "",
 			},
 		},
@@ -414,7 +414,7 @@ func TestPrintFull(t *testing.T) {
 				URLs:       []string{"http://localhost:8080"},
 				ShowSetup:  true,
 				SetupToken: "",
-				AdminPath:  "admin",
+
 			},
 		},
 		{
@@ -423,7 +423,7 @@ func TestPrintFull(t *testing.T) {
 				AppName:   "search",
 				Version:   "1.0.0",
 				URLs:      []string{"http://localhost:8080", "http://192.168.1.1:8080", "https://example.com"},
-				AdminPath: "admin",
+
 			},
 		},
 		{
@@ -887,21 +887,21 @@ func TestBoxWidth(t *testing.T) {
 // Additional edge case tests for complete coverage
 
 func TestPrintFullEdgeCases(t *testing.T) {
-	// Test with URLs but AdminPath is empty (should not print admin panel)
+
 	cfg := Config{
 		AppName:   "search",
 		Version:   "1.0.0",
 		URLs:      []string{"http://localhost:8080"},
-		AdminPath: "",
+
 	}
 	printFull(cfg)
 
-	// Test with AdminPath but no URLs (should not print admin panel)
+
 	cfg = Config{
 		AppName:   "search",
 		Version:   "1.0.0",
 		URLs:      []string{},
-		AdminPath: "admin",
+
 	}
 	printFull(cfg)
 
@@ -910,7 +910,7 @@ func TestPrintFullEdgeCases(t *testing.T) {
 		AppName:   "search",
 		Version:   "1.0.0",
 		URLs:      nil,
-		AdminPath: "admin",
+
 	}
 	printFull(cfg)
 }
@@ -997,7 +997,7 @@ func TestAllPrintFunctionsDirectly(t *testing.T) {
 		URLs:        []string{"http://localhost:8080", "http://127.0.0.1:8080"},
 		ShowSetup:   true,
 		SetupToken:  "token-abc-123",
-		AdminPath:   "admin",
+
 		Description: "Test Application",
 		SMTPStatus:  "Ready",
 	}

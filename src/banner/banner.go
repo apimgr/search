@@ -22,10 +22,10 @@ type Config struct {
 	Debug bool
 	// Listen URLs
 	URLs []string
-	// Show setup token (server only, first run)
+	// Show server.token (server only, first run). The token is persisted to
+	// server.yml; it is shown here so the operator can record it.
 	ShowSetup   bool
 	SetupToken  string
-	AdminPath   string
 	Description string
 	// SMTP status (e.g., "Auto-detected (localhost:25)")
 	SMTPStatus string
@@ -104,17 +104,9 @@ func printFull(cfg Config) {
 		printBoxLine(vertical, "", boxWidth)
 	}
 
-	// Admin Panel
-	if cfg.AdminPath != "" && len(cfg.URLs) > 0 {
-		printBoxLine(vertical, "   "+display.Emoji("🔧", "[ADM]")+" Admin Panel:", boxWidth)
-		adminURL := cfg.URLs[0] + "/" + cfg.AdminPath
-		printBoxLine(vertical, "      "+adminURL, boxWidth)
-		printBoxLine(vertical, "", boxWidth)
-	}
-
-	// Setup Token (first run only)
+	// Operator Token (first run only). Sent as: Authorization: Bearer <token>
 	if cfg.ShowSetup && cfg.SetupToken != "" {
-		printBoxLine(vertical, "   "+display.Emoji("🔑", "[KEY]")+" Setup Token (use at /"+cfg.AdminPath+"):", boxWidth)
+		printBoxLine(vertical, "   "+display.Emoji("🔑", "[KEY]")+" Operator Token (Authorization: Bearer ...):", boxWidth)
 		printBoxLine(vertical, "      "+cfg.SetupToken, boxWidth)
 		printBoxLine(vertical, "", boxWidth)
 	}
@@ -127,7 +119,7 @@ func printFull(cfg Config) {
 
 	// Warning for first run
 	if cfg.ShowSetup {
-		printBoxLine(vertical, "   "+display.Emoji("⚠️", "[!]")+"  Save the setup token! It will not be shown again.", boxWidth)
+		printBoxLine(vertical, "   "+display.Emoji("⚠️", "[!]")+"  Save the operator token! Also stored in server.yml.", boxWidth)
 		printBoxLine(vertical, "", boxWidth)
 	}
 
@@ -172,8 +164,8 @@ func printCompact(cfg Config) {
 
 	if cfg.ShowSetup && cfg.SetupToken != "" {
 		fmt.Println()
-		fmt.Printf("%s Setup Token: %s\n", display.Emoji("🔑", "[KEY]"), cfg.SetupToken)
-		fmt.Printf("%s  Save this token! Shown only once.\n", display.Emoji("⚠️", "[!]"))
+		fmt.Printf("%s Operator Token: %s\n", display.Emoji("🔑", "[KEY]"), cfg.SetupToken)
+		fmt.Printf("%s  Save this token. Also stored in server.yml.\n", display.Emoji("⚠️", "[!]"))
 	}
 	fmt.Println()
 }

@@ -23,7 +23,7 @@ Search is a privacy-respecting metasearch engine that aggregates results from mu
 - **⌨️ Keyboard Navigation**: Vim-style shortcuts for power users (j/k, /, Enter)
 - **📱 Mobile Friendly**: Responsive design that works on all devices
 - **🎨 Beautiful UI**: Modern interface with dark (Dracula) and light themes
-- **⚙️ Easy Configuration**: Web-based admin panel and YAML config
+- **⚙️ File-only configuration**: All settings in `server.yml`; no admin web UI
 - **🌐 Multi-Category**: Web, images, videos, news, maps, files, music, science, IT, and social
 - **🔐 Built-in SSL**: Let's Encrypt integration for automatic HTTPS
 - **📊 Monitoring**: Prometheus metrics and health endpoints
@@ -224,11 +224,9 @@ server:
   # Application mode: production or development
   mode: production
   
-  # Admin credentials (auto-generated on first run)
-  admin:
-    username: administrator
-    password: {auto-generated}
-    token: {auto-generated}
+  # Operator bearer token. Auto-generated on first run.
+  # Send as: Authorization: Bearer <token>
+  token: {auto-generated}
 
 # Enable search engines
 engines:
@@ -325,21 +323,15 @@ Features:
 - Dark/Light theme toggle
 - Mobile-responsive design
 
-### Admin Panel
+### Operator Access
 
-Access the admin panel at: `http://localhost:PORT/admin`
+There is **no admin web UI**. Server configuration is entirely file-driven:
 
-Default credentials (shown once on first run):
-- **Username**: administrator
-- **Password**: (auto-generated, check logs)
-
-Features:
-- Server configuration
-- Engine management
-- User preferences
-- Logs viewer
-- Statistics
-- System monitoring
+- All settings live in `server.yml` (see `/etc/apimgr/search/server.yml` on Linux).
+- The operator bearer token is auto-generated on first run and displayed once in the startup banner. It is also written to `server.yml` (`server.token`).
+- Operator-only API endpoints require `Authorization: Bearer <token>`.
+- To rotate the token: `search --maintenance rotate-token`.
+- The `search-cli` companion binary is the primary management surface.
 
 ## 💡 Instant Answers
 
@@ -515,22 +507,23 @@ curl -X PATCH "http://localhost:PORT/api/v1/alerts/MANAGE_TOKEN" \
   -d '{"deliver_webhook": true, "webhook_url": "https://example.com/search-alerts"}'
 ```
 
-### Admin API
+### Operator API
 
-Manage the server via REST API:
+There is **no admin web UI and no runtime configuration mutation via API**.
+Configuration is read from `server.yml` and reloaded with `SIGHUP`. Operator-only
+read endpoints (engine status, alert moderation, etc.) require the operator
+bearer token:
 
 ```bash
-# Get configuration (requires Bearer token)
+# Inspect engine health (operator-only)
 curl -H "Authorization: Bearer YOUR_TOKEN" \
-  http://localhost:PORT/api/v1/admin/config
+  http://localhost:PORT/api/v1/server/engines
 
-# Update configuration
-curl -X PUT \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"server": {"port": "64580"}}' \
-  http://localhost:PORT/api/v1/admin/config
+# Public health endpoint (no auth)
+curl http://localhost:PORT/server/healthz
 ```
+
+To change a setting: edit `server.yml`, then `kill -HUP $(cat /var/run/apimgr/search.pid)`.
 
 ### OpenAPI
 

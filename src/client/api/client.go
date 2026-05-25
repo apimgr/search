@@ -286,6 +286,11 @@ func (c *Client) getWithFailover(path string) (*http.Response, error) {
 	return nil, err
 }
 
+// doRequest performs an HTTP request to the primary server (BaseURL).
+func (c *Client) doRequest(method, path string, body interface{}) (*http.Response, error) {
+	return c.doRequestToServer(c.BaseURL, method, path, body)
+}
+
 // doRequestToServer performs HTTP request to specific server
 // Per AI.md PART 36: Cluster failover support
 func (c *Client) doRequestToServer(serverURL, method, path string, body interface{}) (*http.Response, error) {

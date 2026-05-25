@@ -1051,25 +1051,6 @@ func TestGetClientIPSimple(t *testing.T) {
 
 // Test structs
 
-func TestAuthPageDataStruct(t *testing.T) {
-	data := AuthPageData{
-		Error:    "test error",
-		Success:  "test success",
-		Username: "testuser",
-		Redirect: "/admin",
-	}
-
-	if data.Error != "test error" {
-		t.Errorf("Error = %q", data.Error)
-	}
-	if data.Username != "testuser" {
-		t.Errorf("Username = %q", data.Username)
-	}
-	if data.Redirect != "/admin" {
-		t.Errorf("Redirect = %q", data.Redirect)
-	}
-}
-
 func TestRequestContextStruct(t *testing.T) {
 	ctx := RequestContext{
 		Type: TargetUser,
@@ -1603,8 +1584,10 @@ func TestFormatBannerURL(t *testing.T) {
 	}
 }
 
-// Tests for session.go
-
+// Tests for session.go — DISABLED. The session subsystem was removed when
+// the admin web UI and user-account systems were dropped. Restore as
+// individual tests if a future feature reintroduces sessions.
+/*
 func TestSessionStruct(t *testing.T) {
 	now := time.Now()
 	session := Session{
@@ -1828,6 +1811,8 @@ func TestSessionManagerGetFromRequest(t *testing.T) {
 		t.Error("Session should not exist without cookie")
 	}
 }
+
+*/
 
 // Tests for ssl.go
 

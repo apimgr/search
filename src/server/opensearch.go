@@ -72,8 +72,8 @@ func (s *Server) handleOpenSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	contact := s.config.Search.OpenSearch.Contact
-	if contact == "" && s.config.Server.Admin.Email != "" {
-		contact = s.config.Server.Admin.Email
+	if contact == "" && s.config.Server.Contact.Email != "" {
+		contact = s.config.Server.Contact.Email
 	}
 
 	// Build OpenSearch description

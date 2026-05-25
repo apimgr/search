@@ -51,9 +51,9 @@ Search is a privacy-respecting, self-hosted metasearch engine that aggregates re
 | Role | Authentication | Permissions |
 |------|---------------|-------------|
 | Anonymous public user | None | Search, view results, set client-side preferences, create/manage email-verified search alerts via signed manage links |
-| Server Admin (per AI.md PART 17) | Local password (Argon2id), optional TOTP/Passkey | Engine management, server settings, statistics, alert moderation, all admin panel surfaces at `/server/admin` |
+| Operator | Possession of `server.token` (operator bearer token from `server.yml`) sent as `Authorization: Bearer <token>` | Operator-only API endpoints (engine state queries, alert moderation, maintenance). Configuration is file-only — all server settings are set in `server.yml` and managed via CLI / config-reload. |
 
-PART 34 (regular users), PART 35 (organizations), PART 36 (custom domains) are NOT implemented for this project.
+There is **no admin web UI** and **no end-user account system**. The operator manages the service entirely via `server.yml` plus the `search-cli` client. PART 34 (regular users), PART 35 (organizations), and PART 36 (custom domains) are NOT implemented for this project.
 
 ### Data model & sensitivity
 
@@ -67,7 +67,8 @@ Full schemas are documented under `### Data Models` below. Sensitivity classific
 | Alert deduplication state (URL hashes) | Low | Server DB | Lifetime of alert |
 | Engine health metrics (response times, error rates) | None | Server DB / Prometheus | Per metrics retention |
 | Cached search results | None (no user attribution) | Server cache | 5 minutes default, configurable |
-| Server admin credentials, MFA secrets, sessions | High | Server DB (Argon2id, encrypted) | Per AI.md PART 11 / PART 17 |
+| Operator bearer token (`server.token`) | High | `server.yml` (file permissions 0600); SHA-256 compared in code, never logged | Until operator rotates via `--maintenance rotate-token` |
+| Per-resource owner tokens (`api_tokens` table) | High | Server DB — SHA-256 hashed, never stored plaintext | Until owner revokes |
 
 ### Trust boundaries & external services
 
@@ -85,11 +86,11 @@ Full provider list under `### Data Sources`. Trust assumptions and failure modes
 
 ### Threat model & abuse cases
 
-**Primary assets:** end-user search queries (must remain unlinkable to user identity), alert subscriptions (signed manage tokens), admin panel, server availability.
+**Primary assets:** end-user search queries (must remain unlinkable to user identity), alert subscriptions (signed manage tokens), operator bearer token, server availability.
 
 **Untrusted inputs:** end-user HTTP requests, alert email addresses, alert webhook URLs, search engine response bodies (HTML/JSON), instant-answer provider responses, ip-location-db downloads.
 
-**Trusted (with controls):** admin panel sessions, signed alert manage tokens, internal scheduler, internal cache.
+**Trusted (with controls):** operator bearer token, signed alert manage tokens, internal scheduler, internal cache.
 
 **Attacker goals & defenses:**
 
@@ -101,9 +102,9 @@ Full provider list under `### Data Sources`. Trust assumptions and failure modes
 | Phish via alert manage links | Signed-token forgery, link confusion | Tokens signed with server secret; manage URLs use 256-bit random; emails sent from verified `From`. |
 | SSRF via webhook destinations | User-supplied webhook URL | Validate URL scheme; block private/loopback ranges; signed payload so target can verify origin; outbound timeout. |
 | Inject malicious content into result snippets | Hostile engine response | All result snippets HTML-escaped; CSP headers; result links never auto-clicked; tracking params stripped. |
-| Take over admin panel | Credential stuffing, weak password, session theft | Argon2id (per AI.md PART 11); MFA recommended for admins (PART 17); login rate limits; session cookies HttpOnly/Secure/SameSite. |
+| Steal operator bearer token | Disk read on the server host, MitM on plain-HTTP cluster traffic | `server.yml` written 0600 and owned by the service user; SHA-256 compared in constant time; never logged; rotated via `--maintenance rotate-token`; TLS required for any remote operator traffic. |
 | Deny availability | DDoS, engine bans | Rate limits, engine rotation, cached fallback. Admin-tunable. |
-| Exfiltrate alert subscriber list | Admin DB compromise | Argon2id credentials; MFA; admin audit log; principle of least privilege on service user. |
+| Exfiltrate alert subscriber list | Server DB read by attacker with host access | Audit log of operator actions; service user runs unprivileged; file-system permissions on DB and `server.yml` (0600/0700). |
 | Abuse instant-answer widgets | Crafted query → widget XSS | All widget output server-rendered with HTML escape; no inline script execution from external answer data. |
 | Enumerate alerts publicly | Token guessing | Manage tokens are 256-bit random; RSS feed tokens same; not enumerable. |
 
@@ -116,7 +117,7 @@ Full provider list under `### Data Sources`. Trust assumptions and failure modes
 - **Tor integration is optional, off by default.** When the server detects the Tor binary (per AI.md PART 32) and admin enables it, an `.onion` hidden service is published. Reason: optional anonymity for users on Tor.
 - **Cached results may be stale.** Default cache is 5 minutes (configurable). Reason: reduce engine load and protect against transient failures. Trade-off: results can lag by up to TTL.
 - **Webhook URL is user-supplied.** SSRF mitigations apply but cannot prevent a user from configuring webhooks pointing at private addresses they own. Reason: legitimate self-hosted automation. Mitigation: validate scheme, block reserved/private CIDRs, signed payloads, outbound timeout.
-- **PART 34/35/36 surface fully removed from the codebase.** AI.md PARTs 34-36 (regular users, organizations, custom domains) remain `OPTIONAL` in the spec. The previous codebase shipped a partial PART 34 implementation (registration, profile, 2FA setup, recovery keys, password reset, user API, `Server.Users` config, `src/user/` package, ~110 i18n keys, openapi paths). All of it has been deleted: `src/user/` package; `src/server/user.go`; `src/api/{auth,user}.go`; the user-facing handlers in `src/server/auth.go`; the `Server.Users` config struct; `templates/auth/{register,forgot,reset,verify}.tmpl`; `templates/user/*.tmpl`; the `user.*`, `auth.reset.*`, `auth.forgot.*`, `auth.register`, `auth.login.{forgot,no_account}` i18n keys; and the `/auth/register|forgot|password|verify|2fa|recovery` and `/users/*` paths from `openapi.json`. `/auth/login` and `/auth/logout` remain as the unified admin login form (PART 11), backed exclusively by `src/admin/AuthManager`. Reason: keep code surface aligned with the documented "no regular-user accounts" non-goal so the project does not ship dead authentication paths or half-implemented OPTIONAL features.
+- **PART 17/34/35/36 surfaces fully removed from the codebase.** AI.md PARTs 17 (admin web UI), 34 (regular users), 35 (organizations), and 36 (custom domains) are NOT implemented. The previous codebase shipped partial implementations (admin panel at `/server/admin` with sessions and login form, partial PART 34 user accounts with registration / 2FA / recovery keys). All of it has been deleted: `src/admin/` package; `src/server/session.go`; `src/server/auth.go`'s old login form; `src/client/cmd/{login,admin}.go`; `src/client/api/admin.go`; `src/scheduler/admin.go`; `Server.Admin` and `Server.Session` config structs; `admin_credentials`, `admin_sessions`, `admin_notifications`, `users`, `user_sessions`, `user_2fa`, `recovery_keys`, `user_tokens`, `passkeys`, `external_admins`, `setup_token`, `admin_invites`, `verification_tokens` database tables and their migrations; the `/auth/login`, `/auth/logout`, `/server/admin/*`, `/auth/register|forgot|password|verify|2fa|recovery`, and `/users/*` routes; and the templates `templates/auth/*`, `templates/user/*`, and the static `admin.css`. The new operator surface is the two-tier bearer-token model (`server.token` + per-resource `api_tokens`) documented above. Reason: privacy is the product; the application has no UI-driven configuration and no end-user accounts, so it must not ship dead authentication paths.
 
 ---
 

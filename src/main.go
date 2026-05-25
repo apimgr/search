@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	cryptoRand "crypto/rand"
-	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -61,7 +59,6 @@ var (
 	flagPID       string
 	flagAddress   string
 	flagPort      int
-	flagAdminPath string
 	flagBaseURL   string
 	flagColor     string
 	flagLang      string
@@ -97,7 +94,6 @@ func init() {
 	flag.StringVar(&flagPID, "pid", "", "Set PID file path")
 	flag.StringVar(&flagAddress, "address", "", "Set listen address")
 	flag.IntVar(&flagPort, "port", 0, "Set listen port")
-	flag.StringVar(&flagAdminPath, "admin-path", "", "Set admin panel path (default: admin)")
 	flag.StringVar(&flagBaseURL, "baseurl", "", "Set URL path prefix for reverse proxy (default: /)")
 	flag.StringVar(&flagColor, "color", "", "Set color output mode (always|never|auto)")
 	// Per AI.md PART 8: --lang sets language for output (default: auto, from LANG env)
@@ -180,7 +176,7 @@ func main() {
 		runtimeFlags := map[string]bool{
 			"--port": true, "--address": true, "--mode": true, "--data": true,
 			"--config": true, "--cache": true, "--log": true, "--backup": true,
-			"--pid": true, "--debug": true, "--daemon": true, "--admin-path": true,
+			"--pid": true, "--debug": true, "--daemon": true,
 			"--baseurl": true, "--color": true, "--lang": true,
 		}
 		if !runtimeFlags[os.Args[1]] {
@@ -245,10 +241,6 @@ func applyCliOverrides() {
 	if flagPort != 0 {
 		os.Setenv("SEARCH_PORT", fmt.Sprintf("%d", flagPort))
 		os.Setenv("PORT", fmt.Sprintf("%d", flagPort))
-	}
-	if flagAdminPath != "" {
-		os.Setenv("SEARCH_ADMIN_PATH", flagAdminPath)
-		config.SetAdminPathOverride(flagAdminPath)
 	}
 	// Per AI.md PART 6: --baseurl sets URL path prefix for reverse proxy
 	if flagBaseURL != "" {
@@ -407,19 +399,13 @@ func runServer() {
 	// Build listen URLs for banner
 	urls := buildListenURLs(cfg)
 
-	// Check for first run - generate setup token if needed
-	// Per AI.md PART 14: Setup token displayed ONCE on first run
+	// On first run, display the auto-generated operator token (server.token)
+	// so the operator can save it. The token lives in server.yml and is the
+	// only credential the application has — there is no admin web UI.
 	var setupToken string
 	showSetup := cfg.IsFirstRun()
 	if showSetup {
-		setupToken = generateSetupToken()
-		// Store hashed token in database for verification
-		// The actual token is shown ONCE and never stored in plain text
-		dataDir := config.GetDataDir()
-		dbPath := filepath.Join(dataDir, "db", "server.db")
-		if err := storeSetupToken(dbPath, setupToken); err != nil {
-			log.Printf("Warning: Could not store setup token: %v", err)
-		}
+		setupToken = cfg.Server.Token
 	}
 
 	// Print responsive startup banner per AI.md PART 7 and PART 14
@@ -431,7 +417,6 @@ func runServer() {
 		URLs:       urls,
 		ShowSetup:  showSetup,
 		SetupToken: setupToken,
-		AdminPath:  config.GetAdminPath(),
 	})
 
 	// Create server
@@ -486,7 +471,6 @@ Runtime Flags:
   --pid <file>             Set PID file path
   --address <addr>         Set listen address
   --port <port>            Set listen port
-  --admin-path <path>      Set admin panel path (default: admin)
   --baseurl <path>         Set URL path prefix for reverse proxy (default: /)
   --color <mode>           Set color output mode (always|never|auto)
   --lang <code>            Set language for output (default: auto, from LANG env)
@@ -526,7 +510,7 @@ Maintenance:
                            Use BACKUP_PASSWORD env var for encryption
     restore <file>         Restore from backup
                            Use BACKUP_PASSWORD env var if encrypted
-    setup                  Reset admin credentials (generates setup token)
+    rotate-token           Rotate the operator bearer token (server.token)
     mode                   Toggle maintenance mode
 
 Updates:
@@ -553,11 +537,10 @@ Environment Variables:
   SEARCH_DATA_DIR          Data directory
   SEARCH_LOG_DIR           Log directory
   DEBUG, SEARCH_DEBUG      Enable debug mode (0/1, true/false)
-  SECRET_KEY               Secret key for sessions
+  SECRET_KEY               Secret key for in-memory caches (not sessions)
   PORT, SEARCH_PORT        Server port
   MODE, SEARCH_MODE        Application mode (production|development)
   INSTANCE_NAME            Instance display name
-  SEARCH_ADMIN_PATH        Admin panel path (default: admin)
   SEARCH_COLOR             Color output mode (always|never|auto)
   NO_COLOR                 Disable colors when set (standard)
   DISABLE_TOR              Disable Tor (auto-enabled if tor binary installed)
@@ -573,7 +556,7 @@ Examples:
   %s --service --install             Install as system service
   %s --service reload                Reload configuration
   %s --update check                  Check for updates
-  %s --maintenance setup             Reset admin credentials
+  %s --maintenance rotate-token      Rotate the operator bearer token
   %s --build all                     Build for all platforms
   %s --build host                    Build for current platform
 
@@ -1125,36 +1108,20 @@ func runMaintenance(action string) {
 			fmt.Println("   The server is now accepting normal requests")
 		}
 
-	case "setup":
-		// Admin recovery per AI.md PART 26
-		// Clears admin password and generates a new setup token
-		fmt.Println(display.Emoji("🔧", "[*]") + " Admin Recovery Setup")
+	case "rotate-token":
+		// Rotate the operator bearer token (server.token) and persist it.
+		// This is the only credential the application has — there is no admin
+		// web UI, no sessions, and no user accounts.
+		fmt.Println(display.Emoji("🔧", "[*]") + " Rotate Operator Token")
 		fmt.Println()
 
-		// Initialize database to reset credentials
 		cfg, err := config.Initialize()
 		if err != nil {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to load config: %v\n", err)
 			os.Exit(1)
 		}
 
-		// Get data directory for server.db
-		dataDir := config.GetDataDir()
-		dbPath := fmt.Sprintf("%s/server.db", dataDir)
-
-		// Check if database exists
-		if _, err := os.Stat(dbPath); os.IsNotExist(err) {
-			fmt.Println("No existing admin accounts found.")
-			fmt.Println("Run the server and visit /admin/setup to create the first admin.")
-			return
-		}
-
-		fmt.Println("This will:")
-		fmt.Println("  1. Clear the primary admin's password")
-		fmt.Println("  2. Generate a one-time setup token")
-		fmt.Println("  3. Allow password reset via /admin/setup")
-		fmt.Println()
-		fmt.Print("Continue? (yes/no): ")
+		fmt.Print("Rotate server.token? Existing operator clients will need the new token. (yes/no): ")
 		var confirm string
 		fmt.Scanln(&confirm)
 		if confirm != "yes" {
@@ -1162,35 +1129,20 @@ func runMaintenance(action string) {
 			return
 		}
 
-		// Generate setup token
-		setupToken := generateSetupToken()
-
-		// Store hashed setup token in database
-		if err := storeSetupToken(dbPath, setupToken); err != nil {
-			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to create setup token: %v\n", err)
+		newToken := generateSetupToken()
+		cfg.Server.Token = newToken
+		if err := cfg.Save(config.GetConfigPath()); err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to save config: %v\n", err)
 			os.Exit(1)
 		}
 
-		// Clear primary admin credentials
-		if err := resetAdminCredentials(dbPath); err != nil {
-			fmt.Printf(display.Emoji("⚠️", "[WARN]")+"  Warning: Could not reset credentials: %v\n", err)
-		}
-
 		fmt.Println()
-		fmt.Println(display.Emoji("✅", "[OK]") + " Setup token created successfully!")
+		fmt.Println(display.Emoji("✅", "[OK]") + " Token rotated. New value:")
 		fmt.Println()
-		fmt.Println("╔══════════════════════════════════════════════════════════╗")
-		fmt.Println("║  SETUP TOKEN (copy this - it will not be shown again)    ║")
-		fmt.Println("╠══════════════════════════════════════════════════════════╣")
-		fmt.Printf("║  %s                                  ║\n", setupToken)
-		fmt.Println("╚══════════════════════════════════════════════════════════╝")
+		fmt.Println("    " + newToken)
 		fmt.Println()
-		fmt.Println("Next steps:")
-		fmt.Println("  1. Start the server: search")
-		fmt.Printf("  2. Visit: http://localhost:%d/admin/setup\n", cfg.Server.Port)
-		fmt.Println("  3. Enter the setup token above to create a new password")
-		fmt.Println()
-		fmt.Println("The token expires in 1 hour.")
+		fmt.Println("Send as: Authorization: Bearer " + newToken)
+		fmt.Println("Also written to: " + config.GetConfigPath())
 
 	case "help":
 		fmt.Println("Maintenance Commands:")
@@ -1202,7 +1154,7 @@ func runMaintenance(action string) {
 		fmt.Println("  list              List available backups")
 		fmt.Println("  update            Check and install updates")
 		fmt.Println("  mode              Toggle maintenance mode")
-		fmt.Println("  setup             Reset admin credentials (generates setup token)")
+		fmt.Println("  rotate-token      Rotate server.token (operator bearer token)")
 		fmt.Println("  help              Show this help")
 		fmt.Println()
 		fmt.Println("Backup Encryption:")
@@ -1211,7 +1163,7 @@ func runMaintenance(action string) {
 
 	default:
 		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown action: %s\n", action)
-		fmt.Println("Valid actions: backup, restore, list, update, mode, setup, help")
+		fmt.Println("Valid actions: backup, restore, list, update, mode, rotate-token, help")
 	}
 }
 
@@ -1428,86 +1380,21 @@ func runTest() {
 }
 
 // ============================================================
-// First Run Detection (per AI.md PART 6)
+// Operator Token Helper
 // ============================================================
 
-// getFirstRunToken returns setup token and whether to show first run setup
-// Per AI.md PART 6: Setup token displayed ONCE on first run
-func getFirstRunToken(cfg *config.Config) (token string, showSetup bool) {
-	dataDir := config.GetDataDir()
-	dbPath := filepath.Join(dataDir, "db", "server.db")
-
-	// Check if database exists
-	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
-		// Database doesn't exist yet, will be created on first use
-		return "", false
-	}
-
-	// Open database and check for admin
-	db, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		return "", false
-	}
-	defer db.Close()
-
-	// Check if admin_credentials table exists
-	var tableName string
-	err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='admin_credentials'").Scan(&tableName)
-	if err != nil {
-		// Table doesn't exist, this is a fresh database - generate token
-		return generateAndStoreToken(dbPath)
-	}
-
-	// Check if any admin exists
-	var count int
-	err = db.QueryRow("SELECT COUNT(*) FROM admin_credentials").Scan(&count)
-	if err != nil {
-		return "", false
-	}
-
-	if count == 0 {
-		// No admin exists, generate setup token
-		return generateAndStoreToken(dbPath)
-	}
-
-	return "", false
-}
-
-// generateAndStoreToken generates a new setup token and stores it
-func generateAndStoreToken(dbPath string) (string, bool) {
-	// Check if a valid setup token already exists
-	db, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		return "", false
-	}
-	defer db.Close()
-
-	// Check for unexpired setup token
-	var expiresAt string
-	err = db.QueryRow(`
-		SELECT expires_at FROM setup_token WHERE id = 1 AND used_at IS NULL
-	`).Scan(&expiresAt)
-
-	if err == nil {
-		// Token exists, check if still valid
-		expiry, err := time.Parse("2006-01-02 15:04:05", expiresAt)
-		if err == nil && expiry.After(time.Now()) {
-			// Valid token exists, don't regenerate (token only shown once)
-			// Return empty token: showSetup=true but token was previously shown
-			return "", true
+// generateSetupToken creates a cryptographically secure 32-char hex token.
+// Used to seed server.token on first run and for the rotate-token command.
+func generateSetupToken() string {
+	randomBytes := make([]byte, 16)
+	if _, err := cryptoRand.Read(randomBytes); err != nil {
+		// Crypto/rand failure is unexpected; fall back to math/rand so the
+		// operator at least gets a token they can immediately replace.
+		for i := range randomBytes {
+			randomBytes[i] = byte(mathRand.Intn(256))
 		}
 	}
-
-	// Generate new setup token
-	setupToken := generateSetupToken()
-
-	// Store the hashed token
-	if err := storeSetupToken(dbPath, setupToken); err != nil {
-		log.Printf("Warning: Failed to store setup token: %v", err)
-		return "", false
-	}
-
-	return setupToken, true
+	return hex.EncodeToString(randomBytes)
 }
 
 // buildListenURLs builds the list of URLs the server is listening on
@@ -1543,213 +1430,6 @@ func buildListenURLs(cfg *config.Config) []string {
 	}
 
 	return urls
-}
-
-// checkFirstRun checks if this is the first run and displays setup token if needed
-// Per AI.md PART 6: Setup token displayed ONCE on first run
-// DEPRECATED: Use getFirstRunToken instead - kept for backward compatibility
-func checkFirstRun(cfg *config.Config) {
-	dataDir := config.GetDataDir()
-	dbPath := filepath.Join(dataDir, "db", "server.db")
-
-	// Check if database exists
-	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
-		// Database doesn't exist yet, will be created on first use
-		// We'll display setup token after database creation
-		return
-	}
-
-	// Open database and check for admin
-	db, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		// Can't open database, skip first-run check
-		return
-	}
-	defer db.Close()
-
-	// Check if admin_credentials table exists
-	var tableName string
-	err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='admin_credentials'").Scan(&tableName)
-	if err != nil {
-		// Table doesn't exist, this is a fresh database
-		// Generate and display setup token
-		displayFirstRunSetupToken(cfg, dbPath)
-		return
-	}
-
-	// Check if any admin exists
-	var count int
-	err = db.QueryRow("SELECT COUNT(*) FROM admin_credentials").Scan(&count)
-	if err != nil {
-		// Can't query, skip check
-		return
-	}
-
-	if count == 0 {
-		// No admin exists, display setup token
-		displayFirstRunSetupToken(cfg, dbPath)
-	}
-}
-
-// displayFirstRunSetupToken generates and displays a setup token on first run
-func displayFirstRunSetupToken(cfg *config.Config, dbPath string) {
-	// Check if a valid setup token already exists
-	db, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		return
-	}
-	defer db.Close()
-
-	// Check for unexpired setup token
-	var expiresAt string
-	err = db.QueryRow(`
-		SELECT expires_at FROM setup_token WHERE id = 1 AND used_at IS NULL
-	`).Scan(&expiresAt)
-
-	if err == nil {
-		// Token exists, check if still valid
-		expiry, err := time.Parse("2006-01-02 15:04:05", expiresAt)
-		if err == nil && expiry.After(time.Now()) {
-			// Valid token exists, don't regenerate (token only shown once)
-			fmt.Println("╔══════════════════════════════════════════════════════════════╗")
-			fmt.Println("║  FIRST RUN: Admin setup required                             ║")
-			fmt.Println("╠══════════════════════════════════════════════════════════════╣")
-			fmt.Printf("║  Visit: http://localhost:%d/admin/setup               ║\n", cfg.Server.Port)
-			fmt.Println("║  A setup token was previously generated.                     ║")
-			fmt.Println("║  Run 'search --maintenance setup' for a new token.           ║")
-			fmt.Println("╚══════════════════════════════════════════════════════════════╝")
-			fmt.Println()
-			return
-		}
-	}
-
-	// Generate new setup token
-	setupToken := generateSetupToken()
-
-	// Store the hashed token
-	if err := storeSetupToken(dbPath, setupToken); err != nil {
-		log.Printf("Warning: Failed to store setup token: %v", err)
-		return
-	}
-
-	// Display the token ONCE - per AI.md this is the only time it's shown
-	fmt.Println()
-	fmt.Println("╔══════════════════════════════════════════════════════════════╗")
-	fmt.Println("║  FIRST RUN: Admin setup required                             ║")
-	fmt.Println("╠══════════════════════════════════════════════════════════════╣")
-	fmt.Println("║  SETUP TOKEN (copy this - it will not be shown again!)       ║")
-	fmt.Println("╠══════════════════════════════════════════════════════════════╣")
-	fmt.Printf("║  %s                                  ║\n", setupToken)
-	fmt.Println("╠══════════════════════════════════════════════════════════════╣")
-	fmt.Printf("║  Visit: http://localhost:%d/admin/setup               ║\n", cfg.Server.Port)
-	fmt.Println("║  Enter the token above to create your admin account.         ║")
-	fmt.Println("║  Token expires in 1 hour.                                     ║")
-	fmt.Println("╚══════════════════════════════════════════════════════════════╝")
-	fmt.Println()
-}
-
-// ============================================================
-// Admin Recovery Helpers (per AI.md PART 26)
-// ============================================================
-
-// generateSetupToken creates a cryptographically secure setup token
-// Per AI.md: Setup token must be 32 hex chars, no dashes
-func generateSetupToken() string {
-	// Generate 16 random bytes = 32 hex characters
-	randomBytes := make([]byte, 16)
-	if _, err := cryptoRand.Read(randomBytes); err != nil {
-		// Fallback to less secure method if crypto/rand fails
-		for i := range randomBytes {
-			randomBytes[i] = byte(mathRand.Intn(256))
-		}
-	}
-	// Return as lowercase hex string (32 chars)
-	return hex.EncodeToString(randomBytes)
-}
-
-// storeSetupToken stores the hashed setup token in the database
-func storeSetupToken(dbPath, token string) error {
-	// Hash the token
-	hash := sha256.Sum256([]byte(token))
-	tokenHash := hex.EncodeToString(hash[:])
-
-	// Ensure directory exists
-	dbDir := filepath.Dir(dbPath)
-	if err := os.MkdirAll(dbDir, 0755); err != nil {
-		return fmt.Errorf("failed to create database directory: %w", err)
-	}
-
-	// Open database
-	db, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		return fmt.Errorf("failed to open database: %w", err)
-	}
-	defer db.Close()
-
-	// Create setup_token table if it doesn't exist
-	_, err = db.Exec(`
-		CREATE TABLE IF NOT EXISTS setup_token (
-			id INTEGER PRIMARY KEY CHECK (id = 1),
-			token_hash TEXT NOT NULL,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			expires_at DATETIME,
-			used_at DATETIME
-		)
-	`)
-	if err != nil {
-		return fmt.Errorf("failed to create table: %w", err)
-	}
-
-	// Clear any existing setup token and insert new one
-	expiresAt := time.Now().Add(1 * time.Hour)
-	_, err = db.Exec(`DELETE FROM setup_token`)
-	if err != nil {
-		return fmt.Errorf("failed to clear old tokens: %w", err)
-	}
-
-	_, err = db.Exec(`
-		INSERT INTO setup_token (id, token_hash, expires_at) VALUES (1, ?, ?)
-	`, tokenHash, expiresAt)
-	if err != nil {
-		return fmt.Errorf("failed to store token: %w", err)
-	}
-
-	return nil
-}
-
-// resetAdminCredentials clears the primary admin's password for recovery
-func resetAdminCredentials(dbPath string) error {
-	// Open database
-	db, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		return fmt.Errorf("failed to open database: %w", err)
-	}
-	defer db.Close()
-
-	// Clear password for primary admin (is_primary = 1)
-	result, err := db.Exec(`
-		UPDATE admin_credentials
-		SET password_hash = '', token_hash = NULL, token_prefix = NULL, updated_at = datetime('now')
-		WHERE is_primary = 1
-	`)
-	if err != nil {
-		return fmt.Errorf("failed to reset credentials: %w", err)
-	}
-
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
-		// Try legacy single-admin format
-		_, err = db.Exec(`
-			UPDATE admin_credentials
-			SET password_hash = '', token_hash = NULL, token_prefix = NULL, updated_at = datetime('now')
-			WHERE id = 1
-		`)
-		if err != nil {
-			return fmt.Errorf("failed to reset credentials: %w", err)
-		}
-	}
-
-	return nil
 }
 
 // ============================================================

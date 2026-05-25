@@ -41,7 +41,9 @@ func NewDatabaseMigrator(dm *DatabaseManager) *DatabaseMigrator {
 	}
 	dbm.registerServerMigrations()
 
-	// Create users database migrator
+	// Create users database migrator. This project has NO user accounts;
+	// the database is provisioned with only a schema_version table so the
+	// DatabaseManager API stays unchanged.
 	dbm.usersMigrator = &Migrator{
 		db:         dm.UsersDB(),
 		migrations: make([]Migration, 0),
@@ -51,8 +53,11 @@ func NewDatabaseMigrator(dm *DatabaseManager) *DatabaseMigrator {
 	return dbm
 }
 
-// registerServerMigrations registers migrations for server.db
-// Tables: admin_credentials, admin_sessions, scheduler_state, audit_log, etc.
+// registerServerMigrations registers migrations for server.db.
+//
+// Per spec there is no admin web UI, no sessions, and no user accounts.
+// Tables kept: scheduler_state, audit_log, server_settings, api_tokens
+// (per-resource owner tokens, SHA-256 hashed), and the search alert tables.
 func (dbm *DatabaseMigrator) registerServerMigrations() {
 	m := dbm.serverMigrator
 
@@ -70,54 +75,9 @@ func (dbm *DatabaseMigrator) registerServerMigrations() {
 		Down: `DROP TABLE IF EXISTS schema_version`,
 	})
 
-	// Migration 2: Admin credentials (single row - primary server admin)
+	// Migration 2: Scheduler state
 	m.Register(Migration{
 		Version:     2,
-		Description: "Create admin_credentials table",
-		Up: `
-			CREATE TABLE IF NOT EXISTS admin_credentials (
-				id INTEGER PRIMARY KEY CHECK (id = 1),
-				username TEXT UNIQUE NOT NULL,
-				email TEXT,
-				password_hash TEXT NOT NULL,
-				token_hash TEXT,
-				token_prefix TEXT,
-				totp_secret TEXT,
-				totp_enabled INTEGER DEFAULT 0,
-				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				last_login_at DATETIME
-			);
-		`,
-		Down: `DROP TABLE IF EXISTS admin_credentials`,
-	})
-
-	// Migration 3: Admin sessions
-	// Per AI.md PART 17: Admin sessions stored in admin_sessions table (server.db)
-	m.Register(Migration{
-		Version:     3,
-		Description: "Create admin_sessions table",
-		Up: `
-			CREATE TABLE IF NOT EXISTS admin_sessions (
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				token TEXT UNIQUE NOT NULL,
-				username TEXT NOT NULL,
-				ip_address TEXT NOT NULL,
-				user_agent TEXT,
-				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				expires_at DATETIME NOT NULL,
-				last_active DATETIME DEFAULT CURRENT_TIMESTAMP
-			);
-			CREATE INDEX idx_admin_sessions_token ON admin_sessions(token);
-			CREATE INDEX idx_admin_sessions_expires ON admin_sessions(expires_at);
-			CREATE INDEX idx_admin_sessions_username ON admin_sessions(username);
-		`,
-		Down: `DROP TABLE IF EXISTS admin_sessions`,
-	})
-
-	// Migration 4: Scheduler state
-	m.Register(Migration{
-		Version:     4,
 		Description: "Create scheduler_state table",
 		Up: `
 			CREATE TABLE IF NOT EXISTS scheduler_state (
@@ -133,9 +93,9 @@ func (dbm *DatabaseMigrator) registerServerMigrations() {
 		Down: `DROP TABLE IF EXISTS scheduler_state`,
 	})
 
-	// Migration 5: Audit log
+	// Migration 3: Audit log
 	m.Register(Migration{
-		Version:     5,
+		Version:     3,
 		Description: "Create audit_log table",
 		Up: `
 			CREATE TABLE IF NOT EXISTS audit_log (
@@ -160,9 +120,9 @@ func (dbm *DatabaseMigrator) registerServerMigrations() {
 		Down: `DROP TABLE IF EXISTS audit_log`,
 	})
 
-	// Migration 6: Server settings
+	// Migration 4: Server settings
 	m.Register(Migration{
-		Version:     6,
+		Version:     4,
 		Description: "Create server_settings table",
 		Up: `
 			CREATE TABLE IF NOT EXISTS server_settings (
@@ -174,9 +134,9 @@ func (dbm *DatabaseMigrator) registerServerMigrations() {
 		Down: `DROP TABLE IF EXISTS server_settings`,
 	})
 
-	// Migration 7: API tokens (admin tokens)
+	// Migration 5: API tokens (per-resource owner tokens; SHA-256 hashed)
 	m.Register(Migration{
-		Version:     7,
+		Version:     5,
 		Description: "Create api_tokens table",
 		Up: `
 			CREATE TABLE IF NOT EXISTS api_tokens (
@@ -198,9 +158,9 @@ func (dbm *DatabaseMigrator) registerServerMigrations() {
 		Down: `DROP TABLE IF EXISTS api_tokens`,
 	})
 
-	// Migration 8: Search statistics
+	// Migration 6: Search statistics
 	m.Register(Migration{
-		Version:     8,
+		Version:     6,
 		Description: "Create search_stats table",
 		Up: `
 			CREATE TABLE IF NOT EXISTS search_stats (
@@ -219,9 +179,9 @@ func (dbm *DatabaseMigrator) registerServerMigrations() {
 		Down: `DROP TABLE IF EXISTS search_stats`,
 	})
 
-	// Migration 9: Engine statistics
+	// Migration 7: Engine statistics
 	m.Register(Migration{
-		Version:     9,
+		Version:     7,
 		Description: "Create engine_stats table",
 		Up: `
 			CREATE TABLE IF NOT EXISTS engine_stats (
@@ -240,9 +200,9 @@ func (dbm *DatabaseMigrator) registerServerMigrations() {
 		Down: `DROP TABLE IF EXISTS engine_stats`,
 	})
 
-	// Migration 10: Blocked IPs
+	// Migration 8: Blocked IPs
 	m.Register(Migration{
-		Version:     10,
+		Version:     8,
 		Description: "Create blocked_ips table",
 		Up: `
 			CREATE TABLE IF NOT EXISTS blocked_ips (
@@ -258,9 +218,9 @@ func (dbm *DatabaseMigrator) registerServerMigrations() {
 		Down: `DROP TABLE IF EXISTS blocked_ips`,
 	})
 
-	// Migration 11: Custom bangs
+	// Migration 9: Custom bangs
 	m.Register(Migration{
-		Version:     11,
+		Version:     9,
 		Description: "Create custom_bangs table",
 		Up: `
 			CREATE TABLE IF NOT EXISTS custom_bangs (
@@ -278,143 +238,9 @@ func (dbm *DatabaseMigrator) registerServerMigrations() {
 		Down: `DROP TABLE IF EXISTS custom_bangs`,
 	})
 
-	// Migration 12: Multi-admin support per AI.md PART 31
-	// Recreate admin_credentials without CHECK constraint, add new columns
+	// Migration 10: Search alerts
 	m.Register(Migration{
-		Version:     12,
-		Description: "Add multi-admin support to admin_credentials",
-		Up: `
-			-- Create new table with multi-admin support
-			CREATE TABLE IF NOT EXISTS admin_credentials_new (
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				username TEXT UNIQUE NOT NULL,
-				email TEXT UNIQUE,
-				password_hash TEXT NOT NULL,
-				token_hash TEXT,
-				token_prefix TEXT,
-				totp_secret TEXT,
-				totp_enabled INTEGER DEFAULT 0,
-				is_primary INTEGER DEFAULT 0,
-				source TEXT DEFAULT 'local',
-				external_id TEXT,
-				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				last_login_at DATETIME
-			);
-
-			-- Copy existing data, marking as primary admin
-			INSERT INTO admin_credentials_new (
-				id, username, email, password_hash, token_hash, token_prefix,
-				totp_secret, totp_enabled, is_primary, source,
-				created_at, updated_at, last_login_at
-			)
-			SELECT
-				id, username, email, password_hash, token_hash, token_prefix,
-				totp_secret, totp_enabled, 1, 'local',
-				created_at, updated_at, last_login_at
-			FROM admin_credentials;
-
-			-- Drop old table and rename new one
-			DROP TABLE admin_credentials;
-			ALTER TABLE admin_credentials_new RENAME TO admin_credentials;
-
-			-- Create indexes
-			CREATE INDEX idx_admin_credentials_username ON admin_credentials(username);
-			CREATE INDEX idx_admin_credentials_email ON admin_credentials(email);
-			CREATE INDEX idx_admin_credentials_source ON admin_credentials(source);
-		`,
-		Down: `
-			-- Revert to single-admin table
-			CREATE TABLE IF NOT EXISTS admin_credentials_old (
-				id INTEGER PRIMARY KEY CHECK (id = 1),
-				username TEXT UNIQUE NOT NULL,
-				email TEXT,
-				password_hash TEXT NOT NULL,
-				token_hash TEXT,
-				token_prefix TEXT,
-				totp_secret TEXT,
-				totp_enabled INTEGER DEFAULT 0,
-				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				last_login_at DATETIME
-			);
-
-			INSERT INTO admin_credentials_old
-			SELECT id, username, email, password_hash, token_hash, token_prefix,
-				   totp_secret, totp_enabled, created_at, updated_at, last_login_at
-			FROM admin_credentials WHERE is_primary = 1;
-
-			DROP TABLE admin_credentials;
-			ALTER TABLE admin_credentials_old RENAME TO admin_credentials;
-		`,
-	})
-
-	// Migration 13: Admin invites table per AI.md PART 31
-	m.Register(Migration{
-		Version:     13,
-		Description: "Create admin_invites table",
-		Up: `
-			CREATE TABLE IF NOT EXISTS admin_invites (
-				id TEXT PRIMARY KEY,
-				token_hash TEXT UNIQUE NOT NULL,
-				username TEXT,
-				created_by INTEGER NOT NULL,
-				expires_at DATETIME NOT NULL,
-				used_at DATETIME,
-				used_by INTEGER,
-				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				FOREIGN KEY (created_by) REFERENCES admin_credentials(id),
-				FOREIGN KEY (used_by) REFERENCES admin_credentials(id)
-			);
-			CREATE INDEX idx_admin_invites_token ON admin_invites(token_hash);
-			CREATE INDEX idx_admin_invites_expires ON admin_invites(expires_at);
-		`,
-		Down: `DROP TABLE IF EXISTS admin_invites`,
-	})
-
-	// Migration 14: Setup token table for --maintenance setup command
-	m.Register(Migration{
-		Version:     14,
-		Description: "Create setup_token table",
-		Up: `
-			CREATE TABLE IF NOT EXISTS setup_token (
-				id INTEGER PRIMARY KEY CHECK (id = 1),
-				token_hash TEXT NOT NULL,
-				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				expires_at DATETIME,
-				used_at DATETIME
-			);
-		`,
-		Down: `DROP TABLE IF EXISTS setup_token`,
-	})
-
-	// Migration 15: External admins table for OIDC/LDAP per AI.md PART 31
-	m.Register(Migration{
-		Version:     15,
-		Description: "Create external_admins table",
-		Up: `
-			CREATE TABLE IF NOT EXISTS external_admins (
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				provider_type TEXT NOT NULL,
-				provider_id TEXT NOT NULL,
-				external_id TEXT NOT NULL,
-				username TEXT NOT NULL,
-				email TEXT,
-				groups_json TEXT,
-				is_admin INTEGER DEFAULT 0,
-				cached_at DATETIME NOT NULL,
-				last_login_at DATETIME,
-				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				UNIQUE(provider_type, provider_id, external_id)
-			);
-			CREATE INDEX idx_external_admins_provider ON external_admins(provider_type, provider_id);
-			CREATE INDEX idx_external_admins_external ON external_admins(external_id);
-		`,
-		Down: `DROP TABLE IF EXISTS external_admins`,
-	})
-
-	m.Register(Migration{
-		Version:     16,
+		Version:     10,
 		Description: "Create search alert tables",
 		Up: `
 			CREATE TABLE IF NOT EXISTS search_alerts (
@@ -442,7 +268,12 @@ func (dbm *DatabaseMigrator) registerServerMigrations() {
 				created_from_ip TEXT,
 				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 				verified_at DATETIME,
-				paused_at DATETIME
+				paused_at DATETIME,
+				language TEXT NOT NULL DEFAULT 'en',
+				region TEXT NOT NULL DEFAULT '',
+				engines_json TEXT NOT NULL DEFAULT '[]',
+				manage_token_encrypted TEXT NOT NULL DEFAULT '',
+				rss_token_encrypted TEXT NOT NULL DEFAULT ''
 			);
 			CREATE UNIQUE INDEX idx_search_alerts_manage_token ON search_alerts(manage_token_hash);
 			CREATE UNIQUE INDEX idx_search_alerts_rss_token ON search_alerts(rss_token_hash);
@@ -472,39 +303,19 @@ func (dbm *DatabaseMigrator) registerServerMigrations() {
 		`,
 	})
 
-	m.Register(Migration{
-		Version:     17,
-		Description: "Add search alert filter fields",
-		Up: `
-			ALTER TABLE search_alerts ADD COLUMN language TEXT NOT NULL DEFAULT 'en';
-			ALTER TABLE search_alerts ADD COLUMN region TEXT NOT NULL DEFAULT '';
-			ALTER TABLE search_alerts ADD COLUMN engines_json TEXT NOT NULL DEFAULT '[]';
-		`,
-		Down: ``,
-	})
-
-	m.Register(Migration{
-		Version:     18,
-		Description: "Add encrypted search alert tokens",
-		Up: `
-			ALTER TABLE search_alerts ADD COLUMN manage_token_encrypted TEXT NOT NULL DEFAULT '';
-			ALTER TABLE search_alerts ADD COLUMN rss_token_encrypted TEXT NOT NULL DEFAULT '';
-		`,
-		Down: ``,
-	})
-
 	// Sort migrations by version
 	sort.Slice(m.migrations, func(i, j int) bool {
 		return m.migrations[i].Version < m.migrations[j].Version
 	})
 }
 
-// registerUsersMigrations registers migrations for user.db
-// Tables: users, user_sessions, user_2fa, recovery_keys, user_tokens, etc.
+// registerUsersMigrations registers migrations for user.db.
+//
+// This project has no user account system; only a schema_version stub is
+// created so existing DatabaseManager code paths keep working.
 func (dbm *DatabaseMigrator) registerUsersMigrations() {
 	m := dbm.usersMigrator
 
-	// Migration 1: Schema version table
 	m.Register(Migration{
 		Version:     1,
 		Description: "Create schema_version table",
@@ -518,346 +329,6 @@ func (dbm *DatabaseMigrator) registerUsersMigrations() {
 		Down: `DROP TABLE IF EXISTS schema_version`,
 	})
 
-	// Migration 2: Users table
-	m.Register(Migration{
-		Version:     2,
-		Description: "Create users table",
-		Up: `
-			CREATE TABLE IF NOT EXISTS users (
-				id TEXT PRIMARY KEY,
-				username TEXT UNIQUE NOT NULL,
-				email TEXT UNIQUE NOT NULL,
-				password_hash TEXT NOT NULL,
-				display_name TEXT,
-				avatar_url TEXT,
-				bio TEXT,
-				role TEXT DEFAULT 'user',
-				email_verified INTEGER DEFAULT 0,
-				approved INTEGER DEFAULT 1,
-				disabled INTEGER DEFAULT 0,
-				totp_secret TEXT,
-				totp_enabled INTEGER DEFAULT 0,
-				timezone TEXT,
-				language TEXT,
-				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				last_login_at DATETIME
-			);
-			CREATE INDEX idx_users_username ON users(username);
-			CREATE INDEX idx_users_email ON users(email);
-			CREATE INDEX idx_users_disabled ON users(disabled);
-		`,
-		Down: `DROP TABLE IF EXISTS users`,
-	})
-
-	// Migration 3: User sessions
-	m.Register(Migration{
-		Version:     3,
-		Description: "Create user_sessions table",
-		Up: `
-			CREATE TABLE IF NOT EXISTS user_sessions (
-				id TEXT PRIMARY KEY,
-				user_id TEXT NOT NULL,
-				token_hash TEXT UNIQUE NOT NULL,
-				ip_address TEXT,
-				user_agent TEXT,
-				location TEXT,
-				device_name TEXT,
-				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				expires_at DATETIME NOT NULL,
-				last_used DATETIME DEFAULT CURRENT_TIMESTAMP,
-				FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-			);
-			CREATE INDEX idx_user_sessions_hash ON user_sessions(token_hash);
-			CREATE INDEX idx_user_sessions_user ON user_sessions(user_id);
-			CREATE INDEX idx_user_sessions_expires ON user_sessions(expires_at);
-		`,
-		Down: `DROP TABLE IF EXISTS user_sessions`,
-	})
-
-	// Migration 4: User 2FA
-	m.Register(Migration{
-		Version:     4,
-		Description: "Create user_2fa table",
-		Up: `
-			CREATE TABLE IF NOT EXISTS user_2fa (
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				user_id TEXT UNIQUE NOT NULL,
-				secret_encrypted TEXT NOT NULL,
-				enabled INTEGER DEFAULT 0,
-				verified INTEGER DEFAULT 0,
-				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				enabled_at DATETIME,
-				FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-			);
-			CREATE INDEX idx_user_2fa_user ON user_2fa(user_id);
-		`,
-		Down: `DROP TABLE IF EXISTS user_2fa`,
-	})
-
-	// Migration 5: Recovery keys
-	m.Register(Migration{
-		Version:     5,
-		Description: "Create recovery_keys table",
-		Up: `
-			CREATE TABLE IF NOT EXISTS recovery_keys (
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				user_id TEXT NOT NULL,
-				key_hash TEXT NOT NULL,
-				used INTEGER DEFAULT 0,
-				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				used_at DATETIME,
-				FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-			);
-			CREATE INDEX idx_recovery_keys_user ON recovery_keys(user_id);
-			CREATE INDEX idx_recovery_keys_hash ON recovery_keys(key_hash);
-		`,
-		Down: `DROP TABLE IF EXISTS recovery_keys`,
-	})
-
-	// Migration 6: User API tokens
-	m.Register(Migration{
-		Version:     6,
-		Description: "Create user_tokens table",
-		Up: `
-			CREATE TABLE IF NOT EXISTS user_tokens (
-				id TEXT PRIMARY KEY,
-				user_id TEXT NOT NULL,
-				name TEXT NOT NULL,
-				token_hash TEXT UNIQUE NOT NULL,
-				token_prefix TEXT NOT NULL,
-				permissions TEXT,
-				last_used DATETIME,
-				expires_at DATETIME,
-				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-			);
-			CREATE INDEX idx_user_tokens_user ON user_tokens(user_id);
-			CREATE INDEX idx_user_tokens_hash ON user_tokens(token_hash);
-		`,
-		Down: `DROP TABLE IF EXISTS user_tokens`,
-	})
-
-	// Migration 7: Verification tokens
-	m.Register(Migration{
-		Version:     7,
-		Description: "Create verification_tokens table",
-		Up: `
-			CREATE TABLE IF NOT EXISTS verification_tokens (
-				id TEXT PRIMARY KEY,
-				user_id TEXT NOT NULL,
-				token TEXT UNIQUE NOT NULL,
-				type TEXT NOT NULL,
-				expires_at DATETIME NOT NULL,
-				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-			);
-			CREATE INDEX idx_verification_tokens_token ON verification_tokens(token);
-			CREATE INDEX idx_verification_tokens_user ON verification_tokens(user_id);
-			CREATE INDEX idx_verification_tokens_type ON verification_tokens(type);
-		`,
-		Down: `DROP TABLE IF EXISTS verification_tokens`,
-	})
-
-	// Migration 8: User preferences
-	m.Register(Migration{
-		Version:     8,
-		Description: "Create user_preferences table",
-		Up: `
-			CREATE TABLE IF NOT EXISTS user_preferences (
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				user_id TEXT UNIQUE NOT NULL,
-				preferences TEXT NOT NULL,
-				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-			);
-			CREATE INDEX idx_user_preferences_user ON user_preferences(user_id);
-		`,
-		Down: `DROP TABLE IF EXISTS user_preferences`,
-	})
-
-	// Migration 9: Invites table
-	m.Register(Migration{
-		Version:     9,
-		Description: "Create invites table",
-		Up: `
-			CREATE TABLE IF NOT EXISTS invites (
-				id TEXT PRIMARY KEY,
-				code TEXT UNIQUE NOT NULL,
-				role TEXT DEFAULT 'user',
-				max_uses INTEGER DEFAULT 1,
-				use_count INTEGER DEFAULT 0,
-				expires_at DATETIME,
-				created_by TEXT,
-				created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-			);
-			CREATE INDEX idx_invites_code ON invites(code);
-		`,
-		Down: `DROP TABLE IF EXISTS invites`,
-	})
-
-	// Migration 10: Passkeys table per AI.md PART 31
-	m.Register(Migration{
-		Version:     10,
-		Description: "Create passkeys table for WebAuthn/FIDO2",
-		Up: `
-			CREATE TABLE IF NOT EXISTS passkeys (
-				id TEXT PRIMARY KEY,
-				user_id TEXT NOT NULL,
-				credential_id TEXT UNIQUE NOT NULL,
-				public_key TEXT NOT NULL,
-				attestation_type TEXT DEFAULT 'none',
-				transport TEXT,
-				aaguid TEXT,
-				sign_count INTEGER DEFAULT 0,
-				name TEXT NOT NULL,
-				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				last_used_at DATETIME,
-				FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-			);
-			CREATE INDEX idx_passkeys_user ON passkeys(user_id);
-			CREATE INDEX idx_passkeys_credential ON passkeys(credential_id);
-		`,
-		Down: `DROP TABLE IF EXISTS passkeys`,
-	})
-
-	// Migration 11: Passkey challenges table
-	m.Register(Migration{
-		Version:     11,
-		Description: "Create passkey_challenges table",
-		Up: `
-			CREATE TABLE IF NOT EXISTS passkey_challenges (
-				id TEXT PRIMARY KEY,
-				user_id TEXT,
-				challenge TEXT NOT NULL,
-				type TEXT NOT NULL,
-				expires_at DATETIME NOT NULL,
-				created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-			);
-			CREATE INDEX idx_passkey_challenges_user ON passkey_challenges(user_id);
-			CREATE INDEX idx_passkey_challenges_expires ON passkey_challenges(expires_at);
-		`,
-		Down: `DROP TABLE IF EXISTS passkey_challenges`,
-	})
-
-	// Migration 12: Dual email support per AI.md PART 31
-	// Account email (security) vs Notification email (non-security)
-	m.Register(Migration{
-		Version:     12,
-		Description: "Add notification email support for dual email",
-		Up: `
-			ALTER TABLE users ADD COLUMN notification_email TEXT;
-			ALTER TABLE users ADD COLUMN notification_email_verified INTEGER DEFAULT 0;
-		`,
-		Down: `
-			-- SQLite doesn't support DROP COLUMN directly
-			-- These columns will be ignored if not used
-		`,
-	})
-
-	// Migration 13: User additional emails table for multiple verified emails
-	m.Register(Migration{
-		Version:     13,
-		Description: "Create user_emails table for additional emails",
-		Up: `
-			CREATE TABLE IF NOT EXISTS user_emails (
-				id TEXT PRIMARY KEY,
-				user_id TEXT NOT NULL,
-				email TEXT UNIQUE NOT NULL,
-				verified INTEGER DEFAULT 0,
-				is_primary INTEGER DEFAULT 0,
-				is_notification INTEGER DEFAULT 0,
-				verification_token TEXT,
-				verification_expires DATETIME,
-				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				verified_at DATETIME,
-				FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-			);
-			CREATE INDEX idx_user_emails_user ON user_emails(user_id);
-			CREATE INDEX idx_user_emails_email ON user_emails(email);
-			CREATE INDEX idx_user_emails_token ON user_emails(verification_token);
-		`,
-		Down: `DROP TABLE IF EXISTS user_emails`,
-	})
-
-	// Migration 14: Notification tables per AI.md PART 18
-	// WebUI notifications stored in database for persistence
-	m.Register(Migration{
-		Version:     14,
-		Description: "Create notification tables for WebUI notifications",
-		Up: `
-			CREATE TABLE IF NOT EXISTS admin_notifications (
-				id TEXT PRIMARY KEY,
-				admin_id TEXT NOT NULL,
-				type TEXT NOT NULL,
-				title TEXT NOT NULL,
-				message TEXT,
-				link TEXT,
-				read INTEGER DEFAULT 0,
-				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				FOREIGN KEY (admin_id) REFERENCES admin_credentials(id) ON DELETE CASCADE
-			);
-			CREATE INDEX idx_admin_notif_admin ON admin_notifications(admin_id);
-			CREATE INDEX idx_admin_notif_read ON admin_notifications(admin_id, read);
-			CREATE INDEX idx_admin_notif_created ON admin_notifications(created_at);
-
-			CREATE TABLE IF NOT EXISTS user_notifications (
-				id TEXT PRIMARY KEY,
-				user_id TEXT NOT NULL,
-				type TEXT NOT NULL,
-				title TEXT NOT NULL,
-				message TEXT,
-				link TEXT,
-				read INTEGER DEFAULT 0,
-				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-			);
-			CREATE INDEX idx_user_notif_user ON user_notifications(user_id);
-			CREATE INDEX idx_user_notif_read ON user_notifications(user_id, read);
-			CREATE INDEX idx_user_notif_created ON user_notifications(created_at);
-
-			CREATE TABLE IF NOT EXISTS admin_notification_prefs (
-				admin_id TEXT PRIMARY KEY,
-				security_login INTEGER DEFAULT 1,
-				security_password INTEGER DEFAULT 1,
-				security_2fa INTEGER DEFAULT 1,
-				server_ssl_webui INTEGER DEFAULT 1,
-				server_ssl_email INTEGER DEFAULT 1,
-				server_update_webui INTEGER DEFAULT 1,
-				server_disk_webui INTEGER DEFAULT 1,
-				server_disk_email INTEGER DEFAULT 1,
-				backup_complete_webui INTEGER DEFAULT 1,
-				backup_failed_webui INTEGER DEFAULT 1,
-				backup_failed_email INTEGER DEFAULT 1,
-				scheduler_failed_webui INTEGER DEFAULT 1,
-				scheduler_failed_email INTEGER DEFAULT 1,
-				updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				FOREIGN KEY (admin_id) REFERENCES admin_credentials(id) ON DELETE CASCADE
-			);
-
-			CREATE TABLE IF NOT EXISTS user_notification_prefs (
-				user_id TEXT PRIMARY KEY,
-				security_login INTEGER DEFAULT 1,
-				security_password INTEGER DEFAULT 1,
-				security_2fa INTEGER DEFAULT 1,
-				account_email_webui INTEGER DEFAULT 1,
-				account_profile_webui INTEGER DEFAULT 1,
-				session_expired_webui INTEGER DEFAULT 1,
-				session_device_webui INTEGER DEFAULT 1,
-				updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-			);
-		`,
-		Down: `
-			DROP TABLE IF EXISTS admin_notifications;
-			DROP TABLE IF EXISTS user_notifications;
-			DROP TABLE IF EXISTS admin_notification_prefs;
-			DROP TABLE IF EXISTS user_notification_prefs;
-		`,
-	})
-
-	// Sort migrations by version
 	sort.Slice(m.migrations, func(i, j int) bool {
 		return m.migrations[i].Version < m.migrations[j].Version
 	})
@@ -900,7 +371,6 @@ func NewMigrator(db *DB) *Migrator {
 
 // registerMigrations registers all migrations (legacy single-database mode)
 func (m *Migrator) registerMigrations() {
-	// Migration 1: Create schema version table
 	m.Register(Migration{
 		Version:     1,
 		Description: "Create schema_version table",
@@ -914,7 +384,6 @@ func (m *Migrator) registerMigrations() {
 		Down: `DROP TABLE IF EXISTS schema_version`,
 	})
 
-	// Sort migrations by version
 	sort.Slice(m.migrations, func(i, j int) bool {
 		return m.migrations[i].Version < m.migrations[j].Version
 	})

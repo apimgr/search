@@ -341,7 +341,6 @@ func initConfig() {
 	viper.SetDefault("server.primary", "")
 	viper.SetDefault("server.cluster", []string{})
 	viper.SetDefault("server.api_version", "v1")
-	viper.SetDefault("server.admin_path", "admin")
 	viper.SetDefault("server.timeout", 30)
 	viper.SetDefault("server.retry", 3)
 	viper.SetDefault("server.retry_delay", 1)

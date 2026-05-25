@@ -18,7 +18,7 @@ import (
 	"github.com/apimgr/search/src/i18n"
 )
 
-//go:embed template/layout/*.tmpl template/partial/*.tmpl template/partial/public/*.tmpl template/component/*.tmpl template/page/*.tmpl template/auth/*.tmpl static/*
+//go:embed template/layout/*.tmpl template/partial/*.tmpl template/partial/public/*.tmpl template/component/*.tmpl template/page/*.tmpl static/*
 var EmbeddedFS embed.FS
 
 // TemplateRenderer handles template rendering
@@ -167,9 +167,6 @@ func (tr *TemplateRenderer) loadTemplates() error {
 
 		// Load page templates from template/page/ (index, healthz, error, etc.)
 		tr.loadPagesRecursive("template/page", "", string(layoutContent), partials, tr.templates[lang], funcMap)
-
-		// Load auth pages from template/auth/ (per AI.md: auth/ is sibling of page/)
-		tr.loadPagesRecursive("template/auth", "auth", string(layoutContent), partials, tr.templates[lang], funcMap)
 	}
 
 	return nil
@@ -372,7 +369,6 @@ func GetStaticFile(path string) ([]byte, error) {
 // Theme is the resolved CSS class ("dark" or "light", never "auto").
 // ThemeMode is the user preference ("dark", "light", or "auto").
 // Lang and Dir are the html lang/dir attributes (defaults: "en" / "ltr").
-// AdminPath is the configurable admin route prefix per AI.md PART 17 (default: "admin").
 type PageData struct {
 	Title              string
 	Description        string
@@ -399,7 +395,6 @@ type PageData struct {
 	DefaultWidgets     string
 	CookieConsent      *CookieConsentData
 	Extra              map[string]interface{}
-	AdminPath          string
 	ServerURL          string
 	PrefsQuery         string
 }
@@ -577,7 +572,6 @@ func NewPageData(cfg *config.Config, title, page string) *PageData {
 		Dir:         "ltr",
 		Config:      cfg,
 		BuildDate:   time.Now().Format(time.RFC3339),
-		AdminPath:   config.GetAdminPath(),
 	}
 
 	// Populate active announcements from config

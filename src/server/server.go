@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apimgr/search/src/admin"
 	"github.com/apimgr/search/src/alert"
 	"github.com/apimgr/search/src/api"
 	"github.com/apimgr/search/src/config"
@@ -51,7 +50,6 @@ type Server struct {
 	rateLimiter    *RateLimiter
 	csrf           *CSRFMiddleware
 	renderer       *TemplateRenderer
-	adminHandler   *admin.Handler
 	apiHandler     *api.Handler
 	torService     *service.TorService
 	bangManager    *bang.Manager
@@ -71,37 +69,6 @@ type Server struct {
 
 	// Internationalization per AI.md PART 32
 	i18nManager *i18n.Manager
-
-	// Per AI.md PART 11: Endpoint-specific rate limiter for /auth/login (admin login)
-	// 5 attempts / 15 min
-	loginLimiter *EndpointRateLimiter
-}
-
-// registryAdapter wraps engine.Registry to implement admin.EngineRegistry
-type registryAdapter struct {
-	r *engine.Registry
-}
-
-func (a *registryAdapter) Count() int {
-	return a.r.Count()
-}
-
-func (a *registryAdapter) GetEnabled() []interface{} {
-	engines := a.r.GetEnabled()
-	result := make([]interface{}, len(engines))
-	for i, e := range engines {
-		result[i] = e
-	}
-	return result
-}
-
-func (a *registryAdapter) GetAll() []interface{} {
-	engines := a.r.GetAll()
-	result := make([]interface{}, len(engines))
-	for i, e := range engines {
-		result[i] = e
-	}
-	return result
 }
 
 // NewServer creates a new server instance
@@ -326,8 +293,8 @@ func NewServer(cfg *config.Config) *Server {
 		}
 	}
 
-	// Per IDEA.md: PART 34 (regular users) is not implemented for this project.
-	// Admin authentication is handled by src/admin/AuthManager (separate from this package).
+	// Per IDEA.md: privacy is the product — no admin web UI, no sessions,
+	// no user accounts. Operator privilege is held by anyone with server.token.
 
 	// Create metrics collector
 	metrics := NewMetrics(cfg)
@@ -371,30 +338,7 @@ func NewServer(cfg *config.Config) *Server {
 		dbManager:    dbMgr,
 		alertManager: alertMgr,
 		i18nManager:  i18nMgr,
-		// Per AI.md PART 11: Endpoint-specific rate limiter for /auth/login (admin login)
-		loginLimiter: NewEndpointRateLimiter(5, 15*time.Minute),
 	}
-
-	// Create admin handler (needs renderer interface)
-	s.adminHandler = admin.NewHandler(cfg, s.renderer)
-
-	// Set database for admin session persistence per AI.md PART 17
-	if dbMgr != nil {
-		s.adminHandler.SetDatabase(dbMgr.ServerDB())
-		// Set admin service for multi-admin support per AI.md PART 17
-		s.adminHandler.SetAdminService(admin.NewAdminService(dbMgr.ServerDB()))
-	}
-
-	// Configure admin handler with registry and reload callback
-	s.adminHandler.SetRegistry(&registryAdapter{r: s.registry})
-	s.adminHandler.SetReloadCallback(func() error {
-		log.Println("[Server] Configuration reload triggered")
-		// Re-render templates in development mode
-		if cfg.IsDevelopment() {
-			s.renderer = NewTemplateRenderer(cfg, s.i18nManager)
-		}
-		return nil
-	})
 
 	// Per AI.md PART 5 lines 5212-5310: Configuration Source of Truth (NON-NEGOTIABLE)
 	// Initialize config sync for cluster mode
@@ -405,7 +349,6 @@ func NewServer(cfg *config.Config) *Server {
 			configPath = "/etc/search/server.yml"
 		}
 		s.configSync = config.NewConfigSync(dbMgr.ServerDB().SQL(), cfg, configPath, isCluster)
-		s.adminHandler.SetConfigSync(s.configSync)
 		if isCluster {
 			log.Printf("[Server] Cluster mode: database is source of truth")
 			// Load config from database on startup
@@ -814,16 +757,9 @@ func (s *Server) setupRoutes() http.Handler {
 	mux.Handle("/static/", http.StripPrefix("/static/", StaticFileServer()))
 	mux.HandleFunc("/locales/", s.handleLocale)
 
-	// Admin routes (if enabled)
-	if s.config.Server.Admin.Enabled || s.config.Server.Admin.Username != "" {
-		s.adminHandler.RegisterRoutes(mux)
-	}
-
-	// Per AI.md PART 11: /auth/login and /auth/logout are the unified login/logout
-	// endpoints used by admin accounts. (PART 34 user accounts are not implemented
-	// for this project — see IDEA.md.)
-	mux.HandleFunc("/auth/login", s.handleLogin)
-	mux.HandleFunc("/auth/logout", s.handleLogout)
+	// No admin web UI, no login routes — per AI.md, configuration is via
+	// server.yml only and the only API privilege check is the operator
+	// bearer token (see src/server/auth.go).
 
 	// API routes
 	s.apiHandler.RegisterRoutes(mux)
