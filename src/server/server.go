@@ -33,6 +33,7 @@ import (
 	"github.com/apimgr/search/src/service"
 	"github.com/apimgr/search/src/ssl"
 	"github.com/apimgr/search/src/widget"
+	"github.com/go-chi/chi/v5"
 )
 
 // Server represents the HTTP server
@@ -683,61 +684,64 @@ func (s *Server) removePIDFile() {
 
 // setupRoutes sets up HTTP routes with middleware
 func (s *Server) setupRoutes() http.Handler {
-	mux := http.NewServeMux()
+	r := chi.NewRouter()
+	// chi NotFound handler: stdlib mux's "/" matched everything; with chi we
+	// route "/" exactly and dispatch other unmatched paths to handleNotFound.
+	r.NotFound(s.handleNotFound)
 
 	// Health check endpoints per AI.md PART 13
 	// Canonical frontend route: /server/healthz (content-negotiated HTML/JSON/text)
 	// Root alias: /healthz → /server/healthz (optional; treated as always-on here)
 	// Note: /api/v1/server/healthz and /api/v1/healthz are registered by apiHandler.RegisterRoutes()
-	mux.HandleFunc("/server/healthz", s.handleHealthz)
-	mux.HandleFunc("/server/healthz.txt", s.handleHealthz)
-	mux.HandleFunc("/healthz", s.handleHealthz)
-	mux.HandleFunc("/healthz.txt", s.handleHealthz)
-	mux.HandleFunc("/readyz", s.handleReadyz)
-	mux.HandleFunc("/livez", s.handleLivez)
+	r.HandleFunc("/server/healthz", s.handleHealthz)
+	r.HandleFunc("/server/healthz.txt", s.handleHealthz)
+	r.HandleFunc("/healthz", s.handleHealthz)
+	r.HandleFunc("/healthz.txt", s.handleHealthz)
+	r.HandleFunc("/readyz", s.handleReadyz)
+	r.HandleFunc("/livez", s.handleLivez)
 
-	// Home page
-	mux.HandleFunc("/", s.handleHome)
+	// Home page (root catch-all)
+	r.HandleFunc("/", s.handleHome)
 
 	// Search
-	mux.HandleFunc("/search", s.handleSearch)
-	mux.HandleFunc("/alerts/new", s.handleAlertNew)
-	mux.HandleFunc("/alerts/confirm", s.handleAlertConfirm)
-	mux.HandleFunc("/alerts", s.handleAlerts)
-	mux.HandleFunc("/alerts/", s.handleAlertAction)
+	r.HandleFunc("/search", s.handleSearch)
+	r.HandleFunc("/alerts/new", s.handleAlertNew)
+	r.HandleFunc("/alerts/confirm", s.handleAlertConfirm)
+	r.HandleFunc("/alerts", s.handleAlerts)
+	r.HandleFunc("/alerts/*", s.handleAlertAction)
 
 	// Direct answers (full-page results for type:term queries per IDEA.md)
-	mux.HandleFunc("/direct/", s.handleDirect)
+	r.HandleFunc("/direct/*", s.handleDirect)
 
 	// Autocomplete (per AI.md PART 36 line 28280)
-	mux.HandleFunc("/autocomplete", s.handleAutocomplete)
+	r.HandleFunc("/autocomplete", s.handleAutocomplete)
 
 	// Standard server pages (per AI.md spec)
 	// /server → /server/about redirect per AI.md line 17696
-	mux.HandleFunc("/server", func(w http.ResponseWriter, r *http.Request) {
+	r.HandleFunc("/server", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/server/about", http.StatusMovedPermanently)
 	})
-	mux.HandleFunc("/server/about", s.handleAbout)
-	mux.HandleFunc("/server/about/", func(w http.ResponseWriter, r *http.Request) {
+	r.HandleFunc("/server/about", s.handleAbout)
+	r.HandleFunc("/server/about/*", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/server/about", http.StatusMovedPermanently)
 	})
-	mux.HandleFunc("/server/privacy", s.handlePrivacy)
-	mux.HandleFunc("/server/contact", s.handleContact)
-	mux.HandleFunc("/server/help", s.handleHelp)
-	mux.HandleFunc("/server/terms", s.handleTerms)
+	r.HandleFunc("/server/privacy", s.handlePrivacy)
+	r.HandleFunc("/server/contact", s.handleContact)
+	r.HandleFunc("/server/help", s.handleHelp)
+	r.HandleFunc("/server/terms", s.handleTerms)
 
 	// robots.txt, sitemap.xml, and security.txt (/.well-known/ only per RFC 9116)
-	mux.HandleFunc("/robots.txt", s.handleRobotsTxt)
-	mux.HandleFunc("/sitemap.xml", s.handleSitemap)
-	mux.HandleFunc("/.well-known/security.txt", s.handleSecurityTxtEnhanced)
+	r.HandleFunc("/robots.txt", s.handleRobotsTxt)
+	r.HandleFunc("/sitemap.xml", s.handleSitemap)
+	r.HandleFunc("/.well-known/security.txt", s.handleSecurityTxtEnhanced)
 
 	// Well-known URIs per RFC 8615
 	// Password change redirect per AI.md PART 11
-	mux.HandleFunc("/.well-known/change-password", s.handleWellKnownChangePassword)
+	r.HandleFunc("/.well-known/change-password", s.handleWellKnownChangePassword)
 
 	// OpenSearch
 	if s.config.Search.OpenSearch.Enabled {
-		mux.HandleFunc("/opensearch.xml", s.handleOpenSearch)
+		r.HandleFunc("/opensearch.xml", s.handleOpenSearch)
 	}
 
 	// Swagger/OpenAPI endpoints are registered by apiHandler.RegisterOpenAPIRoutes() below
@@ -746,31 +750,31 @@ func (s *Server) setupRoutes() http.Handler {
 
 	// Bang proxy (for privacy-preserving redirects)
 	if s.config.Search.Bangs.Enabled {
-		mux.HandleFunc("/bang", s.handleBangProxy)
+		r.HandleFunc("/bang", s.handleBangProxy)
 	}
 
 	// Preferences
-	mux.HandleFunc("/preferences", s.handlePreferences)
-	mux.HandleFunc("/server/preferences", s.handlePreferences)
+	r.HandleFunc("/preferences", s.handlePreferences)
+	r.HandleFunc("/server/preferences", s.handlePreferences)
 
 	// Static files (served from embedded filesystem)
-	mux.Handle("/static/", http.StripPrefix("/static/", StaticFileServer()))
-	mux.HandleFunc("/locales/", s.handleLocale)
+	r.Handle("/static/*", http.StripPrefix("/static/", StaticFileServer()))
+	r.HandleFunc("/locales/*", s.handleLocale)
 
 	// No admin web UI, no login routes — per AI.md, configuration is via
 	// server.yml only and the only API privilege check is the operator
 	// bearer token (see src/server/auth.go).
 
 	// API routes
-	s.apiHandler.RegisterRoutes(mux)
+	s.apiHandler.RegisterRoutes(r)
 
 	// GraphQL routes
-	if err := s.apiHandler.RegisterGraphQLRoutes(mux); err != nil {
+	if err := s.apiHandler.RegisterGraphQLRoutes(r); err != nil {
 		s.logManager.Server().Error("Failed to register GraphQL routes", map[string]interface{}{"error": err.Error()})
 	}
 
 	// OpenAPI/Swagger routes
-	s.apiHandler.RegisterOpenAPIRoutes(mux)
+	s.apiHandler.RegisterOpenAPIRoutes(r)
 
 	// Metrics endpoint (Prometheus-compatible)
 	if s.config.Server.Metrics.Enabled {
@@ -778,12 +782,12 @@ func (s *Server) setupRoutes() http.Handler {
 		if metricsPath == "" {
 			metricsPath = "/metrics"
 		}
-		mux.HandleFunc(metricsPath, s.metrics.AuthenticatedHandler())
+		r.HandleFunc(metricsPath, s.metrics.AuthenticatedHandler())
 	}
 
 	// Debug endpoints (DEBUG=true only)
 	// Per AI.md PART 7: pprof, expvar, and custom debug endpoints
-	s.registerDebugRoutes(mux)
+	s.registerDebugRoutes(r)
 
 	// Apply middleware chain per AI.md PART 5 execution order (1→9).
 	// Chain() iterates from last to first, so index 0 = outermost = first to execute.
@@ -791,7 +795,7 @@ func (s *Server) setupRoutes() http.Handler {
 	//        SecurityHeaders(3) → CORS → RateLimit(4-6) → GeoIP(7) → Logging(9)
 	// Auth(8) is per-route, not global.
 	handler := Chain(
-		mux,
+		r,
 		s.middleware.Recovery,                  // outermost: catches all panics
 		s.middleware.RequestID,                 // assign request ID early
 		URLNormalizeMiddleware,                 // 1. normalize URLs (trailing slash, etc.)

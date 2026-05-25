@@ -13,6 +13,7 @@ import (
 
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/model"
+	"github.com/go-chi/chi/v5"
 	"github.com/graphql-go/graphql"
 )
 
@@ -762,14 +763,14 @@ func (g *GraphQLHandler) ServeGraphiQL(w http.ResponseWriter, r *http.Request) {
 // RegisterGraphQLRoutes registers GraphQL routes per AI.md spec
 // /graphql GET  → GraphiQL interface
 // /graphql POST → GraphQL queries
-func (h *Handler) RegisterGraphQLRoutes(mux *http.ServeMux) error {
+func (h *Handler) RegisterGraphQLRoutes(rt chi.Router) error {
 	gqlHandler, err := NewGraphQLHandler(h)
 	if err != nil {
 		return err
 	}
 
 	// Combined /graphql endpoint: GET serves GraphiQL, POST handles queries
-	mux.HandleFunc("/graphql", func(w http.ResponseWriter, r *http.Request) {
+	rt.HandleFunc("/graphql", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			gqlHandler.ServeGraphiQL(w, r)
 			return

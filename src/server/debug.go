@@ -7,40 +7,42 @@ import (
 	"net/http/pprof"
 	"runtime"
 
+	"github.com/go-chi/chi/v5"
 )
 
 // registerDebugRoutes registers debug endpoints (DEBUG=true only)
 // Per AI.md PART 7: Debug endpoints disabled by default, enabled with DEBUG=true
-func (s *Server) registerDebugRoutes(mux *http.ServeMux) {
+func (s *Server) registerDebugRoutes(r chi.Router) {
 	if !s.config.IsDebug() {
 		// No debug routes unless DEBUG=true
 		return
 	}
 
 	// pprof endpoints
-	mux.HandleFunc("/debug/pprof/", pprof.Index)
-	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-	mux.Handle("/debug/pprof/heap", pprof.Handler("heap"))
-	mux.Handle("/debug/pprof/goroutine", pprof.Handler("goroutine"))
-	mux.Handle("/debug/pprof/allocs", pprof.Handler("allocs"))
-	mux.Handle("/debug/pprof/block", pprof.Handler("block"))
-	mux.Handle("/debug/pprof/mutex", pprof.Handler("mutex"))
-	mux.Handle("/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
+	// /debug/pprof/* catches index and named sub-profiles routed through pprof.Index
+	r.HandleFunc("/debug/pprof/*", pprof.Index)
+	r.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	r.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	r.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	r.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	r.Handle("/debug/pprof/heap", pprof.Handler("heap"))
+	r.Handle("/debug/pprof/goroutine", pprof.Handler("goroutine"))
+	r.Handle("/debug/pprof/allocs", pprof.Handler("allocs"))
+	r.Handle("/debug/pprof/block", pprof.Handler("block"))
+	r.Handle("/debug/pprof/mutex", pprof.Handler("mutex"))
+	r.Handle("/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
 
 	// expvar
-	mux.Handle("/debug/vars", expvar.Handler())
+	r.Handle("/debug/vars", expvar.Handler())
 
 	// Custom debug endpoints
-	mux.HandleFunc("/debug/config", s.handleDebugConfig)
-	mux.HandleFunc("/debug/routes", s.handleDebugRoutes)
-	mux.HandleFunc("/debug/memory", s.handleDebugMemory)
-	mux.HandleFunc("/debug/goroutines", s.handleDebugGoroutines)
-	mux.HandleFunc("/debug/cache", s.handleDebugCache)
-	mux.HandleFunc("/debug/db", s.handleDebugDB)
-	mux.HandleFunc("/debug/scheduler", s.handleDebugScheduler)
+	r.HandleFunc("/debug/config", s.handleDebugConfig)
+	r.HandleFunc("/debug/routes", s.handleDebugRoutes)
+	r.HandleFunc("/debug/memory", s.handleDebugMemory)
+	r.HandleFunc("/debug/goroutines", s.handleDebugGoroutines)
+	r.HandleFunc("/debug/cache", s.handleDebugCache)
+	r.HandleFunc("/debug/db", s.handleDebugDB)
+	r.HandleFunc("/debug/scheduler", s.handleDebugScheduler)
 }
 
 // handleDebugConfig returns sanitized configuration

@@ -25,6 +25,7 @@ import (
 	"github.com/apimgr/search/src/search/engine"
 	"github.com/apimgr/search/src/service"
 	"github.com/apimgr/search/src/widget"
+	"github.com/go-chi/chi/v5"
 )
 
 // API version
@@ -89,58 +90,58 @@ func (h *Handler) SetAlertManager(am *alert.Manager) {
 }
 
 // RegisterRoutes registers API routes
-func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
+func (h *Handler) RegisterRoutes(r chi.Router) {
 	// Autodiscover - non-versioned per AI.md PART 36 line 38077-38157
-	mux.HandleFunc("/api/autodiscover", h.handleAutodiscover)
+	r.HandleFunc("/api/autodiscover", h.handleAutodiscover)
 
 	// Health and info - Per AI.md PART 13/14
 	// Canonical API route: /api/v1/server/healthz (JSON default, text via .txt or Accept header)
 	// Alias per PART 14: /api/v1/healthz and /api/healthz mount the same handler
-	mux.HandleFunc("/api/v1/server/healthz", h.handleHealthz)
-	mux.HandleFunc("/api/v1/server/healthz.txt", h.handleHealthz)
-	mux.HandleFunc("/api/v1/healthz", h.handleHealthz)
-	mux.HandleFunc("/api/v1/healthz.txt", h.handleHealthz)
-	mux.HandleFunc("/api/healthz", h.handleHealthz)
-	mux.HandleFunc("/api/v1/info", h.handleInfo)
+	r.HandleFunc("/api/v1/server/healthz", h.handleHealthz)
+	r.HandleFunc("/api/v1/server/healthz.txt", h.handleHealthz)
+	r.HandleFunc("/api/v1/healthz", h.handleHealthz)
+	r.HandleFunc("/api/v1/healthz.txt", h.handleHealthz)
+	r.HandleFunc("/api/healthz", h.handleHealthz)
+	r.HandleFunc("/api/v1/info", h.handleInfo)
 	// Per AI.md PART 14
-	mux.HandleFunc("/api/v1/info.txt", h.handleInfo)
+	r.HandleFunc("/api/v1/info.txt", h.handleInfo)
 
 	// Search
-	mux.HandleFunc("/api/v1/search", h.handleSearch)
-	mux.HandleFunc("/api/v1/search/related", h.handleRelatedSearches)
-	mux.HandleFunc("/api/v1/autocomplete", h.handleAutocomplete)
+	r.HandleFunc("/api/v1/search", h.handleSearch)
+	r.HandleFunc("/api/v1/search/related", h.handleRelatedSearches)
+	r.HandleFunc("/api/v1/autocomplete", h.handleAutocomplete)
 
 	// Engines
-	mux.HandleFunc("/api/v1/engines", h.handleEngines)
-	mux.HandleFunc("/api/v1/engines/", h.handleEngineByID)
+	r.HandleFunc("/api/v1/engines", h.handleEngines)
+	r.HandleFunc("/api/v1/engines/*", h.handleEngineByID)
 
 	// Categories
-	mux.HandleFunc("/api/v1/categories", h.handleCategories)
+	r.HandleFunc("/api/v1/categories", h.handleCategories)
 
 	// Bangs
-	mux.HandleFunc("/api/v1/bangs", h.handleBangs)
+	r.HandleFunc("/api/v1/bangs", h.handleBangs)
 
 	// Widgets
-	mux.HandleFunc("/api/v1/widgets", h.handleWidgets)
-	mux.HandleFunc("/api/v1/widgets/", h.handleWidgetData)
+	r.HandleFunc("/api/v1/widgets", h.handleWidgets)
+	r.HandleFunc("/api/v1/widgets/*", h.handleWidgetData)
 
 	// Instant Answers
-	mux.HandleFunc("/api/v1/instant", h.handleInstantAnswer)
+	r.HandleFunc("/api/v1/instant", h.handleInstantAnswer)
 
 	// Direct Answers (full-page results per IDEA.md)
-	mux.HandleFunc("/api/v1/direct/", h.handleDirectAnswer)
+	r.HandleFunc("/api/v1/direct/*", h.handleDirectAnswer)
 
 	// Server info pages (per AI.md PART 16)
-	mux.HandleFunc("/api/v1/server/about", h.handleServerAbout)
-	mux.HandleFunc("/api/v1/server/privacy", h.handleServerPrivacy)
-	mux.HandleFunc("/api/v1/server/help", h.handleServerHelp)
-	mux.HandleFunc("/api/v1/server/terms", h.handleServerTerms)
+	r.HandleFunc("/api/v1/server/about", h.handleServerAbout)
+	r.HandleFunc("/api/v1/server/privacy", h.handleServerPrivacy)
+	r.HandleFunc("/api/v1/server/help", h.handleServerHelp)
+	r.HandleFunc("/api/v1/server/terms", h.handleServerTerms)
 
 	// Favicon proxy - privacy-preserving favicon fetching
 	// Per AI.md PART 16: NO external requests from client, server proxies content
-	mux.HandleFunc("/api/v1/favicon", h.handleFavicon)
-	mux.HandleFunc("/api/v1/alerts", h.handleAlerts)
-	mux.HandleFunc("/api/v1/alerts/", h.handleAlertByToken)
+	r.HandleFunc("/api/v1/favicon", h.handleFavicon)
+	r.HandleFunc("/api/v1/alerts", h.handleAlerts)
+	r.HandleFunc("/api/v1/alerts/*", h.handleAlertByToken)
 }
 
 // Response types

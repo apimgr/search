@@ -14,6 +14,7 @@ import (
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 	"github.com/apimgr/search/src/search/engine"
+	"github.com/go-chi/chi/v5"
 )
 
 func newTestHandler() *Handler {
@@ -1777,7 +1778,7 @@ func TestServeSwaggerUIWithXForwardedProto(t *testing.T) {
 
 func TestRegisterOpenAPIRoutes(t *testing.T) {
 	handler := newTestHandler()
-	mux := http.NewServeMux()
+	mux := chi.NewRouter()
 
 	handler.RegisterOpenAPIRoutes(mux)
 
@@ -1962,7 +1963,7 @@ func TestGraphQLServeGraphiQL(t *testing.T) {
 
 func TestRegisterGraphQLRoutes(t *testing.T) {
 	handler := newTestHandler()
-	mux := http.NewServeMux()
+	mux := chi.NewRouter()
 
 	err := handler.RegisterGraphQLRoutes(mux)
 	if err != nil {
@@ -2661,7 +2662,7 @@ func TestAutodiscoverHTTPS(t *testing.T) {
 
 func TestRegisterRoutes(t *testing.T) {
 	handler := newTestHandler()
-	mux := http.NewServeMux()
+	mux := chi.NewRouter()
 
 	handler.RegisterRoutes(mux)
 

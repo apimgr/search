@@ -4,6 +4,8 @@ import (
 	_ "embed"
 	"html/template"
 	"net/http"
+
+	"github.com/go-chi/chi/v5"
 )
 
 //go:embed openapi.json
@@ -331,10 +333,10 @@ func (h *Handler) ServeSwaggerUI(w http.ResponseWriter, r *http.Request) {
 
 // RegisterOpenAPIRoutes registers the OpenAPI/Swagger routes
 // Per AI.md spec: /openapi (Swagger UI), /openapi.json (JSON only, no YAML)
-func (h *Handler) RegisterOpenAPIRoutes(mux *http.ServeMux) {
+func (h *Handler) RegisterOpenAPIRoutes(r chi.Router) {
 	// OpenAPI JSON spec (JSON only per spec)
-	mux.HandleFunc("/openapi.json", h.ServeOpenAPISpec)
+	r.HandleFunc("/openapi.json", h.ServeOpenAPISpec)
 
 	// Swagger UI
-	mux.HandleFunc("/openapi", h.ServeSwaggerUI)
+	r.HandleFunc("/openapi", h.ServeSwaggerUI)
 }
