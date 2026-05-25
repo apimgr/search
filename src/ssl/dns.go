@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-acme/lego/v4/challenge"
@@ -364,6 +365,32 @@ func GetHostFromRequest(r *http.Request, projectName string) string {
 	return GetFQDN(projectName)
 }
 
+// cachedPublicIP holds a public IPv4 address detected by an external
+// refresher (the server's public_ip_refresh scheduler task, AI.md PART 8
+// step 16). GetFQDN consults this before scanning local interfaces, since
+// modern servers usually sit behind NAT and have no globally-routable
+// address on a local NIC.
+var (
+	cachedPublicIPMu sync.RWMutex
+	cachedPublicIP   string
+)
+
+// SetCachedPublicIP updates the cached public IPv4 address used by
+// GetFQDN. Called by the public_ip_refresh scheduler task.
+func SetCachedPublicIP(ip string) {
+	cachedPublicIPMu.Lock()
+	cachedPublicIP = ip
+	cachedPublicIPMu.Unlock()
+}
+
+// CachedPublicIP returns the most recently cached public IPv4 address (or
+// empty string if no refresh has succeeded yet).
+func CachedPublicIP() string {
+	cachedPublicIPMu.RLock()
+	defer cachedPublicIPMu.RUnlock()
+	return cachedPublicIP
+}
+
 // GetFQDN resolves the Fully Qualified Domain Name
 // Per AI.md PART 21: use this when no request context available (startup, background tasks)
 // Returns first domain from DOMAIN env var (comma-separated list supported)
@@ -396,8 +423,14 @@ func GetFQDN(projectName string) string {
 		return ipv6
 	}
 
-	// 5. Global IPv4
+	// 5. Global IPv4 from local NICs (works on bare metal with a public IP)
 	if ipv4 := getGlobalIPv4(); ipv4 != "" {
+		return ipv4
+	}
+
+	// 6. Cached public IPv4 from the public_ip_refresh scheduler task
+	// (handles the common NAT case where no local NIC has a public address).
+	if ipv4 := CachedPublicIP(); ipv4 != "" {
 		return ipv4
 	}
 

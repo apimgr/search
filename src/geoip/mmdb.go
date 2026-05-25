@@ -1,30 +1,21 @@
+// Package geoip MMDB reader implementation.
+//
+// Per AI.md PART 19: use github.com/oschwald/maxminddb-golang to read
+// ip-location-db MMDB files. ip-location-db embeds custom database_type
+// strings (e.g. "asn ipv4", "city ipv6") that geoip2-golang rejects, so we
+// use the lower-level maxminddb reader and decode into generic maps.
 package geoip
 
 import (
-	"bytes"
-	"encoding/binary"
 	"errors"
 	"fmt"
-	"math/big"
 	"net"
-	"os"
 	"sync"
+
+	"github.com/oschwald/maxminddb-golang"
 )
 
-// MMDB file format constants
-const (
-	metadataStartMarker = "\xab\xcd\xefMaxMind.com"
-)
-
-// mmdbReader is a pure Go MMDB reader
-type mmdbReader struct {
-	mu         sync.RWMutex
-	data       []byte
-	metadata   *mmdbMetadata
-	nodeSize   int
-	dataOffset int
-}
-
+// mmdbMetadata mirrors the subset of MMDB metadata callers care about.
 type mmdbMetadata struct {
 	NodeCount                uint32
 	RecordSize               uint16
@@ -37,548 +28,244 @@ type mmdbMetadata struct {
 	Description              map[string]string
 }
 
-// openMMDB opens an MMDB database file
-func openMMDB(path string) (*mmdbReader, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %w", err)
-	}
-
-	reader := &mmdbReader{
-		data: data,
-	}
-
-	if err := reader.parseMetadata(); err != nil {
-		return nil, fmt.Errorf("failed to parse metadata: %w", err)
-	}
-
-	return reader, nil
+// mmdbReader wraps a maxminddb.Reader and decodes records as generic maps.
+// The wrapper keeps the same public method set the rest of the package depends
+// on so callers (geoip.go) do not need to change.
+type mmdbReader struct {
+	mu       sync.RWMutex
+	reader   *maxminddb.Reader
+	metadata *mmdbMetadata
 }
 
-// parseMetadata parses the MMDB metadata from the end of the file
-func (r *mmdbReader) parseMetadata() error {
-	// Find metadata marker
-	markerIdx := bytes.LastIndex(r.data, []byte(metadataStartMarker))
-	if markerIdx == -1 {
-		return errors.New("metadata marker not found")
+// openMMDB opens an MMDB database file from disk.
+func openMMDB(path string) (*mmdbReader, error) {
+	if path == "" {
+		return nil, errors.New("mmdb path is empty")
 	}
-
-	metadataStart := markerIdx + len(metadataStartMarker)
-	metadataBytes := r.data[metadataStart:]
-
-	// Parse metadata map
-	meta, _, err := r.decodeValue(metadataBytes, 0)
+	r, err := maxminddb.Open(path)
 	if err != nil {
-		return fmt.Errorf("failed to decode metadata: %w", err)
+		return nil, fmt.Errorf("failed to open mmdb: %w", err)
 	}
+	meta := &mmdbMetadata{
+		NodeCount:                uint32(r.Metadata.NodeCount),
+		RecordSize:               uint16(r.Metadata.RecordSize),
+		IPVersion:                uint16(r.Metadata.IPVersion),
+		DatabaseType:             r.Metadata.DatabaseType,
+		Languages:                r.Metadata.Languages,
+		BinaryFormatMajorVersion: uint16(r.Metadata.BinaryFormatMajorVersion),
+		BinaryFormatMinorVersion: uint16(r.Metadata.BinaryFormatMinorVersion),
+		BuildEpoch:               uint64(r.Metadata.BuildEpoch),
+		Description:              r.Metadata.Description,
+	}
+	return &mmdbReader{reader: r, metadata: meta}, nil
+}
 
-	metaMap, ok := meta.(map[string]interface{})
-	if !ok {
-		return errors.New("metadata is not a map")
+// lookupRecord decodes the record for ip into a generic map. Returns nil when
+// the IP has no record or the reader is closed.
+func (r *mmdbReader) lookupRecord(ip net.IP) map[string]interface{} {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.reader == nil || ip == nil {
+		return nil
 	}
-
-	r.metadata = &mmdbMetadata{}
-
-	if v, ok := metaMap["node_count"].(uint64); ok {
-		r.metadata.NodeCount = uint32(v)
+	var record interface{}
+	if err := r.reader.Lookup(ip, &record); err != nil {
+		return nil
 	}
-	if v, ok := metaMap["record_size"].(uint64); ok {
-		r.metadata.RecordSize = uint16(v)
+	if record == nil {
+		return nil
 	}
-	if v, ok := metaMap["ip_version"].(uint64); ok {
-		r.metadata.IPVersion = uint16(v)
+	if m, ok := record.(map[string]interface{}); ok {
+		return m
 	}
-	if v, ok := metaMap["database_type"].(string); ok {
-		r.metadata.DatabaseType = v
-	}
-	if v, ok := metaMap["build_epoch"].(uint64); ok {
-		r.metadata.BuildEpoch = v
-	}
-
-	// Calculate node size and data offset
-	r.nodeSize = int(r.metadata.RecordSize) * 2 / 8
-	if r.metadata.RecordSize%4 != 0 {
-		r.nodeSize++
-	}
-	r.dataOffset = int(r.metadata.NodeCount)*r.nodeSize + 16
-
 	return nil
 }
 
-// decodeValue decodes a value from MMDB format
-func (r *mmdbReader) decodeValue(data []byte, offset int) (interface{}, int, error) {
-	if offset >= len(data) {
-		return nil, offset, errors.New("offset out of bounds")
-	}
-
-	ctrlByte := data[offset]
-	offset++
-
-	dataType := (ctrlByte >> 5) & 0x07
-	size := int(ctrlByte & 0x1f)
-
-	// Extended type
-	if dataType == 0 {
-		if offset >= len(data) {
-			return nil, offset, errors.New("unexpected end of data")
-		}
-		dataType = data[offset] + 7
-		offset++
-	}
-
-	// Get actual size
-	if size == 29 {
-		if offset >= len(data) {
-			return nil, offset, errors.New("unexpected end of data")
-		}
-		size = 29 + int(data[offset])
-		offset++
-	} else if size == 30 {
-		if offset+1 >= len(data) {
-			return nil, offset, errors.New("unexpected end of data")
-		}
-		size = 285 + int(binary.BigEndian.Uint16(data[offset:offset+2]))
-		offset += 2
-	} else if size == 31 {
-		if offset+2 >= len(data) {
-			return nil, offset, errors.New("unexpected end of data")
-		}
-		size = 65821 + int(data[offset])<<16 + int(binary.BigEndian.Uint16(data[offset+1:offset+3]))
-		offset += 3
-	}
-
-	switch dataType {
-	// pointer
-	case 1:
-		pointerSize := ((int(ctrlByte) >> 3) & 0x03) + 1
-		var pointer int
-		switch pointerSize {
-		case 1:
-			pointer = (int(ctrlByte)&0x07)<<8 + int(data[offset])
-			offset++
-		case 2:
-			pointer = 2048 + (int(ctrlByte)&0x07)<<16 + int(binary.BigEndian.Uint16(data[offset:offset+2]))
-			offset += 2
-		case 3:
-			pointer = 526336 + (int(ctrlByte)&0x07)<<24 + int(data[offset])<<16 + int(binary.BigEndian.Uint16(data[offset+1:offset+3]))
-			offset += 3
-		case 4:
-			pointer = int(binary.BigEndian.Uint32(data[offset : offset+4]))
-			offset += 4
-		}
-		val, _, err := r.decodeValue(data, pointer)
-		return val, offset, err
-
-	// UTF-8 string
-	case 2:
-		if offset+size > len(data) {
-			return "", offset, nil
-		}
-		return string(data[offset : offset+size]), offset + size, nil
-
-	// double
-	case 3:
-		if offset+8 > len(data) {
-			return 0.0, offset, nil
-		}
-		bits := binary.BigEndian.Uint64(data[offset : offset+8])
-		return float64(bits), offset + 8, nil
-
-	// bytes
-	case 4:
-		if offset+size > len(data) {
-			return []byte{}, offset, nil
-		}
-		return data[offset : offset+size], offset + size, nil
-
-	// uint16
-	case 5:
-		if size == 0 {
-			return uint64(0), offset, nil
-		}
-		if offset+size > len(data) {
-			return uint64(0), offset, nil
-		}
-		val := uint64(0)
-		for i := 0; i < size; i++ {
-			val = val<<8 | uint64(data[offset+i])
-		}
-		return val, offset + size, nil
-
-	// uint32
-	case 6:
-		if size == 0 {
-			return uint64(0), offset, nil
-		}
-		if offset+size > len(data) {
-			return uint64(0), offset, nil
-		}
-		val := uint64(0)
-		for i := 0; i < size; i++ {
-			val = val<<8 | uint64(data[offset+i])
-		}
-		return val, offset + size, nil
-
-	// map
-	case 7:
-		result := make(map[string]interface{})
-		for i := 0; i < size; i++ {
-			key, newOffset, err := r.decodeValue(data, offset)
-			if err != nil {
-				return result, newOffset, err
-			}
-			offset = newOffset
-
-			val, newOffset, err := r.decodeValue(data, offset)
-			if err != nil {
-				return result, newOffset, err
-			}
-			offset = newOffset
-
-			if keyStr, ok := key.(string); ok {
-				result[keyStr] = val
-			}
-		}
-		return result, offset, nil
-
-	// int32
-	case 8:
-		if size == 0 {
-			return int64(0), offset, nil
-		}
-		if offset+size > len(data) {
-			return int64(0), offset, nil
-		}
-		val := int64(0)
-		for i := 0; i < size; i++ {
-			val = val<<8 | int64(data[offset+i])
-		}
-		// Sign extend if negative
-		if size < 4 && val >= (1<<(uint(size)*8-1)) {
-			val -= 1 << (uint(size) * 8)
-		}
-		return val, offset + size, nil
-
-	// uint64
-	case 9:
-		if size == 0 {
-			return uint64(0), offset, nil
-		}
-		if offset+size > len(data) {
-			return uint64(0), offset, nil
-		}
-		val := uint64(0)
-		for i := 0; i < size; i++ {
-			val = val<<8 | uint64(data[offset+i])
-		}
-		return val, offset + size, nil
-
-	// uint128
-	case 10:
-		if offset+size > len(data) {
-			return big.NewInt(0), offset, nil
-		}
-		val := new(big.Int).SetBytes(data[offset : offset+size])
-		return val, offset + size, nil
-
-	// array
-	case 11:
-		result := make([]interface{}, 0, size)
-		for i := 0; i < size; i++ {
-			val, newOffset, err := r.decodeValue(data, offset)
-			if err != nil {
-				return result, newOffset, err
-			}
-			offset = newOffset
-			result = append(result, val)
-		}
-		return result, offset, nil
-
-	// bool
-	case 14:
-		return size != 0, offset, nil
-
-	// float
-	case 15:
-		if offset+4 > len(data) {
-			return float32(0), offset, nil
-		}
-		bits := binary.BigEndian.Uint32(data[offset : offset+4])
-		return float32(bits), offset + 4, nil
-
-	default:
-		return nil, offset + size, nil
-	}
-}
-
-// lookup finds the data offset for an IP address
-func (r *mmdbReader) lookup(ip net.IP) (int, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	if r.metadata == nil {
-		return 0, errors.New("database not loaded")
-	}
-
-	// Convert to 16-byte format
-	ip16 := ip.To16()
-	if ip16 == nil {
-		return 0, errors.New("invalid IP address")
-	}
-
-	// For IPv4, start at bit 96 (first 96 bits are zero in mapped address)
-	bitCount := 128
-	startBit := 0
-	if ip.To4() != nil && r.metadata.IPVersion == 4 {
-		startBit = 96
-	}
-
-	nodeNum := uint32(0)
-	for i := startBit; i < bitCount; i++ {
-		if nodeNum >= r.metadata.NodeCount {
-			break
-		}
-
-		byteIdx := i / 8
-		bitIdx := 7 - (i % 8)
-		bit := (ip16[byteIdx] >> bitIdx) & 1
-
-		nodeOffset := int(nodeNum) * r.nodeSize
-		if nodeOffset+r.nodeSize > len(r.data) {
-			return 0, errors.New("node offset out of bounds")
-		}
-
-		var record uint32
-		switch r.metadata.RecordSize {
-		case 24:
-			if bit == 0 {
-				record = uint32(r.data[nodeOffset])<<16 | uint32(r.data[nodeOffset+1])<<8 | uint32(r.data[nodeOffset+2])
-			} else {
-				record = uint32(r.data[nodeOffset+3])<<16 | uint32(r.data[nodeOffset+4])<<8 | uint32(r.data[nodeOffset+5])
-			}
-		case 28:
-			if bit == 0 {
-				record = (uint32(r.data[nodeOffset+3])&0xf0)<<20 | uint32(r.data[nodeOffset])<<16 | uint32(r.data[nodeOffset+1])<<8 | uint32(r.data[nodeOffset+2])
-			} else {
-				record = (uint32(r.data[nodeOffset+3])&0x0f)<<24 | uint32(r.data[nodeOffset+4])<<16 | uint32(r.data[nodeOffset+5])<<8 | uint32(r.data[nodeOffset+6])
-			}
-		case 32:
-			if bit == 0 {
-				record = binary.BigEndian.Uint32(r.data[nodeOffset : nodeOffset+4])
-			} else {
-				record = binary.BigEndian.Uint32(r.data[nodeOffset+4 : nodeOffset+8])
-			}
-		default:
-			return 0, fmt.Errorf("unsupported record size: %d", r.metadata.RecordSize)
-		}
-
-		if record == r.metadata.NodeCount {
-			// Not found
-			return 0, nil
-		}
-
-		if record > r.metadata.NodeCount {
-			// Found data - return offset
-			return int(record) - int(r.metadata.NodeCount) + r.dataOffset - 16, nil
-		}
-
-		nodeNum = record
-	}
-
-	return 0, nil
-}
-
-// LookupCountry returns the country code for an IP
-func (r *mmdbReader) LookupCountry(ip net.IP) string {
-	offset, err := r.lookup(ip)
-	if err != nil || offset == 0 {
-		return ""
-	}
-
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	val, _, err := r.decodeValue(r.data, offset)
-	if err != nil {
-		return ""
-	}
-
-	// Handle different database formats
-	if m, ok := val.(map[string]interface{}); ok {
-		// Country database format
-		if country, ok := m["country"].(map[string]interface{}); ok {
-			if code, ok := country["iso_code"].(string); ok {
-				return code
-			}
-		}
-		// Simpler format (just iso_code at top level)
-		if code, ok := m["iso_code"].(string); ok {
-			return code
-		}
-		// Alternative: country_code field
-		if code, ok := m["country_code"].(string); ok {
-			return code
+// asString returns the string at key from a generic decoded map.
+func asString(m map[string]interface{}, key string) string {
+	if v, ok := m[key]; ok {
+		if s, ok := v.(string); ok {
+			return s
 		}
 	}
-
-	// Direct string (some databases)
-	if code, ok := val.(string); ok && len(code) == 2 {
-		return code
-	}
-
 	return ""
 }
 
-// LookupASN returns the ASN and organization for an IP
+// asUint returns the uint at key from a generic decoded map.
+func asUint(m map[string]interface{}, key string) uint {
+	if v, ok := m[key]; ok {
+		switch n := v.(type) {
+		case uint64:
+			return uint(n)
+		case uint32:
+			return uint(n)
+		case uint16:
+			return uint(n)
+		case int:
+			return uint(n)
+		case int64:
+			return uint(n)
+		}
+	}
+	return 0
+}
+
+// asFloat returns the float at key from a generic decoded map.
+func asFloat(m map[string]interface{}, key string) float64 {
+	if v, ok := m[key]; ok {
+		switch n := v.(type) {
+		case float64:
+			return n
+		case float32:
+			return float64(n)
+		}
+	}
+	return 0
+}
+
+// asMap returns the nested map at key from a generic decoded map.
+func asMap(m map[string]interface{}, key string) map[string]interface{} {
+	if v, ok := m[key]; ok {
+		if inner, ok := v.(map[string]interface{}); ok {
+			return inner
+		}
+	}
+	return nil
+}
+
+// LookupCountry returns the ISO 3166-1 alpha-2 country code for an IP.
+// Supports both MaxMind-style (country.iso_code) and ip-location-db
+// flat-format (country_code or iso_code at the top level).
+func (r *mmdbReader) LookupCountry(ip net.IP) string {
+	m := r.lookupRecord(ip)
+	if m == nil {
+		return ""
+	}
+	// MaxMind-style nested country.iso_code
+	if country := asMap(m, "country"); country != nil {
+		if code := asString(country, "iso_code"); code != "" {
+			return code
+		}
+	}
+	// ip-location-db flat format
+	if code := asString(m, "country_code"); code != "" {
+		return code
+	}
+	if code := asString(m, "iso_code"); code != "" {
+		return code
+	}
+	return ""
+}
+
+// LookupASN returns the autonomous system number and organization for an IP.
 func (r *mmdbReader) LookupASN(ip net.IP) (uint, string) {
-	offset, err := r.lookup(ip)
-	if err != nil || offset == 0 {
+	m := r.lookupRecord(ip)
+	if m == nil {
 		return 0, ""
 	}
-
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	val, _, err := r.decodeValue(r.data, offset)
-	if err != nil {
-		return 0, ""
+	asn := asUint(m, "autonomous_system_number")
+	if asn == 0 {
+		asn = asUint(m, "asn")
 	}
-
-	if m, ok := val.(map[string]interface{}); ok {
-		var asn uint
-		var org string
-
-		if v, ok := m["autonomous_system_number"].(uint64); ok {
-			asn = uint(v)
-		}
-		if v, ok := m["autonomous_system_organization"].(string); ok {
-			org = v
-		}
-		// Alternative field names
-		if v, ok := m["asn"].(uint64); ok {
-			asn = uint(v)
-		}
-		if v, ok := m["as_org"].(string); ok {
-			org = v
-		}
-		if v, ok := m["name"].(string); ok && org == "" {
-			org = v
-		}
-
-		return asn, org
+	org := asString(m, "autonomous_system_organization")
+	if org == "" {
+		org = asString(m, "as_org")
 	}
-
-	return 0, ""
+	if org == "" {
+		org = asString(m, "name")
+	}
+	return asn, org
 }
 
-// LookupCity returns city information for an IP
+// LookupCity returns the city, region, postal, lat/lon and timezone for an IP.
 func (r *mmdbReader) LookupCity(ip net.IP) (city, region, postal string, lat, lon float64, tz string) {
-	offset, err := r.lookup(ip)
-	if err != nil || offset == 0 {
+	m := r.lookupRecord(ip)
+	if m == nil {
 		return
 	}
-
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	val, _, err := r.decodeValue(r.data, offset)
-	if err != nil {
-		return
+	// MaxMind-style: city.names.en
+	if cityMap := asMap(m, "city"); cityMap != nil {
+		if names := asMap(cityMap, "names"); names != nil {
+			city = asString(names, "en")
+		}
 	}
-
-	if m, ok := val.(map[string]interface{}); ok {
-		// City name
-		if cityData, ok := m["city"].(map[string]interface{}); ok {
-			if names, ok := cityData["names"].(map[string]interface{}); ok {
-				if name, ok := names["en"].(string); ok {
-					city = name
-				}
-			}
-		}
-
-		// Region/subdivision
-		if subdivisions, ok := m["subdivisions"].([]interface{}); ok && len(subdivisions) > 0 {
-			if sub, ok := subdivisions[0].(map[string]interface{}); ok {
-				if names, ok := sub["names"].(map[string]interface{}); ok {
-					if name, ok := names["en"].(string); ok {
-						region = name
-					}
-				}
-			}
-		}
-
-		// Postal code
-		if postalData, ok := m["postal"].(map[string]interface{}); ok {
-			if code, ok := postalData["code"].(string); ok {
-				postal = code
-			}
-		}
-
-		// Location
-		if location, ok := m["location"].(map[string]interface{}); ok {
-			if v, ok := location["latitude"].(float64); ok {
-				lat = v
-			}
-			if v, ok := location["longitude"].(float64); ok {
-				lon = v
-			}
-			if v, ok := location["time_zone"].(string); ok {
-				tz = v
+	// Flat format used by ip-location-db
+	if city == "" {
+		city = asString(m, "city")
+	}
+	// Region / subdivision (MaxMind-style first, then flat)
+	if subs, ok := m["subdivisions"].([]interface{}); ok && len(subs) > 0 {
+		if sub, ok := subs[0].(map[string]interface{}); ok {
+			if names := asMap(sub, "names"); names != nil {
+				region = asString(names, "en")
 			}
 		}
 	}
-
+	if region == "" {
+		region = asString(m, "state1")
+	}
+	// Postal code
+	if postalMap := asMap(m, "postal"); postalMap != nil {
+		postal = asString(postalMap, "code")
+	}
+	if postal == "" {
+		postal = asString(m, "postcode")
+	}
+	// Location (MaxMind-style location.{latitude,longitude,time_zone})
+	if loc := asMap(m, "location"); loc != nil {
+		lat = asFloat(loc, "latitude")
+		lon = asFloat(loc, "longitude")
+		tz = asString(loc, "time_zone")
+	}
+	// Flat format fallback
+	if lat == 0 {
+		lat = asFloat(m, "latitude")
+	}
+	if lon == 0 {
+		lon = asFloat(m, "longitude")
+	}
+	if tz == "" {
+		tz = asString(m, "timezone")
+	}
 	return
 }
 
-// LookupWHOIS returns WHOIS registrant information for an IP
-// Per AI.md PART 20: WHOIS database support
+// LookupWHOIS returns registrant org and network range for an IP.
+// Per AI.md PART 19: WHOIS database support via ip-location-db
+// geo-whois-asn-country dataset (ASN org often represents the registrant).
 func (r *mmdbReader) LookupWHOIS(ip net.IP) (registrantOrg, registrantNet string) {
-	offset, err := r.lookup(ip)
-	if err != nil || offset == 0 {
+	m := r.lookupRecord(ip)
+	if m == nil {
 		return
 	}
-
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	val, _, err := r.decodeValue(r.data, offset)
-	if err != nil {
-		return
-	}
-
-	if m, ok := val.(map[string]interface{}); ok {
-		// Extract registrant organization from various possible fields
-		// geo-whois-asn-country database includes ASN org which often represents the registrant
-		if v, ok := m["autonomous_system_organization"].(string); ok {
+	for _, k := range []string{
+		"autonomous_system_organization",
+		"as_org",
+		"organization",
+		"org",
+		"name",
+	} {
+		if v := asString(m, k); v != "" {
 			registrantOrg = v
-		} else if v, ok := m["as_org"].(string); ok {
-			registrantOrg = v
-		} else if v, ok := m["organization"].(string); ok {
-			registrantOrg = v
-		} else if v, ok := m["org"].(string); ok {
-			registrantOrg = v
-		} else if v, ok := m["name"].(string); ok {
-			registrantOrg = v
-		}
-
-		// Extract network/IP range if available
-		if v, ok := m["network"].(string); ok {
-			registrantNet = v
-		} else if v, ok := m["range"].(string); ok {
-			registrantNet = v
-		} else if v, ok := m["prefix"].(string); ok {
-			registrantNet = v
+			break
 		}
 	}
-
+	for _, k := range []string{"network", "range", "prefix"} {
+		if v := asString(m, k); v != "" {
+			registrantNet = v
+			break
+		}
+	}
 	return
 }
 
-// Close closes the reader
+// Close releases the underlying reader.
 func (r *mmdbReader) Close() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.data = nil
+	if r.reader != nil {
+		_ = r.reader.Close()
+		r.reader = nil
+	}
 	r.metadata = nil
 }

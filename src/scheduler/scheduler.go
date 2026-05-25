@@ -8,10 +8,17 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
+
+	"github.com/robfig/cron/v3"
+)
+
+// cronParser parses both standard 5-field cron expressions and @descriptor
+// forms (@hourly, @daily, @weekly, @monthly, @every Xm) per AI.md PART 18.
+// We use github.com/robfig/cron/v3 — never a hand-rolled parser.
+var cronParser = cron.NewParser(
+	cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor,
 )
 
 // defaultTimezone is the default timezone for the scheduler (allows testing)
@@ -37,6 +44,9 @@ const (
 	TaskAlertsImmediate  TaskID = "alerts.immediate"
 	TaskAlertsDaily      TaskID = "alerts.daily"
 	TaskAlertsWeekly     TaskID = "alerts.weekly"
+	// TaskPublicIPRefresh refreshes the cached server public IP per
+	// AI.md PART 8 step 16 (startup + every 12h, hardcoded — not configurable).
+	TaskPublicIPRefresh TaskID = "public_ip_refresh"
 )
 
 // TaskStatus represents task execution status
@@ -445,6 +455,22 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 		})
 	}
 
+	// Public IP Refresh - Startup + every 12 hours, hardcoded per AI.md
+	// PART 8 step 16. NOT skippable; FQDN detection depends on it.
+	if handlers.PublicIPRefresh != nil {
+		s.Register(&Task{
+			ID:          TaskPublicIPRefresh,
+			Name:        "Public IP Refresh",
+			Description: "Detect and cache the server's public IPv4 address (every 12h, hardcoded)",
+			Schedule:    "@every 12h",
+			TaskType:    TaskTypeLocal,
+			Run:         handlers.PublicIPRefresh,
+			Skippable:   false,
+			RunOnStart:  true,
+			Enabled:     true,
+		})
+	}
+
 	// Cluster Heartbeat - Every 30 seconds, NOT skippable in cluster mode
 	if handlers.ClusterHeartbeat != nil {
 		s.Register(&Task{
@@ -478,6 +504,9 @@ type TaskHandlers struct {
 	AlertsImmediate  func(ctx context.Context) error
 	AlertsDaily      func(ctx context.Context) error
 	AlertsWeekly     func(ctx context.Context) error
+	// PublicIPRefresh refreshes the cached public IP per AI.md PART 8
+	// step 16. Schedule and cadence are hardcoded (startup + every 12h).
+	PublicIPRefresh func(ctx context.Context) error
 }
 
 // Start starts the scheduler
@@ -653,196 +682,26 @@ func (s *Scheduler) runTask(task *Task) {
 	}
 }
 
-// calculateNextRun calculates the next run time from schedule expression
+// calculateNextRun calculates the next run time from a cron expression or
+// @descriptor (handles @every Xm, @hourly, @daily, @weekly, @monthly, and
+// standard 5-field cron) using github.com/robfig/cron/v3 per AI.md PART 18.
+// On a parse error the scheduler falls back to a 1-hour interval so a bad
+// schedule entry never wedges the loop.
 func (s *Scheduler) calculateNextRun(schedule string) time.Time {
-	now := time.Now().In(s.timezone)
-
-	// Handle @every intervals
-	if strings.HasPrefix(schedule, "@every ") {
-		interval := strings.TrimPrefix(schedule, "@every ")
-		d, err := time.ParseDuration(interval)
-		if err != nil {
-			log.Printf("[Scheduler] Invalid interval %s: %v", interval, err)
-			// Default fallback
-			return now.Add(1 * time.Hour)
-		}
-		return now.Add(d)
+	s.mu.RLock()
+	loc := s.timezone
+	s.mu.RUnlock()
+	if loc == nil {
+		loc = time.Local
 	}
+	now := time.Now().In(loc)
 
-	// Handle predefined schedules
-	switch schedule {
-	case "@hourly":
-		return now.Truncate(time.Hour).Add(time.Hour)
-	case "@daily":
-		return time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, s.timezone)
-	case "@weekly":
-		daysUntilSunday := (7 - int(now.Weekday())) % 7
-		if daysUntilSunday == 0 && now.Hour() >= 0 {
-			daysUntilSunday = 7
-		}
-		return time.Date(now.Year(), now.Month(), now.Day()+daysUntilSunday, 0, 0, 0, 0, s.timezone)
-	case "@monthly":
-		return time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, s.timezone)
-	}
-
-	// Parse cron expression (minute hour day month weekday)
-	next, err := parseCronExpression(schedule, now, s.timezone)
+	sched, err := cronParser.Parse(schedule)
 	if err != nil {
-		log.Printf("[Scheduler] Invalid cron expression %s: %v", schedule, err)
+		log.Printf("[Scheduler] Invalid schedule %q: %v", schedule, err)
 		return now.Add(1 * time.Hour)
 	}
-	return next
-}
-
-// parseCronExpression parses a standard cron expression and returns next run time
-// Per AI.md PART 19: Full cron syntax with all 5 fields (minute hour day month weekday)
-func parseCronExpression(expr string, from time.Time, loc *time.Location) (time.Time, error) {
-	parts := strings.Fields(expr)
-	if len(parts) != 5 {
-		return time.Time{}, fmt.Errorf("invalid cron expression: expected 5 fields")
-	}
-
-	minute, err := parseCronField(parts[0], 0, 59)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("invalid minute field: %w", err)
-	}
-
-	hour, err := parseCronField(parts[1], 0, 23)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("invalid hour field: %w", err)
-	}
-
-	day, err := parseCronField(parts[2], 1, 31)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("invalid day field: %w", err)
-	}
-
-	month, err := parseCronField(parts[3], 1, 12)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("invalid month field: %w", err)
-	}
-
-	// 0=Sunday, 6=Saturday
-	weekday, err := parseCronField(parts[4], 0, 6)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("invalid weekday field: %w", err)
-	}
-
-	// Iterate to find next valid time (check all 5 fields)
-	candidate := from.Add(time.Minute)
-	// Round down to start of minute
-	candidate = time.Date(candidate.Year(), candidate.Month(), candidate.Day(),
-		candidate.Hour(), candidate.Minute(), 0, 0, loc)
-
-	// Max 1 year of minutes
-	for i := 0; i < 525600; i++ {
-		if contains(minute, candidate.Minute()) &&
-			contains(hour, candidate.Hour()) &&
-			contains(day, candidate.Day()) &&
-			contains(month, int(candidate.Month())) &&
-			contains(weekday, int(candidate.Weekday())) {
-			return candidate, nil
-		}
-		candidate = candidate.Add(time.Minute)
-	}
-
-	return time.Time{}, fmt.Errorf("could not find next run time")
-}
-
-// parseCronField parses a single cron field
-// Per AI.md PART 19: Supports *, ranges (5-10), lists (5,10,15), steps (*/5, 0-23/2)
-func parseCronField(field string, min, max int) ([]int, error) {
-	// Handle wildcard
-	if field == "*" {
-		return makeRange(min, max, 1), nil
-	}
-
-	// Handle step on wildcard: */5
-	if strings.HasPrefix(field, "*/") {
-		step, err := strconv.Atoi(field[2:])
-		if err != nil || step <= 0 {
-			return nil, fmt.Errorf("invalid step value: %s", field)
-		}
-		return makeRange(min, max, step), nil
-	}
-
-	// Handle lists: 1,5,10
-	if strings.Contains(field, ",") {
-		var result []int
-		for _, part := range strings.Split(field, ",") {
-			vals, err := parseCronField(strings.TrimSpace(part), min, max)
-			if err != nil {
-				return nil, err
-			}
-			result = append(result, vals...)
-		}
-		return result, nil
-	}
-
-	// Handle ranges: 5-10 or 5-10/2
-	if strings.Contains(field, "-") {
-		step := 1
-		rangeStr := field
-
-		// Check for step: 5-10/2
-		if strings.Contains(field, "/") {
-			parts := strings.Split(field, "/")
-			rangeStr = parts[0]
-			var err error
-			step, err = strconv.Atoi(parts[1])
-			if err != nil || step <= 0 {
-				return nil, fmt.Errorf("invalid step value: %s", field)
-			}
-		}
-
-		rangeParts := strings.Split(rangeStr, "-")
-		if len(rangeParts) != 2 {
-			return nil, fmt.Errorf("invalid range: %s", field)
-		}
-
-		start, err := strconv.Atoi(rangeParts[0])
-		if err != nil {
-			return nil, fmt.Errorf("invalid range start: %s", rangeParts[0])
-		}
-		end, err := strconv.Atoi(rangeParts[1])
-		if err != nil {
-			return nil, fmt.Errorf("invalid range end: %s", rangeParts[1])
-		}
-
-		if start < min || end > max || start > end {
-			return nil, fmt.Errorf("range %d-%d out of bounds [%d-%d]", start, end, min, max)
-		}
-
-		return makeRange(start, end, step), nil
-	}
-
-	// Handle single number
-	val, err := strconv.Atoi(field)
-	if err != nil {
-		return nil, fmt.Errorf("invalid number: %s", field)
-	}
-	if val < min || val > max {
-		return nil, fmt.Errorf("value %d out of range [%d-%d]", val, min, max)
-	}
-	return []int{val}, nil
-}
-
-// makeRange creates a slice of integers from start to end (inclusive) with given step
-func makeRange(start, end, step int) []int {
-	var result []int
-	for i := start; i <= end; i += step {
-		result = append(result, i)
-	}
-	return result
-}
-
-func contains(slice []int, val int) bool {
-	for _, v := range slice {
-		if v == val {
-			return true
-		}
-	}
-	return false
+	return sched.Next(now)
 }
 
 // catchUpMissedTasks runs tasks that were missed during downtime

@@ -158,6 +158,11 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 			return s.alertManager.ProcessDue(ctx, alert.FrequencyWeekly)
 		},
 
+		// Public IP Refresh - startup + every 12h (hardcoded per AI.md PART 8 step 16)
+		PublicIPRefresh: func(ctx context.Context) error {
+			return s.refreshPublicIP(ctx)
+		},
+
 		// Cluster Heartbeat - only active in cluster mode; nil in standalone mode
 		ClusterHeartbeat: nil,
 	}
