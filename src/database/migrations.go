@@ -112,10 +112,10 @@ func (dbm *DatabaseMigrator) registerServerMigrations() {
 				severity TEXT DEFAULT 'info',
 				category TEXT
 			);
-			CREATE INDEX idx_audit_log_timestamp ON audit_log(timestamp);
-			CREATE INDEX idx_audit_log_actor ON audit_log(actor_type, actor_id);
-			CREATE INDEX idx_audit_log_action ON audit_log(action);
-			CREATE INDEX idx_audit_log_resource ON audit_log(resource_type, resource_id);
+			CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp);
+			CREATE INDEX IF NOT EXISTS idx_audit_log_actor ON audit_log(actor_type, actor_id);
+			CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action);
+			CREATE INDEX IF NOT EXISTS idx_audit_log_resource ON audit_log(resource_type, resource_id);
 		`,
 		Down: `DROP TABLE IF EXISTS audit_log`,
 	})
@@ -152,8 +152,8 @@ func (dbm *DatabaseMigrator) registerServerMigrations() {
 				expires_at DATETIME,
 				created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 			);
-			CREATE INDEX idx_api_tokens_hash ON api_tokens(token_hash);
-			CREATE INDEX idx_api_tokens_prefix ON api_tokens(token_prefix);
+			CREATE INDEX IF NOT EXISTS idx_api_tokens_hash ON api_tokens(token_hash);
+			CREATE INDEX IF NOT EXISTS idx_api_tokens_prefix ON api_tokens(token_prefix);
 		`,
 		Down: `DROP TABLE IF EXISTS api_tokens`,
 	})
@@ -174,7 +174,7 @@ func (dbm *DatabaseMigrator) registerServerMigrations() {
 				categories TEXT,
 				UNIQUE(date, hour)
 			);
-			CREATE INDEX idx_search_stats_date ON search_stats(date);
+			CREATE INDEX IF NOT EXISTS idx_search_stats_date ON search_stats(date);
 		`,
 		Down: `DROP TABLE IF EXISTS search_stats`,
 	})
@@ -194,8 +194,8 @@ func (dbm *DatabaseMigrator) registerServerMigrations() {
 				avg_response_time REAL DEFAULT 0,
 				UNIQUE(date, engine)
 			);
-			CREATE INDEX idx_engine_stats_date ON engine_stats(date);
-			CREATE INDEX idx_engine_stats_engine ON engine_stats(engine);
+			CREATE INDEX IF NOT EXISTS idx_engine_stats_date ON engine_stats(date);
+			CREATE INDEX IF NOT EXISTS idx_engine_stats_engine ON engine_stats(engine);
 		`,
 		Down: `DROP TABLE IF EXISTS engine_stats`,
 	})
@@ -213,7 +213,7 @@ func (dbm *DatabaseMigrator) registerServerMigrations() {
 				expires_at DATETIME,
 				created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 			);
-			CREATE INDEX idx_blocked_ips_ip ON blocked_ips(ip_address);
+			CREATE INDEX IF NOT EXISTS idx_blocked_ips_ip ON blocked_ips(ip_address);
 		`,
 		Down: `DROP TABLE IF EXISTS blocked_ips`,
 	})
@@ -233,7 +233,7 @@ func (dbm *DatabaseMigrator) registerServerMigrations() {
 				active INTEGER DEFAULT 1,
 				created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 			);
-			CREATE INDEX idx_custom_bangs_shortcut ON custom_bangs(shortcut);
+			CREATE INDEX IF NOT EXISTS idx_custom_bangs_shortcut ON custom_bangs(shortcut);
 		`,
 		Down: `DROP TABLE IF EXISTS custom_bangs`,
 	})
@@ -275,10 +275,10 @@ func (dbm *DatabaseMigrator) registerServerMigrations() {
 				manage_token_encrypted TEXT NOT NULL DEFAULT '',
 				rss_token_encrypted TEXT NOT NULL DEFAULT ''
 			);
-			CREATE UNIQUE INDEX idx_search_alerts_manage_token ON search_alerts(manage_token_hash);
-			CREATE UNIQUE INDEX idx_search_alerts_rss_token ON search_alerts(rss_token_hash);
-			CREATE INDEX idx_search_alerts_verify_token ON search_alerts(verify_token_hash);
-			CREATE INDEX idx_search_alerts_status_frequency ON search_alerts(status, frequency);
+			CREATE UNIQUE INDEX IF NOT EXISTS idx_search_alerts_manage_token ON search_alerts(manage_token_hash);
+			CREATE UNIQUE INDEX IF NOT EXISTS idx_search_alerts_rss_token ON search_alerts(rss_token_hash);
+			CREATE INDEX IF NOT EXISTS idx_search_alerts_verify_token ON search_alerts(verify_token_hash);
+			CREATE INDEX IF NOT EXISTS idx_search_alerts_status_frequency ON search_alerts(status, frequency);
 
 			CREATE TABLE IF NOT EXISTS search_alert_results (
 				id TEXT PRIMARY KEY,
@@ -295,7 +295,7 @@ func (dbm *DatabaseMigrator) registerServerMigrations() {
 				FOREIGN KEY (alert_id) REFERENCES search_alerts(id) ON DELETE CASCADE,
 				UNIQUE(alert_id, fingerprint)
 			);
-			CREATE INDEX idx_search_alert_results_alert ON search_alert_results(alert_id, first_seen_at);
+			CREATE INDEX IF NOT EXISTS idx_search_alert_results_alert ON search_alert_results(alert_id, first_seen_at);
 		`,
 		Down: `
 			DROP TABLE IF EXISTS search_alert_results;
