@@ -92,7 +92,7 @@ func TestTorServiceStopNotRunning(t *testing.T) {
 	ts := NewTorService(cfg)
 
 	// Stop when not running should succeed
-	err := ts.Stop()
+	err := ts.StopTorService()
 	if err != nil {
 		t.Errorf("Stop() error = %v, want nil", err)
 	}
@@ -105,7 +105,7 @@ func TestTorServiceStopWhenNotRunning(t *testing.T) {
 	ts := NewTorService(cfg)
 
 	// Stop is a no-op when not running
-	err := ts.Stop()
+	err := ts.StopTorService()
 	if err != nil {
 		t.Errorf("Stop() error = %v", err)
 	}
@@ -442,7 +442,7 @@ func TestTorServiceStartNoTorBinary(t *testing.T) {
 	ts := NewTorService(cfg)
 
 	// Start should succeed but Tor should be disabled
-	err := ts.Start()
+	err := ts.StartTorService()
 	if err != nil {
 		// If Tor binary not found, Start returns nil (Tor is optional)
 		t.Logf("Start() returned error (expected if no Tor): %v", err)
@@ -457,7 +457,7 @@ func TestTorServiceRestartNotRunning(t *testing.T) {
 	ts := NewTorService(cfg)
 
 	// Restart when not running should attempt to start
-	err := ts.Restart()
+	err := ts.RestartTorService()
 	// May fail if no Tor binary, but should not panic
 	_ = err
 }
@@ -650,7 +650,7 @@ func TestTorServiceStopIsNoOpWhenNotRunning(t *testing.T) {
 	cfg := config.DefaultConfig()
 	ts := NewTorService(cfg)
 
-	err := ts.Stop()
+	err := ts.StopTorService()
 	if err != nil {
 		t.Errorf("Stop() error = %v", err)
 	}
@@ -667,7 +667,7 @@ func TestTorServiceStopIdempotent(t *testing.T) {
 
 	// Stop multiple times should not panic
 	for i := 0; i < 5; i++ {
-		err := ts.Stop()
+		err := ts.StopTorService()
 		if err != nil {
 			t.Errorf("Stop() iteration %d error = %v", i, err)
 		}
@@ -757,7 +757,7 @@ func TestTorServiceStartAlreadyRunning(t *testing.T) {
 	ts.mu.Unlock()
 
 	// Start should return nil early
-	err := ts.Start()
+	err := ts.StartTorService()
 	if err != nil {
 		t.Errorf("Start() when already running should return nil, got %v", err)
 	}
@@ -924,7 +924,7 @@ func TestTorServiceRestartSequence(t *testing.T) {
 	ts := NewTorService(cfg)
 
 	// Restart should call Stop (succeeds) then Start (may fail)
-	err := ts.Restart()
+	err := ts.RestartTorService()
 	// May fail if no Tor binary
 	_ = err
 }

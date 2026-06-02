@@ -277,13 +277,13 @@ func TestSchedulerRegisterMissingRun(t *testing.T) {
 func TestSchedulerStartStop(t *testing.T) {
 	s := NewScheduler(nil, "node1")
 
-	s.Start()
+	s.StartTaskScheduler()
 
 	if !s.IsRunning() {
 		t.Error("Scheduler should be running after Start()")
 	}
 
-	s.Stop()
+	s.StopTaskScheduler()
 
 	if s.IsRunning() {
 		t.Error("Scheduler should not be running after Stop()")
@@ -293,24 +293,24 @@ func TestSchedulerStartStop(t *testing.T) {
 func TestSchedulerStartTwice(t *testing.T) {
 	s := NewScheduler(nil, "node1")
 
-	s.Start()
+	s.StartTaskScheduler()
 	// Should be no-op
-	s.Start()
+	s.StartTaskScheduler()
 
 	if !s.IsRunning() {
 		t.Error("Scheduler should still be running")
 	}
 
-	s.Stop()
+	s.StopTaskScheduler()
 }
 
 func TestSchedulerStopTwice(t *testing.T) {
 	s := NewScheduler(nil, "node1")
 
-	s.Start()
-	s.Stop()
+	s.StartTaskScheduler()
+	s.StopTaskScheduler()
 	// Should be no-op
-	s.Stop()
+	s.StopTaskScheduler()
 
 	if s.IsRunning() {
 		t.Error("Scheduler should not be running")
@@ -321,7 +321,7 @@ func TestSchedulerStopWithoutStart(t *testing.T) {
 	s := NewScheduler(nil, "node1")
 
 	// Stop without start - should be no-op
-	s.Stop()
+	s.StopTaskScheduler()
 
 	if s.IsRunning() {
 		t.Error("Scheduler should not be running")
@@ -537,8 +537,8 @@ func TestSchedulerRunNow(t *testing.T) {
 		},
 	}
 	s.Register(task)
-	s.Start()
-	defer s.Stop()
+	s.StartTaskScheduler()
+	defer s.StopTaskScheduler()
 
 	err := s.RunNow("test.task")
 	if err != nil {
@@ -866,7 +866,7 @@ func TestSchedulerTaskRetry(t *testing.T) {
 	}
 
 	s.Register(task)
-	s.Start()
+	s.StartTaskScheduler()
 
 	// Run the task manually
 	s.RunNow("retry.test")
@@ -874,7 +874,7 @@ func TestSchedulerTaskRetry(t *testing.T) {
 	// Wait for retries
 	time.Sleep(500 * time.Millisecond)
 
-	s.Stop()
+	s.StopTaskScheduler()
 
 	if atomic.LoadInt32(&attempts) < 3 {
 		t.Errorf("Task ran %d times, expected at least 3 (initial + 2 retries)", attempts)
@@ -898,7 +898,7 @@ func TestSchedulerTaskRetryWithDefaultValues(t *testing.T) {
 	}
 
 	s.Register(task)
-	s.Start()
+	s.StartTaskScheduler()
 
 	// Run the task
 	s.RunNow("retry.default")
@@ -906,7 +906,7 @@ func TestSchedulerTaskRetryWithDefaultValues(t *testing.T) {
 	// Wait for task to complete
 	time.Sleep(100 * time.Millisecond)
 
-	s.Stop()
+	s.StopTaskScheduler()
 
 	if atomic.LoadInt32(&attempts) < 1 {
 		t.Error("Task should have run at least once")
@@ -938,14 +938,14 @@ func TestSchedulerTaskFailureNotification(t *testing.T) {
 	}
 
 	s.Register(task)
-	s.Start()
+	s.StartTaskScheduler()
 
 	s.RunNow("fail.test")
 
 	// Wait for notification
 	time.Sleep(200 * time.Millisecond)
 
-	s.Stop()
+	s.StopTaskScheduler()
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -980,7 +980,7 @@ func TestSchedulerCheckAndRunTasks(t *testing.T) {
 	s.tasks["check.test"].NextRun = time.Now().Add(-time.Minute)
 	s.mu.Unlock()
 
-	s.Start()
+	s.StartTaskScheduler()
 
 	// Wait for task to be picked up
 	select {
@@ -990,7 +990,7 @@ func TestSchedulerCheckAndRunTasks(t *testing.T) {
 		t.Error("Task was not run by checkAndRunTasks")
 	}
 
-	s.Stop()
+	s.StopTaskScheduler()
 }
 
 func TestSchedulerRunTaskContextCancellation(t *testing.T) {
@@ -1013,7 +1013,7 @@ func TestSchedulerRunTaskContextCancellation(t *testing.T) {
 	}
 
 	s.Register(task)
-	s.Start()
+	s.StartTaskScheduler()
 
 	s.RunNow("cancel.test")
 
@@ -1021,7 +1021,7 @@ func TestSchedulerRunTaskContextCancellation(t *testing.T) {
 	<-taskStarted
 
 	// Stop scheduler (cancels context)
-	s.Stop()
+	s.StopTaskScheduler()
 
 	// Test should complete without hanging
 }
@@ -1046,7 +1046,7 @@ func TestSchedulerRunStartupTasks(t *testing.T) {
 	}
 
 	s.Register(task)
-	s.Start()
+	s.StartTaskScheduler()
 
 	// Wait for startup task
 	select {
@@ -1056,7 +1056,7 @@ func TestSchedulerRunStartupTasks(t *testing.T) {
 		t.Error("Startup task was not run")
 	}
 
-	s.Stop()
+	s.StopTaskScheduler()
 }
 
 func TestSchedulerCatchUpMissedTasks(t *testing.T) {
@@ -1093,7 +1093,7 @@ func TestSchedulerCatchUpMissedTasks(t *testing.T) {
 	s.tasks["catchup.test"].NextRun = time.Now().Add(-30 * time.Minute)
 	s.mu.Unlock()
 
-	s.Start()
+	s.StartTaskScheduler()
 
 	// Wait for catch-up
 	select {
@@ -1103,7 +1103,7 @@ func TestSchedulerCatchUpMissedTasks(t *testing.T) {
 		t.Error("Catch-up task was not run")
 	}
 
-	s.Stop()
+	s.StopTaskScheduler()
 }
 
 func TestSchedulerCatchUpMissedTasksNoDatabase(t *testing.T) {
@@ -1174,7 +1174,7 @@ func TestSchedulerWithDatabase(t *testing.T) {
 	}
 
 	s.Register(task)
-	s.Start()
+	s.StartTaskScheduler()
 
 	// Enable/disable should persist
 	s.Disable("db.test")
@@ -1193,7 +1193,7 @@ func TestSchedulerWithDatabase(t *testing.T) {
 		t.Error("Task should be enabled")
 	}
 
-	s.Stop()
+	s.StopTaskScheduler()
 }
 
 func TestSchedulerLoadTaskState(t *testing.T) {
@@ -1216,12 +1216,12 @@ func TestSchedulerLoadTaskState(t *testing.T) {
 	}
 
 	s1.Register(task)
-	s1.Start()
+	s1.StartTaskScheduler()
 
 	// Disable the task
 	s1.Disable("persist.test")
 
-	s1.Stop()
+	s1.StopTaskScheduler()
 
 	// Second scheduler - should load persisted state
 	s2 := NewScheduler(db, "node1")
@@ -1264,9 +1264,9 @@ func TestSchedulerLoadTaskStateNonSkippable(t *testing.T) {
 	}
 
 	s.Register(task)
-	s.Start()
+	s.StartTaskScheduler()
 	s.Disable("nonskip.test")
-	s.Stop()
+	s.StopTaskScheduler()
 
 	// Second scheduler with non-skippable version
 	s2 := NewScheduler(db, "node1")
@@ -1298,7 +1298,7 @@ func TestSchedulerSaveTaskStateWithNextRetry(t *testing.T) {
 	defer db.Close()
 
 	s := NewScheduler(db, "node1")
-	s.Start()
+	s.StartTaskScheduler()
 
 	task := &Task{
 		ID:       "retry.save",
@@ -1318,7 +1318,7 @@ func TestSchedulerSaveTaskStateWithNextRetry(t *testing.T) {
 	// Save state
 	s.saveTaskState(s.tasks["retry.save"])
 
-	s.Stop()
+	s.StopTaskScheduler()
 }
 
 func TestSchedulerGlobalTaskWithLocking(t *testing.T) {
@@ -1347,7 +1347,7 @@ func TestSchedulerGlobalTaskWithLocking(t *testing.T) {
 	}
 
 	s.Register(task)
-	s.Start()
+	s.StartTaskScheduler()
 
 	s.RunNow("global.test")
 
@@ -1359,7 +1359,7 @@ func TestSchedulerGlobalTaskWithLocking(t *testing.T) {
 		t.Error("Global task was not run")
 	}
 
-	s.Stop()
+	s.StopTaskScheduler()
 }
 
 func TestSchedulerAcquireReleaseLock(t *testing.T) {
@@ -1370,7 +1370,7 @@ func TestSchedulerAcquireReleaseLock(t *testing.T) {
 	defer db.Close()
 
 	s := NewScheduler(db, "node1")
-	s.Start()
+	s.StartTaskScheduler()
 
 	task := &Task{
 		ID:       "lock.test",
@@ -1391,7 +1391,7 @@ func TestSchedulerAcquireReleaseLock(t *testing.T) {
 	// Release lock
 	s.releaseTaskLock(task)
 
-	s.Stop()
+	s.StopTaskScheduler()
 }
 
 func TestSchedulerLockTakeoverExpired(t *testing.T) {
@@ -1403,7 +1403,7 @@ func TestSchedulerLockTakeoverExpired(t *testing.T) {
 
 	// First node
 	s1 := NewScheduler(db, "node1")
-	s1.Start()
+	s1.StartTaskScheduler()
 
 	task := &Task{
 		ID:       "takeover.test",
@@ -1422,11 +1422,11 @@ func TestSchedulerLockTakeoverExpired(t *testing.T) {
 	db.Exec("UPDATE scheduler_tasks SET locked_at = ? WHERE task_id = ?",
 		time.Now().Add(-10*time.Minute), "takeover.test")
 
-	s1.Stop()
+	s1.StopTaskScheduler()
 
 	// Second node should be able to take over expired lock
 	s2 := NewScheduler(db, "node2")
-	s2.Start()
+	s2.StartTaskScheduler()
 
 	task2 := &Task{
 		ID:       "takeover.test",
@@ -1443,7 +1443,7 @@ func TestSchedulerLockTakeoverExpired(t *testing.T) {
 		t.Error("Node2 should be able to take over expired lock")
 	}
 
-	s2.Stop()
+	s2.StopTaskScheduler()
 }
 
 func TestSchedulerReacquireOwnLock(t *testing.T) {
@@ -1454,7 +1454,7 @@ func TestSchedulerReacquireOwnLock(t *testing.T) {
 	defer db.Close()
 
 	s := NewScheduler(db, "node1")
-	s.Start()
+	s.StartTaskScheduler()
 
 	task := &Task{
 		ID:       "reacquire.test",
@@ -1478,7 +1478,7 @@ func TestSchedulerReacquireOwnLock(t *testing.T) {
 		t.Error("Should be able to re-acquire own lock")
 	}
 
-	s.Stop()
+	s.StopTaskScheduler()
 }
 
 func TestSchedulerRunLoop(t *testing.T) {
@@ -1506,7 +1506,7 @@ func TestSchedulerRunLoop(t *testing.T) {
 	s.tasks["loop.test"].NextRun = time.Now().Add(-time.Second)
 	s.mu.Unlock()
 
-	s.Start()
+	s.StartTaskScheduler()
 
 	// Wait for multiple runs
 	count := 0
@@ -1520,7 +1520,7 @@ func TestSchedulerRunLoop(t *testing.T) {
 		}
 	}
 
-	s.Stop()
+	s.StopTaskScheduler()
 
 	if count < 1 {
 		t.Errorf("Task should have run at least once, ran %d times", count)
@@ -1555,14 +1555,14 @@ func TestSchedulerTaskRetryAllExhausted(t *testing.T) {
 	}
 
 	s.Register(task)
-	s.Start()
+	s.StartTaskScheduler()
 
 	s.RunNow("exhaust.test")
 
 	// Wait for retries to exhaust
 	time.Sleep(500 * time.Millisecond)
 
-	s.Stop()
+	s.StopTaskScheduler()
 
 	// Should have run 2 times (initial + 1 retry)
 	if atomic.LoadInt32(&attempts) < 2 {
@@ -1597,14 +1597,14 @@ func TestSchedulerTaskSuccessNoNotification(t *testing.T) {
 	}
 
 	s.Register(task)
-	s.Start()
+	s.StartTaskScheduler()
 
 	s.RunNow("success.test")
 
 	<-ran
 	time.Sleep(100 * time.Millisecond)
 
-	s.Stop()
+	s.StopTaskScheduler()
 
 	if notificationReceived {
 		t.Error("No notification should be received for successful task")
@@ -1648,8 +1648,8 @@ func TestSchedulerInitDatabaseMigration(t *testing.T) {
 
 	// Create scheduler - should migrate schema
 	s := NewScheduler(db, "node1")
-	s.Start()
-	s.Stop()
+	s.StartTaskScheduler()
+	s.StopTaskScheduler()
 
 	// Verify columns were added (no error means columns exist)
 	_, err = db.Exec("UPDATE scheduler_tasks SET retry_count = 0, next_retry = NULL WHERE task_id = ?", "test.task")
@@ -1674,9 +1674,9 @@ func TestSchedulerIsRunningConcurrent(t *testing.T) {
 		}()
 	}
 
-	s.Start()
+	s.StartTaskScheduler()
 	wg.Wait()
-	s.Stop()
+	s.StopTaskScheduler()
 }
 
 func TestSchedulerConcurrentOperations(t *testing.T) {
@@ -1701,7 +1701,7 @@ func TestSchedulerConcurrentOperations(t *testing.T) {
 
 	wg.Wait()
 
-	s.Start()
+	s.StartTaskScheduler()
 
 	// Get tasks concurrently
 	for i := 0; i < 10; i++ {
@@ -1713,7 +1713,7 @@ func TestSchedulerConcurrentOperations(t *testing.T) {
 	}
 
 	wg.Wait()
-	s.Stop()
+	s.StopTaskScheduler()
 }
 
 func TestSchedulerLoadTaskStateWithFutureNextRun(t *testing.T) {
@@ -1724,7 +1724,7 @@ func TestSchedulerLoadTaskStateWithFutureNextRun(t *testing.T) {
 	defer db.Close()
 
 	s := NewScheduler(db, "node1")
-	s.Start()
+	s.StartTaskScheduler()
 
 	task := &Task{
 		ID:        "future.test",
@@ -1744,7 +1744,7 @@ func TestSchedulerLoadTaskStateWithFutureNextRun(t *testing.T) {
 		t.Fatalf("Failed to update next_run: %v", err)
 	}
 
-	s.Stop()
+	s.StopTaskScheduler()
 
 	// New scheduler should load the future next_run
 	s2 := NewScheduler(db, "node1")
@@ -1774,7 +1774,7 @@ func TestSchedulerLoadTaskStateWithPastNextRun(t *testing.T) {
 	defer db.Close()
 
 	s := NewScheduler(db, "node1")
-	s.Start()
+	s.StartTaskScheduler()
 
 	task := &Task{
 		ID:        "past.test",
@@ -1794,7 +1794,7 @@ func TestSchedulerLoadTaskStateWithPastNextRun(t *testing.T) {
 		t.Fatalf("Failed to update next_run: %v", err)
 	}
 
-	s.Stop()
+	s.StopTaskScheduler()
 
 	// New scheduler should recalculate next_run (not use past time)
 	s2 := NewScheduler(db, "node1")
@@ -1825,7 +1825,7 @@ func TestSchedulerLoadTaskStateWithAllFields(t *testing.T) {
 	defer db.Close()
 
 	s := NewScheduler(db, "node1")
-	s.Start()
+	s.StartTaskScheduler()
 
 	task := &Task{
 		ID:        "allfields.test",
@@ -1850,7 +1850,7 @@ func TestSchedulerLoadTaskStateWithAllFields(t *testing.T) {
 		t.Fatalf("Failed to update fields: %v", err)
 	}
 
-	s.Stop()
+	s.StopTaskScheduler()
 
 	// New scheduler should load all fields
 	s2 := NewScheduler(db, "node1")
