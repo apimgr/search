@@ -552,10 +552,9 @@ func (m *Middleware) Logger(next http.Handler) http.Handler {
 		}
 
 		// Also log to stdout in development mode
+		// Privacy: never log client IP (privacy is the product per CLAUDE.md rule #10).
 		if m.config.Server.Mode == "development" {
-			ip := getClientIP(r, m.config.Server.Security.TrustedProxies)
-			log.Printf("%s - - [%s] \"%s %s %s\" %d %d \"%.3fms\"",
-				ip,
+			log.Printf("- - - [%s] \"%s %s %s\" %d %d \"%.3fms\"",
 				time.Now().Format("02/Jan/2006:15:04:05 -0700"),
 				r.Method,
 				r.URL.Path,
@@ -607,24 +606,25 @@ func (m *Middleware) Recovery(next http.Handler) http.Handler {
 				requestID := r.Header.Get("X-Request-ID")
 
 				// Per AI.md PART 7-9: Structured logging for recovery middleware
-				// Use slog for structured logging with all context
+				// Privacy: never log remote_addr (IPs) or user-agent in production.
+				// Privacy is the product per CLAUDE.md rule #10 — no server-side
+				// logs of IPs or user identifiers. Stack/UA only when --debug is on.
 				attrs := []slog.Attr{
 					slog.String("error", errMsg),
 					slog.String("method", r.Method),
 					slog.String("path", r.URL.Path),
-					slog.String("remote_addr", r.RemoteAddr),
-					slog.String("user_agent", r.UserAgent()),
 				}
 				if requestID != "" {
 					attrs = append(attrs, slog.String("request_id", requestID))
 				}
 
-				// Include stack trace in development mode
+				// Include stack trace and user-agent in development/debug mode only
 				if m.config.Server.Mode == "development" || m.config.IsDebug() {
+					attrs = append(attrs, slog.String("user_agent", r.UserAgent()))
 					attrs = append(attrs, slog.String("stack", string(debug.Stack())))
 				}
 
-				slog.Error("PANIC recovered", slog.Any("attrs", attrs))
+				slog.LogAttrs(r.Context(), slog.LevelError, "PANIC recovered", attrs...)
 
 				// Also log to standard log for backward compatibility
 				if requestID != "" {

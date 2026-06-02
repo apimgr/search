@@ -165,27 +165,22 @@ type FormatVariable struct {
 	Example     string
 }
 
-// AvailableFormatVariables lists all supported format variables
+// AvailableFormatVariables lists all supported format variables.
+// Privacy: identifying variables ($remote_addr, $query_string,
+// $http_referer, $http_user_agent, $http_host, $http_x_forwarded_for,
+// $http_x_real_ip) are intentionally excluded — privacy is the product.
 var AvailableFormatVariables = []FormatVariable{
-	{"$remote_addr", "Client IP address", "192.168.1.1"},
 	{"$remote_user", "Client user name (from auth)", "-"},
 	{"$time_local", "Local time in Common Log Format", "02/Jan/2006:15:04:05 -0700"},
 	{"$time_iso8601", "ISO 8601 time format", "2006-01-02T15:04:05-07:00"},
 	{"$time_unix", "Unix timestamp in seconds", "1704067200"},
 	{"$time_msec", "Unix timestamp with milliseconds", "1704067200.123"},
-	{"$request", "Full request line", "GET /search?q=test HTTP/1.1"},
+	{"$request", "Full request line (path only, no query string)", "GET /search HTTP/1.1"},
 	{"$request_method", "HTTP method", "GET"},
-	{"$request_uri", "Full request URI with query string", "/search?q=test"},
-	{"$request_path", "Request path only (no query string)", "/search"},
-	{"$query_string", "Query string without ?", "q=test"},
+	{"$request_path", "Request path (no query string)", "/search"},
 	{"$status", "HTTP response status code", "200"},
 	{"$body_bytes_sent", "Response body size in bytes", "1234"},
 	{"$bytes_sent", "Total bytes sent (headers + body)", "1456"},
-	{"$http_referer", "Referer header", "https://example.com/"},
-	{"$http_user_agent", "User-Agent header", "Mozilla/5.0 ..."},
-	{"$http_host", "Host header", "example.com"},
-	{"$http_x_forwarded_for", "X-Forwarded-For header", "10.0.0.1"},
-	{"$http_x_real_ip", "X-Real-IP header", "10.0.0.1"},
 	{"$server_protocol", "Request protocol", "HTTP/1.1"},
 	{"$request_time", "Request processing time in seconds with ms precision", "0.123"},
 	{"$request_time_ms", "Request processing time in milliseconds", "123"},
@@ -329,46 +324,36 @@ func (l *AccessLogger) formatWithVariables(entry AccessEntry) string {
 
 	result := l.customFormat
 
-	// Build request URI
-	requestURI := entry.Path
-	if entry.QueryString != "" {
-		requestURI += "?" + entry.QueryString
-	}
+	// Build full request line (path only — query string is never logged)
+	request := fmt.Sprintf("%s %s %s", entry.Method, entry.Path, entry.Protocol)
 
-	// Build full request line
-	request := fmt.Sprintf("%s %s %s", entry.Method, requestURI, entry.Protocol)
-
-	// Define all variable replacements
+	// Define all variable replacements.
+	// Privacy: identifying variables ($remote_addr, $request_uri,
+	// $query_string, $http_referer, $http_user_agent, $http_host,
+	// $http_x_forwarded_for, $http_x_real_ip) are omitted so they cannot
+	// appear in any configured format string.
 	replacements := map[string]string{
-		"$remote_addr":          entry.IP,
-		"$remote_user":          orDash(entry.RemoteUser),
-		"$time_local":           entry.Timestamp.Format("02/Jan/2006:15:04:05 -0700"),
-		"$time_iso8601":         entry.Timestamp.Format(time.RFC3339),
-		"$time_unix":            fmt.Sprintf("%d", entry.Timestamp.Unix()),
-		"$time_msec":            fmt.Sprintf("%d.%03d", entry.Timestamp.Unix(), entry.Timestamp.Nanosecond()/1000000),
-		"$request":              request,
-		"$request_method":       entry.Method,
-		"$request_uri":          requestURI,
-		"$request_path":         entry.Path,
-		"$query_string":         entry.QueryString,
-		"$status":               fmt.Sprintf("%d", entry.Status),
-		"$body_bytes_sent":      fmt.Sprintf("%d", entry.Size),
-		"$bytes_sent":           fmt.Sprintf("%d", entry.BytesSent),
-		"$http_referer":         orDash(entry.Referer),
-		"$http_user_agent":      entry.UserAgent,
-		"$http_host":            orDash(entry.Host),
-		"$http_x_forwarded_for": orDash(entry.XForwardedFor),
-		"$http_x_real_ip":       orDash(entry.XRealIP),
-		"$server_protocol":      entry.Protocol,
-		"$request_time":         fmt.Sprintf("%.3f", float64(entry.Latency)/1000.0),
-		"$request_time_ms":      fmt.Sprintf("%d", entry.Latency),
-		"$request_id":           orDash(entry.RequestID),
-		"$connection":           fmt.Sprintf("%d", entry.Connection),
-		"$connection_requests":  fmt.Sprintf("%d", entry.ConnectionRequests),
-		"$ssl_protocol":         orDash(entry.SSLProtocol),
-		"$ssl_cipher":           orDash(entry.SSLCipher),
-		"$hostname":             getHostname(),
-		"$pid":                  fmt.Sprintf("%d", os.Getpid()),
+		"$remote_user":         orDash(entry.RemoteUser),
+		"$time_local":          entry.Timestamp.Format("02/Jan/2006:15:04:05 -0700"),
+		"$time_iso8601":        entry.Timestamp.Format(time.RFC3339),
+		"$time_unix":           fmt.Sprintf("%d", entry.Timestamp.Unix()),
+		"$time_msec":           fmt.Sprintf("%d.%03d", entry.Timestamp.Unix(), entry.Timestamp.Nanosecond()/1000000),
+		"$request":             request,
+		"$request_method":      entry.Method,
+		"$request_path":        entry.Path,
+		"$status":              fmt.Sprintf("%d", entry.Status),
+		"$body_bytes_sent":     fmt.Sprintf("%d", entry.Size),
+		"$bytes_sent":          fmt.Sprintf("%d", entry.BytesSent),
+		"$server_protocol":     entry.Protocol,
+		"$request_time":        fmt.Sprintf("%.3f", float64(entry.Latency)/1000.0),
+		"$request_time_ms":     fmt.Sprintf("%d", entry.Latency),
+		"$request_id":          orDash(entry.RequestID),
+		"$connection":          fmt.Sprintf("%d", entry.Connection),
+		"$connection_requests": fmt.Sprintf("%d", entry.ConnectionRequests),
+		"$ssl_protocol":        orDash(entry.SSLProtocol),
+		"$ssl_cipher":          orDash(entry.SSLCipher),
+		"$hostname":            getHostname(),
+		"$pid":                 fmt.Sprintf("%d", os.Getpid()),
 	}
 
 	// Apply replacements (order by length descending to avoid partial matches)
@@ -405,30 +390,16 @@ func getHostname() string {
 	return hostname
 }
 
-// LogRequest logs an HTTP request
+// LogRequest logs an HTTP request.
+// Privacy: per CLAUDE.md rule #10 ("privacy is the product"), this server
+// never records IPs, query strings, referers, user-agents, or any
+// proxy-supplied identifiers in server-side logs. We keep only the bare
+// operational fields needed for monitoring (method, path, status, size,
+// latency) and omit identifying data entirely.
 func (l *AccessLogger) LogRequest(r *http.Request, status int, size int64, latency time.Duration) {
-	ip := r.RemoteAddr
-	xForwardedFor := r.Header.Get("X-Forwarded-For")
-	xRealIP := r.Header.Get("X-Real-IP")
-
-	if xForwardedFor != "" {
-		ip = strings.TrimSpace(strings.Split(xForwardedFor, ",")[0])
-	}
-	if xRealIP != "" {
-		ip = xRealIP
-	}
-
-	// Strip port from IP
-	if idx := strings.LastIndex(ip, ":"); idx != -1 {
-		// Handle IPv6
-		if !strings.Contains(ip[idx:], "]") {
-			ip = ip[:idx]
-		}
-	}
-
 	protocol := fmt.Sprintf("HTTP/%d.%d", r.ProtoMajor, r.ProtoMinor)
 
-	// Get TLS info if available
+	// Get TLS info if available (transport-level, not identifying)
 	sslProtocol := ""
 	sslCipher := ""
 	if r.TLS != nil {
@@ -446,50 +417,27 @@ func (l *AccessLogger) LogRequest(r *http.Request, status int, size int64, laten
 	}
 
 	l.Log(AccessEntry{
-		Timestamp:     time.Now(),
-		IP:            ip,
-		Method:        r.Method,
-		Path:          r.URL.Path,
-		QueryString:   r.URL.RawQuery,
-		Protocol:      protocol,
-		Status:        status,
-		Size:          size,
-		BytesSent:     size + estimateHeaderSize(status),
-		Referer:       r.Header.Get("Referer"),
-		UserAgent:     r.Header.Get("User-Agent"),
-		Latency:       latency.Milliseconds(),
-		Host:          r.Host,
-		XForwardedFor: xForwardedFor,
-		XRealIP:       xRealIP,
-		SSLProtocol:   sslProtocol,
-		SSLCipher:     sslCipher,
+		Timestamp:   time.Now(),
+		IP:          "-",
+		Method:      r.Method,
+		Path:        r.URL.Path,
+		Protocol:    protocol,
+		Status:      status,
+		Size:        size,
+		BytesSent:   size + estimateHeaderSize(status),
+		Latency:     latency.Milliseconds(),
+		SSLProtocol: sslProtocol,
+		SSLCipher:   sslCipher,
 	})
 }
 
-// LogRequestWithID logs an HTTP request with a request ID
+// LogRequestWithID logs an HTTP request with a request ID.
+// Privacy: same posture as LogRequest — no IPs, query strings, referers,
+// user-agents, or proxy-supplied identifiers are recorded.
 func (l *AccessLogger) LogRequestWithID(r *http.Request, status int, size int64, latency time.Duration, requestID string) {
-	ip := r.RemoteAddr
-	xForwardedFor := r.Header.Get("X-Forwarded-For")
-	xRealIP := r.Header.Get("X-Real-IP")
-
-	if xForwardedFor != "" {
-		ip = strings.TrimSpace(strings.Split(xForwardedFor, ",")[0])
-	}
-	if xRealIP != "" {
-		ip = xRealIP
-	}
-
-	// Strip port from IP
-	if idx := strings.LastIndex(ip, ":"); idx != -1 {
-		// Handle IPv6
-		if !strings.Contains(ip[idx:], "]") {
-			ip = ip[:idx]
-		}
-	}
-
 	protocol := fmt.Sprintf("HTTP/%d.%d", r.ProtoMajor, r.ProtoMinor)
 
-	// Get TLS info if available
+	// Get TLS info if available (transport-level, not identifying)
 	sslProtocol := ""
 	sslCipher := ""
 	if r.TLS != nil {
@@ -507,24 +455,18 @@ func (l *AccessLogger) LogRequestWithID(r *http.Request, status int, size int64,
 	}
 
 	l.Log(AccessEntry{
-		Timestamp:     time.Now(),
-		IP:            ip,
-		Method:        r.Method,
-		Path:          r.URL.Path,
-		QueryString:   r.URL.RawQuery,
-		Protocol:      protocol,
-		Status:        status,
-		Size:          size,
-		BytesSent:     size + estimateHeaderSize(status),
-		Referer:       r.Header.Get("Referer"),
-		UserAgent:     r.Header.Get("User-Agent"),
-		Latency:       latency.Milliseconds(),
-		RequestID:     requestID,
-		Host:          r.Host,
-		XForwardedFor: xForwardedFor,
-		XRealIP:       xRealIP,
-		SSLProtocol:   sslProtocol,
-		SSLCipher:     sslCipher,
+		Timestamp:   time.Now(),
+		IP:          "-",
+		Method:      r.Method,
+		Path:        r.URL.Path,
+		Protocol:    protocol,
+		Status:      status,
+		Size:        size,
+		BytesSent:   size + estimateHeaderSize(status),
+		Latency:     latency.Milliseconds(),
+		RequestID:   requestID,
+		SSLProtocol: sslProtocol,
+		SSLCipher:   sslCipher,
 	})
 }
 

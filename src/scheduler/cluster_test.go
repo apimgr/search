@@ -795,7 +795,7 @@ func TestClusterSchedulerStartCluster(t *testing.T) {
 		t.Error("Scheduler should be running after StartCluster()")
 	}
 
-	cs.Scheduler.Stop()
+	cs.Scheduler.StopTaskScheduler()
 }
 
 func TestClusterSchedulerStartClusterTwice(t *testing.T) {
@@ -818,7 +818,7 @@ func TestClusterSchedulerStartClusterTwice(t *testing.T) {
 		t.Error("Scheduler should still be running")
 	}
 
-	cs.Scheduler.Stop()
+	cs.Scheduler.StopTaskScheduler()
 }
 
 // catchupMissedJobs tests
@@ -867,7 +867,7 @@ func TestClusterSchedulerCatchupMissedJobs(t *testing.T) {
 		t.Error("Missed task was not caught up")
 	}
 
-	cs.Scheduler.Stop()
+	cs.Scheduler.StopTaskScheduler()
 }
 
 func TestClusterSchedulerCatchupMissedJobsDisabled(t *testing.T) {
@@ -972,7 +972,7 @@ func TestClusterSchedulerCheckAndRunClusterTasks(t *testing.T) {
 		t.Error("Due task was not run")
 	}
 
-	cs.Scheduler.Stop()
+	cs.Scheduler.StopTaskScheduler()
 }
 
 // GetExecutionHistory tests
@@ -1220,7 +1220,7 @@ func TestClusterSchedulerRunClusterLoop(t *testing.T) {
 		t.Error("Task was not run by cluster loop")
 	}
 
-	cs.Scheduler.Stop()
+	cs.Scheduler.StopTaskScheduler()
 }
 
 // Test task execution with error during recording

@@ -560,8 +560,7 @@ Examples:
   %s --build all                     Build for all platforms
   %s --build host                    Build for current platform
 
-//github.com/apimgr/search
-For more information: https:
+For more information: https://github.com/apimgr/search
 `, binaryName, binaryName, binaryName,
 		binaryName, binaryName, binaryName, binaryName,
 		binaryName, binaryName, binaryName, binaryName,

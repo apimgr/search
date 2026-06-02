@@ -278,7 +278,7 @@ func TestMaintenanceServiceStartStop(t *testing.T) {
 	ms := NewMaintenanceService(cfg)
 
 	// Start should succeed
-	if err := ms.Start(); err != nil {
+	if err := ms.StartMaintenanceService(); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
 
@@ -286,7 +286,7 @@ func TestMaintenanceServiceStartStop(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Stop should succeed
-	ms.Stop()
+	ms.StopMaintenanceService()
 
 	// Should not be running after stop
 	ms.mu.RLock()
@@ -303,16 +303,16 @@ func TestMaintenanceServiceStartTwice(t *testing.T) {
 	ms := NewMaintenanceService(cfg)
 
 	// First start
-	if err := ms.Start(); err != nil {
+	if err := ms.StartMaintenanceService(); err != nil {
 		t.Fatalf("First Start() error = %v", err)
 	}
 
 	// Second start should be no-op
-	if err := ms.Start(); err != nil {
+	if err := ms.StartMaintenanceService(); err != nil {
 		t.Fatalf("Second Start() error = %v", err)
 	}
 
-	ms.Stop()
+	ms.StopMaintenanceService()
 }
 
 func TestMaintenanceServiceSetGetMode(t *testing.T) {
@@ -413,7 +413,7 @@ func TestMaintenanceServiceEnableWithDuration(t *testing.T) {
 		t.Error("Should have auto-exited maintenance mode")
 	}
 
-	ms.Stop()
+	ms.StopMaintenanceService()
 }
 
 func TestMaintenanceServiceRegisterCallback(t *testing.T) {
@@ -485,7 +485,7 @@ func TestMaintenanceServiceGetHealthStatus(t *testing.T) {
 	ms := NewMaintenanceService(cfg)
 
 	// Start to initialize health status
-	ms.Start()
+	ms.StartMaintenanceService()
 	time.Sleep(50 * time.Millisecond)
 
 	health := ms.GetHealthStatus()
@@ -498,7 +498,7 @@ func TestMaintenanceServiceGetHealthStatus(t *testing.T) {
 		t.Error("GetHealthStatus() should return some components")
 	}
 
-	ms.Stop()
+	ms.StopMaintenanceService()
 }
 
 func TestMaintenanceServiceGetStatus(t *testing.T) {
@@ -799,7 +799,7 @@ func TestMaintenanceServiceCheckComponent(t *testing.T) {
 	}
 
 	ms.SetDatabaseChecks(failingCheck, nil)
-	ms.Start()
+	ms.StartMaintenanceService()
 	time.Sleep(100 * time.Millisecond)
 
 	// Health should show unhealthy
@@ -810,7 +810,7 @@ func TestMaintenanceServiceCheckComponent(t *testing.T) {
 		}
 	}
 
-	ms.Stop()
+	ms.StopMaintenanceService()
 }
 
 func TestMaintenanceServiceMultipleCallbacks(t *testing.T) {
@@ -1113,19 +1113,19 @@ func TestServiceManagerStartStopRestart(t *testing.T) {
 	sm := NewServiceManager(cfg)
 
 	// Start should fail without privileges
-	err := sm.Start()
+	err := sm.StartAllServices()
 	if err == nil && os.Geteuid() != 0 {
 		t.Log("Start() succeeded unexpectedly")
 	}
 
 	// Stop should fail without privileges
-	err = sm.Stop()
+	err = sm.StopAllServices()
 	if err == nil && os.Geteuid() != 0 {
 		t.Log("Stop() succeeded unexpectedly")
 	}
 
 	// Restart should fail without privileges
-	err = sm.Restart()
+	err = sm.RestartAllServices()
 	if err == nil && os.Geteuid() != 0 {
 		t.Log("Restart() succeeded unexpectedly")
 	}
@@ -1223,7 +1223,7 @@ func TestMaintenanceServiceInitHealthStatus(t *testing.T) {
 	cfg := config.DefaultConfig()
 	ms := NewMaintenanceService(cfg)
 
-	ms.Start()
+	ms.StartMaintenanceService()
 	time.Sleep(50 * time.Millisecond)
 
 	health := ms.GetHealthStatus()
@@ -1236,7 +1236,7 @@ func TestMaintenanceServiceInitHealthStatus(t *testing.T) {
 		}
 	}
 
-	ms.Stop()
+	ms.StopMaintenanceService()
 }
 
 func TestMaintenanceServiceCallbacksNotCalledOnSameMode(t *testing.T) {
@@ -1265,13 +1265,13 @@ func TestMaintenanceServiceStopIdempotent(t *testing.T) {
 	cfg := config.DefaultConfig()
 	ms := NewMaintenanceService(cfg)
 
-	ms.Start()
+	ms.StartMaintenanceService()
 	time.Sleep(10 * time.Millisecond)
 
 	// Stop multiple times should not panic
-	ms.Stop()
-	ms.Stop()
-	ms.Stop()
+	ms.StopMaintenanceService()
+	ms.StopMaintenanceService()
+	ms.StopMaintenanceService()
 }
 
 func TestMaintenanceServiceStatusScheduledEnd(t *testing.T) {
@@ -1825,7 +1825,7 @@ func TestMaintenanceServiceEnableMaintenanceCancelled(t *testing.T) {
 
 	// Stop before duration elapses
 	time.Sleep(50 * time.Millisecond)
-	ms.Stop()
+	ms.StopMaintenanceService()
 
 	// Should have cancelled auto-exit
 	time.Sleep(300 * time.Millisecond)

@@ -1160,7 +1160,8 @@ footer a{color:var(--accent);text-decoration:none}
 // Per AI.md PART 9: Never expose internal error details to users
 func (s *Server) renderSearchError(w http.ResponseWriter, r *http.Request, query string, err error) {
 	// Log actual error for debugging
-	log.Printf("[ERROR] search error: query=%q - %v", query, err)
+	// Privacy: never log user queries (privacy is the product per CLAUDE.md rule #10)
+	log.Printf("[ERROR] search error: %v", err)
 
 	// Use newPageData for TorAddress support per AI.md PART 32
 	baseData := s.newPageData(w, r, "Search Error", "error")

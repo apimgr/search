@@ -62,9 +62,9 @@ func TestQueryValidate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.query.Validate()
+			err := tt.query.ValidateSearchQuery()
 			if (err != nil) != tt.wantErr {
-				t.Errorf("Query.Validate() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("Query.ValidateSearchQuery() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
@@ -74,7 +74,7 @@ func TestQueryValidateCorrectsPagination(t *testing.T) {
 	// Test page correction
 	query := NewQuery("test")
 	query.Page = 0
-	_ = query.Validate()
+	_ = query.ValidateSearchQuery()
 	if query.Page != 1 {
 		t.Errorf("Expected page to be corrected to 1, got %d", query.Page)
 	}
@@ -82,7 +82,7 @@ func TestQueryValidateCorrectsPagination(t *testing.T) {
 	// Test per_page lower bound
 	query = NewQuery("test")
 	query.PerPage = 0
-	_ = query.Validate()
+	_ = query.ValidateSearchQuery()
 	if query.PerPage != 20 {
 		t.Errorf("Expected per_page to be corrected to 20, got %d", query.PerPage)
 	}
@@ -90,7 +90,7 @@ func TestQueryValidateCorrectsPagination(t *testing.T) {
 	// Test per_page upper bound
 	query = NewQuery("test")
 	query.PerPage = 200
-	_ = query.Validate()
+	_ = query.ValidateSearchQuery()
 	if query.PerPage != 100 {
 		t.Errorf("Expected per_page to be corrected to 100, got %d", query.PerPage)
 	}
@@ -98,7 +98,7 @@ func TestQueryValidateCorrectsPagination(t *testing.T) {
 	// Test safe_search correction
 	query = NewQuery("test")
 	query.SafeSearch = 5
-	_ = query.Validate()
+	_ = query.ValidateSearchQuery()
 	if query.SafeSearch != 1 {
 		t.Errorf("Expected safe_search to be corrected to 1, got %d", query.SafeSearch)
 	}
@@ -367,7 +367,7 @@ func TestQueryValidateSortBy(t *testing.T) {
 	// Test empty SortBy gets default
 	query := NewQuery("test")
 	query.SortBy = ""
-	_ = query.Validate()
+	_ = query.ValidateSearchQuery()
 	if query.SortBy != SortRelevance {
 		t.Errorf("Empty SortBy should default to SortRelevance, got %q", query.SortBy)
 	}
@@ -375,7 +375,7 @@ func TestQueryValidateSortBy(t *testing.T) {
 	// Test invalid SortBy gets default
 	query = NewQuery("test")
 	query.SortBy = SortOrder("invalid")
-	_ = query.Validate()
+	_ = query.ValidateSearchQuery()
 	if query.SortBy != SortRelevance {
 		t.Errorf("Invalid SortBy should default to SortRelevance, got %q", query.SortBy)
 	}
@@ -383,7 +383,7 @@ func TestQueryValidateSortBy(t *testing.T) {
 	// Test valid SortBy is preserved
 	query = NewQuery("test")
 	query.SortBy = SortDate
-	_ = query.Validate()
+	_ = query.ValidateSearchQuery()
 	if query.SortBy != SortDate {
 		t.Errorf("Valid SortBy should be preserved, got %q", query.SortBy)
 	}
@@ -396,7 +396,7 @@ func TestQueryValidateCleanedText(t *testing.T) {
 		Category:    CategoryGeneral,
 		CleanedText: "",
 	}
-	_ = query.Validate()
+	_ = query.ValidateSearchQuery()
 	if query.CleanedText != "test query" {
 		t.Errorf("CleanedText should be initialized from Text, got %q", query.CleanedText)
 	}
@@ -405,7 +405,7 @@ func TestQueryValidateCleanedText(t *testing.T) {
 func TestQueryValidateNegativeSafeSearch(t *testing.T) {
 	query := NewQuery("test")
 	query.SafeSearch = -1
-	_ = query.Validate()
+	_ = query.ValidateSearchQuery()
 	if query.SafeSearch != 1 {
 		t.Errorf("Negative SafeSearch should be corrected to 1, got %d", query.SafeSearch)
 	}
@@ -414,7 +414,7 @@ func TestQueryValidateNegativeSafeSearch(t *testing.T) {
 func TestQueryValidateNegativePage(t *testing.T) {
 	query := NewQuery("test")
 	query.Page = -5
-	_ = query.Validate()
+	_ = query.ValidateSearchQuery()
 	if query.Page != 1 {
 		t.Errorf("Negative Page should be corrected to 1, got %d", query.Page)
 	}
@@ -423,7 +423,7 @@ func TestQueryValidateNegativePage(t *testing.T) {
 func TestQueryValidateNegativePerPage(t *testing.T) {
 	query := NewQuery("test")
 	query.PerPage = -10
-	_ = query.Validate()
+	_ = query.ValidateSearchQuery()
 	if query.PerPage != 20 {
 		t.Errorf("Negative PerPage should be corrected to 20, got %d", query.PerPage)
 	}

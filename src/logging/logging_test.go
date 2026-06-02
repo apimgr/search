@@ -722,8 +722,9 @@ func TestAccessLoggerLogRequestWithID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to read log file: %v", err)
 	}
-	if !strings.Contains(string(content), "10.0.0.1") {
-		t.Error("Log should contain IP address")
+	// Privacy: server-side logs must NEVER contain client IPs (CLAUDE.md rule #10).
+	if strings.Contains(string(content), "10.0.0.1") {
+		t.Error("Log must NOT contain IP address — privacy is the product")
 	}
 }
 
@@ -751,8 +752,9 @@ func TestAccessLoggerLogRequestWithXForwardedFor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to read log file: %v", err)
 	}
-	if !strings.Contains(string(content), "203.0.113.1") {
-		t.Error("Log should contain X-Forwarded-For IP")
+	// Privacy: X-Forwarded-For IPs must never appear in server-side logs.
+	if strings.Contains(string(content), "203.0.113.1") || strings.Contains(string(content), "70.41.3.18") {
+		t.Error("Log must NOT contain X-Forwarded-For IP — privacy is the product")
 	}
 }
 
@@ -785,8 +787,9 @@ func TestAccessLoggerLogRequestWithXRealIP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to read log file: %v", err)
 	}
-	if !strings.Contains(string(content), "198.51.100.1") {
-		t.Error("Log should contain X-Real-IP")
+	// Privacy: X-Real-IP must never appear in server-side logs.
+	if strings.Contains(string(content), "198.51.100.1") {
+		t.Error("Log must NOT contain X-Real-IP — privacy is the product")
 	}
 }
 
