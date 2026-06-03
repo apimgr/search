@@ -1,5 +1,5 @@
 // Package cmd implements CLI commands for the search client
-// Per AI.md PART 36: CLI Client implementation
+// Per AI.md PART 32: CLI Client implementation
 package cmd
 
 import (
@@ -32,9 +32,9 @@ var (
 	cfgFile string
 	server  string
 	token   string
-	// Per AI.md PART 36: --token-file flag
+	// Per AI.md PART 32: --token-file flag
 	tokenFile string
-	// Per AI.md PART 36: --user flag for user/org context
+	// Per AI.md PART 32: --user flag for user/org context
 	userCtx   string
 	output    string
 	noColor   bool
@@ -50,10 +50,10 @@ var rootCmd = &cobra.Command{
 	Use:   getBinaryName() + " [query]",
 	Short: "CLI client for Search API",
 	Long:  `search-cli is a command-line interface for interacting with the Search API server.`,
-	// Per AI.md PART 36 line 42776: Bare args = search term
+	// Per AI.md PART 32 line 42776: Bare args = search term
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Per AI.md PART 36 line 40972-40978: Mode detection
+		// Per AI.md PART 32 line 40972-40978: Mode detection
 		// No args + interactive terminal = TUI mode
 		// Args provided = CLI mode (search)
 		if len(args) == 0 {
@@ -71,7 +71,7 @@ var rootCmd = &cobra.Command{
 }
 
 // runTUI launches the TUI interface
-// Per AI.md PART 36: TUI mode when no args in interactive terminal
+// Per AI.md PART 32: TUI mode when no args in interactive terminal
 func runTUI() error {
 	// Initialize client before launching TUI
 	if err := initClient(); err != nil {
@@ -119,14 +119,12 @@ func runSearch(query string) error {
 	return nil
 }
 
-// initClient initializes the API client with cluster failover support
-// Per AI.md PART 36 line 42791-42856: Cluster failover and server resolution
+// initClient initializes the API client
 func initClient() error {
-	// Per AI.md PART 36 line 42820-42856: Server address resolution priority
+	// Server address resolution priority:
 	// 1. --server flag (if provided)
 	// 2. server.primary in cli.yml (if set)
-	// 3. server.cluster nodes (if primary fails) - handled by client
-	// 4. Error with setup instructions (no official site)
+	// 3. Error with setup instructions
 	serverAddr, shouldSave := resolveServerAddress()
 	if serverAddr == "" {
 		return fmt.Errorf(`no server configured
@@ -139,7 +137,7 @@ This will save the server address for future commands.
 Or edit ~/.config/apimgr/%s/cli.yml directly.`, getBinaryName(), ProjectName)
 	}
 
-	// Per AI.md PART 36 line 41436-41469: Token sources (priority order)
+	// Per AI.md PART 32 line 41436-41469: Token sources (priority order)
 	tokenVal := getToken()
 
 	timeoutVal := viper.GetInt("server.timeout")
@@ -154,35 +152,29 @@ Or edit ~/.config/apimgr/%s/cli.yml directly.`, getBinaryName(), ProjectName)
 	api.Version = Version
 	apiClient = api.NewClient(serverAddr, tokenVal, timeoutVal)
 
-	// Load cluster nodes from config
-	clusterNodes := viper.GetStringSlice("server.cluster")
-	if len(clusterNodes) > 0 {
-		apiClient.SetClusterNodes(clusterNodes)
-	}
-
 	// Set user context if provided
 	if userCtx != "" {
 		apiClient.SetUserContext(userCtx)
 	}
 
-	// Per AI.md PART 36 line 42834: Save --server flag to config if empty
+	// Per AI.md PART 32 line 42834: Save --server flag to config if empty
 	if shouldSave {
 		saveServerToConfig(serverAddr)
 	}
 
-	// Per AI.md PART 36 line 42797-42811: Background autodiscover
+	// Per AI.md PART 32 line 42797-42811: Background autodiscover
 	go backgroundAutodiscover()
 
 	return nil
 }
 
 // resolveServerAddress resolves server address with priority order
-// Per AI.md PART 36 line 42820-42856: Server address resolution
+// Per AI.md PART 32 line 42820-42856: Server address resolution
 // Returns server address and whether to save it to config
 func resolveServerAddress() (string, bool) {
 	// 1. --server flag (if provided)
 	if server != "" {
-		// Per AI.md PART 36 line 42834: Save to config if current is empty
+		// Per AI.md PART 32 line 42834: Save to config if current is empty
 		currentPrimary := viper.GetString("server.primary")
 		if currentPrimary == "" {
 			// Also check legacy address key
@@ -205,7 +197,7 @@ func resolveServerAddress() (string, bool) {
 }
 
 // saveServerToConfig saves server address to config file
-// Per AI.md PART 36 line 42834: Save --server to server.primary
+// Per AI.md PART 32 line 42834: Save --server to server.primary
 func saveServerToConfig(serverAddr string) {
 	viper.Set("server.primary", serverAddr)
 	configPath := path.ConfigFile()
@@ -213,43 +205,17 @@ func saveServerToConfig(serverAddr string) {
 }
 
 // backgroundAutodiscover performs autodiscovery in background
-// Per AI.md PART 36 line 42797-42811: Background node discovery
 func backgroundAutodiscover() {
 	if apiClient == nil {
 		return
 	}
 
-	// Call /api/autodiscover in background
-	discover, err := apiClient.Autodiscover()
-	if err != nil {
-		// Silent failure - autodiscover is best-effort
-		return
-	}
-
-	// Update config with discovered cluster nodes (async, non-blocking)
-	if len(discover.Cluster.Nodes) > 0 {
-		updateClusterConfig(discover.Cluster.Primary, discover.Cluster.Nodes)
-	}
+	// Call /api/autodiscover in background; silent failure is acceptable
+	_, _ = apiClient.Autodiscover()
 }
 
-// updateClusterConfig updates cluster configuration
-// Per AI.md PART 36 line 42811: Update server.primary and server.cluster in cli.yml
-func updateClusterConfig(primary string, nodes []string) {
-	// Update in-memory config
-	if primary != "" {
-		viper.Set("server.primary", primary)
-	}
-	if len(nodes) > 0 {
-		viper.Set("server.cluster", nodes)
-	}
-
-	// Save to config file (non-blocking)
-	configPath := path.ConfigFile()
-	_ = viper.WriteConfigAs(configPath)
-}
-
-// getToken returns the API token following PART 36 priority order
-// Per AI.md PART 36 line 41436-41469
+// getToken returns the API token following PART 32 priority order
+// Per AI.md PART 32 line 41436-41469
 func getToken() string {
 	// 1. --token flag (explicit)
 	if token != "" {
@@ -290,12 +256,12 @@ func ExecuteClientCLI() error {
 func init() {
 	cobra.OnInitialize(initConfig)
 
-	// Per AI.md PART 36 line 42627: -h and -v are FLAGS, not commands
-	// Per AI.md PART 36 line 42563-42564: Only -h and -v have short flags
+	// Per AI.md PART 32 line 42627: -h and -v are FLAGS, not commands
+	// Per AI.md PART 32 line 42563-42564: Only -h and -v have short flags
 	rootCmd.Flags().BoolP("version", "v", false, "Show version")
 	rootCmd.Flags().BoolP("help", "h", false, "Show help")
 
-	// Long-form flags only (no short flags per PART 36)
+	// Long-form flags only (no short flags per PART 32)
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file path")
 	rootCmd.PersistentFlags().StringVar(&server, "server", "", "server address")
 	rootCmd.PersistentFlags().StringVar(&token, "token", "", "API token")
@@ -314,7 +280,7 @@ func init() {
 }
 
 func initConfig() {
-	// Per AI.md PART 36: CLI Startup Sequence (NON-NEGOTIABLE)
+	// Per AI.md PART 32: CLI Startup Sequence (NON-NEGOTIABLE)
 	// Ensure all CLI directories exist with correct permissions
 	if err := path.EnsureDirs(); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to create CLI directories: %v\n", err)
@@ -329,17 +295,16 @@ func initConfig() {
 			viper.SetConfigFile(resolvedPath)
 		}
 	} else {
-		// Per AI.md PART 36 line 40579: Config at ~/.config/apimgr/search/cli.yml
+		// Per AI.md PART 32 line 40579: Config at ~/.config/apimgr/search/cli.yml
 		configDir := path.ConfigDir()
 		viper.AddConfigPath(configDir)
 		viper.SetConfigName("cli")
 		viper.SetConfigType("yaml")
 	}
 
-	// Per AI.md PART 36 lines 42709-42772: Full cli.yml configuration
+	// Per AI.md PART 32 lines 42709-42772: Full cli.yml configuration
 	// Server connection defaults
 	viper.SetDefault("server.primary", "")
-	viper.SetDefault("server.cluster", []string{})
 	viper.SetDefault("server.api_version", "v1")
 	viper.SetDefault("server.timeout", 30)
 	viper.SetDefault("server.retry", 3)
@@ -364,13 +329,13 @@ func initConfig() {
 	viper.SetDefault("tui.mouse", true)
 	viper.SetDefault("tui.unicode", true)
 
-	// Logging defaults - Per AI.md PART 36 lines 42749-42755
+	// Logging defaults - Per AI.md PART 32 lines 42749-42755
 	viper.SetDefault("logging.level", "warn")
 	viper.SetDefault("logging.file", "")
 	viper.SetDefault("logging.max_size", 10)
 	viper.SetDefault("logging.max_files", 5)
 
-	// Cache defaults - Per AI.md PART 36 lines 42756-42760
+	// Cache defaults - Per AI.md PART 32 lines 42756-42760
 	viper.SetDefault("cache.enabled", true)
 	viper.SetDefault("cache.ttl", 300)
 	viper.SetDefault("cache.max_size", 100)

@@ -1455,45 +1455,6 @@ func TestNodeInfoSerialization(t *testing.T) {
 	}
 }
 
-// Tests for ClusterInfo serialization
-
-func TestClusterInfoSerialization(t *testing.T) {
-	cluster := ClusterInfo{
-		Enabled:   true,
-		Status:    "connected",
-		Primary:   "node1.example.com",
-		Nodes:     []string{"node1.example.com", "node2.example.com", "node3.example.com"},
-		NodeCount: 3,
-		Role:      "primary",
-	}
-
-	data, err := json.Marshal(cluster)
-	if err != nil {
-		t.Fatalf("Failed to marshal ClusterInfo: %v", err)
-	}
-
-	var unmarshaled ClusterInfo
-	if err := json.Unmarshal(data, &unmarshaled); err != nil {
-		t.Fatalf("Failed to unmarshal ClusterInfo: %v", err)
-	}
-
-	if unmarshaled.Enabled != cluster.Enabled {
-		t.Errorf("Enabled mismatch: got %v, want %v", unmarshaled.Enabled, cluster.Enabled)
-	}
-	if unmarshaled.Status != cluster.Status {
-		t.Errorf("Status mismatch: got %q, want %q", unmarshaled.Status, cluster.Status)
-	}
-	if unmarshaled.NodeCount != cluster.NodeCount {
-		t.Errorf("NodeCount mismatch: got %d, want %d", unmarshaled.NodeCount, cluster.NodeCount)
-	}
-	if len(unmarshaled.Nodes) != len(cluster.Nodes) {
-		t.Errorf("Nodes length mismatch: got %d, want %d", len(unmarshaled.Nodes), len(cluster.Nodes))
-	}
-	if unmarshaled.Role != cluster.Role {
-		t.Errorf("Role mismatch: got %q, want %q", unmarshaled.Role, cluster.Role)
-	}
-}
-
 // Tests for InfoResponse serialization
 
 func TestInfoResponseSerialization(t *testing.T) {

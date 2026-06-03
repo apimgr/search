@@ -713,7 +713,7 @@ func (s *Server) setupRoutes() http.Handler {
 	// Direct answers (full-page results for type:term queries per IDEA.md)
 	r.HandleFunc("/direct/*", s.handleDirect)
 
-	// Autocomplete (per AI.md PART 36 line 28280)
+	// Autocomplete (per AI.md PART 32 line 28280)
 	r.HandleFunc("/autocomplete", s.handleAutocomplete)
 
 	// Standard server pages (per AI.md spec)

@@ -1,5 +1,5 @@
 // Package path provides CLI directory and file path resolution
-// Per AI.md PART 36: CLI paths follow XDG on Linux, standard locations on Windows
+// Per AI.md PART 32: CLI paths follow XDG on Linux, standard locations on Windows
 package path
 
 import (
@@ -93,7 +93,7 @@ func LogFile() string {
 
 // EnsureDirs creates all CLI directories with correct permissions.
 // Called on every startup before any file operations.
-// Per AI.md PART 36: CLI Startup Sequence (NON-NEGOTIABLE)
+// Per AI.md PART 32: CLI Startup Sequence (NON-NEGOTIABLE)
 func EnsureDirs() error {
 	dirs := []string{
 		ConfigDir(),
@@ -125,7 +125,7 @@ func EnsureFile(path string, perm os.FileMode) error {
 }
 
 // ResolveConfigPath resolves --config flag to absolute path
-// Per AI.md PART 36: --config Flag (Config File Selection)
+// Per AI.md PART 32: --config Flag (Config File Selection)
 func ResolveConfigPath(configFlag string) (string, error) {
 	if configFlag == "" {
 		// Default: cli.yml

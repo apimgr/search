@@ -303,12 +303,7 @@ func (s *Server) buildHealthInfo() *HealthResponse {
 		Uptime:    formatDuration(time.Since(s.startTime)),
 		Mode:      s.config.Server.Mode,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
-		// 5. Cluster info (standalone mode)
-		Cluster: ClusterInfo{
-			Enabled: false,
-			Nodes:   []string{},
-		},
-		// 6. Features - PUBLIC only (PARTS 20, 32)
+		// 5. Features - PUBLIC only (PARTS 20, 32)
 		Features: FeaturesInfo{
 			Tor:   torInfo,
 			GeoIP: s.config.Server.GeoIP.Enabled,
@@ -405,19 +400,8 @@ func (s *Server) respondHealthText(w http.ResponseWriter, health *HealthResponse
 	b.WriteString(fmt.Sprintf("check.cache: %s\n", health.Checks.Cache))
 	b.WriteString(fmt.Sprintf("check.disk: %s\n", health.Checks.Disk))
 	b.WriteString(fmt.Sprintf("check.scheduler: %s\n", health.Checks.Scheduler))
-	if health.Checks.Cluster != "" {
-		b.WriteString(fmt.Sprintf("check.cluster: %s\n", health.Checks.Cluster))
-	}
 	if health.Checks.Tor != "" {
 		b.WriteString(fmt.Sprintf("check.tor: %s\n", health.Checks.Tor))
-	}
-
-	// Cluster info
-	if health.Cluster.Enabled {
-		b.WriteString(fmt.Sprintf("cluster.primary: %s\n", health.Cluster.Primary))
-		if len(health.Cluster.Nodes) > 0 {
-			b.WriteString(fmt.Sprintf("cluster.nodes: %s\n", strings.Join(health.Cluster.Nodes, ", ")))
-		}
 	}
 
 	// Features
@@ -578,7 +562,7 @@ func jsonMarshal(v interface{}) ([]byte, error) {
 }
 
 // handleAutocomplete handles autocomplete requests
-// Per AI.md PART 36 line 28280: /autocomplete GET endpoint for autocomplete suggestions
+// Per AI.md PART 32 line 28280: /autocomplete GET endpoint for autocomplete suggestions
 func (s *Server) handleAutocomplete(w http.ResponseWriter, r *http.Request) {
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 

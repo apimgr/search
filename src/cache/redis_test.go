@@ -46,9 +46,7 @@ func TestRedisConfigStructFields(t *testing.T) {
 		PoolSize:     25,
 		MinIdle:      10,
 		Timeout:      15 * time.Second,
-		Prefix:       "myapp:",
-		Cluster:      true,
-		ClusterNodes: []string{"node1:6379", "node2:6379", "node3:6379"},
+		Prefix: "myapp:",
 	}
 
 	if cfg.Type != "valkey" {
@@ -80,12 +78,6 @@ func TestRedisConfigStructFields(t *testing.T) {
 	}
 	if cfg.Prefix != "myapp:" {
 		t.Errorf("Prefix = %q, want %q", cfg.Prefix, "myapp:")
-	}
-	if !cfg.Cluster {
-		t.Error("Cluster should be true")
-	}
-	if len(cfg.ClusterNodes) != 3 {
-		t.Errorf("ClusterNodes length = %d, want 3", len(cfg.ClusterNodes))
 	}
 }
 
@@ -134,29 +126,6 @@ func TestNewRedisCacheInvalidURLParsing(t *testing.T) {
 				t.Logf("URL %q failed: %v", tt.url, err)
 			}
 		})
-	}
-}
-
-// TestNewRedisCacheClusterModeNoNodes tests cluster mode with no running nodes
-func TestNewRedisCacheClusterModeNoNodes(t *testing.T) {
-	cfg := &RedisConfig{
-		Cluster:      true,
-		ClusterNodes: []string{"localhost:17000", "localhost:17001", "localhost:17002"},
-		Password:     "testpass",
-		PoolSize:     5,
-		MinIdle:      1,
-		Timeout:      100 * time.Millisecond,
-	}
-
-	cache, err := NewRedisCache(cfg)
-	if err == nil {
-		if cache != nil {
-			cache.Close()
-		}
-		t.Log("Cluster connection succeeded (cluster may be running)")
-	} else {
-		// Expected - no cluster running
-		t.Log("Cluster connection failed as expected:", err)
 	}
 }
 

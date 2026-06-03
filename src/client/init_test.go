@@ -174,7 +174,7 @@ func TestInitCLISequence(t *testing.T) {
 	os.Setenv("HOME", tempDir)
 	defer os.Unsetenv("HOME")
 
-	// Per AI.md PART 36: CLI Startup Sequence
+	// Per AI.md PART 32: CLI Startup Sequence
 	// 1. Ensure directories exist
 	// 2. Set correct permissions
 	// 3. Initialize logging (with rotation)

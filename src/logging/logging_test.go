@@ -111,10 +111,21 @@ func TestFormatVariables(t *testing.T) {
 		}
 	}
 
-	expectedVars := []string{"$remote_addr", "$request", "$status", "$http_user_agent"}
+	// Privacy: $remote_addr, $http_user_agent and other identifying vars
+	// are intentionally excluded from AvailableFormatVariables. Only check
+	// that non-identifying vars are still present.
+	expectedVars := []string{"$request", "$status", "$time_local", "$request_id"}
 	for _, expected := range expectedVars {
 		if !found[expected] {
 			t.Errorf("Expected format variable %s not found", expected)
+		}
+	}
+
+	// And explicitly assert the identifying vars are NOT present.
+	forbiddenVars := []string{"$remote_addr", "$http_user_agent", "$http_referer", "$http_host", "$http_x_forwarded_for", "$http_x_real_ip", "$query_string"}
+	for _, forbidden := range forbiddenVars {
+		if found[forbidden] {
+			t.Errorf("Privacy violation: %s must not be in AvailableFormatVariables", forbidden)
 		}
 	}
 }
@@ -242,12 +253,13 @@ func TestValidateFormat(t *testing.T) {
 		format  string
 		wantLen int
 	}{
-		// Valid
-		{"$remote_addr - $status", 0},
+		// $remote_addr is no longer in AvailableFormatVariables (privacy),
+		// so it is now reported as unknown alongside any other unknown var.
+		{"$remote_addr - $status", 1},
 		// Unknown
 		{"$unknown_var", 1},
-		// One unknown
-		{"$remote_addr $unknown $status", 1},
+		// $remote_addr (privacy-excluded) + $unknown = 2 unknown.
+		{"$remote_addr $unknown $status", 2},
 		// No variables
 		{"plain text", 0},
 	}
@@ -977,9 +989,24 @@ func TestAccessLoggerFormatWithVariablesAllVariables(t *testing.T) {
 		t.Fatalf("Failed to read log file: %v", err)
 	}
 	logContent := string(content)
-	if !strings.Contains(logContent, "192.168.1.100") {
-		t.Error("Log should contain IP")
+	// Privacy: IP, query string, referer, user-agent, host, X-Forwarded-For,
+	// X-Real-IP must NOT appear in the log even if requested in the format
+	// string. The format-rendering layer must drop these identifying values.
+	forbiddenFragments := []string{
+		"192.168.1.100",
+		"id=123",
+		"app.example.com",
+		"Mozilla/5.0",
+		"api.example.com",
+		"10.0.0.1",
+		"10.0.0.2",
 	}
+	for _, frag := range forbiddenFragments {
+		if strings.Contains(logContent, frag) {
+			t.Errorf("Privacy violation: log contains %q", frag)
+		}
+	}
+	// Non-identifying fields are still expected to render.
 	if !strings.Contains(logContent, "uuid-12345") {
 		t.Error("Log should contain request ID")
 	}
@@ -1838,14 +1865,13 @@ func TestAllTLSCipherSuites(t *testing.T) {
 	}
 }
 
-func TestAuditCategoryTokensAndCluster(t *testing.T) {
+func TestAuditCategoryTokensAndOrganization(t *testing.T) {
 	// Test additional audit categories
 	categories := []struct {
 		cat  AuditCategory
 		want string
 	}{
 		{AuditCategoryTokens, "tokens"},
-		{AuditCategoryCluster, "cluster"},
 		{AuditCategoryOrganization, "organization"},
 	}
 
@@ -2003,11 +2029,6 @@ func TestMoreAuditActions(t *testing.T) {
 		{AuditActionServerUpdated, "server.updated"},
 		{AuditActionSchedulerTaskFail, "scheduler.task_failed"},
 		{AuditActionSchedulerTaskRun, "scheduler.task_manual_run"},
-		{AuditActionClusterNodeJoined, "cluster.node_joined"},
-		{AuditActionClusterNodeRemoved, "cluster.node_removed"},
-		{AuditActionClusterNodeFailed, "cluster.node_failed"},
-		{AuditActionClusterTokenGen, "cluster.token_generated"},
-		{AuditActionClusterModeChanged, "cluster.mode_changed"},
 		{AuditActionPermissionChange, "user.permission_change"},
 		{AuditActionAdminInvite, "admin.invite"},
 	}
@@ -2029,10 +2050,13 @@ func TestValidateFormatEdgeCases(t *testing.T) {
 		{"just dollar", "$", 0},
 		{"dollar at end", "text$", 0},
 		{"multiple unknowns", "$foo $bar $baz", 3},
-		{"mixed valid invalid", "$remote_addr $invalid $status", 1},
+		// $remote_addr is intentionally rejected — privacy is the product
+		// (see AvailableFormatVariables in logging.go).
+		{"mixed valid invalid", "$remote_addr $invalid $status", 2},
 		{"variable with numbers", "$var123", 1},
-		// First $ is skipped (no name), second is valid $remote_addr
-		{"consecutive dollars", "$$remote_addr", 0},
+		// First $ is skipped (no name), second is $remote_addr which is
+		// rejected for privacy reasons, so still counts as unknown.
+		{"consecutive dollars", "$$remote_addr", 1},
 	}
 
 	for _, tt := range tests {

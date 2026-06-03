@@ -82,12 +82,6 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 			return nil
 		},
 
-		// Session Cleanup - remove expired sessions
-		SessionCleanup: func(ctx context.Context) error {
-			log.Println("[Task] Session cleanup complete")
-			return nil
-		},
-
 		// Token Cleanup - remove expired tokens
 		TokenCleanup: func(ctx context.Context) error {
 			log.Println("[Task] Token cleanup complete")
@@ -163,8 +157,6 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 			return s.refreshPublicIP(ctx)
 		},
 
-		// Cluster Heartbeat - only active in cluster mode; nil in standalone mode
-		ClusterHeartbeat: nil,
 	}
 }
 

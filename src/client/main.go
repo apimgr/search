@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	// Per AI.md PART 36: CLI Startup Sequence (NON-NEGOTIABLE)
+	// Per AI.md PART 32: CLI Startup Sequence (NON-NEGOTIABLE)
 	// Initialize CLI environment before executing commands
 	if err := InitCLI(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

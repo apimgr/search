@@ -4,7 +4,6 @@
 
 Search is a privacy-respecting metasearch engine that aggregates results from multiple search engines without tracking you. Built in Go for enhanced performance, security, and ease of deployment.
 
-[![Build](https://github.com/apimgr/search/actions/workflows/docker.yml/badge.svg)](https://github.com/apimgr/search/actions/workflows/docker.yml)
 [![Release](https://img.shields.io/github/v/release/apimgr/search)](https://github.com/apimgr/search/releases)
 [![License](https://img.shields.io/github/license/apimgr/search)](LICENSE.md)
 [![Go Version](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go)](https://go.dev)

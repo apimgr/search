@@ -1132,13 +1132,6 @@ const (
 	AuditActionSchedulerTaskFail  AuditAction = "scheduler.task_failed"
 	AuditActionSchedulerTaskRun   AuditAction = "scheduler.task_manual_run"
 
-	// Cluster events (PART 11 lines 11937-11945)
-	AuditActionClusterNodeJoined  AuditAction = "cluster.node_joined"
-	AuditActionClusterNodeRemoved AuditAction = "cluster.node_removed"
-	AuditActionClusterNodeFailed  AuditAction = "cluster.node_failed"
-	AuditActionClusterTokenGen    AuditAction = "cluster.token_generated"
-	AuditActionClusterModeChanged AuditAction = "cluster.mode_changed"
-
 	// Legacy aliases for backward compatibility
 	AuditActionReload           AuditAction = "config.reload"
 	AuditActionEngineToggle     AuditAction = "config.engine_toggle"
@@ -1166,8 +1159,6 @@ const (
 	AuditCategorySystem AuditCategory = "server"
 	// Token events
 	AuditCategoryTokens AuditCategory = "tokens"
-	// Cluster events
-	AuditCategoryCluster AuditCategory = "cluster"
 	// Organization events
 	AuditCategoryOrganization AuditCategory = "organization"
 )
@@ -2130,45 +2121,6 @@ func (l *AuditLogger) LogSSLUpdated(actor, ip, domain string) {
 		Actor:    AuditActor{Username: actor, IP: ip},
 		Target:   &AuditTarget{Type: "ssl", Name: domain},
 		Result:   "success",
-	})
-}
-
-// LogClusterNodeJoined logs node joining cluster
-func (l *AuditLogger) LogClusterNodeJoined(nodeID, nodeAddress string) {
-	l.Log(AuditEntry{
-		Event:    AuditActionClusterNodeJoined,
-		Category: AuditCategoryCluster,
-		Severity: AuditSeverityInfo,
-		Actor:    AuditActor{Type: "system", Username: "system"},
-		Target:   &AuditTarget{Type: "node", ID: nodeID, Name: nodeAddress},
-		Result:   "success",
-		NodeID:   nodeID,
-	})
-}
-
-// LogClusterNodeRemoved logs node removal from cluster
-func (l *AuditLogger) LogClusterNodeRemoved(actor, ip, nodeID, reason string) {
-	l.Log(AuditEntry{
-		Event:    AuditActionClusterNodeRemoved,
-		Category: AuditCategoryCluster,
-		Severity: AuditSeverityWarning,
-		Actor:    AuditActor{Username: actor, IP: ip},
-		Target:   &AuditTarget{Type: "node", ID: nodeID},
-		Result:   "success",
-		Reason:   reason,
-	})
-}
-
-// LogClusterNodeFailed logs node failure in cluster
-func (l *AuditLogger) LogClusterNodeFailed(nodeID, reason string) {
-	l.Log(AuditEntry{
-		Event:    AuditActionClusterNodeFailed,
-		Category: AuditCategoryCluster,
-		Severity: AuditSeverityCritical,
-		Actor:    AuditActor{Type: "system", Username: "system"},
-		Target:   &AuditTarget{Type: "node", ID: nodeID},
-		Result:   "failure",
-		Reason:   reason,
 	})
 }
 

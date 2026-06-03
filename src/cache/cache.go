@@ -62,10 +62,6 @@ type Config struct {
 	// seconds
 	TTL int `yaml:"ttl"`
 
-	// Cluster mode
-	Cluster      bool     `yaml:"cluster"`
-	ClusterNodes []string `yaml:"cluster_nodes"`
-
 	// Memory cache specific
 	// Max items for memory cache
 	MaxSize int `yaml:"max_size"`
@@ -111,9 +107,7 @@ func NewCache(cfg *Config) (Cache, error) {
 			PoolSize:     cfg.PoolSize,
 			MinIdle:      cfg.MinIdle,
 			Timeout:      cfg.Timeout,
-			Prefix:       cfg.Prefix,
-			Cluster:      cfg.Cluster,
-			ClusterNodes: cfg.ClusterNodes,
+			Prefix:   cfg.Prefix,
 		})
 	case "none":
 		// No-op cache that discards everything

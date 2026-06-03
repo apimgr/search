@@ -29,32 +29,35 @@ On EVERY new conversation or after "context compacted" message:
 
 ## Binary Terminology
 - **server** = `search` (main binary, runs as service)
-- **client** = `search-cli` (REQUIRED companion, CLI/TUI/GUI)
-- **agent** = `search-agent` (optional, runs on remote machines)
+- **client** = `search-cli` (REQUIRED companion, CLI/TUI/GUI — PART 32)
 
 ## Key Placeholders
 - `{project_name}` = search
 - `{project_org}` = apimgr
 - `{internal_name}` = search (FROZEN)
-- `{admin_path}` = admin (default)
 - `{plist_name}` = io.github.apimgr.search (derived)
 
-## Account Types (CRITICAL)
-- **Server Admin** = manages the app (NOT a privileged OS user)
-- **Primary Admin** = first admin, cannot be deleted
-- **No Regular Users** — PART 34 is NOT implemented (privacy is the product)
+## Architecture (CRITICAL)
+- **Single instance only** — no cluster mode, no horizontal scaling, no node election (AI.md line 2055)
+- **No admin web UI, no sessions, no login form** — configuration is file-only via `server.yml`
+- **Two-tier bearer-token model:**
+  - Operator token: `server.token` in `server.yml` (auto-generated on first run). Sent as `Authorization: Bearer <token>`. Compared via SHA-256 + constant-time.
+  - Per-resource owner tokens: stored as SHA-256 in the `api_tokens` table.
+- Service management is via `server.yml` + the `search-cli` client. Never re-introduce admin/session/login/cluster code paths.
 
 ## NEVER Do (Top Violations)
 1. Use bcrypt → Use Argon2id
 2. Put Dockerfile in root → `docker/Dockerfile`
 3. Use CGO → CGO_ENABLED=0 always
 4. Hardcode dev values → Detect at runtime
-5. Use external cron → Internal scheduler (PART 19)
+5. Use external cron → Internal scheduler (PART 18)
 6. Store passwords plaintext → Argon2id (tokens use SHA-256)
 7. Create premium tiers → All features free, no paywalls
 8. Use Makefile in CI/CD → Explicit commands only
 9. Client-side rendering (React/Vue) → Server-side Go templates
 10. Log user queries or IPs → privacy is the product, no server-side logs
+11. Add cluster/agent/multi-node code → single instance only (no cluster in spec)
+12. Reference non-existent PARTs → AI.md has PART 0–33 only
 
 ## ALWAYS Do
 1. Read AI.md before implementing ANY feature
@@ -63,7 +66,7 @@ On EVERY new conversation or after "context compacted" message:
 4. All features work without JavaScript
 5. Tor hidden service support (auto-enabled if Tor found)
 6. Built-in scheduler, GeoIP, metrics, email, backup, update
-7. Full admin panel at `/server/admin` with ALL settings
+7. Operator-only API surface gated by `Authorization: Bearer <server.token>`
 8. Client binary (search-cli) for ALL projects
 9. Commit often — small, focused commits
 
@@ -77,10 +80,10 @@ On EVERY new conversation or after "context compacted" message:
 ## Where to Find Details
 - AI behavior: `.claude/rules/ai-rules.md` (PART 0, 1)
 - Project structure: `.claude/rules/project-rules.md` (PART 2, 3, 4)
-- Frontend/WebUI: `.claude/rules/frontend-rules.md` (PART 16, 17)
+- Frontend/WebUI: `.claude/rules/frontend-rules.md` (PART 16)
 - Full spec: `AI.md` (~55k lines) ← **SOURCE OF TRUTH**
 
 ## Current Project State
-- Last read AI.md: 2026-05-16
-- Current task: bootstrap
-- Relevant PARTs: 0-6
+- Last audit: 2026-06-02
+- Current task: spec compliance cleanup
+- Relevant PARTs: 0–33 (all in scope; spec has no PART 34+)

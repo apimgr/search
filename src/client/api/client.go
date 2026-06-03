@@ -18,13 +18,13 @@ var ProjectName = "search"
 var Version = "dev"
 
 // Client is the API client for the search server
-// Per AI.md PART 36 line 42791-42818: Cluster failover support
+// Per AI.md PART 32 line 42791-42818: Cluster failover support
 type Client struct {
 	BaseURL string
 	Token   string
-	// Per AI.md PART 36: --user flag for user/org context
+	// Per AI.md PART 32: --user flag for user/org context
 	UserContext string
-	// Per AI.md PART 36: cluster nodes for failover
+	// Per AI.md PART 32: cluster nodes for failover
 	ClusterNodes []string
 	HTTPClient   *http.Client
 	mu           sync.RWMutex
@@ -182,7 +182,7 @@ func (c *Client) GetVersion() (string, error) {
 }
 
 // SetUserContext sets the user or org context for API requests
-// Per AI.md PART 36 line 41490-41498: --user flag for user/org context
+// Per AI.md PART 32 line 41490-41498: --user flag for user/org context
 // @name = force user context
 // +name = force org context
 // name = auto-detect
@@ -191,7 +191,7 @@ func (c *Client) SetUserContext(ctx string) {
 }
 
 // AutodiscoverResponse represents /api/autodiscover response
-// Per AI.md PART 36 line 38077-38157: Autodiscover endpoint
+// Per AI.md PART 32 line 38077-38157: Autodiscover endpoint
 type AutodiscoverResponse struct {
 	Server struct {
 		Name     string `json:"name"`
@@ -214,7 +214,7 @@ type AutodiscoverResponse struct {
 }
 
 // SetClusterNodes sets the cluster nodes for failover
-// Per AI.md PART 36 line 42791-42818: Cluster failover
+// Per AI.md PART 32 line 42791-42818: Cluster failover
 func (c *Client) SetClusterNodes(nodes []string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -229,7 +229,7 @@ func (c *Client) GetClusterNodes() []string {
 }
 
 // Autodiscover fetches server settings from /api/autodiscover
-// Per AI.md PART 36 line 38077-38157: Non-versioned autodiscover endpoint
+// Per AI.md PART 32 line 38077-38157: Non-versioned autodiscover endpoint
 func (c *Client) Autodiscover() (*AutodiscoverResponse, error) {
 	resp, err := c.doRequest("GET", "/api/autodiscover", nil)
 	if err != nil {
@@ -251,13 +251,13 @@ func (c *Client) Autodiscover() (*AutodiscoverResponse, error) {
 }
 
 // get performs a GET request with automatic cluster failover
-// Per AI.md PART 36 line 42802-42812: Failover behavior
+// Per AI.md PART 32 line 42802-42812: Failover behavior
 func (c *Client) get(path string) (*http.Response, error) {
 	return c.getWithFailover(path)
 }
 
 // getWithFailover tries primary server first, then cluster nodes
-// Per AI.md PART 36 line 42802-42812: Cluster failover
+// Per AI.md PART 32 line 42802-42812: Cluster failover
 func (c *Client) getWithFailover(path string) (*http.Response, error) {
 	// 1. Try primary server (BaseURL)
 	resp, err := c.doRequest("GET", path, nil)
@@ -292,7 +292,7 @@ func (c *Client) doRequest(method, path string, body interface{}) (*http.Respons
 }
 
 // doRequestToServer performs HTTP request to specific server
-// Per AI.md PART 36: Cluster failover support
+// Per AI.md PART 32: Cluster failover support
 func (c *Client) doRequestToServer(serverURL, method, path string, body interface{}) (*http.Response, error) {
 	var bodyReader io.Reader
 	if body != nil {
@@ -308,7 +308,7 @@ func (c *Client) doRequestToServer(serverURL, method, path string, body interfac
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Fixed User-Agent per AI.md PART 36
+	// Fixed User-Agent per AI.md PART 32
 	req.Header.Set("User-Agent", fmt.Sprintf("%s-cli/%s", ProjectName, Version))
 	req.Header.Set("Accept", "application/json")
 	if body != nil {

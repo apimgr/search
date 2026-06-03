@@ -8,7 +8,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	mathRand "math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1128,7 +1127,11 @@ func runMaintenance(action string) {
 			return
 		}
 
-		newToken := generateSetupToken()
+		newToken, err := generateSetupToken()
+		if err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to generate token: %v\n", err)
+			os.Exit(1)
+		}
 		cfg.Server.Token = newToken
 		if err := cfg.Save(config.GetConfigPath()); err != nil {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to save config: %v\n", err)
@@ -1384,16 +1387,14 @@ func runTest() {
 
 // generateSetupToken creates a cryptographically secure 32-char hex token.
 // Used to seed server.token on first run and for the rotate-token command.
-func generateSetupToken() string {
+// Returns an error if the OS CSPRNG is unavailable — never falls back to a
+// non-CSPRNG, since the token must be unguessable.
+func generateSetupToken() (string, error) {
 	randomBytes := make([]byte, 16)
 	if _, err := cryptoRand.Read(randomBytes); err != nil {
-		// Crypto/rand failure is unexpected; fall back to math/rand so the
-		// operator at least gets a token they can immediately replace.
-		for i := range randomBytes {
-			randomBytes[i] = byte(mathRand.Intn(256))
-		}
+		return "", fmt.Errorf("read crypto/rand: %w", err)
 	}
-	return hex.EncodeToString(randomBytes)
+	return hex.EncodeToString(randomBytes), nil
 }
 
 // buildListenURLs builds the list of URLs the server is listening on

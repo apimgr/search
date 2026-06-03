@@ -39,9 +39,6 @@ type RedisConfig struct {
 	// Key prefix
 	Prefix string
 
-	// Cluster mode
-	Cluster      bool
-	ClusterNodes []string
 }
 
 // NewRedisCache creates a new Redis/Valkey cache
@@ -60,18 +57,7 @@ func NewRedisCache(cfg *RedisConfig) (*RedisCache, error) {
 
 	var client redis.UniversalClient
 
-	if cfg.Cluster && len(cfg.ClusterNodes) > 0 {
-		// Cluster mode
-		client = redis.NewClusterClient(&redis.ClusterOptions{
-			Addrs:        cfg.ClusterNodes,
-			Password:     cfg.Password,
-			PoolSize:     cfg.PoolSize,
-			MinIdleConns: cfg.MinIdle,
-			DialTimeout:  cfg.Timeout,
-			ReadTimeout:  cfg.Timeout,
-			WriteTimeout: cfg.Timeout,
-		})
-	} else if cfg.URL != "" {
+	if cfg.URL != "" {
 		// URL-based connection
 		opts, err := redis.ParseURL(cfg.URL)
 		if err != nil {

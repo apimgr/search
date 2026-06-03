@@ -33,15 +33,13 @@ const (
 	TaskGeoIPUpdate      TaskID = "geoip.update"
 	TaskBlocklistUpdate  TaskID = "blocklist.update"
 	TaskCVEUpdate        TaskID = "cve.update"
-	TaskSessionCleanup   TaskID = "session.cleanup"
-	TaskTokenCleanup     TaskID = "token.cleanup"
-	TaskLogRotation      TaskID = "log.rotation"
-	TaskBackupDaily      TaskID = "backup_daily"
-	TaskBackupHourly     TaskID = "backup_hourly"
-	TaskHealthcheckSelf  TaskID = "healthcheck.self"
-	TaskTorHealth        TaskID = "tor.health"
-	TaskClusterHeartbeat TaskID = "cluster.heartbeat"
-	TaskAlertsImmediate  TaskID = "alerts.immediate"
+	TaskTokenCleanup    TaskID = "token.cleanup"
+	TaskLogRotation     TaskID = "log.rotation"
+	TaskBackupDaily     TaskID = "backup_daily"
+	TaskBackupHourly    TaskID = "backup_hourly"
+	TaskHealthcheckSelf TaskID = "healthcheck.self"
+	TaskTorHealth       TaskID = "tor.health"
+	TaskAlertsImmediate TaskID = "alerts.immediate"
 	TaskAlertsDaily      TaskID = "alerts.daily"
 	TaskAlertsWeekly     TaskID = "alerts.weekly"
 	// TaskPublicIPRefresh refreshes the cached server public IP per
@@ -240,8 +238,10 @@ func (s *Scheduler) Register(task *Task) error {
 		return fmt.Errorf("task run function is required")
 	}
 
-	// Calculate next run time
-	task.NextRun = s.calculateNextRun(task.Schedule)
+	// Calculate next run time. We already hold s.mu (write) here, so use
+	// the lock-free variant — the non-recursive RWMutex would otherwise
+	// self-deadlock when calculateNextRun re-acquires the read lock.
+	task.NextRun = s.calculateNextRunLocked(task.Schedule)
 	task.Enabled = true
 
 	s.tasks[task.ID] = task
@@ -313,19 +313,7 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 		})
 	}
 
-	// Session Cleanup - Every 15 minutes, NOT skippable
-	if handlers.SessionCleanup != nil {
-		s.Register(&Task{
-			ID:          TaskSessionCleanup,
-			Name:        "Session Cleanup",
-			Description: "Remove expired sessions",
-			Schedule:    "@every 15m",
-			TaskType:    TaskTypeLocal,
-			Run:         handlers.SessionCleanup,
-			Skippable:   false,
-			Enabled:     true,
-		})
-	}
+
 
 	// Token Cleanup - Every 15 minutes, NOT skippable
 	if handlers.TokenCleanup != nil {
@@ -471,37 +459,21 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 		})
 	}
 
-	// Cluster Heartbeat - Every 30 seconds, NOT skippable in cluster mode
-	if handlers.ClusterHeartbeat != nil {
-		s.Register(&Task{
-			ID:          TaskClusterHeartbeat,
-			Name:        "Cluster Heartbeat",
-			Description: "Cluster node heartbeat",
-			Schedule:    "@every 30s",
-			TaskType:    TaskTypeLocal,
-			Run:         handlers.ClusterHeartbeat,
-			Skippable:   false,
-			RunOnStart:  true,
-			Enabled:     true,
-		})
-	}
 }
 
 // TaskHandlers holds handler functions for built-in tasks
 type TaskHandlers struct {
-	SSLRenewal       func(ctx context.Context) error
-	GeoIPUpdate      func(ctx context.Context) error
-	BlocklistUpdate  func(ctx context.Context) error
-	CVEUpdate        func(ctx context.Context) error
-	SessionCleanup   func(ctx context.Context) error
-	TokenCleanup     func(ctx context.Context) error
-	LogRotation      func(ctx context.Context) error
-	BackupDaily      func(ctx context.Context) error
-	BackupHourly     func(ctx context.Context) error
-	HealthcheckSelf  func(ctx context.Context) error
-	TorHealth        func(ctx context.Context) error
-	ClusterHeartbeat func(ctx context.Context) error
-	AlertsImmediate  func(ctx context.Context) error
+	SSLRenewal      func(ctx context.Context) error
+	GeoIPUpdate     func(ctx context.Context) error
+	BlocklistUpdate func(ctx context.Context) error
+	CVEUpdate       func(ctx context.Context) error
+	TokenCleanup    func(ctx context.Context) error
+	LogRotation     func(ctx context.Context) error
+	BackupDaily     func(ctx context.Context) error
+	BackupHourly    func(ctx context.Context) error
+	HealthcheckSelf func(ctx context.Context) error
+	TorHealth       func(ctx context.Context) error
+	AlertsImmediate func(ctx context.Context) error
 	AlertsDaily      func(ctx context.Context) error
 	AlertsWeekly     func(ctx context.Context) error
 	// PublicIPRefresh refreshes the cached public IP per AI.md PART 8
@@ -638,7 +610,7 @@ func (s *Scheduler) runTask(task *Task) {
 			task.LastError = ""
 			task.RetryCount = 0
 			task.RunCount++
-			task.NextRun = s.calculateNextRun(task.Schedule)
+			task.NextRun = s.calculateNextRunLocked(task.Schedule)
 			s.mu.Unlock()
 
 			if s.db != nil {
@@ -659,7 +631,7 @@ func (s *Scheduler) runTask(task *Task) {
 	task.RetryCount = 0
 	task.FailCount++
 	failCount := task.FailCount
-	task.NextRun = s.calculateNextRun(task.Schedule)
+	task.NextRun = s.calculateNextRunLocked(task.Schedule)
 	notifyFn := s.notifyFunc
 	s.mu.Unlock()
 
@@ -687,10 +659,25 @@ func (s *Scheduler) runTask(task *Task) {
 // standard 5-field cron) using github.com/robfig/cron/v3 per AI.md PART 18.
 // On a parse error the scheduler falls back to a 1-hour interval so a bad
 // schedule entry never wedges the loop.
+//
+// Acquires s.mu.RLock for the timezone read. Callers that already hold
+// s.mu must use calculateNextRunLocked to avoid a self-deadlock on the
+// non-recursive RWMutex.
 func (s *Scheduler) calculateNextRun(schedule string) time.Time {
 	s.mu.RLock()
 	loc := s.timezone
 	s.mu.RUnlock()
+	return calculateNextRunWithLoc(schedule, loc)
+}
+
+// calculateNextRunLocked is the lock-free variant. Caller must already
+// hold s.mu (read or write). Used from Register / RegisterBuiltinTasks
+// which hold the write lock for the whole insertion.
+func (s *Scheduler) calculateNextRunLocked(schedule string) time.Time {
+	return calculateNextRunWithLoc(schedule, s.timezone)
+}
+
+func calculateNextRunWithLoc(schedule string, loc *time.Location) time.Time {
 	if loc == nil {
 		loc = time.Local
 	}
@@ -906,7 +893,9 @@ func (s *Scheduler) Enable(id TaskID) error {
 	}
 
 	task.Enabled = true
-	task.NextRun = s.calculateNextRun(task.Schedule)
+	// Already holding s.mu (write) — use the lock-free variant to avoid
+	// self-deadlock on the non-recursive RWMutex.
+	task.NextRun = s.calculateNextRunLocked(task.Schedule)
 
 	if s.db != nil {
 		s.saveTaskState(task)

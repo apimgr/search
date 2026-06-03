@@ -1,5 +1,5 @@
 // Package cmd implements CLI commands for the search client
-// Per AI.md PART 36: --status command for health check
+// Per AI.md PART 32: --status command for health check
 package cmd
 
 import (

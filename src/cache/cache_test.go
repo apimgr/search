@@ -792,21 +792,13 @@ func TestConfigStruct(t *testing.T) {
 		PoolSize:     20,
 		MinIdle:      5,
 		Timeout:      10 * time.Second,
-		Prefix:       "test:",
-		TTL:          7200,
-		Cluster:      true,
-		ClusterNodes: []string{"node1:6379", "node2:6379"},
-		MaxSize:      5000,
+		Prefix:  "test:",
+		TTL:     7200,
+		MaxSize: 5000,
 	}
 
 	if cfg.Type != "redis" {
 		t.Errorf("Type = %q, want %q", cfg.Type, "redis")
-	}
-	if cfg.Cluster != true {
-		t.Error("Cluster should be true")
-	}
-	if len(cfg.ClusterNodes) != 2 {
-		t.Errorf("ClusterNodes length = %d, want %d", len(cfg.ClusterNodes), 2)
 	}
 }
 
@@ -1126,26 +1118,6 @@ func TestNewRedisCacheInvalidURL(t *testing.T) {
 		t.Error("Expected error for invalid URL")
 	}
 	// Expected - URL parsing should fail
-}
-
-// TestNewRedisCacheClusterMode tests cluster mode configuration
-func TestNewRedisCacheClusterMode(t *testing.T) {
-	cfg := &RedisConfig{
-		Cluster:      true,
-		ClusterNodes: []string{"localhost:7000", "localhost:7001"},
-		Timeout:      100 * time.Millisecond,
-	}
-
-	cache, err := NewRedisCache(cfg)
-	if err == nil {
-		if cache != nil {
-			cache.Close()
-		}
-		t.Log("Cluster connection succeeded")
-	} else {
-		// Expected - cluster connection should fail (no cluster running)
-		t.Log("Cluster connection failed as expected:", err)
-	}
 }
 
 // TestNewRedisCacheURLMode tests URL-based connection

@@ -433,7 +433,7 @@ type HealthPageData struct {
 
 // HealthResponse represents health check information per AI.md PART 13.
 // All fields use canonical order: project, status, version, build, runtime,
-// cluster, features, checks, stats.
+// features, checks, stats.
 type HealthResponse struct {
 	// 1. Project identification (PART 16: branding config)
 	Project ProjectInfo `json:"project"`
@@ -449,13 +449,11 @@ type HealthResponse struct {
 	Uptime    string `json:"uptime"`
 	Mode      string `json:"mode"`
 	Timestamp string `json:"timestamp"`
-	// 5. Cluster info (PART 10)
-	Cluster ClusterInfo `json:"cluster"`
-	// 6. Features - PUBLIC only (PARTS 20, 32)
+	// 5. Features - PUBLIC only (PARTS 20, 32)
 	Features FeaturesInfo `json:"features"`
-	// 7. Component health checks
+	// 6. Component health checks
 	Checks ChecksInfo `json:"checks"`
-	// 8. Statistics (public-safe aggregates)
+	// 7. Statistics (public-safe aggregates)
 	Stats StatsInfo `json:"stats"`
 }
 
@@ -496,7 +494,6 @@ type ChecksInfo struct {
 	Cache     string `json:"cache"`
 	Disk      string `json:"disk"`
 	Scheduler string `json:"scheduler"`
-	Cluster   string `json:"cluster,omitempty"`
 	Tor       string `json:"tor,omitempty"`
 }
 
@@ -505,17 +502,6 @@ type StatsInfo struct {
 	RequestsTotal int64 `json:"requests_total"`
 	Requests24h   int64 `json:"requests_24h"`
 	ActiveConns   int   `json:"active_connections"`
-}
-
-// ClusterInfo represents cluster status per AI.md PART 13.
-// Status is "connected" or "disconnected"; Role is "primary" or "member".
-type ClusterInfo struct {
-	Enabled   bool     `json:"enabled"`
-	Status    string   `json:"status,omitempty"`
-	Primary   string   `json:"primary,omitempty"`
-	Nodes     []string `json:"nodes,omitempty"`
-	NodeCount int      `json:"node_count,omitempty"`
-	Role      string   `json:"role,omitempty"`
 }
 
 // Pagination represents pagination information

@@ -91,7 +91,7 @@ func (h *Handler) SetAlertManager(am *alert.Manager) {
 
 // RegisterRoutes registers API routes
 func (h *Handler) RegisterRoutes(r chi.Router) {
-	// Autodiscover - non-versioned per AI.md PART 36 line 38077-38157
+	// Autodiscover - non-versioned per AI.md PART 32 line 38077-38157
 	r.HandleFunc("/api/autodiscover", h.handleAutodiscover)
 
 	// Health and info - Per AI.md PART 13/14
@@ -298,7 +298,7 @@ type TorInfo struct {
 }
 
 // AutodiscoverResponse represents /api/autodiscover response
-// Per AI.md PART 36 line 38077-38157: Autodiscover endpoint for CLI/agent
+// Per AI.md PART 32 line 38077-38157: Autodiscover endpoint for CLI/agent
 type AutodiscoverResponse struct {
 	Server struct {
 		Name     string `json:"name"`
@@ -517,7 +517,7 @@ func (h *Handler) handleHealthz(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleAutodiscover handles /api/autodiscover endpoint
-// Per AI.md PART 36 line 38077-38157: Non-versioned autodiscover for CLI/agent
+// Per AI.md PART 32 line 38077-38157: Non-versioned autodiscover for CLI/agent
 func (h *Handler) handleAutodiscover(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		h.jsonResponse(w, http.StatusMethodNotAllowed, &APIResponse{
@@ -541,12 +541,12 @@ func (h *Handler) handleAutodiscover(w http.ResponseWriter, r *http.Request) {
 	resp.Server.Name = h.config.Server.Title
 	resp.Server.Version = config.Version
 	resp.Server.URL = serverURL
-	// PART 34 (regular-user registration/auth) is not implemented for this project.
+	// PART 32 is the CLIENT spec. Regular-user accounts are not part of this project.
 	resp.Server.Features.Auth = false
 	resp.Server.Features.Search = true
 	resp.Server.Features.Register = false
 
-	// Cluster info - for CLI/agent failover per AI.md PART 36 line 42791-42818
+	// Cluster info - for CLI/agent failover per AI.md PART 32 line 42791-42818
 	resp.Cluster.Primary = serverURL
 	// Single node cluster by default
 	resp.Cluster.Nodes = []string{serverURL}

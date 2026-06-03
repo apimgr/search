@@ -1,5 +1,5 @@
 // Package main provides CLI logging configuration
-// Per AI.md PART 36: Logging configuration (lines 42749-42755)
+// Per AI.md PART 32: Logging configuration (lines 42749-42755)
 package main
 
 import (
@@ -23,7 +23,7 @@ var (
 )
 
 // LogConfig holds logging configuration
-// Per AI.md PART 36 lines 42749-42755
+// Per AI.md PART 32 lines 42749-42755
 type LogConfig struct {
 	// debug, info, warn, error (default: warn)
 	Level string
@@ -46,7 +46,7 @@ func GetLogConfig() LogConfig {
 }
 
 // InitLogging initializes the CLI logger with configuration
-// Per AI.md PART 36: Comprehensive logging with log rotation
+// Per AI.md PART 32: Comprehensive logging with log rotation
 func InitLogging() error {
 	var initErr error
 	loggerOnce.Do(func() {
@@ -71,7 +71,7 @@ func InitLogging() error {
 		}
 
 		// Set up log rotation with lumberjack
-		// Per AI.md PART 36: max_size and max_files config
+		// Per AI.md PART 32: max_size and max_files config
 		maxSize := cfg.MaxSize
 		if maxSize == 0 {
 			// Default 10 MB
@@ -94,7 +94,7 @@ func InitLogging() error {
 		}
 
 		// Parse log level
-		// Per AI.md PART 36: debug, info, warn, error (default: warn)
+		// Per AI.md PART 32: debug, info, warn, error (default: warn)
 		var level slog.Level
 		switch cfg.Level {
 		case "debug":

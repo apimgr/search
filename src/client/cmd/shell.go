@@ -1,5 +1,5 @@
 // Package cmd implements CLI commands for the search client
-// Per AI.md PART 36: Shell completion support
+// Per AI.md PART 32: Shell completion support
 package cmd
 
 import (
@@ -68,7 +68,7 @@ func init() {
 }
 
 // detectShell auto-detects shell from $SHELL environment variable
-// Per AI.md PART 36 line 43135-43141
+// Per AI.md PART 32 line 43135-43141
 func detectShell() string {
 	shellPath := os.Getenv("SHELL")
 	if shellPath == "" {
@@ -84,7 +84,7 @@ func detectShell() string {
 }
 
 // printCompletions generates and prints shell completion script
-// Per AI.md PART 36 line 43143-43159
+// Per AI.md PART 32 line 43143-43159
 func printCompletions(shell string) error {
 	binaryName := getBinaryName()
 
@@ -108,7 +108,7 @@ func printCompletions(shell string) error {
 }
 
 // printInit generates shell init command for eval
-// Per AI.md PART 36 line 43161-43176
+// Per AI.md PART 32 line 43161-43176
 func printInit(shell string) error {
 	binaryName := getBinaryName()
 

@@ -332,63 +332,6 @@ func TestSaveServerToConfig(t *testing.T) {
 	}
 }
 
-// Tests for updateClusterConfig
-
-func TestUpdateClusterConfig(t *testing.T) {
-	viper.Reset()
-
-	// Set HOME to temp directory per AI.md PART 13 (test data goes to temp dirs)
-	tempDir := t.TempDir()
-	os.Setenv("HOME", tempDir)
-	// HOME restored by TestMain
-
-	updateClusterConfig("https://primary.example.com", []string{"node1", "node2"})
-
-	if viper.GetString("server.primary") != "https://primary.example.com" {
-		t.Error("updateClusterConfig() should set server.primary")
-	}
-
-	nodes := viper.GetStringSlice("server.cluster")
-	if len(nodes) != 2 {
-		t.Errorf("updateClusterConfig() nodes length = %d, want 2", len(nodes))
-	}
-}
-
-func TestUpdateClusterConfigEmptyPrimary(t *testing.T) {
-	viper.Reset()
-	viper.Set("server.primary", "existing")
-
-	// Set HOME to temp directory per AI.md PART 13 (test data goes to temp dirs)
-	tempDir := t.TempDir()
-	os.Setenv("HOME", tempDir)
-	// HOME restored by TestMain
-
-	updateClusterConfig("", []string{"node1"})
-
-	// Should not change existing primary
-	if viper.GetString("server.primary") != "existing" {
-		t.Error("updateClusterConfig() should not change existing primary when empty")
-	}
-}
-
-func TestUpdateClusterConfigEmptyNodes(t *testing.T) {
-	viper.Reset()
-	viper.Set("server.cluster", []string{"existing"})
-
-	// Set HOME to temp directory per AI.md PART 13 (test data goes to temp dirs)
-	tempDir := t.TempDir()
-	os.Setenv("HOME", tempDir)
-	// HOME restored by TestMain
-
-	updateClusterConfig("primary", []string{})
-
-	// Should not change existing nodes when empty
-	nodes := viper.GetStringSlice("server.cluster")
-	if len(nodes) != 1 {
-		t.Error("updateClusterConfig() should not change nodes when empty")
-	}
-}
-
 // Tests for initClient
 
 func TestInitClientNoServer(t *testing.T) {
@@ -429,31 +372,6 @@ func TestInitClientWithServer(t *testing.T) {
 
 	if apiClient == nil {
 		t.Error("apiClient should not be nil after initClient()")
-	}
-
-	server = ""
-}
-
-func TestInitClientWithClusterNodes(t *testing.T) {
-	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{})
-	}))
-	defer testServer.Close()
-
-	viper.Reset()
-	viper.Set("server.cluster", []string{"node1.example.com", "node2.example.com"})
-	server = testServer.URL
-	apiClient = nil
-
-	err := initClient()
-
-	if err != nil {
-		t.Fatalf("initClient() error = %v", err)
-	}
-
-	nodes := apiClient.GetClusterNodes()
-	if len(nodes) != 2 {
-		t.Errorf("ClusterNodes length = %d, want 2", len(nodes))
 	}
 
 	server = ""

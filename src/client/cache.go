@@ -1,5 +1,5 @@
 // Package main provides CLI cache configuration and implementation
-// Per AI.md PART 36: Cache configuration (lines 42756-42760)
+// Per AI.md PART 32: Cache configuration (lines 42756-42760)
 package main
 
 import (
@@ -16,7 +16,7 @@ import (
 )
 
 // CacheConfig holds cache configuration
-// Per AI.md PART 36 lines 42756-42760
+// Per AI.md PART 32 lines 42756-42760
 type CacheConfig struct {
 	// Enable response caching (default: true)
 	Enabled bool
@@ -42,7 +42,7 @@ type CacheEntry struct {
 }
 
 // CLICache provides in-memory and file-based caching for CLI responses
-// Per AI.md PART 36: Response caching for performance
+// Per AI.md PART 32: Response caching for performance
 type CLICache struct {
 	mu     sync.RWMutex
 	memory map[string]CacheEntry
