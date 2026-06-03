@@ -80,9 +80,9 @@ Full provider list under `### Data Sources`. Trust assumptions and failure modes
 | Specialized engines (Wikipedia, YouTube, Reddit, StackOverflow, GitHub, HN, arXiv, PubMed, Wolfram Alpha, OpenStreetMap) | Domain-specific search/answers | Same as above |
 | Instant-answer providers (OpenWeatherMap/wttr.in, exchangerate.host, Wiktionary, ip-location-db, etc.) | Read-only widget data | Skip widget on failure; never block main search |
 | Outbound HTTP responses from any engine | Untrusted (responses parsed) | All HTML/JSON parsed defensively; user input never embedded in scraping requests; tracking parameters stripped |
-| SMTP for alert delivery | Trusted to deliver | Retry with backoff; pause channel on repeated failures (per AI.md PART 18) |
+| SMTP for alert delivery | Trusted to deliver | Retry with backoff; pause channel on repeated failures (per AI.md PART 17) |
 | Webhook destinations (per-alert) | Untrusted (user-supplied URL) | Signed payload (HMAC); SSRF defenses on outbound URL (private CIDRs blocked, scheme allowlist); retry with backoff |
-| Tor SOCKS5 proxy (optional, AI.md PART 32) | Privacy-preserving outbound | If unavailable, fall back to direct or surface error per admin config |
+| Tor SOCKS5 proxy (optional, AI.md PART 31) | Privacy-preserving outbound | If unavailable, fall back to direct or surface error per admin config |
 
 ### Threat model & abuse cases
 
@@ -2266,16 +2266,6 @@ Click → opens video in embedded player or source site
 | GET | /api/v1/alerts/{token}/rss | Private RSS feed payload |
 | GET | /opensearch.xml | OpenSearch descriptor |
 | GET | /search.rss | Search results as RSS feed |
-
-#### Admin (see AI.md PART 17)
-| Method | URL | Description |
-|--------|-----|-------------|
-| GET | /admin/dashboard | Admin dashboard |
-| GET | /admin/engines | Engine management |
-| GET | /admin/settings | Server settings |
-| GET | /admin/stats | Detailed statistics |
-
----
 
 ### Data Sources
 
