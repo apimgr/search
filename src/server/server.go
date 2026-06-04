@@ -341,24 +341,13 @@ func NewServer(cfg *config.Config) *Server {
 		i18nManager:  i18nMgr,
 	}
 
-	// Per AI.md PART 5 lines 5212-5310: Configuration Source of Truth (NON-NEGOTIABLE)
-	// Initialize config sync for cluster mode
+	// Per AI.md PART 5: server.yml is the source of truth (single-instance, AI.md line 2055)
 	if dbMgr != nil {
-		isCluster := dbMgr.IsClusterMode()
 		configPath := cfg.GetPath()
 		if configPath == "" {
 			configPath = "/etc/search/server.yml"
 		}
-		s.configSync = config.NewConfigSync(dbMgr.ServerDB().SQL(), cfg, configPath, isCluster)
-		if isCluster {
-			log.Printf("[Server] Cluster mode: database is source of truth")
-			// Load config from database on startup
-			if err := s.configSync.LoadFromSource(); err != nil {
-				log.Printf("[Server] Failed to load config from database: %v", err)
-			}
-			// Start periodic sync (every 5 minutes per AI.md)
-			s.configSync.StartPeriodicSync(5 * time.Minute)
-		}
+		s.configSync = config.NewConfigSync(dbMgr.ServerDB().SQL(), cfg, configPath)
 	}
 
 	// Set widget manager on API handler

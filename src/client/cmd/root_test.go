@@ -444,11 +444,11 @@ func TestBackgroundAutodiscoverSuccess(t *testing.T) {
 	backgroundAutodiscover()
 }
 
-func TestBackgroundAutodiscoverWithNodes(t *testing.T) {
+func TestBackgroundAutodiscoverWithResponse(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := api.AutodiscoverResponse{}
-		resp.Cluster.Primary = "https://primary.example.com"
-		resp.Cluster.Nodes = []string{"node1", "node2"}
+		resp.Server.Name = "search"
+		resp.Server.Version = "1.0.0"
 		json.NewEncoder(w).Encode(resp)
 	}))
 	defer testServer.Close()
@@ -457,9 +457,6 @@ func TestBackgroundAutodiscoverWithNodes(t *testing.T) {
 	apiClient = api.NewClient(testServer.URL, "", 30)
 
 	backgroundAutodiscover()
-
-	// Wait a bit for background update
-	// Note: In real tests, we'd use sync mechanisms
 }
 
 // Tests for runSearch

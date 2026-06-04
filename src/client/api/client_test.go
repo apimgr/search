@@ -43,11 +43,10 @@ func TestNewClientZeroTimeout(t *testing.T) {
 
 func TestClientStruct(t *testing.T) {
 	client := &Client{
-		BaseURL:      "https://api.example.com",
-		Token:        "test-token",
-		UserContext:  "testuser",
-		ClusterNodes: []string{"node1", "node2"},
-		HTTPClient:   http.DefaultClient,
+		BaseURL:     "https://api.example.com",
+		Token:       "test-token",
+		UserContext: "testuser",
+		HTTPClient:  http.DefaultClient,
 	}
 
 	if client.BaseURL != "https://api.example.com" {
@@ -58,9 +57,6 @@ func TestClientStruct(t *testing.T) {
 	}
 	if client.UserContext != "testuser" {
 		t.Errorf("UserContext = %q", client.UserContext)
-	}
-	if len(client.ClusterNodes) != 2 {
-		t.Errorf("ClusterNodes length = %d", len(client.ClusterNodes))
 	}
 }
 
@@ -211,8 +207,6 @@ func TestAutodiscoverResponseStruct(t *testing.T) {
 	response.Server.Features.Auth = true
 	response.Server.Features.Search = true
 	response.Server.Features.Register = false
-	response.Cluster.Primary = "https://primary.example.com"
-	response.Cluster.Nodes = []string{"node1", "node2"}
 	response.API.Version = "v1"
 	response.API.BasePath = "/api/v1"
 
@@ -230,12 +224,6 @@ func TestAutodiscoverResponseStruct(t *testing.T) {
 	}
 	if response.Server.Features.Register {
 		t.Error("Server.Features.Register should be false")
-	}
-	if response.Cluster.Primary != "https://primary.example.com" {
-		t.Errorf("Cluster.Primary = %q", response.Cluster.Primary)
-	}
-	if len(response.Cluster.Nodes) != 2 {
-		t.Errorf("Cluster.Nodes length = %d", len(response.Cluster.Nodes))
 	}
 	if response.API.Version != "v1" {
 		t.Errorf("API.Version = %q", response.API.Version)
@@ -260,45 +248,6 @@ func TestSetUserContext(t *testing.T) {
 	client.SetUserContext("+orgname")
 	if client.UserContext != "+orgname" {
 		t.Errorf("UserContext = %q, want '+orgname'", client.UserContext)
-	}
-}
-
-// Tests for SetClusterNodes
-
-func TestSetClusterNodes(t *testing.T) {
-	client := NewClient("https://api.example.com", "", 30)
-
-	nodes := []string{"node1.example.com", "node2.example.com", "node3.example.com"}
-	client.SetClusterNodes(nodes)
-
-	got := client.GetClusterNodes()
-	if len(got) != 3 {
-		t.Errorf("GetClusterNodes() length = %d, want 3", len(got))
-	}
-	for i, node := range nodes {
-		if got[i] != node {
-			t.Errorf("GetClusterNodes()[%d] = %q, want %q", i, got[i], node)
-		}
-	}
-}
-
-func TestSetClusterNodesEmpty(t *testing.T) {
-	client := NewClient("https://api.example.com", "", 30)
-
-	client.SetClusterNodes([]string{})
-
-	got := client.GetClusterNodes()
-	if len(got) != 0 {
-		t.Errorf("GetClusterNodes() length = %d, want 0", len(got))
-	}
-}
-
-func TestGetClusterNodesNil(t *testing.T) {
-	client := NewClient("https://api.example.com", "", 30)
-
-	got := client.GetClusterNodes()
-	if got != nil && len(got) != 0 {
-		t.Errorf("GetClusterNodes() should be nil or empty, got %v", got)
 	}
 }
 
@@ -420,7 +369,6 @@ func TestAutodiscover(t *testing.T) {
 		response := AutodiscoverResponse{}
 		response.Server.Name = "search"
 		response.Server.Version = "1.0.0"
-		response.Cluster.Nodes = []string{"node1", "node2"}
 		json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
@@ -434,21 +382,12 @@ func TestAutodiscover(t *testing.T) {
 	if result.Server.Name != "search" {
 		t.Errorf("result.Server.Name = %q", result.Server.Name)
 	}
-
-	// Should have updated cluster nodes
-	nodes := client.GetClusterNodes()
-	if len(nodes) != 2 {
-		t.Errorf("ClusterNodes should be updated, got length %d", len(nodes))
-	}
 }
 
-// Tests for cluster failover
-
-func TestGetWithFailover(t *testing.T) {
-	// Primary fails, fallback succeeds
-	failCount := 0
+func TestGet(t *testing.T) {
+	requestCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		failCount++
+		requestCount++
 		response := HealthResponse{Status: "healthy"}
 		json.NewEncoder(w).Encode(response)
 	}))
@@ -461,60 +400,14 @@ func TestGetWithFailover(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	if failCount != 1 {
-		t.Errorf("Request count = %d, want 1", failCount)
+	if requestCount != 1 {
+		t.Errorf("Request count = %d, want 1", requestCount)
 	}
 }
 
-func TestGetWithFailoverClusterNode(t *testing.T) {
-	// Create primary that fails
-	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusServiceUnavailable)
-	}))
-	defer primary.Close()
+// Tests for doRequest
 
-	// Create fallback that works
-	fallback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		response := HealthResponse{Status: "healthy"}
-		json.NewEncoder(w).Encode(response)
-	}))
-	defer fallback.Close()
-
-	client := NewClient(primary.URL, "", 30)
-	client.SetClusterNodes([]string{fallback.URL})
-
-	resp, err := client.getWithFailover("/api/v1/healthz")
-	if err != nil {
-		t.Fatalf("getWithFailover() error = %v", err)
-	}
-	resp.Body.Close()
-}
-
-func TestGetWithFailoverAllFail(t *testing.T) {
-	// Create primary that fails
-	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusServiceUnavailable)
-	}))
-	defer primary.Close()
-
-	// Create fallback that also fails
-	fallback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusServiceUnavailable)
-	}))
-	defer fallback.Close()
-
-	client := NewClient(primary.URL, "", 30)
-	client.SetClusterNodes([]string{fallback.URL})
-
-	_, err := client.getWithFailover("/api/v1/healthz")
-	if err == nil {
-		t.Error("getWithFailover() should return error when all nodes fail")
-	}
-}
-
-// Tests for doRequestToServer
-
-func TestDoRequestToServer(t *testing.T) {
+func TestDoRequest(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify headers
 		if r.Header.Get("Accept") != "application/json" {
@@ -530,14 +423,14 @@ func TestDoRequestToServer(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "", 30)
-	resp, err := client.doRequestToServer(server.URL, "GET", "/test", nil)
+	resp, err := client.doRequest("GET", "/test", nil)
 	if err != nil {
-		t.Fatalf("doRequestToServer() error = %v", err)
+		t.Fatalf("doRequest() error = %v", err)
 	}
 	resp.Body.Close()
 }
 
-func TestDoRequestToServerWithToken(t *testing.T) {
+func TestDoRequestWithToken(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")
 		if auth != "Bearer test-token" {
@@ -548,14 +441,14 @@ func TestDoRequestToServerWithToken(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "test-token", 30)
-	resp, err := client.doRequestToServer(server.URL, "GET", "/test", nil)
+	resp, err := client.doRequest("GET", "/test", nil)
 	if err != nil {
-		t.Fatalf("doRequestToServer() error = %v", err)
+		t.Fatalf("doRequest() error = %v", err)
 	}
 	resp.Body.Close()
 }
 
-func TestDoRequestToServerWithBody(t *testing.T) {
+func TestDoRequestWithBody(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		contentType := r.Header.Get("Content-Type")
 		if contentType != "application/json" {
@@ -567,14 +460,14 @@ func TestDoRequestToServerWithBody(t *testing.T) {
 
 	client := NewClient(server.URL, "", 30)
 	body := map[string]string{"key": "value"}
-	resp, err := client.doRequestToServer(server.URL, "POST", "/test", body)
+	resp, err := client.doRequest("POST", "/test", body)
 	if err != nil {
-		t.Fatalf("doRequestToServer() error = %v", err)
+		t.Fatalf("doRequest() error = %v", err)
 	}
 	resp.Body.Close()
 }
 
-func TestDoRequestToServer400Error(t *testing.T) {
+func TestDoRequest400Error(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(`{"error": "bad request"}`))
@@ -582,9 +475,9 @@ func TestDoRequestToServer400Error(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "", 30)
-	_, err := client.doRequestToServer(server.URL, "GET", "/test", nil)
+	_, err := client.doRequest("GET", "/test", nil)
 	if err == nil {
-		t.Error("doRequestToServer() should return error for 400 response")
+		t.Error("doRequest() should return error for 400 response")
 	}
 }
 
@@ -602,32 +495,6 @@ func TestVersion(t *testing.T) {
 	}
 }
 
-// Tests for concurrent access
-
-func TestSetClusterNodesConcurrent(t *testing.T) {
-	client := NewClient("https://api.example.com", "", 30)
-
-	done := make(chan bool)
-
-	// Writer goroutine
-	go func() {
-		for i := 0; i < 100; i++ {
-			client.SetClusterNodes([]string{"node1", "node2"})
-		}
-		done <- true
-	}()
-
-	// Reader goroutine
-	go func() {
-		for i := 0; i < 100; i++ {
-			client.GetClusterNodes()
-		}
-		done <- true
-	}()
-
-	<-done
-	<-done
-}
 
 // Additional tests for 100% coverage
 
@@ -725,78 +592,21 @@ func TestAutodiscoverServerError(t *testing.T) {
 	}
 }
 
-// Test Autodiscover with empty cluster nodes (no update)
-func TestAutodiscoverEmptyClusterNodes(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		response := AutodiscoverResponse{}
-		response.Server.Name = "search"
-		response.Server.Version = "1.0.0"
-		// Empty nodes
-		response.Cluster.Nodes = []string{}
-		json.NewEncoder(w).Encode(response)
-	}))
-	defer server.Close()
-
-	client := NewClient(server.URL, "", 30)
-	// Set some existing nodes first
-	client.SetClusterNodes([]string{"existing-node"})
-
-	result, err := client.Autodiscover()
-	if err != nil {
-		t.Fatalf("Autodiscover() error = %v", err)
-	}
-	if result.Server.Name != "search" {
-		t.Errorf("result.Server.Name = %q", result.Server.Name)
-	}
-
-	// Cluster nodes should NOT be updated (still has existing-node)
-	nodes := client.GetClusterNodes()
-	if len(nodes) != 1 || nodes[0] != "existing-node" {
-		t.Errorf("ClusterNodes should not be updated when response has empty nodes, got %v", nodes)
-	}
-}
-
-// Test getWithFailover when cluster node equals BaseURL (skip logic)
-func TestGetWithFailoverSkipPrimaryInNodes(t *testing.T) {
-	// Create primary that fails
-	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusServiceUnavailable)
-	}))
-	defer primary.Close()
-
-	// Create fallback that works
-	fallback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		response := HealthResponse{Status: "healthy"}
-		json.NewEncoder(w).Encode(response)
-	}))
-	defer fallback.Close()
-
-	client := NewClient(primary.URL, "", 30)
-	// Set cluster nodes including the primary URL (should be skipped)
-	client.SetClusterNodes([]string{primary.URL, fallback.URL})
-
-	resp, err := client.getWithFailover("/api/v1/healthz")
-	if err != nil {
-		t.Fatalf("getWithFailover() error = %v", err)
-	}
-	resp.Body.Close()
-}
-
-// Test doRequestToServer with network connection refused
-func TestDoRequestToServerConnectionRefused(t *testing.T) {
+// Test doRequest with network connection refused
+func TestDoRequestConnectionRefused(t *testing.T) {
 	// Invalid port, connection refused
 	client := NewClient("http://127.0.0.1:59999", "", 1)
-	_, err := client.doRequestToServer("http://127.0.0.1:59999", "GET", "/test", nil)
+	_, err := client.doRequest("GET", "/test", nil)
 	if err == nil {
-		t.Error("doRequestToServer() should return error for connection refused")
+		t.Error("doRequest() should return error for connection refused")
 	}
 	if !strings.Contains(err.Error(), "request failed") {
 		t.Errorf("error = %q, want to contain 'request failed'", err.Error())
 	}
 }
 
-// Test doRequestToServer with body containing unmarshalable type
-func TestDoRequestToServerMarshalError(t *testing.T) {
+// Test doRequest with body containing unmarshalable type
+func TestDoRequestMarshalError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{}`))
 	}))
@@ -805,29 +615,12 @@ func TestDoRequestToServerMarshalError(t *testing.T) {
 	client := NewClient(server.URL, "", 30)
 	// Create an unmarshalable body (channel cannot be marshaled to JSON)
 	unmarshalableBody := make(chan int)
-	_, err := client.doRequestToServer(server.URL, "POST", "/test", unmarshalableBody)
+	_, err := client.doRequest("POST", "/test", unmarshalableBody)
 	if err == nil {
-		t.Error("doRequestToServer() should return error for unmarshalable body")
+		t.Error("doRequest() should return error for unmarshalable body")
 	}
 	if !strings.Contains(err.Error(), "failed to marshal body") {
 		t.Errorf("error = %q, want to contain 'failed to marshal body'", err.Error())
-	}
-}
-
-// Test getWithFailover with no cluster nodes
-func TestGetWithFailoverNoClusterNodes(t *testing.T) {
-	// Create primary that fails
-	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusServiceUnavailable)
-	}))
-	defer primary.Close()
-
-	client := NewClient(primary.URL, "", 30)
-	// No cluster nodes set
-
-	_, err := client.getWithFailover("/api/v1/healthz")
-	if err == nil {
-		t.Error("getWithFailover() should return error when primary fails and no cluster nodes")
 	}
 }
 
@@ -884,8 +677,8 @@ func TestSetUserContextEmpty(t *testing.T) {
 	}
 }
 
-// Test doRequestToServer without token
-func TestDoRequestToServerNoToken(t *testing.T) {
+// Test doRequest without token
+func TestDoRequestNoToken(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")
 		if auth != "" {
@@ -897,9 +690,9 @@ func TestDoRequestToServerNoToken(t *testing.T) {
 
 	// No token
 	client := NewClient(server.URL, "", 30)
-	resp, err := client.doRequestToServer(server.URL, "GET", "/test", nil)
+	resp, err := client.doRequest("GET", "/test", nil)
 	if err != nil {
-		t.Fatalf("doRequestToServer() error = %v", err)
+		t.Fatalf("doRequest() error = %v", err)
 	}
 	resp.Body.Close()
 }
@@ -960,8 +753,6 @@ func TestAutodiscoverResponseJSON(t *testing.T) {
 	response.Server.Features.Auth = true
 	response.Server.Features.Search = true
 	response.Server.Features.Register = false
-	response.Cluster.Primary = "https://primary.example.com"
-	response.Cluster.Nodes = []string{"node1", "node2"}
 	response.API.Version = "v1"
 	response.API.BasePath = "/api/v1"
 
@@ -981,8 +772,8 @@ func TestAutodiscoverResponseJSON(t *testing.T) {
 	if decoded.Server.Features.Auth != response.Server.Features.Auth {
 		t.Error("Server.Features.Auth mismatch")
 	}
-	if len(decoded.Cluster.Nodes) != len(response.Cluster.Nodes) {
-		t.Error("Cluster.Nodes length mismatch")
+	if decoded.API.Version != response.API.Version {
+		t.Errorf("API.Version = %q, want %q", decoded.API.Version, response.API.Version)
 	}
 }
 
@@ -1020,28 +811,13 @@ func TestSearchResponseJSON(t *testing.T) {
 	}
 }
 
-// Test get method (wrapper for getWithFailover)
-func TestGet(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"status": "ok"}`))
-	}))
-	defer server.Close()
-
-	client := NewClient(server.URL, "", 30)
-	resp, err := client.get("/test")
-	if err != nil {
-		t.Fatalf("get() error = %v", err)
-	}
-	resp.Body.Close()
-}
-
-// Test doRequestToServer with invalid URL (should fail at http.NewRequest)
-func TestDoRequestToServerInvalidMethod(t *testing.T) {
+// Test doRequest with invalid HTTP method (should fail at http.NewRequest)
+func TestDoRequestInvalidMethod(t *testing.T) {
 	client := NewClient("http://example.com", "", 30)
 	// Invalid method with space should cause http.NewRequest to fail
-	_, err := client.doRequestToServer("http://example.com", "INVALID METHOD", "/test", nil)
+	_, err := client.doRequest("INVALID METHOD", "/test", nil)
 	if err == nil {
-		t.Error("doRequestToServer() should return error for invalid method")
+		t.Error("doRequest() should return error for invalid method")
 	}
 	if !strings.Contains(err.Error(), "failed to create request") {
 		t.Errorf("error = %q, want to contain 'failed to create request'", err.Error())

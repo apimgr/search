@@ -615,10 +615,9 @@ type TaskConfig struct {
 }
 
 // CacheConfig represents cache configuration per AI.md PART 18
-// EVERY application MUST support Valkey/Redis for clustering
+// Valkey/Redis is used as a local cache only — not for clustering (AI.md line 800)
 type CacheConfig struct {
 	// Type: none (disabled), memory (default), valkey, redis
-	// IMPORTANT: Use valkey/redis for cluster or mixed mode deployments
 	Type string `yaml:"type"`
 
 	// Connection: Use EITHER url OR host/port/password (not both)
@@ -644,10 +643,6 @@ type CacheConfig struct {
 	// Default TTL in seconds
 	TTL int `yaml:"ttl"`
 
-	// Cluster settings (when using Valkey/Redis Cluster)
-	Cluster bool `yaml:"cluster"`
-	// e.g., ["node1:6379", "node2:6379"]
-	ClusterNodes []string `yaml:"cluster_nodes"`
 }
 
 // GeoIPConfig represents GeoIP configuration (uses MMDB from sapics/ip-location-db)

@@ -1429,32 +1429,6 @@ func TestStatsInfoSerialization(t *testing.T) {
 	}
 }
 
-// Tests for NodeInfo serialization
-
-func TestNodeInfoSerialization(t *testing.T) {
-	node := NodeInfo{
-		ID:       "node-1",
-		Hostname: "search-node-1.example.com",
-	}
-
-	data, err := json.Marshal(node)
-	if err != nil {
-		t.Fatalf("Failed to marshal NodeInfo: %v", err)
-	}
-
-	var unmarshaled NodeInfo
-	if err := json.Unmarshal(data, &unmarshaled); err != nil {
-		t.Fatalf("Failed to unmarshal NodeInfo: %v", err)
-	}
-
-	if unmarshaled.ID != node.ID {
-		t.Errorf("ID mismatch: got %q, want %q", unmarshaled.ID, node.ID)
-	}
-	if unmarshaled.Hostname != node.Hostname {
-		t.Errorf("Hostname mismatch: got %q, want %q", unmarshaled.Hostname, node.Hostname)
-	}
-}
-
 // Tests for InfoResponse serialization
 
 func TestInfoResponseSerialization(t *testing.T) {
@@ -1627,8 +1601,6 @@ func TestAutodiscoverResponseSerialization(t *testing.T) {
 	resp.Server.Features.Auth = true
 	resp.Server.Features.Search = true
 	resp.Server.Features.Register = true
-	resp.Cluster.Primary = "https://search.example.com"
-	resp.Cluster.Nodes = []string{"https://search.example.com", "https://search2.example.com"}
 	resp.API.Version = "v1"
 	resp.API.BasePath = "/api/v1"
 
@@ -1650,9 +1622,6 @@ func TestAutodiscoverResponseSerialization(t *testing.T) {
 	}
 	if unmarshaled.API.Version != resp.API.Version {
 		t.Errorf("API.Version mismatch: got %q, want %q", unmarshaled.API.Version, resp.API.Version)
-	}
-	if len(unmarshaled.Cluster.Nodes) != len(resp.Cluster.Nodes) {
-		t.Errorf("Cluster.Nodes length mismatch: got %d, want %d", len(unmarshaled.Cluster.Nodes), len(resp.Cluster.Nodes))
 	}
 }
 

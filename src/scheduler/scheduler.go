@@ -58,13 +58,14 @@ const (
 	StatusRetrying TaskStatus = "retrying"
 )
 
-// TaskType determines how tasks run in cluster mode
+// TaskType determines how a task acquires a run lock.
+// Per AI.md line 2055: single-instance only; TaskType is used for DB-level deduplication.
 type TaskType string
 
 const (
-	// TaskTypeGlobal runs on ONE node only (leader election)
+	// TaskTypeGlobal uses a database lock to prevent concurrent duplicate runs.
 	TaskTypeGlobal TaskType = "global"
-	// TaskTypeLocal runs on EVERY node
+	// TaskTypeLocal runs without acquiring a database lock.
 	TaskTypeLocal TaskType = "local"
 )
 
@@ -542,13 +543,13 @@ func (s *Scheduler) checkAndRunTasks(now time.Time) {
 	}
 }
 
-// runTask runs a single task with proper locking for cluster mode
-// Per AI.md PART 19: Implements exponential backoff retry policy
+// runTask runs a single task with DB-level deduplication for global tasks.
+// Per AI.md PART 18: Implements exponential backoff retry policy.
 func (s *Scheduler) runTask(task *Task) {
-	// For global tasks in cluster mode, acquire lock first
+	// For global tasks, acquire a DB lock to prevent duplicate concurrent runs.
 	if task.TaskType == TaskTypeGlobal && s.db != nil {
 		if !s.acquireTaskLock(task) {
-			// Another node is handling this task
+			// Lock not acquired — task is already running
 			return
 		}
 		defer s.releaseTaskLock(task)

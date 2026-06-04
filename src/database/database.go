@@ -290,17 +290,6 @@ func (dm *DatabaseManager) Ping(ctx context.Context) error {
 	return nil
 }
 
-// IsClusterMode returns true if running in cluster mode (remote database)
-// Per AI.md PART 5: Cluster mode uses remote database as source of truth
-func (dm *DatabaseManager) IsClusterMode() bool {
-	dm.mu.RLock()
-	defer dm.mu.RUnlock()
-	if dm.serverDB == nil {
-		return false
-	}
-	return dm.serverDB.IsRemote()
-}
-
 // NewDB creates a new database connection (single-database mode for direct use)
 func NewDB(cfg *Config) (*DB, error) {
 	if cfg == nil {

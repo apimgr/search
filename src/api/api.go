@@ -197,16 +197,13 @@ type HealthResponse struct {
 	// current UTC time ISO 8601
 	Timestamp string `json:"timestamp"`
 
-	// 5. Cluster info (PART 10: database & cluster)
-	Cluster ClusterInfo `json:"cluster"`
-
-	// 6. Features - PUBLIC only (PARTS 20, 32, 34, 35)
+	// 5. Features - PUBLIC only (PARTS 20, 32)
 	Features FeaturesInfo `json:"features"`
 
-	// 7. Component health checks (per spec line 16298-16308)
+	// 6. Component health checks (per AI.md PART 13)
 	Checks ChecksInfo `json:"checks"`
 
-	// 8. Statistics (public-safe aggregates)
+	// 7. Statistics (public-safe aggregates)
 	Stats StatsInfo `json:"stats"`
 }
 
@@ -239,7 +236,7 @@ type StatsInfo struct {
 	ActiveConns int `json:"active_connections"`
 }
 
-// ChecksInfo represents component health per AI.md PART 13 (line 16298-16308)
+// ChecksInfo represents component health per AI.md PART 13
 type ChecksInfo struct {
 	// PART 10: "ok" or "error"
 	Database string `json:"database"`
@@ -247,33 +244,10 @@ type ChecksInfo struct {
 	Cache string `json:"cache"`
 	// Disk space check
 	Disk string `json:"disk"`
-	// PART 19: "ok" or "error"
+	// PART 18: "ok" or "error"
 	Scheduler string `json:"scheduler"`
-	// PART 10: "ok" or "error" (if enabled)
-	Cluster string `json:"cluster,omitempty"`
-	// PART 32: "ok" or "error" (if enabled)
+	// PART 31: "ok" or "error" (if enabled)
 	Tor string `json:"tor,omitempty"`
-}
-
-// NodeInfo represents node information for cluster mode
-type NodeInfo struct {
-	ID       string `json:"id"`
-	Hostname string `json:"hostname"`
-}
-
-// ClusterInfo represents cluster status per AI.md PART 13
-type ClusterInfo struct {
-	Enabled bool `json:"enabled"`
-	// "connected", "disconnected"
-	Status string `json:"status,omitempty"`
-	// primary node public URL
-	Primary string `json:"primary,omitempty"`
-	// all node public URLs
-	Nodes []string `json:"nodes,omitempty"`
-	// total nodes
-	NodeCount int `json:"node_count,omitempty"`
-	// "primary" or "member"
-	Role string `json:"role,omitempty"`
 }
 
 // FeaturesInfo represents PUBLIC feature status per AI.md PART 13.
@@ -298,7 +272,7 @@ type TorInfo struct {
 }
 
 // AutodiscoverResponse represents /api/autodiscover response
-// Per AI.md PART 32 line 38077-38157: Autodiscover endpoint for CLI/agent
+// Per AI.md PART 32: Autodiscover endpoint for CLI/agent
 type AutodiscoverResponse struct {
 	Server struct {
 		Name     string `json:"name"`
@@ -310,10 +284,6 @@ type AutodiscoverResponse struct {
 			Register bool `json:"register"`
 		} `json:"features"`
 	} `json:"server"`
-	Cluster struct {
-		Primary string   `json:"primary"`
-		Nodes   []string `json:"nodes"`
-	} `json:"cluster"`
 	API struct {
 		Version  string `json:"version"`
 		BasePath string `json:"base_path"`
@@ -461,16 +431,7 @@ func (h *Handler) handleHealthz(w http.ResponseWriter, r *http.Request) {
 		Uptime:    h.formatDuration(time.Since(h.startTime)),
 		Mode:      h.config.Server.Mode,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
-		// 5. Cluster
-		Cluster: ClusterInfo{
-			Enabled:   false,
-			Status:    "",
-			Primary:   "",
-			Nodes:     []string{},
-			NodeCount: 1,
-			Role:      "",
-		},
-		// 6. Features per AI.md PART 13
+		// 5. Features per AI.md PART 13
 		Features: FeaturesInfo{
 			Tor: TorInfo{
 				Enabled:  torEnabled,
@@ -480,16 +441,15 @@ func (h *Handler) handleHealthz(w http.ResponseWriter, r *http.Request) {
 			},
 			GeoIP: h.config.Server.GeoIP.Enabled,
 		},
-		// 7. Checks per spec line 16298-16308
+		// 6. Checks per AI.md PART 13
 		Checks: ChecksInfo{
 			Database:  "ok",
 			Cache:     "disabled",
 			Disk:      h.checkDiskHealth(),
 			Scheduler: "ok",
-			Cluster:   "",
 			Tor:       torCheck,
 		},
-		// 8. Stats
+		// 7. Stats
 		Stats: StatsInfo{
 			RequestsTotal: h.getRequestsTotal(),
 			Requests24h:   h.getRequests24h(),
@@ -545,11 +505,6 @@ func (h *Handler) handleAutodiscover(w http.ResponseWriter, r *http.Request) {
 	resp.Server.Features.Auth = false
 	resp.Server.Features.Search = true
 	resp.Server.Features.Register = false
-
-	// Cluster info - for CLI/agent failover per AI.md PART 32 line 42791-42818
-	resp.Cluster.Primary = serverURL
-	// Single node cluster by default
-	resp.Cluster.Nodes = []string{serverURL}
 
 	// API info
 	resp.API.Version = APIVersion

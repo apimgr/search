@@ -1166,7 +1166,7 @@ type AuditEntry struct {
 	Details map[string]interface{} `json:"details,omitempty"`
 	// "success" or "failure"
 	Result string `json:"result"`
-	// Node ID (cluster mode)
+	// Node ID (hostname of the server that generated the event)
 	NodeID string `json:"node_id,omitempty"`
 	// Reason for action (if provided)
 	Reason string `json:"reason,omitempty"`

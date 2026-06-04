@@ -234,7 +234,9 @@ func (mm *MixedModeManager) IsMixedMode() bool {
 	return mm.config.ServerDB.Driver != mm.config.UsersDB.Driver
 }
 
-// GetMode returns a string describing the current mode
+// GetMode returns a string describing the current database mode.
+// Returns "standalone" (SQLite), "remote" (remote single DB), or "mixed" (different drivers).
+// Per AI.md line 2055: this app is always single-instance; "remote" means a remote DB, not cluster.
 func (mm *MixedModeManager) GetMode() string {
 	mm.mu.RLock()
 	defer mm.mu.RUnlock()
@@ -243,7 +245,7 @@ func (mm *MixedModeManager) GetMode() string {
 		if mm.config.ServerDB.Driver == "sqlite" {
 			return "standalone"
 		}
-		return "cluster"
+		return "remote"
 	}
 	return "mixed"
 }
