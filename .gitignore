@@ -106,6 +106,7 @@ $RECYCLE.BIN/
 # Build output
 binaries/
 releases/
+coverage.out
 
 # Go build cache and XDG runtime dirs (should never be committed)
 .cache/
