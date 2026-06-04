@@ -224,11 +224,6 @@
   "user.security.recovery_keys.download": "Télécharger en TXT",
   "user.security.recovery_keys.copy": "Tout copier",
   "user.security.recovery_keys.confirm": "J'ai sauvegardé mes clés de récupération",
-  "user.security.sessions": "Sessions actives",
-  "user.security.sessions.current": "Session actuelle",
-  "user.security.sessions.revoke": "Révoquer",
-  "user.security.sessions.revoke_all": "Révoquer toutes les autres sessions",
-
   "user.tokens": "Jetons API",
   "user.tokens.title": "Vos jetons API",
   "user.tokens.create": "Créer un nouveau jeton",

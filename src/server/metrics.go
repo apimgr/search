@@ -57,12 +57,7 @@ type Metrics struct {
 	schedulerLastRun      *prometheus.GaugeVec
 
 	// Authentication metrics
-	authAttempts       *prometheus.CounterVec
-	authSessionsActive prometheus.Gauge
-
-	// Business metrics
-	usersTotal  prometheus.Gauge
-	usersActive prometheus.Gauge
+	authAttempts *prometheus.CounterVec
 
 	// Search metrics
 	searchesTotal  prometheus.Counter
@@ -247,33 +242,13 @@ func NewMetrics(cfg *config.Config) *Metrics {
 			[]string{"task"},
 		),
 
-		// Authentication metrics per AI.md PART 29
+		// Authentication metrics per AI.md PART 20
 		authAttempts: promauto.With(reg).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "search_auth_attempts_total",
 				Help: "Total authentication attempts",
 			},
 			[]string{"method", "status"},
-		),
-		authSessionsActive: promauto.With(reg).NewGauge(
-			prometheus.GaugeOpts{
-				Name: "search_auth_sessions_active",
-				Help: "Number of active sessions",
-			},
-		),
-
-		// Business metrics per AI.md PART 29
-		usersTotal: promauto.With(reg).NewGauge(
-			prometheus.GaugeOpts{
-				Name: "search_users_total",
-				Help: "Total number of registered users",
-			},
-		),
-		usersActive: promauto.With(reg).NewGauge(
-			prometheus.GaugeOpts{
-				Name: "search_users_active",
-				Help: "Number of users active in last 24 hours",
-			},
 		),
 
 		// Search metrics
@@ -479,17 +454,6 @@ func (m *Metrics) SetActiveRequests(n int) {
 func (m *Metrics) SetDBConnections(open, inUse int) {
 	m.dbConnectionsOpen.Set(float64(open))
 	m.dbConnectionsInUse.Set(float64(inUse))
-}
-
-// SetActiveSessions sets the current number of active sessions
-func (m *Metrics) SetActiveSessions(n int) {
-	m.authSessionsActive.Set(float64(n))
-}
-
-// SetUserCounts sets the user count metrics
-func (m *Metrics) SetUserCounts(total, active int) {
-	m.usersTotal.Set(float64(total))
-	m.usersActive.Set(float64(active))
 }
 
 // SetCacheStats sets cache statistics

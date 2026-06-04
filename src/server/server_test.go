@@ -923,8 +923,6 @@ func TestMetrics(t *testing.T) {
 	t.Run("Setters", func(t *testing.T) {
 		m.SetActiveRequests(5)
 		m.SetDBConnections(10, 3)
-		m.SetActiveSessions(100)
-		m.SetUserCounts(1000, 500)
 		m.SetCacheStats("search", 500, 10000000)
 	})
 

@@ -434,11 +434,11 @@ func TestSecurityLogger(t *testing.T) {
 func TestAuditActionConstants(t *testing.T) {
 	// Test a sample of audit actions
 	actions := []AuditAction{
-		AuditActionLogin,
-		AuditActionLogout,
 		AuditActionConfigChange,
-		AuditActionUserCreate,
+		AuditActionRateLimitExceeded,
+		AuditActionTokenCreate,
 		AuditActionBackupCreate,
+		AuditActionServerStarted,
 	}
 
 	for _, action := range actions {
@@ -451,9 +451,7 @@ func TestAuditActionConstants(t *testing.T) {
 func TestAuditCategoryConstants(t *testing.T) {
 	categories := []AuditCategory{
 		AuditCategoryAuth,
-		AuditCategoryAdmin,
 		AuditCategoryConfig,
-		AuditCategoryUser,
 		AuditCategorySecurity,
 		AuditCategoryData,
 		AuditCategorySystem,
@@ -488,28 +486,21 @@ func TestAuditLogger(t *testing.T) {
 	logger := NewAuditLogger(path)
 	defer logger.Close()
 
-	logger.LogLogin("admin", "192.168.1.1", true)
-	logger.LogLogin("baduser", "10.0.0.1", false)
-	logger.LogLogout("admin", "192.168.1.1")
-	logger.LogConfigChange("admin", "192.168.1.1", "engines", "enabled google")
-	logger.LogEngineToggle("admin", "192.168.1.1", "google", true)
-	logger.LogTokenCreate("admin", "192.168.1.1", "api-token-1")
-	logger.LogTokenRevoke("admin", "192.168.1.1", "api-token-1")
-	logger.LogReload("admin", "192.168.1.1", true, "config reloaded")
-	logger.LogUserCreate("admin", "192.168.1.1", "newuser")
-	logger.LogUserDelete("admin", "192.168.1.1", "olduser")
-	logger.LogBackupCreate("admin", "192.168.1.1", "backup.tar.gz")
-	logger.LogBackupRestore("admin", "192.168.1.1", "backup.tar.gz", true)
-	logger.Log2FAEnable("admin", "192.168.1.1")
-	logger.Log2FADisable("admin", "192.168.1.1", "testuser")
+	logger.LogConfigChange("operator", "192.168.1.1", "engines", "enabled google")
+	logger.LogTokenCreate("operator", "192.168.1.1", "api-token-1")
+	logger.LogTokenRevoke("operator", "192.168.1.1", "api-token-1")
+	logger.LogBackupCreate("operator", "192.168.1.1", "backup.tar.gz")
+	logger.LogBackupRestore("operator", "192.168.1.1", "backup.tar.gz", true)
+	logger.LogIPBlocked("operator", "192.168.1.1", "10.0.0.5", "brute force")
+	logger.LogRateLimitExceeded("10.0.0.6", "/api/v1/search", 100)
 
 	content, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("Failed to read log file: %v", err)
 	}
 	logContent := string(content)
-	if !strings.Contains(logContent, "admin.login") {
-		t.Error("Log should contain admin.login event")
+	if !strings.Contains(logContent, "config.updated") {
+		t.Error("Log should contain config.updated event")
 	}
 }
 
@@ -532,11 +523,11 @@ func TestAuditEntryStruct(t *testing.T) {
 	entry := AuditEntry{
 		ID:       "audit_test123",
 		Time:     time.Now(),
-		Event:    AuditActionLogin,
-		Category: AuditCategoryAuth,
+		Event:    AuditActionConfigChange,
+		Category: AuditCategoryConfig,
 		Severity: AuditSeverityInfo,
 		Actor: AuditActor{
-			Username: "admin",
+			Username: "operator",
 			IP:       "192.168.1.1",
 		},
 		Result: "success",
@@ -545,7 +536,7 @@ func TestAuditEntryStruct(t *testing.T) {
 	if entry.ID != "audit_test123" {
 		t.Error("Entry ID should be set")
 	}
-	if entry.Event != AuditActionLogin {
+	if entry.Event != AuditActionConfigChange {
 		t.Error("Entry Event should be set")
 	}
 }
@@ -1335,10 +1326,10 @@ func TestAuditLoggerLogWithPresetIDAndTime(t *testing.T) {
 	entry := AuditEntry{
 		ID:       "audit_PRESET123456",
 		Time:     presetTime,
-		Event:    AuditActionLogin,
-		Category: AuditCategoryAuth,
+		Event:    AuditActionConfigChange,
+		Category: AuditCategoryConfig,
 		Severity: AuditSeverityInfo,
-		Actor:    AuditActor{Username: "admin", IP: "10.0.0.1"},
+		Actor:    AuditActor{Username: "operator", IP: "10.0.0.1"},
 		Result:   "success",
 	}
 	logger.Log(entry)
@@ -1363,11 +1354,11 @@ func TestAuditLoggerLogWithoutTarget(t *testing.T) {
 	defer logger.Close()
 
 	entry := AuditEntry{
-		Event:    AuditActionLogout,
+		Event:    AuditActionRateLimitExceeded,
 		Category: AuditCategoryAuth,
 		Severity: AuditSeverityInfo,
-		Actor:    AuditActor{Username: "user", IP: "1.2.3.4"},
-		Result:   "success",
+		Actor:    AuditActor{IP: "1.2.3.4"},
+		Result:   "blocked",
 		// No target
 		Target: nil,
 	}
@@ -1388,7 +1379,7 @@ func TestAuditLoggerRotate(t *testing.T) {
 	logger := NewAuditLogger(path)
 	defer logger.Close()
 
-	logger.LogLogin("admin", "1.1.1.1", true)
+	logger.LogConfigChange("operator", "1.1.1.1", "test", "init")
 
 	err := logger.Rotate()
 	if err != nil {
@@ -1402,7 +1393,7 @@ func TestAuditLoggerRotateWithExistingFile(t *testing.T) {
 	logger := NewAuditLogger(path)
 	defer logger.Close()
 
-	logger.LogLogin("admin", "1.1.1.1", true)
+	logger.LogConfigChange("operator", "1.1.1.1", "test", "init")
 
 	// Create the rotated file
 	timestamp := time.Now().Format("20060102")
@@ -1437,7 +1428,7 @@ func TestAuditLoggerEmptyPath(t *testing.T) {
 	defer logger.Close()
 
 	// Should not panic
-	logger.LogLogin("admin", "1.1.1.1", true)
+	logger.LogConfigChange("operator", "1.1.1.1", "test", "init")
 }
 
 func TestResultFromBool(t *testing.T) {
@@ -1470,21 +1461,21 @@ func TestAuditLoggerBackupRestoreFailure(t *testing.T) {
 	}
 }
 
-func TestAuditLoggerReloadFailure(t *testing.T) {
+func TestAuditLoggerBackupFailure(t *testing.T) {
 	tmpDir := t.TempDir()
-	path := filepath.Join(tmpDir, "audit-reload-fail.log")
+	path := filepath.Join(tmpDir, "audit-backup-fail2.log")
 	logger := NewAuditLogger(path)
 	defer logger.Close()
 
-	logger.LogReload("admin", "1.1.1.1", false, "config error")
+	logger.LogBackupFailed("operator", "1.1.1.1", "disk full")
 
 	content, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("Failed to read log file: %v", err)
 	}
 	logContent := string(content)
-	if !strings.Contains(logContent, "failure") {
-		t.Error("Log should contain failure result")
+	if !strings.Contains(logContent, "backup.failed") {
+		t.Error("Log should contain backup.failed event")
 	}
 }
 
@@ -1865,20 +1856,10 @@ func TestAllTLSCipherSuites(t *testing.T) {
 	}
 }
 
-func TestAuditCategoryTokensAndOrganization(t *testing.T) {
-	// Test additional audit categories
-	categories := []struct {
-		cat  AuditCategory
-		want string
-	}{
-		{AuditCategoryTokens, "tokens"},
-		{AuditCategoryOrganization, "organization"},
-	}
-
-	for _, c := range categories {
-		if string(c.cat) != c.want {
-			t.Errorf("AuditCategory = %q, want %q", c.cat, c.want)
-		}
+func TestAuditCategoryTokens(t *testing.T) {
+	// Test token audit category
+	if string(AuditCategoryTokens) != "tokens" {
+		t.Errorf("AuditCategoryTokens = %q, want %q", AuditCategoryTokens, "tokens")
 	}
 }
 
@@ -1958,58 +1939,18 @@ func TestAuditEntryWithAllFields(t *testing.T) {
 }
 
 func TestMoreAuditActions(t *testing.T) {
-	// Test additional audit actions defined in the package
+	// Test all spec-defined audit actions (AI.md PART 11)
+	// Two-tier auth: no sessions, no user accounts, no admin login (AI.md line 11398)
 	actions := []struct {
 		action AuditAction
 		want   string
 	}{
-		{AuditActionLoginFailed, "admin.login_failed"},
-		{AuditActionAdminCreated, "admin.created"},
-		{AuditActionAdminDeleted, "admin.deleted"},
-		{AuditActionPasswordChanged, "admin.password_changed"},
-		{AuditActionMFAEnabled, "admin.mfa_enabled"},
-		{AuditActionMFADisabled, "admin.mfa_disabled"},
-		{AuditActionTokenRegenerated, "admin.token_regenerated"},
-		{AuditActionSessionExpired, "admin.session_expired"},
-		{AuditActionSessionRevoked, "admin.session_revoked"},
-		{AuditActionUserRegistered, "user.registered"},
-		{AuditActionUserLogin, "user.login"},
-		{AuditActionUserLogout, "user.logout"},
-		{AuditActionUserLoginFailed, "user.login_failed"},
-		{AuditActionUserSuspended, "user.suspended"},
-		{AuditActionUserUnsuspended, "user.unsuspended"},
-		{AuditActionUserRoleChanged, "user.role_changed"},
-		{AuditActionUserPasswordChanged, "user.password_changed"},
-		{AuditActionUserPasswordResetReq, "user.password_reset_requested"},
-		{AuditActionUserPasswordResetDone, "user.password_reset_completed"},
-		{AuditActionUserEmailVerified, "user.email_verified"},
-		{AuditActionUserMFAEnabled, "user.mfa_enabled"},
-		{AuditActionUserMFADisabled, "user.mfa_disabled"},
-		{AuditActionUserRecoveryKeyUsed, "user.recovery_key_used"},
-		{AuditActionOrgCreated, "org.created"},
-		{AuditActionOrgDeleted, "org.deleted"},
-		{AuditActionOrgSettingsUpdated, "org.settings_updated"},
-		{AuditActionOrgMemberInvited, "org.member_invited"},
-		{AuditActionOrgMemberJoined, "org.member_joined"},
-		{AuditActionOrgMemberRemoved, "org.member_removed"},
-		{AuditActionOrgMemberLeft, "org.member_left"},
-		{AuditActionOrgRoleChanged, "org.role_changed"},
-		{AuditActionOrgRoleCreated, "org.role_created"},
-		{AuditActionOrgRoleUpdated, "org.role_updated"},
-		{AuditActionOrgRoleDeleted, "org.role_deleted"},
-		{AuditActionOrgTokenCreated, "org.token_created"},
-		{AuditActionOrgTokenRevoked, "org.token_revoked"},
-		{AuditActionOrgOwnershipTransfer, "org.ownership_transferred"},
-		{AuditActionOrgBillingUpdated, "org.billing_updated"},
+		{AuditActionConfigChange, "config.updated"},
 		{AuditActionConfigSMTPUpdated, "config.smtp_updated"},
 		{AuditActionConfigSSLUpdated, "config.ssl_updated"},
 		{AuditActionConfigSSLExpired, "config.ssl_expired"},
 		{AuditActionConfigTorRegen, "config.tor_address_regenerated"},
 		{AuditActionConfigBrandingUpdate, "config.branding_updated"},
-		{AuditActionConfigOIDCAdded, "config.oidc_provider_added"},
-		{AuditActionConfigOIDCRemoved, "config.oidc_provider_removed"},
-		{AuditActionConfigLDAPUpdated, "config.ldap_updated"},
-		{AuditActionConfigAdminGroups, "config.admin_groups_updated"},
 		{AuditActionRateLimitExceeded, "security.rate_limit_exceeded"},
 		{AuditActionIPBlocked, "security.ip_blocked"},
 		{AuditActionIPUnblocked, "security.ip_unblocked"},
@@ -2018,8 +1959,11 @@ func TestMoreAuditActions(t *testing.T) {
 		{AuditActionInvalidToken, "security.invalid_token"},
 		{AuditActionBruteForceDetected, "security.brute_force_detected"},
 		{AuditActionSuspiciousActivity, "security.suspicious_activity"},
+		{AuditActionTokenCreate, "token.created"},
+		{AuditActionTokenRevoke, "token.revoked"},
 		{AuditActionTokenExpired, "token.expired"},
-		{AuditActionTokenUsed, "token.used"},
+		{AuditActionBackupCreate, "backup.created"},
+		{AuditActionBackupRestore, "backup.restored"},
 		{AuditActionBackupDelete, "backup.deleted"},
 		{AuditActionBackupFailed, "backup.failed"},
 		{AuditActionServerStarted, "server.started"},
@@ -2029,8 +1973,6 @@ func TestMoreAuditActions(t *testing.T) {
 		{AuditActionServerUpdated, "server.updated"},
 		{AuditActionSchedulerTaskFail, "scheduler.task_failed"},
 		{AuditActionSchedulerTaskRun, "scheduler.task_manual_run"},
-		{AuditActionPermissionChange, "user.permission_change"},
-		{AuditActionAdminInvite, "admin.invite"},
 	}
 
 	for _, a := range actions {

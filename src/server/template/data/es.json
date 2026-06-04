@@ -224,11 +224,6 @@
   "user.security.recovery_keys.download": "Descargar como TXT",
   "user.security.recovery_keys.copy": "Copiar todo",
   "user.security.recovery_keys.confirm": "He guardado mis claves de recuperación",
-  "user.security.sessions": "Sesiones activas",
-  "user.security.sessions.current": "Sesión actual",
-  "user.security.sessions.revoke": "Revocar",
-  "user.security.sessions.revoke_all": "Revocar todas las demás sesiones",
-
   "user.tokens": "Tokens API",
   "user.tokens.title": "Tus tokens API",
   "user.tokens.create": "Crear nuevo token",

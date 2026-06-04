@@ -224,11 +224,6 @@
   "user.security.recovery_keys.download": "Als TXT herunterladen",
   "user.security.recovery_keys.copy": "Alle kopieren",
   "user.security.recovery_keys.confirm": "Ich habe meine Wiederherstellungsschlüssel gespeichert",
-  "user.security.sessions": "Aktive Sitzungen",
-  "user.security.sessions.current": "Aktuelle Sitzung",
-  "user.security.sessions.revoke": "Widerrufen",
-  "user.security.sessions.revoke_all": "Alle anderen Sitzungen widerrufen",
-
   "user.tokens": "API-Token",
   "user.tokens.title": "Ihre API-Token",
   "user.tokens.create": "Neues Token erstellen",
