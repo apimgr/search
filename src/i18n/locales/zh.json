@@ -432,49 +432,6 @@
       "api_token_events": "API 令牌创建/撤销",
       "backup_restore_operations": "备份和恢复操作"
     },
-    "setup_page": {
-      "setup_token": "设置令牌",
-      "setup_token_placeholder": "输入控制台中的设置令牌",
-      "setup_token_help": "设置令牌已显示在服务器控制台中。使用 --maintenance setup 重新生成。",
-      "create_admin_account": "创建管理员账户",
-      "description": "欢迎！创建主管理员账户以开始使用。",
-      "username_help": "3-32 个字符，小写字母、数字、下划线、连字符",
-      "email_placeholder": "admin@example.com",
-      "password_placeholder": "至少 8 个字符",
-      "confirm_password_placeholder": "重复密码",
-      "username_placeholder": "admin"
-    },
-    "admins_page": {
-      "invite_created": "邀请已创建",
-      "share_invite": "将此链接分享给新管理员：",
-      "invite_warning": "此链接将在 7 天后过期，并且只能使用一次。",
-      "invite_new_admin": "邀请新管理员",
-      "suggested_username_optional": "建议用户名（可选）",
-      "suggested_username_placeholder": "留空以便受邀者自行选择",
-      "create_invite_link": "创建邀请链接",
-      "total": "总计",
-      "role": "角色",
-      "source": "来源",
-      "two_factor": "2FA",
-      "last_login": "上次登录",
-      "actions": "操作",
-      "no_admins": "没有可显示的管理员",
-      "admin_role": "管理员",
-      "primary_role": "主管理员",
-      "never": "从未",
-      "delete_confirm_message": "删除此管理员账户？此操作无法撤销。",
-      "delete_confirm_title": "删除管理员",
-      "privacy_note": "注意：出于隐私原因，您只能查看自己的管理员账户。主管理员可以查看所有管理员。"
-    },
-    "invite_accept_page": {
-      "title": "接受管理员邀请",
-      "description": "您已被邀请成为服务器管理员。请在下方创建您的账户。"
-    },
-    "invite_error_page": {
-      "title": "邀请无效",
-      "description": "请联系服务器管理员获取新的邀请链接。",
-      "go_to_login": "前往登录"
-    },
     "config_page": {
       "title": "服务器配置",
       "site_title": "站点标题",

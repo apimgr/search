@@ -432,49 +432,6 @@
       "api_token_events": "API-Token-Erstellung/-Widerruf",
       "backup_restore_operations": "Sicherungs- und Wiederherstellungsvorgänge"
     },
-    "setup_page": {
-      "setup_token": "Setup-Token",
-      "setup_token_placeholder": "Geben Sie das Setup-Token aus der Konsole ein",
-      "setup_token_help": "Das Setup-Token wurde in der Serverkonsole angezeigt. Verwenden Sie --maintenance setup, um es neu zu erzeugen.",
-      "create_admin_account": "Admin-Konto erstellen",
-      "description": "Willkommen! Erstellen Sie das primäre Administratorkonto, um zu beginnen.",
-      "username_help": "3-32 Zeichen, Kleinbuchstaben, Zahlen, Unterstrich, Bindestrich",
-      "email_placeholder": "admin@example.com",
-      "password_placeholder": "Mindestens 8 Zeichen",
-      "confirm_password_placeholder": "Passwort wiederholen",
-      "username_placeholder": "admin"
-    },
-    "admins_page": {
-      "invite_created": "Einladung erstellt",
-      "share_invite": "Diesen Link mit dem neuen Admin teilen:",
-      "invite_warning": "Dieser Link läuft in 7 Tagen ab und kann nur einmal verwendet werden.",
-      "invite_new_admin": "Neuen Admin einladen",
-      "suggested_username_optional": "Vorgeschlagener Benutzername (optional)",
-      "suggested_username_placeholder": "Leer lassen, damit der Eingeladene wählen kann",
-      "create_invite_link": "Einladungslink erstellen",
-      "total": "gesamt",
-      "role": "Rolle",
-      "source": "Quelle",
-      "two_factor": "2FA",
-      "last_login": "Zuletzt angemeldet",
-      "actions": "Aktionen",
-      "no_admins": "Keine Admins vorhanden",
-      "admin_role": "Admin",
-      "primary_role": "Primär",
-      "never": "Nie",
-      "delete_confirm_message": "Diesen Admin löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
-      "delete_confirm_title": "Admin löschen",
-      "privacy_note": "Hinweis: Aus Datenschutzgründen können Sie nur Ihr eigenes Admin-Konto sehen. Der primäre Admin kann alle Admins sehen."
-    },
-    "invite_accept_page": {
-      "title": "Admin-Einladung annehmen",
-      "description": "Sie wurden eingeladen, Serveradministrator zu werden. Erstellen Sie unten Ihr Konto."
-    },
-    "invite_error_page": {
-      "title": "Ungültige Einladung",
-      "description": "Bitte kontaktieren Sie den Serveradministrator für einen neuen Einladungslink.",
-      "go_to_login": "Zum Login"
-    },
     "config_page": {
       "title": "Serverkonfiguration",
       "site_title": "Seitentitel",

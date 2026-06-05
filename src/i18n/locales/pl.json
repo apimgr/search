@@ -432,49 +432,6 @@
       "api_token_events": "Tworzenie/cofanie tokenów API",
       "backup_restore_operations": "Operacje kopii zapasowej i przywracania"
     },
-    "setup_page": {
-      "setup_token": "Token konfiguracji",
-      "setup_token_placeholder": "Wprowadź token konfiguracji z konsoli",
-      "setup_token_help": "Token konfiguracji został wyświetlony w konsoli serwera. Użyj --maintenance setup, aby wygenerować go ponownie.",
-      "create_admin_account": "Utwórz konto administratora",
-      "description": "Witamy! Utwórz główne konto administratora, aby rozpocząć.",
-      "username_help": "3-32 znaki, małe litery, cyfry, podkreślenie, myślnik",
-      "email_placeholder": "admin@example.com",
-      "password_placeholder": "Min. 8 znaków",
-      "confirm_password_placeholder": "Powtórz hasło",
-      "username_placeholder": "admin"
-    },
-    "admins_page": {
-      "invite_created": "Utworzono zaproszenie",
-      "share_invite": "Udostępnij ten link nowemu administratorowi:",
-      "invite_warning": "Ten link wygasa za 7 dni i może zostać użyty tylko raz.",
-      "invite_new_admin": "Zaproś nowego administratora",
-      "suggested_username_optional": "Sugerowana nazwa użytkownika (opcjonalnie)",
-      "suggested_username_placeholder": "Pozostaw puste, aby zaproszony wybrał sam",
-      "create_invite_link": "Utwórz link zaproszenia",
-      "total": "łącznie",
-      "role": "Rola",
-      "source": "Źródło",
-      "two_factor": "2FA",
-      "last_login": "Ostatnie logowanie",
-      "actions": "Akcje",
-      "no_admins": "Brak administratorów do wyświetlenia",
-      "admin_role": "Administrator",
-      "primary_role": "Główny",
-      "never": "Nigdy",
-      "delete_confirm_message": "Usunąć to konto administratora? Tej akcji nie można cofnąć.",
-      "delete_confirm_title": "Usuń administratora",
-      "privacy_note": "Uwaga: ze względów prywatności możesz zobaczyć tylko własne konto administratora. Główny administrator może zobaczyć wszystkich administratorów."
-    },
-    "invite_accept_page": {
-      "title": "Zaakceptuj zaproszenie administratora",
-      "description": "Zostałeś zaproszony do zostania administratorem serwera. Utwórz poniżej swoje konto."
-    },
-    "invite_error_page": {
-      "title": "Nieprawidłowe zaproszenie",
-      "description": "Skontaktuj się z administratorem serwera, aby uzyskać nowy link zaproszenia.",
-      "go_to_login": "Przejdź do logowania"
-    },
     "config_page": {
       "title": "Konfiguracja serwera",
       "site_title": "Tytuł witryny",

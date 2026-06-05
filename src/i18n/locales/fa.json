@@ -432,49 +432,6 @@
       "api_token_events": "ایجاد/لغو توکن‌های API",
       "backup_restore_operations": "عملیات پشتیبان‌گیری و بازیابی"
     },
-    "setup_page": {
-      "setup_token": "توکن راه‌اندازی",
-      "setup_token_placeholder": "توکن راه‌اندازی را از کنسول وارد کنید",
-      "setup_token_help": "توکن راه‌اندازی در کنسول سرور نمایش داده شد. برای تولید دوباره از --maintenance setup استفاده کنید.",
-      "create_admin_account": "ایجاد حساب مدیر",
-      "description": "خوش آمدید! برای شروع، حساب مدیر اصلی را ایجاد کنید.",
-      "username_help": "۳ تا ۳۲ کاراکتر، حروف کوچک، اعداد، زیرخط، خط تیره",
-      "email_placeholder": "admin@example.com",
-      "password_placeholder": "حداقل ۸ کاراکتر",
-      "confirm_password_placeholder": "تکرار رمز عبور",
-      "username_placeholder": "admin"
-    },
-    "admins_page": {
-      "invite_created": "دعوت ایجاد شد",
-      "share_invite": "این لینک را با مدیر جدید به اشتراک بگذارید:",
-      "invite_warning": "این لینک تا ۷ روز معتبر است و فقط یک بار قابل استفاده است.",
-      "invite_new_admin": "دعوت از مدیر جدید",
-      "suggested_username_optional": "نام کاربری پیشنهادی (اختیاری)",
-      "suggested_username_placeholder": "خالی بگذارید تا دعوت‌شونده خودش انتخاب کند",
-      "create_invite_link": "ایجاد لینک دعوت",
-      "total": "در مجموع",
-      "role": "نقش",
-      "source": "منبع",
-      "two_factor": "2FA",
-      "last_login": "آخرین ورود",
-      "actions": "اقدامات",
-      "no_admins": "هیچ مدیری برای نمایش وجود ندارد",
-      "admin_role": "مدیر",
-      "primary_role": "اصلی",
-      "never": "هرگز",
-      "delete_confirm_message": "این حساب مدیر حذف شود؟ این عمل قابل بازگشت نیست.",
-      "delete_confirm_title": "حذف مدیر",
-      "privacy_note": "نکته: برای حفظ حریم خصوصی، فقط می‌توانید حساب مدیر خود را ببینید. مدیر اصلی می‌تواند همه مدیران را ببیند."
-    },
-    "invite_accept_page": {
-      "title": "پذیرش دعوت مدیر",
-      "description": "از شما دعوت شده است که مدیر سرور شوید. حساب خود را در زیر ایجاد کنید."
-    },
-    "invite_error_page": {
-      "title": "دعوت نامعتبر",
-      "description": "برای دریافت لینک دعوت جدید با مدیر سرور تماس بگیرید.",
-      "go_to_login": "رفتن به ورود"
-    },
     "config_page": {
       "title": "پیکربندی سرور",
       "site_title": "عنوان سایت",

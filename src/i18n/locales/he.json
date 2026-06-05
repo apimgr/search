@@ -432,49 +432,6 @@
       "api_token_events": "יצירה/שלילה של אסימוני API",
       "backup_restore_operations": "פעולות גיבוי ושחזור"
     },
-    "setup_page": {
-      "setup_token": "אסימון הגדרה",
-      "setup_token_placeholder": "הזן את אסימון ההגדרה מהמסוף",
-      "setup_token_help": "אסימון ההגדרה הוצג במסוף השרת. השתמש ב־--maintenance setup כדי לחדש אותו.",
-      "create_admin_account": "צור חשבון מנהל",
-      "description": "ברוך הבא! צור את חשבון המנהל הראשי כדי להתחיל.",
-      "username_help": "3-32 תווים, אותיות קטנות, ספרות, קו תחתון, מקף",
-      "email_placeholder": "admin@example.com",
-      "password_placeholder": "לפחות 8 תווים",
-      "confirm_password_placeholder": "הזן שוב את הסיסמה",
-      "username_placeholder": "admin"
-    },
-    "admins_page": {
-      "invite_created": "ההזמנה נוצרה",
-      "share_invite": "שתף את הקישור הזה עם המנהל החדש:",
-      "invite_warning": "תוקף הקישור פג בעוד 7 ימים וניתן להשתמש בו פעם אחת בלבד.",
-      "invite_new_admin": "הזמן מנהל חדש",
-      "suggested_username_optional": "שם משתמש מוצע (אופציונלי)",
-      "suggested_username_placeholder": "השאר ריק כדי שהמוזמן יבחר בעצמו",
-      "create_invite_link": "צור קישור הזמנה",
-      "total": "בסך הכול",
-      "role": "תפקיד",
-      "source": "מקור",
-      "two_factor": "2FA",
-      "last_login": "כניסה אחרונה",
-      "actions": "פעולות",
-      "no_admins": "אין מנהלים להצגה",
-      "admin_role": "מנהל",
-      "primary_role": "ראשי",
-      "never": "מעולם לא",
-      "delete_confirm_message": "למחוק את חשבון המנהל הזה? לא ניתן לבטל פעולה זו.",
-      "delete_confirm_title": "מחיקת מנהל",
-      "privacy_note": "הערה: מטעמי פרטיות, אתה יכול לראות רק את חשבון המנהל שלך. המנהל הראשי יכול לראות את כל המנהלים."
-    },
-    "invite_accept_page": {
-      "title": "קבל הזמנת מנהל",
-      "description": "הוזמנת להפוך למנהל השרת. צור את החשבון שלך למטה."
-    },
-    "invite_error_page": {
-      "title": "הזמנה לא תקינה",
-      "description": "פנה למנהל השרת כדי לקבל קישור הזמנה חדש.",
-      "go_to_login": "עבור להתחברות"
-    },
     "config_page": {
       "title": "תצורת השרת",
       "site_title": "כותרת האתר",

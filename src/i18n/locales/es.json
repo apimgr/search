@@ -432,49 +432,6 @@
       "api_token_events": "Creación/revocación de tokens API",
       "backup_restore_operations": "Operaciones de respaldo y restauración"
     },
-    "setup_page": {
-      "setup_token": "Token de configuración",
-      "setup_token_placeholder": "Ingrese el token de configuración desde la consola",
-      "setup_token_help": "El token de configuración se mostró en la consola del servidor. Use --maintenance setup para regenerarlo.",
-      "create_admin_account": "Crear cuenta de administrador",
-      "description": "¡Bienvenido! Cree la cuenta de administrador principal para comenzar.",
-      "username_help": "3-32 caracteres, letras minúsculas, números, guion bajo, guion",
-      "email_placeholder": "admin@example.com",
-      "password_placeholder": "Mín. 8 caracteres",
-      "confirm_password_placeholder": "Repetir contraseña",
-      "username_placeholder": "admin"
-    },
-    "admins_page": {
-      "invite_created": "Invitación creada",
-      "share_invite": "Comparta este enlace con el nuevo administrador:",
-      "invite_warning": "Este enlace caduca en 7 días y solo puede usarse una vez.",
-      "invite_new_admin": "Invitar nuevo administrador",
-      "suggested_username_optional": "Nombre de usuario sugerido (opcional)",
-      "suggested_username_placeholder": "Déjelo vacío para que el invitado elija",
-      "create_invite_link": "Crear enlace de invitación",
-      "total": "en total",
-      "role": "Rol",
-      "source": "Origen",
-      "two_factor": "2FA",
-      "last_login": "Último acceso",
-      "actions": "Acciones",
-      "no_admins": "No hay administradores para mostrar",
-      "admin_role": "Administrador",
-      "primary_role": "Principal",
-      "never": "Nunca",
-      "delete_confirm_message": "¿Eliminar esta cuenta de administrador? Esta acción no se puede deshacer.",
-      "delete_confirm_title": "Eliminar administrador",
-      "privacy_note": "Nota: por privacidad, solo puede ver su propia cuenta de administrador. El administrador principal puede ver a todos los administradores."
-    },
-    "invite_accept_page": {
-      "title": "Aceptar invitación de administrador",
-      "description": "Ha sido invitado a convertirse en administrador del servidor. Cree su cuenta a continuación."
-    },
-    "invite_error_page": {
-      "title": "Invitación no válida",
-      "description": "Póngase en contacto con el administrador del servidor para obtener un nuevo enlace de invitación.",
-      "go_to_login": "Ir al inicio de sesión"
-    },
     "config_page": {
       "title": "Configuración del servidor",
       "site_title": "Título del sitio",

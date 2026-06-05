@@ -432,49 +432,6 @@
       "api_token_events": "Creazione/revoca di token API",
       "backup_restore_operations": "Operazioni di backup e ripristino"
     },
-    "setup_page": {
-      "setup_token": "Token di configurazione",
-      "setup_token_placeholder": "Inserisci il token di configurazione dalla console",
-      "setup_token_help": "Il token di configurazione è stato mostrato nella console del server. Usa --maintenance setup per rigenerarlo.",
-      "create_admin_account": "Crea account admin",
-      "description": "Benvenuto! Crea l’account amministratore principale per iniziare.",
-      "username_help": "3-32 caratteri, lettere minuscole, numeri, underscore, trattino",
-      "email_placeholder": "admin@example.com",
-      "password_placeholder": "Min. 8 caratteri",
-      "confirm_password_placeholder": "Ripeti password",
-      "username_placeholder": "admin"
-    },
-    "admins_page": {
-      "invite_created": "Invito creato",
-      "share_invite": "Condividi questo link con il nuovo admin:",
-      "invite_warning": "Questo link scade tra 7 giorni e può essere usato una sola volta.",
-      "invite_new_admin": "Invita nuovo admin",
-      "suggested_username_optional": "Nome utente suggerito (opzionale)",
-      "suggested_username_placeholder": "Lascia vuoto per lasciare scegliere all’invitato",
-      "create_invite_link": "Crea link di invito",
-      "total": "totali",
-      "role": "Ruolo",
-      "source": "Fonte",
-      "two_factor": "2FA",
-      "last_login": "Ultimo accesso",
-      "actions": "Azioni",
-      "no_admins": "Nessun admin da mostrare",
-      "admin_role": "Admin",
-      "primary_role": "Primario",
-      "never": "Mai",
-      "delete_confirm_message": "Eliminare questo account admin? Questa azione non può essere annullata.",
-      "delete_confirm_title": "Elimina admin",
-      "privacy_note": "Nota: per motivi di privacy, puoi vedere solo il tuo account admin. L’admin primario può vedere tutti gli admin."
-    },
-    "invite_accept_page": {
-      "title": "Accetta invito admin",
-      "description": "Sei stato invitato a diventare amministratore del server. Crea il tuo account qui sotto."
-    },
-    "invite_error_page": {
-      "title": "Invito non valido",
-      "description": "Contatta l’amministratore del server per un nuovo link di invito.",
-      "go_to_login": "Vai al login"
-    },
     "config_page": {
       "title": "Configurazione del server",
       "site_title": "Titolo del sito",

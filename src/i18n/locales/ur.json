@@ -432,49 +432,6 @@
       "api_token_events": "API ٹوکن بنانا/واپس لینا",
       "backup_restore_operations": "بیک اپ اور بحالی کی کارروائیاں"
     },
-    "setup_page": {
-      "setup_token": "سیٹ اپ ٹوکن",
-      "setup_token_placeholder": "کنسول سے سیٹ اپ ٹوکن درج کریں",
-      "setup_token_help": "سیٹ اپ ٹوکن سرور کنسول میں دکھایا گیا تھا۔ اسے دوبارہ بنانے کے لیے --maintenance setup استعمال کریں۔",
-      "create_admin_account": "ایڈمن اکاؤنٹ بنائیں",
-      "description": "خوش آمدید! شروع کرنے کے لیے بنیادی ایڈمن اکاؤنٹ بنائیں۔",
-      "username_help": "3-32 حروف، چھوٹے حروف، اعداد، انڈرسکور، ہائفن",
-      "email_placeholder": "admin@example.com",
-      "password_placeholder": "کم از کم 8 حروف",
-      "confirm_password_placeholder": "پاس ورڈ دوبارہ لکھیں",
-      "username_placeholder": "admin"
-    },
-    "admins_page": {
-      "invite_created": "دعوت بن گئی",
-      "share_invite": "یہ لنک نئے ایڈمن کے ساتھ شیئر کریں:",
-      "invite_warning": "یہ لنک 7 دن میں ختم ہو جائے گا اور صرف ایک بار استعمال ہو سکتا ہے۔",
-      "invite_new_admin": "نئے ایڈمن کو مدعو کریں",
-      "suggested_username_optional": "تجویز کردہ صارف نام (اختیاری)",
-      "suggested_username_placeholder": "خالی چھوڑیں تاکہ مدعو شخص خود منتخب کرے",
-      "create_invite_link": "دعوتی لنک بنائیں",
-      "total": "کل",
-      "role": "کردار",
-      "source": "ماخذ",
-      "two_factor": "2FA",
-      "last_login": "آخری لاگ اِن",
-      "actions": "اقدامات",
-      "no_admins": "دکھانے کے لیے کوئی ایڈمن نہیں",
-      "admin_role": "ایڈمن",
-      "primary_role": "بنیادی",
-      "never": "کبھی نہیں",
-      "delete_confirm_message": "کیا یہ ایڈمن اکاؤنٹ حذف کرنا ہے؟ اس عمل کو واپس نہیں لیا جا سکتا۔",
-      "delete_confirm_title": "ایڈمن حذف کریں",
-      "privacy_note": "نوٹ: رازداری کے لیے، آپ صرف اپنا ایڈمن اکاؤنٹ دیکھ سکتے ہیں۔ بنیادی ایڈمن تمام ایڈمنز دیکھ سکتا ہے۔"
-    },
-    "invite_accept_page": {
-      "title": "ایڈمن دعوت قبول کریں",
-      "description": "آپ کو سرور ایڈمنسٹریٹر بننے کی دعوت دی گئی ہے۔ نیچے اپنا اکاؤنٹ بنائیں۔"
-    },
-    "invite_error_page": {
-      "title": "غلط دعوت",
-      "description": "نئے دعوتی لنک کے لیے سرور ایڈمنسٹریٹر سے رابطہ کریں۔",
-      "go_to_login": "لاگ اِن پر جائیں"
-    },
     "config_page": {
       "title": "سرور ترتیب",
       "site_title": "سائٹ کا عنوان",

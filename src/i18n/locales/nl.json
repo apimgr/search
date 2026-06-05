@@ -432,49 +432,6 @@
       "api_token_events": "Aanmaken/intrekken van API-tokens",
       "backup_restore_operations": "Back-up- en herstelbewerkingen"
     },
-    "setup_page": {
-      "setup_token": "Installatietoken",
-      "setup_token_placeholder": "Voer het installatietoken uit de console in",
-      "setup_token_help": "Het installatietoken werd in de serverconsole weergegeven. Gebruik --maintenance setup om het opnieuw te genereren.",
-      "create_admin_account": "Adminaccount maken",
-      "description": "Welkom! Maak het primaire beheerdersaccount aan om te beginnen.",
-      "username_help": "3-32 tekens, kleine letters, cijfers, underscore, koppelteken",
-      "email_placeholder": "admin@example.com",
-      "password_placeholder": "Min. 8 tekens",
-      "confirm_password_placeholder": "Herhaal wachtwoord",
-      "username_placeholder": "admin"
-    },
-    "admins_page": {
-      "invite_created": "Uitnodiging gemaakt",
-      "share_invite": "Deel deze link met de nieuwe beheerder:",
-      "invite_warning": "Deze link verloopt over 7 dagen en kan slechts één keer worden gebruikt.",
-      "invite_new_admin": "Nieuwe beheerder uitnodigen",
-      "suggested_username_optional": "Voorgestelde gebruikersnaam (optioneel)",
-      "suggested_username_placeholder": "Leeg laten zodat de genodigde kan kiezen",
-      "create_invite_link": "Uitnodigingslink maken",
-      "total": "totaal",
-      "role": "Rol",
-      "source": "Bron",
-      "two_factor": "2FA",
-      "last_login": "Laatste login",
-      "actions": "Acties",
-      "no_admins": "Geen beheerders om weer te geven",
-      "admin_role": "Beheerder",
-      "primary_role": "Primair",
-      "never": "Nooit",
-      "delete_confirm_message": "Dit beheerdersaccount verwijderen? Deze actie kan niet ongedaan worden gemaakt.",
-      "delete_confirm_title": "Beheerder verwijderen",
-      "privacy_note": "Opmerking: om privacyredenen kunt u alleen uw eigen beheerdersaccount bekijken. De primaire beheerder kan alle beheerders zien."
-    },
-    "invite_accept_page": {
-      "title": "Beheerdersuitnodiging accepteren",
-      "description": "U bent uitgenodigd om serverbeheerder te worden. Maak hieronder uw account aan."
-    },
-    "invite_error_page": {
-      "title": "Ongeldige uitnodiging",
-      "description": "Neem contact op met de serverbeheerder voor een nieuwe uitnodigingslink.",
-      "go_to_login": "Ga naar inloggen"
-    },
     "config_page": {
       "title": "Serverconfiguratie",
       "site_title": "Sitetitel",

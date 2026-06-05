@@ -432,49 +432,6 @@
       "api_token_events": "API token creation/revocation",
       "backup_restore_operations": "Backup and restore operations"
     },
-    "setup_page": {
-      "setup_token": "Setup Token",
-      "setup_token_placeholder": "Enter the setup token from console",
-      "setup_token_help": "The setup token was displayed in the server console. Use --maintenance setup to regenerate.",
-      "create_admin_account": "Create Admin Account",
-      "description": "Welcome! Create the primary administrator account to get started.",
-      "username_help": "3-32 characters, lowercase letters, numbers, underscore, hyphen",
-      "email_placeholder": "admin@example.com",
-      "password_placeholder": "Min. 8 characters",
-      "confirm_password_placeholder": "Repeat password",
-      "username_placeholder": "admin"
-    },
-    "admins_page": {
-      "invite_created": "Invite Created",
-      "share_invite": "Share this link with the new admin:",
-      "invite_warning": "This link expires in 7 days and can only be used once.",
-      "invite_new_admin": "Invite New Admin",
-      "suggested_username_optional": "Suggested Username (optional)",
-      "suggested_username_placeholder": "Leave empty for invite to choose",
-      "create_invite_link": "Create Invite Link",
-      "total": "total",
-      "role": "Role",
-      "source": "Source",
-      "two_factor": "2FA",
-      "last_login": "Last Login",
-      "actions": "Actions",
-      "no_admins": "No admins to display",
-      "admin_role": "Admin",
-      "primary_role": "Primary",
-      "never": "Never",
-      "delete_confirm_message": "Delete this admin account? This action cannot be undone.",
-      "delete_confirm_title": "Delete Admin",
-      "privacy_note": "Note: For privacy, you can only view your own admin account. The primary admin can see all admins."
-    },
-    "invite_accept_page": {
-      "title": "Accept Admin Invite",
-      "description": "You've been invited to become a server administrator. Create your account below."
-    },
-    "invite_error_page": {
-      "title": "Invalid Invite",
-      "description": "Please contact the server administrator for a new invite link.",
-      "go_to_login": "Go to Login"
-    },
     "config_page": {
       "title": "Server Configuration",
       "site_title": "Site Title",

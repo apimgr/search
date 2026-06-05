@@ -432,49 +432,6 @@
       "api_token_events": "APIトークンの作成/失効",
       "backup_restore_operations": "バックアップと復元の操作"
     },
-    "setup_page": {
-      "setup_token": "セットアップトークン",
-      "setup_token_placeholder": "コンソールのセットアップトークンを入力してください",
-      "setup_token_help": "セットアップトークンはサーバーコンソールに表示されました。再生成するには --maintenance setup を使用してください。",
-      "create_admin_account": "管理者アカウントを作成",
-      "description": "ようこそ。開始するには、最初の管理者アカウントを作成してください。",
-      "username_help": "3〜32文字、小文字、数字、アンダースコア、ハイフン",
-      "email_placeholder": "admin@example.com",
-      "password_placeholder": "8文字以上",
-      "confirm_password_placeholder": "パスワードを再入力",
-      "username_placeholder": "admin"
-    },
-    "admins_page": {
-      "invite_created": "招待を作成しました",
-      "share_invite": "このリンクを新しい管理者と共有してください:",
-      "invite_warning": "このリンクは7日で期限切れになり、1回だけ使用できます。",
-      "invite_new_admin": "新しい管理者を招待",
-      "suggested_username_optional": "候補のユーザー名（任意）",
-      "suggested_username_placeholder": "空欄のままにすると招待された人が選べます",
-      "create_invite_link": "招待リンクを作成",
-      "total": "件",
-      "role": "役割",
-      "source": "ソース",
-      "two_factor": "2FA",
-      "last_login": "最終ログイン",
-      "actions": "操作",
-      "no_admins": "表示する管理者がいません",
-      "admin_role": "管理者",
-      "primary_role": "プライマリ",
-      "never": "なし",
-      "delete_confirm_message": "この管理者アカウントを削除しますか？ この操作は元に戻せません。",
-      "delete_confirm_title": "管理者を削除",
-      "privacy_note": "注意: プライバシー保護のため、自分の管理者アカウントのみ表示できます。プライマリ管理者はすべての管理者を表示できます。"
-    },
-    "invite_accept_page": {
-      "title": "管理者招待を受け入れる",
-      "description": "サーバー管理者になるよう招待されています。以下でアカウントを作成してください。"
-    },
-    "invite_error_page": {
-      "title": "無効な招待",
-      "description": "新しい招待リンクについてはサーバー管理者に連絡してください。",
-      "go_to_login": "ログインへ"
-    },
     "config_page": {
       "title": "サーバー設定",
       "site_title": "サイトタイトル",

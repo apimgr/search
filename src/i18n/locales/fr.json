@@ -432,49 +432,6 @@
       "api_token_events": "Création/révocation de jetons API",
       "backup_restore_operations": "Opérations de sauvegarde et de restauration"
     },
-    "setup_page": {
-      "setup_token": "Jeton d’installation",
-      "setup_token_placeholder": "Entrez le jeton d’installation depuis la console",
-      "setup_token_help": "Le jeton d’installation a été affiché dans la console du serveur. Utilisez --maintenance setup pour le régénérer.",
-      "create_admin_account": "Créer un compte admin",
-      "description": "Bienvenue ! Créez le compte administrateur principal pour commencer.",
-      "username_help": "3 à 32 caractères, lettres minuscules, chiffres, tiret bas, trait d’union",
-      "email_placeholder": "admin@example.com",
-      "password_placeholder": "8 caractères minimum",
-      "confirm_password_placeholder": "Répéter le mot de passe",
-      "username_placeholder": "admin"
-    },
-    "admins_page": {
-      "invite_created": "Invitation créée",
-      "share_invite": "Partagez ce lien avec le nouvel administrateur :",
-      "invite_warning": "Ce lien expire dans 7 jours et ne peut être utilisé qu’une seule fois.",
-      "invite_new_admin": "Inviter un nouvel admin",
-      "suggested_username_optional": "Nom d’utilisateur suggéré (optionnel)",
-      "suggested_username_placeholder": "Laisser vide pour laisser l’invité choisir",
-      "create_invite_link": "Créer le lien d’invitation",
-      "total": "au total",
-      "role": "Rôle",
-      "source": "Source",
-      "two_factor": "2FA",
-      "last_login": "Dernière connexion",
-      "actions": "Actions",
-      "no_admins": "Aucun administrateur à afficher",
-      "admin_role": "Admin",
-      "primary_role": "Principal",
-      "never": "Jamais",
-      "delete_confirm_message": "Supprimer ce compte admin ? Cette action est irréversible.",
-      "delete_confirm_title": "Supprimer l’admin",
-      "privacy_note": "Remarque : pour des raisons de confidentialité, vous ne pouvez voir que votre propre compte admin. L’admin principal peut voir tous les admins."
-    },
-    "invite_accept_page": {
-      "title": "Accepter l’invitation admin",
-      "description": "Vous avez été invité à devenir administrateur du serveur. Créez votre compte ci-dessous."
-    },
-    "invite_error_page": {
-      "title": "Invitation invalide",
-      "description": "Veuillez contacter l’administrateur du serveur pour obtenir un nouveau lien d’invitation.",
-      "go_to_login": "Aller à la connexion"
-    },
     "config_page": {
       "title": "Configuration du serveur",
       "site_title": "Titre du site",

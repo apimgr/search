@@ -432,49 +432,6 @@
       "api_token_events": "إنشاء/سحب رموز API",
       "backup_restore_operations": "عمليات النسخ الاحتياطي والاستعادة"
     },
-    "setup_page": {
-      "setup_token": "رمز الإعداد",
-      "setup_token_placeholder": "أدخل رمز الإعداد من وحدة التحكم",
-      "setup_token_help": "تم عرض رمز الإعداد في وحدة تحكم الخادم. استخدم --maintenance setup لإعادة إنشائه.",
-      "create_admin_account": "إنشاء حساب مسؤول",
-      "description": "مرحبًا! أنشئ حساب المسؤول الأساسي للبدء.",
-      "username_help": "3-32 حرفًا، أحرف صغيرة، أرقام، شرطة سفلية، شرطة",
-      "email_placeholder": "admin@example.com",
-      "password_placeholder": "8 أحرف على الأقل",
-      "confirm_password_placeholder": "أعد إدخال كلمة المرور",
-      "username_placeholder": "admin"
-    },
-    "admins_page": {
-      "invite_created": "تم إنشاء الدعوة",
-      "share_invite": "شارك هذا الرابط مع المسؤول الجديد:",
-      "invite_warning": "ينتهي هذا الرابط خلال 7 أيام ولا يمكن استخدامه إلا مرة واحدة.",
-      "invite_new_admin": "دعوة مسؤول جديد",
-      "suggested_username_optional": "اسم مستخدم مقترح (اختياري)",
-      "suggested_username_placeholder": "اتركه فارغًا ليختار المدعو بنفسه",
-      "create_invite_link": "إنشاء رابط الدعوة",
-      "total": "إجمالي",
-      "role": "الدور",
-      "source": "المصدر",
-      "two_factor": "2FA",
-      "last_login": "آخر تسجيل دخول",
-      "actions": "الإجراءات",
-      "no_admins": "لا يوجد مسؤولون للعرض",
-      "admin_role": "مسؤول",
-      "primary_role": "أساسي",
-      "never": "أبدًا",
-      "delete_confirm_message": "هل تريد حذف حساب المسؤول هذا؟ لا يمكن التراجع عن هذا الإجراء.",
-      "delete_confirm_title": "حذف المسؤول",
-      "privacy_note": "ملاحظة: حفاظًا على الخصوصية، يمكنك عرض حسابك الإداري فقط. يمكن للمسؤول الأساسي رؤية جميع المسؤولين."
-    },
-    "invite_accept_page": {
-      "title": "قبول دعوة المسؤول",
-      "description": "لقد تمت دعوتك لتصبح مسؤول خادم. أنشئ حسابك أدناه."
-    },
-    "invite_error_page": {
-      "title": "دعوة غير صالحة",
-      "description": "يرجى التواصل مع مسؤول الخادم للحصول على رابط دعوة جديد.",
-      "go_to_login": "الانتقال إلى تسجيل الدخول"
-    },
     "config_page": {
       "title": "إعدادات الخادم",
       "site_title": "عنوان الموقع",
