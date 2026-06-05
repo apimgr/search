@@ -102,13 +102,6 @@
                     <span class="component-name">{{t "health.components.scheduler"}}</span>
                     <span class="component-status">{{if eq .Health.Checks.Scheduler "ok"}}{{t "health.component_operational"}}{{else}}{{t "health.component_error"}}</span>
                 </li>
-                {{if .Health.Checks.Cluster}}
-                <li class="component-item {{if eq .Health.Checks.Cluster "ok"}}component-ok{{else}}component-error{{end}}">
-                    <span class="component-icon">{{if eq .Health.Checks.Cluster "ok"}}✓{{else}}✕{{end}}</span>
-                    <span class="component-name">{{t "health.components.cluster"}}</span>
-                    <span class="component-status">{{if eq .Health.Checks.Cluster "ok"}}{{t "health.component_operational"}}{{else}}{{t "health.component_error"}}</span>
-                </li>
-                {{end}}
                 {{if .Health.Checks.Tor}}
                 <li class="component-item {{if eq .Health.Checks.Tor "ok"}}component-ok{{else}}component-error{{end}}">
                     <span class="component-icon">{{if eq .Health.Checks.Tor "ok"}}✓{{else}}✕{{end}}</span>
@@ -156,46 +149,6 @@
             </ul>
         </section>
 
-        {{/* Cluster Info per AI.md PART 13 */}}
-        {{if .Health.Cluster.Enabled}}
-        <section class="section-card">
-            <h2>🔗 {{t "health.cluster_heading"}}</h2>
-            <dl class="health-info">
-                <div class="info-row">
-                    <dt>{{t "health.status"}}</dt>
-                    <dd>
-                        {{if eq .Health.Cluster.Status "connected"}}
-                        <span class="badge badge-success">{{t "health.connected"}}</span>
-                        {{else}}
-                        <span class="badge badge-error">{{t "health.disconnected"}}</span>
-                        {{end}}
-                    </dd>
-                </div>
-                <div class="info-row">
-                    <dt>{{t "health.role"}}</dt>
-                    <dd>
-                        {{if eq .Health.Cluster.Role "primary"}}
-                        <span class="badge badge-primary">{{t "health.primary_role"}}</span>
-                        {{else}}
-                        <span class="badge">{{t "health.member_role"}}</span>
-                        {{end}}
-                    </dd>
-                </div>
-                {{if .Health.Cluster.Primary}}
-                <div class="info-row">
-                    <dt>{{t "health.primary_label"}}</dt>
-                    <dd><code>{{.Health.Cluster.Primary}}</code></dd>
-                </div>
-                {{end}}
-                {{if .Health.Cluster.NodeCount}}
-                <div class="info-row">
-                    <dt>{{t "health.nodes"}}</dt>
-                    <dd>{{.Health.Cluster.NodeCount}}</dd>
-                </div>
-                {{end}}
-            </dl>
-        </section>
-        {{end}}
 
         {{/* Statistics per AI.md PART 13 */}}
         <section class="section-card">

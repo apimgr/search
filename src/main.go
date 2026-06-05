@@ -734,9 +734,8 @@ func showStatus() {
 	fmt.Printf("  Uptime: %s\n", uptime)
 	fmt.Println()
 
-	// Node status
-	fmt.Println("Node: standalone")
-	fmt.Println("Cluster: disabled")
+	// Instance mode (single-instance per AI.md line 2055)
+	fmt.Println("Mode: standalone")
 	fmt.Println()
 
 	// Tor Hidden Service status

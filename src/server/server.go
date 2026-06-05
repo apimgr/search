@@ -65,7 +65,7 @@ type Server struct {
 	metrics        *Metrics
 	dbManager      *database.DatabaseManager
 	alertManager   *alert.Manager
-	// Per AI.md PART 5: Cluster config sync (NON-NEGOTIABLE)
+	// Per AI.md PART 5: config sync persists settings back to server.yml
 	configSync *config.ConfigSync
 
 	// Internationalization per AI.md PART 32

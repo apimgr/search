@@ -112,7 +112,7 @@ type Task struct {
 	// Scheduled retry time (if retrying)
 	NextRetry time.Time
 
-	// Cluster locking
+	// DB-level deduplication lock (per AI.md line 2055: single instance)
 	LockedBy string
 	LockedAt time.Time
 }

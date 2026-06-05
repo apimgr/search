@@ -402,7 +402,7 @@ func (db *DB) IsReady() bool {
 }
 
 // IsRemote returns true if using a remote database (not local SQLite)
-// Per AI.md PART 5: Cluster mode uses remote database
+// Per AI.md PART 5: remote databases (libsql/Turso) are supported in single-instance mode
 func (db *DB) IsRemote() bool {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
