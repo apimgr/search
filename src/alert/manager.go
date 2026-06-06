@@ -642,7 +642,6 @@ func (m *Manager) sendVerificationEmail(alert *Alert, verifyToken, manageToken s
 	manageURL := alert.BaseURL + "/alerts/manage/" + manageToken
 	subject, body, err := m.templates.Render(email.TemplateEmailVerification, &email.EmailVerificationData{
 		TemplateData:     email.NewTemplateData(siteName(m.serverConfig), alert.BaseURL, m.serverConfig.Server.Email.From.Email),
-		Username:         "there",
 		Email:            alert.Email,
 		VerificationLink: verifyURL,
 		ExpiresIn:        "24 hours",

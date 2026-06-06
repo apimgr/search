@@ -214,7 +214,7 @@ func (s *Server) handleLivez(w http.ResponseWriter, r *http.Request) {
 
 // buildHealthInfo constructs the HealthResponse per AI.md PART 13.
 // Field order matches canonical spec: project, status, version, build, runtime,
-// cluster, features, checks, stats.
+// features, checks, stats.
 func (s *Server) buildHealthInfo() *HealthResponse {
 	// Per AI.md PART 13: Build Tor feature status
 	torInfo := TorInfo{
@@ -239,7 +239,7 @@ func (s *Server) buildHealthInfo() *HealthResponse {
 		status = "maintenance"
 	}
 
-	// Per AI.md PART 13: checks (database, cache, disk, scheduler, cluster, tor)
+	// Per AI.md PART 13: checks (database, cache, disk, scheduler, tor)
 	checks := ChecksInfo{
 		Cache:     "disabled",
 		Disk:      "ok",

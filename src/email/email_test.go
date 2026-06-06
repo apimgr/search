@@ -744,63 +744,12 @@ func TestNewEmailTemplate(t *testing.T) {
 	}
 }
 
-func TestEmailTemplateRenderWelcome(t *testing.T) {
-	et := NewEmailTemplate()
-
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &WelcomeData{
-		TemplateData: baseData,
-		Username:     "testuser",
-		Email:        "test@example.com",
-	}
-
-	subject, body, err := et.Render(TemplateWelcome, data)
-	if err != nil {
-		t.Fatalf("Render() error = %v", err)
-	}
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-	if body == "" {
-		t.Error("Body should not be empty")
-	}
-	if !strings.Contains(body, "testuser") {
-		t.Error("Body should contain username")
-	}
-}
-
-func TestEmailTemplateRenderPasswordReset(t *testing.T) {
-	et := NewEmailTemplate()
-
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &PasswordResetData{
-		TemplateData: baseData,
-		Username:     "testuser",
-		ResetLink:    "https://example.com/reset?token=abc123",
-		ExpiresIn:    "1 hour",
-		IPAddress:    "192.168.1.1",
-		RequestedAt:  time.Now(),
-	}
-
-	subject, body, err := et.Render(TemplatePasswordReset, data)
-	if err != nil {
-		t.Fatalf("Render() error = %v", err)
-	}
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-	if !strings.Contains(body, "reset") || !strings.Contains(strings.ToLower(body), "password") {
-		t.Error("Body should mention password reset")
-	}
-}
-
 func TestEmailTemplateRenderEmailVerification(t *testing.T) {
 	et := NewEmailTemplate()
 
 	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
 	data := &EmailVerificationData{
 		TemplateData:     baseData,
-		Username:         "testuser",
 		Email:            "test@example.com",
 		VerificationLink: "https://example.com/verify?token=xyz789",
 		ExpiresIn:        "24 hours",
@@ -815,32 +764,6 @@ func TestEmailTemplateRenderEmailVerification(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(body), "verif") {
 		t.Error("Body should mention verification")
-	}
-}
-
-func TestEmailTemplateRenderLoginNotification(t *testing.T) {
-	et := NewEmailTemplate()
-
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &LoginNotificationData{
-		TemplateData: baseData,
-		Username:     "testuser",
-		LoginTime:    time.Now(),
-		IPAddress:    "192.168.1.100",
-		UserAgent:    "Chrome on Windows",
-		Location:     "New York, US",
-		IsNewDevice:  true,
-	}
-
-	subject, body, err := et.Render(TemplateLoginNotification, data)
-	if err != nil {
-		t.Fatalf("Render() error = %v", err)
-	}
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-	if !strings.Contains(body, "192.168.1.100") {
-		t.Error("Body should contain IP address")
 	}
 }
 
@@ -867,125 +790,6 @@ func TestEmailTemplateRenderSecurityAlert(t *testing.T) {
 	}
 	if !strings.Contains(body, "Suspicious Activity") {
 		t.Error("Body should contain event")
-	}
-}
-
-func TestEmailTemplateRenderPasswordChanged(t *testing.T) {
-	et := NewEmailTemplate()
-
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &PasswordChangedData{
-		TemplateData: baseData,
-		Username:     "testuser",
-		ChangedAt:    time.Now(),
-		IPAddress:    "192.168.1.50",
-		UserAgent:    "Firefox on Linux",
-	}
-
-	subject, body, err := et.Render(TemplatePasswordChanged, data)
-	if err != nil {
-		t.Fatalf("Render() error = %v", err)
-	}
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-	if !strings.Contains(strings.ToLower(body), "password") {
-		t.Error("Body should mention password")
-	}
-}
-
-func TestEmailTemplateRenderTwoFactorEnabled(t *testing.T) {
-	et := NewEmailTemplate()
-
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &TwoFactorEnabledData{
-		TemplateData: baseData,
-		Username:     "testuser",
-		EnabledAt:    time.Now(),
-		IPAddress:    "192.168.1.70",
-		Method:       "TOTP",
-	}
-
-	subject, body, err := et.Render(Template2FAEnabled, data)
-	if err != nil {
-		t.Fatalf("Render() error = %v", err)
-	}
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-	if !strings.Contains(body, "TOTP") {
-		t.Error("Body should contain 2FA method")
-	}
-}
-
-func TestEmailTemplateRenderTwoFactorDisabled(t *testing.T) {
-	et := NewEmailTemplate()
-
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &TwoFactorDisabledData{
-		TemplateData: baseData,
-		Username:     "testuser",
-		DisabledAt:   time.Now(),
-		IPAddress:    "192.168.1.80",
-		Reason:       "User requested",
-	}
-
-	subject, _, err := et.Render(Template2FADisabled, data)
-	if err != nil {
-		t.Fatalf("Render() error = %v", err)
-	}
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-}
-
-func TestEmailTemplateRenderAccountLocked(t *testing.T) {
-	et := NewEmailTemplate()
-
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &AccountLockedData{
-		TemplateData:       baseData,
-		Username:           "testuser",
-		Reason:             "Too many failed login attempts",
-		LockedAt:           time.Now(),
-		UnlockInstructions: "Contact support or wait 30 minutes",
-	}
-
-	subject, body, err := et.Render(TemplateAccountLocked, data)
-	if err != nil {
-		t.Fatalf("Render() error = %v", err)
-	}
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-	if !strings.Contains(body, "Locked") {
-		t.Error("Body should mention account being locked")
-	}
-}
-
-func TestEmailTemplateRenderAPITokenCreated(t *testing.T) {
-	et := NewEmailTemplate()
-
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &APITokenCreatedData{
-		TemplateData: baseData,
-		Username:     "testuser",
-		TokenName:    "Production API Key",
-		Permissions:  []string{"read", "write"},
-		ExpiresAt:    time.Now().Add(90 * 24 * time.Hour),
-		CreatedAt:    time.Now(),
-		IPAddress:    "192.168.1.100",
-	}
-
-	subject, body, err := et.Render(TemplateAPITokenCreated, data)
-	if err != nil {
-		t.Fatalf("Render() error = %v", err)
-	}
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-	if !strings.Contains(body, "Production API Key") {
-		t.Error("Body should contain token name")
 	}
 }
 
@@ -1023,8 +827,6 @@ func TestEmailTemplateRenderWeeklyReport(t *testing.T) {
 		PeriodStart:   time.Now().AddDate(0, 0, -7),
 		PeriodEnd:     time.Now(),
 		TotalSearches: 15000,
-		UniqueUsers:   2500,
-		TopQueries:    []string{"golang", "python", "docker"},
 		EngineStats:   map[string]int{"Google": 8000, "DuckDuckGo": 7000},
 		ErrorCount:    10,
 	}
@@ -1038,30 +840,6 @@ func TestEmailTemplateRenderWeeklyReport(t *testing.T) {
 	}
 	if !strings.Contains(body, "15000") {
 		t.Error("Body should contain total searches")
-	}
-}
-
-func TestEmailTemplateRenderAdminInvite(t *testing.T) {
-	et := NewEmailTemplate()
-
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &AdminInviteData{
-		TemplateData: baseData,
-		InviterName:  "John Admin",
-		InviteLink:   "https://example.com/invite/abc123",
-		ExpiresIn:    "48 hours",
-		Message:      "Welcome to the team!",
-	}
-
-	subject, body, err := et.Render(TemplateAdminInvite, data)
-	if err != nil {
-		t.Fatalf("Render() error = %v", err)
-	}
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-	if !strings.Contains(body, "John Admin") {
-		t.Error("Body should contain inviter name")
 	}
 }
 
@@ -1137,9 +915,9 @@ func TestEmailTemplateRenderInvalidType(t *testing.T) {
 	et := NewEmailTemplate()
 
 	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &WelcomeData{
+	data := &TestEmailData{
 		TemplateData: baseData,
-		Username:     "test",
+		SentAt:       time.Now(),
 	}
 
 	_, _, err := et.Render(TemplateType("invalid_template"), data)
@@ -1152,7 +930,7 @@ func TestEmailTemplateRenderNilData(t *testing.T) {
 	et := NewEmailTemplate()
 
 	// Nil data should error since templates reference data fields
-	_, _, err := et.Render(TemplateWelcome, nil)
+	_, _, err := et.Render(TemplateTest, nil)
 	// May error depending on implementation
 	_ = err
 }
@@ -1163,22 +941,19 @@ func TestEmailTemplatePreviewTemplate(t *testing.T) {
 	et := NewEmailTemplate()
 
 	templates := []TemplateType{
-		TemplateWelcome,
-		TemplatePasswordReset,
 		TemplateEmailVerification,
-		TemplateLoginNotification,
 		TemplateSecurityAlert,
-		TemplatePasswordChanged,
-		Template2FAEnabled,
-		Template2FADisabled,
-		TemplateAccountLocked,
 		TemplateAdminAlert,
 		TemplateWeeklyReport,
-		TemplateAPITokenCreated,
-		TemplateAdminInvite,
 		TemplateBackupCompleted,
 		TemplateUpdateAvailable,
 		TemplateMaintenanceNotice,
+		TemplateBackupFailed,
+		TemplateSSLExpiring,
+		TemplateSSLRenewed,
+		TemplateSchedulerError,
+		TemplateBreachAdminAlert,
+		TemplateTest,
 	}
 
 	for _, tmplType := range templates {
@@ -1215,17 +990,17 @@ func TestGetAllTemplateTypes(t *testing.T) {
 		t.Fatal("GetAllTemplateTypes() returned empty slice")
 	}
 
-	// Should contain at least the common types
+	// Should contain at least the core operator notification types
 	found := make(map[TemplateType]bool)
 	for _, info := range types {
 		found[info.Type] = true
 	}
 
 	expectedTypes := []TemplateType{
-		TemplateWelcome,
-		TemplatePasswordReset,
-		TemplateLoginNotification,
+		TemplateEmailVerification,
 		TemplateSecurityAlert,
+		TemplateAdminAlert,
+		TemplateBackupCompleted,
 	}
 
 	for _, tt := range expectedTypes {
@@ -1254,34 +1029,26 @@ func TestGetAllTemplateTypesInfo(t *testing.T) {
 // Tests for IsAccountEmail
 
 func TestIsAccountEmail(t *testing.T) {
-	accountTemplates := []TemplateType{
-		TemplateWelcome,
-		TemplatePasswordReset,
+	// This project has no user accounts; all templates are operator/system notifications.
+	allTemplates := []TemplateType{
 		TemplateEmailVerification,
-		TemplatePasswordChanged,
-		TemplateLoginNotification,
-		TemplateAccountLocked,
-		TemplateSecurityAlert,
-		Template2FAEnabled,
-		Template2FADisabled,
-	}
-
-	for _, tt := range accountTemplates {
-		if !IsAccountEmail(tt) {
-			t.Errorf("IsAccountEmail(%s) should return true", tt)
-		}
-	}
-
-	nonAccountTemplates := []TemplateType{
 		TemplateAdminAlert,
 		TemplateWeeklyReport,
+		TemplateSecurityAlert,
 		TemplateBackupCompleted,
 		TemplateUpdateAvailable,
+		TemplateMaintenanceNotice,
+		TemplateBackupFailed,
+		TemplateSSLExpiring,
+		TemplateSSLRenewed,
+		TemplateSchedulerError,
+		TemplateBreachAdminAlert,
+		TemplateTest,
 	}
 
-	for _, tt := range nonAccountTemplates {
+	for _, tt := range allTemplates {
 		if IsAccountEmail(tt) {
-			t.Errorf("IsAccountEmail(%s) should return false", tt)
+			t.Errorf("IsAccountEmail(%s) should return false — no user accounts in this project", tt)
 		}
 	}
 }
@@ -1289,20 +1056,20 @@ func TestIsAccountEmail(t *testing.T) {
 // Tests for TemplateType constants
 
 func TestTemplateTypeConstants(t *testing.T) {
-	if TemplateWelcome != "welcome" {
-		t.Errorf("TemplateWelcome = %q, want %q", TemplateWelcome, "welcome")
-	}
-	if TemplatePasswordReset != "password_reset" {
-		t.Errorf("TemplatePasswordReset = %q, want %q", TemplatePasswordReset, "password_reset")
-	}
 	if TemplateEmailVerification != "email_verification" {
 		t.Errorf("TemplateEmailVerification = %q, want %q", TemplateEmailVerification, "email_verification")
 	}
-	if TemplateLoginNotification != "login_notification" {
-		t.Errorf("TemplateLoginNotification = %q, want %q", TemplateLoginNotification, "login_notification")
-	}
 	if TemplateSecurityAlert != "security_alert" {
 		t.Errorf("TemplateSecurityAlert = %q, want %q", TemplateSecurityAlert, "security_alert")
+	}
+	if TemplateAdminAlert != "admin_alert" {
+		t.Errorf("TemplateAdminAlert = %q, want %q", TemplateAdminAlert, "admin_alert")
+	}
+	if TemplateWeeklyReport != "weekly_report" {
+		t.Errorf("TemplateWeeklyReport = %q, want %q", TemplateWeeklyReport, "weekly_report")
+	}
+	if TemplateBackupCompleted != "backup_completed" {
+		t.Errorf("TemplateBackupCompleted = %q, want %q", TemplateBackupCompleted, "backup_completed")
 	}
 }
 
@@ -1346,67 +1113,6 @@ func TestTemplateDataStruct(t *testing.T) {
 
 // Tests for data structs
 
-func TestWelcomeDataStruct(t *testing.T) {
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &WelcomeData{
-		TemplateData: baseData,
-		Username:     "testuser",
-		Email:        "test@example.com",
-	}
-
-	if data.Username != "testuser" {
-		t.Errorf("Username = %q", data.Username)
-	}
-	if data.Email != "test@example.com" {
-		t.Errorf("Email = %q", data.Email)
-	}
-	if data.SiteName != "TestApp" {
-		t.Errorf("SiteName = %q", data.SiteName)
-	}
-}
-
-func TestPasswordResetDataStruct(t *testing.T) {
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &PasswordResetData{
-		TemplateData: baseData,
-		Username:     "testuser",
-		ResetLink:    "https://example.com/reset",
-		ExpiresIn:    "1 hour",
-		IPAddress:    "192.168.1.1",
-		RequestedAt:  time.Now(),
-	}
-
-	if data.ResetLink != "https://example.com/reset" {
-		t.Errorf("ResetLink = %q", data.ResetLink)
-	}
-	if data.ExpiresIn != "1 hour" {
-		t.Errorf("ExpiresIn = %q", data.ExpiresIn)
-	}
-}
-
-func TestLoginNotificationDataStruct(t *testing.T) {
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &LoginNotificationData{
-		TemplateData: baseData,
-		Username:     "testuser",
-		LoginTime:    time.Now(),
-		IPAddress:    "192.168.1.100",
-		UserAgent:    "Chrome on Windows",
-		Location:     "New York, US",
-		IsNewDevice:  true,
-	}
-
-	if data.Location != "New York, US" {
-		t.Errorf("Location = %q", data.Location)
-	}
-	if data.UserAgent != "Chrome on Windows" {
-		t.Errorf("UserAgent = %q", data.UserAgent)
-	}
-	if !data.IsNewDevice {
-		t.Error("IsNewDevice should be true")
-	}
-}
-
 func TestSecurityAlertDataStruct(t *testing.T) {
 	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
 	data := &SecurityAlertData{
@@ -1427,26 +1133,6 @@ func TestSecurityAlertDataStruct(t *testing.T) {
 	}
 }
 
-func TestAPITokenCreatedDataStruct(t *testing.T) {
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &APITokenCreatedData{
-		TemplateData: baseData,
-		Username:     "testuser",
-		TokenName:    "My API Key",
-		Permissions:  []string{"read", "write", "delete"},
-		ExpiresAt:    time.Now().Add(90 * 24 * time.Hour),
-		CreatedAt:    time.Now(),
-		IPAddress:    "192.168.1.1",
-	}
-
-	if len(data.Permissions) != 3 {
-		t.Errorf("Permissions length = %d", len(data.Permissions))
-	}
-	if data.TokenName != "My API Key" {
-		t.Errorf("TokenName = %q", data.TokenName)
-	}
-}
-
 func TestWeeklyReportDataStruct(t *testing.T) {
 	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
 	data := &WeeklyReportData{
@@ -1454,8 +1140,6 @@ func TestWeeklyReportDataStruct(t *testing.T) {
 		PeriodStart:   time.Now().AddDate(0, 0, -7),
 		PeriodEnd:     time.Now(),
 		TotalSearches: 15000,
-		UniqueUsers:   2500,
-		TopQueries:    []string{"golang", "python"},
 		EngineStats:   map[string]int{"Google": 8000},
 		ErrorCount:    10,
 	}
@@ -1463,26 +1147,8 @@ func TestWeeklyReportDataStruct(t *testing.T) {
 	if data.TotalSearches != 15000 {
 		t.Errorf("TotalSearches = %d", data.TotalSearches)
 	}
-	if data.UniqueUsers != 2500 {
-		t.Errorf("UniqueUsers = %d", data.UniqueUsers)
-	}
-}
-
-func TestAdminInviteDataStruct(t *testing.T) {
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &AdminInviteData{
-		TemplateData: baseData,
-		InviterName:  "John",
-		InviteLink:   "https://example.com/invite",
-		ExpiresIn:    "48 hours",
-		Message:      "Welcome!",
-	}
-
-	if data.InviterName != "John" {
-		t.Errorf("InviterName = %q", data.InviterName)
-	}
-	if data.Message != "Welcome!" {
-		t.Errorf("Message = %q", data.Message)
+	if len(data.EngineStats) != 1 {
+		t.Errorf("EngineStats length = %d", len(data.EngineStats))
 	}
 }
 
@@ -1577,45 +1243,24 @@ func TestRawTemplatesNotEmpty(t *testing.T) {
 
 func TestTemplateInfoStruct(t *testing.T) {
 	info := TemplateInfo{
-		Type:           TemplateWelcome,
-		Name:           "Welcome",
-		Description:    "Welcome email",
-		IsAccountEmail: true,
+		Type:           TemplateTest,
+		Name:           "Test",
+		Description:    "Test email",
+		IsAccountEmail: false,
 	}
 
-	if info.Type != TemplateWelcome {
+	if info.Type != TemplateTest {
 		t.Errorf("Type = %q", info.Type)
 	}
-	if info.Name != "Welcome" {
+	if info.Name != "Test" {
 		t.Errorf("Name = %q", info.Name)
 	}
-	if !info.IsAccountEmail {
-		t.Error("IsAccountEmail should be true")
+	if info.IsAccountEmail {
+		t.Error("IsAccountEmail should be false")
 	}
 }
 
-// Additional tests for PART 18 templates
-
-func TestEmailTemplateRenderMFAReminder(t *testing.T) {
-	et := NewEmailTemplate()
-
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &MFAReminderData{
-		TemplateData: baseData,
-		Username:     "testuser",
-		SetupLink:    "https://example.com/setup-mfa",
-		DismissLink:  "https://example.com/dismiss",
-	}
-
-	subject, body, err := et.Render(TemplateMFAReminder, data)
-	if err != nil {
-		t.Fatalf("Render() error = %v", err)
-	}
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-	_ = body
-}
+// Additional tests for operator notification templates
 
 func TestEmailTemplateRenderBackupFailed(t *testing.T) {
 	et := NewEmailTemplate()
@@ -1703,30 +1348,6 @@ func TestEmailTemplateRenderSchedulerError(t *testing.T) {
 	_ = body
 }
 
-func TestEmailTemplateRenderBreachNotification(t *testing.T) {
-	et := NewEmailTemplate()
-
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &BreachNotificationData{
-		TemplateData:       baseData,
-		Username:           "testuser",
-		BreachDate:         time.Now(),
-		BreachDescription:  "Unauthorized access detected",
-		AffectedData:       []string{"email", "preferences"},
-		RecommendedActions: []string{"Change password", "Enable 2FA"},
-		SupportContact:     "security@example.com",
-	}
-
-	subject, body, err := et.Render(TemplateBreachNotification, data)
-	if err != nil {
-		t.Fatalf("Render() error = %v", err)
-	}
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-	_ = body
-}
-
 func TestEmailTemplateRenderBreachAdminAlert(t *testing.T) {
 	et := NewEmailTemplate()
 
@@ -1770,126 +1391,89 @@ func TestEmailTemplateRenderTest(t *testing.T) {
 	_ = body
 }
 
-// Tests for PreviewTemplate with PART 18 templates that are not yet implemented
-// These templates are not yet supported by PreviewTemplate, so they should return errors
+// Tests for PreviewTemplate with all operator notification templates
 
-func TestEmailTemplatePreviewTemplateMFAReminderError(t *testing.T) {
+func TestEmailTemplatePreviewTemplateBackupFailed(t *testing.T) {
 	et := NewEmailTemplate()
 
-	_, _, err := et.PreviewTemplate(TemplateMFAReminder, "TestApp", "https://example.com")
-	// PreviewTemplate doesn't implement MFAReminder yet, should error
-	if err == nil {
-		t.Error("PreviewTemplate(MFAReminder) should error for unimplemented template")
+	subject, body, err := et.PreviewTemplate(TemplateBackupFailed, "TestApp", "https://example.com")
+	if err != nil {
+		t.Fatalf("PreviewTemplate(BackupFailed) error = %v", err)
 	}
-	if !strings.Contains(err.Error(), "unknown template type") {
-		t.Errorf("Error should mention 'unknown template type', got: %v", err)
+	if subject == "" {
+		t.Error("Subject should not be empty")
 	}
+	_ = body
 }
 
-func TestEmailTemplatePreviewTemplateBackupFailedError(t *testing.T) {
+func TestEmailTemplatePreviewTemplateSSLExpiring(t *testing.T) {
 	et := NewEmailTemplate()
 
-	_, _, err := et.PreviewTemplate(TemplateBackupFailed, "TestApp", "https://example.com")
-	if err == nil {
-		t.Error("PreviewTemplate(BackupFailed) should error for unimplemented template")
+	subject, body, err := et.PreviewTemplate(TemplateSSLExpiring, "TestApp", "https://example.com")
+	if err != nil {
+		t.Fatalf("PreviewTemplate(SSLExpiring) error = %v", err)
 	}
-	if !strings.Contains(err.Error(), "unknown template type") {
-		t.Errorf("Error should mention 'unknown template type', got: %v", err)
+	if subject == "" {
+		t.Error("Subject should not be empty")
 	}
+	_ = body
 }
 
-func TestEmailTemplatePreviewTemplateSSLExpiringError(t *testing.T) {
+func TestEmailTemplatePreviewTemplateSSLRenewed(t *testing.T) {
 	et := NewEmailTemplate()
 
-	_, _, err := et.PreviewTemplate(TemplateSSLExpiring, "TestApp", "https://example.com")
-	if err == nil {
-		t.Error("PreviewTemplate(SSLExpiring) should error for unimplemented template")
+	subject, body, err := et.PreviewTemplate(TemplateSSLRenewed, "TestApp", "https://example.com")
+	if err != nil {
+		t.Fatalf("PreviewTemplate(SSLRenewed) error = %v", err)
 	}
-	if !strings.Contains(err.Error(), "unknown template type") {
-		t.Errorf("Error should mention 'unknown template type', got: %v", err)
+	if subject == "" {
+		t.Error("Subject should not be empty")
 	}
+	_ = body
 }
 
-func TestEmailTemplatePreviewTemplateSSLRenewedError(t *testing.T) {
+func TestEmailTemplatePreviewTemplateSchedulerError(t *testing.T) {
 	et := NewEmailTemplate()
 
-	_, _, err := et.PreviewTemplate(TemplateSSLRenewed, "TestApp", "https://example.com")
-	if err == nil {
-		t.Error("PreviewTemplate(SSLRenewed) should error for unimplemented template")
+	subject, body, err := et.PreviewTemplate(TemplateSchedulerError, "TestApp", "https://example.com")
+	if err != nil {
+		t.Fatalf("PreviewTemplate(SchedulerError) error = %v", err)
 	}
-	if !strings.Contains(err.Error(), "unknown template type") {
-		t.Errorf("Error should mention 'unknown template type', got: %v", err)
+	if subject == "" {
+		t.Error("Subject should not be empty")
 	}
+	_ = body
 }
 
-func TestEmailTemplatePreviewTemplateSchedulerErrorError(t *testing.T) {
+func TestEmailTemplatePreviewTemplateBreachAdminAlert(t *testing.T) {
 	et := NewEmailTemplate()
 
-	_, _, err := et.PreviewTemplate(TemplateSchedulerError, "TestApp", "https://example.com")
-	if err == nil {
-		t.Error("PreviewTemplate(SchedulerError) should error for unimplemented template")
+	subject, body, err := et.PreviewTemplate(TemplateBreachAdminAlert, "TestApp", "https://example.com")
+	if err != nil {
+		t.Fatalf("PreviewTemplate(BreachAdminAlert) error = %v", err)
 	}
-	if !strings.Contains(err.Error(), "unknown template type") {
-		t.Errorf("Error should mention 'unknown template type', got: %v", err)
+	if subject == "" {
+		t.Error("Subject should not be empty")
 	}
+	_ = body
 }
 
-func TestEmailTemplatePreviewTemplateBreachNotificationError(t *testing.T) {
+func TestEmailTemplatePreviewTemplateTest(t *testing.T) {
 	et := NewEmailTemplate()
 
-	_, _, err := et.PreviewTemplate(TemplateBreachNotification, "TestApp", "https://example.com")
-	if err == nil {
-		t.Error("PreviewTemplate(BreachNotification) should error for unimplemented template")
+	subject, body, err := et.PreviewTemplate(TemplateTest, "TestApp", "https://example.com")
+	if err != nil {
+		t.Fatalf("PreviewTemplate(Test) error = %v", err)
 	}
-	if !strings.Contains(err.Error(), "unknown template type") {
-		t.Errorf("Error should mention 'unknown template type', got: %v", err)
+	if subject == "" {
+		t.Error("Subject should not be empty")
 	}
-}
-
-func TestEmailTemplatePreviewTemplateBreachAdminAlertError(t *testing.T) {
-	et := NewEmailTemplate()
-
-	_, _, err := et.PreviewTemplate(TemplateBreachAdminAlert, "TestApp", "https://example.com")
-	if err == nil {
-		t.Error("PreviewTemplate(BreachAdminAlert) should error for unimplemented template")
-	}
-	if !strings.Contains(err.Error(), "unknown template type") {
-		t.Errorf("Error should mention 'unknown template type', got: %v", err)
-	}
-}
-
-func TestEmailTemplatePreviewTemplateTestError(t *testing.T) {
-	et := NewEmailTemplate()
-
-	_, _, err := et.PreviewTemplate(TemplateTest, "TestApp", "https://example.com")
-	if err == nil {
-		t.Error("PreviewTemplate(Test) should error for unimplemented template")
-	}
-	if !strings.Contains(err.Error(), "unknown template type") {
-		t.Errorf("Error should mention 'unknown template type', got: %v", err)
-	}
-}
-
-// Tests for IsAccountEmail with MFA and Breach templates
-
-func TestIsAccountEmailMFAReminder(t *testing.T) {
-	if !IsAccountEmail(TemplateMFAReminder) {
-		t.Error("TemplateMFAReminder should be an account email")
-	}
-}
-
-func TestIsAccountEmailBreachNotification(t *testing.T) {
-	if !IsAccountEmail(TemplateBreachNotification) {
-		t.Error("TemplateBreachNotification should be an account email")
-	}
+	_ = body
 }
 
 // Tests for additional template type constants
 
 func TestTemplateTypeConstantsPart18(t *testing.T) {
-	if TemplateMFAReminder != "mfa_reminder" {
-		t.Errorf("TemplateMFAReminder = %q, want %q", TemplateMFAReminder, "mfa_reminder")
-	}
 	if TemplateBackupFailed != "backup_failed" {
 		t.Errorf("TemplateBackupFailed = %q, want %q", TemplateBackupFailed, "backup_failed")
 	}
@@ -1902,38 +1486,17 @@ func TestTemplateTypeConstantsPart18(t *testing.T) {
 	if TemplateSchedulerError != "scheduler_error" {
 		t.Errorf("TemplateSchedulerError = %q, want %q", TemplateSchedulerError, "scheduler_error")
 	}
-	if TemplateBreachNotification != "breach_notification" {
-		t.Errorf("TemplateBreachNotification = %q, want %q", TemplateBreachNotification, "breach_notification")
-	}
 	if TemplateBreachAdminAlert != "breach_admin_alert" {
 		t.Errorf("TemplateBreachAdminAlert = %q, want %q", TemplateBreachAdminAlert, "breach_admin_alert")
 	}
 	if TemplateTest != "test" {
 		t.Errorf("TemplateTest = %q, want %q", TemplateTest, "test")
 	}
-	if TemplatePasswordChanged != "password_changed" {
-		t.Errorf("TemplatePasswordChanged = %q, want %q", TemplatePasswordChanged, "password_changed")
-	}
-	if TemplateAccountLocked != "account_locked" {
-		t.Errorf("TemplateAccountLocked = %q, want %q", TemplateAccountLocked, "account_locked")
-	}
 	if TemplateAdminAlert != "admin_alert" {
 		t.Errorf("TemplateAdminAlert = %q, want %q", TemplateAdminAlert, "admin_alert")
 	}
 	if TemplateWeeklyReport != "weekly_report" {
 		t.Errorf("TemplateWeeklyReport = %q, want %q", TemplateWeeklyReport, "weekly_report")
-	}
-	if TemplateAPITokenCreated != "api_token_created" {
-		t.Errorf("TemplateAPITokenCreated = %q, want %q", TemplateAPITokenCreated, "api_token_created")
-	}
-	if TemplateAdminInvite != "admin_invite" {
-		t.Errorf("TemplateAdminInvite = %q, want %q", TemplateAdminInvite, "admin_invite")
-	}
-	if Template2FAEnabled != "two_factor_enabled" {
-		t.Errorf("Template2FAEnabled = %q, want %q", Template2FAEnabled, "two_factor_enabled")
-	}
-	if Template2FADisabled != "two_factor_disabled" {
-		t.Errorf("Template2FADisabled = %q, want %q", Template2FADisabled, "two_factor_disabled")
 	}
 	if TemplateBackupCompleted != "backup_completed" {
 		t.Errorf("TemplateBackupCompleted = %q, want %q", TemplateBackupCompleted, "backup_completed")
@@ -1947,26 +1510,6 @@ func TestTemplateTypeConstantsPart18(t *testing.T) {
 }
 
 // Tests for data struct coverage
-
-func TestMFAReminderDataStruct(t *testing.T) {
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &MFAReminderData{
-		TemplateData: baseData,
-		Username:     "testuser",
-		SetupLink:    "https://example.com/setup-mfa",
-		DismissLink:  "https://example.com/dismiss",
-	}
-
-	if data.Username != "testuser" {
-		t.Errorf("Username = %q", data.Username)
-	}
-	if data.SetupLink != "https://example.com/setup-mfa" {
-		t.Errorf("SetupLink = %q", data.SetupLink)
-	}
-	if data.DismissLink != "https://example.com/dismiss" {
-		t.Errorf("DismissLink = %q", data.DismissLink)
-	}
-}
 
 func TestBackupFailedDataStruct(t *testing.T) {
 	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
@@ -2046,32 +1589,6 @@ func TestSchedulerErrorDataStruct(t *testing.T) {
 	}
 }
 
-func TestBreachNotificationDataStruct(t *testing.T) {
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &BreachNotificationData{
-		TemplateData:       baseData,
-		Username:           "testuser",
-		BreachDate:         time.Now(),
-		BreachDescription:  "Unauthorized access",
-		AffectedData:       []string{"email", "preferences"},
-		RecommendedActions: []string{"Change password", "Enable 2FA"},
-		SupportContact:     "security@example.com",
-	}
-
-	if data.Username != "testuser" {
-		t.Errorf("Username = %q", data.Username)
-	}
-	if data.BreachDescription != "Unauthorized access" {
-		t.Errorf("BreachDescription = %q", data.BreachDescription)
-	}
-	if len(data.AffectedData) != 2 {
-		t.Errorf("AffectedData length = %d", len(data.AffectedData))
-	}
-	if len(data.RecommendedActions) != 2 {
-		t.Errorf("RecommendedActions length = %d", len(data.RecommendedActions))
-	}
-}
-
 func TestBreachAdminAlertDataStruct(t *testing.T) {
 	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
 	data := &BreachAdminAlertData{
@@ -2108,44 +1625,15 @@ func TestTestEmailDataStruct(t *testing.T) {
 	}
 }
 
-func TestPasswordChangedDataStruct(t *testing.T) {
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	changedAt := time.Now()
-	data := &PasswordChangedData{
-		TemplateData: baseData,
-		Username:     "testuser",
-		ChangedAt:    changedAt,
-		IPAddress:    "192.168.1.50",
-		UserAgent:    "Firefox on Linux",
-	}
-
-	if data.Username != "testuser" {
-		t.Errorf("Username = %q", data.Username)
-	}
-	if data.ChangedAt != changedAt {
-		t.Error("ChangedAt mismatch")
-	}
-	if data.IPAddress != "192.168.1.50" {
-		t.Errorf("IPAddress = %q", data.IPAddress)
-	}
-	if data.UserAgent != "Firefox on Linux" {
-		t.Errorf("UserAgent = %q", data.UserAgent)
-	}
-}
-
 func TestEmailVerificationDataStruct(t *testing.T) {
 	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
 	data := &EmailVerificationData{
 		TemplateData:     baseData,
-		Username:         "testuser",
 		Email:            "test@example.com",
 		VerificationLink: "https://example.com/verify?token=abc",
 		ExpiresIn:        "24 hours",
 	}
 
-	if data.Username != "testuser" {
-		t.Errorf("Username = %q", data.Username)
-	}
 	if data.Email != "test@example.com" {
 		t.Errorf("Email = %q", data.Email)
 	}
@@ -2154,75 +1642,6 @@ func TestEmailVerificationDataStruct(t *testing.T) {
 	}
 	if data.ExpiresIn != "24 hours" {
 		t.Errorf("ExpiresIn = %q", data.ExpiresIn)
-	}
-}
-
-func TestAccountLockedDataStruct(t *testing.T) {
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	lockedAt := time.Now()
-	data := &AccountLockedData{
-		TemplateData:       baseData,
-		Username:           "testuser",
-		Reason:             "Too many failed attempts",
-		LockedAt:           lockedAt,
-		UnlockInstructions: "Contact support",
-	}
-
-	if data.Username != "testuser" {
-		t.Errorf("Username = %q", data.Username)
-	}
-	if data.Reason != "Too many failed attempts" {
-		t.Errorf("Reason = %q", data.Reason)
-	}
-	if data.LockedAt != lockedAt {
-		t.Error("LockedAt mismatch")
-	}
-	if data.UnlockInstructions != "Contact support" {
-		t.Errorf("UnlockInstructions = %q", data.UnlockInstructions)
-	}
-}
-
-func TestTwoFactorEnabledDataStruct(t *testing.T) {
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	enabledAt := time.Now()
-	data := &TwoFactorEnabledData{
-		TemplateData: baseData,
-		Username:     "testuser",
-		EnabledAt:    enabledAt,
-		IPAddress:    "192.168.1.70",
-		Method:       "TOTP",
-	}
-
-	if data.Username != "testuser" {
-		t.Errorf("Username = %q", data.Username)
-	}
-	if data.EnabledAt != enabledAt {
-		t.Error("EnabledAt mismatch")
-	}
-	if data.Method != "TOTP" {
-		t.Errorf("Method = %q", data.Method)
-	}
-}
-
-func TestTwoFactorDisabledDataStruct(t *testing.T) {
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	disabledAt := time.Now()
-	data := &TwoFactorDisabledData{
-		TemplateData: baseData,
-		Username:     "testuser",
-		DisabledAt:   disabledAt,
-		IPAddress:    "192.168.1.80",
-		Reason:       "User requested",
-	}
-
-	if data.Username != "testuser" {
-		t.Errorf("Username = %q", data.Username)
-	}
-	if data.DisabledAt != disabledAt {
-		t.Error("DisabledAt mismatch")
-	}
-	if data.Reason != "User requested" {
-		t.Errorf("Reason = %q", data.Reason)
 	}
 }
 
@@ -2300,92 +1719,6 @@ func TestMaintenanceNoticeDataStruct(t *testing.T) {
 	}
 }
 
-// Tests for Login notification with IsNewDevice=false
-
-func TestEmailTemplateRenderLoginNotificationNotNewDevice(t *testing.T) {
-	et := NewEmailTemplate()
-
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &LoginNotificationData{
-		TemplateData: baseData,
-		Username:     "testuser",
-		LoginTime:    time.Now(),
-		IPAddress:    "192.168.1.100",
-		UserAgent:    "Chrome on Windows",
-		Location:     "New York, US",
-		IsNewDevice:  false,
-	}
-
-	subject, body, err := et.Render(TemplateLoginNotification, data)
-	if err != nil {
-		t.Fatalf("Render() error = %v", err)
-	}
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-	// Should not have "New Device" in subject for existing device
-	if strings.Contains(subject, "New Device") {
-		t.Error("Subject should not contain 'New Device' for existing device")
-	}
-	if !strings.Contains(body, "192.168.1.100") {
-		t.Error("Body should contain IP address")
-	}
-}
-
-// Tests for Login notification without Location
-
-func TestEmailTemplateRenderLoginNotificationNoLocation(t *testing.T) {
-	et := NewEmailTemplate()
-
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &LoginNotificationData{
-		TemplateData: baseData,
-		Username:     "testuser",
-		LoginTime:    time.Now(),
-		IPAddress:    "192.168.1.100",
-		UserAgent:    "Chrome on Windows",
-		Location:     "",
-		IsNewDevice:  false,
-	}
-
-	subject, body, err := et.Render(TemplateLoginNotification, data)
-	if err != nil {
-		t.Fatalf("Render() error = %v", err)
-	}
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-	if body == "" {
-		t.Error("Body should not be empty")
-	}
-}
-
-// Tests for AccountLocked without UnlockInstructions
-
-func TestEmailTemplateRenderAccountLockedNoInstructions(t *testing.T) {
-	et := NewEmailTemplate()
-
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &AccountLockedData{
-		TemplateData:       baseData,
-		Username:           "testuser",
-		Reason:             "Too many failed login attempts",
-		LockedAt:           time.Now(),
-		UnlockInstructions: "",
-	}
-
-	subject, body, err := et.Render(TemplateAccountLocked, data)
-	if err != nil {
-		t.Fatalf("Render() error = %v", err)
-	}
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-	if body == "" {
-		t.Error("Body should not be empty")
-	}
-}
-
 // Tests for AdminAlert without Details
 
 func TestEmailTemplateRenderAdminAlertNoDetails(t *testing.T) {
@@ -2440,9 +1773,9 @@ func TestEmailTemplateRenderAdminAlertCritical(t *testing.T) {
 	}
 }
 
-// Tests for WeeklyReport without TopQueries
+// Tests for WeeklyReport without EngineStats
 
-func TestEmailTemplateRenderWeeklyReportNoTopQueries(t *testing.T) {
+func TestEmailTemplateRenderWeeklyReportNoEngineStats(t *testing.T) {
 	et := NewEmailTemplate()
 
 	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
@@ -2451,8 +1784,6 @@ func TestEmailTemplateRenderWeeklyReportNoTopQueries(t *testing.T) {
 		PeriodStart:   time.Now().AddDate(0, 0, -7),
 		PeriodEnd:     time.Now(),
 		TotalSearches: 15000,
-		UniqueUsers:   2500,
-		TopQueries:    nil,
 		EngineStats:   nil,
 		ErrorCount:    10,
 	}
@@ -2514,86 +1845,6 @@ func TestEmailTemplateRenderSecurityAlertCritical(t *testing.T) {
 	}
 
 	subject, body, err := et.Render(TemplateSecurityAlert, data)
-	if err != nil {
-		t.Fatalf("Render() error = %v", err)
-	}
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-	if body == "" {
-		t.Error("Body should not be empty")
-	}
-}
-
-// Tests for APITokenCreated without permissions
-
-func TestEmailTemplateRenderAPITokenCreatedNoPermissions(t *testing.T) {
-	et := NewEmailTemplate()
-
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &APITokenCreatedData{
-		TemplateData: baseData,
-		Username:     "testuser",
-		TokenName:    "Production API Key",
-		Permissions:  nil,
-		ExpiresAt:    time.Now().Add(90 * 24 * time.Hour),
-		CreatedAt:    time.Now(),
-		IPAddress:    "192.168.1.100",
-	}
-
-	subject, body, err := et.Render(TemplateAPITokenCreated, data)
-	if err != nil {
-		t.Fatalf("Render() error = %v", err)
-	}
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-	if body == "" {
-		t.Error("Body should not be empty")
-	}
-}
-
-// Tests for AdminInvite without Message
-
-func TestEmailTemplateRenderAdminInviteNoMessage(t *testing.T) {
-	et := NewEmailTemplate()
-
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &AdminInviteData{
-		TemplateData: baseData,
-		InviterName:  "John Admin",
-		InviteLink:   "https://example.com/invite/abc123",
-		ExpiresIn:    "48 hours",
-		Message:      "",
-	}
-
-	subject, body, err := et.Render(TemplateAdminInvite, data)
-	if err != nil {
-		t.Fatalf("Render() error = %v", err)
-	}
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-	if body == "" {
-		t.Error("Body should not be empty")
-	}
-}
-
-// Tests for 2FADisabled without Reason
-
-func TestEmailTemplateRenderTwoFactorDisabledNoReason(t *testing.T) {
-	et := NewEmailTemplate()
-
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &TwoFactorDisabledData{
-		TemplateData: baseData,
-		Username:     "testuser",
-		DisabledAt:   time.Now(),
-		IPAddress:    "192.168.1.80",
-		Reason:       "",
-	}
-
-	subject, body, err := et.Render(Template2FADisabled, data)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
@@ -2703,34 +1954,6 @@ func TestEmailTemplateRenderSchedulerErrorNoDetails(t *testing.T) {
 	}
 
 	subject, body, err := et.Render(TemplateSchedulerError, data)
-	if err != nil {
-		t.Fatalf("Render() error = %v", err)
-	}
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-	if body == "" {
-		t.Error("Body should not be empty")
-	}
-}
-
-// Tests for BreachNotification without RecommendedActions
-
-func TestEmailTemplateRenderBreachNotificationNoActions(t *testing.T) {
-	et := NewEmailTemplate()
-
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &BreachNotificationData{
-		TemplateData:       baseData,
-		Username:           "testuser",
-		BreachDate:         time.Now(),
-		BreachDescription:  "Unauthorized access detected",
-		AffectedData:       nil,
-		RecommendedActions: nil,
-		SupportContact:     "",
-	}
-
-	subject, body, err := et.Render(TemplateBreachNotification, data)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
@@ -3054,39 +2277,37 @@ func TestRawTemplatesContainSubjectLine(t *testing.T) {
 
 func TestTemplateInfoJSONTags(t *testing.T) {
 	info := TemplateInfo{
-		Type:           TemplateWelcome,
-		Name:           "Welcome",
-		Description:    "Welcome email",
-		IsAccountEmail: true,
+		Type:           TemplateAdminAlert,
+		Name:           "Admin Alert",
+		Description:    "Administrative alert email",
+		IsAccountEmail: false,
 	}
 
 	// Verify the struct is properly tagged (just test fields work)
-	if info.Type != TemplateWelcome {
+	if info.Type != TemplateAdminAlert {
 		t.Errorf("Type = %q", info.Type)
 	}
-	if info.Name != "Welcome" {
+	if info.Name != "Admin Alert" {
 		t.Errorf("Name = %q", info.Name)
 	}
-	if info.Description != "Welcome email" {
+	if info.Description != "Administrative alert email" {
 		t.Errorf("Description = %q", info.Description)
 	}
-	if !info.IsAccountEmail {
-		t.Error("IsAccountEmail should be true")
+	if info.IsAccountEmail {
+		t.Error("IsAccountEmail should be false")
 	}
 }
 
 // Tests for GetAllTemplateTypes ensuring all PART 18 templates are included
 
-func TestGetAllTemplateTypesIncludesPart18(t *testing.T) {
+func TestGetAllTemplateTypesIncludesOperatorTemplates(t *testing.T) {
 	types := GetAllTemplateTypes()
 
-	part18Types := []TemplateType{
-		TemplateMFAReminder,
+	operatorTypes := []TemplateType{
 		TemplateBackupFailed,
 		TemplateSSLExpiring,
 		TemplateSSLRenewed,
 		TemplateSchedulerError,
-		TemplateBreachNotification,
 		TemplateBreachAdminAlert,
 		TemplateTest,
 	}
@@ -3096,7 +2317,7 @@ func TestGetAllTemplateTypesIncludesPart18(t *testing.T) {
 		found[info.Type] = true
 	}
 
-	for _, tt := range part18Types {
+	for _, tt := range operatorTypes {
 		if !found[tt] {
 			t.Errorf("GetAllTemplateTypes() should include %s", tt)
 		}
@@ -3106,33 +2327,12 @@ func TestGetAllTemplateTypesIncludesPart18(t *testing.T) {
 // Tests to verify IsAccountEmail covers all account templates
 
 func TestIsAccountEmailAllTemplates(t *testing.T) {
-	// All templates that should return true for IsAccountEmail
-	accountTemplates := []TemplateType{
-		TemplateWelcome,
-		TemplatePasswordReset,
-		TemplatePasswordChanged,
-		TemplateLoginNotification,
+	// All templates are operator/system notifications — none are account emails
+	allTemplates := []TemplateType{
 		TemplateEmailVerification,
-		TemplateAccountLocked,
-		TemplateSecurityAlert,
-		Template2FAEnabled,
-		Template2FADisabled,
-		TemplateMFAReminder,
-		TemplateBreachNotification,
-	}
-
-	for _, tt := range accountTemplates {
-		if !IsAccountEmail(tt) {
-			t.Errorf("IsAccountEmail(%s) should return true", tt)
-		}
-	}
-
-	// All templates that should return false
-	notificationTemplates := []TemplateType{
 		TemplateAdminAlert,
 		TemplateWeeklyReport,
-		TemplateAPITokenCreated,
-		TemplateAdminInvite,
+		TemplateSecurityAlert,
 		TemplateBackupCompleted,
 		TemplateUpdateAvailable,
 		TemplateMaintenanceNotice,
@@ -3144,13 +2344,13 @@ func TestIsAccountEmailAllTemplates(t *testing.T) {
 		TemplateTest,
 	}
 
-	for _, tt := range notificationTemplates {
+	for _, tt := range allTemplates {
 		if IsAccountEmail(tt) {
-			t.Errorf("IsAccountEmail(%s) should return false", tt)
+			t.Errorf("IsAccountEmail(%s) should return false — no user accounts exist", tt)
 		}
 	}
 
-	// Test unknown template type
+	// Unknown template type also returns false
 	if IsAccountEmail(TemplateType("unknown_template")) {
 		t.Error("IsAccountEmail should return false for unknown template type")
 	}
@@ -3178,7 +2378,7 @@ func TestEmailTemplateRenderExecutionError(t *testing.T) {
 	// This should cause template execution to fail
 	invalidData := map[string]string{"invalid": "data"}
 
-	_, _, err := et.Render(TemplateWelcome, invalidData)
+	_, _, err := et.Render(TemplateAdminAlert, invalidData)
 	// Should error because the data doesn't have the expected fields
 	if err == nil {
 		t.Error("Render() should error with mismatched data")
@@ -3497,19 +2697,19 @@ func TestDetectedSMTPAllCombinations(t *testing.T) {
 func TestEmailTemplateRenderWithWrongDataType(t *testing.T) {
 	et := NewEmailTemplate()
 
-	// Use PasswordResetData for Welcome template - should still work partially
+	// Use BackupCompletedData for AdminAlert template — mismatched types
 	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &PasswordResetData{
+	data := &BackupCompletedData{
 		TemplateData: baseData,
-		Username:     "testuser",
-		ResetLink:    "https://example.com/reset",
-		ExpiresIn:    "1 hour",
-		IPAddress:    "192.168.1.1",
-		RequestedAt:  time.Now(),
+		BackupName:   "backup.tar.gz",
+		BackupSize:   "5 MB",
+		CreatedAt:    time.Now(),
+		FileCount:    10,
+		Duration:     "1s",
 	}
 
-	// Welcome template expects WelcomeData but PasswordResetData should work for common fields
-	subject, body, err := et.Render(TemplateWelcome, data)
+	// AdminAlert template expects AdminAlertData but BackupCompletedData should work for common fields
+	subject, body, err := et.Render(TemplateAdminAlert, data)
 	// This should either succeed or error depending on template requirements
 	if err != nil {
 		// If it errors, that's expected for mismatched data
@@ -3541,15 +2741,14 @@ func TestRawTemplatesCountMatchesGetAllTemplateTypes(t *testing.T) {
 func TestEmailTemplateRenderEmptyContent(t *testing.T) {
 	et := NewEmailTemplate()
 
-	// Create minimal data - should still produce subject at minimum
+	// Create minimal data — should still produce subject at minimum
 	baseData := NewTemplateData("", "", "")
-	data := &WelcomeData{
+	data := &TestEmailData{
 		TemplateData: baseData,
-		Username:     "",
-		Email:        "",
+		SentAt:       time.Time{},
 	}
 
-	subject, body, err := et.Render(TemplateWelcome, data)
+	subject, body, err := et.Render(TemplateTest, data)
 	if err != nil {
 		t.Logf("Render with empty data: %v", err)
 	}
