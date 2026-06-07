@@ -4,8 +4,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
 	"fmt"
 	"os"
 
@@ -127,18 +125,6 @@ func DecryptBackup(encrypted []byte, password string) ([]byte, error) {
 	}
 
 	return plaintext, nil
-}
-
-// HashPassword creates a SHA-256 hash of the password for verification
-// This is NOT stored - only used to verify password hasn't changed
-func HashPassword(password string) string {
-	hash := sha256.Sum256([]byte(password))
-	return base64.StdEncoding.EncodeToString(hash[:])
-}
-
-// VerifyPassword checks if a password matches the stored hash
-func VerifyPassword(password, hash string) bool {
-	return HashPassword(password) == hash
 }
 
 // EncryptFile encrypts a file and writes to output path

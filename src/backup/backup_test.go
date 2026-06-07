@@ -169,40 +169,6 @@ func TestDecryptBackupTooShort(t *testing.T) {
 	}
 }
 
-func TestHashPassword(t *testing.T) {
-	password := "testpassword123"
-	hash := HashPassword(password)
-
-	if hash == "" {
-		t.Error("HashPassword() returned empty string")
-	}
-
-	// Same password should produce same hash
-	hash2 := HashPassword(password)
-	if hash != hash2 {
-		t.Error("HashPassword() should be deterministic")
-	}
-
-	// Different password should produce different hash
-	hash3 := HashPassword("differentpassword")
-	if hash == hash3 {
-		t.Error("Different passwords should produce different hashes")
-	}
-}
-
-func TestVerifyPassword(t *testing.T) {
-	password := "testpassword123"
-	hash := HashPassword(password)
-
-	if !VerifyPassword(password, hash) {
-		t.Error("VerifyPassword() should return true for matching password")
-	}
-
-	if VerifyPassword("wrongpassword", hash) {
-		t.Error("VerifyPassword() should return false for non-matching password")
-	}
-}
-
 func TestEncryptDecryptFile(t *testing.T) {
 	tempDir := t.TempDir()
 	inputPath := filepath.Join(tempDir, "input.txt")
@@ -569,40 +535,6 @@ func TestEncryptDecryptBinaryData(t *testing.T) {
 
 	if !bytes.Equal(decrypted, data) {
 		t.Error("Binary data roundtrip failed")
-	}
-}
-
-// Tests for hash verification
-
-func TestHashPasswordConsistency(t *testing.T) {
-	password := "testpassword"
-
-	hash1 := HashPassword(password)
-	hash2 := HashPassword(password)
-
-	if hash1 != hash2 {
-		t.Error("Same password should produce same hash")
-	}
-}
-
-func TestVerifyPasswordEmpty(t *testing.T) {
-	hash := HashPassword("password")
-
-	if VerifyPassword("", hash) {
-		t.Error("Empty password should not verify")
-	}
-}
-
-func TestHashPasswordDifferentValues(t *testing.T) {
-	passwords := []string{"pass1", "pass2", "pass3", "password", "Password"}
-	hashes := make(map[string]bool)
-
-	for _, p := range passwords {
-		hash := HashPassword(p)
-		if hashes[hash] {
-			t.Errorf("Collision found for password %q", p)
-		}
-		hashes[hash] = true
 	}
 }
 
