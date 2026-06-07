@@ -160,6 +160,12 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateRespons
 	if req.BaseURL == "" {
 		req.BaseURL = strings.TrimRight(strings.TrimSpace(m.serverConfig.Server.BaseURL), "/")
 	}
+	// Per AI.md PART 11: privacy — raw IPs must never be persisted.
+	// Hash the IP so rate-limit buckets remain functional without storing the address.
+	if req.CreatedFromIP != "" {
+		h := sha256.Sum256([]byte(req.CreatedFromIP))
+		req.CreatedFromIP = fmt.Sprintf("%x", h)
+	}
 
 	if req.Query == "" {
 		return nil, fmt.Errorf("%w: query is required", ErrInvalidInput)
