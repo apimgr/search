@@ -27,21 +27,21 @@ var defaultTimezone = "America/New_York"
 // TaskID represents a unique task identifier
 type TaskID string
 
-// Built-in task IDs per AI.md PART 19
+// Built-in task IDs per AI.md PART 18 (canonical underscore names)
 const (
-	TaskSSLRenewal       TaskID = "ssl.renewal"
-	TaskGeoIPUpdate      TaskID = "geoip.update"
-	TaskBlocklistUpdate  TaskID = "blocklist.update"
-	TaskCVEUpdate        TaskID = "cve.update"
-	TaskTokenCleanup    TaskID = "token.cleanup"
-	TaskLogRotation     TaskID = "log.rotation"
+	TaskSSLRenewal      TaskID = "ssl_renewal"
+	TaskGeoIPUpdate     TaskID = "geoip_update"
+	TaskBlocklistUpdate TaskID = "blocklist_update"
+	TaskCVEUpdate       TaskID = "cve_update"
+	TaskTokenCleanup    TaskID = "token_cleanup"
+	TaskLogRotation     TaskID = "log_rotation"
 	TaskBackupDaily     TaskID = "backup_daily"
 	TaskBackupHourly    TaskID = "backup_hourly"
-	TaskHealthcheckSelf TaskID = "healthcheck.self"
-	TaskTorHealth       TaskID = "tor.health"
-	TaskAlertsImmediate TaskID = "alerts.immediate"
-	TaskAlertsDaily      TaskID = "alerts.daily"
-	TaskAlertsWeekly     TaskID = "alerts.weekly"
+	TaskHealthcheckSelf TaskID = "healthcheck_self"
+	TaskTorHealth       TaskID = "tor_health"
+	TaskAlertsImmediate TaskID = "alerts_immediate"
+	TaskAlertsDaily     TaskID = "alerts_daily"
+	TaskAlertsWeekly    TaskID = "alerts_weekly"
 	// TaskPublicIPRefresh refreshes the cached server public IP per
 	// AI.md PART 8 step 16 (startup + every 12h, hardcoded — not configurable).
 	TaskPublicIPRefresh TaskID = "public_ip_refresh"

@@ -17,16 +17,16 @@ func TestTaskIDConstants(t *testing.T) {
 		id   TaskID
 		want string
 	}{
-		{TaskSSLRenewal, "ssl.renewal"},
-		{TaskGeoIPUpdate, "geoip.update"},
-		{TaskBlocklistUpdate, "blocklist.update"},
-		{TaskCVEUpdate, "cve.update"},
-		{TaskTokenCleanup, "token.cleanup"},
-		{TaskLogRotation, "log.rotation"},
+		{TaskSSLRenewal, "ssl_renewal"},
+		{TaskGeoIPUpdate, "geoip_update"},
+		{TaskBlocklistUpdate, "blocklist_update"},
+		{TaskCVEUpdate, "cve_update"},
+		{TaskTokenCleanup, "token_cleanup"},
+		{TaskLogRotation, "log_rotation"},
 		{TaskBackupDaily, "backup_daily"},
 		{TaskBackupHourly, "backup_hourly"},
-		{TaskHealthcheckSelf, "healthcheck.self"},
-		{TaskTorHealth, "tor.health"},
+		{TaskHealthcheckSelf, "healthcheck_self"},
+		{TaskTorHealth, "tor_health"},
 	}
 
 	for _, tt := range tests {
