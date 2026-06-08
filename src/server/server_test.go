@@ -74,6 +74,10 @@ func TestMiddlewareSecurityHeaders(t *testing.T) {
 	cfg.Server.Security.Headers.ContentSecurityPolicy = "default-src 'self'"
 	cfg.Server.Security.Headers.PermissionsPolicy = "geolocation=()"
 	cfg.Server.SSL.Enabled = true
+	cfg.Server.Security.HSTS.Enabled = true
+	cfg.Server.Security.HSTS.MaxAgeSeconds = 63072000
+	cfg.Server.Security.HSTS.IncludeSubDomains = true
+	cfg.Server.Security.HSTS.Preload = true
 
 	mw := NewMiddleware(cfg, nil)
 

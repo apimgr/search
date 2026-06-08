@@ -45,7 +45,7 @@ func Chain(h http.Handler, middlewares ...func(http.Handler) http.Handler) http.
 	return h
 }
 
-// SecurityHeaders adds security headers to all responses
+// SecurityHeaders adds security headers to all responses per AI.md PART 11.
 func (m *Middleware) SecurityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		headers := m.config.Server.Security.Headers
@@ -60,7 +60,7 @@ func (m *Middleware) SecurityHeaders(next http.Handler) http.Handler {
 			w.Header().Set("X-Content-Type-Options", headers.XContentTypeOptions)
 		}
 
-		// X-XSS-Protection enables browser XSS filter
+		// X-XSS-Protection enables browser XSS filter (legacy compat)
 		if headers.XXSSProtection != "" {
 			w.Header().Set("X-XSS-Protection", headers.XXSSProtection)
 		}
@@ -80,9 +80,73 @@ func (m *Middleware) SecurityHeaders(next http.Handler) http.Handler {
 			w.Header().Set("Permissions-Policy", headers.PermissionsPolicy)
 		}
 
-		// Strict-Transport-Security for HTTPS (only when SSL enabled)
-		if m.config.Server.SSL.Enabled {
-			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		// X-Permitted-Cross-Domain-Policies blocks Flash/PDF cross-domain embedding
+		if headers.CrossDomainPolicies != "" {
+			w.Header().Set("X-Permitted-Cross-Domain-Policies", headers.CrossDomainPolicies)
+		}
+
+		// Origin-Agent-Cluster: ?1 — security/perf isolation (always on per spec)
+		if headers.OriginAgentCluster {
+			w.Header().Set("Origin-Agent-Cluster", "?1")
+		}
+
+		// Cross-Origin-Opener-Policy (default: unsafe-none)
+		if headers.COOP != "" {
+			w.Header().Set("Cross-Origin-Opener-Policy", headers.COOP)
+		}
+
+		// Cross-Origin-Embedder-Policy (default: unsafe-none)
+		if headers.COEP != "" {
+			w.Header().Set("Cross-Origin-Embedder-Policy", headers.COEP)
+		}
+
+		// Cross-Origin-Resource-Policy (default: cross-origin)
+		if headers.CORP != "" {
+			w.Header().Set("Cross-Origin-Resource-Policy", headers.CORP)
+		}
+
+		// HSTS — only when SSL is enabled per AI.md PART 11 (max-age 2 years + preload)
+		hsts := m.config.Server.Security.HSTS
+		if m.config.Server.SSL.Enabled && hsts.Enabled {
+			maxAge := hsts.MaxAgeSeconds
+			if maxAge <= 0 {
+				maxAge = 63072000
+			}
+			hstsVal := fmt.Sprintf("max-age=%d", maxAge)
+			if hsts.IncludeSubDomains {
+				hstsVal += "; includeSubDomains"
+			}
+			if hsts.Preload {
+				hstsVal += "; preload"
+			}
+			w.Header().Set("Strict-Transport-Security", hstsVal)
+		}
+
+		// NEL + Reporting-Endpoints + Report-To per AI.md PART 11
+		nel := m.config.Server.Security.NEL
+		if nel.Enabled {
+			scheme := "https"
+			if !m.config.Server.SSL.Enabled {
+				scheme = "http"
+			}
+			host := r.Host
+			if host == "" {
+				host = m.config.Server.BaseURL
+			}
+			reportsURL := fmt.Sprintf("%s://%s/api/v1/server/reports/default", scheme, host)
+			w.Header().Set("Reporting-Endpoints", fmt.Sprintf(`default="%s"`, reportsURL))
+			w.Header().Set("Report-To", fmt.Sprintf(
+				`{"group":"default","max_age":%d,"endpoints":[{"url":"%s"}]}`,
+				nel.MaxAgeSeconds, reportsURL,
+			))
+			nelSubdomains := "false"
+			if nel.IncludeSubDomains {
+				nelSubdomains = "true"
+			}
+			w.Header().Set("NEL", fmt.Sprintf(
+				`{"report_to":"default","max_age":%d,"include_subdomains":%s,"failure_fraction":%.1f}`,
+				nel.MaxAgeSeconds, nelSubdomains, nel.SampleRate,
+			))
 		}
 
 		next.ServeHTTP(w, r)

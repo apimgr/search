@@ -419,7 +419,32 @@ type SecurityConfig struct {
 		ReferrerPolicy        string `yaml:"referrer_policy"`
 		ContentSecurityPolicy string `yaml:"content_security_policy"`
 		PermissionsPolicy     string `yaml:"permissions_policy"`
+		// Per AI.md PART 11: cross-origin isolation headers
+		// Cross-Origin-Opener-Policy (default: unsafe-none)
+		COOP string `yaml:"coop"`
+		// Cross-Origin-Embedder-Policy (default: unsafe-none)
+		COEP string `yaml:"coep"`
+		// Cross-Origin-Resource-Policy (default: cross-origin)
+		CORP string `yaml:"corp"`
+		// Emit Origin-Agent-Cluster: ?1 (always on per spec)
+		OriginAgentCluster bool `yaml:"origin_agent_cluster"`
+		// X-Permitted-Cross-Domain-Policies (default: none)
+		CrossDomainPolicies string `yaml:"cross_domain_policies"`
 	} `yaml:"headers"`
+	// HSTS per AI.md PART 11
+	HSTS struct {
+		Enabled           bool `yaml:"enabled"`
+		MaxAgeSeconds     int  `yaml:"max_age_seconds"`
+		IncludeSubDomains bool `yaml:"include_subdomains"`
+		Preload           bool `yaml:"preload"`
+	} `yaml:"hsts"`
+	// NEL (Network Error Logging) per AI.md PART 11
+	NEL struct {
+		Enabled           bool    `yaml:"enabled"`
+		MaxAgeSeconds     int     `yaml:"max_age_seconds"`
+		IncludeSubDomains bool    `yaml:"include_subdomains"`
+		SampleRate        float64 `yaml:"sample_rate"`
+	} `yaml:"nel"`
 	// Trusted Proxies
 	TrustedProxies []string `yaml:"trusted_proxies"`
 }
@@ -1141,6 +1166,11 @@ func DefaultConfig() *Config {
 					ReferrerPolicy        string `yaml:"referrer_policy"`
 					ContentSecurityPolicy string `yaml:"content_security_policy"`
 					PermissionsPolicy     string `yaml:"permissions_policy"`
+					COOP                  string `yaml:"coop"`
+					COEP                  string `yaml:"coep"`
+					CORP                  string `yaml:"corp"`
+					OriginAgentCluster    bool   `yaml:"origin_agent_cluster"`
+					CrossDomainPolicies   string `yaml:"cross_domain_policies"`
 				}{
 					XFrameOptions:         "SAMEORIGIN",
 					XContentTypeOptions:   "nosniff",
@@ -1148,6 +1178,33 @@ func DefaultConfig() *Config {
 					ReferrerPolicy:        "strict-origin-when-cross-origin",
 					ContentSecurityPolicy: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; media-src *",
 					PermissionsPolicy:     "geolocation=(), microphone=(), camera=()",
+					COOP:                  "unsafe-none",
+					COEP:                  "unsafe-none",
+					CORP:                  "cross-origin",
+					OriginAgentCluster:    true,
+					CrossDomainPolicies:   "none",
+				},
+				HSTS: struct {
+					Enabled           bool `yaml:"enabled"`
+					MaxAgeSeconds     int  `yaml:"max_age_seconds"`
+					IncludeSubDomains bool `yaml:"include_subdomains"`
+					Preload           bool `yaml:"preload"`
+				}{
+					Enabled:           true,
+					MaxAgeSeconds:     63072000,
+					IncludeSubDomains: true,
+					Preload:           true,
+				},
+				NEL: struct {
+					Enabled           bool    `yaml:"enabled"`
+					MaxAgeSeconds     int     `yaml:"max_age_seconds"`
+					IncludeSubDomains bool    `yaml:"include_subdomains"`
+					SampleRate        float64 `yaml:"sample_rate"`
+				}{
+					Enabled:           true,
+					MaxAgeSeconds:     2592000,
+					IncludeSubDomains: true,
+					SampleRate:        1.0,
 				},
 			},
 			Pages: PagesConfig{
