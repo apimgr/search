@@ -781,7 +781,7 @@ func (s *Server) setupRoutes() http.Handler {
 	// Apply middleware chain per AI.md PART 5 execution order (1→9).
 	// Chain() iterates from last to first, so index 0 = outermost = first to execute.
 	// Order: Recovery → RequestID → URLNormalize(1) → PathSecurity(2) →
-	//        SecurityHeaders(3) → CORS → RateLimit(4-6) → GeoIP(7) → Logging(9)
+	//        SecurityHeaders(3) → SecGPC → CORS → RateLimit(4-6) → GeoIP(7) → Logging(9)
 	// Auth(8) is per-route, not global.
 	handler := Chain(
 		r,
@@ -790,7 +790,8 @@ func (s *Server) setupRoutes() http.Handler {
 		URLNormalizeMiddleware,                 // 1. normalize URLs (trailing slash, etc.)
 		PathSecurityMiddleware,                 // 2. validate paths, block traversal
 		s.middleware.SecurityHeaders,           // 3. add security headers
-		s.middleware.CORS,                      // 3b. CORS (near security headers; handles preflight)
+		s.middleware.SecGPC,                    // 3b. honor Sec-GPC privacy signal (AI.md PART 11)
+		s.middleware.CORS,                      // 3c. CORS (near security headers; handles preflight)
 		s.middleware.RateLimit(s.rateLimiter),  // 4-6. allowlist/blocklist/rate limit
 		s.middleware.GeoBlock(s.geoipLookup),  // 7. country blocking
 		s.middleware.Logger,                    // 9. log requests (innermost of spec chain)

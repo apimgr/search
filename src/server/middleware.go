@@ -70,9 +70,15 @@ func (m *Middleware) SecurityHeaders(next http.Handler) http.Handler {
 			w.Header().Set("Referrer-Policy", headers.ReferrerPolicy)
 		}
 
-		// Content-Security-Policy prevents XSS and injection attacks
+		// Content-Security-Policy prevents XSS and injection attacks.
+		// Per AI.md PART 11: development mode uses Report-Only so violations are
+		// logged without breaking the app; production enforces the policy.
 		if headers.ContentSecurityPolicy != "" {
-			w.Header().Set("Content-Security-Policy", headers.ContentSecurityPolicy)
+			cspHeader := "Content-Security-Policy"
+			if m.config.Server.Mode == "development" {
+				cspHeader = "Content-Security-Policy-Report-Only"
+			}
+			w.Header().Set(cspHeader, headers.ContentSecurityPolicy)
 		}
 
 		// Permissions-Policy controls browser features
@@ -1399,6 +1405,26 @@ func PathSecurityMiddleware(next http.Handler) http.Handler {
 		// Update request
 		r.URL.Path = cleaned
 
+		next.ServeHTTP(w, r)
+	})
+}
+
+// SecGPC handles the Sec-GPC (Global Privacy Control) request header per AI.md PART 11.
+// When the browser signals GPC opt-out, the spec requires: set a request context flag,
+// audit-log the signal, and skip any non-essential processing. This project has no
+// personalization or behavioral analytics, so the flag is primarily a compliance hook.
+func (m *Middleware) SecGPC(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.TrimSpace(r.Header.Get("Sec-GPC")) == "1" {
+			// Set context flag so downstream handlers can respect the opt-out
+			ctx := context.WithValue(r.Context(), "gpc_opt_out", true)
+			r = r.WithContext(ctx)
+			// Log for compliance per spec ("Surface in the audit log")
+			slog.LogAttrs(r.Context(), slog.LevelInfo, "Sec-GPC opt-out honored",
+				slog.String("path", r.URL.Path),
+				slog.String("method", r.Method),
+			)
+		}
 		next.ServeHTTP(w, r)
 	})
 }
