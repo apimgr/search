@@ -4,6 +4,9 @@ PROJECTORG := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]
 
 # Version precedence: release.txt > env/default fallback
 VERSION ?= $(shell cat release.txt 2>/dev/null || echo "devel")
+# Per AI.md PART 25: add v prefix ONLY to numeric semver (e.g. 1.2.3 → v1.2.3)
+# Text versions (dev, beta, devel) and timestamps get NO v prefix
+TAG := $(shell echo "$(VERSION)" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]' && echo "v$(VERSION)" || echo "$(VERSION)")
 
 # Build info - use TZ env var or system timezone
 # Format: "Thu Dec 17, 2025 at 18:19:24 EST"
@@ -56,7 +59,7 @@ GO_DOCKER := docker run --rm -it \
 	-e CGO_ENABLED=0 \
 	casjaysdev/go:latest
 
-.PHONY: dev local build release docker test clean
+.PHONY: dev local build release docker test
 
 # =============================================================================
 # DEV - Quick dev build to temp directory (per AI.md PART 25)
@@ -81,7 +84,8 @@ dev:
 # LOCAL - Build for current OS/ARCH with version suffix (per AI.md PART 25)
 # =============================================================================
 # Outputs to binaries/search-VERSION for production testing
-local: clean
+local:
+	@rm -rf $(BINDIR) $(RELDIR)
 	@mkdir -p $(BINDIR)
 	@echo "Building local binaries version $(VERSION)..."
 	@$(GO_DOCKER) go mod tidy
@@ -99,7 +103,8 @@ local: clean
 # =============================================================================
 # BUILD - Build all platforms + host binary (via Docker with cached modules)
 # =============================================================================
-build: clean
+build:
+	@rm -rf $(BINDIR) $(RELDIR)
 	@mkdir -p $(BINDIR)
 	@echo "Building version $(VERSION)..."
 	@echo "Tidying and downloading Go modules..."
@@ -156,14 +161,14 @@ release: build
 	@tar --exclude='.git' --exclude='.github' --exclude='.gitea' \
 		--exclude='binaries' --exclude='releases' --exclude='*.tar.gz' \
 		-czf $(RELDIR)/$(PROJECTNAME)-$(VERSION)-source.tar.gz .
-	@gh release delete $(VERSION) --yes 2>/dev/null || true
-	@git tag -d $(VERSION) 2>/dev/null || true
-	@git push origin :refs/tags/$(VERSION) 2>/dev/null || true
-	@gh release create $(VERSION) $(RELDIR)/* \
+	@gh release delete $(TAG) --yes 2>/dev/null || true
+	@git tag -d $(TAG) 2>/dev/null || true
+	@git push origin :refs/tags/$(TAG) 2>/dev/null || true
+	@gh release create $(TAG) $(RELDIR)/* \
 		--title "$(PROJECTNAME) $(VERSION)" \
 		--notes "Release $(VERSION)" \
 		--latest
-	@echo "Release complete: $(VERSION)"
+	@echo "Release complete: $(TAG)"
 
 # =============================================================================
 # DOCKER - Build and push container to ghcr.io
@@ -203,8 +208,3 @@ test:
 	fi
 	@echo "Tests complete"
 
-# =============================================================================
-# CLEAN - Remove build artifacts
-# =============================================================================
-clean:
-	@rm -rf $(BINDIR) $(RELDIR)
