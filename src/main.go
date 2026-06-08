@@ -1236,7 +1236,7 @@ func runUpdate(subCmd string) {
 		}
 
 		fmt.Println("Installing update...")
-		if err := um.InstallUpdate(archivePath); err != nil {
+		if err := um.InstallUpdate(archivePath, info.ChecksumURL); err != nil {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Installation failed: %v\n", err)
 			fmt.Println("   Run 'search --update rollback' to restore previous version")
 			os.Exit(1)

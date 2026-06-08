@@ -2,7 +2,10 @@ package update
 
 import (
 	"archive/tar"
+	"bufio"
 	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -54,9 +57,11 @@ type UpdateInfo struct {
 	LatestVersion  string    `json:"latest_version"`
 	ReleaseNotes   string    `json:"release_notes"`
 	DownloadURL    string    `json:"download_url"`
-	AssetSize      int64     `json:"asset_size"`
-	PublishedAt    time.Time `json:"published_at"`
-	IsPrerelease   bool      `json:"is_prerelease"`
+	// Per AI.md PART 22: URL to checksums.txt for SHA-256 verification
+	ChecksumURL  string    `json:"checksum_url,omitempty"`
+	AssetSize    int64     `json:"asset_size"`
+	PublishedAt  time.Time `json:"published_at"`
+	IsPrerelease bool      `json:"is_prerelease"`
 }
 
 // NewManager creates a new update manager
@@ -128,9 +133,24 @@ func (m *Manager) CheckForUpdates(includePrerelease bool) (*UpdateInfo, error) {
 	if asset != nil {
 		info.DownloadURL = asset.DownloadURL
 		info.AssetSize = asset.Size
+		// Look for checksums.txt in the same release for SHA-256 verification
+		info.ChecksumURL = m.findChecksumURL(latest.Assets)
 	}
 
 	return info, nil
+}
+
+// findChecksumURL returns the download URL of a checksums file in the release assets.
+func (m *Manager) findChecksumURL(assets []Asset) string {
+	names := []string{"checksums.txt", "sha256sums.txt", "SHA256SUMS", "checksums"}
+	for _, asset := range assets {
+		for _, name := range names {
+			if strings.EqualFold(asset.Name, name) {
+				return asset.DownloadURL
+			}
+		}
+	}
+	return ""
 }
 
 // fetchReleases fetches releases from GitHub API
@@ -242,8 +262,78 @@ func (m *Manager) DownloadUpdate(downloadURL string, progressFn func(downloaded,
 	return tempFile.Name(), nil
 }
 
-// InstallUpdate installs an update from a downloaded archive
-func (m *Manager) InstallUpdate(archivePath string) error {
+// VerifyChecksum verifies the SHA-256 checksum of a downloaded file.
+// Per AI.md PART 22: "download binary → verify SHA-256 → atomic replace".
+// checksumURL points to a checksums.txt-format file where each line is:
+// "<hex-sha256>  <filename>". If checksumURL is empty the check is skipped.
+func (m *Manager) VerifyChecksum(filePath, checksumURL string) error {
+	if checksumURL == "" {
+		return nil
+	}
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Get(checksumURL)
+	if err != nil {
+		return fmt.Errorf("failed to fetch checksums: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("checksums endpoint returned %d", resp.StatusCode)
+	}
+
+	// Find the expected hash for this file
+	filename := filepath.Base(filePath)
+	var expected string
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.Fields(line)
+		if len(parts) >= 2 && parts[1] == filename {
+			expected = parts[0]
+			break
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("failed to read checksums: %w", err)
+	}
+	if expected == "" {
+		return fmt.Errorf("no checksum found for %s in checksums file", filename)
+	}
+
+	// Hash the local file
+	f, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to open file for checksum: %w", err)
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return fmt.Errorf("failed to hash file: %w", err)
+	}
+	got := hex.EncodeToString(h.Sum(nil))
+
+	if got != expected {
+		// Delete the corrupt download immediately — never install a bad binary
+		os.Remove(filePath)
+		return fmt.Errorf("checksum mismatch for %s: expected %s, got %s", filename, expected, got)
+	}
+	return nil
+}
+
+// InstallUpdate installs an update from a downloaded archive.
+// checksumURL, if non-empty, points to a checksums.txt file used to verify
+// the archive SHA-256 before extraction per AI.md PART 22.
+func (m *Manager) InstallUpdate(archivePath, checksumURL string) error {
+	// Per AI.md PART 22: verify SHA-256 before installing
+	if err := m.VerifyChecksum(archivePath, checksumURL); err != nil {
+		return fmt.Errorf("checksum verification failed: %w", err)
+	}
+
 	// Create backup of current binary
 	if err := m.backupCurrentBinary(); err != nil {
 		return fmt.Errorf("failed to backup current binary: %w", err)

@@ -858,7 +858,7 @@ func TestManagerInstallUpdateBadArchive(t *testing.T) {
 		tempDir:        tempDir,
 	}
 
-	err = m.InstallUpdate(badArchive)
+	err = m.InstallUpdate(badArchive, "")
 	if err == nil {
 		t.Error("InstallUpdate() should fail with invalid archive")
 	}
@@ -905,7 +905,7 @@ func TestManagerInstallUpdateSuccess(t *testing.T) {
 		tempDir:        tempDir,
 	}
 
-	err = m.InstallUpdate(archivePath)
+	err = m.InstallUpdate(archivePath, "")
 	if err != nil {
 		t.Fatalf("InstallUpdate() error = %v", err)
 	}
@@ -1550,7 +1550,7 @@ func TestInstallUpdateBackupError(t *testing.T) {
 		tempDir:        tempDir,
 	}
 
-	err = m.InstallUpdate("/some/archive.tar.gz")
+	err = m.InstallUpdate("/some/archive.tar.gz", "")
 	if err == nil {
 		t.Error("InstallUpdate() should fail when backup fails")
 	}
@@ -1979,7 +1979,7 @@ func TestInstallUpdateExtractError(t *testing.T) {
 		tempDir:        tempDir,
 	}
 
-	err = m.InstallUpdate(archivePath)
+	err = m.InstallUpdate(archivePath, "")
 	if err == nil {
 		t.Error("InstallUpdate() should fail with invalid archive")
 	}
@@ -2035,7 +2035,7 @@ func TestInstallUpdateReplaceError(t *testing.T) {
 	}
 
 	// Backup will fail because source is now a directory
-	err = m.InstallUpdate(archivePath)
+	err = m.InstallUpdate(archivePath, "")
 	if err == nil {
 		t.Error("InstallUpdate() should fail")
 	}
@@ -2611,7 +2611,7 @@ func TestInstallUpdateCleanup(t *testing.T) {
 		tempDir:        tempDir,
 	}
 
-	err = m.InstallUpdate(archivePath)
+	err = m.InstallUpdate(archivePath, "")
 	if err != nil {
 		t.Fatalf("InstallUpdate() error = %v", err)
 	}
