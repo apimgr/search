@@ -105,7 +105,8 @@ nav:
   - Usage:
     - API Reference: api.md
     - CLI Reference: cli.md
-    - Admin Panel: admin.md
+    - Integrations: integrations.md
+  - Security: security.md
   - Development:
     - Contributing: development.md
 
