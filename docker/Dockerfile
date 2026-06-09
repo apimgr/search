@@ -1,10 +1,8 @@
 # =============================================================================
 # Build Stage - Compile Go binary
 # =============================================================================
-FROM golang:alpine AS builder
-
-# Install git and bash (git: required for go mod download; bash: for build scripts)
-RUN apk add --no-cache git bash
+# Per AI.md PART 26: builder MUST be casjaysdev/go:latest
+FROM casjaysdev/go:latest AS builder
 
 ARG TARGETARCH
 ARG VERSION=dev
@@ -41,7 +39,7 @@ LABEL maintainer="apimgr <apimgr@casjay.cc>" \
       org.opencontainers.image.authors="apimgr" \
       org.opencontainers.image.title="search" \
       org.opencontainers.image.base.name="search" \
-      org.opencontainers.image.description="Containerized version of search - privacy-respecting metasearch engine" \
+      org.opencontainers.image.description="search - standard image (alpine)" \
       org.opencontainers.image.url="https://github.com/apimgr/search" \
       org.opencontainers.image.source="https://github.com/apimgr/search" \
       org.opencontainers.image.documentation="https://github.com/apimgr/search" \

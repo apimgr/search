@@ -2,10 +2,8 @@
 # Dev/Debug Image - Same as production but runs binary in debug mode
 # Tagged :devel — used for local development and debug sessions
 # =============================================================================
-FROM golang:alpine AS builder
-
-# Install git and bash
-RUN apk add --no-cache git bash
+# Per AI.md PART 26: builder MUST be casjaysdev/go:latest
+FROM casjaysdev/go:latest AS builder
 
 ARG TARGETARCH
 ARG VERSION=dev
