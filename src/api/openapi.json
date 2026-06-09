@@ -993,9 +993,6 @@
           "scheduler": {
             "type": "string"
           },
-          "cluster": {
-            "type": "string"
-          },
           "tor": {
             "type": "string"
           }
