@@ -136,6 +136,8 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.HandleFunc("/api/v1/server/privacy", h.handleServerPrivacy)
 	r.HandleFunc("/api/v1/server/help", h.handleServerHelp)
 	r.HandleFunc("/api/v1/server/terms", h.handleServerTerms)
+	r.HandleFunc("/api/v1/server/contact", h.handleServerContact)
+	r.HandleFunc("/api/v1/preferences", h.handlePreferences)
 
 	// Favicon proxy - privacy-preserving favicon fetching
 	// Per AI.md PART 16: NO external requests from client, server proxies content
@@ -1738,6 +1740,100 @@ func (h *Handler) handleFavicon(w http.ResponseWriter, r *http.Request) {
 
 // serveFaviconFallback serves a 1x1 transparent PNG as fallback
 // This allows the client-side JS to detect load failure and show placeholder
+// handleServerContact handles GET|POST /api/v1/server/contact per AI.md PART 1.
+// GET: returns contact form availability and config.
+// POST: submits a contact message (JSON body); same validation as web form.
+func (h *Handler) handleServerContact(w http.ResponseWriter, r *http.Request) {
+	accept := r.Header.Get("Accept")
+	wantsJSON := strings.Contains(accept, "application/json") || !strings.Contains(accept, "text/html")
+
+	contactEnabled := h.config.Server.Contact.Enabled
+
+	if r.Method == http.MethodGet {
+		if !wantsJSON {
+			http.Redirect(w, r, "/server/contact", http.StatusSeeOther)
+			return
+		}
+		h.jsonResponse(w, http.StatusOK, &APIResponse{
+			OK: true,
+			Data: map[string]interface{}{
+				"enabled": contactEnabled,
+				"title":   "Contact",
+			},
+		})
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", r.Method)
+		return
+	}
+
+	if !contactEnabled {
+		h.errorResponse(w, http.StatusNotFound, "Contact form is not enabled", "")
+		return
+	}
+
+	var body struct {
+		Name    string `json:"name"`
+		Email   string `json:"email"`
+		Subject string `json:"subject"`
+		Message string `json:"message"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		h.errorResponse(w, http.StatusBadRequest, "Invalid JSON body", err.Error())
+		return
+	}
+
+	body.Name = strings.TrimSpace(body.Name)
+	body.Email = strings.TrimSpace(body.Email)
+	body.Subject = strings.TrimSpace(body.Subject)
+	body.Message = strings.TrimSpace(body.Message)
+
+	if body.Name == "" || body.Email == "" || body.Subject == "" || body.Message == "" {
+		h.errorResponse(w, http.StatusBadRequest, "All fields are required", "")
+		return
+	}
+
+	log.Printf("[Contact/API] From: %s <%s>, Subject: %s", body.Name, body.Email, body.Subject)
+
+	h.jsonResponse(w, http.StatusOK, &APIResponse{
+		OK: true,
+		Data: map[string]string{
+			"status": "received",
+		},
+	})
+}
+
+// handlePreferences handles GET|POST /api/v1/preferences per AI.md PART 1.
+// Preferences are stored client-side (localStorage/cookies). The API endpoint
+// provides the schema and acknowledges client-submitted preference saves.
+func (h *Handler) handlePreferences(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		h.jsonResponse(w, http.StatusOK, &APIResponse{
+			OK: true,
+			Data: map[string]interface{}{
+				"storage": "client-side",
+				"fields": []string{
+					"theme", "language", "safe_search", "per_page",
+					"default_category", "engines",
+				},
+			},
+		})
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		h.jsonResponse(w, http.StatusOK, &APIResponse{
+			OK: true,
+			Data: map[string]string{"status": "saved"},
+		})
+		return
+	}
+
+	h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", r.Method)
+}
+
 func (h *Handler) serveFaviconFallback(w http.ResponseWriter) {
 	// 1x1 transparent PNG (smallest valid PNG)
 	transparentPNG := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
