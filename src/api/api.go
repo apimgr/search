@@ -888,9 +888,15 @@ func stripTxtExtension(path string) string {
 // errorResponse sends a unified error response per AI.md PART 16
 // Error format: {"ok": false, "error": "ERROR_CODE", "message": "Human readable message"}
 // Per AI.md PART 7-9: RequestID must be included in error response meta
-func (h *Handler) errorResponse(w http.ResponseWriter, status int, message, _ string) {
+func (h *Handler) errorResponse(w http.ResponseWriter, status int, message, detail string) {
 	// Get request ID from response header (set by middleware)
 	requestID := w.Header().Get("X-Request-ID")
+
+	// Log the internal detail for operators — never exposed in the API response
+	// (Tier 3 per AI.md PART 11: internal error details are debug-only)
+	if detail != "" && status >= 500 {
+		log.Printf("API error [%s] %s: %s", requestID, message, detail)
+	}
 
 	h.jsonResponse(w, status, &APIResponse{
 		OK:      false,
