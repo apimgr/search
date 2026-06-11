@@ -42,7 +42,6 @@ Then open [http://localhost:64580](http://localhost:64580) in your browser.
 - [Installation](installation.md) - Detailed installation instructions
 - [Configuration](configuration.md) - Configuration options and settings
 - [API](api.md) - REST and GraphQL API documentation
-- [Admin Panel](admin.md) - Administration guide
 - [CLI](cli.md) - Command-line interface reference
 
 ## Requirements

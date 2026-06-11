@@ -75,9 +75,6 @@ search --maintenance backup
 # Restore from backup
 search --maintenance restore /path/to/backup.tar.gz
 
-# Run setup wizard
-search --maintenance setup
-
 # Show maintenance help
 search --maintenance help
 ```

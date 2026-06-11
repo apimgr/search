@@ -58,7 +58,6 @@ search/
 ├── docs/                # Documentation
 ├── scripts/             # Build and install scripts
 ├── src/                 # Go source code
-│   ├── admin/           # Admin panel handlers
 │   ├── api/             # REST API handlers
 │   ├── backup/          # Backup/restore functionality
 │   ├── client/          # CLI client

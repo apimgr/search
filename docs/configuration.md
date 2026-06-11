@@ -1,17 +1,21 @@
 # Configuration
 
-Search can be configured via:
+Search is configured via:
 
 1. Configuration file (`server.yml`)
 2. Environment variables
 3. CLI flags
-4. Admin panel (web UI)
 
-**Priority**: CLI flags > Environment > Config file
+**Priority**: CLI flags > Environment variables > Config file
 
 ## Configuration File
 
-Default location: `/etc/search/server.yml` (or `/config/server.yml` in Docker)
+Default location:
+- Linux (root): `/etc/apimgr/search/server.yml`
+- Linux (user): `~/.config/apimgr/search/server.yml`
+- Docker: `/config/search/server.yml`
+
+The file is auto-generated with defaults on first run. There is no admin web UI — all configuration is file-only.
 
 ### Server Settings
 
@@ -33,21 +37,10 @@ server:
   mode: production
 
   # Base URL for the application
-  base_url: "https://search.example.com"
+  base_url: ""
 
-  # Secret key for sessions (auto-generated if empty)
-  secret_key: ""
-```
-
-### Admin Settings
-
-```yaml
-server:
-  admin:
-    enabled: true
-    username: "admin"
-    password: "changeme"
-    email: "admin@example.com"
+  # Operator token (auto-generated on first run)
+  token: ""
 ```
 
 ### SSL/TLS Settings
@@ -56,12 +49,12 @@ server:
 server:
   ssl:
     enabled: false
-    cert_file: "/config/ssl/cert.pem"
-    key_file: "/config/ssl/key.pem"
+    cert_file: "/config/search/ssl/cert.pem"
+    key_file: "/config/search/ssl/key.pem"
     auto_tls: false
     letsencrypt:
       enabled: false
-      email: "admin@example.com"
+      email: "operator@example.com"
       domains:
         - "search.example.com"
       staging: false
@@ -83,20 +76,19 @@ server:
 server:
   logs:
     level: info  # debug, info, warn, error
-    access:
-      enabled: true
-      format: combined  # common, combined, json
     error:
       enabled: true
 ```
+
+Note: access logging (per-request IPs and queries) is intentionally not supported — privacy is the product.
 
 ### Tor Hidden Service
 
 ```yaml
 server:
   tor:
-    enabled: false
-    # Tor will auto-start if the tor binary is installed
+    # Auto-enabled when tor binary is found on PATH
+    use_network: false
 ```
 
 ### Search Settings
@@ -156,10 +148,7 @@ All configuration can be set via environment variables with the `SEARCH_` prefix
 | `SEARCH_PORT` | Listen port | `64580` |
 | `SEARCH_ADDRESS` | Listen address | `` |
 | `SEARCH_MODE` | Application mode | `production` |
-| `SEARCH_ADMIN_USERNAME` | Admin username | `admin` |
-| `SEARCH_ADMIN_PASSWORD` | Admin password | - |
 | `SEARCH_SSL_ENABLED` | Enable SSL | `false` |
-| `SEARCH_TOR_ENABLED` | Enable Tor | `false` |
 
 ## CLI Flags
 
@@ -182,9 +171,3 @@ Options:
   --maintenance CMD      Maintenance commands
   --update CMD           Update management
 ```
-
-## Admin Panel
-
-All settings can be configured via the admin panel at `/admin/server/settings`.
-
-See [Admin Panel](admin.md) for details.

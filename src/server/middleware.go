@@ -4,6 +4,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"html"
@@ -14,7 +15,6 @@ import (
 	"net/http"
 	"path"
 	"runtime/debug"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -159,42 +159,44 @@ func (m *Middleware) SecurityHeaders(next http.Handler) http.Handler {
 	})
 }
 
-// CORS handles Cross-Origin Resource Sharing
+// CORS handles Cross-Origin Resource Sharing per AI.md PART 16.
+// Config key: server.web.cors (string). Default: "*" (all origins, no credentials).
+// - "*"       → Access-Control-Allow-Origin: * (no credentials per CORS spec)
+// - "a,b,..."  → match request Origin against list; reflect matched origin + credentials
+// - ""         → no CORS headers (same-origin only)
 func (m *Middleware) CORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cors := m.config.Server.Security.CORS
-
-		if !cors.Enabled {
+		corsPolicy := m.config.Server.Web.CORS
+		if corsPolicy == "" {
 			next.ServeHTTP(w, r)
 			return
 		}
 
+		const (
+			corsAllowMethods = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+			corsAllowHeaders = "*"
+			corsMaxAge       = "86400"
+		)
+
 		origin := r.Header.Get("Origin")
 		if origin != "" {
-			// Check if origin is allowed
-			allowed := false
-			for _, allowedOrigin := range cors.AllowedOrigins {
-				if allowedOrigin == "*" || allowedOrigin == origin {
-					allowed = true
-					break
-				}
-			}
-
-			if allowed {
-				w.Header().Set("Access-Control-Allow-Origin", origin)
-				if cors.AllowCredentials {
-					w.Header().Set("Access-Control-Allow-Credentials", "true")
+			if corsPolicy == "*" {
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+			} else {
+				for _, allowed := range strings.Split(corsPolicy, ",") {
+					if strings.TrimSpace(allowed) == origin {
+						w.Header().Set("Access-Control-Allow-Origin", origin)
+						w.Header().Set("Access-Control-Allow-Credentials", "true")
+						break
+					}
 				}
 			}
 		}
 
-		// Handle preflight requests
 		if r.Method == http.MethodOptions {
-			w.Header().Set("Access-Control-Allow-Methods", strings.Join(cors.AllowedMethods, ", "))
-			w.Header().Set("Access-Control-Allow-Headers", strings.Join(cors.AllowedHeaders, ", "))
-			if cors.MaxAge > 0 {
-				w.Header().Set("Access-Control-Max-Age", strconv.Itoa(cors.MaxAge))
-			}
+			w.Header().Set("Access-Control-Allow-Methods", corsAllowMethods)
+			w.Header().Set("Access-Control-Allow-Headers", corsAllowHeaders)
+			w.Header().Set("Access-Control-Max-Age", corsMaxAge)
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
@@ -504,8 +506,8 @@ func (c *CSRFMiddleware) ValidateToken(r *http.Request) bool {
 		token = r.FormValue(csrf.FieldName)
 	}
 
-	// Validate token matches cookie
-	if token != cookie.Value {
+	// Validate token matches cookie (constant-time per AI.md PART 11)
+	if subtle.ConstantTimeCompare([]byte(token), []byte(cookie.Value)) != 1 {
 		return false
 	}
 
@@ -567,7 +569,7 @@ func (c *CSRFMiddleware) Protect(next http.Handler) http.Handler {
 			token = r.FormValue(csrf.FieldName)
 		}
 
-		if token != cookie.Value {
+		if subtle.ConstantTimeCompare([]byte(token), []byte(cookie.Value)) != 1 {
 			// Per AI.md PART 11: no IP logging — privacy is the product.
 			if c.logManager != nil {
 				c.logManager.Security().LogCSRFViolation("-", r.URL.Path)

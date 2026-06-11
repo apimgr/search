@@ -395,15 +395,6 @@ type EmailFromConfig struct {
 
 // SecurityConfig represents security configuration
 type SecurityConfig struct {
-	// CORS
-	CORS struct {
-		Enabled          bool     `yaml:"enabled"`
-		AllowedOrigins   []string `yaml:"allowed_origins"`
-		AllowedMethods   []string `yaml:"allowed_methods"`
-		AllowedHeaders   []string `yaml:"allowed_headers"`
-		AllowCredentials bool     `yaml:"allow_credentials"`
-		MaxAge           int      `yaml:"max_age"`
-	} `yaml:"cors"`
 	// CSRF
 	CSRF struct {
 		Enabled    bool   `yaml:"enabled"`
@@ -1134,20 +1125,6 @@ func DefaultConfig() *Config {
 				// From defaults applied at runtime based on config
 			},
 			Security: SecurityConfig{
-				CORS: struct {
-					Enabled          bool     `yaml:"enabled"`
-					AllowedOrigins   []string `yaml:"allowed_origins"`
-					AllowedMethods   []string `yaml:"allowed_methods"`
-					AllowedHeaders   []string `yaml:"allowed_headers"`
-					AllowCredentials bool     `yaml:"allow_credentials"`
-					MaxAge           int      `yaml:"max_age"`
-				}{
-					Enabled:        false,
-					AllowedOrigins: []string{"*"},
-					AllowedMethods: []string{"GET", "POST", "OPTIONS"},
-					AllowedHeaders: []string{"Content-Type", "Authorization"},
-					MaxAge:         86400,
-				},
 				CSRF: struct {
 					Enabled    bool   `yaml:"enabled"`
 					CookieName string `yaml:"cookie_name"`

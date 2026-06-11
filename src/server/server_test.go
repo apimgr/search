@@ -118,53 +118,108 @@ func TestMiddlewareSecurityHeaders(t *testing.T) {
 }
 
 func TestMiddlewareCORS(t *testing.T) {
-	cfg := &config.Config{}
-	cfg.Server.Security.CORS.Enabled = true
-	cfg.Server.Security.CORS.AllowedOrigins = []string{"https://example.com"}
-	cfg.Server.Security.CORS.AllowedMethods = []string{"GET", "POST", "PUT"}
-	cfg.Server.Security.CORS.AllowedHeaders = []string{"Content-Type", "Authorization"}
-	cfg.Server.Security.CORS.AllowCredentials = true
-	cfg.Server.Security.CORS.MaxAge = 3600
-	mw := NewMiddleware(cfg, nil)
+	t.Run("wildcard_policy", func(t *testing.T) {
+		cfg := &config.Config{}
+		cfg.Server.Web.CORS = "*"
+		mw := NewMiddleware(cfg, nil)
 
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("OK"))
+		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("OK"))
+		})
+		wrapped := mw.CORS(handler)
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/search", nil)
+		req.Header.Set("Origin", "https://app.example.com")
+		rec := httptest.NewRecorder()
+		wrapped.ServeHTTP(rec, req)
+
+		if rec.Header().Get("Access-Control-Allow-Origin") != "*" {
+			t.Errorf("wildcard: Access-Control-Allow-Origin = %q, want *", rec.Header().Get("Access-Control-Allow-Origin"))
+		}
+		if rec.Header().Get("Access-Control-Allow-Credentials") != "" {
+			t.Error("wildcard: Access-Control-Allow-Credentials must not be set with *")
+		}
 	})
 
-	wrapped := mw.CORS(handler)
+	t.Run("specific_origin_matched", func(t *testing.T) {
+		cfg := &config.Config{}
+		cfg.Server.Web.CORS = "https://example.com"
+		mw := NewMiddleware(cfg, nil)
 
-	// Test regular request with allowed origin
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("Origin", "https://example.com")
-	rec := httptest.NewRecorder()
+		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("OK"))
+		})
+		wrapped := mw.CORS(handler)
 
-	wrapped.ServeHTTP(rec, req)
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("Origin", "https://example.com")
+		rec := httptest.NewRecorder()
+		wrapped.ServeHTTP(rec, req)
 
-	if rec.Header().Get("Access-Control-Allow-Origin") != "https://example.com" {
-		t.Errorf("Access-Control-Allow-Origin = %q", rec.Header().Get("Access-Control-Allow-Origin"))
-	}
-	if rec.Header().Get("Access-Control-Allow-Credentials") != "true" {
-		t.Errorf("Access-Control-Allow-Credentials = %q", rec.Header().Get("Access-Control-Allow-Credentials"))
-	}
+		if rec.Header().Get("Access-Control-Allow-Origin") != "https://example.com" {
+			t.Errorf("specific: Access-Control-Allow-Origin = %q", rec.Header().Get("Access-Control-Allow-Origin"))
+		}
+		if rec.Header().Get("Access-Control-Allow-Credentials") != "true" {
+			t.Errorf("specific: Access-Control-Allow-Credentials = %q", rec.Header().Get("Access-Control-Allow-Credentials"))
+		}
+	})
 
-	// Test preflight request
-	reqPreflight := httptest.NewRequest(http.MethodOptions, "/", nil)
-	reqPreflight.Header.Set("Origin", "https://example.com")
-	recPreflight := httptest.NewRecorder()
+	t.Run("specific_origin_not_matched", func(t *testing.T) {
+		cfg := &config.Config{}
+		cfg.Server.Web.CORS = "https://example.com"
+		mw := NewMiddleware(cfg, nil)
 
-	wrapped.ServeHTTP(recPreflight, reqPreflight)
+		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("OK"))
+		})
+		wrapped := mw.CORS(handler)
 
-	if recPreflight.Code != http.StatusNoContent {
-		t.Errorf("Preflight status = %d, want %d", recPreflight.Code, http.StatusNoContent)
-	}
-	if !strings.Contains(recPreflight.Header().Get("Access-Control-Allow-Methods"), "GET") {
-		t.Error("Access-Control-Allow-Methods should include GET")
-	}
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("Origin", "https://other.com")
+		rec := httptest.NewRecorder()
+		wrapped.ServeHTTP(rec, req)
+
+		if rec.Header().Get("Access-Control-Allow-Origin") != "" {
+			t.Error("non-matching origin: Access-Control-Allow-Origin must not be set")
+		}
+	})
+
+	t.Run("preflight_methods_and_headers", func(t *testing.T) {
+		cfg := &config.Config{}
+		cfg.Server.Web.CORS = "*"
+		mw := NewMiddleware(cfg, nil)
+
+		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("OK"))
+		})
+		wrapped := mw.CORS(handler)
+
+		req := httptest.NewRequest(http.MethodOptions, "/api/v1/search", nil)
+		req.Header.Set("Origin", "https://app.example.com")
+		rec := httptest.NewRecorder()
+		wrapped.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusNoContent {
+			t.Errorf("preflight status = %d, want %d", rec.Code, http.StatusNoContent)
+		}
+		methods := rec.Header().Get("Access-Control-Allow-Methods")
+		for _, m := range []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"} {
+			if !strings.Contains(methods, m) {
+				t.Errorf("preflight: Access-Control-Allow-Methods missing %q (got %q)", m, methods)
+			}
+		}
+		if rec.Header().Get("Access-Control-Allow-Headers") != "*" {
+			t.Errorf("preflight: Access-Control-Allow-Headers = %q, want *", rec.Header().Get("Access-Control-Allow-Headers"))
+		}
+		if rec.Header().Get("Access-Control-Max-Age") != "86400" {
+			t.Errorf("preflight: Access-Control-Max-Age = %q, want 86400", rec.Header().Get("Access-Control-Max-Age"))
+		}
+	})
 }
 
 func TestMiddlewareCORSDisabled(t *testing.T) {
 	cfg := &config.Config{}
-	cfg.Server.Security.CORS.Enabled = false
+	cfg.Server.Web.CORS = ""
 	mw := NewMiddleware(cfg, nil)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -179,9 +234,8 @@ func TestMiddlewareCORSDisabled(t *testing.T) {
 
 	wrapped.ServeHTTP(rec, req)
 
-	// CORS headers should not be set when disabled
 	if rec.Header().Get("Access-Control-Allow-Origin") != "" {
-		t.Error("CORS headers should not be set when disabled")
+		t.Error("CORS disabled: Access-Control-Allow-Origin must not be set when cors is empty string")
 	}
 }
 

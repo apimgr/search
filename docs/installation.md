@@ -118,7 +118,7 @@ sudo systemctl start search
 
 After installation, access the web interface at `http://localhost:64580` (or your configured port).
 
-On first run, you'll be prompted to complete the setup wizard to create an admin account.
+On first run, Search auto-generates `server.yml` with defaults including a random operator token. The startup banner shows the server URL and the token location. No setup wizard or admin account is required.
 
 ## Upgrading
 

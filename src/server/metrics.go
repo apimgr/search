@@ -2,6 +2,7 @@ package server
 
 import (
 	"bufio"
+	"crypto/subtle"
 	"net/http"
 	"os"
 	"runtime"
@@ -496,7 +497,7 @@ func (m *Metrics) AuthenticatedHandler() http.HandlerFunc {
 				localizedHTTPError(w, r, http.StatusUnauthorized, "errors.unauthorized")
 				return
 			}
-			if auth[7:] != token {
+			if subtle.ConstantTimeCompare([]byte(auth[7:]), []byte(token)) != 1 {
 				localizedHTTPError(w, r, http.StatusUnauthorized, "errors.invalid_token")
 				return
 			}

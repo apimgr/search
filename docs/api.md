@@ -168,54 +168,55 @@ Delete an alert permanently.
 
 Return the private RSS feed for an alert.
 
-## Admin API
+## Server Management API
 
-The admin API requires authentication via Bearer token.
+Server management endpoints require the operator token (`server.token` in `server.yml`).
 
 ### Authentication
 
-Include the API token in the Authorization header:
+Include the operator token in the Authorization header:
 
 ```bash
-curl -H "Authorization: Bearer YOUR_API_TOKEN" \
-  "https://search.example.com/api/v1/admin/status"
+curl -H "Authorization: Bearer YOUR_OPERATOR_TOKEN" \
+  "https://search.example.com/api/v1/server/healthz"
 ```
 
-### Status
+### Health
 
-#### `GET /api/v1/admin/status`
+#### `GET /api/v1/server/healthz`
 
-Get server status.
+Get server health status. This endpoint is also available publicly at `/server/healthz`.
 
 **Response:**
 
 ```json
 {
-  "status": "online",
-  "uptime": "3d 14h 22m",
-  "version": "1.0.0",
-  "engines": 12,
-  "requests_24h": 15234
+  "ok": true,
+  "data": {
+    "status": "healthy",
+    "version": "1.0.0",
+    "uptime": "3d 14h 22m"
+  }
 }
 ```
 
-### Configuration
+### Scheduler
 
-#### `GET /api/v1/admin/config`
+#### `GET /api/v1/server/scheduler/tasks`
 
-Get current configuration.
+List all scheduler tasks and their last run status.
 
-#### `PUT /api/v1/admin/config`
+#### `POST /api/v1/server/scheduler/tasks/{task}/run`
 
-Update configuration.
+Trigger a scheduled task to run immediately.
 
 ### Backups
 
-#### `GET /api/v1/admin/backups`
+#### `GET /api/v1/server/backups`
 
 List available backups.
 
-#### `POST /api/v1/admin/backups`
+#### `POST /api/v1/server/backups`
 
 Create a new backup.
 
@@ -291,15 +292,13 @@ Rate limit headers are included in responses:
 
 ## Error Responses
 
-All errors return a JSON response:
+All errors return a JSON response in canonical form:
 
 ```json
 {
-  "error": {
-    "code": "RATE_LIMITED",
-    "message": "Too many requests. Please wait before trying again.",
-    "retry_after": 60
-  }
+  "ok": false,
+  "error": "RATE_LIMITED",
+  "message": "Too many requests. Please wait before trying again."
 }
 ```
 
@@ -307,9 +306,11 @@ Common error codes:
 
 | Code | HTTP Status | Description |
 |------|-------------|-------------|
-| `INVALID_REQUEST` | 400 | Invalid request parameters |
+| `BAD_REQUEST` | 400 | Invalid request parameters |
+| `VALIDATION_FAILED` | 400 | Request validation failed |
 | `UNAUTHORIZED` | 401 | Missing or invalid authentication |
 | `FORBIDDEN` | 403 | Insufficient permissions |
 | `NOT_FOUND` | 404 | Resource not found |
-| `RATE_LIMITED` | 429 | Rate limit exceeded |
-| `INTERNAL_ERROR` | 500 | Server error |
+| `RATE_LIMITED` | 429 | Rate limit exceeded (`Retry-After` header set) |
+| `SERVER_ERROR` | 500 | Internal server error |
+| `MAINTENANCE` | 503 | Server is in maintenance mode |
