@@ -129,9 +129,9 @@ func printInit(shell string) error {
 	return nil
 }
 
-// handleShellFlag processes --shell flag when used as a flag instead of subcommand
-// This provides backwards compatibility with the --shell completions|init pattern
-func handleShellFlag(args []string) bool {
+// HandleShellFlag processes --shell flag when used as a flag instead of subcommand.
+// Called from main() before cobra to support the --shell completions|init pattern per PART 8.
+func HandleShellFlag(args []string) bool {
 	if len(args) < 2 {
 		return false
 	}

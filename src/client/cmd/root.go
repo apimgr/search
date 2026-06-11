@@ -35,9 +35,14 @@ var (
 	// Per AI.md PART 32: --token-file flag
 	tokenFile string
 	// Per AI.md PART 32: --user flag for user/org context
-	userCtx   string
-	output    string
-	noColor   bool
+	userCtx string
+	output  string
+	// Per AI.md PART 8: --color {auto|yes|no} (not --no-color bool)
+	colorMode string
+	// Per AI.md PART 8: --shell flag for shell completions
+	shellFlag string
+	// Per AI.md PART 8: --lang flag for output language
+	langFlag  string
 	timeout   int
 	debugMode bool
 	page      int
@@ -168,22 +173,26 @@ Or edit ~/.config/apimgr/%s/cli.yml directly.`, getBinaryName(), ProjectName)
 	return nil
 }
 
-// resolveServerAddress resolves server address with priority order
-// Per AI.md PART 32 line 42820-42856: Server address resolution
-// Returns server address and whether to save it to config
+// resolveServerAddress resolves server address with priority order.
+// Per AI.md PART 32: priority is --server flag → SEARCH_SERVER env var → cli.yml → compiled default.
+// Returns server address and whether to save it to config.
 func resolveServerAddress() (string, bool) {
-	// 1. --server flag (if provided)
+	// 1. --server flag (explicit override)
 	if server != "" {
-		// Per AI.md PART 32 line 42834: Save to config if current is empty
+		// Per AI.md PART 32: save to config if current config is empty
 		currentPrimary := viper.GetString("server.primary")
 		if currentPrimary == "" {
-			// Also check legacy address key
 			currentPrimary = viper.GetString("server.address")
 		}
 		return server, currentPrimary == ""
 	}
 
-	// 2. server.primary in cli.yml
+	// 2. SEARCH_SERVER environment variable
+	if envServer := os.Getenv("SEARCH_SERVER"); envServer != "" {
+		return envServer, false
+	}
+
+	// 3. cli.yml → server.primary
 	if primary := viper.GetString("server.primary"); primary != "" {
 		return primary, false
 	}
@@ -192,7 +201,11 @@ func resolveServerAddress() (string, bool) {
 		return addr, false
 	}
 
-	// 3. No server configured
+	// 4. Compiled default (if set via ldflags)
+	if OfficialSite != "" {
+		return OfficialSite, false
+	}
+
 	return "", false
 }
 
@@ -204,14 +217,65 @@ func saveServerToConfig(serverAddr string) {
 	_ = viper.WriteConfigAs(configPath)
 }
 
-// backgroundAutodiscover performs autodiscovery in background
+// backgroundAutodiscover performs autodiscovery and checks for CLI updates.
+// Per AI.md PART 32: CLI checks cli_versions on every start; if current < available, notify user.
 func backgroundAutodiscover() {
 	if apiClient == nil {
 		return
 	}
 
-	// Call /api/autodiscover in background; silent failure is acceptable
-	_, _ = apiClient.Autodiscover()
+	info, err := apiClient.Autodiscover()
+	if err != nil || info == nil {
+		return
+	}
+
+	// Per AI.md PART 32: check cli_min_version — refuse further requests if too old
+	if info.CLIMinVersion != "" && Version != "dev" {
+		if versionLessThan(Version, info.CLIMinVersion) {
+			fmt.Fprintf(os.Stderr, "this CLI is too old; the server requires %s — run '%s --update yes' to upgrade.\n",
+				info.CLIMinVersion, getBinaryName())
+			os.Exit(1)
+		}
+	}
+
+	// Per AI.md PART 32: notify user if a newer version is available for this platform
+	if len(info.CLIVersions) == 0 || Version == "dev" {
+		return
+	}
+	platformKey := api.CurrentPlatform()
+	if latest, ok := info.CLIVersions[platformKey]; ok {
+		if versionLessThan(Version, latest.Version) {
+			fmt.Fprintf(os.Stderr, "A newer version of %s is available: %s (you have %s). Run '%s --update yes' to upgrade.\n",
+				getBinaryName(), latest.Version, Version, getBinaryName())
+		}
+	}
+}
+
+// versionLessThan returns true when a is strictly less than b using semver-style comparison.
+// Handles simple "major.minor.patch" strings; returns false on parse failure.
+func versionLessThan(a, b string) bool {
+	parse := func(v string) [3]int {
+		v = strings.TrimPrefix(v, "v")
+		parts := strings.SplitN(v, ".", 3)
+		var nums [3]int
+		for i, p := range parts {
+			if i >= 3 {
+				break
+			}
+			fmt.Sscanf(p, "%d", &nums[i])
+		}
+		return nums
+	}
+	va, vb := parse(a), parse(b)
+	for i := range va {
+		if va[i] < vb[i] {
+			return true
+		}
+		if va[i] > vb[i] {
+			return false
+		}
+	}
+	return false
 }
 
 // getToken returns the API token following PART 32 priority order
@@ -268,7 +332,12 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&tokenFile, "token-file", "", "read token from file")
 	rootCmd.PersistentFlags().StringVar(&userCtx, "user", "", "user or org context (@user, +org, or auto-detect)")
 	rootCmd.PersistentFlags().StringVar(&output, "output", "table", "output format: json, table, plain")
-	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "disable colored output")
+	// Per AI.md PART 8: --color {auto|yes|no} (not --no-color bool); NO_COLOR env is also respected
+	rootCmd.PersistentFlags().StringVar(&colorMode, "color", "auto", "color output: auto, yes, no")
+	// Per AI.md PART 8: --shell flag for shell completions (mirrors server binary)
+	rootCmd.PersistentFlags().StringVar(&shellFlag, "shell", "", "shell integration: completions|init|--help")
+	// Per AI.md PART 8: --lang flag for output language
+	rootCmd.PersistentFlags().StringVar(&langFlag, "lang", "", "output language code (e.g. en, es, zh, fr, ar, de, ja)")
 	rootCmd.PersistentFlags().IntVar(&timeout, "timeout", 0, "request timeout in seconds")
 	rootCmd.PersistentFlags().BoolVar(&debugMode, "debug", false, "enable debug output")
 	rootCmd.PersistentFlags().IntVar(&page, "page", 1, "page number")
@@ -285,6 +354,16 @@ func initConfig() {
 	if err := path.EnsureDirs(); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to create CLI directories: %v\n", err)
 	}
+
+	// Per AI.md PART 8: apply --lang flag (set env so i18n layer picks it up)
+	if langFlag != "" {
+		os.Setenv("SEARCH_LANG", langFlag)
+		os.Setenv("LANG", langFlag)
+	}
+
+	// Per AI.md PART 8: apply --color / NO_COLOR priority chain
+	// Priority: --color flag → config output.color → NO_COLOR env → TTY auto-detect
+	applyColorMode()
 
 	if cfgFile != "" {
 		// Resolve config path (handles relative/absolute paths and extensions)
@@ -355,4 +434,38 @@ func getOutputFormat() string {
 		return output
 	}
 	return viper.GetString("output.format")
+}
+
+// applyColorMode applies the NO_COLOR/--color priority chain per AI.md PART 8.
+// Priority: --color flag → config output.color → NO_COLOR env var → TTY auto-detect.
+// Sets SEARCH_COLOR env so downstream packages (TUI, formatters) pick it up.
+func applyColorMode() {
+	resolved := colorMode
+
+	// 1. --color flag (already in colorMode from PersistentFlags)
+	// Only override from config/env if flag is at its default "auto"
+	if resolved == "auto" || resolved == "" {
+		// 2. Config file: output.color
+		if cfgColor := viper.GetString("output.color"); cfgColor != "" && cfgColor != "auto" {
+			resolved = cfgColor
+		}
+	}
+
+	if resolved == "auto" || resolved == "" {
+		// 3. NO_COLOR env var: non-empty = disable colors
+		if os.Getenv("NO_COLOR") != "" {
+			resolved = "no"
+		}
+	}
+
+	if resolved == "auto" || resolved == "" {
+		// 4. TTY auto-detect
+		if !term.IsTerminal(int(os.Stdout.Fd())) || os.Getenv("TERM") == "dumb" {
+			resolved = "no"
+		} else {
+			resolved = "yes"
+		}
+	}
+
+	os.Setenv("SEARCH_COLOR", resolved)
 }

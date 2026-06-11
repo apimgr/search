@@ -15,6 +15,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Per AI.md PART 8: --shell flag handled before cobra parses, same as server binary
+	if cmd.HandleShellFlag(os.Args) {
+		os.Exit(0)
+	}
+
 	if err := cmd.ExecuteClientCLI(); err != nil {
 		os.Exit(1)
 	}

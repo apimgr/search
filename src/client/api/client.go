@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -171,8 +172,15 @@ func (c *Client) SetUserContext(ctx string) {
 	c.UserContext = ctx
 }
 
-// AutodiscoverResponse represents /api/autodiscover response
-// Per AI.md PART 32: Autodiscover endpoint for CLI/agent
+// CLIBinaryInfo holds the version and SHA-256 checksum for a CLI binary platform.
+// Per AI.md PART 32: cli_versions in autodiscover response, keyed by "{os}-{arch}".
+type CLIBinaryInfo struct {
+	Version string `json:"version"`
+	SHA256  string `json:"sha256"`
+}
+
+// AutodiscoverResponse represents /api/autodiscover response.
+// Per AI.md PART 32: includes cli_versions and cli_min_version for auto-update checks.
 type AutodiscoverResponse struct {
 	Server struct {
 		Name     string `json:"name"`
@@ -188,6 +196,9 @@ type AutodiscoverResponse struct {
 		Version  string `json:"version"`
 		BasePath string `json:"base_path"`
 	} `json:"api"`
+	// Per AI.md PART 32: CLI binary info per platform for auto-update.
+	CLIVersions   map[string]CLIBinaryInfo `json:"cli_versions"`
+	CLIMinVersion string                   `json:"cli_min_version"`
 }
 
 // Autodiscover fetches server settings from /api/autodiscover.
@@ -205,6 +216,12 @@ func (c *Client) Autodiscover() (*AutodiscoverResponse, error) {
 	}
 
 	return &result, nil
+}
+
+// CurrentPlatform returns the "{os}-{arch}" key used in autodiscover cli_versions.
+// Per AI.md PART 32: keys are "{os}-{arch}" e.g. "linux-amd64".
+func CurrentPlatform() string {
+	return runtime.GOOS + "-" + runtime.GOARCH
 }
 
 // get performs a GET request to the primary server.

@@ -275,6 +275,13 @@ type TorInfo struct {
 
 // AutodiscoverResponse represents /api/autodiscover response
 // Per AI.md PART 32: Autodiscover endpoint for CLI/agent
+// CLIBinaryInfo holds the version and SHA-256 checksum for a CLI binary platform.
+// Per AI.md PART 32: autodiscover response must include cli_versions per platform.
+type CLIBinaryInfo struct {
+	Version string `json:"version"`
+	SHA256  string `json:"sha256"`
+}
+
 type AutodiscoverResponse struct {
 	Server struct {
 		Name     string `json:"name"`
@@ -290,6 +297,10 @@ type AutodiscoverResponse struct {
 		Version  string `json:"version"`
 		BasePath string `json:"base_path"`
 	} `json:"api"`
+	// Per AI.md PART 32: CLI version info for auto-update checks.
+	// Keys are "{os}-{arch}" e.g. "linux-amd64".
+	CLIVersions    map[string]CLIBinaryInfo `json:"cli_versions"`
+	CLIMinVersion  string                   `json:"cli_min_version"`
 }
 
 // InfoResponse represents server info response
@@ -511,6 +522,12 @@ func (h *Handler) handleAutodiscover(w http.ResponseWriter, r *http.Request) {
 	// API info
 	resp.API.Version = APIVersion
 	resp.API.BasePath = APIPrefix
+
+	// Per AI.md PART 32: include CLI version info for auto-update checks.
+	// The map is populated when CLI binaries are published alongside the server release.
+	// An empty map signals "no CLI binary available via this server" (CLI uses GitHub Releases).
+	resp.CLIVersions = map[string]CLIBinaryInfo{}
+	resp.CLIMinVersion = ""
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
 		OK:   true,

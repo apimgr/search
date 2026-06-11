@@ -134,6 +134,11 @@ func TestResolveServerAddressFromLegacy(t *testing.T) {
 func TestResolveServerAddressEmpty(t *testing.T) {
 	viper.Reset()
 	server = ""
+	// Clear env and compiled default so the empty-case test remains meaningful
+	t.Setenv("SEARCH_SERVER", "")
+	savedSite := OfficialSite
+	OfficialSite = ""
+	defer func() { OfficialSite = savedSite }()
 
 	addr, shouldSave := resolveServerAddress()
 
@@ -338,6 +343,11 @@ func TestInitClientNoServer(t *testing.T) {
 	viper.Reset()
 	server = ""
 	apiClient = nil
+	// Clear env and compiled default so that no server is found
+	t.Setenv("SEARCH_SERVER", "")
+	savedSite := OfficialSite
+	OfficialSite = ""
+	defer func() { OfficialSite = savedSite }()
 
 	err := initClient()
 
@@ -689,7 +699,8 @@ func TestRootCmdLong(t *testing.T) {
 
 func TestRootCmdFlags(t *testing.T) {
 	// Verify flags are registered
-	flags := []string{"config", "server", "token", "token-file", "user", "output", "no-color", "timeout", "debug", "page", "limit"}
+	// Per AI.md PART 8: shared flags ALL binaries must have include --color, --shell, --lang
+	flags := []string{"config", "server", "token", "token-file", "user", "output", "color", "shell", "lang", "timeout", "debug", "page", "limit"}
 
 	for _, flag := range flags {
 		if rootCmd.PersistentFlags().Lookup(flag) == nil {

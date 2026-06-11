@@ -76,7 +76,6 @@ search/
 │   ├── server/          # HTTP server
 │   ├── service/         # Service management
 │   ├── tls/             # TLS/SSL handling
-│   ├── users/           # User management
 │   ├── widgets/         # Dashboard widgets
 │   └── main.go          # Entry point
 ├── tests/               # Integration tests

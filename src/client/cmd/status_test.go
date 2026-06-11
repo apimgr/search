@@ -247,6 +247,11 @@ func TestRunStatusInitClientError(t *testing.T) {
 	viper.Reset()
 	server = ""
 	apiClient = nil
+	// Clear env and compiled default so that no server is found
+	t.Setenv("SEARCH_SERVER", "")
+	savedSite := OfficialSite
+	OfficialSite = ""
+	defer func() { OfficialSite = savedSite }()
 
 	err := runStatus()
 

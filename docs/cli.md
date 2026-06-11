@@ -124,7 +124,7 @@ sudo mv search-cli-linux-amd64 /usr/local/bin/search-cli
 
 ### Configuration
 
-Configure the CLI client by creating `~/.config/search/cli.yml`:
+Configure the CLI client by creating `~/.config/apimgr/search/cli.yml`:
 
 ```yaml
 # Server to connect to
@@ -164,10 +164,10 @@ search-cli --limit 5 "privacy"
 
 ### TUI Mode
 
-Launch the interactive terminal UI:
+The TUI launches automatically when `search-cli` is run interactively with no search query (auto-detected from the terminal environment — there is no `--tui` flag).
 
 ```bash
-search-cli --tui
+search-cli
 ```
 
 TUI features:
@@ -247,7 +247,9 @@ search-cli "!ddg privacy"
 
 | Variable | Description |
 |----------|-------------|
-| `SEARCH_SERVER` | Server URL |
-| `SEARCH_API_TOKEN` | API token |
+| `SEARCH_SERVER` | Server URL (overrides `--server` flag when no flag given) |
+| `SEARCH_TOKEN` | API token |
 | `SEARCH_FORMAT` | Output format |
-| `NO_COLOR` | Disable color output |
+| `SEARCH_COLOR` | Color output: `auto`, `yes`, `no` |
+| `SEARCH_LANG` | Output language code (e.g. `en`, `es`, `zh`) |
+| `NO_COLOR` | Disable ANSI colors and emojis when set to any non-empty value |

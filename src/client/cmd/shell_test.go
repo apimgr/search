@@ -290,37 +290,37 @@ func TestPrintInitUnsupported(t *testing.T) {
 	}
 }
 
-// Tests for handleShellFlag
+// Tests for HandleShellFlag
 
 func TestHandleShellFlagNoArgs(t *testing.T) {
-	result := handleShellFlag([]string{})
+	result := HandleShellFlag([]string{})
 
 	if result {
-		t.Error("handleShellFlag([]) should return false")
+		t.Error("HandleShellFlag([]) should return false")
 	}
 }
 
 func TestHandleShellFlagSingleArg(t *testing.T) {
-	result := handleShellFlag([]string{"test"})
+	result := HandleShellFlag([]string{"test"})
 
 	if result {
-		t.Error("handleShellFlag(['test']) should return false")
+		t.Error("HandleShellFlag(['test']) should return false")
 	}
 }
 
 func TestHandleShellFlagNoShellFlag(t *testing.T) {
-	result := handleShellFlag([]string{"test", "command", "arg"})
+	result := HandleShellFlag([]string{"test", "command", "arg"})
 
 	if result {
-		t.Error("handleShellFlag without --shell should return false")
+		t.Error("HandleShellFlag without --shell should return false")
 	}
 }
 
 func TestHandleShellFlagWithOtherFlags(t *testing.T) {
-	result := handleShellFlag([]string{"--config", "file.yml", "--server", "url"})
+	result := HandleShellFlag([]string{"--config", "file.yml", "--server", "url"})
 
 	if result {
-		t.Error("handleShellFlag without --shell should return false")
+		t.Error("HandleShellFlag without --shell should return false")
 	}
 }
 
