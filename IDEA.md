@@ -51,7 +51,7 @@ Search is a privacy-respecting, self-hosted metasearch engine that aggregates re
 | Role | Authentication | Permissions |
 |------|---------------|-------------|
 | Anonymous public user | None | Search, view results, set client-side preferences, create/manage email-verified search alerts via signed manage links |
-| Operator | Possession of `server.token` (operator bearer token from `server.yml`) sent as `Authorization: Bearer <token>` | Operator-only API endpoints (engine state queries, alert moderation, maintenance). Configuration is file-only — all server settings are set in `server.yml` and managed via CLI / config-reload. |
+| Operator | Possession of `server.token` (operator bearer token from `server.yml`) | Operator-only API endpoints (engine state queries, alert moderation, maintenance). Configuration is file-only — all server settings are set in `server.yml` and managed via CLI / config-reload. |
 
 There is **no admin web UI** and **no end-user account system**. The operator manages the service entirely via `server.yml` plus the `search-cli` client. The spec (AI.md) has no regular-user accounts, organization tiers, or custom-domain features — these are simply not in scope.
 
@@ -67,8 +67,8 @@ Full schemas are documented under `### Data Models` below. Sensitivity classific
 | Alert deduplication state (URL hashes) | Low | Server DB | Lifetime of alert |
 | Engine health metrics (response times, error rates) | None | Server DB / Prometheus | Per metrics retention |
 | Cached search results | None (no user attribution) | Server cache | 5 minutes default, configurable |
-| Operator bearer token (`server.token`) | High | `server.yml` (file permissions 0600); SHA-256 compared in code, never logged | Until operator rotates via `--maintenance rotate-token` |
-| Per-resource owner tokens (`api_tokens` table) | High | Server DB — SHA-256 hashed, never stored plaintext | Until owner revokes |
+| Operator bearer token (`server.token`) | High | `server.yml` (restricted permissions, never logged) | Until operator rotates |
+| Per-resource owner tokens | High | Server DB (hashed before storage, never stored plaintext) | Until owner revokes |
 
 ### Trust boundaries & external services
 
@@ -99,25 +99,25 @@ Full provider list under `### Data Sources`. Trust assumptions and failure modes
 | De-anonymize a query to a specific user | Query logs, IP logs | No server-side query/IP logging (per AI.md PART 11). Image proxy strips Referer. |
 | Scrape the public service as free metasearch | High-volume bots | Rate limiting (per AI.md PART 1). Engine rotation. Optional CAPTCHA on abuse signals. |
 | Spam alert subscriptions / abuse for email amplification | Mass alert creation, bogus addresses | Rate limit alert creation. Email verification required before activation. Per-email cap. |
-| Phish via alert manage links | Signed-token forgery, link confusion | Tokens signed with server secret; manage URLs use 256-bit random; emails sent from verified `From`. |
+| Phish via alert manage links | Signed-token forgery, link confusion | Alert manage tokens are cryptographically signed and unguessable; emails sent from the configured sender address. |
 | SSRF via webhook destinations | User-supplied webhook URL | Validate URL scheme; block private/loopback ranges; signed payload so target can verify origin; outbound timeout. |
 | Inject malicious content into result snippets | Hostile engine response | All result snippets HTML-escaped; CSP headers; result links never auto-clicked; tracking params stripped. |
-| Steal operator bearer token | Disk read on the server host, MitM on plain-HTTP traffic | `server.yml` written 0600 and owned by the service user; SHA-256 compared in constant time; never logged; rotated via `--maintenance rotate-token`; TLS required for any remote operator traffic. |
+| Steal operator bearer token | Disk read on the server host, MitM on plain-HTTP traffic | Operator token file restricted to service user ownership; token never logged; operator-rotatable; TLS required for any remote operator traffic. |
 | Deny availability | DDoS, engine bans | Rate limits, engine rotation, cached fallback. Admin-tunable. |
-| Exfiltrate alert subscriber list | Server DB read by attacker with host access | Audit log of operator actions; service user runs unprivileged; file-system permissions on DB and `server.yml` (0600/0700). |
+| Exfiltrate alert subscriber list | Server DB read by attacker with host access | Audit log of operator actions; service user runs unprivileged; restrictive filesystem permissions on DB and server config. |
 | Abuse instant-answer widgets | Crafted query → widget XSS | All widget output server-rendered with HTML escape; no inline script execution from external answer data. |
-| Enumerate alerts publicly | Token guessing | Manage tokens are 256-bit random; RSS feed tokens same; not enumerable. |
+| Enumerate alerts publicly | Token guessing | Manage and RSS tokens are cryptographically random and unguessable; not enumerable. |
 
 ### Security decisions & exceptions
 
 - **Anonymous-by-default public surface.** No user accounts on the public side; all preferences are client-side. Trade-off: cannot offer per-user history. Reason: privacy is the product.
 - **Email-verified accountless alerts.** Alerts require email + verification but no account. Reason: keeps the privacy posture while still letting users monitor queries. Manage tokens are signed, single-use confirm + long-term manage links.
-- **Direct scraping of primary engines.** We hit Google/Bing/etc. HTML directly. Trade-off: engines may rate-limit or change HTML. Mitigation: per-engine health monitoring, parser fallback, engine rotation, brief result caching.
+- **Direct querying of primary engines.** We query Google/Bing/etc. directly (no intermediary). Trade-off: engines may rate-limit or change their response format. Mitigation: per-engine health monitoring, parser fallback, engine rotation, brief result caching.
 - **Image proxy enabled by default.** Result thumbnails are proxied through this server to strip Referer and prevent third-party tracking when users hover/load images. Trade-off: bandwidth cost on the server. Reason: privacy.
-- **Tor integration is optional, off by default.** When the server detects the Tor binary (per AI.md PART 31) and admin enables it, an `.onion` hidden service is published. Reason: optional anonymity for users on Tor.
+- **Tor integration is optional, off by default.** When the operator enables Tor integration (per AI.md PART 31), an `.onion` hidden service is published. Reason: optional anonymity for users on Tor.
 - **Cached results may be stale.** Default cache is 5 minutes (configurable). Reason: reduce engine load and protect against transient failures. Trade-off: results can lag by up to TTL.
-- **Webhook URL is user-supplied.** SSRF mitigations apply but cannot prevent a user from configuring webhooks pointing at private addresses they own. Reason: legitimate self-hosted automation. Mitigation: validate scheme, block reserved/private CIDRs, signed payloads, outbound timeout.
-- **No admin web UI or user accounts.** The spec (AI.md PART 0–33) has no admin web panel, no session system, no login form, no user registration, no organizations, and no custom-domain features. The operator surface is the two-tier bearer-token model (`server.token` + per-resource `api_tokens`) documented above. Reason: privacy is the product; the application has no UI-driven configuration and no end-user accounts.
+- **Webhook URL is user-supplied.** SSRF mitigations apply but cannot prevent a user from configuring webhooks pointing at private addresses they own. Reason: legitimate self-hosted automation. Mitigation: SSRF protections applied (per AI.md trust boundary rules).
+- **No admin web UI or user accounts.** The spec (AI.md PART 0–33) has no admin web panel, no session system, no login form, no user registration, no organizations, and no custom-domain features. The operator surface is the two-tier bearer-token model (`server.token` + per-resource owner tokens) documented above. Reason: privacy is the product; the application has no UI-driven configuration and no end-user accounts.
 
 ---
 
@@ -138,7 +138,7 @@ Full provider list under `### Data Sources`. Trust assumptions and failure modes
 - **Engine Health Monitoring**: Track response times, error rates, and availability per engine
 - **Automatic Failover**: If primary engines fail, seamlessly switch to backups
 - **Engine Rotation**: Distribute requests to avoid rate limiting and detection
-- **Multiple Parsers**: HTML scraping + API fallback for each engine
+- **Multiple Query Strategies**: Multiple query approaches per engine with automatic fallback
 - **Cached Results Fallback**: Serve stale results if all engines are temporarily down
 - **Self-Healing**: Automatically re-enable recovered engines
 
@@ -166,23 +166,7 @@ Preferences persist across sessions without accounts. Three storage methods:
 - Useful for backup and migration
 
 ##### 3. Preference String (Portable)
-Compact URL-safe encoded string for sharing/bookmarking:
-
-```
-Format: Base64-encoded JSON or compact key=value
-
-Compact format example:
-t=d;c=web;s=m;r=20;n=1;p=i;k=1
-
-Keys:
-  t   = theme (d=dark, l=light, a=auto)
-  s   = safe_search (o=off, m=moderate, s=strict)
-  c   = default_category
-  k   = keyboard_shortcuts (1=on, 0=off)
-  r   = results_per_page
-  n   = new_tab (1=on, 0=off)
-  p   = pagination (i=infinite, p=pages)
-```
+Compact URL-safe encoded string for sharing/bookmarking.
 
 **Use Cases:**
 - **URL Parameter**: `https://search.example.com/?prefs=t%3Dd%3Bc%3Dweb%3Bs%3Dm`
@@ -275,7 +259,6 @@ convert 500 euros to dollars
 ```
 **Displays**: Converted amount, exchange rate, last updated time
 **Features**: 150+ currencies, real-time rates, historical chart (7 days)
-**Source**: exchangerate.host API (free, no key required)
 
 ---
 
@@ -289,7 +272,6 @@ forecast london, temperature paris
 - Current: temp, feels like, conditions, humidity, wind
 - Forecast: 5-day outlook with highs/lows
 - Icon: sun, cloud, rain, snow, etc.
-**Source**: wttr.in or OpenWeatherMap
 
 ---
 
@@ -305,7 +287,6 @@ what does "catharsis" mean
 - Definitions (numbered)
 - Example sentences
 - Etymology (origin)
-**Source**: Wiktionary API / Free Dictionary API
 
 ---
 
@@ -316,7 +297,6 @@ synonyms for happy, beautiful synonyms, antonyms of good
 words like "important"
 ```
 **Displays**: Grouped synonyms/antonyms by meaning, word type labels
-**Source**: Datamuse API / Wiktionary
 
 ---
 
@@ -332,7 +312,6 @@ ip address, my ip address
 - ISP / Organization
 - Timezone
 - Map preview (optional)
-**Source**: ip-api.com / ipinfo.io / local GeoIP database
 
 ---
 
@@ -364,7 +343,6 @@ what time is it in sydney
 - UTC offset
 - Conversion result with both times
 - World clock (multiple cities)
-**Source**: Built-in Go time library + timezone database
 
 ---
 
@@ -512,7 +490,6 @@ dogecoin, doge price
 - 24h change (% and $)
 - Market cap
 - Mini price chart (24h)
-**Source**: CoinGecko API (free tier)
 
 ---
 
@@ -527,7 +504,6 @@ $GOOGL, $AMZN stock price
 - Change ($ and %)
 - Open, high, low, volume
 - Mini chart
-**Source**: Alpha Vantage / Yahoo Finance API
 **Note**: May be delayed 15-20 minutes (free tier limitation)
 
 ---
@@ -561,7 +537,6 @@ translate こんにちは to english
 - Source language (auto-detected)
 - Pronunciation (if applicable)
 - Copy button
-**Source**: LibreTranslate (self-hosted) or Lingva API
 
 ---
 
@@ -577,7 +552,6 @@ what is quantum computing
 - Title and thumbnail
 - First paragraph summary
 - "Read more" link to Wikipedia
-**Source**: Wikipedia API
 
 ---
 
@@ -593,7 +567,6 @@ world cup scores
 - Teams and logos
 - Game time/status
 - Upcoming game (if no live)
-**Source**: ESPN API / TheSportsDB
 
 ---
 
@@ -608,7 +581,6 @@ nutrition facts chicken breast
 - Calories per serving
 - Macros (protein, carbs, fat)
 - Common serving sizes
-**Source**: USDA FoodData Central API
 
 #### Direct Answers (Full Page Results)
 
@@ -632,7 +604,6 @@ tldr: kubectl
 - Platform indicator (linux/osx/windows/common)
 - Copy button for each example
 - Link to full man page
-**Source**: tldr-pages (https://tldr.sh) - cached locally, updated weekly
 **Fallback**: If command not found, offer to search or show man page
 
 ---
@@ -652,7 +623,6 @@ man: systemctl
 - Table of contents sidebar
 - Section navigation (1-8)
 - Copy button for command examples
-**Source**: man.cx API / local man-db cache
 **Features**:
 - Section selector: `man:printf.3` (C library) vs `man:printf.1` (shell command)
 - Search within page
@@ -699,7 +669,6 @@ whois:cloudflare.com
 - Registrant info (if public)
 - Domain status codes
 - DNSSEC status
-**Source**: WHOIS protocol servers / RDAP
 
 ---
 
@@ -718,7 +687,6 @@ dns:github.io
 - CNAME records
 - SOA record
 - TTL values
-**Source**: Built-in DNS resolver / multiple DNS servers
 **Features**: Query specific record types: `dns:example.com/mx`, `dns:example.com/txt`
 
 ---
@@ -738,7 +706,6 @@ wiki:solar system
 - Key sections expandable
 - Related articles
 - "Read full article" link
-**Source**: Wikipedia API
 **Features**: Language selection, mobile-friendly rendering
 
 ---
@@ -758,7 +725,6 @@ dict:catharsis
 - Related words (synonyms, antonyms)
 - Word frequency/usage level
 - Translations (if multilingual enabled)
-**Source**: Wiktionary API / Free Dictionary API
 
 ---
 
@@ -776,7 +742,6 @@ thesaurus:fast
 - Usage examples
 - Formal/informal indicators
 - Word intensity scale (e.g., happy → ecstatic → elated)
-**Source**: Datamuse API / WordNet / Wiktionary
 
 ---
 
@@ -819,7 +784,6 @@ cve:2014-0160
 - References and advisories
 - Exploit availability indicator
 - Timeline (published, modified dates)
-**Source**: NVD (National Vulnerability Database) / MITRE
 
 ---
 
@@ -838,7 +802,6 @@ rfc:7540
 - Full document with section navigation
 - Related RFCs (obsoletes, updated by)
 - Authors and date
-**Source**: IETF datatracker / rfc-editor.org
 **Features**: Section deep-linking, search within document
 
 ---
@@ -855,7 +818,6 @@ ascii:SEARCH
 - Multiple font style options (banner, big, block, bubble, etc.)
 - Copy button
 - Download as text file
-**Source**: Built-in figlet-compatible renderer
 
 ---
 
@@ -872,7 +834,6 @@ qr:WIFI:T:WPA;S:MyNetwork;P:MyPassword;;
 - Download buttons (PNG/SVG)
 - Error correction level selector
 - Customization (colors, logo embed)
-**Source**: Built-in QR generator
 **Features**: WiFi QR format, vCard format, URL shortening option
 
 ---
@@ -891,7 +852,6 @@ resolve:api.example.com
 - GeoIP location for each IP
 - ASN information
 - Response time from multiple DNS servers
-**Source**: Built-in resolver + GeoIP database
 
 ---
 
@@ -910,7 +870,6 @@ cert:example.com
 - Key algorithm and size
 - Certificate transparency logs
 - Grade/security rating
-**Source**: Direct TLS connection / crt.sh
 
 ---
 
@@ -928,7 +887,6 @@ headers:https://cloudflare.com
 - Caching headers
 - Cookie attributes
 - Security grade
-**Source**: Direct HTTP request
 **Features**: Follow redirects option, custom request headers
 
 ---
@@ -1001,7 +959,6 @@ cheat:awk
 - Related commands
 - Community-contributed examples
 - Copy button for each example
-**Source**: cheat.sh API
 **Difference from tldr**: More verbose, community examples, covers edge cases
 
 ---
@@ -1023,7 +980,6 @@ http:502
 - How to fix (for errors)
 - Related status codes
 - RFC reference
-**Source**: Built-in database (RFC 9110)
 
 ---
 
@@ -1044,7 +1000,6 @@ port:6379
 - Security notes (if applicable)
 - IANA registration status
 - Alternative ports for the service
-**Source**: IANA port registry + common knowledge database
 
 ---
 
@@ -1063,7 +1018,6 @@ cron:0 9-17 * * 1-5
 - Field editor (interactive)
 - Common presets (hourly, daily, weekly, monthly)
 - Timezone selector
-**Source**: Built-in parser
 **Features**: Validates expression, warns about common mistakes
 
 ---
@@ -1085,7 +1039,6 @@ chmod:u+x,g+r
 - Explanation of what each permission means
 - Common use cases for this permission set
 - Security warnings (e.g., 777 is dangerous)
-**Source**: Built-in calculator
 
 ---
 
@@ -1104,7 +1057,6 @@ regex:(?<=@)\w+
 - Match results with groups
 - Common regex library differences (PCRE, RE2, JS)
 - Optimization suggestions
-**Source**: Built-in parser + regex101-style engine
 **Features**: Supports test strings, shows capture groups
 
 ---
@@ -1122,7 +1074,6 @@ jwt:eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J
 - Expiration status (valid/expired)
 - Standard claims explained (iat, exp, sub, iss, aud)
 - Copy buttons for each section
-**Source**: Built-in decoder
 **Security**: Never logs tokens, decoding is client-side only
 
 ---
@@ -1143,7 +1094,6 @@ timestamp:2025-06-15T14:30:00Z
 - Human readable (multiple formats)
 - Relative time (X days ago / in X days)
 - Multiple timezone conversions
-**Source**: Built-in converter
 **Features**: Bidirectional (timestamp ↔ date), timezone selector
 
 ---
@@ -1165,7 +1115,6 @@ asn:32934
 - Upstream/downstream peers
 - Looking glass links
 - Historical changes
-**Source**: RIPE NCC / BGPView / ipinfo.io
 
 ---
 
@@ -1188,7 +1137,6 @@ subnet:172.16.0.0/12
 - Binary representation
 - Subnetting table (split into smaller subnets)
 - Supernetting (combine into larger)
-**Source**: Built-in calculator
 **Features**: IPv4 and IPv6 support
 
 ---
@@ -1209,7 +1157,6 @@ robots:reddit.com
 - Crawl-delay directives
 - Analysis: what's blocked, what's allowed
 - Warnings about common issues
-**Source**: Direct fetch from domain/robots.txt
 
 ---
 
@@ -1228,7 +1175,6 @@ sitemap:news.ycombinator.com
 - Tree view of site structure
 - Export options (CSV, JSON)
 - Filter by path pattern
-**Source**: Direct fetch from domain/sitemap.xml (and robots.txt sitemap references)
 
 ---
 
@@ -1250,7 +1196,6 @@ tech:cloudflare.com
 - SSL certificate issuer
 - Hosting provider
 - Security headers present
-**Source**: HTTP headers + HTML analysis + Wappalyzer-style detection
 **Features**: Confidence scores, detection method shown
 
 ---
@@ -1271,7 +1216,6 @@ feed:reddit.com/r/programming
 - Subscribe links (various readers)
 - Feed preview (latest 5 items)
 - Auto-discovery method used
-**Source**: HTML link tags, common paths (/feed, /rss, /atom.xml), robots.txt
 
 ---
 
@@ -1291,7 +1235,6 @@ expand:t.co/abc123
 - Final page title and description
 - Screenshot preview (optional)
 - Safety warning if suspicious
-**Source**: Direct HTTP follow with redirect capture
 **Supported shorteners**: bit.ly, t.co, tinyurl, goo.gl, ow.ly, is.gd, and any HTTP redirect
 
 ---
@@ -1313,7 +1256,6 @@ safe:some-unknown-site.xyz
 - Redirect chain analysis
 - Phishing indicators
 - Related malicious domains
-**Source**: Google Safe Browsing API, domain reputation databases, SSL check
 **Privacy**: Only domain is checked, not full URLs with parameters
 
 ---
@@ -1332,7 +1274,6 @@ html:&copy; &rarr; &mdash;
 - Named entities vs numeric entities
 - Copy button
 - Bidirectional converter (input either format)
-**Source**: Built-in encoder
 **Features**: Named entities (&amp;), decimal (&#38;), hex (&#x26;)
 
 ---
@@ -1356,7 +1297,6 @@ unicode:SNOWMAN
 - Block/script
 - Related characters
 - Copy in various formats
-**Source**: Unicode database (built-in)
 
 ---
 
@@ -1378,7 +1318,6 @@ emoji:cat
 - Skin tone variants (if applicable)
 - Platform rendering differences
 - Recently added emojis labeled
-**Source**: Unicode CLDR + emoji-data
 
 ---
 
@@ -1406,7 +1345,6 @@ escape:shell $HOME/*.txt
   - C/C++
 - Copy button for each
 - Unescape mode available
-**Source**: Built-in escapers
 
 ---
 
@@ -1431,7 +1369,6 @@ json:validate {"test":}
 - `json:minify` - Compress
 - `json:validate` - Check validity
 - `json:tree` - Tree view
-**Source**: Built-in parser
 
 ---
 
@@ -1456,7 +1393,6 @@ yaml:from-json {"key": "value"}
 - `yaml:` - Format/validate
 - `yaml:to-json` - Convert to JSON
 - `yaml:from-json` - Convert JSON to YAML
-**Source**: Built-in parser
 
 ---
 
@@ -1476,7 +1412,6 @@ diff:function old()|||function new()
 - Word-level diff option
 - Ignore whitespace option
 - Copy diff output
-**Source**: Built-in diff algorithm
 **Features**: Syntax highlighting for code, multiple diff formats
 
 ---
@@ -1505,7 +1440,6 @@ beautify:sql SELECT * FROM users WHERE id=1
 - JSON (redirects to json:)
 - PHP
 - Python (via autopep8 rules)
-**Source**: Built-in formatters
 
 ---
 
@@ -1530,7 +1464,6 @@ case:camel hello-world
 - SCREAMING_SNAKE_CASE
 - dot.case
 - Copy button for each
-**Source**: Built-in converter
 
 ---
 
@@ -1553,7 +1486,6 @@ slug:日本語テスト
   - CJK romanization
 - Multiple slug styles
 - Copy button
-**Source**: Built-in generator
 
 ---
 
@@ -1580,7 +1512,6 @@ lorem:50 sentences
   - Bacon ipsum
   - Tech ipsum
 - Copy button
-**Source**: Built-in generator
 
 ---
 
@@ -1603,7 +1534,6 @@ word:This is a longer piece of text to analyze...
 - Most frequent words
 - Unique words percentage
 - Text input area for live counting
-**Source**: Built-in analyzer
 
 ---
 
@@ -1624,7 +1554,6 @@ useragent:my (detect current browser)
 - Parsed components breakdown
 - Raw string analysis
 - Known UA database match
-**Source**: Built-in parser + UA database
 **Features**: `useragent:my` shows current browser's UA
 
 ---
@@ -1648,7 +1577,6 @@ mime:.docx
 - Compressible flag
 - IANA registration status
 - Related MIME types
-**Source**: IANA media types registry
 **Features**: Lookup by MIME type, extension, or common name
 
 ---
@@ -1673,7 +1601,6 @@ license:ISC
 - Use cases (when to use this license)
 - Copy button for full text
 - Template with placeholders filled
-**Source**: SPDX license list + choosealicense.com data
 
 ---
 
@@ -1701,7 +1628,6 @@ country:276
 - Timezone(s)
 - Driving side
 - Map preview
-**Source**: REST Countries API / built-in database
 
 ---
 
@@ -1726,7 +1652,6 @@ slang:rizz
 - Upvotes/popularity score
 - Date added/last updated
 - NSFW warning (if applicable)
-**Source**: Urban Dictionary API
 **Features**:
 - Multiple definitions shown (top 5 by votes)
 - NSFW filter option (configurable)
@@ -1750,7 +1675,6 @@ rules:all
 - `rules:{number}` - Specific rule by number (e.g., rule 34)
 - `rules:{term}` - Search rules containing the term
 - Invalid number falls back to showing all rules
-**Source**: Built-in database (classic internet culture)
 **Features**:
 - Complete rules 1-100+ from internet folklore
 - Search functionality for finding relevant rules
@@ -2227,45 +2151,32 @@ Click → opens video in embedded player or source site
 
 ### Endpoints
 
-#### Web Interface
-| Method | URL | Description |
-|--------|-----|-------------|
-| GET | / | Homepage with search box |
-| GET | /search | Search results page |
-| GET | /images | Image search |
-| GET | /videos | Video search |
-| GET | /news | News search |
-| GET | /settings | User preferences page |
-| GET | /alerts/new | Create alert from current search |
-| GET | /alerts/confirm | Confirm alert email verification |
-| GET | /alerts/manage/{token} | Manage accountless search alert |
-| POST | /alerts | Create search alert subscription |
-| POST | /alerts/{token}/update | Update alert settings |
-| POST | /alerts/{token}/pause | Pause or resume alert |
-| POST | /alerts/{token}/delete | Delete alert |
-| GET | /alerts/{token}.rss | Private RSS feed for an alert |
-| GET | /about | About page |
-| GET | /stats | Public instance statistics |
+Route paths and HTTP methods are defined in AI.md PART 14 (HOW). This section describes endpoint capabilities (WHAT).
 
-#### API
-| Method | URL | Description |
-|--------|-----|-------------|
-| GET | /api/v1/search | JSON search results |
-| GET | /api/v1/autocomplete | Search suggestions |
-| GET | /api/v1/instant | Instant answers |
-| GET | /api/v1/engines | Available engines and status |
-| GET | /api/v1/categories | Search categories |
-| GET | /api/v1/bangs | Available bang shortcuts |
-| GET | /api/v1/config | Public instance configuration |
-| POST | /api/v1/alerts | Create alert subscription |
-| GET | /api/v1/alerts/{token} | Get alert details for manage page |
-| PATCH | /api/v1/alerts/{token} | Update alert settings |
-| POST | /api/v1/alerts/{token}/verify | Verify/activate alert |
-| POST | /api/v1/alerts/{token}/pause | Pause or resume alert |
-| DELETE | /api/v1/alerts/{token} | Delete alert |
-| GET | /api/v1/alerts/{token}/rss | Private RSS feed payload |
-| GET | /opensearch.xml | OpenSearch descriptor |
-| GET | /search.rss | Search results as RSS feed |
+#### Web Interface Capabilities
+- Homepage with search entry point
+- Search results pages per category (web, images, videos, news)
+- User preferences settings page
+- Search alert creation from any search context
+- Alert email verification flow (confirm subscription)
+- Per-alert management page (update, pause, delete) — accountless, accessed via signed token
+- Private RSS feed per alert subscription
+- About page and public instance statistics
+
+#### JSON API Capabilities
+- Search results as structured JSON with category filtering
+- Autocomplete suggestions for search queries
+- Instant answers (weather, currency, calculator, etc.)
+- Available engine list with current health status
+- Available search categories
+- Available bang shortcuts
+- Public instance configuration (non-sensitive settings only)
+- Alert subscription lifecycle: create, email-verify, update settings, pause/resume, delete
+- RSS feed payload for a single alert subscription
+
+#### Autodiscovery
+- OpenSearch descriptor for browser address-bar integration
+- RSS feed of search results for any query
 
 ### Data Sources
 
@@ -2273,16 +2184,16 @@ Click → opens video in embedded player or source site
 
 Primary engines with their own indexes - no proxies or metasearch:
 
-| Engine | Categories | Method | Notes |
-|--------|-----------|--------|-------|
-| Google | web, images, videos, news, maps | HTML scraping | Largest index |
-| Bing | web, images, videos, news | HTML scraping | Microsoft's index |
-| DuckDuckGo | web, images | HTML scraping | Privacy-focused |
-| Brave | web, images, videos, news | API | Independent index |
-| Qwant | web, images, news | API | EU-based independent index |
-| Mojeek | web | API | UK-based independent index |
-| Yandex | web, images | HTML scraping | Russian index (optional) |
-| Baidu | web, images | HTML scraping | Chinese index (optional) |
+| Engine | Categories | Notes |
+|--------|-----------|-------|
+| Google | web, images, videos, news, maps | Largest index |
+| Bing | web, images, videos, news | Microsoft's index |
+| DuckDuckGo | web, images | Privacy-focused |
+| Brave | web, images, videos, news | Independent index |
+| Qwant | web, images, news | EU-based independent index |
+| Mojeek | web | UK-based independent index |
+| Yandex | web, images | Russian index (optional) |
+| Baidu | web, images | Chinese index (optional) |
 
 **Not included** (metasearch only - we go direct):
 - Ecosia (Bing-powered)
@@ -2311,5 +2222,5 @@ Primary engines with their own indexes - no proxies or metasearch:
 | Currency | exchangerate.host | 1 hour |
 | Dictionary | Wiktionary API | On demand |
 | IP Geolocation | sapics/ip-location-db | Weekly |
-| Timezone | Built-in Go stdlib | Static |
+| Timezone | Built-in | Static |
 | Calculator | Built-in | Static |
