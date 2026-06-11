@@ -401,9 +401,9 @@ func (m *Middleware) RateLimit(limiter *RateLimiter) func(http.Handler) http.Han
 			// Check blacklist
 			for _, blacklisted := range m.config.Server.RateLimit.Blacklist {
 				if ip == blacklisted || strings.HasPrefix(ip, blacklisted) {
-					// Log blocked request
+					// Per AI.md PART 11: no IP logging — privacy is the product.
 					if m.logManager != nil {
-						m.logManager.Security().LogBlocked(ip, r.URL.Path, "blacklisted")
+						m.logManager.Security().LogBlocked("-", r.URL.Path, "blacklisted")
 					}
 					localizedHTTPError(w, r, http.StatusForbidden, "errors.forbidden")
 					return
@@ -411,9 +411,9 @@ func (m *Middleware) RateLimit(limiter *RateLimiter) func(http.Handler) http.Han
 			}
 
 			if !limiter.Allow(ip) {
-				// Log rate limited request
+				// Per AI.md PART 11: no IP logging — privacy is the product.
 				if m.logManager != nil {
-					m.logManager.Security().LogRateLimited(ip, r.URL.Path)
+					m.logManager.Security().LogRateLimited("-", r.URL.Path)
 				}
 				w.Header().Set("Retry-After", "60")
 				localizedHTTPError(w, r, http.StatusTooManyRequests, "errors.rate_limit")
@@ -535,14 +535,15 @@ func (c *CSRFMiddleware) Protect(next http.Handler) http.Handler {
 			token := c.GenerateToken()
 			c.tokens.Store(token, time.Now())
 
-			// Set cookie
+			// Set cookie — SameSite=Strict per AI.md PART 11 (blocks cross-site attachment,
+			// neutralizing CSRF before the double-submit check even runs).
 			http.SetCookie(w, &http.Cookie{
 				Name:     csrf.CookieName,
 				Value:    token,
 				Path:     "/",
 				HttpOnly: true,
 				Secure:   c.config.Server.SSL.Enabled,
-				SameSite: http.SameSiteLaxMode,
+				SameSite: http.SameSiteStrictMode,
 			})
 
 			next.ServeHTTP(w, r)
@@ -552,13 +553,9 @@ func (c *CSRFMiddleware) Protect(next http.Handler) http.Handler {
 		// Validate token for unsafe methods
 		cookie, err := r.Cookie(csrf.CookieName)
 		if err != nil {
-			// Log CSRF violation
+			// Per AI.md PART 11: no IP logging — privacy is the product.
 			if c.logManager != nil {
-				ip := r.RemoteAddr
-				if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-					ip = strings.Split(xff, ",")[0]
-				}
-				c.logManager.Security().LogCSRFViolation(ip, r.URL.Path)
+				c.logManager.Security().LogCSRFViolation("-", r.URL.Path)
 			}
 			localizedHTTPError(w, r, http.StatusForbidden, "errors.csrf_missing")
 			return
@@ -571,13 +568,9 @@ func (c *CSRFMiddleware) Protect(next http.Handler) http.Handler {
 		}
 
 		if token != cookie.Value {
-			// Log CSRF violation
+			// Per AI.md PART 11: no IP logging — privacy is the product.
 			if c.logManager != nil {
-				ip := r.RemoteAddr
-				if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-					ip = strings.Split(xff, ",")[0]
-				}
-				c.logManager.Security().LogCSRFViolation(ip, r.URL.Path)
+				c.logManager.Security().LogCSRFViolation("-", r.URL.Path)
 			}
 			localizedHTTPError(w, r, http.StatusForbidden, "errors.csrf_invalid")
 			return
@@ -585,13 +578,9 @@ func (c *CSRFMiddleware) Protect(next http.Handler) http.Handler {
 
 		// Validate token exists in store
 		if _, ok := c.tokens.Load(token); !ok {
-			// Log CSRF violation
+			// Per AI.md PART 11: no IP logging — privacy is the product.
 			if c.logManager != nil {
-				ip := r.RemoteAddr
-				if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-					ip = strings.Split(xff, ",")[0]
-				}
-				c.logManager.Security().LogCSRFViolation(ip, r.URL.Path)
+				c.logManager.Security().LogCSRFViolation("-", r.URL.Path)
 			}
 			localizedHTTPError(w, r, http.StatusForbidden, "errors.csrf_expired")
 			return
@@ -829,9 +818,9 @@ func (m *Middleware) GeoBlock(lookup *geoip.Lookup) func(http.Handler) http.Hand
 			// Check if country is blocked
 			if lookup.IsBlocked(ip, denyCountries) {
 				result := lookup.Lookup(ip)
-				// Log blocked request
+				// Per AI.md PART 11: no IP logging — log country code (non-PII) but not the IP.
 				if m.logManager != nil {
-					m.logManager.Security().LogBlocked(ip, r.URL.Path, "country:"+result.CountryCode)
+					m.logManager.Security().LogBlocked("-", r.URL.Path, "country:"+result.CountryCode)
 				}
 				localizedHTTPError(w, r, http.StatusForbidden, "errors.forbidden")
 				return
@@ -840,9 +829,9 @@ func (m *Middleware) GeoBlock(lookup *geoip.Lookup) func(http.Handler) http.Hand
 			// Check if country is allowed (if allowlist is configured)
 			if !lookup.IsAllowed(ip, allowedCountries) {
 				result := lookup.Lookup(ip)
-				// Log blocked request
+				// Per AI.md PART 11: no IP logging — log country code (non-PII) but not the IP.
 				if m.logManager != nil {
-					m.logManager.Security().LogBlocked(ip, r.URL.Path, "country:"+result.CountryCode)
+					m.logManager.Security().LogBlocked("-", r.URL.Path, "country:"+result.CountryCode)
 				}
 				localizedHTTPError(w, r, http.StatusForbidden, "errors.forbidden")
 				return
@@ -893,10 +882,9 @@ func (m *Middleware) MaintenanceMode(handler MaintenanceHandler) func(http.Handl
 				return
 			}
 
-			// Log maintenance block
+			// Per AI.md PART 11: no IP logging — privacy is the product.
 			if m.logManager != nil {
-				ip := getClientIP(r, m.config.Server.Security.TrustedProxies)
-				m.logManager.Security().LogBlocked(ip, path, "maintenance")
+				m.logManager.Security().LogBlocked("-", path, "maintenance")
 			}
 
 			// Return maintenance page
@@ -1002,29 +990,19 @@ func URLNormalizeMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// TargetType represents the context type extracted from URL path
-// Per AI.md PART 11: Server-Side Context from URL (NON-NEGOTIABLE)
+// TargetType represents the context type extracted from URL path.
+// Per AI.md PART 11: this project has no admin UI, no user accounts,
+// no organizations. The only valid context types are public routes and
+// server pages (/server/*). All other paths are public.
 type TargetType int
 
 const (
 	// TargetUnknown is an unknown/invalid target type
 	TargetUnknown TargetType = iota
-	// Public routes (/, /api/v1/, project-specific like /search)
+	// TargetPublic covers all public routes: /, /search, /api/v1/*, /alerts/*, etc.
 	TargetPublic
-	// Server pages - about, help, contact, privacy (/server/*)
+	// TargetServerPages covers /server/* operator-info pages (about, privacy, contact, etc.)
 	TargetServerPages
-	// Auth flows (/auth/*)
-	TargetAuth
-	// Current user from token (/users/*)
-	TargetCurrentUser
-	// Specific user (/users/{username}/*)
-	TargetUser
-	// Organization (/orgs/{slug}/*)
-	TargetOrg
-	// Server admin panel (/admin/*)
-	TargetAdmin
-	// Server settings within admin (/admin/server/*)
-	TargetAdminServer
 )
 
 // String returns the string representation of TargetType
@@ -1034,116 +1012,43 @@ func (t TargetType) String() string {
 		return "public"
 	case TargetServerPages:
 		return "server"
-	case TargetAuth:
-		return "auth"
-	case TargetCurrentUser:
-		return "current_user"
-	case TargetUser:
-		return "user"
-	case TargetOrg:
-		return "org"
-	case TargetAdmin:
-		return "admin"
-	case TargetAdminServer:
-		return "admin_server"
 	default:
 		return "unknown"
 	}
 }
 
-// RequestContext holds context extracted from URL path
-// Per AI.md PART 11: Context is determined from URL path, NOT headers
+// RequestContext holds context extracted from URL path.
+// Per AI.md PART 11: context is determined from URL path, not headers.
 type RequestContext struct {
 	Type TargetType
-	// Username or org slug when applicable
-	Name string
 }
 
-// ContextMiddleware extracts context from URL path and validates token access
-// Per AI.md PART 11: Routes are always URL-scoped. Context is determined from URL path.
-func (m *Middleware) ContextMiddleware(adminPath string) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Extract context from URL path
-			ctx := extractContextFromPath(r.URL.Path, adminPath)
+// extractContextFromPath determines context from URL path.
+// Per AI.md PART 1: this project has two route families — /server/* pages and
+// everything else (public). No admin UI, no user accounts, no org routes.
+func extractContextFromPath(urlPath string) *RequestContext {
+	p := strings.TrimPrefix(urlPath, "/")
 
-			// Store in request context for downstream handlers
-			r = r.WithContext(context.WithValue(r.Context(), "target_context", ctx))
-
-			next.ServeHTTP(w, r)
-		})
-	}
-}
-
-// extractContextFromPath determines context from URL path
-// Per AI.md PART 11 line 11314-11365
-func extractContextFromPath(urlPath, adminPath string) *RequestContext {
-	// Normalize admin path
-	if adminPath == "" {
-		adminPath = "admin"
-	}
-	adminPath = strings.TrimPrefix(adminPath, "/")
-
-	// Remove leading slash for easier parsing
-	path := strings.TrimPrefix(urlPath, "/")
-	parts := strings.Split(path, "/")
-
-	if len(parts) == 0 || parts[0] == "" {
-		return &RequestContext{Type: TargetPublic}
-	}
-
-	// Check for API routes
-	if parts[0] == "api" {
-		if len(parts) < 2 {
-			return &RequestContext{Type: TargetPublic}
-		}
-		// Skip API version (v1, v2, etc.)
-		if len(parts) < 3 {
-			return &RequestContext{Type: TargetPublic}
-		}
-		// Remove "api" and version
-		parts = parts[2:]
-		if len(parts) == 0 {
+	// API routes: strip /api/{version}/ and re-classify the sub-path
+	if strings.HasPrefix(p, "api/") {
+		parts := strings.SplitN(p, "/", 4)
+		if len(parts) >= 3 {
+			// parts[0]="api" parts[1]="v1" parts[2]=sub-resource
+			p = strings.Join(parts[2:], "/")
+		} else {
 			return &RequestContext{Type: TargetPublic}
 		}
 	}
 
-	switch parts[0] {
-	case "server":
-		// /server/* or /api/v1/server/* - public server pages (about, help, contact, privacy)
+	// /server/* routes are operator-info pages
+	if p == "server" || strings.HasPrefix(p, "server/") {
 		return &RequestContext{Type: TargetServerPages}
-	case "auth":
-		// /auth/* or /api/v1/auth/* - authentication flows (public)
-		return &RequestContext{Type: TargetAuth}
-	case "users":
-		if len(parts) > 1 && parts[1] != "" {
-			// /users/{username}/* - specific user
-			return &RequestContext{Type: TargetUser, Name: parts[1]}
-		}
-		// /users/* - current user (from token)
-		return &RequestContext{Type: TargetCurrentUser}
-	case "orgs":
-		if len(parts) < 2 || parts[1] == "" {
-			// Invalid org route
-			return &RequestContext{Type: TargetPublic}
-		}
-		// /orgs/{slug}/*
-		return &RequestContext{Type: TargetOrg, Name: parts[1]}
-	case adminPath:
-		// Check for server settings within admin
-		if len(parts) > 1 && parts[1] == "server" {
-			// /admin/server/* - server settings
-			return &RequestContext{Type: TargetAdminServer}
-		}
-		// /admin/* - admin panel
-		return &RequestContext{Type: TargetAdmin}
-	default:
-		// Project-specific public routes (e.g., /search, /healthz)
-		return &RequestContext{Type: TargetPublic}
 	}
+
+	return &RequestContext{Type: TargetPublic}
 }
 
-// GetRequestContext retrieves the request context from the request
+// GetRequestContext retrieves the request context from the request.
 func GetRequestContext(r *http.Request) *RequestContext {
 	if ctx := r.Context().Value("target_context"); ctx != nil {
 		if rc, ok := ctx.(*RequestContext); ok {
@@ -1151,220 +1056,6 @@ func GetRequestContext(r *http.Request) *RequestContext {
 		}
 	}
 	return &RequestContext{Type: TargetUnknown}
-}
-
-// TokenType represents the type of API token
-// Per AI.md PART 11: Token prefixes (NON-NEGOTIABLE)
-type TokenType int
-
-const (
-	TokenTypeUnknown TokenType = iota
-	// adm_ prefix
-	TokenTypeAdmin
-	// usr_ prefix
-	TokenTypeUser
-	// org_ prefix
-	TokenTypeOrg
-	// adm_agt_ prefix (admin agent)
-	TokenTypeAdminAgt
-	// usr_agt_ prefix (user agent)
-	TokenTypeUserAgt
-	// org_agt_ prefix (org agent)
-	TokenTypeOrgAgt
-)
-
-// TokenInfo holds validated token information
-// Per AI.md PART 11: Token validation
-type TokenInfo struct {
-	Type TokenType
-	// admin.id, user.id, or org.id
-	OwnerID int64
-	// First 8 chars for display
-	Prefix string
-	// global, read-write, read
-	Scope string
-	// For user tokens, the associated username
-	Username string
-	// For org tokens, the specific org slug
-	OrgSlug string
-}
-
-// getTokenFromRequest extracts the token from Authorization header or cookie
-// Per AI.md PART 11: Token validation
-func getTokenFromRequest(r *http.Request) string {
-	// Check Authorization header first (Bearer token)
-	auth := r.Header.Get("Authorization")
-	if strings.HasPrefix(auth, "Bearer ") {
-		return strings.TrimPrefix(auth, "Bearer ")
-	}
-
-	// Check X-API-Key header
-	if apiKey := r.Header.Get("X-API-Key"); apiKey != "" {
-		return apiKey
-	}
-
-	// Check query parameter (for debugging/testing only)
-	if token := r.URL.Query().Get("token"); token != "" {
-		return token
-	}
-
-	return ""
-}
-
-// parseTokenType determines the token type from prefix
-// Per AI.md PART 11 lines 11078-11136
-func parseTokenType(token string) TokenType {
-	// Check compound agent prefixes first (adm_agt_, usr_agt_, org_agt_)
-	if strings.HasPrefix(token, "adm_agt_") {
-		return TokenTypeAdminAgt
-	}
-	if strings.HasPrefix(token, "usr_agt_") {
-		return TokenTypeUserAgt
-	}
-	if strings.HasPrefix(token, "org_agt_") {
-		return TokenTypeOrgAgt
-	}
-
-	// Standard single-prefix tokens
-	if strings.HasPrefix(token, "adm_") {
-		return TokenTypeAdmin
-	}
-	if strings.HasPrefix(token, "usr_") {
-		return TokenTypeUser
-	}
-	if strings.HasPrefix(token, "org_") {
-		return TokenTypeOrg
-	}
-
-	return TokenTypeUnknown
-}
-
-// ErrNoAccess is returned when token lacks access to requested context
-var ErrNoAccess = fmt.Errorf("no access to requested resource")
-
-// ErrInvalidToken is returned for malformed tokens
-var ErrInvalidToken = fmt.Errorf("invalid token format")
-
-// validateTokenAccess validates that a token has access to the given context
-// Per AI.md PART 11 lines 11251-11262: Token scope determines allowed access
-func validateTokenAccess(tokenType TokenType, ctx *RequestContext) error {
-	// Public routes are always accessible
-	if ctx.Type == TargetPublic || ctx.Type == TargetServerPages || ctx.Type == TargetAuth {
-		return nil
-	}
-
-	switch tokenType {
-	case TokenTypeAdmin:
-		// Admin tokens can access admin panel and server settings
-		if ctx.Type == TargetAdmin || ctx.Type == TargetAdminServer {
-			return nil
-		}
-		return ErrNoAccess
-
-	case TokenTypeUser:
-		// User tokens can access user routes and orgs they belong to
-		// Note: Actual org membership validation happens in the handler
-		if ctx.Type == TargetCurrentUser || ctx.Type == TargetUser || ctx.Type == TargetOrg {
-			return nil
-		}
-		return ErrNoAccess
-
-	case TokenTypeOrg:
-		// Org tokens can only access their specific org
-		// Note: Specific org validation happens in the handler
-		if ctx.Type == TargetOrg {
-			return nil
-		}
-		return ErrNoAccess
-
-	case TokenTypeAdminAgt:
-		// Admin agent tokens can access admin server agents routes
-		if ctx.Type == TargetAdminServer {
-			return nil
-		}
-		return ErrNoAccess
-
-	case TokenTypeUserAgt:
-		// User agent tokens can access user agent routes
-		if ctx.Type == TargetCurrentUser {
-			return nil
-		}
-		return ErrNoAccess
-
-	case TokenTypeOrgAgt:
-		// Org agent tokens can access their org's agent routes
-		if ctx.Type == TargetOrg {
-			return nil
-		}
-		return ErrNoAccess
-
-	case TokenTypeUnknown:
-		// Unknown token type - reject non-public routes
-		return ErrInvalidToken
-	}
-
-	return ErrNoAccess
-}
-
-// TokenValidationMiddleware validates API tokens and checks access per URL context
-// Per AI.md PART 11 lines 11282-11311: Server request handling
-func (m *Middleware) TokenValidationMiddleware(adminPath string) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			token := getTokenFromRequest(r)
-			if token == "" {
-				// No token - anonymous access (if route allows)
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			// Parse token type from prefix
-			tokenType := parseTokenType(token)
-			if tokenType == TokenTypeUnknown {
-				http.Error(w, `{"error": "invalid token format"}`, http.StatusUnauthorized)
-				return
-			}
-
-			// Extract context from URL path
-			ctx := extractContextFromPath(r.URL.Path, adminPath)
-
-			// Validate token has access to this context
-			if err := validateTokenAccess(tokenType, ctx); err != nil {
-				if err == ErrNoAccess {
-					http.Error(w, `{"error": "no access to requested resource"}`, http.StatusForbidden)
-				} else {
-					http.Error(w, `{"error": "invalid token"}`, http.StatusUnauthorized)
-				}
-				return
-			}
-
-			// Store token type in context for downstream handlers
-			r = r.WithContext(context.WithValue(r.Context(), "token_type", tokenType))
-			r = r.WithContext(context.WithValue(r.Context(), "token", token))
-
-			next.ServeHTTP(w, r)
-		})
-	}
-}
-
-// GetTokenFromContext retrieves the token string from request context
-func GetTokenFromContext(r *http.Request) string {
-	if token := r.Context().Value("token"); token != nil {
-		if t, ok := token.(string); ok {
-			return t
-		}
-	}
-	return ""
-}
-
-// GetTokenTypeFromContext retrieves the token type from request context
-func GetTokenTypeFromContext(r *http.Request) TokenType {
-	if tt := r.Context().Value("token_type"); tt != nil {
-		if t, ok := tt.(TokenType); ok {
-			return t
-		}
-	}
-	return TokenTypeUnknown
 }
 
 // PathSecurityMiddleware normalizes paths and blocks traversal attempts

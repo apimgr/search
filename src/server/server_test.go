@@ -592,89 +592,66 @@ func TestPathSecurityMiddleware(t *testing.T) {
 }
 
 // Tests for extractContextFromPath
+// Per AI.md: only TargetPublic and TargetServerPages are valid for this project.
 
 func TestExtractContextFromPath(t *testing.T) {
 	tests := []struct {
-		name      string
-		path      string
-		adminPath string
-		wantType  TargetType
-		wantName  string
+		name     string
+		path     string
+		wantType TargetType
 	}{
 		{
-			name:      "root path",
-			path:      "/",
-			adminPath: "admin",
-			wantType:  TargetPublic,
+			name:     "root path",
+			path:     "/",
+			wantType: TargetPublic,
 		},
 		{
-			name:      "server pages",
-			path:      "/server/about",
-			adminPath: "admin",
-			wantType:  TargetServerPages,
+			name:     "search route",
+			path:     "/search",
+			wantType: TargetPublic,
 		},
 		{
-			name:      "auth routes",
-			path:      "/auth/login",
-			adminPath: "admin",
-			wantType:  TargetAuth,
+			name:     "alerts route",
+			path:     "/alerts/new",
+			wantType: TargetPublic,
 		},
 		{
-			name:      "current user",
-			path:      "/users",
-			adminPath: "admin",
-			wantType:  TargetCurrentUser,
+			name:     "server pages — about",
+			path:     "/server/about",
+			wantType: TargetServerPages,
 		},
 		{
-			name:      "specific user",
-			path:      "/users/john",
-			adminPath: "admin",
-			wantType:  TargetUser,
-			wantName:  "john",
+			name:     "server pages — privacy",
+			path:     "/server/privacy",
+			wantType: TargetServerPages,
 		},
 		{
-			name:      "org route",
-			path:      "/orgs/acme",
-			adminPath: "admin",
-			wantType:  TargetOrg,
-			wantName:  "acme",
+			name:     "server root",
+			path:     "/server",
+			wantType: TargetServerPages,
 		},
 		{
-			name:      "admin panel",
-			path:      "/admin",
-			adminPath: "admin",
-			wantType:  TargetAdmin,
+			name:     "api v1 server route",
+			path:     "/api/v1/server/healthz",
+			wantType: TargetServerPages,
 		},
 		{
-			name:      "admin server settings",
-			path:      "/admin/server/settings",
-			adminPath: "admin",
-			wantType:  TargetAdminServer,
+			name:     "api v1 public route",
+			path:     "/api/v1/search",
+			wantType: TargetPublic,
 		},
 		{
-			name:      "api v1 users",
-			path:      "/api/v1/users/john",
-			adminPath: "admin",
-			wantType:  TargetUser,
-			wantName:  "john",
-		},
-		{
-			name:      "api v1 public",
-			path:      "/api/v1/search",
-			adminPath: "admin",
-			wantType:  TargetPublic,
+			name:     "api root",
+			path:     "/api/v1/",
+			wantType: TargetPublic,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := extractContextFromPath(tt.path, tt.adminPath)
-
+			ctx := extractContextFromPath(tt.path)
 			if ctx.Type != tt.wantType {
-				t.Errorf("Type = %v, want %v", ctx.Type, tt.wantType)
-			}
-			if ctx.Name != tt.wantName {
-				t.Errorf("Name = %q, want %q", ctx.Name, tt.wantName)
+				t.Errorf("extractContextFromPath(%q) type = %v, want %v", tt.path, ctx.Type, tt.wantType)
 			}
 		})
 	}
@@ -689,12 +666,6 @@ func TestTargetTypeString(t *testing.T) {
 	}{
 		{TargetPublic, "public"},
 		{TargetServerPages, "server"},
-		{TargetAuth, "auth"},
-		{TargetCurrentUser, "current_user"},
-		{TargetUser, "user"},
-		{TargetOrg, "org"},
-		{TargetAdmin, "admin"},
-		{TargetAdminServer, "admin_server"},
 		{TargetUnknown, "unknown"},
 	}
 
@@ -702,161 +673,6 @@ func TestTargetTypeString(t *testing.T) {
 		t.Run(tt.want, func(t *testing.T) {
 			if got := tt.target.String(); got != tt.want {
 				t.Errorf("String() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
-// Tests for parseTokenType
-
-func TestParseTokenType(t *testing.T) {
-	tests := []struct {
-		token    string
-		wantType TokenType
-	}{
-		{"adm_abcdefgh12345", TokenTypeAdmin},
-		{"usr_abcdefgh12345", TokenTypeUser},
-		{"org_abcdefgh12345", TokenTypeOrg},
-		{"adm_agt_abcdefgh12345", TokenTypeAdminAgt},
-		{"usr_agt_abcdefgh12345", TokenTypeUserAgt},
-		{"org_agt_abcdefgh12345", TokenTypeOrgAgt},
-		{"invalid_token", TokenTypeUnknown},
-		{"", TokenTypeUnknown},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.token, func(t *testing.T) {
-			got := parseTokenType(tt.token)
-			if got != tt.wantType {
-				t.Errorf("parseTokenType(%q) = %v, want %v", tt.token, got, tt.wantType)
-			}
-		})
-	}
-}
-
-// Tests for validateTokenAccess
-
-func TestValidateTokenAccess(t *testing.T) {
-	tests := []struct {
-		name      string
-		tokenType TokenType
-		ctx       *RequestContext
-		wantErr   bool
-	}{
-		{
-			name:      "public route always allowed",
-			tokenType: TokenTypeAdmin,
-			ctx:       &RequestContext{Type: TargetPublic},
-			wantErr:   false,
-		},
-		{
-			name:      "admin token can access admin panel",
-			tokenType: TokenTypeAdmin,
-			ctx:       &RequestContext{Type: TargetAdmin},
-			wantErr:   false,
-		},
-		{
-			name:      "admin token cannot access user routes",
-			tokenType: TokenTypeAdmin,
-			ctx:       &RequestContext{Type: TargetUser, Name: "john"},
-			wantErr:   true,
-		},
-		{
-			name:      "user token can access user routes",
-			tokenType: TokenTypeUser,
-			ctx:       &RequestContext{Type: TargetCurrentUser},
-			wantErr:   false,
-		},
-		{
-			name:      "user token cannot access admin",
-			tokenType: TokenTypeUser,
-			ctx:       &RequestContext{Type: TargetAdmin},
-			wantErr:   true,
-		},
-		{
-			name:      "org token can access org routes",
-			tokenType: TokenTypeOrg,
-			ctx:       &RequestContext{Type: TargetOrg, Name: "acme"},
-			wantErr:   false,
-		},
-		{
-			name:      "unknown token can access public",
-			tokenType: TokenTypeUnknown,
-			ctx:       &RequestContext{Type: TargetPublic},
-			wantErr:   false,
-		},
-		{
-			name:      "unknown token cannot access admin",
-			tokenType: TokenTypeUnknown,
-			ctx:       &RequestContext{Type: TargetAdmin},
-			wantErr:   true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := validateTokenAccess(tt.tokenType, tt.ctx)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("validateTokenAccess() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-// Tests for getTokenFromRequest
-
-func TestGetTokenFromRequest(t *testing.T) {
-	tests := []struct {
-		name       string
-		authHeader string
-		apiKeyHdr  string
-		query      string
-		want       string
-	}{
-		{
-			name:       "bearer token",
-			authHeader: "Bearer mytoken123",
-			want:       "mytoken123",
-		},
-		{
-			name:      "x-api-key header",
-			apiKeyHdr: "apikey456",
-			want:      "apikey456",
-		},
-		{
-			name:  "query parameter",
-			query: "token=querytoken",
-			want:  "querytoken",
-		},
-		{
-			name: "no token",
-			want: "",
-		},
-		{
-			name:       "bearer takes priority",
-			authHeader: "Bearer bearer",
-			apiKeyHdr:  "apikey",
-			want:       "bearer",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			path := "/"
-			if tt.query != "" {
-				path += "?" + tt.query
-			}
-			req := httptest.NewRequest(http.MethodGet, path, nil)
-			if tt.authHeader != "" {
-				req.Header.Set("Authorization", tt.authHeader)
-			}
-			if tt.apiKeyHdr != "" {
-				req.Header.Set("X-API-Key", tt.apiKeyHdr)
-			}
-
-			got := getTokenFromRequest(req)
-			if got != tt.want {
-				t.Errorf("getTokenFromRequest() = %q, want %q", got, tt.want)
 			}
 		})
 	}
@@ -1055,35 +871,11 @@ func TestGetClientIPSimple(t *testing.T) {
 
 func TestRequestContextStruct(t *testing.T) {
 	ctx := RequestContext{
-		Type: TargetUser,
-		Name: "john",
+		Type: TargetPublic,
 	}
 
-	if ctx.Type != TargetUser {
-		t.Errorf("Type = %v", ctx.Type)
-	}
-	if ctx.Name != "john" {
-		t.Errorf("Name = %q", ctx.Name)
-	}
-}
-
-func TestTokenInfoStruct(t *testing.T) {
-	info := TokenInfo{
-		Type:     TokenTypeUser,
-		OwnerID:  123,
-		Prefix:   "usr_1234",
-		Scope:    "read-write",
-		Username: "john",
-	}
-
-	if info.Type != TokenTypeUser {
-		t.Errorf("Type = %v", info.Type)
-	}
-	if info.OwnerID != 123 {
-		t.Errorf("OwnerID = %d", info.OwnerID)
-	}
-	if info.Username != "john" {
-		t.Errorf("Username = %q", info.Username)
+	if ctx.Type != TargetPublic {
+		t.Errorf("Type = %v, want %v", ctx.Type, TargetPublic)
 	}
 }
 
@@ -1120,24 +912,6 @@ func TestGetRequestContext(t *testing.T) {
 	ctx := GetRequestContext(req)
 	if ctx.Type != TargetUnknown {
 		t.Errorf("Type = %v, want %v", ctx.Type, TargetUnknown)
-	}
-}
-
-func TestGetTokenFromContext(t *testing.T) {
-	// Test without context
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	token := GetTokenFromContext(req)
-	if token != "" {
-		t.Errorf("Token = %q, want empty", token)
-	}
-}
-
-func TestGetTokenTypeFromContext(t *testing.T) {
-	// Test without context
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	tokenType := GetTokenTypeFromContext(req)
-	if tokenType != TokenTypeUnknown {
-		t.Errorf("TokenType = %v, want %v", tokenType, TokenTypeUnknown)
 	}
 }
 

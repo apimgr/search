@@ -1177,7 +1177,9 @@ func DefaultConfig() *Config {
 					XXSSProtection:        "1; mode=block",
 					ReferrerPolicy:        "strict-origin-when-cross-origin",
 					ContentSecurityPolicy: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; media-src *",
-					PermissionsPolicy:     "geolocation=(), microphone=(), camera=()",
+					// Per AI.md PART 11: full Permissions-Policy — locked tracking proposals,
+					// spec-required features scoped to self, all sensors locked by default.
+					PermissionsPolicy: "accelerometer=(), ambient-light-sensor=(), attribution-reporting=(), battery=(), browsing-topics=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), idle-detection=(), interest-cohort=(), magnetometer=(), microphone=(), midi=(), screen-wake-lock=(), serial=(), usb=(), xr-spatial-tracking=(), autoplay=(self), encrypted-media=(self), fullscreen=(self), payment=(self), picture-in-picture=(self), publickey-credentials-get=(self), storage-access=(self), web-share=(self)",
 					COOP:                  "unsafe-none",
 					COEP:                  "unsafe-none",
 					CORP:                  "cross-origin",
