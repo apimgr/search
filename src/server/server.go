@@ -803,20 +803,23 @@ func (s *Server) setupRoutes() http.Handler {
 
 	// Apply middleware chain per AI.md PART 5 execution order (1→10).
 	// Chain() iterates from last to first, so index 0 = outermost = first to execute.
-	// Order: Recovery → URLNormalize(1) → RequestID(2) → PathSecurity(3) →
-	//        SecurityHeaders(4) → SecGPC → CORS → RateLimit(5-7) → GeoIP(8) → Logging(10)
-	// Auth(9) is per-route, not global.
+	// Middleware order per AI.md PART 5 (NON-NEGOTIABLE):
+	// Recovery → URLNormalize(1) → RequestID(2) → PathSecurity(3) →
+	// SecurityHeaders(4) → SecGPC → CORS → Allowlist(5) → Blocklist(6) →
+	// RateLimit(7) → GeoIP(8) → Logging(10). Auth(9) is per-route.
 	handler := Chain(
 		r,
 		s.middleware.Recovery,                  // outermost: catches all panics
-		URLNormalizeMiddleware,                 // 1. normalize URLs (trailing slash, etc.) — MUST be first
-		s.middleware.RequestID,                 // 2. attach request ID (before logging so logs carry it)
+		URLNormalizeMiddleware,                 // 1. normalize URLs (trailing slash, etc.)
+		s.middleware.RequestID,                 // 2. attach request ID (before logging)
 		PathSecurityMiddleware,                 // 3. validate paths, block traversal
 		s.middleware.SecurityHeaders,           // 4. add security headers
-		s.middleware.SecGPC,                    // 4b. honor Sec-GPC privacy signal (AI.md PART 11)
+		s.middleware.SecGPC,                    // 4b. honor Sec-GPC privacy signal
 		s.middleware.CORS,                      // 4c. CORS (near security headers; handles preflight)
-		s.middleware.RateLimit(s.rateLimiter),  // 5-7. allowlist/blocklist/rate limit
-		s.middleware.GeoBlock(s.geoipLookup),  // 8. country blocking
+		s.middleware.Allowlist,                 // 5. set allowlisted flag (bypasses 6/7/8, not auth)
+		s.middleware.Blocklist,                 // 6. IP/domain blocklist check
+		s.middleware.RateLimit(s.rateLimiter),  // 7. rate limiting
+		s.middleware.GeoBlock(s.geoipLookup),   // 8. country blocking
 		s.middleware.Logger,                    // 10. log requests (innermost of spec chain)
 	)
 

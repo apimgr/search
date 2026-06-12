@@ -27,6 +27,17 @@ import (
 	"github.com/google/uuid"
 )
 
+// allowlistedCtxKey is the context key for the allowlisted flag.
+// Set by AllowlistMiddleware; checked by BlocklistMiddleware, RateLimit, and GeoBlock.
+type allowlistedCtxKey struct{}
+
+// isAllowlisted returns true if the request IP is in the configured allowlist.
+// Per AI.md PART 5: the flag bypasses blocklist, rate-limit, and GeoIP — NOT auth.
+func isAllowlisted(ctx context.Context) bool {
+	v, _ := ctx.Value(allowlistedCtxKey{}).(bool)
+	return v
+}
+
 // Middleware wraps an http.Handler to add common functionality
 type Middleware struct {
 	config     *config.Config
@@ -387,32 +398,58 @@ func (erl *EndpointRateLimiter) RemainingTime(ip string) time.Duration {
 	return remaining
 }
 
-// RateLimit middleware applies rate limiting
+// Allowlist is middleware step 5 per AI.md PART 5.
+// Sets the allowlisted flag in the request context when the client IP is in the
+// configured whitelist. Allowlisted requests bypass blocklist, rate-limit, and GeoIP
+// checks downstream — but NOT auth.
+func (m *Middleware) Allowlist(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ip := getClientIP(r, m.config.Server.Security.TrustedProxies)
+		for _, allowed := range m.config.Server.RateLimit.Whitelist {
+			if ip == allowed || strings.HasPrefix(ip, allowed) {
+				ctx := context.WithValue(r.Context(), allowlistedCtxKey{}, true)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// Blocklist is middleware step 6 per AI.md PART 5.
+// Blocks requests from IPs on the configured blacklist.
+// Allowlisted IPs (flag set by Allowlist middleware) skip this check.
+func (m *Middleware) Blocklist(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isAllowlisted(r.Context()) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		ip := getClientIP(r, m.config.Server.Security.TrustedProxies)
+		for _, blacklisted := range m.config.Server.RateLimit.Blacklist {
+			if ip == blacklisted || strings.HasPrefix(ip, blacklisted) {
+				// Per AI.md PART 11: no IP logging — privacy is the product.
+				if m.logManager != nil {
+					m.logManager.Security().LogBlocked("-", r.URL.Path, "blacklisted")
+				}
+				localizedHTTPError(w, r, http.StatusForbidden, "errors.forbidden")
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// RateLimit is middleware step 7 per AI.md PART 5.
+// Applies per-IP rate limiting. Allowlisted IPs (flag set by Allowlist middleware) skip this check.
 func (m *Middleware) RateLimit(limiter *RateLimiter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if isAllowlisted(r.Context()) {
+				next.ServeHTTP(w, r)
+				return
+			}
 			ip := getClientIP(r, m.config.Server.Security.TrustedProxies)
-
-			// Check whitelist
-			for _, whitelisted := range m.config.Server.RateLimit.Whitelist {
-				if ip == whitelisted || strings.HasPrefix(ip, whitelisted) {
-					next.ServeHTTP(w, r)
-					return
-				}
-			}
-
-			// Check blacklist
-			for _, blacklisted := range m.config.Server.RateLimit.Blacklist {
-				if ip == blacklisted || strings.HasPrefix(ip, blacklisted) {
-					// Per AI.md PART 11: no IP logging — privacy is the product.
-					if m.logManager != nil {
-						m.logManager.Security().LogBlocked("-", r.URL.Path, "blacklisted")
-					}
-					localizedHTTPError(w, r, http.StatusForbidden, "errors.forbidden")
-					return
-				}
-			}
-
 			if !limiter.Allow(ip) {
 				// Per AI.md PART 11: no IP logging — privacy is the product.
 				if m.logManager != nil {
@@ -422,7 +459,6 @@ func (m *Middleware) RateLimit(limiter *RateLimiter) func(http.Handler) http.Han
 				localizedHTTPError(w, r, http.StatusTooManyRequests, "errors.rate_limit")
 				return
 			}
-
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -807,6 +843,11 @@ func (m *Middleware) GeoBlock(lookup *geoip.Lookup) func(http.Handler) http.Hand
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Skip if GeoIP is not configured
 			if lookup == nil || !lookup.IsLoaded() {
+				next.ServeHTTP(w, r)
+				return
+			}
+			// Allowlisted IPs bypass GeoIP per AI.md PART 5
+			if isAllowlisted(r.Context()) {
 				next.ServeHTTP(w, r)
 				return
 			}
