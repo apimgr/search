@@ -15,7 +15,7 @@ const (
 	TemplateAdminAlert        TemplateType = "admin_alert"
 	TemplateWeeklyReport      TemplateType = "weekly_report"
 	TemplateSecurityAlert     TemplateType = "security_alert"
-	TemplateBackupCompleted   TemplateType = "backup_completed"
+	TemplateBackupCompleted   TemplateType = "backup_complete"
 	TemplateUpdateAvailable   TemplateType = "update_available"
 	TemplateMaintenanceNotice TemplateType = "maintenance_notice"
 	// Operator/system notification templates per AI.md PART 18

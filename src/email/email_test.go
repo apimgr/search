@@ -1068,8 +1068,8 @@ func TestTemplateTypeConstants(t *testing.T) {
 	if TemplateWeeklyReport != "weekly_report" {
 		t.Errorf("TemplateWeeklyReport = %q, want %q", TemplateWeeklyReport, "weekly_report")
 	}
-	if TemplateBackupCompleted != "backup_completed" {
-		t.Errorf("TemplateBackupCompleted = %q, want %q", TemplateBackupCompleted, "backup_completed")
+	if TemplateBackupCompleted != "backup_complete" {
+		t.Errorf("TemplateBackupCompleted = %q, want %q", TemplateBackupCompleted, "backup_complete")
 	}
 }
 
@@ -1498,8 +1498,8 @@ func TestTemplateTypeConstantsPart18(t *testing.T) {
 	if TemplateWeeklyReport != "weekly_report" {
 		t.Errorf("TemplateWeeklyReport = %q, want %q", TemplateWeeklyReport, "weekly_report")
 	}
-	if TemplateBackupCompleted != "backup_completed" {
-		t.Errorf("TemplateBackupCompleted = %q, want %q", TemplateBackupCompleted, "backup_completed")
+	if TemplateBackupCompleted != "backup_complete" {
+		t.Errorf("TemplateBackupCompleted = %q, want %q", TemplateBackupCompleted, "backup_complete")
 	}
 	if TemplateUpdateAvailable != "update_available" {
 		t.Errorf("TemplateUpdateAvailable = %q, want %q", TemplateUpdateAvailable, "update_available")

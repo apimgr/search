@@ -801,23 +801,23 @@ func (s *Server) setupRoutes() http.Handler {
 	// Per AI.md PART 7: pprof, expvar, and custom debug endpoints
 	s.registerDebugRoutes(r)
 
-	// Apply middleware chain per AI.md PART 5 execution order (1→9).
+	// Apply middleware chain per AI.md PART 5 execution order (1→10).
 	// Chain() iterates from last to first, so index 0 = outermost = first to execute.
-	// Order: Recovery → RequestID → URLNormalize(1) → PathSecurity(2) →
-	//        SecurityHeaders(3) → SecGPC → CORS → RateLimit(4-6) → GeoIP(7) → Logging(9)
-	// Auth(8) is per-route, not global.
+	// Order: Recovery → URLNormalize(1) → RequestID(2) → PathSecurity(3) →
+	//        SecurityHeaders(4) → SecGPC → CORS → RateLimit(5-7) → GeoIP(8) → Logging(10)
+	// Auth(9) is per-route, not global.
 	handler := Chain(
 		r,
 		s.middleware.Recovery,                  // outermost: catches all panics
-		s.middleware.RequestID,                 // assign request ID early
-		URLNormalizeMiddleware,                 // 1. normalize URLs (trailing slash, etc.)
-		PathSecurityMiddleware,                 // 2. validate paths, block traversal
-		s.middleware.SecurityHeaders,           // 3. add security headers
-		s.middleware.SecGPC,                    // 3b. honor Sec-GPC privacy signal (AI.md PART 11)
-		s.middleware.CORS,                      // 3c. CORS (near security headers; handles preflight)
-		s.middleware.RateLimit(s.rateLimiter),  // 4-6. allowlist/blocklist/rate limit
-		s.middleware.GeoBlock(s.geoipLookup),  // 7. country blocking
-		s.middleware.Logger,                    // 9. log requests (innermost of spec chain)
+		URLNormalizeMiddleware,                 // 1. normalize URLs (trailing slash, etc.) — MUST be first
+		s.middleware.RequestID,                 // 2. attach request ID (before logging so logs carry it)
+		PathSecurityMiddleware,                 // 3. validate paths, block traversal
+		s.middleware.SecurityHeaders,           // 4. add security headers
+		s.middleware.SecGPC,                    // 4b. honor Sec-GPC privacy signal (AI.md PART 11)
+		s.middleware.CORS,                      // 4c. CORS (near security headers; handles preflight)
+		s.middleware.RateLimit(s.rateLimiter),  // 5-7. allowlist/blocklist/rate limit
+		s.middleware.GeoBlock(s.geoipLookup),  // 8. country blocking
+		s.middleware.Logger,                    // 10. log requests (innermost of spec chain)
 	)
 
 	return handler
