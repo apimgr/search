@@ -2,8 +2,11 @@ package i18n
 
 import (
 	"embed"
+	"encoding/json"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -1012,5 +1015,70 @@ func TestLoadFromFSMissingDefaultLanguage(t *testing.T) {
 	expectedErr := "default language xx not found"
 	if err.Error() != expectedErr {
 		t.Errorf("error = %q, want %q", err.Error(), expectedErr)
+	}
+}
+
+// TestKeyConsistency verifies all locale files have the same flat keys as en.json.
+// Per AI.md PART 30: "Build-time check ensures all languages have the same keys as en.json"
+func TestKeyConsistency(t *testing.T) {
+	lfs := LocalesFS()
+
+	// Read and flatten en.json keys as the reference set
+	enData, err := fs.ReadFile(lfs, "locales/en.json")
+	if err != nil {
+		t.Fatalf("cannot read en.json: %v", err)
+	}
+	var enRaw interface{}
+	if err := json.Unmarshal(enData, &enRaw); err != nil {
+		t.Fatalf("cannot parse en.json: %v", err)
+	}
+	enKeys := make(map[string]string)
+	flattenTranslations("", enRaw, enKeys)
+
+	// Collect sorted reference keys for deterministic error messages
+	refKeys := make([]string, 0, len(enKeys))
+	for k := range enKeys {
+		refKeys = append(refKeys, k)
+	}
+	sort.Strings(refKeys)
+
+	// Walk every locale file and compare flat keys against the reference
+	entries, err := fs.ReadDir(lfs, "locales")
+	if err != nil {
+		t.Fatalf("cannot read locales dir: %v", err)
+	}
+
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || name == "en.json" {
+			continue
+		}
+		lang := strings.TrimSuffix(name, ".json")
+
+		data, err := fs.ReadFile(lfs, "locales/"+name)
+		if err != nil {
+			t.Errorf("lang %s: cannot read file: %v", lang, err)
+			continue
+		}
+		var raw interface{}
+		if err := json.Unmarshal(data, &raw); err != nil {
+			t.Errorf("lang %s: cannot parse JSON: %v", lang, err)
+			continue
+		}
+		langKeys := make(map[string]string)
+		flattenTranslations("", raw, langKeys)
+
+		// Check for keys in en that are missing in this locale
+		for _, k := range refKeys {
+			if _, ok := langKeys[k]; !ok {
+				t.Errorf("lang %s: missing key %q (present in en.json)", lang, k)
+			}
+		}
+		// Check for extra keys in this locale not in en
+		for k := range langKeys {
+			if _, ok := enKeys[k]; !ok {
+				t.Errorf("lang %s: extra key %q (not in en.json)", lang, k)
+			}
+		}
 	}
 }

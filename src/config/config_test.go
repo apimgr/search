@@ -31,8 +31,8 @@ func TestDefaultConfig(t *testing.T) {
 
 func TestGetRandomPort(t *testing.T) {
 	port := GetRandomPort()
-	if port < 1024 || port > 65535 {
-		t.Errorf("GetRandomPort() = %d, want between 1024 and 65535", port)
+	if port < 64000 || port > 64999 {
+		t.Errorf("GetRandomPort() = %d, want between 64000 and 64999", port)
 	}
 
 	// Test multiple times to verify randomness
