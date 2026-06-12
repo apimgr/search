@@ -883,14 +883,6 @@ directory:ubuntu iso
 directory:programming pdf
 directory:movies mkv
 ```
-**How it works**:
-Automatically constructs complex search query:
-```
-intitle:"index of" OR intitle:"directory of" {term}
-"parent directory" OR "last modified"
--html -htm -php -asp -aspx -jsp
-{file_extension if detected}
-```
 **Displays**:
 - List of discovered open directories
 - URL with clickable path
@@ -1057,7 +1049,7 @@ jwt:eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J
 - Expiration status (valid/expired)
 - Standard claims explained (iat, exp, sub, iss, aud)
 - Copy buttons for each section
-**Security**: Never logs tokens, decoding is client-side only
+**Security**: Tokens are never logged or sent to the server
 
 ---
 
@@ -1802,10 +1794,10 @@ Interactive video thumbnails without leaving search results:
 - Double-tap → open full video
 - Shows progress bar during preview
 
-**Implementation**:
-- Thumbnails served via image proxy for privacy
-- Preview clips fetched on-demand (not preloaded)
-- Fallback to static thumbnail if preview unavailable
+**Privacy & Fallback Behavior**:
+- Thumbnails proxied for privacy (same image proxy as search results)
+- Preview clips loaded on demand, not preloaded
+- Falls back to static thumbnail if video preview unavailable
 - Respects user preference to disable previews (bandwidth/privacy)
 
 ---
