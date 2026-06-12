@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"sort"
@@ -96,7 +97,8 @@ func (s *Server) handleAlertNew(w http.ResponseWriter, r *http.Request) {
 		data.Frequency = string(alert.FrequencyDaily)
 	}
 	if err := s.renderer.Render(w, "alerts-new", data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("[Server] template render error: %v", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 	}
 }
 
@@ -154,7 +156,8 @@ func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
 		VerificationSent: created.VerificationSent,
 	}
 	if err := s.renderer.Render(w, "alerts-created", data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("[Server] template render error: %v", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 	}
 }
 
@@ -179,7 +182,8 @@ func (s *Server) handleAlertConfirm(w http.ResponseWriter, r *http.Request) {
 		VerificationSent: false,
 	}
 	if err := s.renderer.Render(w, "alerts-confirmed", data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("[Server] template render error: %v", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 	}
 }
 
@@ -250,7 +254,8 @@ func (s *Server) renderManageAlert(w http.ResponseWriter, r *http.Request, token
 		Success:          strings.TrimSpace(r.URL.Query().Get("success")),
 	}
 	if err := s.renderer.Render(w, "alerts-manage", data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("[Server] template render error: %v", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 	}
 }
 

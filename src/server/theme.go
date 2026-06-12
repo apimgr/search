@@ -147,8 +147,9 @@ func (s *Server) handleThemeSwitch(w http.ResponseWriter, r *http.Request) {
 	// Set theme cookie
 	SetTheme(w, theme)
 
-	// Return success
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"success":true,"theme":"` + theme + `"}`))
+	// Return success using spec-required JSON format: {"ok":true,"data":{...}}
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":   true,
+		"data": map[string]string{"theme": theme},
+	})
 }
