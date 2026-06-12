@@ -1,178 +1,129 @@
-# Search - Privacy-Respecting Metasearch Engine
+# search
 
-**A fast, privacy-focused metasearch engine written in Go**
+[![CI](https://github.com/apimgr/search/actions/workflows/ci.yml/badge.svg)](https://github.com/apimgr/search/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/apimgr/search)](https://github.com/apimgr/search/releases)
+[![License](https://img.shields.io/github/license/apimgr/search)](LICENSE.md)
+
+## About
 
 Search is a privacy-respecting metasearch engine that aggregates results from multiple search engines without tracking you. Built in Go for enhanced performance, security, and ease of deployment.
 
-[![Release](https://img.shields.io/github/v/release/apimgr/search)](https://github.com/apimgr/search/releases)
-[![License](https://img.shields.io/github/license/apimgr/search)](LICENSE.md)
-[![Go Version](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go)](https://go.dev)
-[![Docker](https://img.shields.io/badge/Docker-Available-2496ED?logo=docker)](https://github.com/apimgr/search/pkgs/container/search)
+Single self-contained binary. Runs with zero configuration on first start. No admin web UI — all settings are in `server.yml`.
 
-## ✨ Features
-
-- **🔒 Privacy First**: No third-party analytics by default, consent-aware preferences, self-hosted data control
-- **🧅 Tor Support**: Full Tor integration with SOCKS5, circuit rotation, and .onion service
-- **💾 Portable Preferences**: Save settings locally, export/import them, or share them with portable `prefs` links
-- **🔔 Search Alerts**: Accountless alerts with email verification plus private RSS and webhook delivery
-- **🚀 Fast & Efficient**: Written in Go with concurrent engine queries
-- **🔍 Multiple Engines**: Aggregate results from Google, Bing, DuckDuckGo, and more
-- **💡 Instant Answers**: Calculator, unit/currency converter, weather, dictionary, and more
-- **⚡ Bang Shortcuts**: Quick redirects like `!g`, `!w`, `!gh` for fast searching
-- **⌨️ Keyboard Navigation**: Vim-style shortcuts for power users (j/k, /, Enter)
-- **📱 Mobile Friendly**: Responsive design that works on all devices
-- **🎨 Beautiful UI**: Modern interface with dark (Dracula) and light themes
-- **⚙️ File-only configuration**: All settings in `server.yml`; no admin web UI
-- **🌐 Multi-Category**: Web, images, videos, news, maps, files, music, science, IT, and social
-- **🔐 Built-in SSL**: Let's Encrypt integration for automatic HTTPS
-- **📊 Monitoring**: Prometheus metrics and health endpoints
-- **🐳 Container Ready**: Docker and Docker Compose support
-- **🌍 GeoIP**: Country detection and blocking capabilities
-- **📧 Notifications**: Email alerts for important events
-
-## 📦 Official Site
+## Official Site
 
 **https://scour.li**
 
-## 🚀 Quick Start
+## Features
 
-### Using Pre-built Binary
+- Privacy First: No third-party analytics by default, consent-aware preferences, self-hosted data control
+- Tor Support: Full Tor integration with SOCKS5, circuit rotation, and .onion service
+- Portable Preferences: Save settings locally, export/import them, or share them with portable `prefs` links
+- Search Alerts: Accountless alerts with email verification plus private RSS and webhook delivery
+- Fast and Efficient: Written in Go with concurrent engine queries
+- Multiple Engines: Aggregate results from Google, Bing, DuckDuckGo, and more
+- Instant Answers: Calculator, unit/currency converter, weather, dictionary, and more
+- Bang Shortcuts: Quick redirects like `!g`, `!w`, `!gh` for fast searching
+- Keyboard Navigation: Vim-style shortcuts for power users (j/k, /, Enter)
+- Mobile Friendly: Responsive design that works on all devices
+- Dark and Light Themes: Modern interface with dark (Dracula) and light themes
+- File-only Configuration: All settings in `server.yml`; no admin web UI
+- Multi-Category Search: Web, images, videos, news, maps, files, music, science, IT, and social
+- Built-in SSL: Let's Encrypt integration for automatic HTTPS
+- Monitoring: Prometheus metrics and health endpoints
+- Container Ready: Docker and Docker Compose support
+- GeoIP: Country detection and blocking capabilities
+- Email Notifications: Alerts for important events
+
+## Production
+
+### Binary
 
 ```bash
-# Download the latest release
+# Download latest release
 curl -fsSL https://raw.githubusercontent.com/apimgr/search/main/scripts/install.sh | bash
 
-# Start the server
+# Start the server (auto-selects port in 64000-65535 range)
 search
 
-# Access at http://localhost:64xxx (random port, shown on startup)
+# Specify port
+search --port 64080
 ```
 
-### Using Docker
+### Docker
 
 ```bash
-# Run with Docker
 docker run -d \
-  -p 64080:80 \
+  -p 172.17.0.1:64080:80 \
   -v ./data:/data \
   -v ./config:/config \
   --name search \
   ghcr.io/apimgr/search:latest
-
-# Access at http://localhost:64080
 ```
 
-### Using Docker Compose
+### Docker Compose
 
 ```bash
-# Clone the repository
 git clone https://github.com/apimgr/search.git
 cd search
-
-# Start with Docker Compose
-docker-compose up -d
-
-# Access at http://localhost:64xxx (see docker-compose.yml for port)
+docker compose -f docker/docker-compose.yml up -d
 ```
 
-## 📖 Installation
-
-### Linux
+### Install as System Service
 
 ```bash
-# Using the install script (recommended)
-curl -fsSL https://raw.githubusercontent.com/apimgr/search/main/scripts/install.sh | bash
+# Install (writes systemd unit / launchd plist / Windows service)
+sudo search install
 
-# Or manually
-wget https://github.com/apimgr/search/releases/latest/download/search-linux-amd64
-chmod +x search-linux-amd64
-sudo mv search-linux-amd64 /usr/local/bin/search
-
-# Install as service
-sudo search --service --install
-sudo search --service start
+# Uninstall
+sudo search uninstall
 ```
 
-### macOS
+### Multi-Platform Downloads
+
+| Platform | Download |
+|----------|----------|
+| Linux amd64 | `search-linux-amd64` |
+| Linux arm64 | `search-linux-arm64` |
+| macOS amd64 | `search-darwin-amd64` |
+| macOS arm64 | `search-darwin-arm64` |
+| Windows amd64 | `search-windows-amd64.exe` |
+| Windows arm64 | `search-windows-arm64.exe` |
+| FreeBSD amd64 | `search-freebsd-amd64` |
+| FreeBSD arm64 | `search-freebsd-arm64` |
+
+All binaries at: https://github.com/apimgr/search/releases/latest
+
+## Client
+
+A companion CLI/TUI client (`search-cli`) is available for interacting with the Search API from the terminal.
+
+### Install
 
 ```bash
-# Using Homebrew (coming soon)
-# brew install apimgr/tap/search
-
-# Or using the install script
-curl -fsSL https://raw.githubusercontent.com/apimgr/search/main/scripts/macos.sh | bash
-
-# Or manually
-wget https://github.com/apimgr/search/releases/latest/download/search-darwin-amd64
-chmod +x search-darwin-amd64
-sudo mv search-darwin-amd64 /usr/local/bin/search
-
-# Install as service
-sudo search --service --install
-sudo search --service start
-```
-
-### Windows
-
-```powershell
-# Using PowerShell (run as Administrator)
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/apimgr/search/main/scripts/windows.ps1" -UseBasicParsing | Invoke-Expression
-
-# Or manually
-# Download from: https://github.com/apimgr/search/releases/latest/download/search-windows-amd64.exe
-# Place in C:\Program Files\apimgr\search\
-# Install as service:
-# search.exe --service --install
-```
-
-### BSD
-
-```bash
-# FreeBSD/OpenBSD
-curl -fsSL https://raw.githubusercontent.com/apimgr/search/main/scripts/install.sh | bash
-
-# Or manually
-fetch https://github.com/apimgr/search/releases/latest/download/search-freebsd-amd64
-chmod +x search-freebsd-amd64
-sudo mv search-freebsd-amd64 /usr/local/bin/search
-
-# Install as service
-sudo search --service --install
-```
-
-## 💻 CLI Client
-
-A companion CLI client is available for interacting with the Search API from the terminal.
-
-### Install CLI
-
-```bash
-# Linux/BSD
-curl -LO https://github.com/apimgr/search/releases/latest/download/search-linux-amd64-cli
-chmod +x search-linux-amd64-cli
-sudo mv search-linux-amd64-cli /usr/local/bin/search-cli
+# Linux
+curl -LO https://github.com/apimgr/search/releases/latest/download/search-cli-linux-amd64
+chmod +x search-cli-linux-amd64
+sudo mv search-cli-linux-amd64 /usr/local/bin/search-cli
 
 # macOS
-curl -LO https://github.com/apimgr/search/releases/latest/download/search-darwin-amd64-cli
-chmod +x search-darwin-amd64-cli
-sudo mv search-darwin-amd64-cli /usr/local/bin/search-cli
-
-# Windows (PowerShell)
-Invoke-WebRequest -Uri "https://github.com/apimgr/search/releases/latest/download/search-windows-amd64-cli.exe" -OutFile "search-cli.exe"
+curl -LO https://github.com/apimgr/search/releases/latest/download/search-cli-darwin-arm64
+chmod +x search-cli-darwin-arm64
+sudo mv search-cli-darwin-arm64 /usr/local/bin/search-cli
 ```
 
-### Configure CLI
+### Configure
 
 ```bash
-# Connect to a server (creates ~/.config/apimgr/search/cli.yml)
+# Connect to a server
 search-cli config --server https://search.example.com --token YOUR_API_TOKEN
 
-# Or set environment variables
+# Or via environment variables
 export SEARCH_SERVER="https://search.example.com"
 export SEARCH_TOKEN="your-api-token"
 ```
 
-### CLI Usage
+### Usage
 
 ```bash
 # Search from command line
@@ -186,46 +137,37 @@ search-cli tui
 
 # Show help
 search-cli --help
-search-cli search --help
 ```
 
-### CLI Configuration File
+## Configuration
 
-Location: `~/.config/apimgr/search/cli.yml`
+On first run, Search creates a configuration file with sane defaults.
 
-```yaml
-server: https://search.example.com
-token: your-api-token
-default_category: general
-theme: dark
-```
+**Config file locations:**
 
-## ⚙️ Configuration
-
-On first run, Search creates a configuration file with sane defaults:
-
-**Linux (root)**: `/etc/apimgr/search/server.yml`  
-**Linux (user)**: `~/.config/apimgr/search/server.yml`  
-**macOS**: `~/Library/Application Support/apimgr/search/server.yml`  
-**Windows**: `%AppData%\apimgr\search\server.yml`  
-**BSD**: `/usr/local/etc/apimgr/search/server.yml`
+| OS | Path |
+|----|------|
+| Linux (root) | `/etc/apimgr/search/server.yml` |
+| Linux (user) | `~/.config/apimgr/search/server.yml` |
+| macOS | `~/Library/Application Support/apimgr/search/server.yml` |
+| Windows | `%AppData%\apimgr\search\server.yml` |
+| BSD | `/usr/local/etc/apimgr/search/server.yml` |
 
 ### Basic Configuration
 
 ```yaml
 server:
-  # Port: single (HTTP) or dual (HTTP,HTTPS) e.g., "8090" or "8090,64453"
+  # Port in 64000-65535 range (random on first run, saved to config)
   port: 64080
-  
-  # Listen address: [::] (all), 127.0.0.1 (localhost only)
+
+  # Listen address: [::] (all interfaces) or 127.0.0.1 (localhost only)
   address: "[::]"
-  
+
   # Application mode: production or development
   mode: production
-  
-  # Operator bearer token. Auto-generated on first run.
-  # Send as: Authorization: Bearer <token>
-  token: {auto-generated}
+
+  # Operator bearer token (auto-generated on first run)
+  token: ""
 
 # Enable search engines
 engines:
@@ -237,247 +179,31 @@ engines:
 
 ### Environment Variables
 
-For initial setup (init only):
-
 ```bash
-export MODE=production           # Application mode
-export PORT=64080                # Server port (64xxx range for dev)
-export LISTEN="0.0.0.0"         # Listen address
-export CONFIG_DIR="/etc/apimgr/search"
-export DATA_DIR="/var/lib/apimgr/search"
+SEARCH_MODE=production
+SEARCH_PORT=64080
+SEARCH_LISTEN="0.0.0.0"
+SEARCH_CONFIG_DIR="/etc/apimgr/search"
+SEARCH_DATA_DIR="/var/lib/apimgr/search"
 ```
-
-## 🎯 Usage
-
-### Command Line
-
-```bash
-# Start the server (default: random 64xxx port)
-search
-
-# Specify port
-search --port 64080
-
-# Specify dual ports (HTTP + HTTPS)
-search --port 80,443
-
-# Development mode
-search --mode development
-
-# Check status
-search --status
-
-# Show version
-search --version
-
-# Show help
-search --help
-```
-
-### Service Management
-
-```bash
-# Install as system service
-sudo search --service --install
-
-# Start/stop/restart
-sudo search --service start
-sudo search --service stop
-sudo search --service restart
-
-# Reload configuration
-sudo search --service reload
-
-# Uninstall service
-sudo search --service --uninstall
-```
-
-### Maintenance
-
-```bash
-# Create backup
-search --maintenance backup
-
-# Restore from backup
-search --maintenance restore
-
-# Update to latest version
-search --maintenance update
-
-# Enable maintenance mode
-search --maintenance mode enable
-```
-
-## 🌐 Web Interface
-
-### Search Interface
-
-Access the search interface at: `http://localhost:PORT/`
-
-Features:
-- Clean, ad-free search results
-- Category tabs (Web, Images, Videos, News, Maps, Files, Music, Science, IT, Social)
-- Advanced search options
-- Create accountless alerts from the current query
-- Dark/Light theme toggle
-- Mobile-responsive design
 
 ### Operator Access
 
-There is **no admin web UI**. Server configuration is entirely file-driven:
+There is **no admin web UI**. Configuration is file-driven via `server.yml` and reloaded with `SIGHUP`. To rotate the operator token:
 
-- All settings live in `server.yml` (see `/etc/apimgr/search/server.yml` on Linux).
-- The operator bearer token is auto-generated on first run and displayed once in the startup banner. It is also written to `server.yml` (`server.token`).
-- Operator-only API endpoints require `Authorization: Bearer <token>`.
-- To rotate the token: `search --maintenance rotate-token`.
-- The `search-cli` companion binary is the primary management surface.
-
-## 💡 Instant Answers
-
-Zero-click answers displayed above search results:
-
-| Widget | Triggers | Example |
-|--------|----------|---------|
-| **Calculator** | Math expressions | `2 + 2`, `sqrt(144)`, `15% of 200` |
-| **Unit Converter** | Number + unit | `5 miles in km`, `100F to C`, `2 cups in ml` |
-| **Currency** | Amount + currency | `100 usd to eur`, `$50 in pounds` |
-| **Weather** | Location weather | `weather tokyo`, `forecast london` |
-| **Dictionary** | Word definitions | `define ubiquitous`, `dict: serendipity` |
-| **Thesaurus** | Synonyms/antonyms | `synonyms for happy`, `antonyms of good` |
-| **IP Lookup** | IP address | `my ip`, `8.8.8.8`, `ip 1.1.1.1` |
-| **Timezone** | Time in location | `time in tokyo`, `3pm EST to PST` |
-| **Calendar** | Date arithmetic | `days until christmas`, `days between jan 1 and mar 15` |
-| **Stopwatch** | Timer/stopwatch | `stopwatch`, `timer 5 minutes`, `countdown 30 seconds` |
-| **Color** | Color codes | `#ff5733`, `rgb(255,87,51)`, `dark blue` |
-| **Hash** | Hash text | `md5 hello`, `sha256 password` |
-| **Password** | Generate password | `password`, `random password`, `password 16` |
-| **UUID** | Generate UUID | `uuid`, `generate uuid`, `guid` |
-| **Random** | Random numbers | `random 1-100`, `roll d20`, `flip coin` |
-| **QR Code** | Generate QR | `qr https://example.com` |
-
-## 🔍 Direct Answer Operators
-
-Type these prefixes in the search box for instant full-page answers:
-
-### Network & Security
-| Operator | Example | Description |
-|----------|---------|-------------|
-| `ip:` | `ip:8.8.8.8` | IP geolocation |
-| `dns:` | `dns:example.com` | DNS records |
-| `whois:` | `whois:example.com` | WHOIS info |
-| `cert:` | `cert:example.com` | SSL certificate |
-| `headers:` | `headers:example.com` | HTTP response headers |
-| `asn:` | `asn:AS15169` | ASN information |
-| `subnet:` | `subnet:192.168.1.0/24` | Subnet calculator |
-| `resolve:` | `resolve:example.com` | Hostname to IP |
-| `robots:` | `robots:example.com` | robots.txt contents |
-| `sitemap:` | `sitemap:example.com` | Sitemap URLs |
-| `tech:` | `tech:example.com` | Technology detection |
-| `feed:` | `feed:example.com` | RSS/Atom feeds |
-| `expand:` | `expand:short.url/x` | Expand shortened URL |
-| `safe:` | `safe:example.com` | Safe browsing check |
-
-### Encoding & Conversion
-| Operator | Example | Description |
-|----------|---------|-------------|
-| `base64:` | `base64:hello world` | Base64 encode/decode |
-| `url:` | `url:hello world!` | URL encode/decode |
-| `hash:` | `hash:hello` | MD5, SHA1, SHA256, SHA512 |
-| `html:` | `html:<b>text</b>` | HTML entity encode/decode |
-| `escape:` | `escape:hello & world` | Escape special characters |
-| `color:` | `color:#ff5500` | Color info & conversion |
-| `unicode:` | `unicode:U+1F600` | Unicode character lookup |
-| `emoji:` | `emoji:smile` | Emoji search |
-| `ascii:` | `ascii:hello` | ASCII art |
-| `qr:` | `qr:https://example.com` | QR code generator |
-| `uuid:` | `uuid:` | Generate UUID v4 |
-| `jwt:` | `jwt:eyJ...` | Decode JWT token |
-
-### Developer Tools
-| Operator | Example | Description |
-|----------|---------|-------------|
-| `json:` | `json:{"key":"val"}` | Format / validate JSON |
-| `yaml:` | `yaml:key: value` | Format / validate YAML |
-| `regex:` | `regex:[a-z]+` | Explain regex pattern |
-| `beautify:` | `beautify:minified code` | Beautify / format code |
-| `cron:` | `cron:0 * * * *` | Explain cron expression |
-| `chmod:` | `chmod:755` | File permission converter |
-| `timestamp:` | `timestamp:1700000000` | Unix timestamp converter |
-| `slug:` | `slug:Hello World` | Generate URL slug |
-| `case:` | `case:hello world` | Case conversion (upper/lower/camel/snake) |
-
-### Reference
-| Operator | Example | Description |
-|----------|---------|-------------|
-| `tldr:` | `tldr:git` | Simplified man page |
-| `man:` | `man:grep` | Full Unix man page |
-| `cheat:` | `cheat:git` | Command cheatsheet |
-| `rfc:` | `rfc:2616` | RFC document |
-| `cve:` | `cve:CVE-2024-1234` | CVE vulnerability info |
-| `pkg:` | `pkg:express` | Package info (npm/PyPI/Go) |
-| `http:` | `http:404` | HTTP status code |
-| `port:` | `port:443` | Port number info |
-
-## ⚡ Bang Shortcuts
-
-Quick redirects to specific sites (180+ bangs available):
-
-| Category | Bangs |
-|----------|-------|
-| **Search** | `!g` Google, `!b` Bing, `!ddg` DuckDuckGo, `!br` Brave, `!sp` Startpage, `!q` Qwant, `!kagi` Kagi |
-| **Images** | `!gi` Google Images, `!bi` Bing Images, `!fl` Flickr, `!pexels`, `!pixabay`, `!tineye` |
-| **Video** | `!yt` YouTube, `!v` Vimeo, `!twitch`, `!tiktok`, `!rumble` |
-| **Maps** | `!gm` Google Maps, `!osm` OpenStreetMap, `!waze`, `!yelp`, `!tripadvisor` |
-| **News** | `!gn` Google News, `!hn` Hacker News, `!bbc`, `!techcrunch`, `!verge`, `!reuters` |
-| **Social** | `!tw` Twitter/X, `!r` Reddit, `!mast` Mastodon, `!lb` Lobsters, `!bluesky` |
-| **Code & Dev** | `!gh` GitHub, `!gl` GitLab, `!so` Stack Overflow, `!npm`, `!pypi`, `!crates`, `!docker`, `!mdn` |
-| **Shopping** | `!amz` Amazon, `!eb` eBay, `!etsy`, `!walmart`, `!camelcamelcamel` |
-| **Science** | `!scholar` Google Scholar, `!arxiv`, `!pubmed`, `!doi` |
-| **Reference** | `!w` Wikipedia, `!wa` Wolfram Alpha, `!mw` Merriam-Webster, `!ud` Urban Dictionary |
-| **Privacy** | `!wbm` Wayback Machine, `!virustotal`, `!shodan`, `!urlscan` |
-| **Entertainment** | `!imdb`, `!rt` Rotten Tomatoes, `!steam`, `!spot` Spotify, `!letterboxd` |
-
-Examples:
-```
-!g golang tutorial     → Search Google
-!w machine learning    → Wikipedia article
-!gh octocat            → GitHub search
-!npm express           → NPM package
+```bash
+search maintenance rotate-token
 ```
 
-Custom bangs can be defined in user preferences.
+## API
 
-## ⌨️ Keyboard Shortcuts
+All API endpoints are under `/api/v1/`. Every web page has a corresponding JSON API endpoint.
 
-Vim-inspired navigation for power users:
-
-| Key | Action |
-|-----|--------|
-| `/` | Focus search box |
-| `Escape` | Clear/unfocus search |
-| `j` / `k` | Navigate results down/up |
-| `Enter` | Open selected result |
-| `o` / `O` | Open in current/new tab |
-| `h` / `l` | Previous/next page |
-| `g g` | Go to first result |
-| `G` | Go to last result |
-| `t` | Toggle theme |
-| `s` | Open settings |
-| `?` | Show shortcuts help |
-| `1-9` | Jump to result N |
-
-## 🔌 API
-
-### REST API
-
-Search uses a versioned REST API at `/api/v1`:
+### Search
 
 ```bash
 # Search
 curl "http://localhost:PORT/api/v1/search?q=golang&category=general"
-
-# Get text response
-curl "http://localhost:PORT/api/v1/search.txt?q=golang"
 
 # Autocomplete
 curl "http://localhost:PORT/api/v1/autocomplete?q=gol"
@@ -486,499 +212,208 @@ curl "http://localhost:PORT/api/v1/autocomplete?q=gol"
 curl "http://localhost:PORT/api/v1/engines"
 ```
 
+### Alerts
+
 ```bash
-# Create an alert
+# Create an alert (accountless)
 curl -X POST "http://localhost:PORT/api/v1/alerts" \
   -H "Content-Type: application/json" \
   -d '{
     "query": "golang release notes",
     "category": "news",
-    "language": "en",
-    "frequency": "daily",
     "email": "alerts@example.com",
+    "frequency": "daily",
     "deliver_rss": true
   }'
 
-# Inspect or update an alert later with the returned manage token
+# Manage alert with returned token
 curl "http://localhost:PORT/api/v1/alerts/MANAGE_TOKEN"
-curl -X PATCH "http://localhost:PORT/api/v1/alerts/MANAGE_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"deliver_webhook": true, "webhook_url": "https://example.com/search-alerts"}'
 ```
 
-### Operator API
-
-There is **no admin web UI and no runtime configuration mutation via API**.
-Configuration is read from `server.yml` and reloaded with `SIGHUP`. Operator-only
-read endpoints (engine status, alert moderation, etc.) require the operator
-bearer token:
+### Health and Status
 
 ```bash
-# Inspect engine health (operator-only)
+# Public health (no auth)
+curl http://localhost:PORT/server/healthz
+
+# Engine status (operator token required)
 curl -H "Authorization: Bearer YOUR_TOKEN" \
   http://localhost:PORT/api/v1/server/engines
-
-# Public health endpoint (no auth)
-curl http://localhost:PORT/server/healthz
 ```
 
-To change a setting: edit `server.yml`, then `kill -HUP $(cat /var/run/apimgr/search.pid)`.
+### API Documentation
 
-### OpenAPI
+Interactive API docs at: `http://localhost:PORT/server/docs/swagger`
 
-View API documentation at: `http://localhost:PORT/openapi`
+GraphQL playground at: `http://localhost:PORT/server/docs/graphql`
 
-## 🔧 Search Engines
+## Other
 
-Currently supported search engines:
+### Supported Search Engines
 
-### General (Web)
-- Google
-- Bing
-- DuckDuckGo
-- Yahoo
-- Brave Search
-- Startpage
-- Qwant
-- Wikipedia
+Web: Google, Bing, DuckDuckGo, Yahoo, Brave Search, Startpage, Qwant, Wikipedia
 
-### Videos
-- YouTube
+Video: YouTube
 
-### News & Social
-- Reddit
+News and Social: Reddit
 
-### Code
-- GitHub
-- Stack Overflow
+Code: GitHub, Stack Overflow
 
-*More engines coming soon!*
+### Instant Answers
 
-## 🛡️ Privacy
+Zero-click answers displayed above search results:
 
-Search is designed with privacy as the top priority:
+| Widget | Example |
+|--------|---------|
+| Calculator | `2 + 2`, `sqrt(144)` |
+| Unit Converter | `5 miles in km`, `100F to C` |
+| Currency | `100 usd to eur` |
+| Weather | `weather tokyo` |
+| Dictionary | `define ubiquitous` |
+| IP Lookup | `my ip`, `8.8.8.8` |
+| QR Code | `qr https://example.com` |
+| UUID | `uuid` |
+| Hash | `sha256 hello` |
 
-- ✅ **No third-party tracking by default**: Analytics scripts stay off unless you configure tracking and users consent
-- ✅ **Consent-aware cookies**: Essential cookies keep auth/CSRF working, and preference cookies are optional
-- ✅ **No data sharing**: Your data never leaves your server
-- ✅ **No ads**: Clean, ad-free results
-- ✅ **Clean result links**: Common tracking parameters are stripped from result URLs
-- ✅ **Tor support**: Full Tor integration with circuit rotation and .onion service
-- ✅ **Client-side preferences**: Settings live in localStorage or portable links, not server-side profiles
-- ✅ **Proxy support**: Route requests through SOCKS5/HTTP/Tor proxies
-- ✅ **Stream isolation**: Each engine query uses separate Tor circuit
-- ✅ **Image proxy**: Optional image proxying for extra privacy
-- ✅ **Self-hosted**: You control the data
+### Bang Shortcuts
 
-## 🧅 Tor Integration
+Quick redirects with `!` prefix: `!g` Google, `!w` Wikipedia, `!gh` GitHub, `!yt` YouTube, `!r` Reddit, `!so` Stack Overflow, `!npm` NPM, `!ddg` DuckDuckGo, and 170+ more.
 
-Search has comprehensive Tor support for maximum anonymity:
+### Keyboard Navigation
 
-### Features
+| Key | Action |
+|-----|--------|
+| `/` | Focus search box |
+| `j` / `k` | Navigate results down/up |
+| `Enter` | Open selected result |
+| `h` / `l` | Previous/next page |
+| `t` | Toggle theme |
+| `?` | Show shortcuts help |
 
-- **SOCKS5 Proxy**: Route all searches through Tor network
-- **Circuit Rotation**: Automatically rotate Tor circuits for enhanced privacy
-- **Hidden Service**: Run as .onion service for Tor-only access
-- **Per-Engine Routing**: Configure which engines use Tor vs clearnet
-- **Stream Isolation**: Each search engine query uses separate Tor circuit
-- **Tor Browser Optimized**: Detects and optimizes for Tor Browser
-- **Fallback Support**: Gracefully fallback to clearnet if Tor unavailable
+### Tor Integration
 
-### Configuration
+Search auto-detects a running Tor daemon and enables the hidden service. Configuration in `server.yml`:
 
 ```yaml
 server:
-  # Tor configuration
   tor:
     enabled: true
-    
-    # SOCKS5 proxy address (default Tor proxy)
     socks_proxy: "127.0.0.1:9050"
-    
-    # Tor control port for circuit management
     control_port: "127.0.0.1:9051"
-    control_password: ""
-    
-    # Run as .onion hidden service
     hidden_service:
       enabled: false
       port: 80
-    
-    # Per-engine Tor routing
-    # all: route all engines through Tor
-    # none: use clearnet for all engines
-    # auto: use Tor for engines that support it
-    routing: auto
-    
-    # Force new circuit for each search (maximum privacy)
     circuit_rotation: true
-    
-    # Stream isolation (separate circuit per engine)
     stream_isolation: true
 ```
 
-### Usage
+### Privacy
+
+- No third-party tracking by default
+- No ads; clean result links with tracking params stripped
+- Preferences stored client-side (localStorage + portable `?prefs=` links)
+- Optional image proxy
+- Full Tor support with per-engine routing and stream isolation
+
+### Monitoring
 
 ```bash
-# Start with Tor enabled
-search --tor
-
-# Run as .onion hidden service
-search --tor --hidden-service
-
-# Check Tor status
-search --tor-status
-```
-
-## 💾 User Preferences
-
-User preferences stay **client-side**. Most settings live in browser localStorage, can be exported/imported as JSON, or can be encoded into portable `?prefs=` links. Export/import covers the full browser-side preference set, while portable links currently carry the core search/display defaults. With consent, Search may also persist the active theme in a preference cookie for server-rendered pages. Nothing is stored in a server-side profile.
-
-### Stored Preferences
-
-- ✅ Default category (web, images, videos, etc.)
-- ✅ Safe search level (off, moderate, strict)
-- ✅ Theme preference (dark, light, auto)
-- ✅ Results per page (10, 20, 50, 100)
-- ✅ Infinite scroll vs pagination
-- ✅ Open results in a new tab
-- ✅ Keyboard shortcuts
-- ✅ Homepage widgets and custom bangs
-
-### Managing Preferences
-
-All preferences can be managed in the web UI:
-
-1. Click **Preferences** button
-2. Adjust your settings
-3. Click **Save** (stored in browser only)
-4. **Export** preferences as JSON for backup
-5. **Import** preferences from JSON on new browser
-6. **Generate Link** to create a shareable `?prefs=` URL or QR code
-7. **Clear All** to reset to defaults
-
-Portable `?prefs=` links currently encode:
-
-- theme
-- default category
-- safe search
-- results per page
-- open in new tab
-- infinite scroll vs pagination
-- keyboard shortcuts
-
-### Privacy Notes
-
-- **Client-side first**: Preferences use localStorage and portable links
-- **Consent-aware cookies**: Theme cookies are optional and cleared when cookie preferences are declined
-- **No server storage**: Nothing stored in a server-side profile
-- **No tracking**: Your settings never leave your browser
-- **Portable**: Export/import JSON to move between browsers
-- **Optional**: Use default settings without saving anything
-
-## 📊 Monitoring
-
-### Health Check
-
-```bash
-# HTML response
-curl http://localhost:PORT/healthz
-
-# JSON response
-curl http://localhost:PORT/api/v1/healthz
-```
-
-### Prometheus Metrics
-
-```bash
-# Enable in configuration
-server:
-  metrics:
-    enabled: true
-    endpoint: /metrics
-
-# Access metrics
+# Prometheus metrics
 curl http://localhost:PORT/metrics
+
+# Health check
+curl http://localhost:PORT/server/healthz
 ```
 
-## 🐳 Docker
+### Security Headers
 
-### Dockerfile
+HSTS, CSP, X-Frame-Options, X-Content-Type-Options, rate limiting (120 req/min default), CSRF protection, and input validation on all endpoints.
 
-Build your own image:
+### Internationalization
 
-```bash
-docker build -t search:latest .
-```
+Language resolved from: `?lang=` query param → `lang` cookie → `Accept-Language` header → English.
 
-### Docker Compose
+Supported: English, German, French, Spanish, Italian, Portuguese, Dutch, Polish, Russian, Japanese, Chinese, Korean, Arabic, Turkish, and more.
 
-Full setup with dependencies:
+## Development
 
-```yaml
-services:
-  search:
-    image: ghcr.io/apimgr/search:latest
-    container_name: search
-    ports:
-      - "64080:80"
-    volumes:
-      - ./volumes/data/search:/data
-      - ./volumes/config/search:/config
-    environment:
-      - MODE=production
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "search", "--status"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-```
-
-## 🔐 Security
-
-- **HTTPS by default**: Automatic Let's Encrypt certificates
-- **Rate limiting**: Protect against abuse (120 req/min default)
-- **Security headers**: HSTS, CSP, X-Frame-Options, etc.
-- **CSRF protection**: All forms protected
-- **Input validation**: All inputs sanitized
-- **GeoIP blocking**: Block countries by ISO code
-- **Fail2ban**: Compatible security logs
-
-## 🌍 Internationalization
-
-Use the header language selector or `?lang=de` to choose a language. The server resolves language in this order: `?lang=` query param, `lang` cookie, `Accept-Language` header, then English.
-
-Supported languages include English, German, French, Spanish, Italian, Portuguese, Dutch, Polish, Russian, Japanese, Chinese, Korean, Arabic, Hebrew, Persian, Urdu, Turkish, and Vietnamese.
-
-## 📝 License
-
-This project is licensed under the MIT License - see [LICENSE.md](LICENSE.md) for details.
-
-## 🤝 Contributing
-
-Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) first.
-
-### Development
-
-See the [Development](#development-1) section below.
-
-## 💬 Support
-
-- **Documentation**: https://apimgr-search.readthedocs.io
-- **Issues**: https://github.com/apimgr/search/issues
-- **Discussions**: https://github.com/apimgr/search/discussions
-
-## 🙏 Acknowledgments
-
-Built with ❤️ by the apimgr team. Special thanks to all contributors and the open source community.
-
----
-
-# Development
-
-This section is for developers who want to build, test, or contribute to Search.
-
-## 🛠️ Building from Source
+Development instructions are for contributors only.
 
 ### Prerequisites
 
-- Go 1.23 or later
-- Docker (for testing)
+- Docker (for builds and tests — Go is NOT installed on host)
 - Make
+- Git
 
 ### Build
 
 ```bash
-# Clone the repository
+# Clone
 git clone https://github.com/apimgr/search.git
 cd search
 
-# Build for all platforms
+# Quick dev build (Docker, outputs to /tmp/apimgr/)
+make dev
+
+# Full cross-platform build (8 platforms)
 make build
 
-# Build for current platform
-go build -o binaries/search ./src
-
-# Run
-./binaries/search
-```
-
-### Build Options
-
-```bash
-# Build all platforms to ./binaries
-make build
-
-# Run tests
+# Run tests (Docker)
 make test
 
 # Build and push Docker image
 make docker
-
-# Create GitHub release
-make release
-```
-
-## 🧪 Testing
-
-We use Docker for all testing to keep the host system clean:
-
-```bash
-# Run tests in Docker
-docker run --rm \
-  -v $PWD:/build \
-  -w /build \
-  golang:latest \
-  go test ./...
-
-# Build and test
-docker run --rm \
-  -v $PWD:/build \
-  -w /build \
-  -e CGO_ENABLED=0 \
-  golang:latest \
-  sh -c "go build -o /tmp/search ./src && /tmp/search --version"
-```
-
-## 📁 Project Structure
-
-```
-./
-├── src/                    # Source code
-│   ├── main.go            # Entry point
-│   ├── config/            # Configuration
-│   ├── server/            # HTTP server
-│   ├── search/            # Search engine
-│   ├── models/            # Data models
-│   ├── database/          # Database drivers
-│   └── ...
-├── scripts/               # Installation scripts
-├── tests/                 # Test files
-├── binaries/              # Built binaries (gitignored)
-├── releases/              # Release artifacts (gitignored)
-├── Makefile               # Build automation
-├── Dockerfile             # Container image
-├── docker-compose.yml     # Local development
-└── README.md              # This file
-```
-
-## 🎯 Adding Search Engines
-
-To add a new search engine:
-
-1. Create a new file in `src/search/engines/`
-2. Implement the `Engine` interface
-3. Register the engine in `src/search/engines/registry.go`
-4. Add configuration to `server.yml`
-5. Add tests
-
-Example:
-
-```go
-package engines
-
-type MyEngine struct {
-    config EngineConfig
-}
-
-func (e *MyEngine) Name() string {
-    return "myengine"
-}
-
-func (e *MyEngine) Category() Category {
-    return CategoryGeneral
-}
-
-func (e *MyEngine) Search(ctx context.Context, query Query) ([]Result, error) {
-    // Implement search logic
-    return results, nil
-}
-```
-
-## 🐛 Debugging
-
-Enable development mode for verbose logging:
-
-```bash
-# Run in development mode
-search --mode development
-
-# Or set environment variable
-export MODE=development
-search
-```
-
-Development mode enables:
-- Verbose logging
-- Debug endpoints (/debug/pprof/)
-- Detailed error messages
-- Template hot-reload
-
-## 📚 Documentation
-
-Full documentation is available at: https://scour.li/docs
-
-- [Installation Guide](https://scour.li/docs/installation)
-- [Configuration Reference](https://scour.li/docs/configuration)
-- [API Documentation](https://scour.li/docs/api)
-- [Admin Guide](https://scour.li/docs/admin)
-
-## 🛠️ Development
-
-**Development instructions are for contributors only.**
-
-### Prerequisites
-
-- Go 1.23+ (latest stable recommended)
-- Docker (for containerized builds)
-- Make
-
-### Build
-
-```bash
-# Clone the repository
-git clone https://github.com/apimgr/search
-cd search
-
-# Quick dev build (outputs to OS temp dir)
-make dev
-
-# Full build (all platforms, outputs to binaries/)
-make build
-
-# Run tests
-make test
-
-# Clean build artifacts
-make clean
 ```
 
 ### Project Structure
 
 ```
 src/           # Go source code
-  ├── admin/   # Admin panel
-  ├── api/     # REST API
-  ├── client/  # CLI client
+  ├── client/  # CLI/TUI client (search-cli)
   ├── config/  # Configuration
-  ├── server/  # HTTP server
+  ├── server/  # HTTP server + handlers
+  ├── search/  # Search engine aggregator
+  ├── database/# Database layer
   └── ...
-tests/         # Test files
 docker/        # Docker configuration
+  ├── Dockerfile        # Production image
+  ├── Dockerfile.build  # Build toolchain image
+  └── Dockerfile.dev    # Development image
 docs/          # MkDocs documentation
+tests/         # Integration tests
 binaries/      # Built binaries (gitignored)
 ```
 
-### CI/CD
+### Adding a Search Engine
 
-- **GitHub Actions**: Automated testing on pull requests
-- **Jenkins**: Multi-architecture builds (AMD64, ARM64)
+1. Create `src/search/engines/myengine.go`
+2. Implement the `Engine` interface
+3. Register in `src/search/engines/registry.go`
+4. Add configuration key to `server.yml` defaults
+5. Write unit tests
 
-## 📄 License
+### Debug Mode
 
-This project is licensed under the MIT License - see [LICENSE.md](LICENSE.md) for details.
+```bash
+# Enable debug endpoints (/debug/pprof, /debug/config, /debug/routes, etc.)
+search --debug
 
----
+# Or via environment
+DEBUG=true search
+```
 
-Made with ❤️ by [apimgr](https://github.com/apimgr)
+## Disclaimer
+
+This software is provided "as is" without warranty of any kind. Use at your own risk.
+
+- **No Warranty**: The authors are not responsible for any damages, data loss, or issues arising from use of this software
+- **Not Professional Advice**: This software does not constitute legal, financial, medical, or other professional advice
+- **Third-Party Services**: If this software connects to external APIs or services, their terms of service apply separately
+- **Security**: While we strive to follow security best practices, no software is guaranteed to be free of vulnerabilities
+- **Production Use**: Evaluate thoroughly before deploying in production environments
+
+By using this software, you acknowledge that you have read and understood this disclaimer.
+
+## License
+
+This project is licensed under the MIT License — see [LICENSE.md](LICENSE.md) for details.

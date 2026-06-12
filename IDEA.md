@@ -1,34 +1,17 @@
-# search - Project Idea
-
 ## Project description
 
-### Purpose
+Search is a privacy-respecting, self-hosted metasearch engine that aggregates results directly from primary search engines (Google, Bing, DuckDuckGo, Brave, Qwant, Mojeek) without tracking users. It combines the best reliability and feature ideas from Whoogle, SearX, and SearXNG into a single, always-working solution — but queries source engines directly rather than through proxies or other metasearch engines.
 
-Search is a privacy-respecting, self-hosted metasearch engine that aggregates results directly from primary search engines (Google, Bing, DuckDuckGo, Brave, Qwant, Mojeek) without tracking users. It combines the best features from Whoogle, SearX, SearXNG, DuckDuckGo, and major search engines into a single, reliable, always-working solution - but queries source engines directly rather than through proxies or other metasearch engines.
-
-### Target Users
-
-- Privacy-conscious individuals who want to search the web without being tracked
-- Self-hosters who want to run their own search engine infrastructure
-- Organizations requiring private, internal search capabilities
-- Tor users seeking a search engine accessible via .onion services
-- Power users who want customizable, keyboard-driven search
-- Developers who need API access to search functionality
-
----
-
-
----
+Target users include privacy-conscious individuals who want web search without being tracked, self-hosters running their own search infrastructure, organizations requiring private internal search, Tor users seeking an .onion-accessible search engine, power users wanting keyboard-driven search with vim-style shortcuts, and developers needing structured API access to aggregated search results.
 
 ## Project variables
 
-    project_name:  search
-    project_org:   apimgr
-    internal_name: search
-
-`internal_name` is FROZEN — set once at first-time setup, never edit. `project_name` may change on rename, but `internal_name` (and every on-disk identifier derived from it: `{config_dir}`, `{data_dir}`, `{log_dir}`, `{cache_dir}`, systemd unit, `{plist_name}`) stays.
-
-`{plist_name}` is derived as `io.github.apimgr.search` (not stored).
+project_name:     search
+project_org:      apimgr
+internal_name:    search
+app_name:         Search
+maintainer_name:  casjay
+maintainer_email: casjay@yahoo.com
 
 ---
 
@@ -1689,10 +1672,9 @@ rules:all
 2. If found → render full-page direct answer
 3. If not found → continue to instant answers → search
 
-**URL Format:**
-- Direct answers accessible via: `/direct/{type}/{term}`
-- Example: `/direct/tldr/git`, `/direct/man/bash`
-- Also triggered from search: `/search?q=tldr:git`
+**Access:**
+- Direct answers are accessible as full-page views and can also be triggered from a regular search query using the `type:term` operator syntax.
+- Route paths are defined in AI.md PART 14.
 
 **Caching:**
 - tldr pages: 7 days (updated weekly)

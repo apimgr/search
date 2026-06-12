@@ -997,6 +997,12 @@ func (s *Scheduler) GetTasks() []*TaskInfo {
 	return tasks
 }
 
+// Status returns the current status of all registered tasks.
+// Used by the debug /scheduler endpoint per AI.md PART 6.
+func (s *Scheduler) Status() []*TaskInfo {
+	return s.GetTasks()
+}
+
 // GetTask returns a specific task
 func (s *Scheduler) GetTask(id TaskID) (*TaskInfo, error) {
 	s.mu.RLock()

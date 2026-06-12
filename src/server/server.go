@@ -70,6 +70,11 @@ type Server struct {
 
 	// Internationalization per AI.md PART 32
 	i18nManager *i18n.Manager
+
+	// Debug accessors per AI.md PART 6
+	router chi.Router
+	cache  *search.ResultCache
+	db     *sql.DB
 }
 
 // NewServer creates a new server instance
@@ -316,6 +321,18 @@ func NewServer(cfg *config.Config) *Server {
 		alertMgr = alert.NewManager(dbMgr.ServerDB().SQL(), cfg, aggregator, mailer)
 	}
 
+	// Set debug accessor for cache per AI.md PART 6
+	var resultCache *search.ResultCache
+	if aggregator != nil {
+		resultCache = aggregator.Cache()
+	}
+
+	// Set debug accessor for db per AI.md PART 6
+	var serverDB *sql.DB
+	if dbMgr != nil && dbMgr.ServerDB() != nil {
+		serverDB = dbMgr.ServerDB().SQL()
+	}
+
 	s := &Server{
 		config:         cfg,
 		registry:       registry,
@@ -339,6 +356,9 @@ func NewServer(cfg *config.Config) *Server {
 		dbManager:    dbMgr,
 		alertManager: alertMgr,
 		i18nManager:  i18nMgr,
+		// Debug accessors per AI.md PART 6
+		cache: resultCache,
+		db:    serverDB,
 	}
 
 	// Per AI.md PART 5: server.yml is the source of truth (single-instance, AI.md line 2055)
@@ -674,6 +694,8 @@ func (s *Server) removePIDFile() {
 // setupRoutes sets up HTTP routes with middleware
 func (s *Server) setupRoutes() http.Handler {
 	r := chi.NewRouter()
+	// Store router reference for debug route introspection per AI.md PART 6
+	s.router = r
 	// chi NotFound handler: stdlib mux's "/" matched everything; with chi we
 	// route "/" exactly and dispatch other unmatched paths to handleNotFound.
 	r.NotFound(s.handleNotFound)

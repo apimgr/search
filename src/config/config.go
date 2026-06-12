@@ -1864,6 +1864,25 @@ func (c *Config) IsDebug() bool {
 	return IsTruthy(os.Getenv("DEBUG"))
 }
 
+// Sanitized returns a copy of the config with all sensitive values redacted.
+// Used by the debug /config endpoint.
+func (c *Config) Sanitized() map[string]any {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return map[string]any{
+		"mode":    c.Server.Mode,
+		"port":    c.Server.Port,
+		"address": c.Server.Address,
+		"title":   c.Server.Title,
+		"token":   "xxxxx",
+		"secret_key": "xxxxx",
+		"ssl": map[string]any{
+			"enabled": c.Server.SSL.Enabled,
+		},
+		"debug": IsTruthy(os.Getenv("DEBUG")),
+	}
+}
+
 // GetAddress returns the full bind address
 func (c *Config) GetAddress() string {
 	c.mu.RLock()

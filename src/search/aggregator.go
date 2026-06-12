@@ -567,6 +567,12 @@ func (a *Aggregator) applyFilters(results []model.Result, query *model.Query) []
 	return filtered
 }
 
+// Cache returns the result cache, or nil if caching is disabled.
+// Used by the debug /cache endpoint per AI.md PART 6.
+func (a *Aggregator) Cache() *ResultCache {
+	return a.cache
+}
+
 // generateCacheKey creates a unique cache key for the query
 func (a *Aggregator) generateCacheKey(query *model.Query) string {
 	// Include relevant query parameters

@@ -1,7 +1,6 @@
 package server
 
 import (
-	"encoding/json"
 	"expvar"
 	"net/http"
 	"net/http/pprof"
@@ -10,192 +9,131 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// registerDebugRoutes registers debug endpoints (DEBUG=true only)
-// Per AI.md PART 7: Debug endpoints disabled by default, enabled with DEBUG=true
+// registerDebugRoutes registers debug endpoints under /debug/* (DEBUG=true only).
+// Per AI.md PART 6: pprof, expvar, and custom debug endpoints.
 func (s *Server) registerDebugRoutes(r chi.Router) {
 	if !s.config.IsDebug() {
-		// No debug routes unless DEBUG=true
 		return
 	}
 
-	// pprof endpoints
-	// /debug/pprof/* catches index and named sub-profiles routed through pprof.Index
-	r.HandleFunc("/debug/pprof/*", pprof.Index)
-	r.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	r.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	r.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	r.HandleFunc("/debug/pprof/trace", pprof.Trace)
-	r.Handle("/debug/pprof/heap", pprof.Handler("heap"))
-	r.Handle("/debug/pprof/goroutine", pprof.Handler("goroutine"))
-	r.Handle("/debug/pprof/allocs", pprof.Handler("allocs"))
-	r.Handle("/debug/pprof/block", pprof.Handler("block"))
-	r.Handle("/debug/pprof/mutex", pprof.Handler("mutex"))
-	r.Handle("/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
+	r.Route("/debug", func(r chi.Router) {
+		r.HandleFunc("/pprof/", pprof.Index)
+		r.HandleFunc("/pprof/cmdline", pprof.Cmdline)
+		r.HandleFunc("/pprof/profile", pprof.Profile)
+		r.HandleFunc("/pprof/symbol", pprof.Symbol)
+		r.HandleFunc("/pprof/trace", pprof.Trace)
+		r.Handle("/pprof/heap", pprof.Handler("heap"))
+		r.Handle("/pprof/goroutine", pprof.Handler("goroutine"))
+		r.Handle("/pprof/allocs", pprof.Handler("allocs"))
+		r.Handle("/pprof/block", pprof.Handler("block"))
+		r.Handle("/pprof/mutex", pprof.Handler("mutex"))
+		r.Handle("/pprof/threadcreate", pprof.Handler("threadcreate"))
 
-	// expvar
-	r.Handle("/debug/vars", expvar.Handler())
+		// expvar
+		r.Handle("/vars", expvar.Handler())
 
-	// Custom debug endpoints
-	r.HandleFunc("/debug/config", s.handleDebugConfig)
-	r.HandleFunc("/debug/routes", s.handleDebugRoutes)
-	r.HandleFunc("/debug/memory", s.handleDebugMemory)
-	r.HandleFunc("/debug/goroutines", s.handleDebugGoroutines)
-	r.HandleFunc("/debug/cache", s.handleDebugCache)
-	r.HandleFunc("/debug/db", s.handleDebugDB)
-	r.HandleFunc("/debug/scheduler", s.handleDebugScheduler)
+		// Custom debug endpoints
+		r.Get("/config", s.handleDebugConfig)
+		r.Get("/routes", s.handleDebugRoutes)
+		r.Get("/cache", s.handleDebugCache)
+		r.Get("/db", s.handleDebugDB)
+		r.Get("/scheduler", s.handleDebugScheduler)
+		r.Get("/memory", s.handleDebugMemory)
+		r.Get("/goroutines", s.handleDebugGoroutines)
+	})
 }
 
 // handleDebugConfig returns sanitized configuration
 func (s *Server) handleDebugConfig(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
-		return
-	}
-
 	// Return config with sensitive values redacted
-	config := map[string]interface{}{
-		"mode":    s.config.Server.Mode,
-		"port":    s.config.Server.Port,
-		"address": s.config.Server.Address,
-		"title":   s.config.Server.Title,
-		"ssl": map[string]interface{}{
-			"enabled": s.config.Server.SSL.Enabled,
-		},
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(config)
+	sanitized := s.config.Sanitized()
+	respondJSON(w, http.StatusOK, sanitized)
 }
 
-// handleDebugRoutes lists all registered routes
+// handleDebugRoutes returns all registered routes
 func (s *Server) handleDebugRoutes(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
+	routes := []map[string]string{}
+
+	walkFunc := func(method string, route string, handler http.Handler, middlewares ...func(http.Handler) http.Handler) error {
+		routes = append(routes, map[string]string{
+			"method": method,
+			"route":  route,
+		})
+		return nil
+	}
+
+	if err := chi.Walk(s.router, walkFunc); err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to walk routes")
 		return
 	}
 
-	routes := []string{
-		"GET /",
-		"GET /search",
-		"GET /autocomplete",
-		"GET /server/healthz",
-		"GET /healthz",
-		"GET /preferences",
-		"GET /static/*",
-		"GET /api/v1/*",
-		"GET /debug/*",
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
+		"count":  len(routes),
 		"routes": routes,
 	})
 }
 
 // handleDebugMemory returns memory statistics
 func (s *Server) handleDebugMemory(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
-		return
-	}
-
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
 
-	stats := map[string]interface{}{
-		"alloc":       m.Alloc,
-		"total_alloc": m.TotalAlloc,
-		"sys":         m.Sys,
-		"num_gc":      m.NumGC,
-		"heap_alloc":  m.HeapAlloc,
-		"heap_sys":    m.HeapSys,
-		"heap_idle":   m.HeapIdle,
-		"heap_inuse":  m.HeapInuse,
-		"stack_inuse": m.StackInuse,
-		"stack_sys":   m.StackSys,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(stats)
+	respondJSON(w, http.StatusOK, map[string]any{
+		"alloc_mb":       m.Alloc / 1024 / 1024,
+		"total_alloc_mb": m.TotalAlloc / 1024 / 1024,
+		"sys_mb":         m.Sys / 1024 / 1024,
+		"num_gc":         m.NumGC,
+		"heap_objects":   m.HeapObjects,
+		"goroutines":     runtime.NumGoroutine(),
+	})
 }
 
-// handleDebugGoroutines returns goroutine count
+// handleDebugGoroutines returns goroutine count and stack traces
 func (s *Server) handleDebugGoroutines(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
-		return
-	}
+	// 1MB buffer for stack traces
+	buf := make([]byte, 1024*1024)
+	// true = include all goroutines
+	n := runtime.Stack(buf, true)
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"count":      runtime.NumGoroutine(),
-		"gomaxprocs": runtime.GOMAXPROCS(0),
-		"numcpu":     runtime.NumCPU(),
-	})
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(buf[:n])
 }
 
 // handleDebugCache returns cache statistics
 func (s *Server) handleDebugCache(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
+	if s.cache == nil {
+		respondJSON(w, http.StatusOK, map[string]any{"enabled": false})
 		return
 	}
-
-	// Cache stats from aggregator if available
-	stats := map[string]interface{}{
-		"enabled": s.aggregator != nil,
-	}
-
-	if s.aggregator != nil {
-		stats["cache_enabled"] = true
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(stats)
+	stats := s.cache.Stats()
+	respondJSON(w, http.StatusOK, stats)
 }
 
 // handleDebugDB returns database statistics
-// Per AI.md PART 6: Debug endpoint for database stats
 func (s *Server) handleDebugDB(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
+	if s.db == nil {
+		respondJSON(w, http.StatusOK, map[string]any{"enabled": false})
 		return
 	}
-
-	stats := map[string]interface{}{
-		"enabled": s.dbManager != nil,
-	}
-
-	if s.dbManager != nil && s.dbManager.ServerDB() != nil {
-		dbStats := s.dbManager.ServerDB().SQL().Stats()
-		stats["open_connections"] = dbStats.OpenConnections
-		stats["in_use"] = dbStats.InUse
-		stats["idle"] = dbStats.Idle
-		stats["wait_count"] = dbStats.WaitCount
-		stats["wait_duration_ms"] = dbStats.WaitDuration.Milliseconds()
-		stats["max_idle_closed"] = dbStats.MaxIdleClosed
-		stats["max_lifetime_closed"] = dbStats.MaxLifetimeClosed
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(stats)
+	stats := s.db.Stats()
+	respondJSON(w, http.StatusOK, map[string]any{
+		"open_connections":    stats.OpenConnections,
+		"in_use":              stats.InUse,
+		"idle":                stats.Idle,
+		"wait_count":          stats.WaitCount,
+		"wait_duration_ms":    stats.WaitDuration.Milliseconds(),
+		"max_idle_closed":     stats.MaxIdleClosed,
+		"max_lifetime_closed": stats.MaxLifetimeClosed,
+	})
 }
 
 // handleDebugScheduler returns scheduler task status
 func (s *Server) handleDebugScheduler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
+	if s.scheduler == nil {
+		respondJSON(w, http.StatusOK, map[string]any{"enabled": false})
 		return
 	}
-
-	stats := map[string]interface{}{
-		"enabled": s.scheduler != nil,
-	}
-
-	if s.scheduler != nil {
-		stats["running"] = true
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(stats)
+	tasks := s.scheduler.Status()
+	respondJSON(w, http.StatusOK, tasks)
 }
