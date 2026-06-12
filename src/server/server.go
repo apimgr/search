@@ -18,6 +18,7 @@ import (
 	"github.com/apimgr/search/src/alert"
 	"github.com/apimgr/search/src/api"
 	"github.com/apimgr/search/src/config"
+	graphqlpkg "github.com/apimgr/search/src/graphql"
 	"github.com/apimgr/search/src/database"
 	"github.com/apimgr/search/src/direct"
 	"github.com/apimgr/search/src/email"
@@ -291,11 +292,10 @@ func NewServer(cfg *config.Config) *Server {
 	if err != nil {
 		log.Printf("[Database] Warning: Failed to initialize database: %v", err)
 	} else {
-		migrator := database.NewDatabaseMigrator(dbMgr)
-		if err := migrator.MigrateAll(context.Background()); err != nil {
-			log.Printf("[Database] Warning: Failed to run migrations: %v", err)
+		if err := database.InitSchema(context.Background(), dbMgr); err != nil {
+			log.Printf("[Database] Warning: Failed to initialize schema: %v", err)
 		} else {
-			log.Printf("[Database] Migrations completed successfully")
+			log.Printf("[Database] Schema initialized successfully")
 		}
 	}
 
@@ -756,8 +756,6 @@ func (s *Server) setupRoutes() http.Handler {
 	}
 
 	// Swagger/OpenAPI endpoints are registered by apiHandler.RegisterOpenAPIRoutes() below
-	// GraphQL endpoint is registered by apiHandler.RegisterGraphQLRoutes() below
-	// This provides both GraphQL API (POST) and GraphiQL interface (GET)
 
 	// Bang proxy (for privacy-preserving redirects)
 	if s.config.Search.Bangs.Enabled {
@@ -779,10 +777,13 @@ func (s *Server) setupRoutes() http.Handler {
 	// API routes
 	s.apiHandler.RegisterRoutes(r)
 
-	// GraphQL routes
-	if err := s.apiHandler.RegisterGraphQLRoutes(r); err != nil {
-		s.logManager.Server().Error("Failed to register GraphQL routes", map[string]interface{}{"error": err.Error()})
-	}
+	// GraphQL routes per AI.md PART 14
+	// GET /server/docs/graphql → GraphiQL UI (interactive explorer, POSTs to /api/graphql)
+	r.Get("/server/docs/graphql", graphqlpkg.UIHandler(s.config))
+	// POST /api/graphql → GraphQL queries (unversioned alias for current api version)
+	r.Post("/api/graphql", graphqlpkg.QueryHandler(s.config))
+	// POST /api/v1/server/graphql → GraphQL queries (versioned canonical)
+	r.Post("/api/v1/server/graphql", graphqlpkg.QueryHandler(s.config))
 
 	// OpenAPI/Swagger routes
 	s.apiHandler.RegisterOpenAPIRoutes(r)
@@ -849,8 +850,8 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 		{"/server/privacy", "0.3", "monthly"},
 		{"/server/help", "0.5", "monthly"},
 		{"/server/terms", "0.3", "monthly"},
-		{"/openapi", "0.4", "weekly"},
-		{"/graphql", "0.4", "weekly"},
+		{"/server/docs/swagger", "0.4", "weekly"},
+		{"/server/docs/graphql", "0.4", "weekly"},
 		{"/server/healthz", "0.2", "always"},
 	}
 

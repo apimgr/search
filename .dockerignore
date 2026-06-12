@@ -1,51 +1,41 @@
-# Version control
+# Git
 .git/
 .gitignore
 .gitattributes
 
-# Documentation
-*.md
-!LICENSE.md
-docs/
-
-# IDE and editor files
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# Build artifacts
-binaries/
-releases/
-*.test
-*.out
-
-# OS files
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# Development files
-tests/
-scripts/
-.env
-.env.*
-
-# CI/CD
+# CI/CD workflows (not needed in container)
 .github/
 .gitea/
+.forgejo/
 .gitlab-ci.yml
 Jenkinsfile
 
 # Runtime volume data (NEVER include in image)
-rootfs/
+volumes/
 
-# Dependencies
-vendor/
+# Build output (container builds from source)
+binaries/
+releases/
 
-# Temporary files
-tmp/
-temp/
-*.tmp
-*.log
+# Tests (not needed in production image)
+tests/
+
+# Documentation (not needed in container)
+docs/
+*.md
+
+# Build files (not needed - build happens inside Docker)
+Makefile
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# AI config directories
+.claude/
+.cursor/
+.aider/
+.ai/
+.windsurf/

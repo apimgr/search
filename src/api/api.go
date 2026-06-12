@@ -1572,7 +1572,7 @@ func (h *Handler) handleServerHelp(w http.ResponseWriter, r *http.Request) {
 		{
 			ID:      "api_documentation",
 			Title:   "API Documentation",
-			Content: "REST, direct-answer, GraphQL, and OpenAPI interfaces are available. Key endpoints include /api/v1/search, /api/v1/search/related, /api/v1/autocomplete, /api/v1/instant, /api/v1/direct/{type}/{term}, /api/v1/engines, /api/v1/categories, /api/v1/bangs, /api/v1/server/help, /graphql, /openapi, and /openapi.json.",
+			Content: "REST, direct-answer, GraphQL, and OpenAPI interfaces are available. Key endpoints include /api/v1/search, /api/v1/search/related, /api/v1/autocomplete, /api/v1/instant, /api/v1/direct/{type}/{term}, /api/v1/engines, /api/v1/categories, /api/v1/bangs, /api/v1/server/help, /api/graphql, /server/docs/graphql, /server/docs/swagger, and /api/swagger.",
 		},
 	}
 

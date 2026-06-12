@@ -448,7 +448,7 @@ func serveGraphiQL(w http.ResponseWriter, r *http.Request) {
 	<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 	<script src="https://unpkg.com/graphiql@3/graphiql.min.js"></script>
 	<script>
-		const fetcher = GraphiQL.createFetcher({ url: '/graphql' });
+		const fetcher = GraphiQL.createFetcher({ url: '/api/graphql' });
 		ReactDOM.render(
 			React.createElement(GraphiQL, { fetcher: fetcher }),
 			document.getElementById('graphiql')
@@ -482,6 +482,37 @@ func buildBaseURL(r *http.Request) string {
 	}
 
 	return proto + "://" + host
+}
+
+// UIHandler returns an http.HandlerFunc that serves the GraphiQL UI (GET only).
+// Registered at GET /server/docs/graphql per AI.md PART 14.
+func UIHandler(cfg *config.Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
+			return
+		}
+		serveGraphiQL(w, r)
+	}
+}
+
+// QueryHandler returns an http.HandlerFunc that handles GraphQL POST queries only.
+// Registered at POST /api/graphql and POST /api/v1/server/graphql per AI.md PART 14.
+func QueryHandler(cfg *config.Config) http.HandlerFunc {
+	if Schema.QueryType() == nil {
+		if err := InitSchema(); err != nil {
+			return func(w http.ResponseWriter, r *http.Request) {
+				localizedHTTPError(w, r, http.StatusInternalServerError, "errors.server_error")
+			}
+		}
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
+			return
+		}
+		handleGraphQLQuery(w, r)
+	}
 }
 
 // getTheme gets the current theme from cookie or defaults to dark

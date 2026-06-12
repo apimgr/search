@@ -1,16 +1,18 @@
 # =============================================================================
 # Build Stage - Compile Go binary
 # =============================================================================
-# Per AI.md PART 26: builder MUST be casjaysdev/go:latest
 FROM casjaysdev/go:latest AS builder
+
+# Install git and bash (git: required for go mod download; bash: for build scripts)
+RUN apk add --no-cache git bash
 
 ARG TARGETARCH
 ARG VERSION=dev
 ARG BUILD_DATE
 ARG COMMIT_ID
-ARG OFFICIALSITE
+ARG OFFICIAL_SITE
 
-WORKDIR /build
+WORKDIR /app
 
 # Copy go.mod first for layer caching
 COPY go.mod go.sum ./
@@ -19,8 +21,8 @@ RUN go mod download
 # Copy source and build
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
-    -ldflags "-s -w -X 'github.com/apimgr/search/src/config.Version=${VERSION}' -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/config.BuildDate=${BUILD_DATE}' -X 'github.com/apimgr/search/src/config.OfficialSite=${OFFICIALSITE}'" \
-    -o /build/binary/search ./src
+    -ldflags "-s -w -X 'github.com/apimgr/search/src/config.Version=${VERSION}' -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT_ID}' -X 'github.com/apimgr/search/src/config.BuildDate=${BUILD_DATE}' -X 'github.com/apimgr/search/src/config.OfficialSite=${OFFICIAL_SITE}'" \
+    -o /app/binary/search ./src
 
 # =============================================================================
 # Runtime Stage - Minimal Alpine image
@@ -33,46 +35,30 @@ ARG BUILD_DATE
 ARG COMMIT_ID
 ARG LICENSE=MIT
 
-# Static Labels
-LABEL maintainer="apimgr <apimgr@casjay.cc>" \
-      org.opencontainers.image.vendor="apimgr" \
-      org.opencontainers.image.authors="apimgr" \
-      org.opencontainers.image.title="search" \
-      org.opencontainers.image.base.name="search" \
-      org.opencontainers.image.description="search - standard image (alpine)" \
-      org.opencontainers.image.url="https://github.com/apimgr/search" \
-      org.opencontainers.image.source="https://github.com/apimgr/search" \
-      org.opencontainers.image.documentation="https://github.com/apimgr/search" \
-      org.opencontainers.image.vcs-type="Git" \
-      com.github.containers.toolbox="false"
+# No LABEL blocks — all image metadata is applied as OCI annotations at build time.
+# Pass --annotation flags to docker buildx build (or use docker/metadata-action
+# annotations: output in GitHub Actions). Annotations attach to the manifest index
+# and are visible on multiarch pulls. LABEL applies only to per-platform layers.
+# See dockerfile_conventions.md -> OCI Annotations.
 
-# Dynamic Labels (from ARGs)
-LABEL org.opencontainers.image.licenses="${LICENSE}" \
-      org.opencontainers.image.created="${BUILD_DATE}" \
-      org.opencontainers.image.version="${VERSION}" \
-      org.opencontainers.image.schema-version="${VERSION}" \
-      org.opencontainers.image.revision="${COMMIT_ID}"
-
-# Install required packages per AI.md PART 27 (git, curl, bash, tini, tor)
-# Plus tzdata for scheduler timezone support per AI.md PART 19 (default: America/New_York)
+# Install required packages
+# NOTE: Tor binary installed but NOT configured here - binary handles all Tor setup (see PART 31)
 RUN apk add --no-cache \
     git \
     curl \
     bash \
     tini \
-    tor \
-    tzdata
+    tor
 
 # NO directory creation - binary handles ALL setup based on env vars
 # This allows users to override CONFIG_DIR, DATA_DIR, etc.
 # Docker volume mounts auto-create mount points
-# Per AI.md PART 27: Binary handles directories, permissions, user/group, Tor, etc.
 
 # Copy binary from builder stage (multi-stage build)
-COPY --from=builder /build/binary/search /usr/local/bin/search
+COPY --from=builder /app/binary/search /usr/local/bin/search
 
-# Copy build-time container overlay (entrypoint.sh, etc.) from docker/rootfs/
-# Per AI.md PART 27: docker/rootfs/ mirrors the container filesystem layout
+# Copy BUILD-TIME overlay (entrypoint.sh) from docker/rootfs/ into image
+# Note: This is docker/rootfs/ (build context), NOT runtime ./volumes/ mounts
 COPY docker/rootfs/ /
 
 # Copy Dockerfile to image (for reference and backup)
@@ -82,13 +68,13 @@ COPY docker/Dockerfile /root/Dockerfile
 RUN chmod 755 /usr/local/bin/*
 
 # Set environment
-# Note: Tor available (binary installed) but server binary controls Tor startup (see PART 32)
+# Note: Tor available (binary installed) but server binary controls Tor startup (see PART 31)
 # DATABASE_DIR: SQLite location (binary auto-detects container, but explicit is clearer)
 ENV MODE=development \
     TZ=America/New_York \
     DATABASE_DIR=/data/db/sqlite
 
-# Expose internal port (80 inside container, map to 64080 on host)
+# Expose internal port (always 80)
 EXPOSE 80
 
 # Stop signal for graceful shutdown
