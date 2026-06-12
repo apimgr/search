@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/apimgr/search/src/version"
 )
 
 // Tests for NewClient
@@ -208,7 +210,7 @@ func TestAutodiscoverResponseStruct(t *testing.T) {
 	response.Server.Features.Search = true
 	response.Server.Features.Register = false
 	response.API.Version = "v1"
-	response.API.BasePath = "/api/v1"
+	response.API.BasePath = version.APIPrefix
 
 	if response.Server.Name != "search" {
 		t.Errorf("Server.Name = %q", response.Server.Name)
@@ -256,8 +258,8 @@ func TestSetUserContext(t *testing.T) {
 func TestSearch(t *testing.T) {
 	// Create test server that returns wrapped API response per AI.md
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/search" {
-			t.Errorf("Expected path /api/v1/search, got %s", r.URL.Path)
+		if r.URL.Path != version.APIPrefix+"/search" {
+			t.Errorf("Expected path %s, got %s", version.APIPrefix+"/search", r.URL.Path)
 		}
 		if r.URL.Query().Get("q") != "test query" {
 			t.Errorf("Expected q=test+query, got %s", r.URL.Query().Get("q"))
@@ -301,8 +303,8 @@ func TestSearchServerError(t *testing.T) {
 
 func TestHealth(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/healthz" {
-			t.Errorf("Expected path /api/v1/healthz, got %s", r.URL.Path)
+		if r.URL.Path != version.APIPrefix+"/healthz" {
+			t.Errorf("Expected path %s, got %s", version.APIPrefix+"/healthz", r.URL.Path)
 		}
 
 		// Per AI.md PART 14: Wrapped response format {"ok": true, "data": {...}}
@@ -394,7 +396,7 @@ func TestGet(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL, "", 30)
-	resp, err := client.get("/api/v1/healthz")
+	resp, err := client.get(version.APIPrefix + "/healthz")
 	if err != nil {
 		t.Fatalf("get() error = %v", err)
 	}
@@ -754,7 +756,7 @@ func TestAutodiscoverResponseJSON(t *testing.T) {
 	response.Server.Features.Search = true
 	response.Server.Features.Register = false
 	response.API.Version = "v1"
-	response.API.BasePath = "/api/v1"
+	response.API.BasePath = version.APIPrefix
 
 	data, err := json.Marshal(response)
 	if err != nil {

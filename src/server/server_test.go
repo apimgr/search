@@ -11,6 +11,7 @@ import (
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/direct"
 	"github.com/apimgr/search/src/i18n"
+	"github.com/apimgr/search/src/version"
 )
 
 // Tests for Middleware
@@ -128,7 +129,7 @@ func TestMiddlewareCORS(t *testing.T) {
 		})
 		wrapped := mw.CORS(handler)
 
-		req := httptest.NewRequest(http.MethodGet, "/api/v1/search", nil)
+		req := httptest.NewRequest(http.MethodGet, version.APIPrefix+"/search", nil)
 		req.Header.Set("Origin", "https://app.example.com")
 		rec := httptest.NewRecorder()
 		wrapped.ServeHTTP(rec, req)
@@ -194,7 +195,7 @@ func TestMiddlewareCORS(t *testing.T) {
 		})
 		wrapped := mw.CORS(handler)
 
-		req := httptest.NewRequest(http.MethodOptions, "/api/v1/search", nil)
+		req := httptest.NewRequest(http.MethodOptions, version.APIPrefix+"/search", nil)
 		req.Header.Set("Origin", "https://app.example.com")
 		rec := httptest.NewRecorder()
 		wrapped.ServeHTTP(rec, req)
@@ -611,7 +612,7 @@ func TestPathSecurityMiddleware(t *testing.T) {
 	}{
 		{
 			name:       "normal path",
-			path:       "/api/v1/search",
+			path:       version.APIPrefix + "/search",
 			wantStatus: http.StatusOK,
 		},
 		{
@@ -686,17 +687,17 @@ func TestExtractContextFromPath(t *testing.T) {
 		},
 		{
 			name:     "api v1 server route",
-			path:     "/api/v1/server/healthz",
+			path:     version.APIPrefix + "/server/healthz",
 			wantType: TargetServerPages,
 		},
 		{
 			name:     "api v1 public route",
-			path:     "/api/v1/search",
+			path:     version.APIPrefix + "/search",
 			wantType: TargetPublic,
 		},
 		{
 			name:     "api root",
-			path:     "/api/v1/",
+			path:     version.APIPrefix + "/",
 			wantType: TargetPublic,
 		},
 	}
@@ -850,9 +851,9 @@ func TestNormalizePath(t *testing.T) {
 		path string
 		want string
 	}{
-		{"/api/v1/search", "/api/v1/search"},
-		{"/api/v1/users/123", "/api/v1/users/:id"},
-		{"/api/v1/items/123e4567-e89b-12d3-a456-426614174000", "/api/v1/items/:id"},
+		{version.APIPrefix + "/search", version.APIPrefix + "/search"},
+		{version.APIPrefix + "/users/123", version.APIPrefix + "/users/:id"},
+		{version.APIPrefix + "/items/123e4567-e89b-12d3-a456-426614174000", version.APIPrefix + "/items/:id"},
 		{"/static/css/common.css", "/static/css/common.css"},
 	}
 

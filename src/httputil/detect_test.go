@@ -3,6 +3,8 @@ package httputil
 import (
 	"net/http/httptest"
 	"testing"
+
+	"github.com/apimgr/search/src/version"
 )
 
 func TestProjectName(t *testing.T) {
@@ -200,14 +202,14 @@ func TestGetPreferredFormat(t *testing.T) {
 		accept    string
 		want      string
 	}{
-		{"txt extension", "/api/v1/status.txt", "", "", "text/plain"},
-		{"json accept", "/api/v1/status", "", "application/json", "application/json"},
-		{"plain accept", "/api/v1/status", "", "text/plain", "text/plain"},
+		{"txt extension", version.APIPrefix + "/status.txt", "", "", "text/plain"},
+		{"json accept", version.APIPrefix + "/status", "", "application/json", "application/json"},
+		{"plain accept", version.APIPrefix + "/status", "", "text/plain", "text/plain"},
 		{"html accept", "/page", "", "text/html", "text/html"},
-		{"our cli", "/api/v1/status", "search-cli/1.0.0", "", "application/json"},
-		{"http tool", "/api/v1/status", "curl/7.68.0", "", "text/plain"},
+		{"our cli", version.APIPrefix + "/status", "search-cli/1.0.0", "", "application/json"},
+		{"http tool", version.APIPrefix + "/status", "curl/7.68.0", "", "text/plain"},
 		{"browser", "/page", "Mozilla/5.0 Chrome", "", "text/html"},
-		{"api path", "/api/v1/status", "", "", "application/json"},
+		{"api path", version.APIPrefix + "/status", "", "", "application/json"},
 		{"default", "/page", "", "", "text/html"},
 	}
 

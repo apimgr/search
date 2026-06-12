@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/apimgr/search/src/client/api"
+	"github.com/apimgr/search/src/version"
 )
 
 // TestMain sets up HOME environment for all tests in this package.
@@ -473,7 +474,7 @@ func TestBackgroundAutodiscoverWithResponse(t *testing.T) {
 
 func TestRunSearchSuccess(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/v1/search" {
+		if r.URL.Path == version.APIPrefix+"/search" {
 			// Per AI.md PART 14: Wrapped response format {"ok": true, "data": {...}}
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"ok": true,

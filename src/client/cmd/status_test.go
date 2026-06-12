@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/apimgr/search/src/client/api"
+	"github.com/apimgr/search/src/version"
 )
 
 // Tests for statusCmd
@@ -51,7 +52,7 @@ func TestStatusCommandRegistered(t *testing.T) {
 
 func TestRunStatusHealthy(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/v1/healthz" {
+		if r.URL.Path == version.APIPrefix+"/healthz" {
 			// Per AI.md PART 14: Wrapped response format
 			json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "data": api.HealthResponse{
 				Status:  "healthy",
