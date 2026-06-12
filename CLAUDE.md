@@ -12,10 +12,10 @@ Purpose:
 
 ## Asking Questions
 
-- **Default to continuing work** - do not stop just to ask whether you should continue; if the next step is implied by the spec, the current task, or the current findings, continue
-- **Never guess** - if the answer cannot be determined from `AI.md`, `IDEA.md`, the codebase, or repo state **and** the missing information materially changes behavior, scope, or safety, ASK the user
-- **Do NOT ask for permission to keep going** - continue until the current task is complete, blocked by a real decision, or the user explicitly asks to pause
-- **Question mark = question** - when user ends with `?`, answer/clarify, don't execute
+- **Default to continuing work** — do not stop just to ask whether you should continue; if the next step is implied by the spec, the current task, or the current findings, continue
+- **Never guess** — if the answer cannot be determined from `AI.md`, `IDEA.md`, the codebase, or repo state **and** the missing information materially changes behavior, scope, or safety, ASK the user
+- **Do NOT ask for permission to keep going** — continue until the current task is complete, blocked by a real decision, or the user explicitly asks to pause
+- **Question mark = question** — when user ends with `?`, answer/clarify, don't execute
 
 ## Before ANY Code Change
 
@@ -31,7 +31,9 @@ Purpose:
 
 ## Key Placeholders
 - `{project_name}` = search
+- `{internal_name}` = search (FROZEN — never changes after init)
 - `{project_org}` = apimgr
+- `{plist_name}` = io.github.apimgr.search
 
 ## NEVER Do (Top 19) - VIOLATIONS ARE BUGS
 1. Use bcrypt for config/backup passwords → Use Argon2id
@@ -41,9 +43,9 @@ Purpose:
 5. Use external cron → Internal scheduler (PART 18)
 6. Store config/backup passwords plaintext → Argon2id (API tokens use SHA-256)
 7. Create premium tiers → All features free, no paywalls
-8. Use Makefile in CI/CD → Explicit commands only
+8. Use Makefile in CI/CD → Explicit Docker commands only
 9. Guess or assume values that a command can produce → Run the command
-10. Skip platforms → Build all 8 (linux/darwin/windows × amd64/arm64)
+10. Skip platforms → Build all 8 (linux/darwin/windows/freebsd × amd64/arm64)
 11. Client-side rendering (React/Vue) → Server-side Go templates
 12. Require JavaScript for core features → Progressive enhancement only
 13. Let long strings break mobile → Use word-break CSS
@@ -57,12 +59,12 @@ Purpose:
 ## ALWAYS Do - NON-NEGOTIABLE
 1. Read AI.md before implementing ANY feature
 2. Server-side processing (server does the work, client displays)
-3. Mobile-first responsive CSS
+3. Mobile-first responsive CSS with CSS custom properties
 4. All features work without JavaScript
 5. Tor hidden service support (auto-enabled if Tor found)
 6. Built-in scheduler, GeoIP, metrics, email, backup, update
-7. All settings configurable via API and config file
-8. Client binary for ALL projects
+7. All settings configurable via config file, CLI flags, AND env vars
+8. Client binary `search-cli` for ALL projects
 9. Commit often via `gitcommit --dir /root/Projects/github/apimgr/search all`
 
 ## File Locations
@@ -73,13 +75,23 @@ Purpose:
 - Docker: `docker/`
 
 ## Where to Find Details
-- AI behavior: `.claude/rules/ai-rules.md` (PART 0, 1)
-- Project structure: `.claude/rules/project-rules.md` (PART 2, 3, 4)
-- Frontend/WebUI: `.claude/rules/frontend-rules.md` (PART 16)
+- AI behavior + rules: `.claude/rules/ai-rules.md` (PART 0, 1)
+- Project structure + paths: `.claude/rules/project-rules.md` (PART 2, 3, 4)
+- Config + middleware + debug: `.claude/rules/config-rules.md` (PART 5, 6, 12)
+- Binary + platforms + client: `.claude/rules/binary-rules.md` (PART 7, 8, 32)
+- Error handling + DB + security + Tor: `.claude/rules/backend-rules.md` (PART 9, 10, 11, 31)
+- API + health + TLS: `.claude/rules/api-rules.md` (PART 13, 14, 15)
+- Frontend + templates: `.claude/rules/frontend-rules.md` (PART 16)
+- Email + scheduler + GeoIP + metrics + backup + update: `.claude/rules/features-rules.md` (PART 17-22)
+- Service installation + privilege escalation: `.claude/rules/service-rules.md` (PART 23, 24)
+- Makefile + build: `.claude/rules/makefile-rules.md` (PART 25)
+- Docker: `.claude/rules/docker-rules.md` (PART 26)
+- CI/CD workflows: `.claude/rules/cicd-rules.md` (PART 27)
+- Testing + docs + i18n: `.claude/rules/testing-rules.md` (PART 28, 29, 30)
 - Full spec: `AI.md` (~55k lines) ← **SOURCE OF TRUTH**
 
 ## Current Project State
 [AI updates this section as work progresses]
 - Last read AI.md: 2026-06-12
-- Current task: Fixing PARTS 1-6 spec compliance violations
-- Relevant PARTs: 1, 2, 3, 5, 6
+- Current task: Regenerating .claude/rules/ files from spec
+- Relevant PARTs: 0-32
