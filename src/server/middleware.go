@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/apimgr/search/src/api"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/geoip"
 	"github.com/apimgr/search/src/i18n"
@@ -867,13 +868,13 @@ func (m *Middleware) MaintenanceMode(handler MaintenanceHandler) func(http.Handl
 			path := r.URL.Path
 
 			// Always allow health checks
-			if path == "/healthz" || path == "/api/v1/healthz" {
+			if path == "/healthz" || path == api.APIPrefix+"/healthz" {
 				next.ServeHTTP(w, r)
 				return
 			}
 
 			// Always allow API maintenance status endpoint
-			if path == "/api/v1/maintenance" || path == "/api/v1/status" {
+			if path == api.APIPrefix+"/maintenance" || path == api.APIPrefix+"/status" {
 				next.ServeHTTP(w, r)
 				return
 			}

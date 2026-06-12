@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	searchapi "github.com/apimgr/search/src/api"
 )
 
 // ProjectName is set at build time - used for User-Agent
@@ -110,7 +112,7 @@ func (c *Client) Search(query string, page, perPage int) (*SearchResponse, error
 	params.Set("page", fmt.Sprintf("%d", page))
 	params.Set("limit", fmt.Sprintf("%d", perPage))
 
-	resp, err := c.get("/api/v1/search?" + params.Encode())
+	resp, err := c.get(searchapi.APIPrefix + "/search?" + params.Encode())
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +137,7 @@ func (c *Client) Search(query string, page, perPage int) (*SearchResponse, error
 
 // Health checks server health
 func (c *Client) Health() (*HealthResponse, error) {
-	resp, err := c.get("/api/v1/healthz")
+	resp, err := c.get(searchapi.APIPrefix + "/healthz")
 	if err != nil {
 		return nil, err
 	}

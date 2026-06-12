@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/api"
 	"github.com/apimgr/search/src/version"
 )
 
@@ -94,7 +95,7 @@ func (s *Server) handleOpenSearch(w http.ResponseWriter, r *http.Request) {
 			},
 			{
 				Type:     "application/x-suggestions+json",
-				Template: baseURL + "/api/v1/autocomplete?q={searchTerms}",
+				Template: baseURL + api.APIPrefix + "/autocomplete?q={searchTerms}",
 				Rel:      "suggestions",
 			},
 		},

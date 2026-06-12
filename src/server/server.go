@@ -782,8 +782,8 @@ func (s *Server) setupRoutes() http.Handler {
 	r.Get("/server/docs/graphql", graphqlpkg.UIHandler(s.config))
 	// POST /api/graphql → GraphQL queries (unversioned alias for current api version)
 	r.Post("/api/graphql", graphqlpkg.QueryHandler(s.config))
-	// POST /api/v1/server/graphql → GraphQL queries (versioned canonical)
-	r.Post("/api/v1/server/graphql", graphqlpkg.QueryHandler(s.config))
+	// POST /api/{api_version}/server/graphql → GraphQL queries (versioned canonical)
+	r.Post(api.APIPrefix+"/server/graphql", graphqlpkg.QueryHandler(s.config))
 
 	// OpenAPI/Swagger routes
 	s.apiHandler.RegisterOpenAPIRoutes(r)

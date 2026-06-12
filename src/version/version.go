@@ -8,6 +8,13 @@ import (
 	"strings"
 )
 
+// APIVersion is the current API version string. All API routes use this.
+// Never hardcode "v1" directly in code — always reference APIVersion or APIPrefix.
+const APIVersion = "v1"
+
+// APIPrefix is the versioned API base path (e.g., "/api/v1").
+const APIPrefix = "/api/" + APIVersion
+
 // BrowserUserAgent is the standard User-Agent string for browser-like HTTP requests.
 // Windows 11 Edge - consistent across all engines for privacy and compatibility.
 const BrowserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"

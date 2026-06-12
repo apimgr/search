@@ -24,15 +24,22 @@ import (
 	"github.com/apimgr/search/src/search"
 	"github.com/apimgr/search/src/search/engine"
 	"github.com/apimgr/search/src/service"
+	"github.com/apimgr/search/src/version"
 	"github.com/apimgr/search/src/widget"
 	"github.com/go-chi/chi/v5"
 )
 
-// API version
-const (
-	APIVersion = "v1"
-	APIPrefix  = "/api/v1"
-)
+// APIVersion is the current API version. Derived from version.APIVersion.
+const APIVersion = version.APIVersion
+
+// APIPrefix is the versioned API base path (e.g. "/api/v1"). Derived from version.APIPrefix.
+const APIPrefix = version.APIPrefix
+
+// APIBasePath returns the versioned API base path (e.g. "/api/v1").
+// Always use this or APIPrefix in code — never hardcode "v1" directly.
+func APIBasePath() string {
+	return version.APIPrefix
+}
 
 // Handler handles API requests
 type Handler struct {
@@ -97,53 +104,53 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	// Health and info - Per AI.md PART 13/14
 	// Canonical API route: /api/v1/server/healthz (JSON default, text via .txt or Accept header)
 	// Alias per PART 14: /api/v1/healthz and /api/healthz mount the same handler
-	r.HandleFunc("/api/v1/server/healthz", h.handleHealthz)
-	r.HandleFunc("/api/v1/server/healthz.txt", h.handleHealthz)
-	r.HandleFunc("/api/v1/healthz", h.handleHealthz)
-	r.HandleFunc("/api/v1/healthz.txt", h.handleHealthz)
+	r.HandleFunc(APIPrefix+"/server/healthz", h.handleHealthz)
+	r.HandleFunc(APIPrefix+"/server/healthz.txt", h.handleHealthz)
+	r.HandleFunc(APIPrefix+"/healthz", h.handleHealthz)
+	r.HandleFunc(APIPrefix+"/healthz.txt", h.handleHealthz)
 	r.HandleFunc("/api/healthz", h.handleHealthz)
-	r.HandleFunc("/api/v1/info", h.handleInfo)
+	r.HandleFunc(APIPrefix+"/info", h.handleInfo)
 	// Per AI.md PART 14
-	r.HandleFunc("/api/v1/info.txt", h.handleInfo)
+	r.HandleFunc(APIPrefix+"/info.txt", h.handleInfo)
 
 	// Search
-	r.HandleFunc("/api/v1/search", h.handleSearch)
-	r.HandleFunc("/api/v1/search/related", h.handleRelatedSearches)
-	r.HandleFunc("/api/v1/autocomplete", h.handleAutocomplete)
+	r.HandleFunc(APIPrefix+"/search", h.handleSearch)
+	r.HandleFunc(APIPrefix+"/search/related", h.handleRelatedSearches)
+	r.HandleFunc(APIPrefix+"/autocomplete", h.handleAutocomplete)
 
 	// Engines
-	r.HandleFunc("/api/v1/engines", h.handleEngines)
-	r.HandleFunc("/api/v1/engines/*", h.handleEngineByID)
+	r.HandleFunc(APIPrefix+"/engines", h.handleEngines)
+	r.HandleFunc(APIPrefix+"/engines/*", h.handleEngineByID)
 
 	// Categories
-	r.HandleFunc("/api/v1/categories", h.handleCategories)
+	r.HandleFunc(APIPrefix+"/categories", h.handleCategories)
 
 	// Bangs
-	r.HandleFunc("/api/v1/bangs", h.handleBangs)
+	r.HandleFunc(APIPrefix+"/bangs", h.handleBangs)
 
 	// Widgets
-	r.HandleFunc("/api/v1/widgets", h.handleWidgets)
-	r.HandleFunc("/api/v1/widgets/*", h.handleWidgetData)
+	r.HandleFunc(APIPrefix+"/widgets", h.handleWidgets)
+	r.HandleFunc(APIPrefix+"/widgets/*", h.handleWidgetData)
 
 	// Instant Answers
-	r.HandleFunc("/api/v1/instant", h.handleInstantAnswer)
+	r.HandleFunc(APIPrefix+"/instant", h.handleInstantAnswer)
 
 	// Direct Answers (full-page results per IDEA.md)
-	r.HandleFunc("/api/v1/direct/*", h.handleDirectAnswer)
+	r.HandleFunc(APIPrefix+"/direct/*", h.handleDirectAnswer)
 
 	// Server info pages (per AI.md PART 16)
-	r.HandleFunc("/api/v1/server/about", h.handleServerAbout)
-	r.HandleFunc("/api/v1/server/privacy", h.handleServerPrivacy)
-	r.HandleFunc("/api/v1/server/help", h.handleServerHelp)
-	r.HandleFunc("/api/v1/server/terms", h.handleServerTerms)
-	r.HandleFunc("/api/v1/server/contact", h.handleServerContact)
-	r.HandleFunc("/api/v1/preferences", h.handlePreferences)
+	r.HandleFunc(APIPrefix+"/server/about", h.handleServerAbout)
+	r.HandleFunc(APIPrefix+"/server/privacy", h.handleServerPrivacy)
+	r.HandleFunc(APIPrefix+"/server/help", h.handleServerHelp)
+	r.HandleFunc(APIPrefix+"/server/terms", h.handleServerTerms)
+	r.HandleFunc(APIPrefix+"/server/contact", h.handleServerContact)
+	r.HandleFunc(APIPrefix+"/preferences", h.handlePreferences)
 
 	// Favicon proxy - privacy-preserving favicon fetching
 	// Per AI.md PART 16: NO external requests from client, server proxies content
-	r.HandleFunc("/api/v1/favicon", h.handleFavicon)
-	r.HandleFunc("/api/v1/alerts", h.handleAlerts)
-	r.HandleFunc("/api/v1/alerts/*", h.handleAlertByToken)
+	r.HandleFunc(APIPrefix+"/favicon", h.handleFavicon)
+	r.HandleFunc(APIPrefix+"/alerts", h.handleAlerts)
+	r.HandleFunc(APIPrefix+"/alerts/*", h.handleAlertByToken)
 }
 
 // Response types
@@ -777,7 +784,7 @@ func (h *Handler) handleEngines(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleEngineByID(w http.ResponseWriter, r *http.Request) {
 	// Extract engine ID from path
 	path := r.URL.Path
-	id := strings.TrimPrefix(path, "/api/v1/engines/")
+	id := strings.TrimPrefix(path, APIPrefix+"/engines/")
 	id = strings.TrimSuffix(id, "/")
 
 	if id == "" {
@@ -1242,8 +1249,8 @@ func (h *Handler) handleDirectAnswer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse path: /api/v1/direct/{type}/{term}
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/direct/")
+	// Parse path: /api/{api_version}/direct/{type}/{term}
+	path := strings.TrimPrefix(r.URL.Path, APIPrefix+"/direct/")
 	parts := strings.SplitN(path, "/", 2)
 	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
 		h.errorResponse(w, http.StatusBadRequest, "Invalid request", "URL format: /api/v1/direct/{type}/{term}")

@@ -64,8 +64,8 @@ func (h *Handler) handleWidgetData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract widget type from path: /api/v1/widgets/{type}
-	path := strings.TrimPrefix(r.URL.Path, "/api/v1/widgets/")
+	// Extract widget type from path: /api/{api_version}/widgets/{type}
+	path := strings.TrimPrefix(r.URL.Path, APIPrefix+"/widgets/")
 	widgetType := widget.WidgetType(strings.Split(path, "/")[0])
 
 	if widgetType == "" {

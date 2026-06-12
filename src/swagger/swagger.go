@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/apimgr/search/src/api"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/i18n"
 )
@@ -145,10 +146,10 @@ func generatePaths() map[string]PathItem {
 	}
 
 	// API v1 health check
-	paths["/api/v1/healthz"] = paths["/healthz"]
+	paths[api.APIPrefix+"/healthz"] = paths["/healthz"]
 
 	// Search endpoint
-	paths["/api/v1/search"] = PathItem{
+	paths[api.APIPrefix+"/search"] = PathItem{
 		Get: &Operation{
 			Summary:     "Search",
 			Description: "Perform a metasearch query across multiple engines",
@@ -206,7 +207,7 @@ func generatePaths() map[string]PathItem {
 	}
 
 	// Autocomplete endpoint
-	paths["/api/v1/autocomplete"] = PathItem{
+	paths[api.APIPrefix+"/autocomplete"] = PathItem{
 		Get: &Operation{
 			Summary:     "Autocomplete suggestions",
 			Description: "Get search query suggestions",
@@ -237,7 +238,7 @@ func generatePaths() map[string]PathItem {
 	}
 
 	// Direct answer endpoint
-	paths["/api/v1/direct/{type}/{term}"] = PathItem{
+	paths[api.APIPrefix+"/direct/{type}/{term}"] = PathItem{
 		Get: &Operation{
 			Summary:     "Direct answer lookup",
 			Description: "Get a direct answer for a specific type and term (e.g., tldr:git, dns:example.com, http:404)",
@@ -291,7 +292,7 @@ func generatePaths() map[string]PathItem {
 	}
 
 	// Instant answer endpoint
-	paths["/api/v1/instant"] = PathItem{
+	paths[api.APIPrefix+"/instant"] = PathItem{
 		Get: &Operation{
 			Summary:     "Instant answer",
 			Description: "Get an instant answer widget for a query (calculator, converter, dictionary, etc.)",
@@ -334,7 +335,7 @@ func generatePaths() map[string]PathItem {
 		},
 	}
 
-	paths["/api/v1/alerts"] = PathItem{
+	paths[api.APIPrefix+"/alerts"] = PathItem{
 		Post: &Operation{
 			Summary:     "Create search alert",
 			Description: "Create an accountless search alert with email, private RSS, and/or webhook delivery",
@@ -370,7 +371,7 @@ func generatePaths() map[string]PathItem {
 		},
 	}
 
-	paths["/api/v1/alerts/{token}"] = PathItem{
+	paths[api.APIPrefix+"/alerts/{token}"] = PathItem{
 		Get: &Operation{
 			Summary:     "Get alert details",
 			Description: "Get alert details for a manage token",
@@ -430,7 +431,7 @@ func generatePaths() map[string]PathItem {
 		},
 	}
 
-	paths["/api/v1/alerts/{token}/verify"] = PathItem{
+	paths[api.APIPrefix+"/alerts/{token}/verify"] = PathItem{
 		Post: &Operation{
 			Summary:     "Verify alert",
 			Description: "Verify and activate an alert using its email verification token",
@@ -444,7 +445,7 @@ func generatePaths() map[string]PathItem {
 		},
 	}
 
-	paths["/api/v1/alerts/{token}/pause"] = PathItem{
+	paths[api.APIPrefix+"/alerts/{token}/pause"] = PathItem{
 		Post: &Operation{
 			Summary:     "Pause or resume alert",
 			Description: "Pause or resume an alert using its manage token",
@@ -472,7 +473,7 @@ func generatePaths() map[string]PathItem {
 		},
 	}
 
-	paths["/api/v1/alerts/{token}/rss"] = PathItem{
+	paths[api.APIPrefix+"/alerts/{token}/rss"] = PathItem{
 		Get: &Operation{
 			Summary:     "Get alert RSS feed",
 			Description: "Return the private RSS feed for an alert",

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"html/template"
 	"time"
+
+	"github.com/apimgr/search/src/version"
 )
 
 // TemplateType represents an email template type
@@ -705,7 +707,7 @@ func (et *EmailTemplate) PreviewTemplate(templateType TemplateType, siteName, si
 			Domain:       siteURL,
 			ExpiresAt:    sampleTime.Add(14 * 24 * time.Hour),
 			DaysLeft:     14,
-			RenewLink:    siteURL + "/api/v1/server/ssl/renew",
+			RenewLink:    siteURL + version.APIPrefix + "/server/ssl/renew",
 		}
 	case TemplateSSLRenewed:
 		data = &SSLRenewedData{
