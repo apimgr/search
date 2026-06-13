@@ -137,14 +137,16 @@ func (mm *MixedModeManager) connectBackend(cfg *DatabaseBackendConfig) (*MixedDB
 		}
 
 		// Enable foreign keys, WAL mode, and busy timeout
-		if _, err := mdb.db.Exec("PRAGMA foreign_keys = ON"); err != nil {
+		// Per AI.md PART 10: all DB calls must use context with timeout
+		pragmaCtx, pragmaCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer pragmaCancel()
+		if _, err := mdb.db.ExecContext(pragmaCtx, "PRAGMA foreign_keys = ON"); err != nil {
 			return nil, fmt.Errorf("failed to enable foreign keys: %w", err)
 		}
-		if _, err := mdb.db.Exec("PRAGMA journal_mode = WAL"); err != nil {
+		if _, err := mdb.db.ExecContext(pragmaCtx, "PRAGMA journal_mode = WAL"); err != nil {
 			return nil, fmt.Errorf("failed to enable WAL mode: %w", err)
 		}
-		// Set busy timeout to 5 seconds to prevent "database locked" errors
-		if _, err := mdb.db.Exec("PRAGMA busy_timeout = 5000"); err != nil {
+		if _, err := mdb.db.ExecContext(pragmaCtx, "PRAGMA busy_timeout = 5000"); err != nil {
 			return nil, fmt.Errorf("failed to set busy timeout: %w", err)
 		}
 
