@@ -1,7 +1,6 @@
 package server
 
 import (
-	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -233,9 +232,10 @@ func (s *Server) handlePreferences(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handlePreferencesSave(w http.ResponseWriter, r *http.Request) {
 	// Preferences are saved client-side in localStorage
 	// This endpoint just acknowledges the save
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":   true,
+		"data": map[string]string{},
+	})
 }
 
 // getBaseURL returns the base URL for the server.

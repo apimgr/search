@@ -568,8 +568,10 @@ func (s *Server) handleAutocomplete(w http.ResponseWriter, r *http.Request) {
 
 	// If no query, return empty suggestions
 	if query == "" {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]string{})
+		respondJSON(w, http.StatusOK, map[string]interface{}{
+			"ok":   true,
+			"data": []string{},
+		})
 		return
 	}
 
@@ -582,6 +584,8 @@ func (s *Server) handleAutocomplete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fallback: return empty suggestions if API handler not available
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode([]string{})
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":   true,
+		"data": []string{},
+	})
 }

@@ -740,6 +740,10 @@ func (s *Scheduler) runStartupTasks() {
 
 // initDatabase creates the scheduler_tasks table if not exists
 func (s *Scheduler) initDatabase() {
+	// Per AI.md PART 10: bulk/DDL operations use 60s context timeout
+	initCtx, initCancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer initCancel()
+
 	query := `
 		CREATE TABLE IF NOT EXISTS scheduler_tasks (
 			task_id TEXT PRIMARY KEY,
@@ -758,13 +762,13 @@ func (s *Scheduler) initDatabase() {
 			locked_at DATETIME
 		)
 	`
-	if _, err := s.db.Exec(query); err != nil {
+	if _, err := s.db.ExecContext(initCtx, query); err != nil {
 		log.Printf("[Scheduler] Failed to create tasks table: %v", err)
 	}
 
-	// Add retry columns to existing tables (migration)
-	s.db.Exec("ALTER TABLE scheduler_tasks ADD COLUMN retry_count INTEGER DEFAULT 0")
-	s.db.Exec("ALTER TABLE scheduler_tasks ADD COLUMN next_retry DATETIME")
+	// Add retry columns to existing tables (idempotent migration)
+	s.db.ExecContext(initCtx, "ALTER TABLE scheduler_tasks ADD COLUMN retry_count INTEGER DEFAULT 0")
+	s.db.ExecContext(initCtx, "ALTER TABLE scheduler_tasks ADD COLUMN next_retry DATETIME")
 }
 
 // loadTaskState loads persisted state for a task
@@ -778,7 +782,10 @@ func (s *Scheduler) loadTaskState(task *Task) {
 	var retryCount int
 	var enabled bool
 
-	err := s.db.QueryRow(query, string(task.ID)).Scan(
+	// Per AI.md PART 10: SELECT queries must use context with 5s timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := s.db.QueryRowContext(ctx, query, string(task.ID)).Scan(
 		&lastRun, &lastStatus, &lastError, &nextRun, &runCount, &failCount, &enabled, &retryCount, &nextRetry,
 	)
 
@@ -832,7 +839,10 @@ func (s *Scheduler) saveTaskState(task *Task) {
 		nextRetry = task.NextRetry
 	}
 
-	_, err := s.db.Exec(query,
+	// Per AI.md PART 10: INSERT/UPDATE queries must use context with 10s timeout
+	saveCtx, saveCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer saveCancel()
+	_, err := s.db.ExecContext(saveCtx, query,
 		string(task.ID),
 		task.Name,
 		task.Schedule,
@@ -863,7 +873,10 @@ func (s *Scheduler) acquireTaskLock(task *Task) bool {
 		SET locked_by = ?, locked_at = ?
 		WHERE task_id = ? AND (locked_by IS NULL OR locked_by = ? OR locked_at < ?)`
 
-	result, err := s.db.Exec(query, s.nodeID, now, string(task.ID), s.nodeID, now.Add(-lockTimeout))
+	// Per AI.md PART 10: UPDATE queries must use context with 10s timeout
+	lockCtx, lockCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer lockCancel()
+	result, err := s.db.ExecContext(lockCtx, query, s.nodeID, now, string(task.ID), s.nodeID, now.Add(-lockTimeout))
 	if err != nil {
 		log.Printf("[Scheduler] Failed to acquire lock for %s: %v", task.ID, err)
 		return false
@@ -876,7 +889,10 @@ func (s *Scheduler) acquireTaskLock(task *Task) bool {
 // releaseTaskLock releases the distributed lock for a task
 func (s *Scheduler) releaseTaskLock(task *Task) {
 	query := `UPDATE scheduler_tasks SET locked_by = NULL, locked_at = NULL WHERE task_id = ? AND locked_by = ?`
-	s.db.Exec(query, string(task.ID), s.nodeID)
+	// Per AI.md PART 10: UPDATE queries must use context with 10s timeout
+	relCtx, relCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer relCancel()
+	s.db.ExecContext(relCtx, query, string(task.ID), s.nodeID)
 }
 
 // Enable enables a task

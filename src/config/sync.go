@@ -3,6 +3,7 @@
 package config
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -72,7 +73,10 @@ func (cs *ConfigSync) writeToDatabase(key string, value interface{}) error {
 		VALUES (?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = CURRENT_TIMESTAMP
 	`
-	_, err = cs.db.Exec(query, key, string(jsonValue), string(jsonValue))
+	// Per AI.md PART 10: INSERT/UPDATE queries must use context with 10s timeout
+	dbCtx, dbCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer dbCancel()
+	_, err = cs.db.ExecContext(dbCtx, query, key, string(jsonValue), string(jsonValue))
 	if err != nil {
 		return fmt.Errorf("failed to upsert setting: %w", err)
 	}

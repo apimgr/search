@@ -887,7 +887,10 @@ func (m *Manager) markResultsDelivered(ctx context.Context, results []AlertResul
 
 func (m *Manager) webhookSecret(alert *Alert) (string, error) {
 	var encrypted string
-	if err := m.db.QueryRow(`SELECT webhook_secret_encrypted FROM search_alerts WHERE id = ?`, alert.ID).Scan(&encrypted); err != nil {
+	// Per AI.md PART 10: SELECT queries must use context with 5s timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := m.db.QueryRowContext(ctx, `SELECT webhook_secret_encrypted FROM search_alerts WHERE id = ?`, alert.ID).Scan(&encrypted); err != nil {
 		return "", err
 	}
 	creds, err := ssl.DecryptCredentials(encrypted, m.serverConfig.Server.SecretKey)
