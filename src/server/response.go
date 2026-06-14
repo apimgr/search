@@ -13,8 +13,12 @@ func respondJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// respondError writes a JSON error response with the given status code and message.
-// Per AI.md PART 6: used by debug endpoint handlers.
+// respondError writes a JSON error response using the spec-required format.
+// Per AI.md PART 9: {"ok":false,"error":"ERROR_CODE","message":"..."}
 func respondError(w http.ResponseWriter, status int, message string) {
-	respondJSON(w, status, map[string]string{"error": message})
+	respondJSON(w, status, map[string]interface{}{
+		"ok":      false,
+		"error":   http.StatusText(status),
+		"message": message,
+	})
 }
