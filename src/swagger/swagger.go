@@ -431,20 +431,6 @@ func generatePaths() map[string]PathItem {
 		},
 	}
 
-	paths[api.APIPrefix+"/alerts/{token}/verify"] = PathItem{
-		Post: &Operation{
-			Summary:     "Verify alert",
-			Description: "Verify and activate an alert using its email verification token",
-			Tags:        []string{"Alerts"},
-			Parameters: []Parameter{
-				{Name: "token", In: "path", Description: "Alert verification token", Required: true, Schema: &Schema{Type: "string"}},
-			},
-			Responses: map[string]Response{
-				"200": {Description: "Alert verified"},
-			},
-		},
-	}
-
 	paths[api.APIPrefix+"/alerts/{token}/pause"] = PathItem{
 		Post: &Operation{
 			Summary:     "Pause or resume alert",

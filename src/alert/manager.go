@@ -109,10 +109,9 @@ type CreateRequest struct {
 }
 
 type CreateResponse struct {
-	Alert            *Alert
-	ManageToken      string
-	RSSToken         string
-	VerificationSent bool
+	Alert       *Alert
+	ManageToken string
+	RSSToken    string
 }
 
 type UpdateRequest struct {
@@ -214,10 +213,6 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateRespons
 	if err != nil {
 		return nil, err
 	}
-	verifyToken, err := randomToken(32)
-	if err != nil {
-		return nil, err
-	}
 	rssToken, err := randomToken(32)
 	if err != nil {
 		return nil, err
@@ -245,23 +240,6 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateRespons
 	}
 
 	now := time.Now().UTC()
-	status := StatusPending
-	emailVerified := false
-	var verifiedAt interface{}
-	var verifyHash interface{}
-	var verifyExpires interface{}
-	verificationSent := false
-
-	if m.mailer == nil || !m.mailer.IsEnabled() {
-		status = StatusActive
-		emailVerified = true
-		verifiedAt = now
-		verifyHash = nil
-		verifyExpires = nil
-	} else {
-		verifyHash = hashTokenHex(verifyToken)
-		verifyExpires = now.Add(24 * time.Hour)
-	}
 
 	_, err = m.db.ExecContext(ctx, `
 		INSERT INTO search_alerts (
@@ -276,9 +254,9 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateRespons
 		alertID, req.Email, req.Query, category.String(), req.Language, req.Region, marshalAlertEngines(req.Engines), req.SafeSearch, string(req.Frequency),
 		boolToInt(req.DeliverEmail), boolToInt(req.DeliverRSS), boolToInt(req.DeliverWebhook),
 		req.WebhookURL, webhookSecretEncrypted,
-		boolToInt(emailVerified), status, verifyHash, verifyExpires,
+		1, StatusActive, nil, nil,
 		hashTokenHex(manageToken), hashTokenHex(rssToken), manageTokenEncrypted, rssTokenEncrypted, req.BaseURL, req.CreatedFromIP,
-		now, verifiedAt,
+		now, now,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create alert: %w", err)
@@ -298,50 +276,19 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateRespons
 		DeliverRSS:     req.DeliverRSS,
 		DeliverWebhook: req.DeliverWebhook,
 		WebhookURL:     req.WebhookURL,
-		EmailVerified:  emailVerified,
-		Status:         status,
+		EmailVerified:  true,
+		Status:         StatusActive,
 		BaseURL:        req.BaseURL,
 		CreatedFromIP:  req.CreatedFromIP,
 		CreatedAt:      now,
-	}
-	if emailVerified {
-		alert.VerifiedAt = ptrTime(now)
-	} else if err := m.sendVerificationEmail(alert, verifyToken, manageToken); err == nil {
-		verificationSent = true
-	} else {
-		return nil, err
+		VerifiedAt:     ptrTime(now),
 	}
 
 	return &CreateResponse{
-		Alert:            alert,
-		ManageToken:      manageToken,
-		RSSToken:         rssToken,
-		VerificationSent: verificationSent,
+		Alert:       alert,
+		ManageToken: manageToken,
+		RSSToken:    rssToken,
 	}, nil
-}
-
-func (m *Manager) Verify(ctx context.Context, token string) (*Alert, string, string, error) {
-	if m.db == nil {
-		return nil, "", "", ErrNotFound
-	}
-	tokenHash := hashTokenHex(token)
-	alertInfo, err := m.getAlertByVerifyHash(ctx, tokenHash)
-	if err != nil {
-		return nil, "", "", err
-	}
-	now := time.Now().UTC()
-	_, err = m.db.ExecContext(ctx, `
-		UPDATE search_alerts
-		SET email_verified = 1, status = ?, verified_at = ?, verify_token_hash = NULL, verify_token_expires = NULL
-		WHERE verify_token_hash = ? AND verify_token_expires > ? AND status = ?
-	`, StatusActive, now, tokenHash, now, StatusPending)
-	if err != nil {
-		return nil, "", "", fmt.Errorf("verify alert: %w", err)
-	}
-	alertInfo.EmailVerified = true
-	alertInfo.Status = StatusActive
-	alertInfo.VerifiedAt = &now
-	return alertInfo, "", "", nil
 }
 
 func (m *Manager) GetByManageToken(ctx context.Context, token string) (*Alert, error) {
@@ -640,27 +587,6 @@ func (m *Manager) processAlert(ctx context.Context, alert *Alert) error {
 	return m.CleanupResults(ctx)
 }
 
-func (m *Manager) sendVerificationEmail(alert *Alert, verifyToken, manageToken string) error {
-	if m.mailer == nil || !m.mailer.IsEnabled() {
-		return nil
-	}
-	verifyURL := alert.BaseURL + "/alerts/confirm?token=" + url.QueryEscape(verifyToken)
-	manageURL := alert.BaseURL + "/alerts/manage/" + manageToken
-	subject, body, err := m.templates.Render(email.TemplateEmailVerification, &email.EmailVerificationData{
-		TemplateData:     email.NewTemplateData(siteName(m.serverConfig), alert.BaseURL, m.serverConfig.Server.Email.From.Email),
-		Email:            alert.Email,
-		VerificationLink: verifyURL,
-		ExpiresIn:        "24 hours",
-	})
-	if err != nil {
-		return fmt.Errorf("render verification email: %w", err)
-	}
-	body = body + fmt.Sprintf(`<p style="color:#888;font-size:14px;">Manage this alert after verification: <a href="%s">%s</a></p>`, manageURL, manageURL)
-	msg := email.NewMessage([]string{alert.Email}, subject, stripHTML(body))
-	msg.SetHTML(body)
-	return m.mailer.Send(msg)
-}
-
 func (m *Manager) sendDigestEmail(ctx context.Context, alert *Alert, results []AlertResult) error {
 	var body strings.Builder
 	body.WriteString("<!DOCTYPE html><html><body style=\"font-family: sans-serif; max-width: 700px; margin: 0 auto; padding: 20px;\">")
@@ -798,24 +724,6 @@ func (m *Manager) getAlertByTokenHash(ctx context.Context, column, tokenHash str
 		FROM search_alerts WHERE %s = ?
 	`, column)
 	row := m.db.QueryRowContext(ctx, query, tokenHash)
-	alert, err := scanAlert(row)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrNotFound
-		}
-		return nil, err
-	}
-	return alert, nil
-}
-
-func (m *Manager) getAlertByVerifyHash(ctx context.Context, tokenHash string) (*Alert, error) {
-	row := m.db.QueryRowContext(ctx, `
-		SELECT id, email, query, category, language, region, engines_json, safe_search, frequency,
-		       deliver_email, deliver_rss, deliver_webhook, webhook_url,
-		       email_verified, status, base_url, last_checked_at, last_sent_at,
-		       last_error, created_from_ip, created_at, verified_at, paused_at
-		FROM search_alerts WHERE verify_token_hash = ?
-	`, tokenHash)
 	alert, err := scanAlert(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

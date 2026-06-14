@@ -13,8 +13,7 @@ import (
 type TemplateType string
 
 const (
-	TemplateEmailVerification TemplateType = "email_verification"
-	TemplateAdminAlert        TemplateType = "admin_alert"
+	TemplateAdminAlert TemplateType = "admin_alert"
 	TemplateWeeklyReport      TemplateType = "weekly_report"
 	TemplateSecurityAlert     TemplateType = "security_alert"
 	TemplateBackupCompleted   TemplateType = "backup_complete"
@@ -45,14 +44,6 @@ func NewTemplateData(siteName, siteURL, supportEmail string) *TemplateData {
 		Year:         time.Now().Year(),
 		SupportEmail: supportEmail,
 	}
-}
-
-// EmailVerificationData holds data for alert email verification
-type EmailVerificationData struct {
-	*TemplateData
-	Email            string
-	VerificationLink string
-	ExpiresIn        string
 }
 
 // AdminAlertData holds data for admin alert
@@ -250,24 +241,6 @@ func joinLines(lines []string) string {
 
 // rawTemplates contains the raw template strings
 var rawTemplates = map[TemplateType]string{
-	TemplateEmailVerification: `Verify Your Alert Email - {{.SiteName}}
-<!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"></head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-    <div style="background: #1a1a2e; color: #ffffff; padding: 30px; border-radius: 8px;">
-        <h1 style="color: #00d9ff; margin-top: 0;">Verify Your Email</h1>
-        <p>Hello,</p>
-        <p>Please verify your email address ({{.Email}}) by clicking the button below:</p>
-        <p><a href="{{.VerificationLink}}" style="display: inline-block; background: #00d9ff; color: #1a1a2e; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">Verify Email</a></p>
-        <p style="color: #888; font-size: 14px;">This link will expire in {{.ExpiresIn}}.</p>
-        <p style="color: #888; font-size: 14px;">If you didn't subscribe to this alert, please ignore this email.</p>
-        <hr style="border: 1px solid #333; margin: 20px 0;">
-        <p style="color: #888; font-size: 12px;">&copy; {{.Year}} {{.SiteName}}</p>
-    </div>
-</body>
-</html>`,
-
 	TemplateAdminAlert: `[{{.AlertLevel}}] {{.AlertType}} - {{.SiteName}}
 <!DOCTYPE html>
 <html>
@@ -592,8 +565,6 @@ type TemplateInfo struct {
 // GetAllTemplateTypes returns a list of all available email template types
 func GetAllTemplateTypes() []TemplateInfo {
 	return []TemplateInfo{
-		// Alert subscription confirmation
-		{TemplateEmailVerification, "Email Verification", "Alert subscription email verification link", false},
 		// Operator/system notification emails
 		{TemplateAdminAlert, "Admin Alert", "System alerts for administrators", false},
 		{TemplateWeeklyReport, "Weekly Report", "Weekly usage statistics summary", false},
@@ -625,13 +596,6 @@ func (et *EmailTemplate) PreviewTemplate(templateType TemplateType, siteName, si
 	var data interface{}
 
 	switch templateType {
-	case TemplateEmailVerification:
-		data = &EmailVerificationData{
-			TemplateData:     baseData,
-			Email:            "operator@example.com",
-			VerificationLink: siteURL + "/alerts/confirm/sample-token-12345",
-			ExpiresIn:        "24 hours",
-		}
 	case TemplateAdminAlert:
 		data = &AdminAlertData{
 			TemplateData: baseData,

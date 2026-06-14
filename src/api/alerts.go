@@ -85,12 +85,11 @@ func (h *Handler) handleAlerts(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusCreated, APIResponse{
 		OK: true,
 		Data: map[string]interface{}{
-			"alert":             created.Alert,
-			"manage_url":        baseURLFromRequest(h, r) + "/alerts/manage/" + created.ManageToken,
-			"rss_url":           baseURLFromRequest(h, r) + "/alerts/" + created.RSSToken + ".rss",
-			"manage_token":      created.ManageToken,
-			"rss_token":         created.RSSToken,
-			"verification_sent": created.VerificationSent,
+			"alert":        created.Alert,
+			"manage_url":   baseURLFromRequest(h, r) + "/alerts/manage/" + created.ManageToken,
+			"rss_url":      baseURLFromRequest(h, r) + "/alerts/" + created.RSSToken + ".rss",
+			"manage_token": created.ManageToken,
+			"rss_token":    created.RSSToken,
 		},
 	})
 }
@@ -102,14 +101,6 @@ func (h *Handler) handleAlertByToken(w http.ResponseWriter, r *http.Request) {
 	}
 	path := strings.TrimPrefix(r.URL.Path, APIPrefix+"/alerts/")
 	switch {
-	case strings.HasSuffix(path, "/verify") && r.Method == http.MethodPost:
-		token := strings.TrimSuffix(path, "/verify")
-		alertInfo, _, _, err := h.alertManager.Verify(r.Context(), token)
-		if err != nil {
-			h.writeError(w, "BAD_REQUEST", err.Error(), http.StatusBadRequest)
-			return
-		}
-		h.writeJSON(w, http.StatusOK, APIResponse{OK: true, Data: alertInfo})
 	case strings.HasSuffix(path, "/pause") && r.Method == http.MethodPost:
 		token := strings.TrimSuffix(path, "/pause")
 		paused, err := decodeAlertPauseState(r)

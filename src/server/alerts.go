@@ -34,10 +34,9 @@ type AlertNewPageData struct {
 
 type AlertCreatedPageData struct {
 	PageData
-	Alert            *alert.Alert
-	ManageURL        string
-	RSSURL           string
-	VerificationSent bool
+	Alert     *alert.Alert
+	ManageURL string
+	RSSURL    string
 }
 
 type AlertManagePageData struct {
@@ -149,39 +148,12 @@ func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
 	baseData := s.newPageData(w, r, "", "alerts-created")
 	baseData.Title = s.getI18nManager().T(baseData.Lang, "alerts.created_title")
 	data := &AlertCreatedPageData{
-		PageData:         *baseData,
-		Alert:            created.Alert,
-		ManageURL:        s.getBaseURL(r) + "/alerts/manage/" + created.ManageToken,
-		RSSURL:           s.getBaseURL(r) + "/alerts/" + created.RSSToken + ".rss",
-		VerificationSent: created.VerificationSent,
+		PageData:  *baseData,
+		Alert:     created.Alert,
+		ManageURL: s.getBaseURL(r) + "/alerts/manage/" + created.ManageToken,
+		RSSURL:    s.getBaseURL(r) + "/alerts/" + created.RSSToken + ".rss",
 	}
 	if err := s.renderer.Render(w, "alerts-created", data); err != nil {
-		log.Printf("[Server] template render error: %v", err)
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-	}
-}
-
-func (s *Server) handleAlertConfirm(w http.ResponseWriter, r *http.Request) {
-	if s.alertManager == nil {
-		s.renderAlertError(w, r, http.StatusServiceUnavailable, "alerts.error_unavailable_title", "alerts.error_storage_unavailable")
-		return
-	}
-	token := strings.TrimSpace(r.URL.Query().Get("token"))
-	if token == "" {
-		s.renderAlertError(w, r, http.StatusBadRequest, "alerts.error_invalid_token_title", "alerts.error_missing_verification_token")
-		return
-	}
-	if _, _, _, err := s.alertManager.Verify(r.Context(), token); err != nil {
-		s.renderAlertError(w, r, http.StatusBadRequest, "alerts.error_invalid_token_title", "alerts.error_invalid_token")
-		return
-	}
-	baseData := s.newPageData(w, r, "", "alerts-created")
-	baseData.Title = s.getI18nManager().T(baseData.Lang, "alerts.confirmed_title")
-	data := &AlertCreatedPageData{
-		PageData:         *baseData,
-		VerificationSent: false,
-	}
-	if err := s.renderer.Render(w, "alerts-confirmed", data); err != nil {
 		log.Printf("[Server] template render error: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 	}

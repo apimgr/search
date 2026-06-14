@@ -744,29 +744,6 @@ func TestNewEmailTemplate(t *testing.T) {
 	}
 }
 
-func TestEmailTemplateRenderEmailVerification(t *testing.T) {
-	et := NewEmailTemplate()
-
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &EmailVerificationData{
-		TemplateData:     baseData,
-		Email:            "test@example.com",
-		VerificationLink: "https://example.com/verify?token=xyz789",
-		ExpiresIn:        "24 hours",
-	}
-
-	subject, body, err := et.Render(TemplateEmailVerification, data)
-	if err != nil {
-		t.Fatalf("Render() error = %v", err)
-	}
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-	if !strings.Contains(strings.ToLower(body), "verif") {
-		t.Error("Body should mention verification")
-	}
-}
-
 func TestEmailTemplateRenderSecurityAlert(t *testing.T) {
 	et := NewEmailTemplate()
 
@@ -941,7 +918,6 @@ func TestEmailTemplatePreviewTemplate(t *testing.T) {
 	et := NewEmailTemplate()
 
 	templates := []TemplateType{
-		TemplateEmailVerification,
 		TemplateSecurityAlert,
 		TemplateAdminAlert,
 		TemplateWeeklyReport,
@@ -997,7 +973,6 @@ func TestGetAllTemplateTypes(t *testing.T) {
 	}
 
 	expectedTypes := []TemplateType{
-		TemplateEmailVerification,
 		TemplateSecurityAlert,
 		TemplateAdminAlert,
 		TemplateBackupCompleted,
@@ -1031,7 +1006,6 @@ func TestGetAllTemplateTypesInfo(t *testing.T) {
 func TestIsAccountEmail(t *testing.T) {
 	// This project has no user accounts; all templates are operator/system notifications.
 	allTemplates := []TemplateType{
-		TemplateEmailVerification,
 		TemplateAdminAlert,
 		TemplateWeeklyReport,
 		TemplateSecurityAlert,
@@ -1056,9 +1030,6 @@ func TestIsAccountEmail(t *testing.T) {
 // Tests for TemplateType constants
 
 func TestTemplateTypeConstants(t *testing.T) {
-	if TemplateEmailVerification != "email_verification" {
-		t.Errorf("TemplateEmailVerification = %q, want %q", TemplateEmailVerification, "email_verification")
-	}
 	if TemplateSecurityAlert != "security_alert" {
 		t.Errorf("TemplateSecurityAlert = %q, want %q", TemplateSecurityAlert, "security_alert")
 	}
@@ -1622,26 +1593,6 @@ func TestTestEmailDataStruct(t *testing.T) {
 
 	if data.SentAt != sentAt {
 		t.Error("SentAt mismatch")
-	}
-}
-
-func TestEmailVerificationDataStruct(t *testing.T) {
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &EmailVerificationData{
-		TemplateData:     baseData,
-		Email:            "test@example.com",
-		VerificationLink: "https://example.com/verify?token=abc",
-		ExpiresIn:        "24 hours",
-	}
-
-	if data.Email != "test@example.com" {
-		t.Errorf("Email = %q", data.Email)
-	}
-	if data.VerificationLink != "https://example.com/verify?token=abc" {
-		t.Errorf("VerificationLink = %q", data.VerificationLink)
-	}
-	if data.ExpiresIn != "24 hours" {
-		t.Errorf("ExpiresIn = %q", data.ExpiresIn)
 	}
 }
 
@@ -2329,7 +2280,6 @@ func TestGetAllTemplateTypesIncludesOperatorTemplates(t *testing.T) {
 func TestIsAccountEmailAllTemplates(t *testing.T) {
 	// All templates are operator/system notifications — none are account emails
 	allTemplates := []TemplateType{
-		TemplateEmailVerification,
 		TemplateAdminAlert,
 		TemplateWeeklyReport,
 		TemplateSecurityAlert,

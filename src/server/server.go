@@ -717,7 +717,6 @@ func (s *Server) setupRoutes() http.Handler {
 	// Search
 	r.HandleFunc("/search", s.handleSearch)
 	r.HandleFunc("/alerts/new", s.handleAlertNew)
-	r.HandleFunc("/alerts/confirm", s.handleAlertConfirm)
 	r.HandleFunc("/alerts", s.handleAlerts)
 	r.HandleFunc("/alerts/*", s.handleAlertAction)
 
