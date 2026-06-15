@@ -3,7 +3,6 @@ package email
 import (
 	"strings"
 	"testing"
-	"time"
 )
 
 // Tests for Config
@@ -348,7 +347,6 @@ func TestTLSModes(t *testing.T) {
 
 func TestMailerSendAlert(t *testing.T) {
 	cfg := &Config{
-		// Will fail but we want to test the path
 		Enabled:     false,
 		AdminEmails: []string{"admin@example.com"},
 	}
@@ -426,7 +424,6 @@ func TestMailerTestConnectionNoHost(t *testing.T) {
 	}
 	ml := NewMailer(cfg)
 
-	// Will fail to connect since no host is specified
 	err := ml.TestConnection()
 	if err == nil {
 		t.Error("TestConnection() should error with no host")
@@ -481,7 +478,6 @@ func TestDetectedSMTPStructTLS(t *testing.T) {
 // Tests for DetectAndConfigure
 
 func TestDetectAndConfigureNoSMTP(t *testing.T) {
-	// When no SMTP is detected, should return default config
 	cfg := DefaultConfig()
 
 	if cfg.Enabled {
@@ -495,8 +491,6 @@ func TestDetectAndConfigureNoSMTP(t *testing.T) {
 // Tests for IsLocalSMTPAvailable
 
 func TestIsLocalSMTPAvailable(t *testing.T) {
-	// This test just ensures the function doesn't panic
-	// Actual availability depends on environment
 	_ = IsLocalSMTPAvailable()
 }
 
@@ -547,7 +541,6 @@ func TestConfigYAMLTags(t *testing.T) {
 		AdminEmails: []string{"admin@example.com"},
 	}
 
-	// Verify all fields are set correctly
 	if cfg.SMTP.Host != "smtp.example.com" {
 		t.Errorf("SMTP.Host = %q", cfg.SMTP.Host)
 	}
@@ -646,7 +639,7 @@ func TestSMTPPortConfigurations(t *testing.T) {
 	}
 }
 
-// Test Send with various message configurations
+// Tests for Send with various message configurations
 
 func TestMailerSendWithHTML(t *testing.T) {
 	cfg := &Config{Enabled: false}
@@ -655,7 +648,6 @@ func TestMailerSendWithHTML(t *testing.T) {
 	msg.SetHTML("<h1>Hello</h1>")
 
 	err := ml.Send(msg)
-	// Should fail because email is not enabled, but HTML should be set
 	if err == nil {
 		t.Error("Send() should error when disabled")
 	}
@@ -671,7 +663,6 @@ func TestMailerSendNilMessage(t *testing.T) {
 	cfg := &Config{Enabled: true}
 	ml := NewMailer(cfg)
 
-	// Sending nil message would panic, so we test with empty To
 	msg := NewMessage([]string{}, "Test", "Body")
 	err := ml.Send(msg)
 	if err == nil {
@@ -696,31 +687,23 @@ func TestConfigMultipleAdminEmails(t *testing.T) {
 	}
 }
 
-// Test DetectSMTP doesn't crash
+// Tests for DetectSMTP
 
 func TestDetectSMTP(t *testing.T) {
-	// This just ensures the function doesn't panic
-	// Actual detection depends on environment
 	result := DetectSMTP()
-	// result may be nil or not, depending on environment
 	_ = result
 }
 
-// Test getDefaultGateway doesn't crash
+// Tests for getDefaultGateway
 
 func TestGetDefaultGateway(t *testing.T) {
-	// This just ensures the function doesn't panic
 	gateway := getDefaultGateway()
-	// gateway may be empty or have a value
 	_ = gateway
 }
 
-// Test tryDetectSMTP with unreachable host
-// Uses localhost with high port that's unlikely to have anything listening
+// Tests for tryDetectSMTP with unreachable host
 
 func TestTryDetectSMTPUnreachable(t *testing.T) {
-	// Use localhost with a high port that nothing is listening on
-	// This should fail quickly with connection refused
 	result := tryDetectSMTP("127.0.0.1", 59999, false)
 	if result != nil {
 		t.Error("tryDetectSMTP should return nil for unreachable port")
@@ -728,7 +711,6 @@ func TestTryDetectSMTPUnreachable(t *testing.T) {
 }
 
 func TestTryDetectSMTPTLSUnreachable(t *testing.T) {
-	// Use localhost with a high port that nothing is listening on
 	result := tryDetectSMTP("127.0.0.1", 59998, true)
 	if result != nil {
 		t.Error("tryDetectSMTP with TLS should return nil for unreachable port")
@@ -747,18 +729,16 @@ func TestNewEmailTemplate(t *testing.T) {
 func TestEmailTemplateRenderSecurityAlert(t *testing.T) {
 	et := NewEmailTemplate()
 
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &SecurityAlertData{
-		TemplateData:   baseData,
-		Event:          "Suspicious Activity",
-		Severity:       "high",
-		IPAddress:      "10.0.0.1",
-		Details:        "Multiple failed login attempts detected",
-		OccurredAt:     time.Now(),
-		ActionRequired: "Review the activity",
+	vars := map[string]string{
+		"app_name":  "TestApp",
+		"fqdn":      "https://example.com",
+		"timestamp": "2026-06-13 12:00:00 UTC",
+		"event":     "Suspicious Activity",
+		"ip":        "10.0.0.1",
+		"details":   "Multiple failed login attempts detected",
 	}
 
-	subject, body, err := et.Render(TemplateSecurityAlert, data)
+	subject, body, err := et.Render(TemplateSecurityAlert, vars)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
@@ -773,17 +753,16 @@ func TestEmailTemplateRenderSecurityAlert(t *testing.T) {
 func TestEmailTemplateRenderAdminAlert(t *testing.T) {
 	et := NewEmailTemplate()
 
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &AdminAlertData{
-		TemplateData: baseData,
-		AlertType:    "System Warning",
-		AlertLevel:   "warning",
-		Message:      "High CPU usage detected",
-		Details:      map[string]string{"CPU": "92%", "Duration": "5 min"},
-		OccurredAt:   time.Now(),
+	vars := map[string]string{
+		"app_name":    "TestApp",
+		"fqdn":        "https://example.com",
+		"timestamp":   "2026-06-13 12:00:00 UTC",
+		"alert_type":  "System Warning",
+		"alert_level": "warning",
+		"message":     "High CPU usage detected",
 	}
 
-	subject, body, err := et.Render(TemplateAdminAlert, data)
+	subject, body, err := et.Render(TemplateAdminAlert, vars)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
@@ -798,17 +777,16 @@ func TestEmailTemplateRenderAdminAlert(t *testing.T) {
 func TestEmailTemplateRenderWeeklyReport(t *testing.T) {
 	et := NewEmailTemplate()
 
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &WeeklyReportData{
-		TemplateData:  baseData,
-		PeriodStart:   time.Now().AddDate(0, 0, -7),
-		PeriodEnd:     time.Now(),
-		TotalSearches: 15000,
-		EngineStats:   map[string]int{"Google": 8000, "DuckDuckGo": 7000},
-		ErrorCount:    10,
+	vars := map[string]string{
+		"app_name":       "TestApp",
+		"fqdn":           "https://example.com",
+		"period_start":   "2026-06-06",
+		"period_end":     "2026-06-13",
+		"total_searches": "15000",
+		"error_count":    "10",
 	}
 
-	subject, body, err := et.Render(TemplateWeeklyReport, data)
+	subject, body, err := et.Render(TemplateWeeklyReport, vars)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
@@ -823,17 +801,15 @@ func TestEmailTemplateRenderWeeklyReport(t *testing.T) {
 func TestEmailTemplateRenderBackupCompleted(t *testing.T) {
 	et := NewEmailTemplate()
 
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &BackupCompletedData{
-		TemplateData: baseData,
-		BackupName:   "daily-backup-20240115.tar.gz",
-		BackupSize:   "10.5 MB",
-		CreatedAt:    time.Now(),
-		FileCount:    150,
-		Duration:     "3.2 seconds",
+	vars := map[string]string{
+		"app_name":  "TestApp",
+		"fqdn":      "https://example.com",
+		"timestamp": "2026-06-13 02:00:00 UTC",
+		"filename":  "search_backup_2026-06-13_020000.tar.gz",
+		"size":      "10.5 MB",
 	}
 
-	subject, _, err := et.Render(TemplateBackupCompleted, data)
+	subject, _, err := et.Render(TemplateBackupCompleted, vars)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
@@ -845,17 +821,18 @@ func TestEmailTemplateRenderBackupCompleted(t *testing.T) {
 func TestEmailTemplateRenderUpdateAvailable(t *testing.T) {
 	et := NewEmailTemplate()
 
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &UpdateAvailableData{
-		TemplateData:   baseData,
-		CurrentVersion: "1.2.3",
-		NewVersion:     "1.3.0",
-		ReleaseDate:    time.Now(),
-		ReleaseNotes:   "Bug fixes and improvements",
-		UpdateURL:      "https://example.com/releases/1.3.0",
+	vars := map[string]string{
+		"app_name":        "TestApp",
+		"fqdn":            "https://example.com",
+		"timestamp":       "2026-06-13 12:00:00 UTC",
+		"current_version": "1.2.3",
+		"new_version":     "1.3.0",
+		"release_date":    "2026-06-13",
+		"release_notes":   "Bug fixes and improvements",
+		"update_url":      "https://example.com/releases/1.3.0",
 	}
 
-	subject, body, err := et.Render(TemplateUpdateAvailable, data)
+	subject, body, err := et.Render(TemplateUpdateAvailable, vars)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
@@ -870,16 +847,17 @@ func TestEmailTemplateRenderUpdateAvailable(t *testing.T) {
 func TestEmailTemplateRenderMaintenanceNotice(t *testing.T) {
 	et := NewEmailTemplate()
 
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &MaintenanceNoticeData{
-		TemplateData:     baseData,
-		ScheduledAt:      time.Now().Add(24 * time.Hour),
-		Duration:         "30 minutes",
-		Reason:           "Database maintenance",
-		AffectedServices: []string{"Search API", "Admin Panel"},
+	vars := map[string]string{
+		"app_name":          "TestApp",
+		"fqdn":              "https://example.com",
+		"timestamp":         "2026-06-13 12:00:00 UTC",
+		"scheduled_at":      "2026-06-14 02:00:00 UTC",
+		"duration":          "30 minutes",
+		"reason":            "Database maintenance",
+		"affected_services": "search, alerts",
 	}
 
-	subject, _, err := et.Render(TemplateMaintenanceNotice, data)
+	subject, _, err := et.Render(TemplateMaintenanceNotice, vars)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
@@ -891,13 +869,7 @@ func TestEmailTemplateRenderMaintenanceNotice(t *testing.T) {
 func TestEmailTemplateRenderInvalidType(t *testing.T) {
 	et := NewEmailTemplate()
 
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &TestEmailData{
-		TemplateData: baseData,
-		SentAt:       time.Now(),
-	}
-
-	_, _, err := et.Render(TemplateType("invalid_template"), data)
+	_, _, err := et.Render(TemplateType("invalid_template"), map[string]string{})
 	if err == nil {
 		t.Error("Render() should error for invalid template type")
 	}
@@ -906,9 +878,8 @@ func TestEmailTemplateRenderInvalidType(t *testing.T) {
 func TestEmailTemplateRenderNilData(t *testing.T) {
 	et := NewEmailTemplate()
 
-	// Nil data should error since templates reference data fields
+	// nil map is valid — no substitution occurs, template renders with placeholders
 	_, _, err := et.Render(TemplateTest, nil)
-	// May error depending on implementation
 	_ = err
 }
 
@@ -966,7 +937,6 @@ func TestGetAllTemplateTypes(t *testing.T) {
 		t.Fatal("GetAllTemplateTypes() returned empty slice")
 	}
 
-	// Should contain at least the core operator notification types
 	found := make(map[TemplateType]bool)
 	for _, info := range types {
 		found[info.Type] = true
@@ -1004,7 +974,6 @@ func TestGetAllTemplateTypesInfo(t *testing.T) {
 // Tests for IsAccountEmail
 
 func TestIsAccountEmail(t *testing.T) {
-	// This project has no user accounts; all templates are operator/system notifications.
 	allTemplates := []TemplateType{
 		TemplateAdminAlert,
 		TemplateWeeklyReport,
@@ -1082,63 +1051,24 @@ func TestTemplateDataStruct(t *testing.T) {
 	}
 }
 
-// Tests for data structs
+func TestTemplateDataVarsMap(t *testing.T) {
+	data := NewTemplateData("MySite", "https://mysite.com", "help@mysite.com")
+	vars := data.VarsMap()
 
-func TestSecurityAlertDataStruct(t *testing.T) {
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &SecurityAlertData{
-		TemplateData:   baseData,
-		Event:          "Suspicious Activity",
-		Severity:       "high",
-		IPAddress:      "10.0.0.1",
-		Details:        "Multiple failed logins",
-		OccurredAt:     time.Now(),
-		ActionRequired: "Review activity",
+	if vars["app_name"] != "MySite" {
+		t.Errorf("app_name = %q", vars["app_name"])
 	}
-
-	if data.Event != "Suspicious Activity" {
-		t.Errorf("Event = %q", data.Event)
+	if vars["app_url"] != "https://mysite.com" {
+		t.Errorf("app_url = %q", vars["app_url"])
 	}
-	if data.Severity != "high" {
-		t.Errorf("Severity = %q", data.Severity)
+	if vars["fqdn"] != "https://mysite.com" {
+		t.Errorf("fqdn = %q", vars["fqdn"])
 	}
-}
-
-func TestWeeklyReportDataStruct(t *testing.T) {
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &WeeklyReportData{
-		TemplateData:  baseData,
-		PeriodStart:   time.Now().AddDate(0, 0, -7),
-		PeriodEnd:     time.Now(),
-		TotalSearches: 15000,
-		EngineStats:   map[string]int{"Google": 8000},
-		ErrorCount:    10,
+	if vars["year"] == "" {
+		t.Error("year should not be empty")
 	}
-
-	if data.TotalSearches != 15000 {
-		t.Errorf("TotalSearches = %d", data.TotalSearches)
-	}
-	if len(data.EngineStats) != 1 {
-		t.Errorf("EngineStats length = %d", len(data.EngineStats))
-	}
-}
-
-func TestAdminAlertDataStruct(t *testing.T) {
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &AdminAlertData{
-		TemplateData: baseData,
-		AlertType:    "Critical",
-		AlertLevel:   "critical",
-		Message:      "Server down",
-		Details:      map[string]string{"Server": "prod-1"},
-		OccurredAt:   time.Now(),
-	}
-
-	if data.AlertType != "Critical" {
-		t.Errorf("AlertType = %q", data.AlertType)
-	}
-	if data.AlertLevel != "critical" {
-		t.Errorf("AlertLevel = %q", data.AlertLevel)
+	if vars["timestamp"] == "" {
+		t.Error("timestamp should not be empty")
 	}
 }
 
@@ -1151,7 +1081,6 @@ func TestSplitLines(t *testing.T) {
 	}{
 		{"line1\nline2\nline3", 3},
 		{"single line", 1},
-		// empty line in middle
 		{"line1\n\nline3", 3},
 	}
 
@@ -1164,10 +1093,38 @@ func TestSplitLines(t *testing.T) {
 }
 
 func TestSplitLinesEmpty(t *testing.T) {
-	// Empty string returns empty slice
 	result := splitLines("")
 	if len(result) != 0 {
 		t.Errorf("splitLines(\"\") returned %d lines, want 0", len(result))
+	}
+}
+
+func TestSplitLinesTrailingNewline(t *testing.T) {
+	result := splitLines("line1\nline2\n")
+	if len(result) != 2 {
+		t.Errorf("splitLines(\"line1\\nline2\\n\") returned %d lines, want 2", len(result))
+	}
+}
+
+func TestSplitLinesOnlyNewlines(t *testing.T) {
+	result := splitLines("\n\n\n")
+	if len(result) != 3 {
+		t.Errorf("splitLines(\"\\n\\n\\n\") returned %d lines, want 3", len(result))
+	}
+	for i, line := range result {
+		if line != "" {
+			t.Errorf("Line %d should be empty, got %q", i, line)
+		}
+	}
+}
+
+func TestSplitLinesSingleChar(t *testing.T) {
+	result := splitLines("a")
+	if len(result) != 1 {
+		t.Errorf("splitLines(\"a\") returned %d lines, want 1", len(result))
+	}
+	if result[0] != "a" {
+		t.Errorf("splitLines(\"a\")[0] = %q, want \"a\"", result[0])
 	}
 }
 
@@ -1190,6 +1147,59 @@ func TestJoinLines(t *testing.T) {
 	}
 }
 
+func TestJoinLinesSingleLine(t *testing.T) {
+	result := joinLines([]string{"single"})
+	if result != "single" {
+		t.Errorf("joinLines([\"single\"]) = %q, want \"single\"", result)
+	}
+}
+
+func TestJoinLinesNilSlice(t *testing.T) {
+	result := joinLines(nil)
+	if result != "" {
+		t.Errorf("joinLines(nil) = %q, want \"\"", result)
+	}
+}
+
+// Tests for ReplaceVars
+
+func TestReplaceVars(t *testing.T) {
+	text := "Hello {name}, welcome to {app_name}!"
+	vars := map[string]string{
+		"name":     "World",
+		"app_name": "TestApp",
+	}
+	result := ReplaceVars(text, vars)
+	if result != "Hello World, welcome to TestApp!" {
+		t.Errorf("ReplaceVars = %q", result)
+	}
+}
+
+func TestReplaceVarsNilMap(t *testing.T) {
+	text := "Hello {name}"
+	result := ReplaceVars(text, nil)
+	if result != "Hello {name}" {
+		t.Errorf("ReplaceVars with nil map should leave placeholders, got %q", result)
+	}
+}
+
+func TestReplaceVarsEmptyMap(t *testing.T) {
+	text := "Hello {name}"
+	result := ReplaceVars(text, map[string]string{})
+	if result != "Hello {name}" {
+		t.Errorf("ReplaceVars with empty map should leave placeholders, got %q", result)
+	}
+}
+
+func TestReplaceVarsNoPlaceholders(t *testing.T) {
+	text := "Plain text without placeholders"
+	vars := map[string]string{"key": "value"}
+	result := ReplaceVars(text, vars)
+	if result != text {
+		t.Errorf("ReplaceVars without placeholders should return original, got %q", result)
+	}
+}
+
 // Tests for rawTemplates map
 
 func TestRawTemplatesExist(t *testing.T) {
@@ -1207,6 +1217,37 @@ func TestRawTemplatesNotEmpty(t *testing.T) {
 		if tmpl == "" {
 			t.Errorf("rawTemplates[%s] should not be empty", tt)
 		}
+	}
+}
+
+func TestRawTemplatesContainSubjectLine(t *testing.T) {
+	for tt, tmpl := range rawTemplates {
+		lines := strings.Split(tmpl, "\n")
+		if len(lines) < 3 {
+			t.Errorf("rawTemplates[%s] should have at least 3 lines (subject, ---, body)", tt)
+		}
+		firstLine := strings.TrimSpace(lines[0])
+		if !strings.HasPrefix(firstLine, "Subject:") {
+			t.Errorf("rawTemplates[%s] first line should start with 'Subject:', got %q", tt, firstLine)
+		}
+	}
+}
+
+func TestRawTemplatesContainSeparator(t *testing.T) {
+	for tt, tmpl := range rawTemplates {
+		if !strings.Contains(tmpl, "\n---\n") {
+			t.Errorf("rawTemplates[%s] should contain '---' separator", tt)
+		}
+	}
+}
+
+func TestRawTemplatesCountMatchesGetAllTemplateTypes(t *testing.T) {
+	allTypes := GetAllTemplateTypes()
+	rawCount := len(rawTemplates)
+	allTypesCount := len(allTypes)
+
+	if rawCount != allTypesCount {
+		t.Errorf("rawTemplates has %d entries but GetAllTemplateTypes returns %d entries", rawCount, allTypesCount)
 	}
 }
 
@@ -1231,20 +1272,20 @@ func TestTemplateInfoStruct(t *testing.T) {
 	}
 }
 
-// Additional tests for operator notification templates
+// Additional render tests
 
 func TestEmailTemplateRenderBackupFailed(t *testing.T) {
 	et := NewEmailTemplate()
 
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &BackupFailedData{
-		TemplateData: baseData,
-		BackupName:   "daily-backup",
-		Error:        "Disk full",
-		FailedAt:     time.Now(),
+	vars := map[string]string{
+		"app_name":  "TestApp",
+		"fqdn":      "https://example.com",
+		"timestamp": "2026-06-13 02:00:00 UTC",
+		"filename":  "daily-backup",
+		"error":     "Disk full",
 	}
 
-	subject, body, err := et.Render(TemplateBackupFailed, data)
+	subject, body, err := et.Render(TemplateBackupFailed, vars)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
@@ -1257,16 +1298,16 @@ func TestEmailTemplateRenderBackupFailed(t *testing.T) {
 func TestEmailTemplateRenderSSLExpiring(t *testing.T) {
 	et := NewEmailTemplate()
 
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &SSLExpiringData{
-		TemplateData: baseData,
-		Domain:       "example.com",
-		ExpiresAt:    time.Now().Add(7 * 24 * time.Hour),
-		DaysLeft:     7,
-		RenewLink:    "https://example.com/renew-ssl",
+	vars := map[string]string{
+		"app_name":    "TestApp",
+		"fqdn":        "https://example.com",
+		"timestamp":   "2026-06-13 12:00:00 UTC",
+		"domain":      "example.com",
+		"expires_in":  "7 days",
+		"expiry_date": "2026-06-20",
 	}
 
-	subject, body, err := et.Render(TemplateSSLExpiring, data)
+	subject, body, err := et.Render(TemplateSSLExpiring, vars)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
@@ -1279,15 +1320,15 @@ func TestEmailTemplateRenderSSLExpiring(t *testing.T) {
 func TestEmailTemplateRenderSSLRenewed(t *testing.T) {
 	et := NewEmailTemplate()
 
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &SSLRenewedData{
-		TemplateData: baseData,
-		Domain:       "example.com",
-		RenewedAt:    time.Now(),
-		ValidUntil:   time.Now().Add(365 * 24 * time.Hour),
+	vars := map[string]string{
+		"app_name":    "TestApp",
+		"fqdn":        "https://example.com",
+		"timestamp":   "2026-06-13 12:00:00 UTC",
+		"domain":      "example.com",
+		"valid_until": "2027-06-13",
 	}
 
-	subject, body, err := et.Render(TemplateSSLRenewed, data)
+	subject, body, err := et.Render(TemplateSSLRenewed, vars)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
@@ -1300,16 +1341,16 @@ func TestEmailTemplateRenderSSLRenewed(t *testing.T) {
 func TestEmailTemplateRenderSchedulerError(t *testing.T) {
 	et := NewEmailTemplate()
 
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &SchedulerErrorData{
-		TemplateData: baseData,
-		TaskName:     "daily-cleanup",
-		Error:        "Task timed out",
-		FailedAt:     time.Now(),
-		TaskDetails:  map[string]string{"Duration": "exceeded 1h"},
+	vars := map[string]string{
+		"app_name":  "TestApp",
+		"fqdn":      "https://example.com",
+		"timestamp": "2026-06-13 12:00:00 UTC",
+		"task_name": "daily-cleanup",
+		"error":     "Task timed out",
+		"next_run":  "2026-06-14 00:00:00 UTC",
 	}
 
-	subject, body, err := et.Render(TemplateSchedulerError, data)
+	subject, body, err := et.Render(TemplateSchedulerError, vars)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
@@ -1322,18 +1363,18 @@ func TestEmailTemplateRenderSchedulerError(t *testing.T) {
 func TestEmailTemplateRenderBreachAdminAlert(t *testing.T) {
 	et := NewEmailTemplate()
 
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &BreachAdminAlertData{
-		TemplateData:      baseData,
-		Severity:          "critical",
-		DetectedAt:        time.Now(),
-		BreachDescription: "Multiple accounts compromised",
-		AffectedUsers:     150,
-		IPAddresses:       []string{"1.2.3.4", "5.6.7.8"},
-		ActionRequired:    "Investigate immediately",
+	vars := map[string]string{
+		"app_name":           "TestApp",
+		"fqdn":               "https://example.com",
+		"timestamp":          "2026-06-13 12:00:00 UTC",
+		"severity":           "critical",
+		"breach_description": "Multiple accounts compromised",
+		"affected_users":     "150",
+		"ip_addresses":       "1.2.3.4, 5.6.7.8",
+		"action_required":    "Investigate immediately",
 	}
 
-	subject, body, err := et.Render(TemplateBreachAdminAlert, data)
+	subject, body, err := et.Render(TemplateBreachAdminAlert, vars)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
@@ -1346,13 +1387,15 @@ func TestEmailTemplateRenderBreachAdminAlert(t *testing.T) {
 func TestEmailTemplateRenderTest(t *testing.T) {
 	et := NewEmailTemplate()
 
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &TestEmailData{
-		TemplateData: baseData,
-		SentAt:       time.Now(),
+	vars := map[string]string{
+		"app_name":  "TestApp",
+		"fqdn":      "https://example.com",
+		"timestamp": "2026-06-13 12:00:00 UTC",
+		"sent_at":   "2026-06-13 12:00:00 UTC",
+		"app_url":   "https://example.com",
 	}
 
-	subject, body, err := et.Render(TemplateTest, data)
+	subject, body, err := et.Render(TemplateTest, vars)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
@@ -1362,7 +1405,7 @@ func TestEmailTemplateRenderTest(t *testing.T) {
 	_ = body
 }
 
-// Tests for PreviewTemplate with all operator notification templates
+// Tests for PreviewTemplate with each operator notification template
 
 func TestEmailTemplatePreviewTemplateBackupFailed(t *testing.T) {
 	et := NewEmailTemplate()
@@ -1480,239 +1523,21 @@ func TestTemplateTypeConstantsPart18(t *testing.T) {
 	}
 }
 
-// Tests for data struct coverage
-
-func TestBackupFailedDataStruct(t *testing.T) {
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &BackupFailedData{
-		TemplateData: baseData,
-		BackupName:   "daily-backup",
-		Error:        "Disk full",
-		FailedAt:     time.Now(),
-	}
-
-	if data.BackupName != "daily-backup" {
-		t.Errorf("BackupName = %q", data.BackupName)
-	}
-	if data.Error != "Disk full" {
-		t.Errorf("Error = %q", data.Error)
-	}
-}
-
-func TestSSLExpiringDataStruct(t *testing.T) {
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &SSLExpiringData{
-		TemplateData: baseData,
-		Domain:       "example.com",
-		ExpiresAt:    time.Now().Add(7 * 24 * time.Hour),
-		DaysLeft:     7,
-		RenewLink:    "https://example.com/renew",
-	}
-
-	if data.Domain != "example.com" {
-		t.Errorf("Domain = %q", data.Domain)
-	}
-	if data.DaysLeft != 7 {
-		t.Errorf("DaysLeft = %d", data.DaysLeft)
-	}
-}
-
-func TestSSLRenewedDataStruct(t *testing.T) {
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	renewedAt := time.Now()
-	validUntil := time.Now().Add(365 * 24 * time.Hour)
-	data := &SSLRenewedData{
-		TemplateData: baseData,
-		Domain:       "example.com",
-		RenewedAt:    renewedAt,
-		ValidUntil:   validUntil,
-	}
-
-	if data.Domain != "example.com" {
-		t.Errorf("Domain = %q", data.Domain)
-	}
-	if data.RenewedAt != renewedAt {
-		t.Error("RenewedAt mismatch")
-	}
-	if data.ValidUntil != validUntil {
-		t.Error("ValidUntil mismatch")
-	}
-}
-
-func TestSchedulerErrorDataStruct(t *testing.T) {
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &SchedulerErrorData{
-		TemplateData: baseData,
-		TaskName:     "daily-cleanup",
-		Error:        "Timeout",
-		FailedAt:     time.Now(),
-		TaskDetails:  map[string]string{"duration": "exceeded 1h"},
-	}
-
-	if data.TaskName != "daily-cleanup" {
-		t.Errorf("TaskName = %q", data.TaskName)
-	}
-	if data.Error != "Timeout" {
-		t.Errorf("Error = %q", data.Error)
-	}
-	if len(data.TaskDetails) != 1 {
-		t.Errorf("TaskDetails length = %d", len(data.TaskDetails))
-	}
-}
-
-func TestBreachAdminAlertDataStruct(t *testing.T) {
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &BreachAdminAlertData{
-		TemplateData:      baseData,
-		Severity:          "critical",
-		DetectedAt:        time.Now(),
-		BreachDescription: "Mass account compromise",
-		AffectedUsers:     150,
-		IPAddresses:       []string{"1.2.3.4", "5.6.7.8"},
-		ActionRequired:    "Immediate investigation required",
-	}
-
-	if data.Severity != "critical" {
-		t.Errorf("Severity = %q", data.Severity)
-	}
-	if data.AffectedUsers != 150 {
-		t.Errorf("AffectedUsers = %d", data.AffectedUsers)
-	}
-	if len(data.IPAddresses) != 2 {
-		t.Errorf("IPAddresses length = %d", len(data.IPAddresses))
-	}
-}
-
-func TestTestEmailDataStruct(t *testing.T) {
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	sentAt := time.Now()
-	data := &TestEmailData{
-		TemplateData: baseData,
-		SentAt:       sentAt,
-	}
-
-	if data.SentAt != sentAt {
-		t.Error("SentAt mismatch")
-	}
-}
-
-func TestBackupCompletedDataStruct(t *testing.T) {
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	createdAt := time.Now()
-	data := &BackupCompletedData{
-		TemplateData: baseData,
-		BackupName:   "backup-20240115.tar.gz",
-		BackupSize:   "10.5 MB",
-		CreatedAt:    createdAt,
-		FileCount:    150,
-		Duration:     "3.2 seconds",
-	}
-
-	if data.BackupName != "backup-20240115.tar.gz" {
-		t.Errorf("BackupName = %q", data.BackupName)
-	}
-	if data.BackupSize != "10.5 MB" {
-		t.Errorf("BackupSize = %q", data.BackupSize)
-	}
-	if data.FileCount != 150 {
-		t.Errorf("FileCount = %d", data.FileCount)
-	}
-	if data.Duration != "3.2 seconds" {
-		t.Errorf("Duration = %q", data.Duration)
-	}
-}
-
-func TestUpdateAvailableDataStruct(t *testing.T) {
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	releaseDate := time.Now()
-	data := &UpdateAvailableData{
-		TemplateData:   baseData,
-		CurrentVersion: "1.2.3",
-		NewVersion:     "1.3.0",
-		ReleaseDate:    releaseDate,
-		ReleaseNotes:   "Bug fixes and improvements",
-		UpdateURL:      "https://example.com/releases/1.3.0",
-	}
-
-	if data.CurrentVersion != "1.2.3" {
-		t.Errorf("CurrentVersion = %q", data.CurrentVersion)
-	}
-	if data.NewVersion != "1.3.0" {
-		t.Errorf("NewVersion = %q", data.NewVersion)
-	}
-	if data.ReleaseNotes != "Bug fixes and improvements" {
-		t.Errorf("ReleaseNotes = %q", data.ReleaseNotes)
-	}
-	if data.UpdateURL != "https://example.com/releases/1.3.0" {
-		t.Errorf("UpdateURL = %q", data.UpdateURL)
-	}
-}
-
-func TestMaintenanceNoticeDataStruct(t *testing.T) {
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	scheduledAt := time.Now().Add(24 * time.Hour)
-	data := &MaintenanceNoticeData{
-		TemplateData:     baseData,
-		ScheduledAt:      scheduledAt,
-		Duration:         "30 minutes",
-		Reason:           "Database maintenance",
-		AffectedServices: []string{"Search API", "Admin Panel"},
-	}
-
-	if data.Duration != "30 minutes" {
-		t.Errorf("Duration = %q", data.Duration)
-	}
-	if data.Reason != "Database maintenance" {
-		t.Errorf("Reason = %q", data.Reason)
-	}
-	if len(data.AffectedServices) != 2 {
-		t.Errorf("AffectedServices length = %d", len(data.AffectedServices))
-	}
-}
-
-// Tests for AdminAlert without Details
-
-func TestEmailTemplateRenderAdminAlertNoDetails(t *testing.T) {
-	et := NewEmailTemplate()
-
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &AdminAlertData{
-		TemplateData: baseData,
-		AlertType:    "System Warning",
-		AlertLevel:   "info",
-		Message:      "Test message",
-		Details:      nil,
-		OccurredAt:   time.Now(),
-	}
-
-	subject, body, err := et.Render(TemplateAdminAlert, data)
-	if err != nil {
-		t.Fatalf("Render() error = %v", err)
-	}
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-	if body == "" {
-		t.Error("Body should not be empty")
-	}
-}
-
 // Tests for AdminAlert with critical level
 
 func TestEmailTemplateRenderAdminAlertCritical(t *testing.T) {
 	et := NewEmailTemplate()
 
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &AdminAlertData{
-		TemplateData: baseData,
-		AlertType:    "System Down",
-		AlertLevel:   "critical",
-		Message:      "Server is not responding",
-		Details:      map[string]string{"Server": "prod-1"},
-		OccurredAt:   time.Now(),
+	vars := map[string]string{
+		"app_name":    "TestApp",
+		"fqdn":        "https://example.com",
+		"timestamp":   "2026-06-13 12:00:00 UTC",
+		"alert_type":  "System Down",
+		"alert_level": "critical",
+		"message":     "Server is not responding",
 	}
 
-	subject, body, err := et.Render(TemplateAdminAlert, data)
+	subject, body, err := et.Render(TemplateAdminAlert, vars)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
@@ -1724,215 +1549,22 @@ func TestEmailTemplateRenderAdminAlertCritical(t *testing.T) {
 	}
 }
 
-// Tests for WeeklyReport without EngineStats
-
-func TestEmailTemplateRenderWeeklyReportNoEngineStats(t *testing.T) {
-	et := NewEmailTemplate()
-
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &WeeklyReportData{
-		TemplateData:  baseData,
-		PeriodStart:   time.Now().AddDate(0, 0, -7),
-		PeriodEnd:     time.Now(),
-		TotalSearches: 15000,
-		EngineStats:   nil,
-		ErrorCount:    10,
-	}
-
-	subject, body, err := et.Render(TemplateWeeklyReport, data)
-	if err != nil {
-		t.Fatalf("Render() error = %v", err)
-	}
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-	if body == "" {
-		t.Error("Body should not be empty")
-	}
-}
-
-// Tests for SecurityAlert without ActionRequired
-
-func TestEmailTemplateRenderSecurityAlertNoAction(t *testing.T) {
-	et := NewEmailTemplate()
-
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &SecurityAlertData{
-		TemplateData:   baseData,
-		Event:          "Suspicious Activity",
-		Severity:       "medium",
-		IPAddress:      "10.0.0.1",
-		Details:        "",
-		OccurredAt:     time.Now(),
-		ActionRequired: "",
-	}
-
-	subject, body, err := et.Render(TemplateSecurityAlert, data)
-	if err != nil {
-		t.Fatalf("Render() error = %v", err)
-	}
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-	if body == "" {
-		t.Error("Body should not be empty")
-	}
-}
-
-// Tests for SecurityAlert critical and high severity
+// Tests for SecurityAlert with critical severity
 
 func TestEmailTemplateRenderSecurityAlertCritical(t *testing.T) {
 	et := NewEmailTemplate()
 
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &SecurityAlertData{
-		TemplateData:   baseData,
-		Event:          "Account Breach",
-		Severity:       "critical",
-		IPAddress:      "10.0.0.1",
-		Details:        "Account credentials exposed",
-		OccurredAt:     time.Now(),
-		ActionRequired: "Immediate action required",
+	vars := map[string]string{
+		"app_name":        "TestApp",
+		"fqdn":            "https://example.com",
+		"timestamp":       "2026-06-13 12:00:00 UTC",
+		"event":           "Account Breach",
+		"ip":              "10.0.0.1",
+		"details":         "Account credentials exposed",
+		"action_required": "Immediate action required",
 	}
 
-	subject, body, err := et.Render(TemplateSecurityAlert, data)
-	if err != nil {
-		t.Fatalf("Render() error = %v", err)
-	}
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-	if body == "" {
-		t.Error("Body should not be empty")
-	}
-}
-
-// Tests for MaintenanceNotice without Reason
-
-func TestEmailTemplateRenderMaintenanceNoticeNoReason(t *testing.T) {
-	et := NewEmailTemplate()
-
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &MaintenanceNoticeData{
-		TemplateData:     baseData,
-		ScheduledAt:      time.Now().Add(24 * time.Hour),
-		Duration:         "30 minutes",
-		Reason:           "",
-		AffectedServices: nil,
-	}
-
-	subject, body, err := et.Render(TemplateMaintenanceNotice, data)
-	if err != nil {
-		t.Fatalf("Render() error = %v", err)
-	}
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-	if body == "" {
-		t.Error("Body should not be empty")
-	}
-}
-
-// Tests for UpdateAvailable without ReleaseNotes
-
-func TestEmailTemplateRenderUpdateAvailableNoNotes(t *testing.T) {
-	et := NewEmailTemplate()
-
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &UpdateAvailableData{
-		TemplateData:   baseData,
-		CurrentVersion: "1.2.3",
-		NewVersion:     "1.3.0",
-		ReleaseDate:    time.Now(),
-		ReleaseNotes:   "",
-		UpdateURL:      "https://example.com/releases/1.3.0",
-	}
-
-	subject, body, err := et.Render(TemplateUpdateAvailable, data)
-	if err != nil {
-		t.Fatalf("Render() error = %v", err)
-	}
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-	if body == "" {
-		t.Error("Body should not be empty")
-	}
-}
-
-// Tests for SSL expiring with very few days left
-
-func TestEmailTemplateRenderSSLExpiringUrgent(t *testing.T) {
-	et := NewEmailTemplate()
-
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &SSLExpiringData{
-		TemplateData: baseData,
-		Domain:       "example.com",
-		ExpiresAt:    time.Now().Add(2 * 24 * time.Hour),
-		DaysLeft:     2,
-		RenewLink:    "",
-	}
-
-	subject, body, err := et.Render(TemplateSSLExpiring, data)
-	if err != nil {
-		t.Fatalf("Render() error = %v", err)
-	}
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-	if body == "" {
-		t.Error("Body should not be empty")
-	}
-	// Should have urgent messaging for 2 days left
-	if !strings.Contains(body, "URGENT") {
-		t.Error("Body should contain URGENT for very few days left")
-	}
-}
-
-// Tests for SchedulerError without TaskDetails
-
-func TestEmailTemplateRenderSchedulerErrorNoDetails(t *testing.T) {
-	et := NewEmailTemplate()
-
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &SchedulerErrorData{
-		TemplateData: baseData,
-		TaskName:     "daily-cleanup",
-		Error:        "Task timed out",
-		FailedAt:     time.Now(),
-		TaskDetails:  nil,
-	}
-
-	subject, body, err := et.Render(TemplateSchedulerError, data)
-	if err != nil {
-		t.Fatalf("Render() error = %v", err)
-	}
-	if subject == "" {
-		t.Error("Subject should not be empty")
-	}
-	if body == "" {
-		t.Error("Body should not be empty")
-	}
-}
-
-// Tests for BreachAdminAlert without IPAddresses
-
-func TestEmailTemplateRenderBreachAdminAlertNoIPs(t *testing.T) {
-	et := NewEmailTemplate()
-
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &BreachAdminAlertData{
-		TemplateData:      baseData,
-		Severity:          "HIGH",
-		DetectedAt:        time.Now(),
-		BreachDescription: "Multiple accounts compromised",
-		AffectedUsers:     150,
-		IPAddresses:       nil,
-		ActionRequired:    "Investigate immediately",
-	}
-
-	subject, body, err := et.Render(TemplateBreachAdminAlert, data)
+	subject, body, err := et.Render(TemplateSecurityAlert, vars)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
@@ -1949,18 +1581,18 @@ func TestEmailTemplateRenderBreachAdminAlertNoIPs(t *testing.T) {
 func TestEmailTemplateRenderBreachAdminAlertCritical(t *testing.T) {
 	et := NewEmailTemplate()
 
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &BreachAdminAlertData{
-		TemplateData:      baseData,
-		Severity:          "CRITICAL",
-		DetectedAt:        time.Now(),
-		BreachDescription: "Complete system breach",
-		AffectedUsers:     1000,
-		IPAddresses:       []string{"1.2.3.4"},
-		ActionRequired:    "Shut down immediately",
+	vars := map[string]string{
+		"app_name":           "TestApp",
+		"fqdn":               "https://example.com",
+		"timestamp":          "2026-06-13 12:00:00 UTC",
+		"severity":           "CRITICAL",
+		"breach_description": "Complete system breach",
+		"affected_users":     "1000",
+		"ip_addresses":       "1.2.3.4",
+		"action_required":    "Shut down immediately",
 	}
 
-	subject, body, err := et.Render(TemplateBreachAdminAlert, data)
+	subject, body, err := et.Render(TemplateBreachAdminAlert, vars)
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
@@ -1972,26 +1604,220 @@ func TestEmailTemplateRenderBreachAdminAlertCritical(t *testing.T) {
 	}
 }
 
-// Tests for splitLines with trailing newline
+// Tests for Render with partial vars (empty/missing values)
 
-func TestSplitLinesTrailingNewline(t *testing.T) {
-	result := splitLines("line1\nline2\n")
-	if len(result) != 2 {
-		t.Errorf("splitLines(\"line1\\nline2\\n\") returned %d lines, want 2", len(result))
+func TestEmailTemplateRenderPartialVars(t *testing.T) {
+	et := NewEmailTemplate()
+
+	// Only supply the minimum — template renders with leftover {placeholders}
+	vars := map[string]string{
+		"app_name": "TestApp",
+	}
+
+	subject, body, err := et.Render(TemplateSecurityAlert, vars)
+	if err != nil {
+		t.Fatalf("Render() with partial vars error = %v", err)
+	}
+	if subject == "" {
+		t.Error("Subject should not be empty even with partial vars")
+	}
+	_ = body
+}
+
+// Tests for Render with empty vars map
+
+func TestEmailTemplateRenderEmptyVars(t *testing.T) {
+	et := NewEmailTemplate()
+
+	subject, body, err := et.Render(TemplateTest, map[string]string{})
+	if err != nil {
+		t.Fatalf("Render() with empty vars error = %v", err)
+	}
+	// Subject line becomes "Test Email - {app_name}" — still non-empty
+	if subject == "" {
+		t.Error("Subject should not be empty")
+	}
+	_ = body
+}
+
+// Tests for TemplateInfo JSON tags
+
+func TestTemplateInfoJSONTags(t *testing.T) {
+	info := TemplateInfo{
+		Type:           TemplateAdminAlert,
+		Name:           "Admin Alert",
+		Description:    "Administrative alert email",
+		IsAccountEmail: false,
+	}
+
+	if info.Type != TemplateAdminAlert {
+		t.Errorf("Type = %q", info.Type)
+	}
+	if info.Name != "Admin Alert" {
+		t.Errorf("Name = %q", info.Name)
+	}
+	if info.Description != "Administrative alert email" {
+		t.Errorf("Description = %q", info.Description)
+	}
+	if info.IsAccountEmail {
+		t.Error("IsAccountEmail should be false")
+	}
+}
+
+// Tests for GetAllTemplateTypes ensuring all operator templates are included
+
+func TestGetAllTemplateTypesIncludesOperatorTemplates(t *testing.T) {
+	types := GetAllTemplateTypes()
+
+	operatorTypes := []TemplateType{
+		TemplateBackupFailed,
+		TemplateSSLExpiring,
+		TemplateSSLRenewed,
+		TemplateSchedulerError,
+		TemplateBreachAdminAlert,
+		TemplateTest,
+	}
+
+	found := make(map[TemplateType]bool)
+	for _, info := range types {
+		found[info.Type] = true
+	}
+
+	for _, tt := range operatorTypes {
+		if !found[tt] {
+			t.Errorf("GetAllTemplateTypes() should include %s", tt)
+		}
+	}
+}
+
+// Tests for IsAccountEmail covering all templates
+
+func TestIsAccountEmailAllTemplates(t *testing.T) {
+	allTemplates := []TemplateType{
+		TemplateAdminAlert,
+		TemplateWeeklyReport,
+		TemplateSecurityAlert,
+		TemplateBackupCompleted,
+		TemplateUpdateAvailable,
+		TemplateMaintenanceNotice,
+		TemplateBackupFailed,
+		TemplateSSLExpiring,
+		TemplateSSLRenewed,
+		TemplateSchedulerError,
+		TemplateBreachAdminAlert,
+		TemplateTest,
+	}
+
+	for _, tt := range allTemplates {
+		if IsAccountEmail(tt) {
+			t.Errorf("IsAccountEmail(%s) should return false — no user accounts exist", tt)
+		}
+	}
+
+	if IsAccountEmail(TemplateType("unknown_template")) {
+		t.Error("IsAccountEmail should return false for unknown template type")
+	}
+}
+
+// Tests for Message with empty recipients after filtering
+
+func TestMessageWithEmptyToList(t *testing.T) {
+	msg := NewMessage([]string{}, "Test", "Body")
+	if len(msg.To) != 0 {
+		t.Errorf("To should be empty, got %d", len(msg.To))
+	}
+}
+
+// Tests for Message multiple To recipients
+
+func TestMessageMultipleRecipients(t *testing.T) {
+	to := []string{"user1@example.com", "user2@example.com", "user3@example.com"}
+	msg := NewMessage(to, "Test", "Body")
+
+	if len(msg.To) != 3 {
+		t.Errorf("To length = %d, want 3", len(msg.To))
+	}
+	for i, recipient := range to {
+		if msg.To[i] != recipient {
+			t.Errorf("To[%d] = %q, want %q", i, msg.To[i], recipient)
+		}
+	}
+}
+
+// Tests for Send building message with all components
+
+func TestMailerSendWithHTMLAndHeaders(t *testing.T) {
+	cfg := &Config{
+		Enabled: true,
+		SMTP: SMTPConfig{
+			Host: "invalid.host.example.com",
+			Port: 587,
+			TLS:  "starttls",
+		},
+		From: FromConfig{
+			Name:  "Test App",
+			Email: "noreply@example.com",
+		},
+	}
+	ml := NewMailer(cfg)
+	msg := NewMessage([]string{"user@example.com"}, "Test Subject", "Plain body")
+	msg.SetHTML("<h1>Hello</h1>")
+	msg.CC = []string{"cc1@example.com", "cc2@example.com"}
+	msg.BCC = []string{"bcc@example.com"}
+	msg.Headers["X-Mailer"] = "Test Mailer"
+	msg.Headers["Reply-To"] = "reply@example.com"
+
+	err := ml.Send(msg)
+	if err == nil {
+		t.Error("Send() should error with invalid SMTP server")
+	}
+}
+
+// Tests for Send with UTF-8 subject
+
+func TestMailerSendWithUTF8Subject(t *testing.T) {
+	cfg := &Config{
+		Enabled: true,
+		SMTP: SMTPConfig{
+			Host: "invalid.host.example.com",
+			Port: 587,
+			TLS:  "auto",
+		},
+		From: FromConfig{
+			Email: "sender@example.com",
+		},
+	}
+	ml := NewMailer(cfg)
+	msg := NewMessage([]string{"user@example.com"}, "Hello 世界", "Body")
+
+	err := ml.Send(msg)
+	if err == nil {
+		t.Error("Send() should error with invalid SMTP server")
+	}
+}
+
+// Tests for encodeHeader boundary
+
+func TestEncodeHeaderBoundary(t *testing.T) {
+	cfg := DefaultConfig()
+	ml := NewMailer(cfg)
+
+	result127 := ml.encodeHeader("test\x7fvalue")
+	_ = result127
+
+	result128 := ml.encodeHeader("test\x80value")
+	if !strings.HasPrefix(result128, "=?UTF-8?B?") {
+		t.Errorf("encodeHeader with char 128 should be encoded, got %q", result128)
 	}
 }
 
 // Tests for getDefaultGateway returning value
 
 func TestGetDefaultGatewayReturn(t *testing.T) {
-	// This tests that getDefaultGateway doesn't panic and returns a string
 	result := getDefaultGateway()
-	// Result can be empty or a valid IP, just ensure it's a string
 	if result != "" {
-		// Should be a valid IPv4-like format if not empty
 		parts := strings.Split(result, ".")
 		if len(parts) != 4 {
-			// It's ok if empty but if not empty should look like IP
 			t.Logf("Gateway result: %s", result)
 		}
 	}
@@ -2000,14 +1826,12 @@ func TestGetDefaultGatewayReturn(t *testing.T) {
 // Tests for DetectAndConfigure
 
 func TestDetectAndConfigureFull(t *testing.T) {
-	// Test that it returns a valid config (either default or detected)
 	cfg := DetectAndConfigure()
 
 	if cfg == nil {
 		t.Fatal("DetectAndConfigure() returned nil")
 	}
 
-	// Should have valid defaults at minimum
 	if cfg.SMTP.TLS == "" {
 		t.Error("TLS should have a value")
 	}
@@ -2029,10 +1853,6 @@ func TestMailerTestConnectionTLSMode(t *testing.T) {
 	err := ml.TestConnection()
 	if err == nil {
 		t.Error("TestConnection() should error with invalid host")
-	}
-	// Error should mention connection failure
-	if !strings.Contains(err.Error(), "connection failed") && !strings.Contains(err.Error(), "lookup") {
-		t.Logf("Error: %v", err)
 	}
 }
 
@@ -2057,7 +1877,6 @@ func TestMailerTestConnectionNoneMode(t *testing.T) {
 	cfg := &Config{
 		Enabled: true,
 		SMTP: SMTPConfig{
-			// Use TEST-NET-1 (reserved for docs, doesn't route)
 			Host: "192.0.2.1",
 			Port: 59999,
 			TLS:  "none",
@@ -2090,7 +1909,6 @@ func TestMailerSendWithCC(t *testing.T) {
 	msg := NewMessage([]string{"user@example.com"}, "Test", "Body")
 	msg.CC = []string{"cc@example.com"}
 
-	// Will fail on connection but exercises the CC code path
 	err := ml.Send(msg)
 	if err == nil {
 		t.Error("Send() should error with invalid SMTP server")
@@ -2175,7 +1993,6 @@ func TestMailerSendWithNoneTLSMode(t *testing.T) {
 	cfg := &Config{
 		Enabled: true,
 		SMTP: SMTPConfig{
-			// Use TEST-NET-1 (reserved for docs, doesn't route)
 			Host: "192.0.2.1",
 			Port: 59999,
 			TLS:  "none",
@@ -2199,8 +2016,7 @@ func TestFormatAddressUTF8Name(t *testing.T) {
 	cfg := DefaultConfig()
 	ml := NewMailer(cfg)
 
-	result := ml.formatAddress("Caf\u00e9 Owner", "test@example.com")
-	// Should have encoded UTF-8 name
+	result := ml.formatAddress("Café Owner", "test@example.com")
 	if !strings.Contains(result, "=?UTF-8?B?") {
 		t.Errorf("formatAddress with UTF-8 name = %q, should have UTF-8 encoding", result)
 	}
@@ -2209,203 +2025,69 @@ func TestFormatAddressUTF8Name(t *testing.T) {
 	}
 }
 
-// Tests for rawTemplates to ensure all template types have content
+// Tests for formatAddress with special characters in name
 
-func TestRawTemplatesContainSubjectLine(t *testing.T) {
-	for tt, tmpl := range rawTemplates {
-		lines := strings.Split(tmpl, "\n")
-		if len(lines) < 2 {
-			t.Errorf("rawTemplates[%s] should have at least 2 lines (subject + body)", tt)
-		}
-		// First line should be the subject template
-		if lines[0] == "" {
-			t.Errorf("rawTemplates[%s] should have non-empty first line (subject)", tt)
-		}
-	}
-}
-
-// Tests for TemplateInfo JSON tags
-
-func TestTemplateInfoJSONTags(t *testing.T) {
-	info := TemplateInfo{
-		Type:           TemplateAdminAlert,
-		Name:           "Admin Alert",
-		Description:    "Administrative alert email",
-		IsAccountEmail: false,
-	}
-
-	// Verify the struct is properly tagged (just test fields work)
-	if info.Type != TemplateAdminAlert {
-		t.Errorf("Type = %q", info.Type)
-	}
-	if info.Name != "Admin Alert" {
-		t.Errorf("Name = %q", info.Name)
-	}
-	if info.Description != "Administrative alert email" {
-		t.Errorf("Description = %q", info.Description)
-	}
-	if info.IsAccountEmail {
-		t.Error("IsAccountEmail should be false")
-	}
-}
-
-// Tests for GetAllTemplateTypes ensuring all PART 18 templates are included
-
-func TestGetAllTemplateTypesIncludesOperatorTemplates(t *testing.T) {
-	types := GetAllTemplateTypes()
-
-	operatorTypes := []TemplateType{
-		TemplateBackupFailed,
-		TemplateSSLExpiring,
-		TemplateSSLRenewed,
-		TemplateSchedulerError,
-		TemplateBreachAdminAlert,
-		TemplateTest,
-	}
-
-	found := make(map[TemplateType]bool)
-	for _, info := range types {
-		found[info.Type] = true
-	}
-
-	for _, tt := range operatorTypes {
-		if !found[tt] {
-			t.Errorf("GetAllTemplateTypes() should include %s", tt)
-		}
-	}
-}
-
-// Tests to verify IsAccountEmail covers all account templates
-
-func TestIsAccountEmailAllTemplates(t *testing.T) {
-	// All templates are operator/system notifications — none are account emails
-	allTemplates := []TemplateType{
-		TemplateAdminAlert,
-		TemplateWeeklyReport,
-		TemplateSecurityAlert,
-		TemplateBackupCompleted,
-		TemplateUpdateAvailable,
-		TemplateMaintenanceNotice,
-		TemplateBackupFailed,
-		TemplateSSLExpiring,
-		TemplateSSLRenewed,
-		TemplateSchedulerError,
-		TemplateBreachAdminAlert,
-		TemplateTest,
-	}
-
-	for _, tt := range allTemplates {
-		if IsAccountEmail(tt) {
-			t.Errorf("IsAccountEmail(%s) should return false — no user accounts exist", tt)
-		}
-	}
-
-	// Unknown template type also returns false
-	if IsAccountEmail(TemplateType("unknown_template")) {
-		t.Error("IsAccountEmail should return false for unknown template type")
-	}
-}
-
-// Tests for NewEmailTemplate parsing all templates successfully
-
-func TestNewEmailTemplateAllTemplatesParsed(t *testing.T) {
-	et := NewEmailTemplate()
-
-	// Verify that all templates in rawTemplates were successfully parsed
-	for templateType := range rawTemplates {
-		if _, ok := et.templates[templateType]; !ok {
-			t.Errorf("Template %s should be parsed and available", templateType)
-		}
-	}
-}
-
-// Tests for Render with template execution error
-
-func TestEmailTemplateRenderExecutionError(t *testing.T) {
-	et := NewEmailTemplate()
-
-	// Pass invalid data that doesn't match template expectations
-	// This should cause template execution to fail
-	invalidData := map[string]string{"invalid": "data"}
-
-	_, _, err := et.Render(TemplateAdminAlert, invalidData)
-	// Should error because the data doesn't have the expected fields
-	if err == nil {
-		t.Error("Render() should error with mismatched data")
-	}
-}
-
-// Tests for Message with empty recipients after filtering
-
-func TestMessageWithEmptyToList(t *testing.T) {
-	msg := NewMessage([]string{}, "Test", "Body")
-	if len(msg.To) != 0 {
-		t.Errorf("To should be empty, got %d", len(msg.To))
-	}
-}
-
-// Tests for Message multiple To recipients
-
-func TestMessageMultipleRecipients(t *testing.T) {
-	to := []string{"user1@example.com", "user2@example.com", "user3@example.com"}
-	msg := NewMessage(to, "Test", "Body")
-
-	if len(msg.To) != 3 {
-		t.Errorf("To length = %d, want 3", len(msg.To))
-	}
-	for i, recipient := range to {
-		if msg.To[i] != recipient {
-			t.Errorf("To[%d] = %q, want %q", i, msg.To[i], recipient)
-		}
-	}
-}
-
-// Tests for Send building message with all components
-
-func TestMailerSendWithHTMLAndHeaders(t *testing.T) {
-	cfg := &Config{
-		Enabled: true,
-		SMTP: SMTPConfig{
-			Host: "invalid.host.example.com",
-			Port: 587,
-			TLS:  "starttls",
-		},
-		From: FromConfig{
-			Name:  "Test App",
-			Email: "noreply@example.com",
-		},
-	}
+func TestFormatAddressSpecialChars(t *testing.T) {
+	cfg := DefaultConfig()
 	ml := NewMailer(cfg)
-	msg := NewMessage([]string{"user@example.com"}, "Test Subject", "Plain body")
-	msg.SetHTML("<h1>Hello</h1>")
-	msg.CC = []string{"cc1@example.com", "cc2@example.com"}
-	msg.BCC = []string{"bcc@example.com"}
-	msg.Headers["X-Mailer"] = "Test Mailer"
-	msg.Headers["Reply-To"] = "reply@example.com"
 
-	// Will fail on connection but exercises all message building code paths
-	err := ml.Send(msg)
-	if err == nil {
-		t.Error("Send() should error with invalid SMTP server")
+	tests := []struct {
+		name  string
+		email string
+	}{
+		{"O'Connor", "oconnor@example.com"},
+		{"Test \"Quoted\"", "quoted@example.com"},
+		{"Test, With Comma", "comma@example.com"},
+	}
+
+	for _, tt := range tests {
+		result := ml.formatAddress(tt.name, tt.email)
+		if !strings.Contains(result, tt.email) {
+			t.Errorf("formatAddress(%q, %q) = %q, should contain email", tt.name, tt.email, result)
+		}
 	}
 }
 
-// Tests for Send with UTF-8 subject
+// Tests for getDefaultGateway with different network configurations
 
-func TestMailerSendWithUTF8Subject(t *testing.T) {
+func TestGetDefaultGatewayDifferentConfigs(t *testing.T) {
+	result1 := getDefaultGateway()
+	result2 := getDefaultGateway()
+
+	if result1 != result2 {
+		t.Errorf("getDefaultGateway() should return consistent results: %q vs %q", result1, result2)
+	}
+}
+
+// Tests for tryDetectSMTP with different scenarios
+
+func TestTryDetectSMTPDifferentPorts(t *testing.T) {
+	ports := []int{59990, 59991, 59992}
+
+	for _, port := range ports {
+		result := tryDetectSMTP("127.0.0.1", port, false)
+		if result != nil {
+			t.Errorf("tryDetectSMTP for port %d should return nil", port)
+		}
+	}
+}
+
+// Tests for Send with uppercase TLS mode
+
+func TestMailerSendWithUppercaseTLSMode(t *testing.T) {
 	cfg := &Config{
 		Enabled: true,
 		SMTP: SMTPConfig{
 			Host: "invalid.host.example.com",
 			Port: 587,
-			TLS:  "auto",
+			TLS:  "AUTO",
 		},
 		From: FromConfig{
 			Email: "sender@example.com",
 		},
 	}
 	ml := NewMailer(cfg)
-	msg := NewMessage([]string{"user@example.com"}, "Hello \u4e16\u754c", "Body")
+	msg := NewMessage([]string{"user@example.com"}, "Test", "Body")
 
 	err := ml.Send(msg)
 	if err == nil {
@@ -2413,102 +2095,45 @@ func TestMailerSendWithUTF8Subject(t *testing.T) {
 	}
 }
 
-// Tests for encodeHeader with exactly 128 character
-
-func TestEncodeHeaderBoundary(t *testing.T) {
-	cfg := DefaultConfig()
-	ml := NewMailer(cfg)
-
-	// Test with character code 127 (DEL, highest ASCII)
-	result127 := ml.encodeHeader("test\x7fvalue")
-	if result127 != "test\x7fvalue" {
-		// Character 127 is ASCII, should not be encoded
-		t.Logf("Result for char 127: %s", result127)
-	}
-
-	// Test with character code 128 (first non-ASCII)
-	result128 := ml.encodeHeader("test\x80value")
-	if !strings.HasPrefix(result128, "=?UTF-8?B?") {
-		t.Errorf("encodeHeader with char 128 should be encoded, got %q", result128)
-	}
-}
-
-// Tests for splitLines edge cases
-
-func TestSplitLinesOnlyNewlines(t *testing.T) {
-	result := splitLines("\n\n\n")
-	if len(result) != 3 {
-		t.Errorf("splitLines(\"\\n\\n\\n\") returned %d lines, want 3", len(result))
-	}
-	for i, line := range result {
-		if line != "" {
-			t.Errorf("Line %d should be empty, got %q", i, line)
-		}
-	}
-}
-
-func TestSplitLinesSingleChar(t *testing.T) {
-	result := splitLines("a")
-	if len(result) != 1 {
-		t.Errorf("splitLines(\"a\") returned %d lines, want 1", len(result))
-	}
-	if result[0] != "a" {
-		t.Errorf("splitLines(\"a\")[0] = %q, want \"a\"", result[0])
-	}
-}
-
-// Tests for joinLines edge cases
-
-func TestJoinLinesSingleLine(t *testing.T) {
-	result := joinLines([]string{"single"})
-	if result != "single" {
-		t.Errorf("joinLines([\"single\"]) = %q, want \"single\"", result)
-	}
-}
-
-func TestJoinLinesNilSlice(t *testing.T) {
-	result := joinLines(nil)
-	if result != "" {
-		t.Errorf("joinLines(nil) = %q, want \"\"", result)
-	}
-}
-
-// Tests for Config with all fields
-
-func TestConfigAllFields(t *testing.T) {
+func TestMailerSendWithUppercaseTLS(t *testing.T) {
 	cfg := &Config{
 		Enabled: true,
 		SMTP: SMTPConfig{
-			Host:     "smtp.example.com",
-			Port:     587,
-			Username: "user",
-			Password: "pass",
-			TLS:      "starttls",
+			Host: "invalid.host.example.com",
+			Port: 465,
+			TLS:  "TLS",
 		},
 		From: FromConfig{
-			Name:  "My App",
-			Email: "noreply@example.com",
+			Email: "sender@example.com",
 		},
-		AdminEmails: []string{"admin1@example.com", "admin2@example.com"},
 	}
+	ml := NewMailer(cfg)
+	msg := NewMessage([]string{"user@example.com"}, "Test", "Body")
 
-	if !cfg.Enabled {
-		t.Error("Enabled should be true")
+	err := ml.Send(msg)
+	if err == nil {
+		t.Error("Send() should error with invalid SMTP server")
 	}
-	if cfg.SMTP.Host != "smtp.example.com" {
-		t.Errorf("SMTP.Host = %q", cfg.SMTP.Host)
+}
+
+func TestMailerSendWithUppercaseSTARTTLS(t *testing.T) {
+	cfg := &Config{
+		Enabled: true,
+		SMTP: SMTPConfig{
+			Host: "invalid.host.example.com",
+			Port: 587,
+			TLS:  "STARTTLS",
+		},
+		From: FromConfig{
+			Email: "sender@example.com",
+		},
 	}
-	if cfg.SMTP.Username != "user" {
-		t.Errorf("SMTP.Username = %q", cfg.SMTP.Username)
-	}
-	if cfg.SMTP.Password != "pass" {
-		t.Errorf("SMTP.Password = %q", cfg.SMTP.Password)
-	}
-	if cfg.From.Name != "My App" {
-		t.Errorf("From.Name = %q", cfg.From.Name)
-	}
-	if len(cfg.AdminEmails) != 2 {
-		t.Errorf("AdminEmails length = %d", len(cfg.AdminEmails))
+	ml := NewMailer(cfg)
+	msg := NewMessage([]string{"user@example.com"}, "Test", "Body")
+
+	err := ml.Send(msg)
+	if err == nil {
+		t.Error("Send() should error with invalid SMTP server")
 	}
 }
 
@@ -2547,7 +2172,6 @@ func TestMailerSendAlertWithServer(t *testing.T) {
 	ml := NewMailer(cfg)
 
 	err := ml.SendAlert("Test Alert", "Test message content")
-	// Should fail on connection but exercises the SendAlert -> SendToAdmins -> Send path
 	if err == nil {
 		t.Error("SendAlert() should error with invalid SMTP server")
 	}
@@ -2570,7 +2194,6 @@ func TestMailerSendSecurityAlertWithServer(t *testing.T) {
 	ml := NewMailer(cfg)
 
 	err := ml.SendSecurityAlert("Brute Force Attack", "192.168.1.100", "Multiple failed login attempts")
-	// Should fail on connection but exercises the full code path
 	if err == nil {
 		t.Error("SendSecurityAlert() should error with invalid SMTP server")
 	}
@@ -2642,185 +2265,41 @@ func TestDetectedSMTPAllCombinations(t *testing.T) {
 	}
 }
 
-// Tests for Render with mismatched template data type
+// Tests for Config with all fields
 
-func TestEmailTemplateRenderWithWrongDataType(t *testing.T) {
-	et := NewEmailTemplate()
-
-	// Use BackupCompletedData for AdminAlert template — mismatched types
-	baseData := NewTemplateData("TestApp", "https://example.com", "support@example.com")
-	data := &BackupCompletedData{
-		TemplateData: baseData,
-		BackupName:   "backup.tar.gz",
-		BackupSize:   "5 MB",
-		CreatedAt:    time.Now(),
-		FileCount:    10,
-		Duration:     "1s",
-	}
-
-	// AdminAlert template expects AdminAlertData but BackupCompletedData should work for common fields
-	subject, body, err := et.Render(TemplateAdminAlert, data)
-	// This should either succeed or error depending on template requirements
-	if err != nil {
-		// If it errors, that's expected for mismatched data
-		t.Logf("Render with mismatched data errored: %v", err)
-	} else {
-		if subject == "" {
-			t.Error("Subject should not be empty")
-		}
-		if body == "" {
-			t.Error("Body should not be empty")
-		}
-	}
-}
-
-// Tests for rawTemplates count matches GetAllTemplateTypes count
-
-func TestRawTemplatesCountMatchesGetAllTemplateTypes(t *testing.T) {
-	allTypes := GetAllTemplateTypes()
-	rawCount := len(rawTemplates)
-	allTypesCount := len(allTypes)
-
-	if rawCount != allTypesCount {
-		t.Errorf("rawTemplates has %d entries but GetAllTemplateTypes returns %d entries", rawCount, allTypesCount)
-	}
-}
-
-// Tests for Render with template that produces empty content
-
-func TestEmailTemplateRenderEmptyContent(t *testing.T) {
-	et := NewEmailTemplate()
-
-	// Create minimal data — should still produce subject at minimum
-	baseData := NewTemplateData("", "", "")
-	data := &TestEmailData{
-		TemplateData: baseData,
-		SentAt:       time.Time{},
-	}
-
-	subject, body, err := et.Render(TemplateTest, data)
-	if err != nil {
-		t.Logf("Render with empty data: %v", err)
-	}
-	// Even with empty data, templates should produce some output
-	_ = subject
-	_ = body
-}
-
-// Tests for formatAddress with special characters in name
-
-func TestFormatAddressSpecialChars(t *testing.T) {
-	cfg := DefaultConfig()
-	ml := NewMailer(cfg)
-
-	tests := []struct {
-		name  string
-		email string
-	}{
-		{"O'Connor", "oconnor@example.com"},
-		{"Test \"Quoted\"", "quoted@example.com"},
-		{"Test, With Comma", "comma@example.com"},
-	}
-
-	for _, tt := range tests {
-		result := ml.formatAddress(tt.name, tt.email)
-		if !strings.Contains(result, tt.email) {
-			t.Errorf("formatAddress(%q, %q) = %q, should contain email", tt.name, tt.email, result)
-		}
-	}
-}
-
-// Tests for getDefaultGateway with different network configurations
-
-func TestGetDefaultGatewayDifferentConfigs(t *testing.T) {
-	// Call multiple times to ensure consistency
-	result1 := getDefaultGateway()
-	result2 := getDefaultGateway()
-
-	// Results should be consistent
-	if result1 != result2 {
-		t.Errorf("getDefaultGateway() should return consistent results: %q vs %q", result1, result2)
-	}
-}
-
-// Tests for tryDetectSMTP with different scenarios
-
-func TestTryDetectSMTPDifferentPorts(t *testing.T) {
-	// Test with unreachable ports
-	ports := []int{59990, 59991, 59992}
-
-	for _, port := range ports {
-		result := tryDetectSMTP("127.0.0.1", port, false)
-		if result != nil {
-			t.Errorf("tryDetectSMTP for port %d should return nil", port)
-		}
-	}
-}
-
-// Tests for sendMail with uppercase TLS mode
-
-func TestMailerSendWithUppercaseTLSMode(t *testing.T) {
+func TestConfigAllFields(t *testing.T) {
 	cfg := &Config{
 		Enabled: true,
 		SMTP: SMTPConfig{
-			Host: "invalid.host.example.com",
-			Port: 587,
-			// uppercase
-			TLS: "AUTO",
+			Host:     "smtp.example.com",
+			Port:     587,
+			Username: "user",
+			Password: "pass",
+			TLS:      "starttls",
 		},
 		From: FromConfig{
-			Email: "sender@example.com",
+			Name:  "My App",
+			Email: "noreply@example.com",
 		},
+		AdminEmails: []string{"admin1@example.com", "admin2@example.com"},
 	}
-	ml := NewMailer(cfg)
-	msg := NewMessage([]string{"user@example.com"}, "Test", "Body")
 
-	err := ml.Send(msg)
-	if err == nil {
-		t.Error("Send() should error with invalid SMTP server")
+	if !cfg.Enabled {
+		t.Error("Enabled should be true")
 	}
-}
-
-func TestMailerSendWithUppercaseTLS(t *testing.T) {
-	cfg := &Config{
-		Enabled: true,
-		SMTP: SMTPConfig{
-			Host: "invalid.host.example.com",
-			Port: 465,
-			// uppercase
-			TLS: "TLS",
-		},
-		From: FromConfig{
-			Email: "sender@example.com",
-		},
+	if cfg.SMTP.Host != "smtp.example.com" {
+		t.Errorf("SMTP.Host = %q", cfg.SMTP.Host)
 	}
-	ml := NewMailer(cfg)
-	msg := NewMessage([]string{"user@example.com"}, "Test", "Body")
-
-	err := ml.Send(msg)
-	if err == nil {
-		t.Error("Send() should error with invalid SMTP server")
+	if cfg.SMTP.Username != "user" {
+		t.Errorf("SMTP.Username = %q", cfg.SMTP.Username)
 	}
-}
-
-func TestMailerSendWithUppercaseSTARTTLS(t *testing.T) {
-	cfg := &Config{
-		Enabled: true,
-		SMTP: SMTPConfig{
-			Host: "invalid.host.example.com",
-			Port: 587,
-			// uppercase
-			TLS: "STARTTLS",
-		},
-		From: FromConfig{
-			Email: "sender@example.com",
-		},
+	if cfg.SMTP.Password != "pass" {
+		t.Errorf("SMTP.Password = %q", cfg.SMTP.Password)
 	}
-	ml := NewMailer(cfg)
-	msg := NewMessage([]string{"user@example.com"}, "Test", "Body")
-
-	err := ml.Send(msg)
-	if err == nil {
-		t.Error("Send() should error with invalid SMTP server")
+	if cfg.From.Name != "My App" {
+		t.Errorf("From.Name = %q", cfg.From.Name)
+	}
+	if len(cfg.AdminEmails) != 2 {
+		t.Errorf("AdminEmails length = %d", len(cfg.AdminEmails))
 	}
 }
