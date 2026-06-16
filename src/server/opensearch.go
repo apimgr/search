@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -149,6 +150,12 @@ func (s *Server) handleBangProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// SSRF prevention: reject localhost and private/internal IPs
+	if err := validateNotPrivateProxy(parsedURL.Hostname()); err != nil {
+		s.handleError(w, r, http.StatusBadRequest, "Bad Request", "URL not allowed")
+		return
+	}
+
 	// Create HTTP client with timeout
 	client := &http.Client{
 		Timeout: 30 * time.Second,
@@ -272,4 +279,26 @@ func (s *Server) getBaseURL(r *http.Request) string {
 	}
 
 	return fmt.Sprintf("%s://%s", scheme, host)
+}
+
+// validateNotPrivateProxy rejects hostnames that resolve to private, loopback,
+// or link-local addresses, preventing SSRF attacks via the bang proxy endpoint.
+func validateNotPrivateProxy(hostname string) error {
+	lower := strings.ToLower(hostname)
+	if lower == "localhost" || lower == "127.0.0.1" || lower == "::1" {
+		return fmt.Errorf("localhost not allowed")
+	}
+	if strings.HasSuffix(lower, ".local") || strings.HasSuffix(lower, ".internal") || strings.HasSuffix(lower, ".localhost") {
+		return fmt.Errorf("internal hostname not allowed")
+	}
+	ips, err := net.LookupIP(hostname)
+	if err != nil {
+		return fmt.Errorf("DNS lookup failed: %w", err)
+	}
+	for _, ip := range ips {
+		if ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+			return fmt.Errorf("private/local IP not allowed")
+		}
+	}
+	return nil
 }
