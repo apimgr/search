@@ -1,0 +1,35 @@
+# TODO.AI.md — Outstanding bootstrap items
+
+## [ ] Replace forbidden scheduler library
+
+`src/scheduler/scheduler.go` and its test file import `github.com/robfig/cron/v3`, which is explicitly forbidden by the spec. Replace all usage with `github.com/go-co-op/gocron/v2` (already added to go.mod). The scheduler package must be rewritten to use gocron/v2's API. All tests must continue to pass after the migration.
+
+Read: AI.md PART 18
+
+## [ ] Remove spf13/viper from codebase
+
+`github.com/spf13/viper` is forbidden by the spec; config must use direct YAML parsing with `gopkg.in/yaml.v3` only. The following files import viper and must be migrated:
+- `src/client/cmd/root.go`
+- `src/client/cmd/root_test.go`
+- `src/client/init_test.go`
+- `src/client/logging.go`
+- `src/client/cache.go`
+- `src/client/cache_test.go`
+- `src/client/logging_test.go`
+- `src/client/cmd/status_test.go`
+
+After migration, remove `github.com/spf13/viper` from `go.mod` with `go mod tidy`.
+
+Read: AI.md PART 5
+
+## [ ] Move gocron/v2 and required libs from indirect to direct in go.mod
+
+After the scheduler and client migrations above are complete, run `go mod tidy` inside Docker to promote `github.com/go-co-op/gocron/v2`, `github.com/go-playground/validator/v10`, `github.com/rs/cors`, and `golang.org/x/time` from indirect to direct dependencies (once they are imported in source code).
+
+Read: AI.md PART 3
+
+## [ ] Fix Makefile coverage output path
+
+`make test` writes `coverage.out` to the project tree (project root). The spec requires coverage output to go to `/tmp/coverage.out` (or a tmp subdirectory). Update the test target in `Makefile` to write coverage to `/tmp/coverage.out` instead of `coverage.out`.
+
+Read: AI.md PART 26

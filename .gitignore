@@ -126,3 +126,6 @@ volumes/
 .aider/
 .ai/
 .windsurf/
+
+# Claude Code personal files (always gitignored)
+CLAUDE.local.md
