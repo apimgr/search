@@ -38,7 +38,6 @@ type RedisConfig struct {
 
 	// Key prefix
 	Prefix string
-
 }
 
 // NewRedisCache creates a new Redis/Valkey cache

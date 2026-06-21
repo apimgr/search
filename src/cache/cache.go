@@ -98,15 +98,15 @@ func NewCache(cfg *Config) (Cache, error) {
 	switch cfg.Type {
 	case "redis", "valkey":
 		return NewRedisCache(&RedisConfig{
-			Type:         cfg.Type,
-			URL:          cfg.URL,
-			Host:         cfg.Host,
-			Port:         cfg.Port,
-			Password:     cfg.Password,
-			DB:           cfg.DB,
-			PoolSize:     cfg.PoolSize,
-			MinIdle:      cfg.MinIdle,
-			Timeout:      cfg.Timeout,
+			Type:     cfg.Type,
+			URL:      cfg.URL,
+			Host:     cfg.Host,
+			Port:     cfg.Port,
+			Password: cfg.Password,
+			DB:       cfg.DB,
+			PoolSize: cfg.PoolSize,
+			MinIdle:  cfg.MinIdle,
+			Timeout:  cfg.Timeout,
 			Prefix:   cfg.Prefix,
 		})
 	case "none":

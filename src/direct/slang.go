@@ -158,7 +158,7 @@ func (h *SlangHandler) formatSlangHTML(term string, defs []urbanDictionaryEntry)
 		html.WriteString("<div class=\"slang-definition\">")
 
 		// Definition number and votes
-		html.WriteString(fmt.Sprintf("<div class=\"def-header\">"))
+		html.WriteString("<div class=\"def-header\">")
 		html.WriteString(fmt.Sprintf("<span class=\"def-number\">#%d</span>", i+1))
 		html.WriteString(fmt.Sprintf("<span class=\"def-votes\">👍 %d | 👎 %d</span>", def.ThumbsUp, def.ThumbsDown))
 		html.WriteString("</div>")

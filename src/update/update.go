@@ -52,11 +52,11 @@ type Asset struct {
 
 // UpdateInfo contains information about an available update
 type UpdateInfo struct {
-	Available      bool      `json:"available"`
-	CurrentVersion string    `json:"current_version"`
-	LatestVersion  string    `json:"latest_version"`
-	ReleaseNotes   string    `json:"release_notes"`
-	DownloadURL    string    `json:"download_url"`
+	Available      bool   `json:"available"`
+	CurrentVersion string `json:"current_version"`
+	LatestVersion  string `json:"latest_version"`
+	ReleaseNotes   string `json:"release_notes"`
+	DownloadURL    string `json:"download_url"`
 	// Per AI.md PART 22: URL to checksums.txt for SHA-256 verification
 	ChecksumURL  string    `json:"checksum_url,omitempty"`
 	AssetSize    int64     `json:"asset_size"`

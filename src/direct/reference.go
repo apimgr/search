@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 	"github.com/apimgr/search/src/version"
 )
 
@@ -767,7 +769,7 @@ func formatCountryContent(flagEmoji, flagURL, name, official string, data map[st
 		html.WriteString(fmt.Sprintf("<tr><td>TLD</td><td><code>%s</code></td></tr>", escapeHTML(strings.Join(tld, ", "))))
 	}
 	if drivingSide, ok := data["drivingSide"].(string); ok && drivingSide != "" {
-		html.WriteString(fmt.Sprintf("<tr><td>Driving Side</td><td>%s</td></tr>", escapeHTML(strings.Title(drivingSide))))
+		html.WriteString(fmt.Sprintf("<tr><td>Driving Side</td><td>%s</td></tr>", escapeHTML(cases.Title(language.Und, cases.NoLower).String(drivingSide))))
 	}
 	if timezones, ok := data["timezones"].([]string); ok && len(timezones) > 0 {
 		html.WriteString(fmt.Sprintf("<tr><td>Timezones</td><td>%s</td></tr>", escapeHTML(strings.Join(timezones, ", "))))

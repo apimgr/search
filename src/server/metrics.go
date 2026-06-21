@@ -23,7 +23,6 @@ import (
 type Metrics struct {
 	config    *config.Config
 	startTime time.Time
-	registry  *prometheus.Registry
 
 	// Per AI.md PART 13: Atomic counters for health endpoint stats
 	// These are separate from Prometheus counters for easy access

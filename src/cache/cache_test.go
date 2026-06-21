@@ -783,18 +783,18 @@ func TestStatsStructJSON(t *testing.T) {
 
 func TestConfigStruct(t *testing.T) {
 	cfg := Config{
-		Type:         "redis",
-		URL:          "redis://localhost:6379",
-		Host:         "localhost",
-		Port:         6379,
-		Password:     "secret",
-		DB:           1,
-		PoolSize:     20,
-		MinIdle:      5,
-		Timeout:      10 * time.Second,
-		Prefix:  "test:",
-		TTL:     7200,
-		MaxSize: 5000,
+		Type:     "redis",
+		URL:      "redis://localhost:6379",
+		Host:     "localhost",
+		Port:     6379,
+		Password: "secret",
+		DB:       1,
+		PoolSize: 20,
+		MinIdle:  5,
+		Timeout:  10 * time.Second,
+		Prefix:   "test:",
+		TTL:      7200,
+		MaxSize:  5000,
 	}
 
 	if cfg.Type != "redis" {

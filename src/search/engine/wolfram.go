@@ -73,7 +73,7 @@ func (e *WolframAlpha) searchWeb(ctx context.Context, query *model.Query) ([]mod
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Wolfram Alpha returned status %d", resp.StatusCode)
+		return nil, fmt.Errorf("wolfram alpha returned status %d", resp.StatusCode)
 	}
 
 	return e.parseWolframHTML(resp, query)

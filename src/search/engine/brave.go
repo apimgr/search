@@ -96,7 +96,7 @@ func (e *Brave) parseResults(html string, category model.Category) ([]model.Resu
 	for _, match := range matches {
 		// Extract URL and title
 		titleMatch := titlePattern.FindStringSubmatch(match)
-		if titleMatch == nil || len(titleMatch) < 3 {
+		if len(titleMatch) < 3 {
 			continue
 		}
 
@@ -106,7 +106,7 @@ func (e *Brave) parseResults(html string, category model.Category) ([]model.Resu
 		// Extract description
 		content := ""
 		descMatch := descPattern.FindStringSubmatch(match)
-		if descMatch != nil && len(descMatch) >= 2 {
+		if len(descMatch) >= 2 {
 			content = strings.TrimSpace(descMatch[1])
 		}
 

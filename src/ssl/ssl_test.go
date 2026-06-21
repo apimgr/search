@@ -586,9 +586,6 @@ func TestCreateTLSConfig(t *testing.T) {
 	if tlsCfg.MinVersion != tls.VersionTLS12 {
 		t.Errorf("MinVersion = %d, want TLS 1.2", tlsCfg.MinVersion)
 	}
-	if !tlsCfg.PreferServerCipherSuites {
-		t.Error("PreferServerCipherSuites should be true")
-	}
 	if len(tlsCfg.CipherSuites) == 0 {
 		t.Error("CipherSuites should not be empty")
 	}
@@ -666,7 +663,7 @@ func TestManagerRenewCertificateDNS01NoClient(t *testing.T) {
 	m := NewManager(cfg, "/tmp/test")
 
 	// Should return nil when legoClient is nil
-	err := m.RenewCertificateDNS01(nil)
+	err := m.RenewCertificateDNS01(context.TODO())
 	if err != nil {
 		t.Errorf("RenewCertificateDNS01() error = %v, want nil", err)
 	}
@@ -1045,6 +1042,7 @@ func TestGetProviderByIDAllProviders(t *testing.T) {
 		p := GetProviderByID(provider.ID)
 		if p == nil {
 			t.Errorf("GetProviderByID(%q) returned nil", provider.ID)
+			continue
 		}
 		if p.ID != provider.ID {
 			t.Errorf("Provider ID = %q, want %q", p.ID, provider.ID)

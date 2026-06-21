@@ -18,11 +18,11 @@ import (
 	"github.com/apimgr/search/src/alert"
 	"github.com/apimgr/search/src/api"
 	"github.com/apimgr/search/src/config"
-	graphqlpkg "github.com/apimgr/search/src/graphql"
 	"github.com/apimgr/search/src/database"
 	"github.com/apimgr/search/src/direct"
 	"github.com/apimgr/search/src/email"
 	"github.com/apimgr/search/src/geoip"
+	graphqlpkg "github.com/apimgr/search/src/graphql"
 	"github.com/apimgr/search/src/i18n"
 	"github.com/apimgr/search/src/instant"
 	"github.com/apimgr/search/src/logging"
@@ -126,7 +126,7 @@ func NewServer(cfg *config.Config) *Server {
 	csrf.SetLogManager(logMgr)
 
 	// Create template renderer (i18n funcs set later after i18n manager init)
-	renderer := NewTemplateRenderer(cfg, nil)
+	var renderer *TemplateRenderer
 
 	// Create API handler
 	apiHandler := api.NewHandler(cfg, registry, aggregator)
@@ -808,18 +808,18 @@ func (s *Server) setupRoutes() http.Handler {
 	// RateLimit(7) → GeoIP(8) → Logging(10). Auth(9) is per-route.
 	handler := Chain(
 		r,
-		s.middleware.Recovery,                  // outermost: catches all panics
-		URLNormalizeMiddleware,                 // 1. normalize URLs (trailing slash, etc.)
-		s.middleware.RequestID,                 // 2. attach request ID (before logging)
-		PathSecurityMiddleware,                 // 3. validate paths, block traversal
-		s.middleware.SecurityHeaders,           // 4. add security headers
-		s.middleware.SecGPC,                    // 4b. honor Sec-GPC privacy signal
-		s.middleware.CORS,                      // 4c. CORS (near security headers; handles preflight)
-		s.middleware.Allowlist,                 // 5. set allowlisted flag (bypasses 6/7/8, not auth)
-		s.middleware.Blocklist,                 // 6. IP/domain blocklist check
-		s.middleware.RateLimit(s.rateLimiter),  // 7. rate limiting
-		s.middleware.GeoBlock(s.geoipLookup),   // 8. country blocking
-		s.middleware.Logger,                    // 10. log requests (innermost of spec chain)
+		s.middleware.Recovery,                 // outermost: catches all panics
+		URLNormalizeMiddleware,                // 1. normalize URLs (trailing slash, etc.)
+		s.middleware.RequestID,                // 2. attach request ID (before logging)
+		PathSecurityMiddleware,                // 3. validate paths, block traversal
+		s.middleware.SecurityHeaders,          // 4. add security headers
+		s.middleware.SecGPC,                   // 4b. honor Sec-GPC privacy signal
+		s.middleware.CORS,                     // 4c. CORS (near security headers; handles preflight)
+		s.middleware.Allowlist,                // 5. set allowlisted flag (bypasses 6/7/8, not auth)
+		s.middleware.Blocklist,                // 6. IP/domain blocklist check
+		s.middleware.RateLimit(s.rateLimiter), // 7. rate limiting
+		s.middleware.GeoBlock(s.geoipLookup),  // 8. country blocking
+		s.middleware.Logger,                   // 10. log requests (innermost of spec chain)
 	)
 
 	return handler
@@ -1194,11 +1194,6 @@ func (s *Server) renderSearchError(w http.ResponseWriter, r *http.Request, query
 		// Fallback to plain error - still no internal details
 		localizedHTTPError(w, r, http.StatusInternalServerError, "errors.server_error")
 	}
-}
-
-// renderSearchResults renders the search results page
-func (s *Server) renderSearchResults(w http.ResponseWriter, r *http.Request, query string, results *model.SearchResults, category string) {
-	s.renderSearchResultsWithInstant(w, r, query, results, category, nil)
 }
 
 // renderSearchResultsWithInstant renders search results with optional instant answer

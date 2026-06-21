@@ -1505,12 +1505,13 @@ func TestSchedulerRunLoop(t *testing.T) {
 	// Wait for multiple runs
 	count := 0
 	timeout := time.After(3 * time.Second)
+waitLoop:
 	for count < 2 {
 		select {
 		case <-ran:
 			count++
 		case <-timeout:
-			break
+			break waitLoop
 		}
 	}
 

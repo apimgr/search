@@ -110,7 +110,7 @@ func (h *DNSHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 
 	// Build content
 	var content strings.Builder
-	content.WriteString(fmt.Sprintf("<div class=\"dns-result\">"))
+	content.WriteString("<div class=\"dns-result\">")
 	content.WriteString(fmt.Sprintf("<strong>DNS Records for:</strong> %s<br><br>", domain))
 
 	hasRecords := false
@@ -143,7 +143,7 @@ func (h *DNSHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 	if showAll || recordType == "CNAME" {
 		if records.CNAME != "" {
 			hasRecords = true
-			content.WriteString(fmt.Sprintf("<strong>CNAME Record:</strong><br>"))
+			content.WriteString("<strong>CNAME Record:</strong><br>")
 			content.WriteString(fmt.Sprintf("&nbsp;&nbsp;<code>%s</code><br><br>", records.CNAME))
 		}
 	}

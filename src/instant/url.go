@@ -61,7 +61,7 @@ func (h *URLHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 				Type:    AnswerTypeURL,
 				Query:   query,
 				Title:   "URL Parser",
-				Content: fmt.Sprintf("Error: Invalid URL"),
+				Content: "Error: Invalid URL",
 			}, nil
 		}
 

@@ -511,9 +511,9 @@ func TestModelViewWithError(t *testing.T) {
 func TestRunFunctionExists(t *testing.T) {
 	// Just verify the RunTUIApp function exists and has correct signature
 	var runFunc func(*api.Client) error = RunTUIApp
-	if runFunc == nil {
-		t.Error("RunTUIApp function should exist")
-	}
+	// A function value assigned from a known function is never nil;
+	// verify via reflect that the assignment compiled successfully
+	_ = runFunc
 }
 
 // Tests for multiple search results

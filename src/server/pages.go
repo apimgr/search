@@ -104,46 +104,6 @@ func (s *Server) handleContact(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleContactSubmit processes contact form submission
-func (s *Server) handleContactSubmit(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		http.Redirect(w, r, "/server/contact", http.StatusSeeOther)
-		return
-	}
-
-	// Parse form
-	if err := r.ParseForm(); err != nil {
-		localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
-		return
-	}
-
-	name := strings.TrimSpace(r.FormValue("name"))
-	email := strings.TrimSpace(r.FormValue("email"))
-	subject := strings.TrimSpace(r.FormValue("subject"))
-	message := strings.TrimSpace(r.FormValue("message"))
-	captchaIDStr := r.FormValue("captcha_id")
-	captchaAnswer := strings.TrimSpace(r.FormValue("captcha"))
-
-	// Validate required fields
-	if name == "" || email == "" || subject == "" || message == "" {
-		localizedHTTPError(w, r, http.StatusBadRequest, "errors.required")
-		return
-	}
-
-	// Validate captcha
-	userAnswer, err := strconv.Atoi(captchaAnswer)
-	if err != nil || !s.verifyCaptcha(captchaIDStr, userAnswer) {
-		localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
-		return
-	}
-
-	// Log the contact message (in production, this would send an email)
-	log.Printf("[Contact] From: %s <%s>, Subject: %s", name, email, subject)
-
-	// Redirect to success
-	http.Redirect(w, r, "/server/contact?success=1", http.StatusSeeOther)
-}
-
 // handleHelp renders the help page
 func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
 	data := s.newPageData(w, r, "", "help")
@@ -502,27 +462,6 @@ func (s *Server) signCaptcha(answer int) string {
 	return data + "." + sig
 }
 
-// verifyCaptcha checks the user's captcha answer against the signed captcha ID
-func (s *Server) verifyCaptcha(captchaID string, userAnswer int) bool {
-	parts := strings.SplitN(captchaID, ".", 2)
-	if len(parts) != 2 {
-		return false
-	}
-	expectedAnswer, err := strconv.Atoi(parts[0])
-	if err != nil {
-		return false
-	}
-	// Verify HMAC signature
-	key := []byte(s.startTime.Format(time.RFC3339Nano))
-	mac := hmac.New(sha256.New, key)
-	mac.Write([]byte(parts[0]))
-	expectedSig := base64.URLEncoding.EncodeToString(mac.Sum(nil))
-	if !hmac.Equal([]byte(parts[1]), []byte(expectedSig)) {
-		return false
-	}
-	return userAnswer == expectedAnswer
-}
-
 // getCSRFToken returns a CSRF token for the request
 func (s *Server) getCSRFToken(r *http.Request) string {
 	// Generate a simple CSRF token
@@ -544,11 +483,6 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%dh %dm", hours, minutes)
 	}
 	return fmt.Sprintf("%dm", minutes)
-}
-
-// isContactEnabled checks if contact form is enabled
-func (s *Server) isContactEnabled() bool {
-	return s.config.Server.Pages.Contact.Enabled
 }
 
 // getVersion returns the application version

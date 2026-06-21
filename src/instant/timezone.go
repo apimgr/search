@@ -7,6 +7,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // TimezoneHandler handles timezone queries and conversions
@@ -260,7 +263,7 @@ func (h *TimezoneHandler) handleTimeIn(query, location string) (*Answer, error) 
 	return &Answer{
 		Type:  AnswerTypeTime,
 		Query: query,
-		Title: fmt.Sprintf("Time in %s", strings.Title(location)),
+		Title: fmt.Sprintf("Time in %s", cases.Title(language.Und, cases.NoLower).String(location)),
 		Content: fmt.Sprintf(`<div class="timezone-result">
 <div class="time-display"><strong>%s</strong></div>
 <div class="date-display">%s</div>
@@ -396,9 +399,10 @@ func (h *TimezoneHandler) resolveTZ(input string) string {
 	// Try as a direct IANA timezone name
 	if strings.Contains(input, "/") {
 		// Capitalize properly for IANA names
+		titler := cases.Title(language.Und, cases.NoLower)
 		parts := strings.Split(input, "/")
 		for i, part := range parts {
-			parts[i] = strings.Title(strings.ReplaceAll(part, "_", " "))
+			parts[i] = titler.String(strings.ReplaceAll(part, "_", " "))
 			parts[i] = strings.ReplaceAll(parts[i], " ", "_")
 		}
 		tzName := strings.Join(parts, "/")
@@ -408,13 +412,14 @@ func (h *TimezoneHandler) resolveTZ(input string) string {
 	}
 
 	// Try common variations
+	titler := cases.Title(language.Und, cases.NoLower)
 	variations := []string{
-		"America/" + strings.Title(input),
-		"Europe/" + strings.Title(input),
-		"Asia/" + strings.Title(input),
-		"Australia/" + strings.Title(input),
-		"Pacific/" + strings.Title(input),
-		"Africa/" + strings.Title(input),
+		"America/" + titler.String(input),
+		"Europe/" + titler.String(input),
+		"Asia/" + titler.String(input),
+		"Australia/" + titler.String(input),
+		"Pacific/" + titler.String(input),
+		"Africa/" + titler.String(input),
 	}
 
 	for _, tz := range variations {

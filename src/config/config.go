@@ -462,21 +462,21 @@ type OIDCProviderConfig struct {
 
 // LDAPConfig represents LDAP authentication configuration
 type LDAPConfig struct {
-	ID            string `yaml:"id"`
-	Name          string `yaml:"name"`
-	Enabled       bool   `yaml:"enabled"`
-	Host          string `yaml:"host"`
-	Port          int    `yaml:"port"`
-	UseTLS        bool   `yaml:"use_tls"`
-	SkipTLSVerify bool   `yaml:"skip_tls_verify"`
-	BindDN        string `yaml:"bind_dn"`
-	BindPassword  string `yaml:"bind_password"`
-	BaseDN        string `yaml:"base_dn"`
-	UserFilter    string `yaml:"user_filter"`
-	UsernameAttr  string `yaml:"username_attr"`
-	EmailAttr       string   `yaml:"email_attr"`
-	GroupFilter     string   `yaml:"group_filter"`
-	GroupMemberAttr string   `yaml:"group_member_attr"`
+	ID              string `yaml:"id"`
+	Name            string `yaml:"name"`
+	Enabled         bool   `yaml:"enabled"`
+	Host            string `yaml:"host"`
+	Port            int    `yaml:"port"`
+	UseTLS          bool   `yaml:"use_tls"`
+	SkipTLSVerify   bool   `yaml:"skip_tls_verify"`
+	BindDN          string `yaml:"bind_dn"`
+	BindPassword    string `yaml:"bind_password"`
+	BaseDN          string `yaml:"base_dn"`
+	UserFilter      string `yaml:"user_filter"`
+	UsernameAttr    string `yaml:"username_attr"`
+	EmailAttr       string `yaml:"email_attr"`
+	GroupFilter     string `yaml:"group_filter"`
+	GroupMemberAttr string `yaml:"group_member_attr"`
 }
 
 // PagesConfig represents standard pages configuration
@@ -658,7 +658,6 @@ type CacheConfig struct {
 
 	// Default TTL in seconds
 	TTL int `yaml:"ttl"`
-
 }
 
 // GeoIPConfig represents GeoIP configuration (uses MMDB from sapics/ip-location-db)
@@ -1156,12 +1155,12 @@ func DefaultConfig() *Config {
 					ContentSecurityPolicy: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; media-src *",
 					// Per AI.md PART 11: full Permissions-Policy — locked tracking proposals,
 					// spec-required features scoped to self, all sensors locked by default.
-					PermissionsPolicy: "accelerometer=(), ambient-light-sensor=(), attribution-reporting=(), battery=(), browsing-topics=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), idle-detection=(), interest-cohort=(), magnetometer=(), microphone=(), midi=(), screen-wake-lock=(), serial=(), usb=(), xr-spatial-tracking=(), autoplay=(self), encrypted-media=(self), fullscreen=(self), payment=(self), picture-in-picture=(self), publickey-credentials-get=(self), storage-access=(self), web-share=(self)",
-					COOP:                  "unsafe-none",
-					COEP:                  "unsafe-none",
-					CORP:                  "cross-origin",
-					OriginAgentCluster:    true,
-					CrossDomainPolicies:   "none",
+					PermissionsPolicy:   "accelerometer=(), ambient-light-sensor=(), attribution-reporting=(), battery=(), browsing-topics=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), idle-detection=(), interest-cohort=(), magnetometer=(), microphone=(), midi=(), screen-wake-lock=(), serial=(), usb=(), xr-spatial-tracking=(), autoplay=(self), encrypted-media=(self), fullscreen=(self), payment=(self), picture-in-picture=(self), publickey-credentials-get=(self), storage-access=(self), web-share=(self)",
+					COOP:                "unsafe-none",
+					COEP:                "unsafe-none",
+					CORP:                "cross-origin",
+					OriginAgentCluster:  true,
+					CrossDomainPolicies: "none",
 				},
 				HSTS: struct {
 					Enabled           bool `yaml:"enabled"`
@@ -1870,11 +1869,11 @@ func (c *Config) Sanitized() map[string]any {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return map[string]any{
-		"mode":    c.Server.Mode,
-		"port":    c.Server.Port,
-		"address": c.Server.Address,
-		"title":   c.Server.Title,
-		"token":   "xxxxx",
+		"mode":       c.Server.Mode,
+		"port":       c.Server.Port,
+		"address":    c.Server.Address,
+		"title":      c.Server.Title,
+		"token":      "xxxxx",
 		"secret_key": "xxxxx",
 		"ssl": map[string]any{
 			"enabled": c.Server.SSL.Enabled,

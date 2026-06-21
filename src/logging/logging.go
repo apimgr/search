@@ -37,7 +37,6 @@ const (
 
 // Manager manages all log types
 type Manager struct {
-	mu       sync.RWMutex
 	logDir   string
 	access   *AccessLogger
 	server   *ServerLogger

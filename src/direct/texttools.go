@@ -9,6 +9,9 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // CaseHandler handles case:{text} queries
@@ -74,7 +77,7 @@ func (h *CaseHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 }
 
 func toTitleCase(s string) string {
-	return strings.Title(strings.ToLower(s))
+	return cases.Title(language.Und, cases.NoLower).String(strings.ToLower(s))
 }
 
 func toSentenceCase(s string) string {

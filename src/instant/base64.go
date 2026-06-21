@@ -62,7 +62,7 @@ func (h *Base64Handler) HandleInstantQuery(ctx context.Context, query string) (*
 				Type:    AnswerTypeBase64,
 				Query:   query,
 				Title:   "Base64 Decoder",
-				Content: fmt.Sprintf("Error: Invalid base64 string"),
+				Content: "Error: Invalid base64 string",
 			}, nil
 		}
 		result = string(decoded)

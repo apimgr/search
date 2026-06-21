@@ -115,7 +115,7 @@ func (e *Mojeek) parseResults(html string, category model.Category) ([]model.Res
 	for _, match := range matches {
 		// Extract URL and title
 		titleMatch := titlePattern.FindStringSubmatch(match)
-		if titleMatch == nil || len(titleMatch) < 3 {
+		if len(titleMatch) < 3 {
 			continue
 		}
 
@@ -125,14 +125,14 @@ func (e *Mojeek) parseResults(html string, category model.Category) ([]model.Res
 		// Extract description
 		content := ""
 		descMatch := descPattern.FindStringSubmatch(match)
-		if descMatch != nil && len(descMatch) >= 2 {
+		if len(descMatch) >= 2 {
 			content = strings.TrimSpace(descMatch[1])
 		}
 
 		// Use display URL if main URL not found
 		if resultURL == "" {
 			urlMatch := urlPattern.FindStringSubmatch(match)
-			if urlMatch != nil && len(urlMatch) >= 2 {
+			if len(urlMatch) >= 2 {
 				resultURL = urlMatch[1]
 				if !strings.HasPrefix(resultURL, "http") {
 					resultURL = "https://" + resultURL

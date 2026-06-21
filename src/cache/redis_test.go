@@ -37,16 +37,16 @@ func TestRedisCachePrefixKeyMethod(t *testing.T) {
 // TestRedisConfigStructFields tests all RedisConfig struct fields
 func TestRedisConfigStructFields(t *testing.T) {
 	cfg := RedisConfig{
-		Type:         "valkey",
-		URL:          "redis://user:pass@localhost:6379/1",
-		Host:         "redis.example.com",
-		Port:         6380,
-		Password:     "secretpassword",
-		DB:           2,
-		PoolSize:     25,
-		MinIdle:      10,
-		Timeout:      15 * time.Second,
-		Prefix: "myapp:",
+		Type:     "valkey",
+		URL:      "redis://user:pass@localhost:6379/1",
+		Host:     "redis.example.com",
+		Port:     6380,
+		Password: "secretpassword",
+		DB:       2,
+		PoolSize: 25,
+		MinIdle:  10,
+		Timeout:  15 * time.Second,
+		Prefix:   "myapp:",
 	}
 
 	if cfg.Type != "valkey" {

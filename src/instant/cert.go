@@ -137,7 +137,7 @@ func (h *CertHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 
 	// Build content
 	var content strings.Builder
-	content.WriteString(fmt.Sprintf("<div class=\"cert-result\">"))
+	content.WriteString("<div class=\"cert-result\">")
 
 	// Status indicator
 	if isValid {

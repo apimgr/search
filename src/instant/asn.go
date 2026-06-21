@@ -138,7 +138,7 @@ func (h *ASNHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 	var content strings.Builder
 	data := asnInfo.Data
 
-	content.WriteString(fmt.Sprintf("<div class=\"asn-result\">"))
+	content.WriteString("<div class=\"asn-result\">")
 	content.WriteString(fmt.Sprintf("<strong>AS%d</strong>", data.ASN))
 	if data.Name != "" {
 		content.WriteString(fmt.Sprintf(" - %s", data.Name))

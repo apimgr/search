@@ -145,7 +145,7 @@ func (e *Yahoo) parseResults(html string, category model.Category) ([]model.Resu
 		resultMatches := resultPattern.FindAllString(html, -1)
 		for _, match := range resultMatches {
 			linkMatch := linkPattern.FindStringSubmatch(match)
-			if linkMatch == nil || len(linkMatch) < 3 {
+			if len(linkMatch) < 3 {
 				continue
 			}
 
@@ -154,7 +154,7 @@ func (e *Yahoo) parseResults(html string, category model.Category) ([]model.Resu
 
 			content := ""
 			descMatch := descPattern.FindStringSubmatch(match)
-			if descMatch != nil && len(descMatch) >= 2 {
+			if len(descMatch) >= 2 {
 				content = strings.TrimSpace(descMatch[1])
 			}
 

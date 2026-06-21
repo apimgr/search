@@ -80,7 +80,7 @@ func (h *HTMLEntityHandler) HandleInstantQuery(ctx context.Context, query string
 	}
 
 	var content strings.Builder
-	content.WriteString(fmt.Sprintf("<div class=\"html-entity-result\">\n"))
+	content.WriteString("<div class=\"html-entity-result\">\n")
 	content.WriteString(fmt.Sprintf("<strong>Input:</strong> <code>%s</code><br><br>", html.EscapeString(text)))
 
 	// Auto-detect: if text contains &...; patterns or numeric entities, decode; otherwise encode

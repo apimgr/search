@@ -90,11 +90,6 @@ func NewManager(cfg *config.WidgetsConfig) *Manager {
 	return newManager(cfg, NewCache())
 }
 
-// newManagerForTest creates a new widget manager for testing (no cleanup goroutine)
-func newManagerForTest(cfg *config.WidgetsConfig) *Manager {
-	return newManager(cfg, newCacheNoCleanup())
-}
-
 // newManager is the internal constructor
 func newManager(cfg *config.WidgetsConfig, cache *Cache) *Manager {
 	m := &Manager{

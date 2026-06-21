@@ -27,6 +27,9 @@ import (
 	"github.com/google/uuid"
 )
 
+// contextKey is a package-local type for context keys to avoid collisions.
+type contextKey string
+
 // allowlistedCtxKey is the context key for the allowlisted flag.
 // Set by AllowlistMiddleware; checked by BlocklistMiddleware, RateLimit, and GeoBlock.
 type allowlistedCtxKey struct{}
@@ -1152,7 +1155,7 @@ func (m *Middleware) SecGPC(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.TrimSpace(r.Header.Get("Sec-GPC")) == "1" {
 			// Set context flag so downstream handlers can respect the opt-out
-			ctx := context.WithValue(r.Context(), "gpc_opt_out", true)
+			ctx := context.WithValue(r.Context(), contextKey("gpc_opt_out"), true)
 			r = r.WithContext(ctx)
 			// Log for compliance per spec ("Surface in the audit log")
 			slog.LogAttrs(r.Context(), slog.LevelInfo, "Sec-GPC opt-out honored",

@@ -158,7 +158,7 @@ func (h *DefinitionHandler) HandleInstantQuery(ctx context.Context, query string
 		Title:     fmt.Sprintf("Definition: %s", entry.Word),
 		Content:   content.String(),
 		Source:    "Free Dictionary API",
-		SourceURL: fmt.Sprintf("https://dictionaryapi.dev/"),
+		SourceURL: "https://dictionaryapi.dev/",
 		Data: map[string]interface{}{
 			"word":     entry.Word,
 			"phonetic": entry.Phonetic,

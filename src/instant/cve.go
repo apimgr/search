@@ -110,14 +110,14 @@ func (h *CVEHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 	}
 
 	// CVSS Score
-	if cve.Metrics.CVSSMetricV31 != nil && len(cve.Metrics.CVSSMetricV31) > 0 {
+	if len(cve.Metrics.CVSSMetricV31) > 0 {
 		cvss := cve.Metrics.CVSSMetricV31[0]
 		severity := cvss.CVSSData.BaseSeverity
 		score := cvss.CVSSData.BaseScore
 		severityClass := getSeverityClass(severity)
 		content.WriteString(fmt.Sprintf("<strong>CVSS 3.1 Score:</strong> <span class=\"%s\">%.1f (%s)</span><br>", severityClass, score, severity))
 		content.WriteString(fmt.Sprintf("<strong>Vector:</strong> <code>%s</code><br><br>", cvss.CVSSData.VectorString))
-	} else if cve.Metrics.CVSSMetricV2 != nil && len(cve.Metrics.CVSSMetricV2) > 0 {
+	} else if len(cve.Metrics.CVSSMetricV2) > 0 {
 		cvss := cve.Metrics.CVSSMetricV2[0]
 		severity := cvss.BaseSeverity
 		score := cvss.CVSSData.BaseScore

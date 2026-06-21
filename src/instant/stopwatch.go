@@ -133,7 +133,7 @@ func (h *StopwatchHandler) handlePomodoro(query string) (*Answer, error) {
 		Type:  AnswerTypeTime,
 		Query: query,
 		Title: "Pomodoro Timer",
-		Content: fmt.Sprintf(`<div class="timer-widget pomodoro-widget" data-type="pomodoro">
+		Content: `<div class="timer-widget pomodoro-widget" data-type="pomodoro">
 <div class="pomodoro-phase">Work Session</div>
 <div class="timer-display">25:00</div>
 <div class="timer-controls">
@@ -150,7 +150,7 @@ func (h *StopwatchHandler) handlePomodoro(query string) (*Answer, error) {
 </ul>
 </div>
 <div class="pomodoro-counter">Pomodoros completed: <span class="count">0</span></div>
-</div>`),
+</div>`,
 		Data: map[string]interface{}{
 			"type":                  "pomodoro",
 			"workDuration":          int(workDuration.Seconds()),

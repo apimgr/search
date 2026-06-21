@@ -141,26 +141,6 @@ type sportsDBLeague struct {
 	StrBadge   string `json:"strBadge"`
 }
 
-type sportsDBLiveScoresResponse struct {
-	Events []sportsDBLiveEvent `json:"events"`
-}
-
-type sportsDBLiveEvent struct {
-	IDEvent      string `json:"idEvent"`
-	StrEvent     string `json:"strEvent"`
-	StrLeague    string `json:"strLeague"`
-	IDLeague     string `json:"idLeague"`
-	StrHomeTeam  string `json:"strHomeTeam"`
-	IDHomeTeam   string `json:"idHomeTeam"`
-	StrAwayTeam  string `json:"strAwayTeam"`
-	IDAwayTeam   string `json:"idAwayTeam"`
-	IntHomeScore string `json:"intHomeScore"`
-	IntAwayScore string `json:"intAwayScore"`
-	StrProgress  string `json:"strProgress"`
-	StrStatus    string `json:"strStatus"`
-	StrVenue     string `json:"strVenue"`
-}
-
 // League name mappings for common queries
 var leagueNameMappings = map[string]string{
 	// American Football
@@ -546,7 +526,7 @@ func (f *SportsFetcher) searchLeague(ctx context.Context, leagueName string) (*s
 
 	if len(resp.Leagues) == 0 {
 		// Try alternate search
-		apiURL = fmt.Sprintf("https://www.thesportsdb.com/api/v1/json/3/all_leagues.php")
+		apiURL = "https://www.thesportsdb.com/api/v1/json/3/all_leagues.php"
 		if err := f.doRequest(ctx, apiURL, &resp); err != nil {
 			return nil, err
 		}

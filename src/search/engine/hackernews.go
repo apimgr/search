@@ -62,7 +62,7 @@ func (e *HackerNews) Search(ctx context.Context, query *model.Query) ([]model.Re
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Hacker News API returned status %d", resp.StatusCode)
+		return nil, fmt.Errorf("hacker news API returned status %d", resp.StatusCode)
 	}
 
 	var data struct {

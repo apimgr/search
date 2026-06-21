@@ -583,9 +583,8 @@ func TestKillProcessWithRealProcess(t *testing.T) {
 	cmd.Wait()
 
 	// Try to kill again (should fail since process is dead)
-	err = KillProcess(pid, true)
-	// This may succeed or fail depending on OS behavior
-	// Just ensure no panic
+	// This may succeed or fail depending on OS behavior; just ensure no panic
+	_ = KillProcess(pid, true)
 }
 
 // TestStopChildProcessesWithProcessExitDuringPolling tests process exit during polling

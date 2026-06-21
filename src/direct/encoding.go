@@ -11,6 +11,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 	"gopkg.in/yaml.v3"
 )
 
@@ -64,7 +66,7 @@ func (h *HTMLHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 	return &Answer{
 		Type:        AnswerTypeHTML,
 		Term:        term,
-		Title:       fmt.Sprintf("HTML %s", strings.Title(mode)),
+		Title:       fmt.Sprintf("HTML %s", cases.Title(language.Und, cases.NoLower).String(mode)),
 		Description: fmt.Sprintf("HTML entity %s", mode),
 		Content:     formatHTMLEncodingContent(mode, text, result),
 		Source:      "Local Encoder",
@@ -147,7 +149,7 @@ func htmlDecode(s string) string {
 func formatHTMLEncodingContent(mode, input, output string) string {
 	var html strings.Builder
 	html.WriteString("<div class=\"html-encoding-content\">")
-	html.WriteString(fmt.Sprintf("<h1>HTML %s</h1>", strings.Title(mode)))
+	html.WriteString(fmt.Sprintf("<h1>HTML %s</h1>", cases.Title(language.Und, cases.NoLower).String(mode)))
 
 	html.WriteString("<h2>Input</h2>")
 	html.WriteString(fmt.Sprintf("<pre><code>%s</code></pre>", escapeHTML(input)))
@@ -270,7 +272,7 @@ func (h *UnicodeHandler) searchUnicodeName(name string) (*Answer, error) {
 		Term:        name,
 		Title:       "Unicode Search",
 		Description: "Unicode name search not supported",
-		Content:     fmt.Sprintf("<p>Searching by Unicode name is not supported. Try entering a character directly or use <code>U+XXXX</code> format.</p>"),
+		Content:     "<p>Searching by Unicode name is not supported. Try entering a character directly or use <code>U+XXXX</code> format.</p>",
 		Error:       "not_supported",
 	}, nil
 }
@@ -632,7 +634,7 @@ func (h *JSONHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 	return &Answer{
 		Type:        AnswerTypeJSON,
 		Term:        term,
-		Title:       fmt.Sprintf("JSON %s", strings.Title(mode)),
+		Title:       fmt.Sprintf("JSON %s", cases.Title(language.Und, cases.NoLower).String(mode)),
 		Description: "Valid JSON",
 		Content:     formatJSONContent(mode, jsonStr, output, keys, depth),
 		Source:      "JSON Parser",
@@ -684,7 +686,7 @@ func getJSONDepth(v interface{}) int {
 func formatJSONContent(mode, input, output string, keys, depth int) string {
 	var html strings.Builder
 	html.WriteString("<div class=\"json-content\">")
-	html.WriteString(fmt.Sprintf("<h1>JSON %s</h1>", strings.Title(mode)))
+	html.WriteString(fmt.Sprintf("<h1>JSON %s</h1>", cases.Title(language.Und, cases.NoLower).String(mode)))
 
 	html.WriteString("<p class=\"valid\">✓ Valid JSON</p>")
 	html.WriteString(fmt.Sprintf("<p>Keys: %d | Depth: %d | Size: %d → %d bytes</p>", keys, depth, len(input), len(output)))

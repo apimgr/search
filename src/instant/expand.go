@@ -109,11 +109,11 @@ func (h *ExpandHandler) HandleInstantQuery(ctx context.Context, query string) (*
 	content.WriteString("<div class=\"expand-result\">")
 
 	// Original URL
-	content.WriteString(fmt.Sprintf("<strong>Original URL:</strong><br>"))
+	content.WriteString("<strong>Original URL:</strong><br>")
 	content.WriteString(fmt.Sprintf("&nbsp;&nbsp;<code>%s</code><br><br>", escapeHTML(urlStr)))
 
 	// Final URL
-	content.WriteString(fmt.Sprintf("<strong>Final URL:</strong><br>"))
+	content.WriteString("<strong>Final URL:</strong><br>")
 	content.WriteString(fmt.Sprintf("&nbsp;&nbsp;<a href=\"%s\" target=\"_blank\">%s</a><br><br>", escapeHTML(finalURL), escapeHTML(finalURL)))
 
 	// Redirect chain

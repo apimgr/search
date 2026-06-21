@@ -79,7 +79,7 @@ func (h *EmojiHandler) HandleInstantQuery(ctx context.Context, query string) (*A
 
 	// Build content
 	var content strings.Builder
-	content.WriteString(fmt.Sprintf("<div class=\"emoji-result\">\n"))
+	content.WriteString("<div class=\"emoji-result\">\n")
 	content.WriteString(fmt.Sprintf("<p>Found <strong>%d</strong> emojis matching \"%s\":</p>\n", len(matches), searchTerm))
 	content.WriteString("<div class=\"emoji-grid\" style=\"display: flex; flex-wrap: wrap; gap: 10px;\">\n")
 

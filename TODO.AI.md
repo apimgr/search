@@ -28,6 +28,14 @@ After the scheduler and client migrations above are complete, run `go mod tidy` 
 
 Read: AI.md PART 3
 
+## [ ] Raise test coverage to spec minimum of 80%
+
+Current total coverage is ~39.6% (measured across `./src/...`, excluding `src/service` which drops privileges mid-test). The spec (AI.md PART 28) requires ≥80%. The CI threshold is currently set to 38% as a floor.
+
+Packages needing significant improvement: `src/main` (0%), `src/database` (0%), `src/instant` (14%), `src/server` (18%), `src/direct` (24.5%), `src/geoip` (30.3%).
+
+Read: AI.md PART 28
+
 ## [ ] Fix Makefile coverage output path
 
 `make test` writes `coverage.out` to the project tree (project root). The spec requires coverage output to go to `/tmp/coverage.out` (or a tmp subdirectory). Update the test target in `Makefile` to write coverage to `/tmp/coverage.out` instead of `coverage.out`.

@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
-	"strconv"
 	"strings"
-	"unicode/utf8"
 )
 
 // EscapeHandler handles string escaping for various formats
@@ -251,52 +249,3 @@ func escapeHex(s string) string {
 	return hex.EncodeToString([]byte(s))
 }
 
-// unescapeString attempts to unescape a string
-func unescapeString(s string) string {
-	// Try URL decoding
-	if decoded, err := url.QueryUnescape(s); err == nil && decoded != s {
-		return decoded
-	}
-
-	// Try unescaping common sequences
-	result := s
-	result = strings.ReplaceAll(result, "\\n", "\n")
-	result = strings.ReplaceAll(result, "\\r", "\r")
-	result = strings.ReplaceAll(result, "\\t", "\t")
-	result = strings.ReplaceAll(result, "\\\\", "\\")
-	result = strings.ReplaceAll(result, "\\'", "'")
-	result = strings.ReplaceAll(result, "\\\"", "\"")
-
-	// Try unicode escapes
-	unicodePattern := regexp.MustCompile(`\\u([0-9A-Fa-f]{4})`)
-	result = unicodePattern.ReplaceAllStringFunc(result, func(match string) string {
-		code, err := strconv.ParseInt(match[2:], 16, 32)
-		if err != nil {
-			return match
-		}
-		return string(rune(code))
-	})
-
-	// Try HTML entities
-	htmlEntities := map[string]string{
-		"&amp;":  "&",
-		"&lt;":   "<",
-		"&gt;":   ">",
-		"&quot;": "\"",
-		"&#39;":  "'",
-		"&apos;": "'",
-	}
-	for entity, char := range htmlEntities {
-		result = strings.ReplaceAll(result, entity, char)
-	}
-
-	return result
-}
-
-// countCharacters returns character count info
-func countCharacters(s string) (int, int, int) {
-	bytes := len(s)
-	chars := utf8.RuneCountInString(s)
-	words := len(strings.Fields(s))
-	return bytes, chars, words
-}

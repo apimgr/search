@@ -130,26 +130,3 @@ func GetThemeInfo(r *http.Request) ThemeInfo {
 	return info
 }
 
-// handleThemeSwitch handles theme switching requests
-// Per AI.md PART 16: Theme switching without page reload
-func (s *Server) handleThemeSwitch(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
-		return
-	}
-
-	theme := r.FormValue("theme")
-	if !IsValidTheme(theme) {
-		localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
-		return
-	}
-
-	// Set theme cookie
-	SetTheme(w, theme)
-
-	// Return success using spec-required JSON format: {"ok":true,"data":{...}}
-	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"ok":   true,
-		"data": map[string]string{"theme": theme},
-	})
-}

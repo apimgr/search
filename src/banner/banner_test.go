@@ -6,13 +6,13 @@ import (
 
 func TestConfigStruct(t *testing.T) {
 	cfg := Config{
-		AppName:     "search",
-		Version:     "1.0.0",
-		Mode:        "production",
-		Debug:       false,
-		URLs:        []string{"http://localhost:8080"},
-		ShowSetup:   true,
-		SetupToken:  "abc123",
+		AppName:    "search",
+		Version:    "1.0.0",
+		Mode:       "production",
+		Debug:      false,
+		URLs:       []string{"http://localhost:8080"},
+		ShowSetup:  true,
+		SetupToken: "abc123",
 
 		Description: "Test app",
 		SMTPStatus:  "Configured",
@@ -358,11 +358,11 @@ func TestPrintFull(t *testing.T) {
 		{
 			name: "without ShowSetup",
 			cfg: Config{
-				AppName:    "search",
-				Version:    "1.0.0",
-				Mode:       "production",
-				URLs:       []string{"http://localhost:8080"},
-				ShowSetup:  false,
+				AppName:   "search",
+				Version:   "1.0.0",
+				Mode:      "production",
+				URLs:      []string{"http://localhost:8080"},
+				ShowSetup: false,
 
 				SMTPStatus: "Auto-detected",
 			},
@@ -414,16 +414,14 @@ func TestPrintFull(t *testing.T) {
 				URLs:       []string{"http://localhost:8080"},
 				ShowSetup:  true,
 				SetupToken: "",
-
 			},
 		},
 		{
 			name: "multiple URLs",
 			cfg: Config{
-				AppName:   "search",
-				Version:   "1.0.0",
-				URLs:      []string{"http://localhost:8080", "http://192.168.1.1:8080", "https://example.com"},
-
+				AppName: "search",
+				Version: "1.0.0",
+				URLs:    []string{"http://localhost:8080", "http://192.168.1.1:8080", "https://example.com"},
 			},
 		},
 		{
@@ -889,28 +887,24 @@ func TestBoxWidth(t *testing.T) {
 func TestPrintFullEdgeCases(t *testing.T) {
 
 	cfg := Config{
-		AppName:   "search",
-		Version:   "1.0.0",
-		URLs:      []string{"http://localhost:8080"},
-
+		AppName: "search",
+		Version: "1.0.0",
+		URLs:    []string{"http://localhost:8080"},
 	}
 	printFull(cfg)
 
-
 	cfg = Config{
-		AppName:   "search",
-		Version:   "1.0.0",
-		URLs:      []string{},
-
+		AppName: "search",
+		Version: "1.0.0",
+		URLs:    []string{},
 	}
 	printFull(cfg)
 
 	// Test nil URLs slice
 	cfg = Config{
-		AppName:   "search",
-		Version:   "1.0.0",
-		URLs:      nil,
-
+		AppName: "search",
+		Version: "1.0.0",
+		URLs:    nil,
 	}
 	printFull(cfg)
 }
@@ -990,13 +984,13 @@ func TestPrintDispatcher(t *testing.T) {
 // terminal.GetSize() which can't be mocked without source modification.
 func TestAllPrintFunctionsDirectly(t *testing.T) {
 	cfg := Config{
-		AppName:     "test",
-		Version:     "1.0.0",
-		Mode:        "production",
-		Debug:       true,
-		URLs:        []string{"http://localhost:8080", "http://127.0.0.1:8080"},
-		ShowSetup:   true,
-		SetupToken:  "token-abc-123",
+		AppName:    "test",
+		Version:    "1.0.0",
+		Mode:       "production",
+		Debug:      true,
+		URLs:       []string{"http://localhost:8080", "http://127.0.0.1:8080"},
+		ShowSetup:  true,
+		SetupToken: "token-abc-123",
 
 		Description: "Test Application",
 		SMTPStatus:  "Ready",

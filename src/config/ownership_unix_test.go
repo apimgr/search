@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
-	"runtime"
 	"testing"
 )
 
@@ -198,12 +197,7 @@ func TestChownPathInvalidUser(t *testing.T) {
 }
 
 func TestPlatformSpecificFunctions(t *testing.T) {
-	// Verify we're on Unix
-	if runtime.GOOS == "windows" {
-		t.Skip("These tests are Unix-specific")
-	}
-
-	// These functions should work without panicking
+	// These functions should work without panicking on Unix
 	_ = IsPrivileged()
 	_ = GetCurrentUID()
 	_ = GetCurrentGID()

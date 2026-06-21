@@ -49,18 +49,18 @@ var (
 	flagShell       string
 
 	// Required flags per AI.md PART 6 (NON-NEGOTIABLE)
-	flagMode      string
-	flagData      string
-	flagConfig    string
-	flagCache     string
-	flagLog       string
-	flagBackup    string
-	flagPID       string
-	flagAddress   string
-	flagPort      int
-	flagBaseURL   string
-	flagColor     string
-	flagLang      string
+	flagMode    string
+	flagData    string
+	flagConfig  string
+	flagCache   string
+	flagLog     string
+	flagBackup  string
+	flagPID     string
+	flagAddress string
+	flagPort    int
+	flagBaseURL string
+	flagColor   string
+	flagLang    string
 )
 
 func init() {
@@ -1004,7 +1004,7 @@ func runMaintenance(action string) {
 		metadata, err := bm.GetMetadata(backupPath)
 		if err == nil {
 			fmt.Printf("   Version: %s\n", metadata.Version)
-			fmt.Printf("   Files:   %d\n", len(metadata.Files))
+			fmt.Printf("   Files:   %d\n", len(metadata.Contents))
 			if metadata.Encrypted {
 				fmt.Printf("   Encrypted: YES (%s)\n", metadata.EncryptionMethod)
 			} else {

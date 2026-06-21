@@ -139,7 +139,7 @@ To configure a server, run:
   %s --server https:
 
 This will save the server address for future commands.
-Or edit ~/.config/apimgr/%s/cli.yml directly.`, getBinaryName(), ProjectName)
+Or edit ~/.config/apimgr/%s/cli.yml directly`, getBinaryName(), ProjectName)
 	}
 
 	// Per AI.md PART 32 line 41436-41469: Token sources (priority order)

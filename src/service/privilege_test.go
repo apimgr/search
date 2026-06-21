@@ -563,7 +563,7 @@ func TestPrivilegeEscalatorEscalateCommandAll(t *testing.T) {
 			cmd := pe.EscalateCommand("ls", "-la")
 
 			if cmd == nil {
-				t.Error("EscalateCommand returned nil")
+				t.Fatal("EscalateCommand returned nil")
 			}
 
 			// Verify args include original command

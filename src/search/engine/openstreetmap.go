@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 )
@@ -107,7 +109,7 @@ func (e *OpenStreetMap) Search(ctx context.Context, query *model.Query) ([]model
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Nominatim API returned status %d", resp.StatusCode)
+		return nil, fmt.Errorf("nominatim API returned status %d", resp.StatusCode)
 	}
 
 	var nominatimResults []nominatimResult
@@ -182,9 +184,9 @@ func (e *OpenStreetMap) buildTitle(nr nominatimResult) string {
 	case "place":
 		switch nr.Type {
 		case "city", "town", "village", "hamlet":
-			typeQualifier = strings.Title(nr.Type)
+			typeQualifier = cases.Title(language.Und, cases.NoLower).String(nr.Type)
 		case "county", "state", "country":
-			typeQualifier = strings.Title(nr.Type)
+			typeQualifier = cases.Title(language.Und, cases.NoLower).String(nr.Type)
 		}
 	case "highway":
 		typeQualifier = "Road"
@@ -302,5 +304,5 @@ func (e *OpenStreetMap) formatAddress(nr nominatimResult) string {
 // formatType converts snake_case type to readable format
 func formatType(t string) string {
 	t = strings.ReplaceAll(t, "_", " ")
-	return strings.Title(t)
+	return cases.Title(language.Und, cases.NoLower).String(t)
 }

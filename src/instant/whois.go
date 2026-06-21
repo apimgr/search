@@ -287,7 +287,7 @@ func (h *WHOISHandler) HandleInstantQuery(ctx context.Context, query string) (*A
 
 	// Build content
 	var content strings.Builder
-	content.WriteString(fmt.Sprintf("<div class=\"whois-result\">"))
+	content.WriteString("<div class=\"whois-result\">")
 	content.WriteString(fmt.Sprintf("<strong>Domain:</strong> %s<br><br>", domain))
 
 	if parsed.registrar != "" {

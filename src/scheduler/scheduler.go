@@ -314,8 +314,6 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 		})
 	}
 
-
-
 	// Token Cleanup - Every 15 minutes, NOT skippable
 	if handlers.TokenCleanup != nil {
 		s.Register(&Task{
@@ -475,8 +473,8 @@ type TaskHandlers struct {
 	HealthcheckSelf func(ctx context.Context) error
 	TorHealth       func(ctx context.Context) error
 	AlertsImmediate func(ctx context.Context) error
-	AlertsDaily      func(ctx context.Context) error
-	AlertsWeekly     func(ctx context.Context) error
+	AlertsDaily     func(ctx context.Context) error
+	AlertsWeekly    func(ctx context.Context) error
 	// PublicIPRefresh refreshes the cached public IP per AI.md PART 8
 	// step 16. Schedule and cadence are hardcoded (startup + every 12h).
 	PublicIPRefresh func(ctx context.Context) error

@@ -66,7 +66,7 @@ func (e *StackOverflow) Search(ctx context.Context, query *model.Query) ([]model
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Stack Overflow API returned status %d", resp.StatusCode)
+		return nil, fmt.Errorf("stack overflow API returned status %d", resp.StatusCode)
 	}
 
 	var data struct {

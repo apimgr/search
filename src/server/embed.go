@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/i18n"
 )
@@ -86,7 +88,7 @@ func (tr *TemplateRenderer) newFuncMap(i18nFuncs template.FuncMap) template.Func
 		"safeJS":    func(s string) template.JS { return template.JS(s) },
 		"lower":     strings.ToLower,
 		"upper":     strings.ToUpper,
-		"title":     strings.Title,
+		"title":     func(s string) string { return cases.Title(language.Und, cases.NoLower).String(s) },
 		"contains":  strings.Contains,
 		"hasPrefix": strings.HasPrefix,
 		"hasSuffix": strings.HasSuffix,

@@ -2213,11 +2213,6 @@ func TestEngineCategoryStrings(t *testing.T) {
 	}
 }
 
-// Test containsHelper function (used in tests)
-
-func containsHelper(s, substr string) bool {
-	return strings.Contains(s, substr)
-}
 
 // ============================================================================
 // COMPREHENSIVE HTTP MOCK TESTS FOR 100% COVERAGE

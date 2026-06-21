@@ -48,9 +48,9 @@ type Manager struct {
 	db           *sql.DB
 	serverConfig *config.Config
 	aggregator   *search.Aggregator
-	mailer     *email.Mailer
-	templates  *email.EmailTemplate
-	client     *http.Client
+	mailer       *email.Mailer
+	templates    *email.EmailTemplate
+	client       *http.Client
 }
 
 type Alert struct {
@@ -138,9 +138,9 @@ func NewManager(db *sql.DB, serverConfig *config.Config, aggregator *search.Aggr
 	return &Manager{
 		db:           db,
 		serverConfig: serverConfig,
-		aggregator: aggregator,
-		mailer:     mailer,
-		templates:  email.NewEmailTemplate(),
+		aggregator:   aggregator,
+		mailer:       mailer,
+		templates:    email.NewEmailTemplate(),
 		client: &http.Client{
 			Timeout: 15 * time.Second,
 		},
@@ -1071,32 +1071,3 @@ func ptrTime(value time.Time) *time.Time {
 	return &value
 }
 
-func stripHTML(value string) string {
-	replacer := strings.NewReplacer("<br>", "\n", "<br/>", "\n", "<br />", "\n", "</p>", "\n\n", "</li>", "\n")
-	text := replacer.Replace(value)
-	var out strings.Builder
-	inTag := false
-	for _, r := range text {
-		switch r {
-		case '<':
-			inTag = true
-		case '>':
-			inTag = false
-		default:
-			if !inTag {
-				out.WriteRune(r)
-			}
-		}
-	}
-	return strings.TrimSpace(out.String())
-}
-
-func siteName(cfg *config.Config) string {
-	if cfg.Server.Branding.Title != "" {
-		return cfg.Server.Branding.Title
-	}
-	if cfg.Server.Title != "" {
-		return cfg.Server.Title
-	}
-	return "Search"
-}

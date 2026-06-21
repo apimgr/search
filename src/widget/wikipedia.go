@@ -154,7 +154,7 @@ func (f *WikipediaFetcher) fetchArticleSummary(ctx context.Context, title, lang 
 	}
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("Wikipedia API error: %d", resp.StatusCode)
+		return nil, fmt.Errorf("wikipedia API error: %d", resp.StatusCode)
 	}
 
 	var result struct {
@@ -224,7 +224,7 @@ func (f *WikipediaFetcher) searchAndFetch(ctx context.Context, query, lang strin
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("Wikipedia search API error: %d", resp.StatusCode)
+		return nil, fmt.Errorf("wikipedia search API error: %d", resp.StatusCode)
 	}
 
 	var searchResult struct {
@@ -272,7 +272,7 @@ func (f *WikipediaFetcher) fetchRelatedArticles(ctx context.Context, title, lang
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("Wikipedia links API error: %d", resp.StatusCode)
+		return nil, fmt.Errorf("wikipedia links API error: %d", resp.StatusCode)
 	}
 
 	var linksResult struct {

@@ -41,14 +41,6 @@ func (c *Cache) Close() {
 	}
 }
 
-// newCacheNoCleanup creates a cache without starting the cleanup goroutine (for testing)
-func newCacheNoCleanup() *Cache {
-	return &Cache{
-		items: make(map[string]*CacheItem),
-		stop:  make(chan struct{}),
-	}
-}
-
 // Get retrieves an item from the cache
 func (c *Cache) Get(key string) (*WidgetData, bool) {
 	c.mu.RLock()

@@ -9,9 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"regexp"
-	"strconv"
-	"strings"
+"strings"
 	"time"
 
 	"github.com/apimgr/search/src/version"
@@ -54,7 +52,6 @@ func (h *DNSHandler) HandleDirectQuery(ctx context.Context, term string) (*Answe
 	}
 
 	records := make(map[string]interface{})
-	var errors []string
 
 	// Lookup A records
 	if recordType == "" || recordType == "A" {
@@ -65,8 +62,6 @@ func (h *DNSHandler) HandleDirectQuery(ctx context.Context, term string) (*Answe
 				ips[i] = addr.String()
 			}
 			records["A"] = ips
-		} else if err != nil {
-			errors = append(errors, fmt.Sprintf("A: %v", err))
 		}
 	}
 
@@ -368,7 +363,7 @@ func (h *ResolveHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 	}
 
 	// Reverse DNS for first IP
-	if ipv4Addrs != nil && len(ipv4Addrs) > 0 {
+	if len(ipv4Addrs) > 0 {
 		names, err := h.resolver.LookupAddr(ctx, ipv4Addrs[0].String())
 		if err == nil && len(names) > 0 {
 			data["ptr"] = names
@@ -699,7 +694,7 @@ func analyzeSecurityHeaders(headers map[string][]string) map[string]interface{} 
 func formatHeadersData(url string, data map[string]interface{}) string {
 	var html strings.Builder
 	html.WriteString("<div class=\"headers-data\">")
-	html.WriteString(fmt.Sprintf("<h2>HTTP Headers</h2>"))
+	html.WriteString("<h2>HTTP Headers</h2>")
 	html.WriteString(fmt.Sprintf("<p><code>%s</code></p>", escapeHTML(url)))
 	html.WriteString(fmt.Sprintf("<p>Status: <strong>%s</strong></p>", escapeHTML(data["statusText"].(string))))
 
@@ -1035,11 +1030,3 @@ func formatSubnetData(data map[string]interface{}) string {
 	return html.String()
 }
 
-// ipRe is a compiled regex for IP validation
-var ipRe = regexp.MustCompile(`^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$`)
-
-// parseASN parses an ASN string and returns the number
-func parseASN(s string) (int, error) {
-	s = strings.TrimPrefix(strings.ToUpper(s), "AS")
-	return strconv.Atoi(s)
-}

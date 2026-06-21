@@ -156,7 +156,6 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 		PublicIPRefresh: func(ctx context.Context) error {
 			return s.refreshPublicIP(ctx)
 		},
-
 	}
 }
 

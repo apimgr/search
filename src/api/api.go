@@ -306,8 +306,8 @@ type AutodiscoverResponse struct {
 	} `json:"api"`
 	// Per AI.md PART 32: CLI version info for auto-update checks.
 	// Keys are "{os}-{arch}" e.g. "linux-amd64".
-	CLIVersions    map[string]CLIBinaryInfo `json:"cli_versions"`
-	CLIMinVersion  string                   `json:"cli_min_version"`
+	CLIVersions   map[string]CLIBinaryInfo `json:"cli_versions"`
+	CLIMinVersion string                   `json:"cli_min_version"`
 }
 
 // InfoResponse represents server info response
@@ -1849,7 +1849,7 @@ func (h *Handler) handlePreferences(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodPost {
 		h.jsonResponse(w, http.StatusOK, &APIResponse{
-			OK: true,
+			OK:   true,
 			Data: map[string]string{"status": "saved"},
 		})
 		return

@@ -497,7 +497,6 @@ func TestVersion(t *testing.T) {
 	}
 }
 
-
 // Additional tests for 100% coverage
 
 // Test Search with invalid JSON response
