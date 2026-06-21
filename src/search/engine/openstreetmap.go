@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // OpenStreetMap implements OpenStreetMap/Nominatim search engine

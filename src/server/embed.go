@@ -14,10 +14,10 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/i18n"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 //go:embed template/layout/*.tmpl template/partial/*.tmpl template/partial/public/*.tmpl template/component/*.tmpl template/page/*.tmpl static/*

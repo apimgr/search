@@ -1070,4 +1070,3 @@ func nullableTime(value time.Time) interface{} {
 func ptrTime(value time.Time) *time.Time {
 	return &value
 }
-

@@ -248,4 +248,3 @@ func escapeUnicode(s string) string {
 func escapeHex(s string) string {
 	return hex.EncodeToString([]byte(s))
 }
-

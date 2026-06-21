@@ -9,7 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-"strings"
+	"strings"
 	"time"
 
 	"github.com/apimgr/search/src/version"
@@ -1029,4 +1029,3 @@ func formatSubnetData(data map[string]interface{}) string {
 	html.WriteString("</div>")
 	return html.String()
 }
-

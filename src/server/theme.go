@@ -129,4 +129,3 @@ func GetThemeInfo(r *http.Request) ThemeInfo {
 
 	return info
 }
-

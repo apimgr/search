@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/version"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
-	"github.com/apimgr/search/src/version"
 )
 
 // UserAgentHandler handles useragent:{string} queries
