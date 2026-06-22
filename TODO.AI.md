@@ -38,6 +38,6 @@ Read: AI.md PART 28
 
 ## [ ] Fix Makefile coverage output path
 
-`make test` writes `coverage.out` to the project tree (project root). The spec requires coverage output to go to `/tmp/coverage.out` (or a tmp subdirectory). Update the test target in `Makefile` to write coverage to `/tmp/coverage.out` instead of `coverage.out`.
+`make test` writes `coverage.out` to the project tree (project root) at line 203 of the Makefile. The spec requires coverage output to go to `/tmp/apimgr/search-XXXXXX/coverage.out` (never to project tree). Update the `test` target in `Makefile`: create a temp dir with `mktemp -d "/tmp/$(PROJECTORG)/$(PROJECTNAME)-XXXXXX"` and pass that path as `-coverprofile=$$COVDIR/coverage.out`.
 
 Read: AI.md PART 26

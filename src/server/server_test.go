@@ -12,6 +12,7 @@ import (
 	"github.com/apimgr/search/src/direct"
 	"github.com/apimgr/search/src/i18n"
 	"github.com/apimgr/search/src/version"
+	"github.com/go-chi/chi/v5"
 )
 
 // Tests for Middleware
@@ -734,13 +735,17 @@ func TestTargetTypeString(t *testing.T) {
 }
 
 // TestMetrics tests all Metrics functionality in a single test to avoid
-// Prometheus duplicate collector registration panics (collectors are global)
+// Prometheus duplicate collector registration panics (collectors are global).
+// Uses the package-level sharedServer to avoid re-registering the same metric names.
 func TestMetrics(t *testing.T) {
-	cfg := &config.Config{}
+	s := sharedServer()
+	m := s.metrics
+	cfg := m.config
 	cfg.Server.Metrics.Enabled = true
 	cfg.Server.Metrics.IncludeSystem = false
+	origToken := cfg.Server.Metrics.Token
 	cfg.Server.Metrics.Token = "secret-token"
-	m := NewMetrics(cfg)
+	t.Cleanup(func() { cfg.Server.Metrics.Token = origToken })
 
 	// Test NewMetrics
 	t.Run("NewMetrics", func(t *testing.T) {
@@ -1775,3 +1780,1330 @@ func TestOpenSearchURLStruct(t *testing.T) {
 		t.Errorf("Template incorrect")
 	}
 }
+
+// Tests for logging.go
+
+func TestLogLevelString(t *testing.T) {
+	tests := []struct {
+		level LogLevel
+		want  string
+	}{
+		{LevelDebug, "DEBUG"},
+		{LevelInfo, "INFO"},
+		{LevelWarn, "WARN"},
+		{LevelError, "ERROR"},
+		{LevelFatal, "FATAL"},
+		{LogLevel(99), "UNKNOWN"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			if got := tt.level.String(); got != tt.want {
+				t.Errorf("LogLevel(%d).String() = %q, want %q", tt.level, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseLogLevel(t *testing.T) {
+	tests := []struct {
+		input string
+		want  LogLevel
+	}{
+		{"debug", LevelDebug},
+		{"DEBUG", LevelDebug},
+		{"info", LevelInfo},
+		{"INFO", LevelInfo},
+		{"warn", LevelWarn},
+		{"warning", LevelWarn},
+		{"WARN", LevelWarn},
+		{"error", LevelError},
+		{"ERROR", LevelError},
+		{"fatal", LevelFatal},
+		{"FATAL", LevelFatal},
+		// unknown → defaults to LevelInfo
+		{"", LevelInfo},
+		{"verbose", LevelInfo},
+		{"trace", LevelInfo},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			if got := ParseLogLevel(tt.input); got != tt.want {
+				t.Errorf("ParseLogLevel(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNewLogger(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Logs.Level = "debug"
+	cfg.Server.Logs.Format = "text"
+
+	l := NewLogger(cfg)
+	if l == nil {
+		t.Fatal("NewLogger() returned nil")
+	}
+	if l.level != LevelDebug {
+		t.Errorf("level = %v, want LevelDebug", l.level)
+	}
+	if l.format != "text" {
+		t.Errorf("format = %q, want %q", l.format, "text")
+	}
+}
+
+func TestLoggerSetLevel(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Logs.Level = "info"
+	l := NewLogger(cfg)
+
+	l.SetLevel(LevelError)
+	if l.level != LevelError {
+		t.Errorf("after SetLevel: level = %v, want LevelError", l.level)
+	}
+}
+
+func TestLoggerWithField(t *testing.T) {
+	cfg := &config.Config{}
+	l := NewLogger(cfg)
+	l2 := l.WithField("key", "value")
+
+	if l2 == l {
+		t.Error("WithField should return a new logger instance")
+	}
+	if l2.fields["key"] != "value" {
+		t.Errorf("fields[key] = %v, want %q", l2.fields["key"], "value")
+	}
+	// Original should be unmodified
+	if _, ok := l.fields["key"]; ok {
+		t.Error("original logger fields should not be modified by WithField")
+	}
+}
+
+func TestLoggerWithFields(t *testing.T) {
+	cfg := &config.Config{}
+	l := NewLogger(cfg)
+	l2 := l.WithFields(map[string]interface{}{"a": 1, "b": "two"})
+
+	if l2 == l {
+		t.Error("WithFields should return a new logger instance")
+	}
+	if l2.fields["a"] != 1 {
+		t.Errorf("fields[a] = %v, want 1", l2.fields["a"])
+	}
+	if l2.fields["b"] != "two" {
+		t.Errorf("fields[b] = %v, want 'two'", l2.fields["b"])
+	}
+}
+
+func TestLoggerWithFieldsInheritance(t *testing.T) {
+	cfg := &config.Config{}
+	l := NewLogger(cfg)
+	l = l.WithField("original", true)
+	l2 := l.WithFields(map[string]interface{}{"new": "field"})
+
+	// New logger should have both fields
+	if _, ok := l2.fields["original"]; !ok {
+		t.Error("WithFields should inherit existing fields from parent logger")
+	}
+	if _, ok := l2.fields["new"]; !ok {
+		t.Error("WithFields should include new fields")
+	}
+}
+
+func TestLoggerDebugBelowLevelSuppressed(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Logs.Level = "info"
+	l := NewLogger(cfg)
+
+	// Write to a buffer so we can check nothing was written
+	var buf strings.Builder
+	l.output = &buf
+
+	l.Debug("should be suppressed")
+
+	if buf.Len() > 0 {
+		t.Errorf("Debug() wrote output when level is INFO: %q", buf.String())
+	}
+}
+
+func TestLoggerInfoWritesOutput(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Logs.Level = "debug"
+	cfg.Server.Logs.Format = "text"
+	l := NewLogger(cfg)
+	l.colorOutput = false
+
+	var buf strings.Builder
+	l.output = &buf
+
+	l.Info("hello world")
+
+	if !strings.Contains(buf.String(), "hello world") {
+		t.Errorf("Info() output does not contain message: %q", buf.String())
+	}
+	if !strings.Contains(buf.String(), "INFO") {
+		t.Errorf("Info() output does not contain level: %q", buf.String())
+	}
+}
+
+func TestLoggerWarnWritesOutput(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Logs.Level = "debug"
+	cfg.Server.Logs.Format = "text"
+	l := NewLogger(cfg)
+	l.colorOutput = false
+
+	var buf strings.Builder
+	l.output = &buf
+
+	l.Warn("warning message")
+
+	if !strings.Contains(buf.String(), "WARN") {
+		t.Errorf("Warn() output missing level: %q", buf.String())
+	}
+}
+
+func TestLoggerErrorIncludesCallerInfo(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Logs.Level = "debug"
+	cfg.Server.Logs.Format = "text"
+	l := NewLogger(cfg)
+	l.colorOutput = false
+
+	var buf strings.Builder
+	l.output = &buf
+
+	l.Error("error occurred")
+
+	// Error level adds file:line info
+	out := buf.String()
+	if !strings.Contains(out, "ERROR") {
+		t.Errorf("Error() output missing level: %q", out)
+	}
+}
+
+func TestLoggerJSONFormat(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Logs.Level = "debug"
+	cfg.Server.Logs.Format = "json"
+	l := NewLogger(cfg)
+
+	var buf strings.Builder
+	l.output = &buf
+
+	l.Info("json test")
+
+	out := buf.String()
+	if !strings.Contains(out, `"message"`) {
+		t.Errorf("JSON output missing 'message' key: %q", out)
+	}
+	if !strings.Contains(out, "json test") {
+		t.Errorf("JSON output missing message text: %q", out)
+	}
+	if !strings.Contains(out, `"level"`) {
+		t.Errorf("JSON output missing 'level' key: %q", out)
+	}
+}
+
+func TestLoggerRequestLogger(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Logs.Level = "debug"
+	cfg.Server.Logs.Format = "text"
+	l := NewLogger(cfg)
+	l.colorOutput = false
+
+	var buf strings.Builder
+	l.output = &buf
+
+	l.RequestLogger("GET", "/search", "127.0.0.1", 200, 50*time.Millisecond)
+
+	out := buf.String()
+	if !strings.Contains(out, "HTTP Request") {
+		t.Errorf("RequestLogger output missing 'HTTP Request': %q", out)
+	}
+	if !strings.Contains(out, "/search") {
+		t.Errorf("RequestLogger output missing path: %q", out)
+	}
+}
+
+func TestLoggerRotateNoFile(t *testing.T) {
+	cfg := &config.Config{}
+	l := NewLogger(cfg)
+	// No file configured — Rotate should be a no-op returning nil
+	if err := l.Rotate(); err != nil {
+		t.Errorf("Rotate() with no file = %v, want nil", err)
+	}
+}
+
+func TestLoggerClose(t *testing.T) {
+	cfg := &config.Config{}
+	l := NewLogger(cfg)
+	// No file — Close should return nil
+	if err := l.Close(); err != nil {
+		t.Errorf("Close() with no file = %v, want nil", err)
+	}
+}
+
+// Tests for pages.go pure functions
+
+func TestFormatDuration(t *testing.T) {
+	tests := []struct {
+		name  string
+		input time.Duration
+		want  string
+	}{
+		{"zero", 0, "0m"},
+		{"45 seconds", 45 * time.Second, "0m"},
+		{"one minute", time.Minute, "1m"},
+		{"90 seconds", 90 * time.Second, "1m"},
+		{"one hour", time.Hour, "1h 0m"},
+		{"1h30m", time.Hour + 30*time.Minute, "1h 30m"},
+		{"one day", 24 * time.Hour, "1d 0h 0m"},
+		{"2d 5h 30m", 2*24*time.Hour + 5*time.Hour + 30*time.Minute, "2d 5h 30m"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := formatDuration(tt.input); got != tt.want {
+				t.Errorf("formatDuration(%v) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetVersion(t *testing.T) {
+	v := getVersion()
+	if v == "" {
+		t.Error("getVersion() returned empty string")
+	}
+}
+
+func TestJsonMarshal(t *testing.T) {
+	type sample struct {
+		Name string `json:"name"`
+		Age  int    `json:"age"`
+	}
+	input := sample{Name: "test", Age: 42}
+	data, err := jsonMarshal(input)
+	if err != nil {
+		t.Fatalf("jsonMarshal() error = %v", err)
+	}
+	if !strings.Contains(string(data), `"name"`) {
+		t.Errorf("jsonMarshal output missing 'name' key: %s", data)
+	}
+	if !strings.Contains(string(data), "test") {
+		t.Errorf("jsonMarshal output missing value: %s", data)
+	}
+}
+
+func TestJsonMarshalNilInput(t *testing.T) {
+	data, err := jsonMarshal(nil)
+	if err != nil {
+		t.Fatalf("jsonMarshal(nil) error = %v", err)
+	}
+	if string(data) != "null" {
+		t.Errorf("jsonMarshal(nil) = %q, want %q", string(data), "null")
+	}
+}
+
+func TestHandleLivez(t *testing.T) {
+	s := &Server{config: &config.Config{}, i18nManager: i18n.NewManager("en", []string{"en"})}
+	r := httptest.NewRequest(http.MethodGet, "/livez", nil)
+	w := httptest.NewRecorder()
+
+	s.handleLivez(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("handleLivez() status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if !strings.Contains(w.Body.String(), "ALIVE") {
+		t.Errorf("handleLivez() body = %q, want to contain 'ALIVE'", w.Body.String())
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "text/plain" {
+		t.Errorf("handleLivez() Content-Type = %q, want 'text/plain'", ct)
+	}
+}
+
+func TestHandleReadyzHealthy(t *testing.T) {
+	s := &Server{config: &config.Config{}, i18nManager: i18n.NewManager("en", []string{"en"})}
+	r := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	w := httptest.NewRecorder()
+
+	s.handleReadyz(w, r)
+
+	// With no DB and no maintenance mode, should be 200 READY
+	if w.Code != http.StatusOK {
+		t.Errorf("handleReadyz() status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if !strings.Contains(w.Body.String(), "READY") {
+		t.Errorf("handleReadyz() body = %q, want to contain 'READY'", w.Body.String())
+	}
+}
+
+func TestHandleReadyzMaintenance(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.MaintenanceMode = true
+	s := &Server{config: cfg, i18nManager: i18n.NewManager("en", []string{"en"})}
+	r := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	w := httptest.NewRecorder()
+
+	s.handleReadyz(w, r)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("handleReadyz() in maintenance status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+	}
+	if !strings.Contains(w.Body.String(), "NOT READY") {
+		t.Errorf("handleReadyz() body = %q, want to contain 'NOT READY'", w.Body.String())
+	}
+}
+
+func TestHandleNotFoundAPIPath(t *testing.T) {
+	s := &Server{config: &config.Config{}, i18nManager: i18n.NewManager("en", []string{"en"})}
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/missing", nil)
+	w := httptest.NewRecorder()
+
+	s.handleNotFound(w, r)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("handleNotFound() API status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+		t.Errorf("handleNotFound() API Content-Type = %q, want 'application/json'", ct)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "NOT_FOUND") {
+		t.Errorf("handleNotFound() API body = %q, missing NOT_FOUND", body)
+	}
+	if !strings.Contains(body, `"ok":false`) {
+		t.Errorf("handleNotFound() API body = %q, missing ok:false", body)
+	}
+}
+
+func TestHandleNotFoundNonAPIPath(t *testing.T) {
+	s := &Server{config: &config.Config{}, i18nManager: i18n.NewManager("en", []string{"en"})}
+	r := httptest.NewRequest(http.MethodGet, "/missing-page", nil)
+	w := httptest.NewRecorder()
+
+	s.handleNotFound(w, r)
+
+	// Non-API paths fall through to handleError (renderer is nil so falls back to http.Error)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("handleNotFound() non-API status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+}
+
+func TestHandleAutocompleteEmptyQuery(t *testing.T) {
+	s := &Server{config: &config.Config{}, i18nManager: i18n.NewManager("en", []string{"en"})}
+	r := httptest.NewRequest(http.MethodGet, "/autocomplete?q=", nil)
+	w := httptest.NewRecorder()
+
+	s.handleAutocomplete(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("handleAutocomplete() empty query status = %d, want %d", w.Code, http.StatusOK)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, `"ok":true`) {
+		t.Errorf("handleAutocomplete() empty query body = %q, missing ok:true", body)
+	}
+}
+
+func TestHandleAutocompleteNoAPIHandler(t *testing.T) {
+	// When apiHandler is nil and query is present, fall back to empty suggestions
+	s := &Server{config: &config.Config{}, i18nManager: i18n.NewManager("en", []string{"en"})}
+	r := httptest.NewRequest(http.MethodGet, "/autocomplete?q=golang", nil)
+	w := httptest.NewRecorder()
+
+	s.handleAutocomplete(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("handleAutocomplete() no-apiHandler status = %d, want %d", w.Code, http.StatusOK)
+	}
+}
+
+func TestRespondHealthJSONHealthy(t *testing.T) {
+	s := &Server{config: &config.Config{}, i18nManager: i18n.NewManager("en", []string{"en"})}
+	health := &HealthResponse{Status: "healthy", Version: "1.0.0"}
+	w := httptest.NewRecorder()
+
+	s.respondHealthJSON(w, health)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("respondHealthJSON() healthy status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+		t.Errorf("respondHealthJSON() Content-Type = %q, want 'application/json'", ct)
+	}
+	if !strings.Contains(w.Body.String(), "healthy") {
+		t.Errorf("respondHealthJSON() body missing 'healthy': %q", w.Body.String())
+	}
+}
+
+func TestRespondHealthJSONUnhealthy(t *testing.T) {
+	s := &Server{config: &config.Config{}, i18nManager: i18n.NewManager("en", []string{"en"})}
+	health := &HealthResponse{Status: "unhealthy"}
+	w := httptest.NewRecorder()
+
+	s.respondHealthJSON(w, health)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("respondHealthJSON() unhealthy status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+	}
+}
+
+func TestRespondHealthJSONMaintenance(t *testing.T) {
+	s := &Server{config: &config.Config{}, i18nManager: i18n.NewManager("en", []string{"en"})}
+	health := &HealthResponse{Status: "maintenance"}
+	w := httptest.NewRecorder()
+
+	s.respondHealthJSON(w, health)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("respondHealthJSON() maintenance status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+	}
+}
+
+func TestRespondHealthText(t *testing.T) {
+	s := &Server{config: &config.Config{}, i18nManager: i18n.NewManager("en", []string{"en"})}
+	health := &HealthResponse{
+		Status:  "healthy",
+		Version: "1.0.0",
+		Mode:    "production",
+		Uptime:  "1h 0m",
+		Checks: ChecksInfo{
+			Database:  "ok",
+			Cache:     "disabled",
+			Disk:      "ok",
+			Scheduler: "ok",
+		},
+	}
+	w := httptest.NewRecorder()
+
+	s.respondHealthText(w, health)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("respondHealthText() status = %d, want %d", w.Code, http.StatusOK)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "status: healthy") {
+		t.Errorf("respondHealthText() body missing 'status: healthy': %q", body)
+	}
+	if !strings.Contains(body, "version: 1.0.0") {
+		t.Errorf("respondHealthText() body missing version: %q", body)
+	}
+}
+
+func TestRespondHealthTextUnhealthy(t *testing.T) {
+	s := &Server{config: &config.Config{}, i18nManager: i18n.NewManager("en", []string{"en"})}
+	health := &HealthResponse{Status: "unhealthy"}
+	w := httptest.NewRecorder()
+
+	s.respondHealthText(w, health)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("respondHealthText() unhealthy status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+	}
+}
+
+func TestBuildHealthInfoMinimal(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Mode = "production"
+	s := &Server{
+		config:      cfg,
+		i18nManager: i18n.NewManager("en", []string{"en"}),
+		startTime:   time.Now().Add(-time.Hour),
+	}
+
+	health := s.buildHealthInfo()
+
+	if health == nil {
+		t.Fatal("buildHealthInfo() returned nil")
+	}
+	if health.Status != "healthy" {
+		t.Errorf("buildHealthInfo() status = %q, want 'healthy'", health.Status)
+	}
+	if health.Mode != "production" {
+		t.Errorf("buildHealthInfo() mode = %q, want 'production'", health.Mode)
+	}
+	if health.Checks.Database != "ok" {
+		t.Errorf("buildHealthInfo() checks.database = %q, want 'ok'", health.Checks.Database)
+	}
+}
+
+func TestBuildHealthInfoMaintenanceMode(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.MaintenanceMode = true
+	s := &Server{
+		config:      cfg,
+		i18nManager: i18n.NewManager("en", []string{"en"}),
+		startTime:   time.Now(),
+	}
+
+	health := s.buildHealthInfo()
+
+	if health.Status != "maintenance" {
+		t.Errorf("buildHealthInfo() maintenance status = %q, want 'maintenance'", health.Status)
+	}
+}
+
+func TestSignCaptcha(t *testing.T) {
+	s := &Server{
+		config:    &config.Config{},
+		startTime: time.Now(),
+	}
+	id := s.signCaptcha(7)
+	if id == "" {
+		t.Error("signCaptcha() returned empty string")
+	}
+	// Format should be "answer.signature"
+	parts := strings.Split(id, ".")
+	if len(parts) < 2 {
+		t.Errorf("signCaptcha() format incorrect, got %q (expected answer.sig)", id)
+	}
+	if parts[0] != "7" {
+		t.Errorf("signCaptcha(7) answer part = %q, want '7'", parts[0])
+	}
+}
+
+func TestGetCSRFToken(t *testing.T) {
+	s := &Server{config: &config.Config{}}
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+
+	tok1 := s.getCSRFToken(r)
+	tok2 := s.getCSRFToken(r)
+
+	if tok1 == "" {
+		t.Error("getCSRFToken() returned empty token")
+	}
+	// Each call generates a new random token
+	if tok1 == tok2 {
+		t.Error("getCSRFToken() returned same token on consecutive calls (should be random)")
+	}
+}
+
+// Tests for auth.go
+
+func TestExtractBearerToken(t *testing.T) {
+	tests := []struct {
+		name    string
+		header  string
+		wantTok string
+		wantOK  bool
+	}{
+		{"no header", "", "", false},
+		{"non-bearer", "Basic dXNlcjpwYXNz", "", false},
+		{"bearer only prefix", "Bearer ", "", false},
+		{"valid token", "Bearer mytoken123", "mytoken123", true},
+		{"valid with whitespace", "Bearer  spaced ", "spaced", true},
+		{"case insensitive", "bearer mytoken", "mytoken", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, "/", nil)
+			if tt.header != "" {
+				r.Header.Set("Authorization", tt.header)
+			}
+			tok, ok := extractBearerToken(r)
+			if ok != tt.wantOK {
+				t.Errorf("extractBearerToken() ok = %v, want %v", ok, tt.wantOK)
+			}
+			if tok != tt.wantTok {
+				t.Errorf("extractBearerToken() token = %q, want %q", tok, tt.wantTok)
+			}
+		})
+	}
+}
+
+func TestValidateOperatorToken(t *testing.T) {
+	tests := []struct {
+		name        string
+		configToken string
+		headerToken string
+		want        bool
+	}{
+		{"nil config handled via no match", "", "", false},
+		{"empty config token", "", "anything", false},
+		{"matching token", "secret123", "secret123", true},
+		{"wrong token", "secret123", "wrongtoken", false},
+		{"no header", "secret123", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &config.Config{}
+			cfg.Server.Token = tt.configToken
+			r := httptest.NewRequest(http.MethodGet, "/", nil)
+			if tt.headerToken != "" {
+				r.Header.Set("Authorization", "Bearer "+tt.headerToken)
+			}
+			got := ValidateOperatorToken(r, cfg)
+			if got != tt.want {
+				t.Errorf("ValidateOperatorToken() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidateOperatorTokenNilConfig(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Header.Set("Authorization", "Bearer anytoken")
+	if got := ValidateOperatorToken(r, nil); got {
+		t.Error("ValidateOperatorToken() with nil config should return false")
+	}
+}
+
+func TestRequireOperator(t *testing.T) {
+	tests := []struct {
+		name       string
+		token      string
+		sendHeader string
+		wantStatus int
+	}{
+		{"no token configured", "", "", http.StatusUnauthorized},
+		{"valid token", "correcttoken", "correcttoken", http.StatusOK},
+		{"wrong token", "correcttoken", "wrongtoken", http.StatusUnauthorized},
+		{"missing header", "correcttoken", "", http.StatusUnauthorized},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &config.Config{}
+			cfg.Server.Token = tt.token
+			s := &Server{config: cfg, i18nManager: i18n.NewManager("en", []string{"en"})}
+
+			next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			})
+
+			handler := s.RequireOperator(next)
+			r := httptest.NewRequest(http.MethodGet, "/api/admin", nil)
+			if tt.sendHeader != "" {
+				r.Header.Set("Authorization", "Bearer "+tt.sendHeader)
+			}
+			w := httptest.NewRecorder()
+			handler(w, r)
+
+			if w.Code != tt.wantStatus {
+				t.Errorf("RequireOperator() status = %d, want %d", w.Code, tt.wantStatus)
+			}
+		})
+	}
+}
+
+func TestRequireOperatorSetsWWWAuthenticate(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Token = "secret"
+	s := &Server{config: cfg, i18nManager: i18n.NewManager("en", []string{"en"})}
+
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := s.RequireOperator(next)
+
+	r := httptest.NewRequest(http.MethodGet, "/api/admin", nil)
+	w := httptest.NewRecorder()
+	handler(w, r)
+
+	if hdr := w.Header().Get("WWW-Authenticate"); hdr == "" {
+		t.Error("RequireOperator() should set WWW-Authenticate header on 401")
+	}
+}
+
+// Tests for alerts.go pure functions
+
+func TestSplitAlertAction(t *testing.T) {
+	tests := []struct {
+		name       string
+		path       string
+		wantToken  string
+		wantAction string
+	}{
+		{"empty path", "", "", ""},
+		{"no slash", "tokenonly", "", ""},
+		{"valid token/update", "tok123/update", "tok123", "update"},
+		{"valid token/delete", "tok123/delete", "tok123", "delete"},
+		{"valid token/pause", "tok456/pause", "tok456", "pause"},
+		{"nested path ignored", "tok/sub/extra", "tok", "sub/extra"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotToken, gotAction := splitAlertAction(tt.path)
+			if gotToken != tt.wantToken {
+				t.Errorf("splitAlertAction(%q) token = %q, want %q", tt.path, gotToken, tt.wantToken)
+			}
+			if gotAction != tt.wantAction {
+				t.Errorf("splitAlertAction(%q) action = %q, want %q", tt.path, gotAction, tt.wantAction)
+			}
+		})
+	}
+}
+
+func TestURLQueryEscape(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"", ""},
+		{"hello", "hello"},
+		{"hello world", "hello+world"},
+		{"  trim me  ", "trim+me"},
+		{"a&b=c", "a%26b%3Dc"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			if got := urlQueryEscape(tt.input); got != tt.want {
+				t.Errorf("urlQueryEscape(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBuildAlertEnginesQuery(t *testing.T) {
+	tests := []struct {
+		name    string
+		engines []string
+		want    string
+	}{
+		{"empty slice", []string{}, ""},
+		{"nil slice", nil, ""},
+		{"one engine", []string{"google"}, "&engines=google"},
+		{"two engines", []string{"google", "bing"}, "&engines=google&engines=bing"},
+		{"with spaces", []string{"  google  "}, "&engines=google"},
+		{"empty string skipped", []string{"google", "", "bing"}, "&engines=google&engines=bing"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := buildAlertEnginesQuery(tt.engines); got != tt.want {
+				t.Errorf("buildAlertEnginesQuery(%v) = %q, want %q", tt.engines, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSplitCSVParam(t *testing.T) {
+	tests := []struct {
+		name   string
+		values []string
+		want   []string
+	}{
+		{"empty", []string{}, []string{}},
+		{"single value", []string{"google"}, []string{"google"}},
+		{"csv in one", []string{"google,bing,duckduckgo"}, []string{"google", "bing", "duckduckgo"}},
+		{"multi values", []string{"google", "bing"}, []string{"google", "bing"}},
+		{"with spaces", []string{"google , bing"}, []string{"google", "bing"}},
+		{"empty elements skipped", []string{"google,,bing"}, []string{"google", "bing"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := splitCSVParam(tt.values)
+			if len(got) != len(tt.want) {
+				t.Errorf("splitCSVParam(%v) = %v, want %v", tt.values, got, tt.want)
+				return
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("splitCSVParam(%v)[%d] = %q, want %q", tt.values, i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestAlertEngineOptionsNilRegistry(t *testing.T) {
+	s := &Server{config: &config.Config{}, registry: nil}
+	opts := s.alertEngineOptions([]string{"google"})
+	if len(opts) != 0 {
+		t.Errorf("alertEngineOptions() with nil registry = %v, want empty slice", opts)
+	}
+}
+
+func TestHandleAlertNewNilManager(t *testing.T) {
+	s := &Server{
+		config:       &config.Config{},
+		i18nManager:  i18n.NewManager("en", []string{"en"}),
+		alertManager: nil,
+	}
+	r := httptest.NewRequest(http.MethodGet, "/alerts/new", nil)
+	w := httptest.NewRecorder()
+
+	s.handleAlertNew(w, r)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("handleAlertNew() nil manager status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+	}
+}
+
+func TestHandleAlertNewMethodNotAllowed(t *testing.T) {
+	s := &Server{
+		config:      &config.Config{},
+		i18nManager: i18n.NewManager("en", []string{"en"}),
+	}
+	r := httptest.NewRequest(http.MethodPost, "/alerts/new", nil)
+	w := httptest.NewRecorder()
+
+	s.handleAlertNew(w, r)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("handleAlertNew() POST status = %d, want %d", w.Code, http.StatusMethodNotAllowed)
+	}
+}
+
+func TestHandleAlertsNilManager(t *testing.T) {
+	s := &Server{
+		config:       &config.Config{},
+		i18nManager:  i18n.NewManager("en", []string{"en"}),
+		alertManager: nil,
+	}
+	r := httptest.NewRequest(http.MethodPost, "/alerts", strings.NewReader("query=test"))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	s.handleAlerts(w, r)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("handleAlerts() nil manager status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+	}
+}
+
+func TestHandleAlertsMethodNotAllowed(t *testing.T) {
+	s := &Server{
+		config:      &config.Config{},
+		i18nManager: i18n.NewManager("en", []string{"en"}),
+	}
+	r := httptest.NewRequest(http.MethodGet, "/alerts", nil)
+	w := httptest.NewRecorder()
+
+	s.handleAlerts(w, r)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("handleAlerts() GET status = %d, want %d", w.Code, http.StatusMethodNotAllowed)
+	}
+}
+
+func TestHandleAlertActionNilManager(t *testing.T) {
+	s := &Server{
+		config:       &config.Config{},
+		i18nManager:  i18n.NewManager("en", []string{"en"}),
+		alertManager: nil,
+	}
+	r := httptest.NewRequest(http.MethodGet, "/alerts/tok123/update", nil)
+	w := httptest.NewRecorder()
+
+	s.handleAlertAction(w, r)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("handleAlertAction() nil manager status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+	}
+}
+
+// Tests for response.go
+
+func TestRespondJSON(t *testing.T) {
+	w := httptest.NewRecorder()
+	respondJSON(w, http.StatusOK, map[string]string{"key": "value"})
+
+	if w.Code != http.StatusOK {
+		t.Errorf("respondJSON() status = %d, want %d", w.Code, http.StatusOK)
+	}
+	ct := w.Header().Get("Content-Type")
+	if ct != "application/json" {
+		t.Errorf("respondJSON() Content-Type = %q, want 'application/json'", ct)
+	}
+	if !strings.Contains(w.Body.String(), "value") {
+		t.Errorf("respondJSON() body = %q, missing expected value", w.Body.String())
+	}
+}
+
+func TestRespondJSONCustomStatus(t *testing.T) {
+	w := httptest.NewRecorder()
+	respondJSON(w, http.StatusCreated, map[string]bool{"ok": true})
+
+	if w.Code != http.StatusCreated {
+		t.Errorf("respondJSON() status = %d, want %d", w.Code, http.StatusCreated)
+	}
+}
+
+func TestRespondError(t *testing.T) {
+	w := httptest.NewRecorder()
+	respondError(w, http.StatusBadRequest, "something went wrong")
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("respondError() status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, `"ok":false`) {
+		t.Errorf("respondError() body = %q, missing ok:false", body)
+	}
+	if !strings.Contains(body, "something went wrong") {
+		t.Errorf("respondError() body = %q, missing message", body)
+	}
+}
+
+// Tests for debug.go handlers
+
+func TestHandleDebugMemory(t *testing.T) {
+	s := &Server{config: &config.Config{}}
+	r := httptest.NewRequest(http.MethodGet, "/debug/memory", nil)
+	w := httptest.NewRecorder()
+
+	s.handleDebugMemory(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("handleDebugMemory() status = %d, want %d", w.Code, http.StatusOK)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "goroutines") {
+		t.Errorf("handleDebugMemory() body = %q, missing 'goroutines'", body)
+	}
+	if !strings.Contains(body, "alloc_mb") {
+		t.Errorf("handleDebugMemory() body = %q, missing 'alloc_mb'", body)
+	}
+}
+
+func TestHandleDebugGoroutines(t *testing.T) {
+	s := &Server{config: &config.Config{}}
+	r := httptest.NewRequest(http.MethodGet, "/debug/goroutines", nil)
+	w := httptest.NewRecorder()
+
+	s.handleDebugGoroutines(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("handleDebugGoroutines() status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if ct := w.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/plain") {
+		t.Errorf("handleDebugGoroutines() Content-Type = %q, want text/plain prefix", ct)
+	}
+	// Stack trace should mention goroutine
+	if !strings.Contains(w.Body.String(), "goroutine") {
+		t.Errorf("handleDebugGoroutines() body missing 'goroutine': %q", w.Body.String()[:200])
+	}
+}
+
+func TestHandleDebugCacheNil(t *testing.T) {
+	s := &Server{config: &config.Config{}, cache: nil}
+	r := httptest.NewRequest(http.MethodGet, "/debug/cache", nil)
+	w := httptest.NewRecorder()
+
+	s.handleDebugCache(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("handleDebugCache() nil status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if !strings.Contains(w.Body.String(), `"enabled":false`) {
+		t.Errorf("handleDebugCache() nil body = %q, want enabled:false", w.Body.String())
+	}
+}
+
+func TestHandleDebugDBNil(t *testing.T) {
+	s := &Server{config: &config.Config{}, db: nil}
+	r := httptest.NewRequest(http.MethodGet, "/debug/db", nil)
+	w := httptest.NewRecorder()
+
+	s.handleDebugDB(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("handleDebugDB() nil status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if !strings.Contains(w.Body.String(), `"enabled":false`) {
+		t.Errorf("handleDebugDB() nil body = %q, want enabled:false", w.Body.String())
+	}
+}
+
+func TestHandleDebugSchedulerNil(t *testing.T) {
+	s := &Server{config: &config.Config{}, scheduler: nil}
+	r := httptest.NewRequest(http.MethodGet, "/debug/scheduler", nil)
+	w := httptest.NewRecorder()
+
+	s.handleDebugScheduler(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("handleDebugScheduler() nil status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if !strings.Contains(w.Body.String(), `"enabled":false`) {
+		t.Errorf("handleDebugScheduler() nil body = %q, want enabled:false", w.Body.String())
+	}
+}
+
+func TestHandleDebugConfig(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Mode = "production"
+	s := &Server{config: cfg}
+	r := httptest.NewRequest(http.MethodGet, "/debug/config", nil)
+	w := httptest.NewRecorder()
+
+	s.handleDebugConfig(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("handleDebugConfig() status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+		t.Errorf("handleDebugConfig() Content-Type = %q, want 'application/json'", ct)
+	}
+}
+
+func TestRegisterDebugRoutesDebugFalse(t *testing.T) {
+	// When debug mode is off, no debug routes are registered
+	// We verify by checking the config flag is used
+	cfg := &config.Config{}
+	cfg.Server.Mode = "production"
+	s := &Server{config: cfg}
+
+	// isDebug returns false for production mode with no debug flag
+	if s.config.IsDebug() {
+		t.Skip("config reports debug mode — skipping non-debug test")
+	}
+	// The method should return without panic when debug is false
+	// We use a real chi router to verify no routes were registered
+	router := newTestRouter()
+	s.registerDebugRoutes(router)
+	// If we get here without panic, the test passes
+}
+
+// Tests for opensearch.go
+
+func TestGetBaseURLConfigured(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.BaseURL = "https://search.example.com"
+	s := &Server{config: cfg}
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+
+	got := s.getBaseURL(r)
+	if got != "https://search.example.com" {
+		t.Errorf("getBaseURL() configured = %q, want %q", got, "https://search.example.com")
+	}
+}
+
+func TestGetBaseURLConfiguredTrailingSlash(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.BaseURL = "https://search.example.com/"
+	s := &Server{config: cfg}
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+
+	got := s.getBaseURL(r)
+	if got != "https://search.example.com" {
+		t.Errorf("getBaseURL() trailing slash = %q, want no trailing slash", got)
+	}
+}
+
+func TestGetBaseURLXForwardedProto(t *testing.T) {
+	s := &Server{config: &config.Config{}}
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Host = "example.com"
+	r.Header.Set("X-Forwarded-Proto", "https")
+
+	got := s.getBaseURL(r)
+	if !strings.HasPrefix(got, "https://") {
+		t.Errorf("getBaseURL() X-Forwarded-Proto = %q, want https:// prefix", got)
+	}
+}
+
+func TestGetBaseURLXForwardedHost(t *testing.T) {
+	s := &Server{config: &config.Config{}}
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Host = "internal.host"
+	r.Header.Set("X-Forwarded-Host", "public.example.com, extra.host")
+
+	got := s.getBaseURL(r)
+	if !strings.Contains(got, "public.example.com") {
+		t.Errorf("getBaseURL() X-Forwarded-Host = %q, want public.example.com", got)
+	}
+}
+
+func TestGetBaseURLHTTP(t *testing.T) {
+	s := &Server{config: &config.Config{}}
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Host = "localhost:8080"
+
+	got := s.getBaseURL(r)
+	if !strings.HasPrefix(got, "http://") {
+		t.Errorf("getBaseURL() plain HTTP = %q, want http:// prefix", got)
+	}
+}
+
+func TestGetBaseURLForwardedHeader(t *testing.T) {
+	s := &Server{config: &config.Config{}}
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Host = "example.com"
+	r.Header.Set("Forwarded", "for=10.0.0.1; proto=https")
+
+	got := s.getBaseURL(r)
+	if !strings.HasPrefix(got, "https://") {
+		t.Errorf("getBaseURL() Forwarded header = %q, want https:// prefix", got)
+	}
+}
+
+func TestValidateNotPrivateProxyLocalhost(t *testing.T) {
+	tests := []string{"localhost", "127.0.0.1", "::1"}
+	for _, host := range tests {
+		t.Run(host, func(t *testing.T) {
+			if err := validateNotPrivateProxy(host); err == nil {
+				t.Errorf("validateNotPrivateProxy(%q) should return error for localhost/loopback", host)
+			}
+		})
+	}
+}
+
+func TestValidateNotPrivateProxyInternalSuffixes(t *testing.T) {
+	tests := []string{
+		"myservice.local",
+		"db.internal",
+		"api.localhost",
+	}
+	for _, host := range tests {
+		t.Run(host, func(t *testing.T) {
+			if err := validateNotPrivateProxy(host); err == nil {
+				t.Errorf("validateNotPrivateProxy(%q) should return error for internal hostname", host)
+			}
+		})
+	}
+}
+
+func TestHandleOpenSearchBasic(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Test Search"
+	cfg.Search.OpenSearch.ShortName = "Test"
+	cfg.Search.OpenSearch.Description = "A test search engine"
+	s := &Server{config: cfg, i18nManager: i18n.NewManager("en", []string{"en"})}
+
+	r := httptest.NewRequest(http.MethodGet, "/opensearch.xml", nil)
+	r.Host = "localhost:8080"
+	w := httptest.NewRecorder()
+
+	s.handleOpenSearch(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("handleOpenSearch() status = %d, want %d", w.Code, http.StatusOK)
+	}
+	ct := w.Header().Get("Content-Type")
+	if !strings.Contains(ct, "opensearchdescription+xml") {
+		t.Errorf("handleOpenSearch() Content-Type = %q, missing opensearchdescription+xml", ct)
+	}
+	if !strings.Contains(w.Body.String(), "OpenSearchDescription") {
+		t.Errorf("handleOpenSearch() body missing OpenSearchDescription element")
+	}
+}
+
+func TestHandleOpenSearchCustomName(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Title = "Default Title"
+	s := &Server{config: cfg, i18nManager: i18n.NewManager("en", []string{"en"})}
+
+	r := httptest.NewRequest(http.MethodGet, "/opensearch.xml?name=CustomName", nil)
+	r.Host = "localhost:8080"
+	w := httptest.NewRecorder()
+
+	s.handleOpenSearch(w, r)
+
+	if !strings.Contains(w.Body.String(), "CustomName") {
+		t.Errorf("handleOpenSearch() with name= param should use custom name, body: %q", w.Body.String())
+	}
+}
+
+func TestHandlePreferencesSave(t *testing.T) {
+	s := &Server{config: &config.Config{}, i18nManager: i18n.NewManager("en", []string{"en"})}
+	r := httptest.NewRequest(http.MethodPost, "/preferences", nil)
+	w := httptest.NewRecorder()
+
+	s.handlePreferencesSave(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("handlePreferencesSave() status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if !strings.Contains(w.Body.String(), `"ok":true`) {
+		t.Errorf("handlePreferencesSave() body = %q, missing ok:true", w.Body.String())
+	}
+}
+
+func TestHandleBangProxyMissingURL(t *testing.T) {
+	s := &Server{config: &config.Config{}, i18nManager: i18n.NewManager("en", []string{"en"})}
+	r := httptest.NewRequest(http.MethodGet, "/bang-proxy", nil)
+	w := httptest.NewRecorder()
+
+	s.handleBangProxy(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("handleBangProxy() missing url status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleBangProxyInvalidScheme(t *testing.T) {
+	s := &Server{config: &config.Config{}, i18nManager: i18n.NewManager("en", []string{"en"})}
+	r := httptest.NewRequest(http.MethodGet, "/bang-proxy?url=ftp://example.com/file.txt", nil)
+	w := httptest.NewRecorder()
+
+	s.handleBangProxy(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("handleBangProxy() invalid scheme status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleBangProxyLocalhost(t *testing.T) {
+	s := &Server{config: &config.Config{}, i18nManager: i18n.NewManager("en", []string{"en"})}
+	r := httptest.NewRequest(http.MethodGet, "/bang-proxy?url=http://localhost/secret", nil)
+	w := httptest.NewRecorder()
+
+	s.handleBangProxy(w, r)
+
+	// localhost is blocked by SSRF prevention
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("handleBangProxy() localhost url status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+// Tests for http_errors.go
+
+func TestLocalizedHTTPError(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+
+	localizedHTTPError(w, r, http.StatusNotFound, "errors.not_found")
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("localizedHTTPError() status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+}
+
+// newTestRouter creates a minimal chi router for testing route registration.
+func newTestRouter() *testChiRouter {
+	return &testChiRouter{}
+}
+
+// testChiRouter is a no-op chi.Router that satisfies the interface for testing
+// registerDebugRoutes when debug mode is off (no routes should be registered).
+type testChiRouter struct {
+	routes []string
+}
+
+func (r *testChiRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {}
+func (r *testChiRouter) Use(middlewares ...func(http.Handler) http.Handler) {}
+func (r *testChiRouter) With(middlewares ...func(http.Handler) http.Handler) chi.Router {
+	return r
+}
+func (r *testChiRouter) Group(fn func(chi.Router)) chi.Router { fn(r); return r }
+func (r *testChiRouter) Route(pattern string, fn func(chi.Router)) chi.Router {
+	r.routes = append(r.routes, pattern)
+	fn(r)
+	return r
+}
+func (r *testChiRouter) Mount(pattern string, h http.Handler)             {}
+func (r *testChiRouter) Handle(pattern string, h http.Handler)            {}
+func (r *testChiRouter) HandleFunc(pattern string, h http.HandlerFunc)    {}
+func (r *testChiRouter) Method(method, pattern string, h http.Handler)    {}
+func (r *testChiRouter) MethodFunc(method, pattern string, h http.HandlerFunc) {
+}
+func (r *testChiRouter) Connect(pattern string, h http.HandlerFunc)    {}
+func (r *testChiRouter) Delete(pattern string, h http.HandlerFunc)     {}
+func (r *testChiRouter) Get(pattern string, h http.HandlerFunc)        {}
+func (r *testChiRouter) Head(pattern string, h http.HandlerFunc)       {}
+func (r *testChiRouter) Options(pattern string, h http.HandlerFunc)    {}
+func (r *testChiRouter) Patch(pattern string, h http.HandlerFunc)      {}
+func (r *testChiRouter) Post(pattern string, h http.HandlerFunc)       {}
+func (r *testChiRouter) Put(pattern string, h http.HandlerFunc)        {}
+func (r *testChiRouter) Trace(pattern string, h http.HandlerFunc)      {}
+func (r *testChiRouter) NotFound(h http.HandlerFunc)                   {}
+func (r *testChiRouter) MethodNotAllowed(h http.HandlerFunc)           {}
+func (r *testChiRouter) Routes() []chi.Route                           { return nil }
+func (r *testChiRouter) Middlewares() chi.Middlewares                  { return nil }
+func (r *testChiRouter) Match(rctx *chi.Context, method, path string) bool { return false }
+func (r *testChiRouter) Find(rctx *chi.Context, method, path string) string { return "" }
+
+// verifyRouteCount returns the number of /debug routes registered on this router.
+func (r *testChiRouter) routeCount() int { return len(r.routes) }

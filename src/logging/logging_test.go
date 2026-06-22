@@ -1,7 +1,9 @@
 package logging
 
 import (
+	"bytes"
 	"crypto/tls"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"os"
@@ -2133,5 +2135,1116 @@ func TestFormatVariableStruct(t *testing.T) {
 	}
 	if fv.Example != "example_value" {
 		t.Error("Example should be set")
+	}
+}
+
+// ============================================================
+// csvEscape tests
+// ============================================================
+
+func TestCSVEscape(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"plain string", "hello", "hello"},
+		{"empty string", "", ""},
+		{"string with comma", "hello,world", `"hello,world"`},
+		{"string with double quote", `say "hi"`, `"say ""hi"""`},
+		{"string with newline", "line\none", "\"line\none\""},
+		{"string with carriage return", "line\rone", "\"line\rone\""},
+		{"all special chars", `a,b"c`, `"a,b""c"`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := csvEscape(tt.input)
+			if got != tt.want {
+				t.Errorf("csvEscape(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+// ============================================================
+// matchesAuditFilter tests
+// ============================================================
+
+func TestMatchesAuditFilter(t *testing.T) {
+	now := time.Now().UTC()
+	base := AuditEntry{
+		Event:    AuditActionConfigChange,
+		Category: AuditCategoryConfig,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Username: "operator", IP: "10.0.0.1"},
+		Target:   &AuditTarget{Type: "config", Name: "ssl"},
+		Result:   "success",
+		Time:     now,
+	}
+
+	tests := []struct {
+		name string
+		opts AuditQueryOptions
+		want bool
+	}{
+		{
+			name: "empty opts matches all",
+			opts: AuditQueryOptions{},
+			want: true,
+		},
+		{
+			name: "category match",
+			opts: AuditQueryOptions{Category: AuditCategoryConfig},
+			want: true,
+		},
+		{
+			name: "category no match",
+			opts: AuditQueryOptions{Category: AuditCategorySecurity},
+			want: false,
+		},
+		{
+			name: "severity match",
+			opts: AuditQueryOptions{Severity: AuditSeverityInfo},
+			want: true,
+		},
+		{
+			name: "severity no match",
+			opts: AuditQueryOptions{Severity: AuditSeverityCritical},
+			want: false,
+		},
+		{
+			name: "result match",
+			opts: AuditQueryOptions{Result: "success"},
+			want: true,
+		},
+		{
+			name: "result no match",
+			opts: AuditQueryOptions{Result: "failure"},
+			want: false,
+		},
+		{
+			name: "actor username match",
+			opts: AuditQueryOptions{ActorUsername: "operator"},
+			want: true,
+		},
+		{
+			name: "actor username no match",
+			opts: AuditQueryOptions{ActorUsername: "attacker"},
+			want: false,
+		},
+		{
+			name: "actor IP match",
+			opts: AuditQueryOptions{ActorIP: "10.0.0.1"},
+			want: true,
+		},
+		{
+			name: "actor IP no match",
+			opts: AuditQueryOptions{ActorIP: "192.168.1.1"},
+			want: false,
+		},
+		{
+			name: "target type match",
+			opts: AuditQueryOptions{TargetType: "config"},
+			want: true,
+		},
+		{
+			name: "target type no match",
+			opts: AuditQueryOptions{TargetType: "token"},
+			want: false,
+		},
+		{
+			name: "target name match",
+			opts: AuditQueryOptions{TargetName: "ssl"},
+			want: true,
+		},
+		{
+			name: "target name no match",
+			opts: AuditQueryOptions{TargetName: "smtp"},
+			want: false,
+		},
+		{
+			name: "event match",
+			opts: AuditQueryOptions{Event: AuditActionConfigChange},
+			want: true,
+		},
+		{
+			name: "event no match",
+			opts: AuditQueryOptions{Event: AuditActionIPBlocked},
+			want: false,
+		},
+		{
+			name: "start time before entry",
+			opts: AuditQueryOptions{StartTime: now.Add(-time.Hour)},
+			want: true,
+		},
+		{
+			name: "start time after entry",
+			opts: AuditQueryOptions{StartTime: now.Add(time.Hour)},
+			want: false,
+		},
+		{
+			name: "end time after entry",
+			opts: AuditQueryOptions{EndTime: now.Add(time.Hour)},
+			want: true,
+		},
+		{
+			name: "end time before entry",
+			opts: AuditQueryOptions{EndTime: now.Add(-time.Hour)},
+			want: false,
+		},
+		{
+			name: "time range contains entry",
+			opts: AuditQueryOptions{StartTime: now.Add(-time.Hour), EndTime: now.Add(time.Hour)},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := matchesAuditFilter(base, tt.opts)
+			if got != tt.want {
+				t.Errorf("matchesAuditFilter() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMatchesAuditFilterNilTarget(t *testing.T) {
+	entry := AuditEntry{
+		Category: AuditCategorySystem,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Username: "system"},
+		Result:   "success",
+		Time:     time.Now().UTC(),
+		Target:   nil,
+	}
+
+	// Target type filter with nil target should not match
+	if matchesAuditFilter(entry, AuditQueryOptions{TargetType: "config"}) {
+		t.Error("nil target should not match TargetType filter")
+	}
+
+	// Target name filter with nil target should not match
+	if matchesAuditFilter(entry, AuditQueryOptions{TargetName: "ssl"}) {
+		t.Error("nil target should not match TargetName filter")
+	}
+
+	// No target filter with nil target should match
+	if !matchesAuditFilter(entry, AuditQueryOptions{}) {
+		t.Error("entry with nil target should match empty filter")
+	}
+}
+
+// ============================================================
+// DefaultAuditRetentionPolicy tests
+// ============================================================
+
+func TestDefaultAuditRetentionPolicy(t *testing.T) {
+	policy := DefaultAuditRetentionPolicy()
+
+	if policy.MaxAge == 0 {
+		t.Error("DefaultAuditRetentionPolicy MaxAge should be non-zero")
+	}
+	if policy.MaxAge < 24*time.Hour {
+		t.Error("DefaultAuditRetentionPolicy MaxAge should be at least one day")
+	}
+	if !policy.PreserveCritical {
+		t.Error("DefaultAuditRetentionPolicy should preserve critical events")
+	}
+}
+
+// ============================================================
+// QueryAuditLogs tests
+// ============================================================
+
+func TestQueryAuditLogsEmptyFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	result, err := logger.QueryAuditLogs(AuditQueryOptions{})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error = %v", err)
+	}
+	if result.Total != 0 {
+		t.Errorf("QueryAuditLogs() Total = %d, want 0", result.Total)
+	}
+	if result.Count != 0 {
+		t.Errorf("QueryAuditLogs() Count = %d, want 0", result.Count)
+	}
+	if len(result.Entries) != 0 {
+		t.Errorf("QueryAuditLogs() len(Entries) = %d, want 0", len(result.Entries))
+	}
+}
+
+func TestQueryAuditLogsNonExistentFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "no-such-audit.log")
+	// Create logger but remove file immediately
+	logger := NewAuditLogger(path)
+	logger.Close()
+	os.Remove(path)
+
+	// Re-open with no backing file
+	logger2 := &AuditLogger{path: path}
+
+	result, err := logger2.QueryAuditLogs(AuditQueryOptions{})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() on missing file error = %v", err)
+	}
+	if result.Total != 0 {
+		t.Errorf("QueryAuditLogs() Total = %d, want 0", result.Total)
+	}
+}
+
+func TestQueryAuditLogsReturnsEntries(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	logger.LogConfigChange("operator", "10.0.0.1", "engines", "enabled google")
+	logger.LogIPBlocked("operator", "10.0.0.1", "1.2.3.4", "spam")
+	logger.LogServerStarted("1.0.0", "node-1")
+
+	result, err := logger.QueryAuditLogs(AuditQueryOptions{})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error = %v", err)
+	}
+	if result.Total != 3 {
+		t.Errorf("QueryAuditLogs() Total = %d, want 3", result.Total)
+	}
+	if result.Count != 3 {
+		t.Errorf("QueryAuditLogs() Count = %d, want 3", result.Count)
+	}
+}
+
+func TestQueryAuditLogsFilterByCategory(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	logger.LogConfigChange("operator", "10.0.0.1", "engines", "change")
+	logger.LogIPBlocked("operator", "10.0.0.1", "1.2.3.4", "spam")
+	logger.LogServerStarted("1.0.0", "node-1")
+
+	result, err := logger.QueryAuditLogs(AuditQueryOptions{Category: AuditCategoryConfig})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error = %v", err)
+	}
+	if result.Total != 1 {
+		t.Errorf("QueryAuditLogs() filtered Total = %d, want 1", result.Total)
+	}
+	if result.Entries[0].Category != AuditCategoryConfig {
+		t.Errorf("QueryAuditLogs() entry category = %q, want %q", result.Entries[0].Category, AuditCategoryConfig)
+	}
+}
+
+func TestQueryAuditLogsFilterBySeverity(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	logger.LogConfigChange("operator", "10.0.0.1", "engines", "change")
+	logger.LogBruteForceDetected("10.0.0.2", "/api/v1/search", 10)
+
+	result, err := logger.QueryAuditLogs(AuditQueryOptions{Severity: AuditSeverityCritical})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error = %v", err)
+	}
+	if result.Total != 1 {
+		t.Errorf("QueryAuditLogs() critical Total = %d, want 1", result.Total)
+	}
+}
+
+func TestQueryAuditLogsPagination(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	for i := 0; i < 5; i++ {
+		logger.LogConfigChange("operator", "10.0.0.1", "field", "change")
+	}
+
+	// First page: limit 2
+	r1, err := logger.QueryAuditLogs(AuditQueryOptions{Limit: 2})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error = %v", err)
+	}
+	if r1.Total != 5 {
+		t.Errorf("Total = %d, want 5", r1.Total)
+	}
+	if r1.Count != 2 {
+		t.Errorf("Count = %d, want 2", r1.Count)
+	}
+	if len(r1.Entries) != 2 {
+		t.Errorf("len(Entries) = %d, want 2", len(r1.Entries))
+	}
+
+	// Second page: limit 2, offset 2
+	r2, err := logger.QueryAuditLogs(AuditQueryOptions{Limit: 2, Offset: 2})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error = %v", err)
+	}
+	if r2.Count != 2 {
+		t.Errorf("Page 2 Count = %d, want 2", r2.Count)
+	}
+
+	// Offset past end
+	r3, err := logger.QueryAuditLogs(AuditQueryOptions{Offset: 10})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error = %v", err)
+	}
+	if r3.Count != 0 {
+		t.Errorf("Offset past end Count = %d, want 0", r3.Count)
+	}
+}
+
+func TestQueryAuditLogsTimeRange(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	past := time.Now().UTC().Add(-2 * time.Hour)
+	future := time.Now().UTC().Add(2 * time.Hour)
+
+	logger.LogConfigChange("operator", "10.0.0.1", "ssl", "updated")
+
+	// Entry is recent — querying for last hour should include it
+	r, err := logger.QueryAuditLogs(AuditQueryOptions{
+		StartTime: past,
+		EndTime:   future,
+	})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error = %v", err)
+	}
+	if r.Total != 1 {
+		t.Errorf("QueryAuditLogs() with wide time range Total = %d, want 1", r.Total)
+	}
+
+	// Query far in the past — should return nothing
+	r2, err := logger.QueryAuditLogs(AuditQueryOptions{
+		EndTime: past,
+	})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error = %v", err)
+	}
+	if r2.Total != 0 {
+		t.Errorf("QueryAuditLogs() past range Total = %d, want 0", r2.Total)
+	}
+}
+
+// ============================================================
+// ExportAuditLogs tests
+// ============================================================
+
+func TestExportAuditLogsJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	logger.LogConfigChange("operator", "10.0.0.1", "engines", "enabled google")
+	logger.LogIPBlocked("operator", "10.0.0.1", "5.6.7.8", "spam")
+
+	var buf bytes.Buffer
+	err := logger.ExportAuditLogs(AuditQueryOptions{}, AuditExportJSON, &buf)
+	if err != nil {
+		t.Fatalf("ExportAuditLogs(JSON) error = %v", err)
+	}
+
+	var entries []AuditEntry
+	if err := json.Unmarshal(buf.Bytes(), &entries); err != nil {
+		t.Fatalf("ExportAuditLogs(JSON) produced invalid JSON: %v\nOutput: %s", err, buf.String())
+	}
+	if len(entries) != 2 {
+		t.Errorf("ExportAuditLogs(JSON) entries count = %d, want 2", len(entries))
+	}
+}
+
+func TestExportAuditLogsCSV(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	logger.LogConfigChange("operator", "10.0.0.1", "engines", "enabled google")
+
+	var buf bytes.Buffer
+	err := logger.ExportAuditLogs(AuditQueryOptions{}, AuditExportCSV, &buf)
+	if err != nil {
+		t.Fatalf("ExportAuditLogs(CSV) error = %v", err)
+	}
+
+	output := buf.String()
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	// Header + 1 data row
+	if len(lines) < 2 {
+		t.Errorf("ExportAuditLogs(CSV) produced %d lines, want at least 2", len(lines))
+	}
+	if !strings.HasPrefix(lines[0], "id,time,event,category") {
+		t.Errorf("ExportAuditLogs(CSV) header = %q, expected CSV header", lines[0])
+	}
+	if !strings.Contains(lines[1], "config.updated") {
+		t.Errorf("ExportAuditLogs(CSV) data row = %q, expected config.updated event", lines[1])
+	}
+}
+
+func TestExportAuditLogsUnsupportedFormat(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	logger.LogConfigChange("operator", "10.0.0.1", "engines", "change")
+
+	var buf bytes.Buffer
+	err := logger.ExportAuditLogs(AuditQueryOptions{}, AuditExportFormat("xml"), &buf)
+	if err == nil {
+		t.Error("ExportAuditLogs(unsupported format) should return error")
+	}
+}
+
+func TestExportAuditLogsEmpty(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	var buf bytes.Buffer
+	err := logger.ExportAuditLogs(AuditQueryOptions{}, AuditExportJSON, &buf)
+	if err != nil {
+		t.Fatalf("ExportAuditLogs(JSON) on empty log error = %v", err)
+	}
+	var entries []AuditEntry
+	if err := json.Unmarshal(buf.Bytes(), &entries); err != nil {
+		t.Fatalf("ExportAuditLogs(JSON) empty produced invalid JSON: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("ExportAuditLogs(JSON) empty entries = %d, want 0", len(entries))
+	}
+}
+
+// ============================================================
+// CleanupAuditLogs tests
+// ============================================================
+
+func TestCleanupAuditLogsNonExistent(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "no-such.log")
+	logger := &AuditLogger{path: path}
+
+	removed, err := logger.CleanupAuditLogs(DefaultAuditRetentionPolicy())
+	if err != nil {
+		t.Fatalf("CleanupAuditLogs() on missing file error = %v", err)
+	}
+	if removed != 0 {
+		t.Errorf("CleanupAuditLogs() removed = %d, want 0", removed)
+	}
+}
+
+func TestCleanupAuditLogsMaxEntries(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	for i := 0; i < 10; i++ {
+		logger.LogConfigChange("operator", "10.0.0.1", "field", "change")
+	}
+
+	policy := AuditRetentionPolicy{
+		MaxAge:           0,
+		MaxEntries:       5,
+		PreserveCritical: false,
+	}
+
+	removed, err := logger.CleanupAuditLogs(policy)
+	if err != nil {
+		t.Fatalf("CleanupAuditLogs() error = %v", err)
+	}
+	if removed != 5 {
+		t.Errorf("CleanupAuditLogs() removed = %d, want 5", removed)
+	}
+
+	result, err := logger.QueryAuditLogs(AuditQueryOptions{})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() after cleanup error = %v", err)
+	}
+	if result.Total != 5 {
+		t.Errorf("After cleanup Total = %d, want 5", result.Total)
+	}
+}
+
+func TestCleanupAuditLogsPreservesCritical(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	// Write 3 normal + 1 critical
+	for i := 0; i < 3; i++ {
+		logger.LogConfigChange("operator", "10.0.0.1", "field", "change")
+	}
+	logger.LogBruteForceDetected("1.2.3.4", "/api/v1/search", 50)
+
+	policy := AuditRetentionPolicy{
+		MaxAge:           0,
+		MaxEntries:       2,
+		PreserveCritical: true,
+	}
+
+	_, err := logger.CleanupAuditLogs(policy)
+	if err != nil {
+		t.Fatalf("CleanupAuditLogs() error = %v", err)
+	}
+
+	result, err := logger.QueryAuditLogs(AuditQueryOptions{Severity: AuditSeverityCritical})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() after cleanup error = %v", err)
+	}
+	if result.Total < 1 {
+		t.Error("CleanupAuditLogs() should preserve critical entries")
+	}
+}
+
+func TestCleanupAuditLogsMaxAge(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	// Write a current entry
+	logger.LogConfigChange("operator", "10.0.0.1", "ssl", "change")
+
+	// Cleanup with zero MaxAge means no age filtering
+	policy := AuditRetentionPolicy{
+		MaxAge:           0,
+		MaxEntries:       0,
+		PreserveCritical: false,
+	}
+
+	removed, err := logger.CleanupAuditLogs(policy)
+	if err != nil {
+		t.Fatalf("CleanupAuditLogs() error = %v", err)
+	}
+	if removed != 0 {
+		t.Errorf("CleanupAuditLogs() with MaxAge=0 should remove 0, got %d", removed)
+	}
+}
+
+// ============================================================
+// GetAuditStats tests
+// ============================================================
+
+func TestGetAuditStatsEmpty(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	stats, err := logger.GetAuditStats()
+	if err != nil {
+		t.Fatalf("GetAuditStats() error = %v", err)
+	}
+	if stats.TotalEntries != 0 {
+		t.Errorf("GetAuditStats() TotalEntries = %d, want 0", stats.TotalEntries)
+	}
+	if len(stats.ByCategory) != 0 {
+		t.Errorf("GetAuditStats() ByCategory len = %d, want 0", len(stats.ByCategory))
+	}
+}
+
+func TestGetAuditStatsCounts(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	logger.LogConfigChange("operator", "10.0.0.1", "ssl", "change")
+	logger.LogConfigChange("operator", "10.0.0.1", "smtp", "change")
+	logger.LogIPBlocked("operator", "10.0.0.1", "1.2.3.4", "spam")
+	logger.LogServerStarted("1.0.0", "node-1")
+
+	stats, err := logger.GetAuditStats()
+	if err != nil {
+		t.Fatalf("GetAuditStats() error = %v", err)
+	}
+	if stats.TotalEntries != 4 {
+		t.Errorf("GetAuditStats() TotalEntries = %d, want 4", stats.TotalEntries)
+	}
+	if stats.ByCategory[AuditCategoryConfig] != 2 {
+		t.Errorf("GetAuditStats() config count = %d, want 2", stats.ByCategory[AuditCategoryConfig])
+	}
+	if stats.ByCategory[AuditCategorySecurity] != 1 {
+		t.Errorf("GetAuditStats() security count = %d, want 1", stats.ByCategory[AuditCategorySecurity])
+	}
+	if stats.ByCategory[AuditCategorySystem] != 1 {
+		t.Errorf("GetAuditStats() system count = %d, want 1", stats.ByCategory[AuditCategorySystem])
+	}
+	if stats.ByResult["success"] != 4 {
+		t.Errorf("GetAuditStats() success result count = %d, want 4", stats.ByResult["success"])
+	}
+	if stats.OldestEntry.IsZero() {
+		t.Error("GetAuditStats() OldestEntry should be set")
+	}
+	if stats.NewestEntry.IsZero() {
+		t.Error("GetAuditStats() NewestEntry should be set")
+	}
+}
+
+func TestGetAuditStatsNonExistentFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "no-such.log")
+	logger := &AuditLogger{path: path}
+
+	stats, err := logger.GetAuditStats()
+	if err != nil {
+		t.Fatalf("GetAuditStats() on missing file error = %v", err)
+	}
+	if stats.TotalEntries != 0 {
+		t.Errorf("GetAuditStats() on missing file TotalEntries = %d, want 0", stats.TotalEntries)
+	}
+}
+
+// ============================================================
+// Audit helper method tests
+// ============================================================
+
+func TestLogServerStarted(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	logger.LogServerStarted("1.2.3", "node-42")
+
+	result, err := logger.QueryAuditLogs(AuditQueryOptions{})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error = %v", err)
+	}
+	if result.Total != 1 {
+		t.Fatalf("LogServerStarted() wrote %d entries, want 1", result.Total)
+	}
+	entry := result.Entries[0]
+	if entry.Event != AuditActionServerStarted {
+		t.Errorf("LogServerStarted() Event = %q, want %q", entry.Event, AuditActionServerStarted)
+	}
+	if entry.Category != AuditCategorySystem {
+		t.Errorf("LogServerStarted() Category = %q, want %q", entry.Category, AuditCategorySystem)
+	}
+}
+
+func TestLogServerStopped(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	logger.LogServerStopped("graceful shutdown", "node-1")
+
+	result, err := logger.QueryAuditLogs(AuditQueryOptions{})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error = %v", err)
+	}
+	if result.Total != 1 {
+		t.Fatalf("LogServerStopped() wrote %d entries, want 1", result.Total)
+	}
+	if result.Entries[0].Event != AuditActionServerStopped {
+		t.Errorf("LogServerStopped() Event = %q, want %q", result.Entries[0].Event, AuditActionServerStopped)
+	}
+}
+
+func TestLogMaintenanceEnteredExited(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	logger.LogMaintenanceEntered("operator", "10.0.0.1", "db unavailable")
+	logger.LogMaintenanceExited("operator", "10.0.0.1")
+
+	result, err := logger.QueryAuditLogs(AuditQueryOptions{Category: AuditCategorySystem})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error = %v", err)
+	}
+	if result.Total != 2 {
+		t.Fatalf("Maintenance enter+exit wrote %d entries, want 2", result.Total)
+	}
+
+	// Results are sorted newest-first
+	events := make(map[AuditAction]bool)
+	for _, e := range result.Entries {
+		events[e.Event] = true
+	}
+	if !events[AuditActionMaintenanceEntered] {
+		t.Error("LogMaintenanceEntered event not found")
+	}
+	if !events[AuditActionMaintenanceExited] {
+		t.Error("LogMaintenanceExited event not found")
+	}
+}
+
+func TestLogConfigUpdated(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	logger.LogConfigUpdated("operator", "10.0.0.1", "server", "port", 8080, 9090)
+
+	result, err := logger.QueryAuditLogs(AuditQueryOptions{})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error = %v", err)
+	}
+	if result.Total != 1 {
+		t.Fatalf("LogConfigUpdated() wrote %d entries, want 1", result.Total)
+	}
+	entry := result.Entries[0]
+	if entry.Event != AuditActionConfigChange {
+		t.Errorf("LogConfigUpdated() Event = %q, want %q", entry.Event, AuditActionConfigChange)
+	}
+	if entry.Target == nil || entry.Target.Name != "server.port" {
+		t.Errorf("LogConfigUpdated() Target.Name = %v, want server.port", entry.Target)
+	}
+}
+
+func TestLogIPBlocked(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	logger.LogIPBlocked("operator", "10.0.0.1", "5.6.7.8", "brute force")
+
+	result, err := logger.QueryAuditLogs(AuditQueryOptions{})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error = %v", err)
+	}
+	if result.Total != 1 {
+		t.Fatalf("LogIPBlocked() wrote %d entries, want 1", result.Total)
+	}
+	entry := result.Entries[0]
+	if entry.Event != AuditActionIPBlocked {
+		t.Errorf("LogIPBlocked() Event = %q, want %q", entry.Event, AuditActionIPBlocked)
+	}
+	if entry.Target == nil || entry.Target.Name != "5.6.7.8" {
+		t.Errorf("LogIPBlocked() Target.Name = %v, want 5.6.7.8", entry.Target)
+	}
+	if entry.Reason != "brute force" {
+		t.Errorf("LogIPBlocked() Reason = %q, want brute force", entry.Reason)
+	}
+}
+
+func TestLogIPUnblocked(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	logger.LogIPUnblocked("operator", "10.0.0.1", "5.6.7.8")
+
+	result, err := logger.QueryAuditLogs(AuditQueryOptions{})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error = %v", err)
+	}
+	if result.Total != 1 {
+		t.Fatalf("LogIPUnblocked() wrote %d entries, want 1", result.Total)
+	}
+	if result.Entries[0].Event != AuditActionIPUnblocked {
+		t.Errorf("LogIPUnblocked() Event = %q, want %q", result.Entries[0].Event, AuditActionIPUnblocked)
+	}
+}
+
+func TestLogRateLimitExceeded(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	logger.LogRateLimitExceeded("1.2.3.4", "/api/v1/search", 100)
+
+	result, err := logger.QueryAuditLogs(AuditQueryOptions{})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error = %v", err)
+	}
+	if result.Total != 1 {
+		t.Fatalf("LogRateLimitExceeded() wrote %d entries, want 1", result.Total)
+	}
+	entry := result.Entries[0]
+	if entry.Event != AuditActionRateLimitExceeded {
+		t.Errorf("LogRateLimitExceeded() Event = %q, want %q", entry.Event, AuditActionRateLimitExceeded)
+	}
+	if entry.Result != "blocked" {
+		t.Errorf("LogRateLimitExceeded() Result = %q, want blocked", entry.Result)
+	}
+}
+
+func TestLogBruteForceDetected(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	logger.LogBruteForceDetected("9.8.7.6", "/api/v1/search", 50)
+
+	result, err := logger.QueryAuditLogs(AuditQueryOptions{})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error = %v", err)
+	}
+	if result.Total != 1 {
+		t.Fatalf("LogBruteForceDetected() wrote %d entries, want 1", result.Total)
+	}
+	entry := result.Entries[0]
+	if entry.Event != AuditActionBruteForceDetected {
+		t.Errorf("LogBruteForceDetected() Event = %q, want %q", entry.Event, AuditActionBruteForceDetected)
+	}
+	if entry.Severity != AuditSeverityCritical {
+		t.Errorf("LogBruteForceDetected() Severity = %q, want critical", entry.Severity)
+	}
+}
+
+func TestLogCSRFFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	logger.LogCSRFFailure("1.2.3.4", "/api/v1/preferences")
+
+	result, err := logger.QueryAuditLogs(AuditQueryOptions{})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error = %v", err)
+	}
+	if result.Total != 1 {
+		t.Fatalf("LogCSRFFailure() wrote %d entries, want 1", result.Total)
+	}
+	if result.Entries[0].Event != AuditActionCSRFFailure {
+		t.Errorf("LogCSRFFailure() Event = %q, want %q", result.Entries[0].Event, AuditActionCSRFFailure)
+	}
+}
+
+func TestLogInvalidToken(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	logger.LogInvalidToken("1.2.3.4", "/server/status", "bearer")
+
+	result, err := logger.QueryAuditLogs(AuditQueryOptions{})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error = %v", err)
+	}
+	if result.Total != 1 {
+		t.Fatalf("LogInvalidToken() wrote %d entries, want 1", result.Total)
+	}
+	if result.Entries[0].Event != AuditActionInvalidToken {
+		t.Errorf("LogInvalidToken() Event = %q, want %q", result.Entries[0].Event, AuditActionInvalidToken)
+	}
+}
+
+func TestLogBackupDelete(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	logger.LogBackupDelete("operator", "10.0.0.1", "backup-20240101.tar.gz")
+
+	result, err := logger.QueryAuditLogs(AuditQueryOptions{})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error = %v", err)
+	}
+	if result.Total != 1 {
+		t.Fatalf("LogBackupDelete() wrote %d entries, want 1", result.Total)
+	}
+	entry := result.Entries[0]
+	if entry.Event != AuditActionBackupDelete {
+		t.Errorf("LogBackupDelete() Event = %q, want %q", entry.Event, AuditActionBackupDelete)
+	}
+	if entry.Target == nil || entry.Target.Name != "backup-20240101.tar.gz" {
+		t.Errorf("LogBackupDelete() Target.Name = %v, want backup-20240101.tar.gz", entry.Target)
+	}
+}
+
+func TestLogBackupFailed(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	logger.LogBackupFailed("operator", "10.0.0.1", "disk full")
+
+	result, err := logger.QueryAuditLogs(AuditQueryOptions{})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error = %v", err)
+	}
+	if result.Total != 1 {
+		t.Fatalf("LogBackupFailed() wrote %d entries, want 1", result.Total)
+	}
+	entry := result.Entries[0]
+	if entry.Event != AuditActionBackupFailed {
+		t.Errorf("LogBackupFailed() Event = %q, want %q", entry.Event, AuditActionBackupFailed)
+	}
+	if entry.Result != "failure" {
+		t.Errorf("LogBackupFailed() Result = %q, want failure", entry.Result)
+	}
+	if entry.Reason != "disk full" {
+		t.Errorf("LogBackupFailed() Reason = %q, want disk full", entry.Reason)
+	}
+}
+
+func TestLogSMTPUpdated(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	logger.LogSMTPUpdated("operator", "10.0.0.1")
+
+	result, err := logger.QueryAuditLogs(AuditQueryOptions{})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error = %v", err)
+	}
+	if result.Total != 1 {
+		t.Fatalf("LogSMTPUpdated() wrote %d entries, want 1", result.Total)
+	}
+	if result.Entries[0].Event != AuditActionConfigSMTPUpdated {
+		t.Errorf("LogSMTPUpdated() Event = %q, want %q", result.Entries[0].Event, AuditActionConfigSMTPUpdated)
+	}
+}
+
+func TestLogSSLUpdated(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	logger.LogSSLUpdated("operator", "10.0.0.1", "search.example.com")
+
+	result, err := logger.QueryAuditLogs(AuditQueryOptions{})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error = %v", err)
+	}
+	if result.Total != 1 {
+		t.Fatalf("LogSSLUpdated() wrote %d entries, want 1", result.Total)
+	}
+	entry := result.Entries[0]
+	if entry.Event != AuditActionConfigSSLUpdated {
+		t.Errorf("LogSSLUpdated() Event = %q, want %q", entry.Event, AuditActionConfigSSLUpdated)
+	}
+	if entry.Target == nil || entry.Target.Name != "search.example.com" {
+		t.Errorf("LogSSLUpdated() Target.Name = %v, want search.example.com", entry.Target)
+	}
+}
+
+func TestLogSchedulerTaskFailed(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	logger.LogSchedulerTaskFailed("geoip_update", "connection timeout")
+
+	result, err := logger.QueryAuditLogs(AuditQueryOptions{})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error = %v", err)
+	}
+	if result.Total != 1 {
+		t.Fatalf("LogSchedulerTaskFailed() wrote %d entries, want 1", result.Total)
+	}
+	entry := result.Entries[0]
+	if entry.Event != AuditActionSchedulerTaskFail {
+		t.Errorf("LogSchedulerTaskFailed() Event = %q, want %q", entry.Event, AuditActionSchedulerTaskFail)
+	}
+	if entry.Target == nil || entry.Target.Name != "geoip_update" {
+		t.Errorf("LogSchedulerTaskFailed() Target.Name = %v, want geoip_update", entry.Target)
+	}
+}
+
+func TestLogSchedulerTaskManualRun(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	logger.LogSchedulerTaskManualRun("operator", "10.0.0.1", "blocklist_update", true)
+	logger.LogSchedulerTaskManualRun("operator", "10.0.0.1", "cve_update", false)
+
+	result, err := logger.QueryAuditLogs(AuditQueryOptions{})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error = %v", err)
+	}
+	if result.Total != 2 {
+		t.Fatalf("LogSchedulerTaskManualRun() wrote %d entries, want 2", result.Total)
+	}
+
+	// Check success result
+	var successEntry, failEntry AuditEntry
+	for _, e := range result.Entries {
+		if e.Result == "success" {
+			successEntry = e
+		} else {
+			failEntry = e
+		}
+	}
+	if successEntry.Event != AuditActionSchedulerTaskRun {
+		t.Errorf("LogSchedulerTaskManualRun success Event = %q, want %q", successEntry.Event, AuditActionSchedulerTaskRun)
+	}
+	if failEntry.Result != "failure" {
+		t.Errorf("LogSchedulerTaskManualRun failure Result = %q, want failure", failEntry.Result)
+	}
+}
+
+func TestLogEvent(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "audit.log")
+	logger := NewAuditLogger(path)
+	defer logger.Close()
+
+	actor := AuditActor{Type: "operator", Username: "admin", IP: "10.0.0.1"}
+	target := &AuditTarget{Type: "config", Name: "tor"}
+	details := map[string]interface{}{"regenerated": true}
+
+	logger.LogEvent(
+		AuditActionConfigTorRegen,
+		AuditCategoryConfig,
+		AuditSeverityWarning,
+		actor,
+		target,
+		"success",
+		details,
+		"user requested regen",
+	)
+
+	result, err := logger.QueryAuditLogs(AuditQueryOptions{})
+	if err != nil {
+		t.Fatalf("QueryAuditLogs() error = %v", err)
+	}
+	if result.Total != 1 {
+		t.Fatalf("LogEvent() wrote %d entries, want 1", result.Total)
+	}
+	entry := result.Entries[0]
+	if entry.Event != AuditActionConfigTorRegen {
+		t.Errorf("LogEvent() Event = %q, want %q", entry.Event, AuditActionConfigTorRegen)
+	}
+	if entry.Category != AuditCategoryConfig {
+		t.Errorf("LogEvent() Category = %q, want %q", entry.Category, AuditCategoryConfig)
+	}
+	if entry.Severity != AuditSeverityWarning {
+		t.Errorf("LogEvent() Severity = %q, want %q", entry.Severity, AuditSeverityWarning)
+	}
+	if entry.Reason != "user requested regen" {
+		t.Errorf("LogEvent() Reason = %q, want user requested regen", entry.Reason)
+	}
+	if entry.Target == nil || entry.Target.Name != "tor" {
+		t.Errorf("LogEvent() Target.Name = %v, want tor", entry.Target)
 	}
 }

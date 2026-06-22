@@ -55,7 +55,11 @@ func expandLocationAbbreviations(location string) string {
 		// Check country abbreviations
 		if fullName, ok := countryAbbreviations[upper]; ok {
 			parts[i] = fullName
+			continue
 		}
+
+		// Not found: normalize whitespace to avoid double-spacing on join
+		parts[i] = trimmed
 	}
 
 	return strings.Join(parts, ", ")

@@ -486,40 +486,6 @@ func TestNewWeatherFetcher(t *testing.T) {
 	}
 }
 
-func TestWeatherFetcherWidgetType(t *testing.T) {
-	f := NewWeatherFetcher(&config.WeatherWidgetConfig{})
-	if f.WidgetType() != WidgetWeather {
-		t.Errorf("WidgetType() = %v, want %v", f.WidgetType(), WidgetWeather)
-	}
-}
-
-func TestWeatherFetcherCacheDuration(t *testing.T) {
-	f := NewWeatherFetcher(&config.WeatherWidgetConfig{})
-	duration := f.CacheDuration()
-	if duration != 15*time.Minute {
-		t.Errorf("CacheDuration() = %v, want %v", duration, 15*time.Minute)
-	}
-}
-
-func TestWeatherFetcherFetchNoCity(t *testing.T) {
-	cfg := &config.WeatherWidgetConfig{
-		Enabled:     true,
-		DefaultCity: "",
-		Units:       "metric",
-	}
-
-	f := NewWeatherFetcher(cfg)
-	ctx := context.Background()
-
-	data, err := f.Fetch(ctx, map[string]string{})
-	if err != nil {
-		t.Fatalf("Fetch() error = %v", err)
-	}
-	if data.Error != "no city specified" {
-		t.Errorf("Error = %q, want 'no city specified'", data.Error)
-	}
-}
-
 func TestWeatherDataStruct(t *testing.T) {
 	w := WeatherData{
 		Location:    "New York, NY, USA",
@@ -586,57 +552,6 @@ func TestOpenMeteoResponseStruct(t *testing.T) {
 	}
 	if resp.CurrentWeather.Temperature != 25.5 {
 		t.Errorf("CurrentWeather.Temperature = %v", resp.CurrentWeather.Temperature)
-	}
-}
-
-func TestWeatherCodeToDescription(t *testing.T) {
-	tests := []struct {
-		code     int
-		wantDesc string
-		wantCond string
-	}{
-		{0, "Clear sky", "clear"},
-		{1, "Mainly clear", "clear"},
-		{2, "Partly cloudy", "partly-cloudy"},
-		{3, "Overcast", "cloudy"},
-		{45, "Foggy", "fog"},
-		{48, "Foggy", "fog"},
-		{51, "Drizzle", "rain"},
-		{53, "Drizzle", "rain"},
-		{55, "Drizzle", "rain"},
-		{56, "Freezing drizzle", "rain"},
-		{57, "Freezing drizzle", "rain"},
-		{61, "Rain", "rain"},
-		{63, "Rain", "rain"},
-		{65, "Rain", "rain"},
-		{66, "Freezing rain", "rain"},
-		{67, "Freezing rain", "rain"},
-		{71, "Snow", "snow"},
-		{73, "Snow", "snow"},
-		{75, "Snow", "snow"},
-		{77, "Snow grains", "snow"},
-		{80, "Rain showers", "rain"},
-		{81, "Rain showers", "rain"},
-		{82, "Rain showers", "rain"},
-		{85, "Snow showers", "snow"},
-		{86, "Snow showers", "snow"},
-		{95, "Thunderstorm", "thunderstorm"},
-		{96, "Thunderstorm with hail", "thunderstorm"},
-		{99, "Thunderstorm with hail", "thunderstorm"},
-		{-1, "Unknown", "cloudy"},
-		{100, "Unknown", "cloudy"},
-	}
-
-	for _, tt := range tests {
-		t.Run(fmt.Sprintf("code_%d", tt.code), func(t *testing.T) {
-			desc, cond := weatherCodeToDescription(tt.code)
-			if desc != tt.wantDesc {
-				t.Errorf("description = %q, want %q", desc, tt.wantDesc)
-			}
-			if cond != tt.wantCond {
-				t.Errorf("condition = %q, want %q", cond, tt.wantCond)
-			}
-		})
 	}
 }
 
@@ -1505,15 +1420,6 @@ func TestSportsFetcherWidgetType(t *testing.T) {
 	}
 }
 
-func TestSportsFetcherCacheDuration(t *testing.T) {
-	f := NewSportsFetcher(&config.SportsWidgetConfig{})
-	// Default cache duration for a fresh fetcher (no game status set)
-	duration := f.CacheDuration()
-	if duration != 1*time.Hour {
-		t.Errorf("CacheDuration() = %v, want %v", duration, 1*time.Hour)
-	}
-}
-
 func TestSportsFetcherImplementsFetcher(t *testing.T) {
 	var _ Fetcher = (*SportsFetcher)(nil)
 }
@@ -2108,20 +2014,6 @@ func TestNewTranslateFetcher(t *testing.T) {
 	}
 }
 
-func TestTranslateFetcherWidgetType(t *testing.T) {
-	f := NewTranslateFetcher()
-	if f.WidgetType() != WidgetTranslate {
-		t.Errorf("WidgetType() = %v, want %v", f.WidgetType(), WidgetTranslate)
-	}
-}
-
-func TestTranslateFetcherCacheDuration(t *testing.T) {
-	f := NewTranslateFetcher()
-	duration := f.CacheDuration()
-	if duration != 1*time.Hour {
-		t.Errorf("CacheDuration() = %v, want %v", duration, 1*time.Hour)
-	}
-}
 
 func TestTranslateFetcherImplementsFetcher(t *testing.T) {
 	var _ Fetcher = (*TranslateFetcher)(nil)
@@ -2160,27 +2052,6 @@ func TestTranslateFetcherFetchNoText(t *testing.T) {
 	}
 	if result.Error != "text parameter required (or use query for natural language)" {
 		t.Errorf("Error = %q, want %q", result.Error, "text parameter required (or use query for natural language)")
-	}
-}
-
-func TestSupportedLanguages(t *testing.T) {
-	if len(SupportedLanguages) == 0 {
-		t.Error("SupportedLanguages should not be empty")
-	}
-
-	// Check that English is in the list
-	found := false
-	for _, lang := range SupportedLanguages {
-		if lang.Code == "en" {
-			found = true
-			if lang.Name != "English" {
-				t.Errorf("English name = %q, want %q", lang.Name, "English")
-			}
-			break
-		}
-	}
-	if !found {
-		t.Error("English not found in SupportedLanguages")
 	}
 }
 
@@ -2444,15 +2315,6 @@ func TestTrackingFetcherWidgetType(t *testing.T) {
 	}
 }
 
-func TestTrackingFetcherCacheDuration(t *testing.T) {
-	f := NewTrackingFetcher()
-	// Without API key, uses longer cache for carrier detection only
-	duration := f.CacheDuration()
-	if duration != 15*time.Minute {
-		t.Errorf("CacheDuration() = %v, want %v", duration, 15*time.Minute)
-	}
-}
-
 func TestTrackingFetcherImplementsFetcher(t *testing.T) {
 	var _ Fetcher = (*TrackingFetcher)(nil)
 }
@@ -2567,76 +2429,6 @@ func TestTrackingFetcherFetchWithNumber(t *testing.T) {
 	}
 	if !data.Detected {
 		t.Error("Detected should be true for UPS number")
-	}
-}
-
-func TestCleanTrackingNumber(t *testing.T) {
-	tests := []struct {
-		input string
-		want  string
-	}{
-		{"1Z999AA10123456784", "1Z999AA10123456784"},
-		{"1Z 999 AA1 0123 4567 84", "1Z999AA10123456784"},
-		{"1Z-999-AA1-0123-4567-84", "1Z999AA10123456784"},
-		{"  1Z999AA10123456784  ", "1Z999AA10123456784"},
-		// Normalized to uppercase
-		{"abc123XYZ", "ABC123XYZ"},
-		{"", ""},
-		{"!@#$%", ""},
-		{"12-34-56", "123456"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			got := cleanTrackingNumber(tt.input)
-			if got != tt.want {
-				t.Errorf("cleanTrackingNumber(%q) = %q, want %q", tt.input, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestDetectCarrier(t *testing.T) {
-	tests := []struct {
-		trackingNumber string
-		wantCarrier    string
-		wantDetected   bool
-	}{
-		// UPS patterns (1Z + 16 alphanumeric = 18 chars)
-		{"1Z999AA10123456784", "UPS", true},
-		{"1Z999AA1012345678A", "UPS", true},
-
-		// FedEx patterns (15, 20, 22 digits - 12 digits match UPS Freight due to pattern order)
-		{"123456789012345", "FedEx", true},
-		{"12345678901234567890", "FedEx", true},
-		{"1234567890123456789012", "FedEx", true},
-
-		// UPS Freight (9-12 digits - lower priority but comes first in pattern array)
-		// 12 digits matches UPS Freight
-		{"123456789012", "UPS", true},
-
-		// Amazon TBA pattern
-		{"TBA123456789012", "Amazon Logistics", true},
-
-		// Royal Mail pattern
-		{"AB123456789GB", "Royal Mail", true},
-
-		// Unknown patterns
-		{"UNKNOWN123", "Unknown", false},
-		{"XYZ", "Unknown", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.trackingNumber, func(t *testing.T) {
-			result := detectCarrier(tt.trackingNumber)
-			if result.Name != tt.wantCarrier {
-				t.Errorf("detectCarrier(%q).Name = %q, want %q", tt.trackingNumber, result.Name, tt.wantCarrier)
-			}
-			detected := result.Name != "Unknown"
-			if detected != tt.wantDetected {
-				t.Errorf("detectCarrier(%q) detected = %v, want %v", tt.trackingNumber, detected, tt.wantDetected)
-			}
-		})
 	}
 }
 

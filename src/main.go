@@ -63,6 +63,10 @@ var (
 	flagLang    string
 )
 
+// exitFunc is the function used to exit the process.
+// Overriding this in tests prevents os.Exit from terminating the test process.
+var exitFunc = os.Exit
+
 func init() {
 	// Simple commands
 	flag.BoolVar(&flagVersion, "version", false, "Show version information")
@@ -572,7 +576,9 @@ func runInit() {
 
 	cfg, err := config.Initialize()
 	if err != nil {
-		log.Fatalf(display.Emoji("❌", "[ERROR]")+" Initialization failed: %v", err)
+		log.Printf(display.Emoji("❌", "[ERROR]")+" Initialization failed: %v", err)
+		exitFunc(1)
+		return
 	}
 
 	fmt.Println(display.Emoji("✅", "[OK]") + " Configuration initialized successfully!")
@@ -841,7 +847,8 @@ func runService(action string) {
 	cfg, err := config.Initialize()
 	if err != nil {
 		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to load config: %v\n", err)
-		os.Exit(1)
+		exitFunc(1)
+		return
 	}
 
 	// Create service manager
@@ -852,12 +859,12 @@ func runService(action string) {
 		if !config.IsPrivileged() {
 			fmt.Println(display.Emoji("❌", "[ERROR]") + " This command requires elevated privileges")
 			fmt.Println("   Run with sudo/admin rights")
-			os.Exit(1)
+			exitFunc(1)
 		}
 		fmt.Printf("Installing service for %s...\n", runtime.GOOS)
 		if err := sm.Install(); err != nil {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to install service: %v\n", err)
-			os.Exit(1)
+			exitFunc(1)
 		}
 		fmt.Println(display.Emoji("✅", "[OK]") + " Service installed successfully")
 		fmt.Println("   Run 'search --service start' to start the service")
@@ -865,36 +872,36 @@ func runService(action string) {
 	case "--uninstall", "uninstall":
 		if !config.IsPrivileged() {
 			fmt.Println(display.Emoji("❌", "[ERROR]") + " This command requires elevated privileges")
-			os.Exit(1)
+			exitFunc(1)
 		}
 		fmt.Println("Uninstalling service...")
 		if err := sm.Uninstall(); err != nil {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to uninstall service: %v\n", err)
-			os.Exit(1)
+			exitFunc(1)
 		}
 		fmt.Println(display.Emoji("✅", "[OK]") + " Service uninstalled successfully")
 
 	case "start":
 		if !config.IsPrivileged() {
 			fmt.Println(display.Emoji("❌", "[ERROR]") + " This command requires elevated privileges")
-			os.Exit(1)
+			exitFunc(1)
 		}
 		fmt.Println("Starting service...")
 		if err := sm.StartAllServices(); err != nil {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to start service: %v\n", err)
-			os.Exit(1)
+			exitFunc(1)
 		}
 		fmt.Println(display.Emoji("✅", "[OK]") + " Service started successfully")
 
 	case "stop":
 		if !config.IsPrivileged() {
 			fmt.Println(display.Emoji("❌", "[ERROR]") + " This command requires elevated privileges")
-			os.Exit(1)
+			exitFunc(1)
 		}
 		fmt.Println("Stopping service...")
 		if err := sm.StopAllServices(); err != nil {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to stop service: %v\n", err)
-			os.Exit(1)
+			exitFunc(1)
 		}
 		fmt.Println(display.Emoji("✅", "[OK]") + " Service stopped successfully")
 
@@ -902,19 +909,19 @@ func runService(action string) {
 		status, err := sm.Status()
 		if err != nil {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to get service status: %v\n", err)
-			os.Exit(1)
+			exitFunc(1)
 		}
 		fmt.Printf("Service status: %s\n", status)
 
 	case "restart":
 		if !config.IsPrivileged() {
 			fmt.Println(display.Emoji("❌", "[ERROR]") + " This command requires elevated privileges")
-			os.Exit(1)
+			exitFunc(1)
 		}
 		fmt.Println("Restarting service...")
 		if err := sm.RestartAllServices(); err != nil {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to restart service: %v\n", err)
-			os.Exit(1)
+			exitFunc(1)
 		}
 		fmt.Println(display.Emoji("✅", "[OK]") + " Service restarted successfully")
 
@@ -922,31 +929,31 @@ func runService(action string) {
 		fmt.Println("Reloading service configuration...")
 		if err := sm.Reload(); err != nil {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to reload service: %v\n", err)
-			os.Exit(1)
+			exitFunc(1)
 		}
 		fmt.Println(display.Emoji("✅", "[OK]") + " Service configuration reloaded")
 
 	case "--disable", "disable":
 		if !config.IsPrivileged() {
 			fmt.Println(display.Emoji("❌", "[ERROR]") + " This command requires elevated privileges")
-			os.Exit(1)
+			exitFunc(1)
 		}
 		fmt.Println("Disabling service autostart...")
 		if err := sm.Disable(); err != nil {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to disable service: %v\n", err)
-			os.Exit(1)
+			exitFunc(1)
 		}
 		fmt.Println(display.Emoji("✅", "[OK]") + " Service autostart disabled")
 
 	case "--enable", "enable":
 		if !config.IsPrivileged() {
 			fmt.Println(display.Emoji("❌", "[ERROR]") + " This command requires elevated privileges")
-			os.Exit(1)
+			exitFunc(1)
 		}
 		fmt.Println("Enabling service autostart...")
 		if err := sm.Enable(); err != nil {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to enable service: %v\n", err)
-			os.Exit(1)
+			exitFunc(1)
 		}
 		fmt.Println(display.Emoji("✅", "[OK]") + " Service autostart enabled")
 
@@ -996,7 +1003,7 @@ func runMaintenance(action string) {
 		backupPath, err := bm.Create(filename)
 		if err != nil {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Backup failed: %v\n", err)
-			os.Exit(1)
+			exitFunc(1)
 		}
 		fmt.Printf(display.Emoji("✅", "[OK]")+" Backup created: %s\n", backupPath)
 
@@ -1056,7 +1063,7 @@ func runMaintenance(action string) {
 			} else {
 				fmt.Printf(display.Emoji("❌", "[ERROR]")+" Restore failed: %v\n", err)
 			}
-			os.Exit(1)
+			exitFunc(1)
 		}
 		fmt.Println(display.Emoji("✅", "[OK]") + " Restore completed successfully")
 		fmt.Println("   Please restart the server to apply changes.")
@@ -1089,13 +1096,14 @@ func runMaintenance(action string) {
 		cfg, err := config.Initialize()
 		if err != nil {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to load config: %v\n", err)
-			os.Exit(1)
+			exitFunc(1)
+			return
 		}
 		// Toggle maintenance mode
 		cfg.Server.MaintenanceMode = !cfg.Server.MaintenanceMode
 		if err := cfg.Save(config.GetConfigPath()); err != nil {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to save config: %v\n", err)
-			os.Exit(1)
+			exitFunc(1)
 		}
 		if cfg.Server.MaintenanceMode {
 			fmt.Println(display.Emoji("✅", "[OK]") + " Maintenance mode: ENABLED")
@@ -1115,7 +1123,8 @@ func runMaintenance(action string) {
 		cfg, err := config.Initialize()
 		if err != nil {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to load config: %v\n", err)
-			os.Exit(1)
+			exitFunc(1)
+			return
 		}
 
 		fmt.Print("Rotate server.token? Existing operator clients will need the new token. (yes/no): ")
@@ -1129,12 +1138,12 @@ func runMaintenance(action string) {
 		newToken, err := generateSetupToken()
 		if err != nil {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to generate token: %v\n", err)
-			os.Exit(1)
+			exitFunc(1)
 		}
 		cfg.Server.Token = newToken
 		if err := cfg.Save(config.GetConfigPath()); err != nil {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to save config: %v\n", err)
-			os.Exit(1)
+			exitFunc(1)
 		}
 
 		fmt.Println()
@@ -1205,14 +1214,14 @@ func runUpdate(subCmd string) {
 		if !config.IsPrivileged() {
 			fmt.Println(display.Emoji("❌", "[ERROR]") + " Update installation requires elevated privileges")
 			fmt.Println("   Use --update check to check without privileges")
-			os.Exit(1)
+			exitFunc(1)
 		}
 
 		fmt.Println("Checking for updates...")
 		info, err := um.CheckForUpdates(false)
 		if err != nil {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to check for updates: %v\n", err)
-			os.Exit(1)
+			exitFunc(1)
 		}
 
 		if !info.Available {
@@ -1232,14 +1241,14 @@ func runUpdate(subCmd string) {
 
 		if err != nil {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Download failed: %v\n", err)
-			os.Exit(1)
+			exitFunc(1)
 		}
 
 		fmt.Println("Installing update...")
 		if err := um.InstallUpdate(archivePath, info.ChecksumURL); err != nil {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Installation failed: %v\n", err)
 			fmt.Println("   Run 'search --update rollback' to restore previous version")
-			os.Exit(1)
+			exitFunc(1)
 		}
 
 		fmt.Println(display.Emoji("✅", "[OK]") + " Update installed successfully!")
@@ -1249,7 +1258,7 @@ func runUpdate(subCmd string) {
 		fmt.Println("Rolling back to previous version...")
 		if err := um.Rollback(); err != nil {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Rollback failed: %v\n", err)
-			os.Exit(1)
+			exitFunc(1)
 		}
 		fmt.Println(display.Emoji("✅", "[OK]") + " Rollback completed successfully!")
 		fmt.Println("   Please restart the service to apply the change")
@@ -1452,7 +1461,7 @@ func runBuild(platform string) {
 	if _, err := exec.LookPath("docker"); err != nil {
 		fmt.Println(display.Emoji("❌", "[ERROR]") + " Docker is required for cross-platform builds")
 		fmt.Println("   Please install Docker and try again")
-		os.Exit(1)
+		exitFunc(1)
 	}
 
 	// Find the source directory
@@ -1460,7 +1469,7 @@ func runBuild(platform string) {
 	if err != nil {
 		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Cannot find source directory: %v\n", err)
 		fmt.Println("   The build command requires access to the source code")
-		os.Exit(1)
+		exitFunc(1)
 	}
 
 	// Define build targets
@@ -1498,7 +1507,7 @@ func runBuild(platform string) {
 		} else {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown platform: %s\n", platform)
 			fmt.Println("   Valid options: all, linux, darwin, windows, freebsd, host, or OS/ARCH")
-			os.Exit(1)
+			exitFunc(1)
 		}
 	}
 
@@ -1506,7 +1515,7 @@ func runBuild(platform string) {
 	outputDir := filepath.Join(srcDir, "binaries")
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to create output directory: %v\n", err)
-		os.Exit(1)
+		exitFunc(1)
 	}
 
 	fmt.Printf(display.Emoji("📁", "[DIR]")+" Source: %s\n", srcDir)
@@ -1541,7 +1550,7 @@ func runBuild(platform string) {
 	fmt.Println()
 	if failed > 0 {
 		fmt.Printf(display.Emoji("⚠️", "[WARN]")+"  %d/%d builds failed\n", failed, len(targets))
-		os.Exit(1)
+		exitFunc(1)
 	}
 	fmt.Printf(display.Emoji("✅", "[OK]")+" Build complete: %d binaries in %s/\n", len(targets), outputDir)
 }
@@ -1670,7 +1679,7 @@ func daemonize() error {
 
 	// Parent exits, child continues
 	fmt.Printf("Daemon started with PID %d\n", cmd.Process.Pid)
-	os.Exit(0)
+	exitFunc(0)
 	return nil
 }
 
@@ -1711,7 +1720,7 @@ func runShell(subCmd string) {
 	default:
 		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown shell subcommand: %s\n", subCmd)
 		fmt.Println("Valid subcommands: completions, init, --help")
-		os.Exit(1)
+		exitFunc(1)
 	}
 }
 
@@ -1913,7 +1922,7 @@ Register-ArgumentCompleter -CommandName %s -ScriptBlock {
 	default:
 		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unsupported shell: %s\n", shell)
 		fmt.Println("Supported shells: bash, zsh, fish, powershell")
-		os.Exit(1)
+		exitFunc(1)
 	}
 }
 
@@ -1931,7 +1940,7 @@ func printShellInit(binaryName, shell string) {
 	default:
 		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unsupported shell: %s\n", shell)
 		fmt.Println("Supported shells: bash, zsh, fish, powershell")
-		os.Exit(1)
+		exitFunc(1)
 	}
 }
 

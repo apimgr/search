@@ -304,6 +304,9 @@ func getRuleContext(num int) string {
 
 // highlightTerm wraps matching terms in <mark> tags
 func highlightTerm(text, term string) string {
+	if term == "" {
+		return escapeHTML(text)
+	}
 	escaped := escapeHTML(text)
 	termLower := strings.ToLower(term)
 	textLower := strings.ToLower(escaped)

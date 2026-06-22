@@ -165,8 +165,16 @@ func GetArch() string {
 // IsPrivileged is implemented in ownership_unix.go and ownership_windows.go
 // with platform-specific code using build tags
 
+// containerDetectionOverride allows tests to override container detection without filesystem manipulation.
+// Nil means use actual detection; non-nil overrides the result directly.
+var containerDetectionOverride *bool
+
 // IsRunningInContainer returns true if running inside a container
 func IsRunningInContainer() bool {
+	if containerDetectionOverride != nil {
+		return *containerDetectionOverride
+	}
+
 	// Check for Docker/container indicators
 	if _, err := os.Stat("/.dockerenv"); err == nil {
 		return true

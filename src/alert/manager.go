@@ -375,9 +375,13 @@ func (m *Manager) SetPaused(ctx context.Context, manageToken string, paused bool
 		status = StatusPaused
 		pausedAt = time.Now().UTC()
 	}
-	_, err := m.db.ExecContext(ctx, `UPDATE search_alerts SET status = ?, paused_at = ? WHERE manage_token_hash = ?`, status, pausedAt, hashTokenHex(manageToken))
+	result, err := m.db.ExecContext(ctx, `UPDATE search_alerts SET status = ?, paused_at = ? WHERE manage_token_hash = ?`, status, pausedAt, hashTokenHex(manageToken))
 	if err != nil {
 		return fmt.Errorf("update alert status: %w", err)
+	}
+	affected, _ := result.RowsAffected()
+	if affected == 0 {
+		return ErrNotFound
 	}
 	return nil
 }

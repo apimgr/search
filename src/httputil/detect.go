@@ -334,9 +334,11 @@ func BuildFullURL(r *http.Request, path string) string {
 		path = "/" + path
 	}
 
-	// Combine base URL and path, avoiding double slashes
-	fullPath := baseURL + path
-	if baseURL != "/" && strings.HasPrefix(path, "/") {
+	// Combine base URL and path, avoiding double slashes at the join point
+	var fullPath string
+	if baseURL == "/" {
+		fullPath = path
+	} else {
 		fullPath = baseURL + path
 	}
 

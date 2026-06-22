@@ -1,8 +1,11 @@
 package email
 
 import (
+	"fmt"
+	"net"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Tests for Config
@@ -1874,6 +1877,12 @@ func TestMailerTestConnectionSTARTTLSMode(t *testing.T) {
 }
 
 func TestMailerTestConnectionNoneMode(t *testing.T) {
+	orig := netDialTimeout
+	defer func() { netDialTimeout = orig }()
+	netDialTimeout = func(network, addr string, timeout time.Duration) (net.Conn, error) {
+		return nil, fmt.Errorf("connection refused")
+	}
+
 	cfg := &Config{
 		Enabled: true,
 		SMTP: SMTPConfig{
@@ -1990,6 +1999,12 @@ func TestMailerSendWithTLSMode(t *testing.T) {
 // Tests for Send with none TLS mode
 
 func TestMailerSendWithNoneTLSMode(t *testing.T) {
+	orig := netDialTimeout
+	defer func() { netDialTimeout = orig }()
+	netDialTimeout = func(network, addr string, timeout time.Duration) (net.Conn, error) {
+		return nil, fmt.Errorf("connection refused")
+	}
+
 	cfg := &Config{
 		Enabled: true,
 		SMTP: SMTPConfig{

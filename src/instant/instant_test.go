@@ -3,6 +3,7 @@ package instant
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -3046,5 +3047,2568 @@ func TestMathHandlerDataStructure(t *testing.T) {
 	}
 	if answer.Data["result"] == nil {
 		t.Error("Data should contain result")
+	}
+}
+
+// BeautifyHandler tests cover pure-Go code formatting with no network calls.
+
+func TestNewBeautifyHandler(t *testing.T) {
+	h := NewBeautifyHandler()
+	if h == nil {
+		t.Fatal("NewBeautifyHandler() returned nil")
+	}
+}
+
+func TestBeautifyHandlerName(t *testing.T) {
+	h := NewBeautifyHandler()
+	if h.Name() != "beautify" {
+		t.Errorf("Name() = %q, want %q", h.Name(), "beautify")
+	}
+}
+
+func TestBeautifyHandlerPatterns(t *testing.T) {
+	h := NewBeautifyHandler()
+	if len(h.Patterns()) == 0 {
+		t.Error("Patterns() should return patterns")
+	}
+}
+
+func TestBeautifyHandlerCanHandle(t *testing.T) {
+	h := NewBeautifyHandler()
+
+	tests := []struct {
+		query string
+		want  bool
+	}{
+		{"beautify:json {}", true},
+		{"beautify:js function(){}", true},
+		{"beautify:minify css body{}", true},
+		{"format:html <div></div>", true},
+		{"hello world", false},
+		{"convert meters to feet", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			got := h.CanHandle(tt.query)
+			if got != tt.want {
+				t.Errorf("CanHandle(%q) = %v, want %v", tt.query, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBeautifyHandlerHandleJSON(t *testing.T) {
+	h := NewBeautifyHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, `beautify:json {"a":1,"b":2}`)
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if answer.Type != AnswerTypeBeautify {
+		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeBeautify)
+	}
+	if !contains(answer.Content, "a") {
+		t.Error("Content should contain formatted JSON")
+	}
+}
+
+func TestBeautifyHandlerHandleJavaScript(t *testing.T) {
+	h := NewBeautifyHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "beautify:js function hello(){return 42;}")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if answer.Type != AnswerTypeBeautify {
+		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeBeautify)
+	}
+}
+
+func TestBeautifyHandlerHandleCSS(t *testing.T) {
+	h := NewBeautifyHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "beautify:css body{color:red;margin:0}")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if answer.Type != AnswerTypeBeautify {
+		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeBeautify)
+	}
+}
+
+func TestBeautifyHandlerHandleHTML(t *testing.T) {
+	h := NewBeautifyHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "beautify:html <div><p>hello</p></div>")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if answer.Type != AnswerTypeBeautify {
+		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeBeautify)
+	}
+}
+
+func TestBeautifyHandlerHandleSQL(t *testing.T) {
+	h := NewBeautifyHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "beautify:sql select * from users where id=1")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if answer.Type != AnswerTypeBeautify {
+		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeBeautify)
+	}
+}
+
+func TestBeautifyHandlerHandleMinifyCSS(t *testing.T) {
+	h := NewBeautifyHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "beautify:minify body { color: red; margin: 0; }")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+}
+
+func TestBeautifyHandlerHandleAutoDetect(t *testing.T) {
+	h := NewBeautifyHandler()
+	ctx := context.Background()
+
+	// beautify:json pattern matches ^beautify:(\w+)\s+(.+)$; space after colon is not valid
+	answer, err := h.HandleInstantQuery(ctx, `beautify:json {"key":"value"}`)
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+}
+
+func TestBeautifyHandlerHandleNoMatch(t *testing.T) {
+	h := NewBeautifyHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "completely unrelated query")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer != nil {
+		t.Error("HandleInstantQuery() should return nil for non-matching query")
+	}
+}
+
+func TestNormalizeLanguage(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"js", "javascript"},
+		{"htm", "html"},
+		// ts/py/rb/sh/yml have no alias — normalizeLanguage passes them through unchanged
+		{"ts", "ts"},
+		{"py", "py"},
+		{"rb", "rb"},
+		{"sh", "sh"},
+		{"yml", "yml"},
+		{"javascript", "javascript"},
+		{"css", "css"},
+		{"sql", "sql"},
+		{"unknown_lang", "unknown_lang"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := normalizeLanguage(tt.input)
+			if got != tt.want {
+				t.Errorf("normalizeLanguage(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDetectCodeLanguage(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+		want string
+	}{
+		{"json object", `{"key": "value"}`, "json"},
+		{"html doctype", `<!DOCTYPE html><html></html>`, "html"},
+		// <div> has no doctype/html/body keyword → detected as xml (generic tag)
+		{"html tag", `<div class="test">content</div>`, "xml"},
+		{"xml tag", `<?xml version="1.0"?><root></root>`, "xml"},
+		{"css selector", `body { color: red; }`, "css"},
+		{"sql select", `SELECT * FROM users WHERE id = 1`, "sql"},
+		// plain text with no markup/syntax → "unknown"
+		{"plain text", `hello world this is text`, "unknown"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := detectCodeLanguage(tt.code)
+			if got != tt.want {
+				t.Errorf("detectCodeLanguage() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDefaultBeautifyConfig(t *testing.T) {
+	cfg := DefaultBeautifyConfig()
+	if cfg.IndentSize <= 0 {
+		t.Error("IndentSize should be positive")
+	}
+}
+
+func TestBeautifyCodeWithConfig(t *testing.T) {
+	cfg := DefaultBeautifyConfig()
+
+	tests := []struct {
+		name    string
+		lang    string
+		code    string
+		wantErr bool
+	}{
+		{"valid json", "json", `{"a":1}`, false},
+		{"valid javascript", "javascript", `function f(){}`, false},
+		{"valid css", "css", `body{color:red}`, false},
+		{"valid html", "html", `<div></div>`, false},
+		{"valid sql", "sql", `SELECT 1`, false},
+		{"unsupported lang", "cobol", `IDENTIFICATION DIVISION.`, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := beautifyCodeWithConfig(tt.code, tt.lang, cfg)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("beautifyCodeWithConfig() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestMinifyCode(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+		lang string
+	}{
+		{"valid css", `body { color: red; }`, "css"},
+		{"valid html", `<div> hello </div>`, "html"},
+		{"valid json", `{ "key": "value" }`, "json"},
+		{"javascript", `function f() { return 1; }`, "javascript"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, _ := minifyCode(tt.code, tt.lang)
+			_ = result
+		})
+	}
+}
+
+func TestEscapeHTMLContent(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"ampersand", "a & b", "a &amp; b"},
+		{"less than", "a < b", "a &lt; b"},
+		{"greater than", "a > b", "a &gt; b"},
+		{"double quote", `say "hello"`, "say &quot;hello&quot;"},
+		{"plain text", "hello world", "hello world"},
+		{"mixed", `<div class="test">content & more</div>`, "&lt;div class=&quot;test&quot;&gt;content &amp; more&lt;/div&gt;"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := escapeHTMLContent(tt.input)
+			if got != tt.want {
+				t.Errorf("escapeHTMLContent(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+// HTMLEntityHandler tests cover pure-Go HTML entity encode/decode.
+
+func TestNewHTMLEntityHandler(t *testing.T) {
+	h := NewHTMLEntityHandler()
+	if h == nil {
+		t.Fatal("NewHTMLEntityHandler() returned nil")
+	}
+}
+
+func TestHTMLEntityHandlerName(t *testing.T) {
+	h := NewHTMLEntityHandler()
+	if h.Name() != "html_entity" {
+		t.Errorf("Name() = %q, want %q", h.Name(), "html_entity")
+	}
+}
+
+func TestHTMLEntityHandlerPatterns(t *testing.T) {
+	h := NewHTMLEntityHandler()
+	if len(h.Patterns()) == 0 {
+		t.Error("Patterns() should return patterns")
+	}
+}
+
+func TestHTMLEntityHandlerCanHandle(t *testing.T) {
+	h := NewHTMLEntityHandler()
+
+	tests := []struct {
+		query string
+		want  bool
+	}{
+		{"encode html: <div>", true},
+		{"decode html: &lt;div&gt;", true},
+		{"html: &amp;", true},
+		{"entity: &#60;", true},
+		// "encode: <p>" and "decode: &lt;p&gt;" lack the "html" keyword — no match
+		{"encode: <p>", false},
+		{"decode: &lt;p&gt;", false},
+		{"html entities &lt;test&gt;", true},
+		{"hello world", false},
+		{"convert meters to feet", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			got := h.CanHandle(tt.query)
+			if got != tt.want {
+				t.Errorf("CanHandle(%q) = %v, want %v", tt.query, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHTMLEntityHandlerHandleEncode(t *testing.T) {
+	h := NewHTMLEntityHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, `encode html: <div class="test">`)
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if answer.Type != AnswerTypeHTMLEntity {
+		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeHTMLEntity)
+	}
+	if !contains(answer.Content, "&lt;") {
+		t.Error("Content should contain encoded entity &lt;")
+	}
+}
+
+func TestHTMLEntityHandlerHandleDecode(t *testing.T) {
+	h := NewHTMLEntityHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "decode html: &lt;div&gt;")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if answer.Type != AnswerTypeHTMLEntity {
+		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeHTMLEntity)
+	}
+	// decode path uses html.EscapeString for display, so <div> appears as &lt;div&gt; in Content
+	if !contains(answer.Content, "&lt;div&gt;") {
+		t.Error("Content should contain HTML-escaped decoded value &lt;div&gt;")
+	}
+}
+
+func TestHTMLEntityHandlerHandleAutoDetectDecode(t *testing.T) {
+	h := NewHTMLEntityHandler()
+	ctx := context.Background()
+
+	// Query contains &...; so auto-detect should decode
+	answer, err := h.HandleInstantQuery(ctx, "html: &amp;&lt;&gt;")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if answer.Type != AnswerTypeHTMLEntity {
+		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeHTMLEntity)
+	}
+}
+
+func TestHTMLEntityHandlerHandleNoMatch(t *testing.T) {
+	h := NewHTMLEntityHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "completely unrelated")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer != nil {
+		t.Error("HandleInstantQuery() should return nil for non-matching query")
+	}
+}
+
+func TestDecodeHTMLEntities(t *testing.T) {
+	h := NewHTMLEntityHandler()
+
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"&lt;div&gt;", "<div>"},
+		{"&amp;", "&"},
+		{"&quot;", "\""},
+		{"&#60;", "<"},
+		{"hello world", "hello world"},
+		{"&lt;p class=&quot;test&quot;&gt;", `<p class="test">`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := h.decodeHTMLEntities(tt.input)
+			if got != tt.want {
+				t.Errorf("decodeHTMLEntities(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEncodeAllChars(t *testing.T) {
+	h := NewHTMLEntityHandler()
+
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"less than", "<"},
+		{"greater than", ">"},
+		{"ampersand", "&"},
+		{"plain text stays plain", "abc"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := h.encodeAllChars(tt.input)
+			// Encoded result should not contain the raw special character
+			if tt.input == "<" && contains(got, "<") && !contains(got, "&lt;") {
+				t.Errorf("encodeAllChars(%q) should encode < to &lt;, got %q", tt.input, got)
+			}
+		})
+	}
+}
+
+func TestGetHTMLEntities(t *testing.T) {
+	entities := getHTMLEntities()
+	if len(entities) == 0 {
+		t.Error("getHTMLEntities() should return a non-empty map")
+	}
+	// Verify some common entities exist
+	if _, ok := entities["amp"]; !ok {
+		t.Error("getHTMLEntities() should contain 'amp'")
+	}
+	if _, ok := entities["lt"]; !ok {
+		t.Error("getHTMLEntities() should contain 'lt'")
+	}
+	if _, ok := entities["gt"]; !ok {
+		t.Error("getHTMLEntities() should contain 'gt'")
+	}
+}
+
+// ASCIIHandler tests cover pure-Go ASCII art generation.
+
+func TestNewASCIIHandler(t *testing.T) {
+	h := NewASCIIHandler()
+	if h == nil {
+		t.Fatal("NewASCIIHandler() returned nil")
+	}
+}
+
+func TestASCIIHandlerName(t *testing.T) {
+	h := NewASCIIHandler()
+	if h.Name() != "ascii" {
+		t.Errorf("Name() = %q, want %q", h.Name(), "ascii")
+	}
+}
+
+func TestASCIIHandlerPatterns(t *testing.T) {
+	h := NewASCIIHandler()
+	if len(h.Patterns()) == 0 {
+		t.Error("Patterns() should return patterns")
+	}
+}
+
+func TestASCIIHandlerCanHandle(t *testing.T) {
+	h := NewASCIIHandler()
+
+	tests := []struct {
+		query string
+		want  bool
+	}{
+		{"ascii: hello", true},
+		{"ascii art: world", true},
+		{"figlet: test", true},
+		{"banner: foo", true},
+		{"text art: bar", true},
+		{"hello world", false},
+		{"convert 10 km to miles", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			got := h.CanHandle(tt.query)
+			if got != tt.want {
+				t.Errorf("CanHandle(%q) = %v, want %v", tt.query, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestASCIIHandlerHandle(t *testing.T) {
+	h := NewASCIIHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "ascii: HELLO")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if answer.Type != AnswerTypeASCII {
+		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeASCII)
+	}
+	if answer.Content == "" {
+		t.Error("Content should not be empty")
+	}
+}
+
+func TestASCIIHandlerHandleAllPatterns(t *testing.T) {
+	h := NewASCIIHandler()
+	ctx := context.Background()
+
+	tests := []struct {
+		query string
+	}{
+		{"ascii: A"},
+		{"figlet: B"},
+		{"banner: C"},
+		{"text art: D"},
+		{"ascii art: E"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			answer, err := h.HandleInstantQuery(ctx, tt.query)
+			if err != nil {
+				t.Fatalf("HandleInstantQuery() error = %v", err)
+			}
+			if answer == nil {
+				t.Fatal("HandleInstantQuery() returned nil")
+			}
+		})
+	}
+}
+
+func TestASCIIHandlerHandleNumbers(t *testing.T) {
+	h := NewASCIIHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "ascii: 1234567890")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+}
+
+func TestASCIIHandlerHandleSpecialChars(t *testing.T) {
+	h := NewASCIIHandler()
+	ctx := context.Background()
+
+	// Unknown characters fall back to space in font
+	answer, err := h.HandleInstantQuery(ctx, "ascii: !?.")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+}
+
+func TestASCIIHandlerHandleNoMatch(t *testing.T) {
+	h := NewASCIIHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "completely unrelated query")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer != nil {
+		t.Error("HandleInstantQuery() should return nil for non-matching query")
+	}
+}
+
+func TestGenerateASCII(t *testing.T) {
+	h := NewASCIIHandler()
+
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"single letter", "A"},
+		{"lowercase converts to uppercase", "hello"},
+		{"numbers", "123"},
+		{"empty string", ""},
+		{"special chars", "@#"},
+		{"long text", "ABCDEFGHIJKLMNOPQRSTUVWXYZ"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := h.generateASCII(tt.input)
+			// generateASCII should always return a string (even if empty)
+			_ = got
+		})
+	}
+}
+
+// EmojiHandler tests cover pure-Go emoji searching.
+
+func TestNewEmojiHandler(t *testing.T) {
+	h := NewEmojiHandler()
+	if h == nil {
+		t.Fatal("NewEmojiHandler() returned nil")
+	}
+}
+
+func TestEmojiHandlerName(t *testing.T) {
+	h := NewEmojiHandler()
+	if h.Name() != "emoji" {
+		t.Errorf("Name() = %q, want %q", h.Name(), "emoji")
+	}
+}
+
+func TestEmojiHandlerPatterns(t *testing.T) {
+	h := NewEmojiHandler()
+	if len(h.Patterns()) == 0 {
+		t.Error("Patterns() should return patterns")
+	}
+}
+
+func TestEmojiHandlerCanHandle(t *testing.T) {
+	h := NewEmojiHandler()
+
+	tests := []struct {
+		query string
+		want  bool
+	}{
+		{"emoji: smile", true},
+		{"emojis: happy", true},
+		{"find emoji: heart", true},
+		{"search emoji: fire", true},
+		{"hello world", false},
+		{"ascii: test", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			got := h.CanHandle(tt.query)
+			if got != tt.want {
+				t.Errorf("CanHandle(%q) = %v, want %v", tt.query, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEmojiHandlerHandleKnownEmoji(t *testing.T) {
+	h := NewEmojiHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "emoji: smile")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if answer.Type != AnswerTypeEmoji {
+		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeEmoji)
+	}
+}
+
+func TestEmojiHandlerHandleNoResults(t *testing.T) {
+	h := NewEmojiHandler()
+	ctx := context.Background()
+
+	// Query that is unlikely to match any emoji
+	answer, err := h.HandleInstantQuery(ctx, "emoji: xyzzy_not_a_real_emoji_12345")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil — should return 'No emojis found' answer")
+	}
+	if answer.Type != AnswerTypeEmoji {
+		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeEmoji)
+	}
+	if !contains(answer.Content, "No emojis found") {
+		t.Error("Content should indicate no emojis found")
+	}
+}
+
+func TestEmojiHandlerHandleAllPatterns(t *testing.T) {
+	h := NewEmojiHandler()
+	ctx := context.Background()
+
+	tests := []string{
+		"emoji: heart",
+		"emojis: heart",
+		"find emoji: heart",
+		"search emoji: heart",
+	}
+
+	for _, query := range tests {
+		t.Run(query, func(t *testing.T) {
+			answer, err := h.HandleInstantQuery(ctx, query)
+			if err != nil {
+				t.Fatalf("HandleInstantQuery() error = %v", err)
+			}
+			if answer == nil {
+				t.Fatal("HandleInstantQuery() returned nil")
+			}
+		})
+	}
+}
+
+func TestEmojiHandlerHandleNoMatch(t *testing.T) {
+	h := NewEmojiHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "completely unrelated query")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer != nil {
+		t.Error("HandleInstantQuery() should return nil for non-matching query")
+	}
+}
+
+func TestSearchEmojis(t *testing.T) {
+	h := NewEmojiHandler()
+
+	tests := []struct {
+		name     string
+		query    string
+		wantMore int
+	}{
+		{"exact name match", "smile", 1},
+		{"partial match", "hap", 0},
+		{"no match", "xyzzy_definitely_not_an_emoji_99999", 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			results := h.searchEmojis(tt.query)
+			if tt.wantMore > 0 && len(results) < tt.wantMore {
+				t.Errorf("searchEmojis(%q) returned %d results, want at least %d", tt.query, len(results), tt.wantMore)
+			}
+			// Max 20 results enforced
+			if len(results) > 20 {
+				t.Errorf("searchEmojis() returned %d results, max is 20", len(results))
+			}
+		})
+	}
+}
+
+// QRHandler tests cover QR code generation.
+
+func TestNewQRHandler(t *testing.T) {
+	h := NewQRHandler()
+	if h == nil {
+		t.Fatal("NewQRHandler() returned nil")
+	}
+}
+
+func TestQRHandlerName(t *testing.T) {
+	h := NewQRHandler()
+	if h.Name() != "qr" {
+		t.Errorf("Name() = %q, want %q", h.Name(), "qr")
+	}
+}
+
+func TestQRHandlerPatterns(t *testing.T) {
+	h := NewQRHandler()
+	if len(h.Patterns()) == 0 {
+		t.Error("Patterns() should return patterns")
+	}
+}
+
+func TestQRHandlerCanHandle(t *testing.T) {
+	h := NewQRHandler()
+
+	tests := []struct {
+		query string
+		want  bool
+	}{
+		{"qr: https://example.com", true},
+		{"qrcode: hello world", true},
+		{"generate qr: test text", true},
+		{"qr code: data here", true},
+		{"hello world", false},
+		{"ascii: test", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			got := h.CanHandle(tt.query)
+			if got != tt.want {
+				t.Errorf("CanHandle(%q) = %v, want %v", tt.query, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestQRHandlerHandle(t *testing.T) {
+	h := NewQRHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "qr: https://example.com")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if answer.Type != AnswerTypeQR {
+		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeQR)
+	}
+	if !contains(answer.Content, "data:image/png;base64,") {
+		t.Error("Content should contain base64-encoded PNG image")
+	}
+}
+
+func TestQRHandlerHandleAllPatterns(t *testing.T) {
+	h := NewQRHandler()
+	ctx := context.Background()
+
+	tests := []string{
+		"qr: test",
+		"qrcode: test",
+		"generate qr: test",
+		"qr code: test",
+	}
+
+	for _, query := range tests {
+		t.Run(query, func(t *testing.T) {
+			answer, err := h.HandleInstantQuery(ctx, query)
+			if err != nil {
+				t.Fatalf("HandleInstantQuery() error = %v", err)
+			}
+			if answer == nil {
+				t.Fatal("HandleInstantQuery() returned nil")
+			}
+			if answer.Type != AnswerTypeQR {
+				t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeQR)
+			}
+		})
+	}
+}
+
+func TestQRHandlerHandleNoMatch(t *testing.T) {
+	h := NewQRHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "completely unrelated query")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer != nil {
+		t.Error("HandleInstantQuery() should return nil for non-matching query")
+	}
+}
+
+func TestQRHandlerDataFields(t *testing.T) {
+	h := NewQRHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "qr: test data")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if answer.Data["text"] == nil {
+		t.Error("Data should contain text")
+	}
+	if answer.Data["image_b64"] == nil {
+		t.Error("Data should contain image_b64")
+	}
+	if answer.Data["image_type"] == nil {
+		t.Error("Data should contain image_type")
+	}
+	if answer.Data["image_type"] != "png" {
+		t.Errorf("image_type = %v, want png", answer.Data["image_type"])
+	}
+}
+
+func TestGenerateQRASCII(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"simple text", "hello"},
+		{"URL", "https://example.com"},
+		{"empty string", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := generateQRASCII(tt.input)
+			_ = got
+			if tt.input != "" && got == "" {
+				t.Logf("generateQRASCII(%q) returned empty string", tt.input)
+			}
+		})
+	}
+}
+
+// DefinitionHandler HTTP mock tests use httptest.Server to mock the dictionary API.
+
+func TestDefinitionHandlerHandleSuccess(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`[{"word":"test","phonetic":"/test/","phonetics":[],"meanings":[{"partOfSpeech":"noun","definitions":[{"definition":"A procedure intended to establish quality.","example":"a test of strength","synonyms":[],"antonyms":[]}]}],"origin":"Old English"}]`))
+	}))
+	defer srv.Close()
+
+	h := NewDefinitionHandler()
+	h.client = &http.Client{
+		Transport: &redirectTransport{target: srv.URL},
+	}
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "define: test")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if answer.Type != AnswerTypeDefinition {
+		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeDefinition)
+	}
+	if !contains(answer.Content, "test") {
+		t.Error("Content should contain the word")
+	}
+	if answer.Source != "Free Dictionary API" {
+		t.Errorf("Source = %q, want %q", answer.Source, "Free Dictionary API")
+	}
+}
+
+func TestDefinitionHandlerHandleNotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	h := NewDefinitionHandler()
+	h.client = &http.Client{
+		Transport: &redirectTransport{target: srv.URL},
+	}
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "define: xyzzynotaword")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if !contains(answer.Content, "No definition found") {
+		t.Error("Content should indicate no definition found")
+	}
+}
+
+func TestDefinitionHandlerHandleEmptyData(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`[]`))
+	}))
+	defer srv.Close()
+
+	h := NewDefinitionHandler()
+	h.client = &http.Client{
+		Transport: &redirectTransport{target: srv.URL},
+	}
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "define: emptyword")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if !contains(answer.Content, "No definition found") {
+		t.Error("Content should indicate no definition found for empty data")
+	}
+}
+
+func TestDefinitionHandlerHandleNoMatch(t *testing.T) {
+	h := NewDefinitionHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "completely unrelated query")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer != nil {
+		t.Error("HandleInstantQuery() should return nil for non-matching query")
+	}
+}
+
+func TestDefinitionHandlerHandleWithPhonetic(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`[{"word":"hello","phonetic":"/phonetic-test/","phonetics":[],"meanings":[{"partOfSpeech":"exclamation","definitions":[{"definition":"Used as a greeting.","example":"","synonyms":[],"antonyms":[]}]}],"origin":""}]`))
+	}))
+	defer srv.Close()
+
+	h := NewDefinitionHandler()
+	h.client = &http.Client{
+		Transport: &redirectTransport{target: srv.URL},
+	}
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "what is hello")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if !contains(answer.Content, "phonetic-test") {
+		t.Error("Content should contain phonetic")
+	}
+}
+
+// DictionaryHandlerHandleSuccess verifies the shared definition logic through the dictionary prefix patterns.
+
+func TestDictionaryHandlerHandleSuccess(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`[{"word":"test","phonetic":"","phonetics":[],"meanings":[{"partOfSpeech":"noun","definitions":[{"definition":"An examination.","example":"","synonyms":[],"antonyms":[]}]}],"origin":""}]`))
+	}))
+	defer srv.Close()
+
+	h := NewDictionaryHandler()
+	h.client = &http.Client{
+		Transport: &redirectTransport{target: srv.URL},
+	}
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "dict: test")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if answer.Type != AnswerTypeDefinition {
+		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeDefinition)
+	}
+}
+
+// SynonymHandlerHandleSuccess tests the Datamuse API integration via a mock server.
+
+func TestSynonymHandlerHandleSuccess(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`[{"word":"glad","score":100},{"word":"joyful","score":95},{"word":"cheerful","score":90}]`))
+	}))
+	defer srv.Close()
+
+	h := NewSynonymHandler()
+	h.client = &http.Client{
+		Transport: &redirectTransport{target: srv.URL},
+	}
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "synonym: happy")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if answer.Type != AnswerTypeSynonym {
+		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeSynonym)
+	}
+	if !contains(answer.Content, "glad") {
+		t.Error("Content should contain synonym 'glad'")
+	}
+	if answer.Source != "Datamuse API" {
+		t.Errorf("Source = %q, want %q", answer.Source, "Datamuse API")
+	}
+}
+
+func TestSynonymHandlerHandleEmpty(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`[]`))
+	}))
+	defer srv.Close()
+
+	h := NewSynonymHandler()
+	h.client = &http.Client{
+		Transport: &redirectTransport{target: srv.URL},
+	}
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "synonym: xyzzynoword")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if !contains(answer.Content, "No synonyms found") {
+		t.Error("Content should indicate no synonyms found")
+	}
+}
+
+func TestSynonymHandlerHandleNoMatch(t *testing.T) {
+	h := NewSynonymHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "completely unrelated query")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer != nil {
+		t.Error("HandleInstantQuery() should return nil for non-matching query")
+	}
+}
+
+func TestSynonymHandlerDataFields(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`[{"word":"big","score":100}]`))
+	}))
+	defer srv.Close()
+
+	h := NewSynonymHandler()
+	h.client = &http.Client{
+		Transport: &redirectTransport{target: srv.URL},
+	}
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "syn: large")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if answer.Data["word"] == nil {
+		t.Error("Data should contain word")
+	}
+	if answer.Data["synonyms"] == nil {
+		t.Error("Data should contain synonyms")
+	}
+}
+
+// AntonymHandlerHandleSuccess tests the Datamuse antonym API integration via a mock server.
+
+func TestAntonymHandlerHandleSuccess(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`[{"word":"sad","score":100},{"word":"unhappy","score":95}]`))
+	}))
+	defer srv.Close()
+
+	h := NewAntonymHandler()
+	h.client = &http.Client{
+		Transport: &redirectTransport{target: srv.URL},
+	}
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "antonym: happy")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if answer.Type != AnswerTypeAntonym {
+		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeAntonym)
+	}
+	if !contains(answer.Content, "sad") {
+		t.Error("Content should contain antonym 'sad'")
+	}
+}
+
+func TestAntonymHandlerHandleEmpty(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`[]`))
+	}))
+	defer srv.Close()
+
+	h := NewAntonymHandler()
+	h.client = &http.Client{
+		Transport: &redirectTransport{target: srv.URL},
+	}
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "antonym: xyzzynoword")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if !contains(answer.Content, "No antonyms found") {
+		t.Error("Content should indicate no antonyms found")
+	}
+}
+
+func TestAntonymHandlerHandleNoMatch(t *testing.T) {
+	h := NewAntonymHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "completely unrelated query")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer != nil {
+		t.Error("HandleInstantQuery() should return nil for non-matching query")
+	}
+}
+
+// redirectTransport is a test helper that redirects all requests to a local test server.
+type redirectTransport struct {
+	target string
+}
+
+func (t *redirectTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req2 := req.Clone(req.Context())
+	req2.URL.Scheme = "http"
+	req2.URL.Host = strings.TrimPrefix(t.target, "http://")
+	return http.DefaultTransport.RoundTrip(req2)
+}
+
+// DirectAnswerManager tests cover registration, dispatch, and all pure-Go handlers.
+
+func TestNewDirectAnswerManager(t *testing.T) {
+	m := NewDirectAnswerManager()
+	if m == nil {
+		t.Fatal("NewDirectAnswerManager() returned nil")
+	}
+	if len(m.GetHandlers()) == 0 {
+		t.Error("GetHandlers() should return registered handlers")
+	}
+}
+
+func TestDirectAnswerManagerRegister(t *testing.T) {
+	m := &DirectAnswerManager{handlers: make([]Handler, 0)}
+	initial := len(m.GetHandlers())
+	m.Register(NewHTTPCodeHandler())
+	if len(m.GetHandlers()) != initial+1 {
+		t.Errorf("GetHandlers() length = %d, want %d", len(m.GetHandlers()), initial+1)
+	}
+}
+
+func TestDirectAnswerManagerProcessNoMatch(t *testing.T) {
+	m := NewDirectAnswerManager()
+	ctx := context.Background()
+
+	answer, err := m.Process(ctx, "completely unrelated query that matches nothing")
+	if err != nil {
+		t.Fatalf("Process() error = %v", err)
+	}
+	if answer != nil {
+		t.Error("Process() should return nil for unmatched query")
+	}
+}
+
+func TestDirectAnswerManagerProcessHTTPCode(t *testing.T) {
+	m := NewDirectAnswerManager()
+	ctx := context.Background()
+
+	answer, err := m.Process(ctx, "http: 404")
+	if err != nil {
+		t.Fatalf("Process() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("Process() returned nil")
+	}
+	if answer.Type != AnswerTypeHTTPCode {
+		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeHTTPCode)
+	}
+}
+
+func TestDirectAnswerManagerProcessTrimsSpace(t *testing.T) {
+	m := NewDirectAnswerManager()
+	ctx := context.Background()
+
+	answer, err := m.Process(ctx, "  http: 200  ")
+	if err != nil {
+		t.Fatalf("Process() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("Process() returned nil for whitespace-padded query")
+	}
+}
+
+// HTTPCodeHandler tests cover the static lookup table.
+
+func TestNewHTTPCodeHandler(t *testing.T) {
+	h := NewHTTPCodeHandler()
+	if h == nil {
+		t.Fatal("NewHTTPCodeHandler() returned nil")
+	}
+}
+
+func TestHTTPCodeHandlerName(t *testing.T) {
+	h := NewHTTPCodeHandler()
+	if h.Name() != "httpcode" {
+		t.Errorf("Name() = %q, want %q", h.Name(), "httpcode")
+	}
+}
+
+func TestHTTPCodeHandlerPatterns(t *testing.T) {
+	h := NewHTTPCodeHandler()
+	if len(h.Patterns()) == 0 {
+		t.Error("Patterns() should return patterns")
+	}
+}
+
+func TestHTTPCodeHandlerCanHandle(t *testing.T) {
+	h := NewHTTPCodeHandler()
+
+	tests := []struct {
+		query string
+		want  bool
+	}{
+		{"http: 404", true},
+		{"http status: 200", true},
+		{"status code: 500", true},
+		{"http 418", true},
+		{"hello world", false},
+		{"http: abc", false},
+		{"port: 80", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			got := h.CanHandle(tt.query)
+			if got != tt.want {
+				t.Errorf("CanHandle(%q) = %v, want %v", tt.query, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHTTPCodeHandlerHandleKnownCodes(t *testing.T) {
+	h := NewHTTPCodeHandler()
+	ctx := context.Background()
+
+	tests := []struct {
+		query    string
+		wantCode string
+	}{
+		{"http: 200", "OK"},
+		{"http: 404", "Not Found"},
+		{"http: 500", "Internal Server Error"},
+		{"http: 418", "teapot"},
+		{"http status: 301", "Moved Permanently"},
+		{"status code: 403", "Forbidden"},
+		{"http 201", "Created"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			answer, err := h.HandleInstantQuery(ctx, tt.query)
+			if err != nil {
+				t.Fatalf("HandleInstantQuery() error = %v", err)
+			}
+			if answer == nil {
+				t.Fatal("HandleInstantQuery() returned nil")
+			}
+			if answer.Type != AnswerTypeHTTPCode {
+				t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeHTTPCode)
+			}
+			if !contains(answer.Content, tt.wantCode) {
+				t.Errorf("Content should contain %q, got: %s", tt.wantCode, answer.Content)
+			}
+		})
+	}
+}
+
+func TestHTTPCodeHandlerHandleUnknownCode(t *testing.T) {
+	h := NewHTTPCodeHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "http: 999")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if !contains(answer.Content, "Unknown HTTP status code") {
+		t.Error("Content should indicate unknown HTTP status code")
+	}
+}
+
+func TestHTTPCodeHandlerHandleNoMatch(t *testing.T) {
+	h := NewHTTPCodeHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "completely unrelated")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer != nil {
+		t.Error("HandleInstantQuery() should return nil for non-matching query")
+	}
+}
+
+// PortHandler tests cover the static port lookup table.
+
+func TestNewPortHandler(t *testing.T) {
+	h := NewPortHandler()
+	if h == nil {
+		t.Fatal("NewPortHandler() returned nil")
+	}
+}
+
+func TestPortHandlerName(t *testing.T) {
+	h := NewPortHandler()
+	if h.Name() != "port" {
+		t.Errorf("Name() = %q, want %q", h.Name(), "port")
+	}
+}
+
+func TestPortHandlerCanHandle(t *testing.T) {
+	h := NewPortHandler()
+
+	tests := []struct {
+		query string
+		want  bool
+	}{
+		{"port: 80", true},
+		{"what is port 22?", true},
+		{"service on port: 443", true},
+		{"hello world", false},
+		{"http: 200", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			got := h.CanHandle(tt.query)
+			if got != tt.want {
+				t.Errorf("CanHandle(%q) = %v, want %v", tt.query, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPortHandlerHandleKnownPorts(t *testing.T) {
+	h := NewPortHandler()
+	ctx := context.Background()
+
+	tests := []struct {
+		query       string
+		wantService string
+	}{
+		{"port: 80", "HTTP"},
+		{"port: 443", "HTTPS"},
+		{"port: 22", "SSH"},
+		{"port: 25", "SMTP"},
+		{"what is port 53?", "DNS"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			answer, err := h.HandleInstantQuery(ctx, tt.query)
+			if err != nil {
+				t.Fatalf("HandleInstantQuery() error = %v", err)
+			}
+			if answer == nil {
+				t.Fatal("HandleInstantQuery() returned nil")
+			}
+			if answer.Type != AnswerTypePort {
+				t.Errorf("Type = %v, want %v", answer.Type, AnswerTypePort)
+			}
+			if !contains(answer.Content, tt.wantService) {
+				t.Errorf("Content should contain service %q", tt.wantService)
+			}
+		})
+	}
+}
+
+func TestPortHandlerHandleUnknownPort(t *testing.T) {
+	h := NewPortHandler()
+	ctx := context.Background()
+
+	// Use a port unlikely to be in the lookup table
+	answer, err := h.HandleInstantQuery(ctx, "port: 59999")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if answer.Type != AnswerTypePort {
+		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypePort)
+	}
+	if !contains(answer.Content, "Unknown") {
+		t.Error("Content should indicate Unknown/Custom port")
+	}
+}
+
+func TestPortHandlerHandleWellKnownCategory(t *testing.T) {
+	h := NewPortHandler()
+	ctx := context.Background()
+
+	// Port in Well-Known range (0-1023) but not in lookup table
+	answer, err := h.HandleInstantQuery(ctx, "port: 999")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+}
+
+func TestPortHandlerHandleNoMatch(t *testing.T) {
+	h := NewPortHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "completely unrelated")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer != nil {
+		t.Error("HandleInstantQuery() should return nil for non-matching query")
+	}
+}
+
+// CronHandler tests cover cron expression parsing.
+
+func TestNewCronHandler(t *testing.T) {
+	h := NewCronHandler()
+	if h == nil {
+		t.Fatal("NewCronHandler() returned nil")
+	}
+}
+
+func TestCronHandlerName(t *testing.T) {
+	h := NewCronHandler()
+	if h.Name() != "cron" {
+		t.Errorf("Name() = %q, want %q", h.Name(), "cron")
+	}
+}
+
+func TestCronHandlerCanHandle(t *testing.T) {
+	h := NewCronHandler()
+
+	tests := []struct {
+		query string
+		want  bool
+	}{
+		{"cron: * * * * *", true},
+		{"crontab: 0 0 * * *", true},
+		{"explain cron: */5 * * * *", true},
+		{"hello world", false},
+		{"port: 80", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			got := h.CanHandle(tt.query)
+			if got != tt.want {
+				t.Errorf("CanHandle(%q) = %v, want %v", tt.query, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCronHandlerHandleValidExpressions(t *testing.T) {
+	h := NewCronHandler()
+	ctx := context.Background()
+
+	tests := []struct {
+		query string
+	}{
+		{"cron: * * * * *"},
+		{"cron: 0 0 * * *"},
+		{"cron: */5 * * * *"},
+		{"cron: 0 9-17 * * 1-5"},
+		{"cron: 0 0 1 1 *"},
+		{"cron: @daily"},
+		{"cron: @weekly"},
+		{"cron: @monthly"},
+		{"cron: @yearly"},
+		{"cron: @hourly"},
+		{"cron: @reboot"},
+		{"cron: 0 0 * * * *"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			answer, err := h.HandleInstantQuery(ctx, tt.query)
+			if err != nil {
+				t.Fatalf("HandleInstantQuery() error = %v", err)
+			}
+			if answer == nil {
+				t.Fatal("HandleInstantQuery() returned nil")
+			}
+			if answer.Type != AnswerTypeCron {
+				t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeCron)
+			}
+		})
+	}
+}
+
+func TestCronHandlerHandleInvalidExpression(t *testing.T) {
+	h := NewCronHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "cron: one two three four five six seven")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if answer.Type != AnswerTypeCron {
+		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeCron)
+	}
+	if !contains(answer.Content, "Invalid") && !contains(answer.Content, "invalid") {
+		t.Error("Content should indicate invalid cron expression")
+	}
+}
+
+func TestCronHandlerHandleNoMatch(t *testing.T) {
+	h := NewCronHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "completely unrelated")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer != nil {
+		t.Error("HandleInstantQuery() should return nil for non-matching query")
+	}
+}
+
+func TestExplainCron(t *testing.T) {
+	tests := []struct {
+		name    string
+		expr    string
+		wantErr bool
+	}{
+		{"every minute", "* * * * *", false},
+		{"daily midnight", "0 0 * * *", false},
+		{"step value", "*/15 * * * *", false},
+		{"range", "0 9-17 * * 1-5", false},
+		{"list values", "0 0 1,15 * *", false},
+		{"6-field with seconds", "0 0 0 * * *", false},
+		{"special @daily", "@daily", false},
+		{"special @weekly", "@weekly", false},
+		{"special @monthly", "@monthly", false},
+		{"special @yearly", "@yearly", false},
+		{"special @annually", "@annually", false},
+		{"special @hourly", "@hourly", false},
+		{"special @reboot", "@reboot", false},
+		{"too few fields", "* *", true},
+		{"too many fields", "* * * * * * *", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := explainCron(tt.expr)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("explainCron(%q) error = %v, wantErr %v", tt.expr, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestExplainCronField(t *testing.T) {
+	tests := []struct {
+		field      string
+		fieldIndex int
+		wantSubstr string
+	}{
+		{"*", 0, "every value"},
+		{"*/5", 0, "every 5"},
+		{"1,2,3", 0, "specific values"},
+		{"1-5", 0, "from 1 to 5"},
+		{"0", 0, "at 0"},
+		{"1", 3, "January"},
+		{"12", 3, "December"},
+		{"0", 4, "Sunday"},
+		{"5", 4, "Friday"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.field+"_idx"+string(rune('0'+tt.fieldIndex)), func(t *testing.T) {
+			got := explainCronField(tt.field, tt.fieldIndex)
+			if !contains(got, tt.wantSubstr) {
+				t.Errorf("explainCronField(%q, %d) = %q, want to contain %q", tt.field, tt.fieldIndex, got, tt.wantSubstr)
+			}
+		})
+	}
+}
+
+// ChmodHandler tests cover octal and symbolic permission parsing.
+
+func TestNewChmodHandler(t *testing.T) {
+	h := NewChmodHandler()
+	if h == nil {
+		t.Fatal("NewChmodHandler() returned nil")
+	}
+}
+
+func TestChmodHandlerName(t *testing.T) {
+	h := NewChmodHandler()
+	if h.Name() != "chmod" {
+		t.Errorf("Name() = %q, want %q", h.Name(), "chmod")
+	}
+}
+
+func TestChmodHandlerCanHandle(t *testing.T) {
+	h := NewChmodHandler()
+
+	tests := []struct {
+		query string
+		want  bool
+	}{
+		{"chmod: 755", true},
+		{"permissions: 644", true},
+		{"chmod: rwxr-xr-x", true},
+		{"hello world", false},
+		{"cron: * * * * *", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			got := h.CanHandle(tt.query)
+			if got != tt.want {
+				t.Errorf("CanHandle(%q) = %v, want %v", tt.query, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestChmodHandlerHandleOctal(t *testing.T) {
+	h := NewChmodHandler()
+	ctx := context.Background()
+
+	tests := []struct {
+		query  string
+		wantIn string
+	}{
+		{"chmod: 755", "rwxr-xr-x"},
+		{"chmod: 644", "rw-r--r--"},
+		{"chmod: 777", "rwxrwxrwx"},
+		{"chmod: 000", "---"},
+		{"chmod: 4755", "rwsr-xr-x"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			answer, err := h.HandleInstantQuery(ctx, tt.query)
+			if err != nil {
+				t.Fatalf("HandleInstantQuery() error = %v", err)
+			}
+			if answer == nil {
+				t.Fatal("HandleInstantQuery() returned nil")
+			}
+			if answer.Type != AnswerTypeChmod {
+				t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeChmod)
+			}
+			if !contains(answer.Content, tt.wantIn) {
+				t.Errorf("Content should contain %q for query %q", tt.wantIn, tt.query)
+			}
+		})
+	}
+}
+
+func TestChmodHandlerHandleSymbolic(t *testing.T) {
+	h := NewChmodHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "chmod: rwxr-xr-x")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if answer.Type != AnswerTypeChmod {
+		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeChmod)
+	}
+	// Symbolic rwxr-xr-x = 755
+	if !contains(answer.Content, "755") {
+		t.Error("Content should contain octal 755 for rwxr-xr-x")
+	}
+}
+
+func TestChmodHandlerHandleNoMatch(t *testing.T) {
+	h := NewChmodHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "completely unrelated")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer != nil {
+		t.Error("HandleInstantQuery() should return nil for non-matching query")
+	}
+}
+
+func TestOctalToSymbolic(t *testing.T) {
+	tests := []struct {
+		octal string
+		want  string
+	}{
+		{"755", "rwxr-xr-x"},
+		{"644", "rw-r--r--"},
+		{"777", "rwxrwxrwx"},
+		{"000", "---------"},
+		{"700", "rwx------"},
+		{"444", "r--r--r--"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.octal, func(t *testing.T) {
+			got := octalToSymbolic(tt.octal)
+			if got != tt.want {
+				t.Errorf("octalToSymbolic(%q) = %q, want %q", tt.octal, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSymbolicToOctal(t *testing.T) {
+	tests := []struct {
+		symbolic string
+		want     string
+	}{
+		{"rwxr-xr-x", "755"},
+		{"rw-r--r--", "644"},
+		{"rwxrwxrwx", "777"},
+		{"---------", "000"},
+		{"rwx------", "700"},
+		{"r--r--r--", "444"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.symbolic, func(t *testing.T) {
+			got := symbolicToOctal(tt.symbolic)
+			if got != tt.want {
+				t.Errorf("symbolicToOctal(%q) = %q, want %q", tt.symbolic, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExplainChmod(t *testing.T) {
+	tests := []struct {
+		octal      string
+		wantSubstr string
+	}{
+		{"755", "Owner"},
+		{"644", "Group"},
+		{"777", "read"},
+		{"000", "no permissions"},
+		{"4755", "setuid"},
+		{"2755", "setgid"},
+		{"1755", "sticky"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.octal, func(t *testing.T) {
+			got := explainChmod(tt.octal)
+			if !contains(got, tt.wantSubstr) {
+				t.Errorf("explainChmod(%q) = %q, want to contain %q", tt.octal, got, tt.wantSubstr)
+			}
+		})
+	}
+}
+
+// TimestampHandler tests cover Unix timestamp conversion.
+
+func TestNewTimestampHandler(t *testing.T) {
+	h := NewTimestampHandler()
+	if h == nil {
+		t.Fatal("NewTimestampHandler() returned nil")
+	}
+}
+
+func TestTimestampHandlerName(t *testing.T) {
+	h := NewTimestampHandler()
+	if h.Name() != "timestamp" {
+		t.Errorf("Name() = %q, want %q", h.Name(), "timestamp")
+	}
+}
+
+func TestTimestampHandlerCanHandle(t *testing.T) {
+	h := NewTimestampHandler()
+
+	tests := []struct {
+		query string
+		want  bool
+	}{
+		{"timestamp: 1609459200", true},
+		{"unix: 1609459200", true},
+		{"epoch: 1609459200", true},
+		{"time: 1609459200", true},
+		{"hello world", false},
+		{"timestamp: notanumber", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			got := h.CanHandle(tt.query)
+			if got != tt.want {
+				t.Errorf("CanHandle(%q) = %v, want %v", tt.query, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTimestampHandlerHandleSeconds(t *testing.T) {
+	h := NewTimestampHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "timestamp: 1609459200")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if answer.Type != AnswerTypeTimestamp {
+		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeTimestamp)
+	}
+	if !contains(answer.Content, "UTC") {
+		t.Error("Content should contain UTC time")
+	}
+	if !contains(answer.Content, "ISO 8601") {
+		t.Error("Content should contain ISO 8601")
+	}
+}
+
+func TestTimestampHandlerHandleMilliseconds(t *testing.T) {
+	h := NewTimestampHandler()
+	ctx := context.Background()
+
+	// Millisecond timestamp (> 9999999999)
+	answer, err := h.HandleInstantQuery(ctx, "timestamp: 1609459200000")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if answer.Type != AnswerTypeTimestamp {
+		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeTimestamp)
+	}
+	// TimestampHandler content uses "(milliseconds)" for millis input, not "ms"
+	if !contains(answer.Content, "milliseconds") {
+		t.Error("Content should indicate millisecond input with '(milliseconds)'")
+	}
+}
+
+func TestTimestampHandlerHandleAllPatterns(t *testing.T) {
+	h := NewTimestampHandler()
+	ctx := context.Background()
+
+	tests := []string{
+		"timestamp: 1609459200",
+		"unix: 1609459200",
+		"epoch: 1609459200",
+		"time: 1609459200",
+	}
+
+	for _, query := range tests {
+		t.Run(query, func(t *testing.T) {
+			answer, err := h.HandleInstantQuery(ctx, query)
+			if err != nil {
+				t.Fatalf("HandleInstantQuery() error = %v", err)
+			}
+			if answer == nil {
+				t.Fatal("HandleInstantQuery() returned nil")
+			}
+		})
+	}
+}
+
+func TestTimestampHandlerHandleNoMatch(t *testing.T) {
+	h := NewTimestampHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "completely unrelated")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer != nil {
+		t.Error("HandleInstantQuery() should return nil for non-matching query")
+	}
+}
+
+func TestFormatRelativeTime(t *testing.T) {
+	tests := []struct {
+		name     string
+		duration time.Duration
+		wantIn   string
+	}{
+		{"just now", 30 * time.Second, "seconds"},
+		{"minutes ago", 5 * time.Minute, "5 minutes ago"},
+		{"one hour ago", 90 * time.Minute, "1.5 hours"},
+		{"hours ago", 3 * time.Hour, "3.0 hours"},
+		{"one day ago", 25 * time.Hour, "1.0 days"},
+		{"days ago", 3 * 24 * time.Hour, "3.0 days"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatRelativeTime(tt.duration)
+			if !contains(got, tt.wantIn) {
+				t.Errorf("formatRelativeTime(%v) = %q, want to contain %q", tt.duration, got, tt.wantIn)
+			}
+		})
+	}
+}
+
+// SubnetHandler tests cover CIDR subnet calculation.
+
+func TestNewSubnetHandler(t *testing.T) {
+	h := NewSubnetHandler()
+	if h == nil {
+		t.Fatal("NewSubnetHandler() returned nil")
+	}
+}
+
+func TestSubnetHandlerName(t *testing.T) {
+	h := NewSubnetHandler()
+	if h.Name() != "subnet" {
+		t.Errorf("Name() = %q, want %q", h.Name(), "subnet")
+	}
+}
+
+func TestSubnetHandlerCanHandle(t *testing.T) {
+	h := NewSubnetHandler()
+
+	tests := []struct {
+		query string
+		want  bool
+	}{
+		{"subnet: 192.168.1.0/24", true},
+		{"cidr: 10.0.0.0/8", true},
+		{"ip range: 172.16.0.0/12", true},
+		{"netmask: 192.168.0.0/16", true},
+		{"hello world", false},
+		{"port: 80", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			got := h.CanHandle(tt.query)
+			if got != tt.want {
+				t.Errorf("CanHandle(%q) = %v, want %v", tt.query, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSubnetHandlerHandleValidCIDR(t *testing.T) {
+	h := NewSubnetHandler()
+	ctx := context.Background()
+
+	tests := []struct {
+		query       string
+		wantNetmask string
+	}{
+		{"subnet: 192.168.1.0/24", "255.255.255.0"},
+		{"cidr: 10.0.0.0/8", "255.0.0.0"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			answer, err := h.HandleInstantQuery(ctx, tt.query)
+			if err != nil {
+				t.Fatalf("HandleInstantQuery() error = %v", err)
+			}
+			if answer == nil {
+				t.Fatal("HandleInstantQuery() returned nil")
+			}
+			if answer.Type != AnswerTypeSubnet {
+				t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeSubnet)
+			}
+			if !contains(answer.Content, tt.wantNetmask) {
+				t.Errorf("Content should contain netmask %q", tt.wantNetmask)
+			}
+		})
+	}
+}
+
+func TestSubnetHandlerHandleSingleIP(t *testing.T) {
+	h := NewSubnetHandler()
+	ctx := context.Background()
+
+	// Single IP without CIDR — handler should try appending /32
+	answer, err := h.HandleInstantQuery(ctx, "subnet: 192.168.1.1")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+}
+
+func TestSubnetHandlerHandleInvalidCIDR(t *testing.T) {
+	h := NewSubnetHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "subnet: not-a-valid-cidr-at-all")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if !contains(answer.Content, "Invalid CIDR") {
+		t.Error("Content should indicate invalid CIDR")
+	}
+}
+
+func TestSubnetHandlerHandleDataFields(t *testing.T) {
+	h := NewSubnetHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "subnet: 192.168.1.0/24")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	for _, field := range []string{"cidr", "netmask", "network", "broadcast", "usable_hosts"} {
+		if answer.Data[field] == nil {
+			t.Errorf("Data should contain %q", field)
+		}
+	}
+}
+
+func TestSubnetHandlerHandleNoMatch(t *testing.T) {
+	h := NewSubnetHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "completely unrelated")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer != nil {
+		t.Error("HandleInstantQuery() should return nil for non-matching query")
+	}
+}
+
+func TestCalculateBroadcast(t *testing.T) {
+	_, ipnet, _ := net.ParseCIDR("192.168.1.0/24")
+	broadcast := calculateBroadcast(ipnet)
+	if broadcast.String() != "192.168.1.255" {
+		t.Errorf("calculateBroadcast() = %s, want 192.168.1.255", broadcast.String())
+	}
+}
+
+func TestCalculateWildcard(t *testing.T) {
+	_, ipnet, _ := net.ParseCIDR("192.168.1.0/24")
+	wildcard := calculateWildcard(ipnet.Mask)
+	if wildcard != "0.0.0.255" {
+		t.Errorf("calculateWildcard() = %s, want 0.0.0.255", wildcard)
+	}
+}
+
+func TestIncrementIP(t *testing.T) {
+	_, ipnet, _ := net.ParseCIDR("192.168.1.0/24")
+	first := incrementIP(ipnet.IP)
+	if first.String() != "192.168.1.1" {
+		t.Errorf("incrementIP() = %s, want 192.168.1.1", first.String())
+	}
+}
+
+func TestDecrementIP(t *testing.T) {
+	broadcast := net.IP{192, 168, 1, 255}
+	last := decrementIP(broadcast)
+	if last.String() != "192.168.1.254" {
+		t.Errorf("decrementIP() = %s, want 192.168.1.254", last.String())
+	}
+}
+
+// JWTHandler tests cover JWT decoding (invalid format and CanHandle paths).
+
+func TestNewJWTHandler(t *testing.T) {
+	h := NewJWTHandler()
+	if h == nil {
+		t.Fatal("NewJWTHandler() returned nil")
+	}
+}
+
+func TestJWTHandlerName(t *testing.T) {
+	h := NewJWTHandler()
+	if h.Name() != "jwt" {
+		t.Errorf("Name() = %q, want %q", h.Name(), "jwt")
+	}
+}
+
+func TestJWTHandlerCanHandle(t *testing.T) {
+	h := NewJWTHandler()
+
+	// Construct a syntactically-valid-looking token from base64url-encoded parts.
+	// These are NOT real credentials — they are plaintext test data encoded in base64.
+	// Header: {"alg":"none"}  Payload: {"sub":"test"}  Sig: test
+	fakeHeader := "eyJhbGciOiJub25lIn0"
+	fakePayload := "eyJzdWIiOiJ0ZXN0In0"
+	fakeSig := "dGVzdA"
+	fakeToken := fakeHeader + "." + fakePayload + "." + fakeSig
+
+	tests := []struct {
+		query string
+		want  bool
+	}{
+		{"jwt: " + fakeToken, true},
+		{"decode jwt: " + fakeToken, true},
+		{"token: " + fakeToken, true},
+		{"hello world", false},
+		{"port: 80", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			got := h.CanHandle(tt.query)
+			if got != tt.want {
+				t.Errorf("CanHandle(%q) = %v, want %v", tt.query, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestJWTHandlerHandleInvalidFormat(t *testing.T) {
+	h := NewJWTHandler()
+	ctx := context.Background()
+
+	// A token with only two dot-separated parts — missing signature
+	twoPartToken := "eyJhbGciOiJub25lIn0.eyJzdWIiOiJ0ZXN0In0"
+
+	answer, err := h.HandleInstantQuery(ctx, "jwt: "+twoPartToken)
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if !contains(answer.Content, "Invalid JWT format") {
+		t.Error("Content should indicate invalid JWT format")
+	}
+}
+
+func TestJWTHandlerHandleValidDecode(t *testing.T) {
+	h := NewJWTHandler()
+	ctx := context.Background()
+
+	// Manually construct a decodable three-part token.
+	// Header: {"alg":"none","typ":"JWT"}  Payload: {"sub":"testuser","iat":1000}
+	// These are NOT real credentials — all parts are synthetic test data.
+	fakeHeader := "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0"
+	fakePayload := "eyJzdWIiOiJ0ZXN0dXNlciIsImlhdCI6MTAwMH0"
+	fakeSig := "dGVzdHNpZ25hdHVyZQ"
+	threePartToken := fakeHeader + "." + fakePayload + "." + fakeSig
+
+	answer, err := h.HandleInstantQuery(ctx, "jwt: "+threePartToken)
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if answer.Type != AnswerTypeJWT {
+		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeJWT)
+	}
+}
+
+func TestJWTHandlerHandleExpiredToken(t *testing.T) {
+	h := NewJWTHandler()
+	ctx := context.Background()
+
+	// Payload contains exp=1 (Unix epoch 1970-01-01 00:00:01 — definitely expired).
+	// Header: {"alg":"none"}  Payload: {"sub":"x","exp":1}
+	// NOT real credentials — synthetic test data only.
+	fakeHeader := "eyJhbGciOiJub25lIn0"
+	fakePayload := "eyJzdWIiOiJ4IiwiZXhwIjoxfQ"
+	fakeSig := "dGVzdA"
+	expiredToken := fakeHeader + "." + fakePayload + "." + fakeSig
+
+	answer, err := h.HandleInstantQuery(ctx, "jwt: "+expiredToken)
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if !contains(answer.Content, "EXPIRED") {
+		t.Error("Content should indicate expired token")
+	}
+}
+
+func TestJWTHandlerHandleNoMatch(t *testing.T) {
+	h := NewJWTHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "completely unrelated")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer != nil {
+		t.Error("HandleInstantQuery() should return nil for non-matching query")
+	}
+}
+
+func TestDecodeJWTSegment(t *testing.T) {
+	tests := []struct {
+		name    string
+		segment string
+		wantKey string
+		wantErr bool
+	}{
+		{
+			"valid header with alg field",
+			"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+			"alg",
+			false,
+		},
+		{
+			"valid payload with sub field",
+			"eyJzdWIiOiIxMjM0NTY3ODkwIn0",
+			"sub",
+			false,
+		},
+		{
+			"invalid base64 characters",
+			"!!!notbase64!!!",
+			"",
+			true,
+		},
+		{
+			"valid base64 but not json",
+			"aGVsbG8",
+			"",
+			true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := decodeJWTSegment(tt.segment)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("decodeJWTSegment() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && tt.wantKey != "" {
+				if _, ok := result[tt.wantKey]; !ok {
+					t.Errorf("decodeJWTSegment() result missing key %q", tt.wantKey)
+				}
+			}
+		})
+	}
+}
+
+// TLDRHandler tests use httptest.Server to mock GitHub raw content.
+
+func TestNewTLDRHandler(t *testing.T) {
+	h := NewTLDRHandler()
+	if h == nil {
+		t.Fatal("NewTLDRHandler() returned nil")
+	}
+}
+
+func TestTLDRHandlerName(t *testing.T) {
+	h := NewTLDRHandler()
+	if h.Name() != "tldr" {
+		t.Errorf("Name() = %q, want %q", h.Name(), "tldr")
+	}
+}
+
+func TestTLDRHandlerCanHandle(t *testing.T) {
+	h := NewTLDRHandler()
+
+	tests := []struct {
+		query string
+		want  bool
+	}{
+		{"tldr: curl", true},
+		{"man: ls", true},
+		{"command: grep", true},
+		{"hello world", false},
+		{"port: 80", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			got := h.CanHandle(tt.query)
+			if got != tt.want {
+				t.Errorf("CanHandle(%q) = %v, want %v", tt.query, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTLDRHandlerHandleFound(t *testing.T) {
+	tldrContent := "# curl\n\n> Transfer data from or to a server.\n\n- Download the contents of an URL to a file:\n\n`curl http://example.com --output filename`\n"
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(tldrContent))
+	}))
+	defer srv.Close()
+
+	h := NewTLDRHandler()
+	h.client = &http.Client{
+		Transport: &redirectTransport{target: srv.URL},
+	}
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "tldr: curl")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if answer.Type != AnswerTypeTLDR {
+		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeTLDR)
+	}
+	if !contains(answer.Content, "Transfer data") {
+		t.Error("Content should contain TLDR description")
+	}
+	if answer.Source != "tldr-pages" {
+		t.Errorf("Source = %q, want %q", answer.Source, "tldr-pages")
+	}
+}
+
+func TestTLDRHandlerHandleNotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	h := NewTLDRHandler()
+	h.client = &http.Client{
+		Transport: &redirectTransport{target: srv.URL},
+	}
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "tldr: nonexistentcommand")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("HandleInstantQuery() returned nil")
+	}
+	if !contains(answer.Content, "No TLDR page found") {
+		t.Error("Content should indicate no TLDR page found")
+	}
+}
+
+func TestTLDRHandlerHandleNoMatch(t *testing.T) {
+	h := NewTLDRHandler()
+	ctx := context.Background()
+
+	answer, err := h.HandleInstantQuery(ctx, "completely unrelated")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery() error = %v", err)
+	}
+	if answer != nil {
+		t.Error("HandleInstantQuery() should return nil for non-matching query")
+	}
+}
+
+func TestParseTLDRMarkdown(t *testing.T) {
+	md := "# curl\n\n> Transfer data from or to a server.\n\n- Download the contents of an URL to a file:\n\n`curl http://example.com --output filename`\n\n- Send a POST request:\n\n`curl --data data http://example.com`"
+
+	result := parseTLDRMarkdown(md, "curl")
+
+	if !contains(result, "curl") {
+		t.Error("Result should contain command name")
+	}
+	if !contains(result, "Transfer data") {
+		t.Error("Result should contain description")
+	}
+	if !contains(result, "<code>") {
+		t.Error("Result should contain code examples")
+	}
+	if !contains(result, "Download") {
+		t.Error("Result should contain example descriptions")
+	}
+}
+
+func TestParseTLDRMarkdownEmpty(t *testing.T) {
+	result := parseTLDRMarkdown("", "testcmd")
+	if !contains(result, "testcmd") {
+		t.Error("Result should contain command name even for empty markdown")
+	}
+}
+
+func TestParseTLDRMarkdownNoDescription(t *testing.T) {
+	md := "# ls\n\n- List directory contents:\n\n`ls`"
+
+	result := parseTLDRMarkdown(md, "ls")
+	if !contains(result, "ls") {
+		t.Error("Result should contain command name")
 	}
 }

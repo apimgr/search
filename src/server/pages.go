@@ -436,6 +436,11 @@ func (s *Server) handleError(w http.ResponseWriter, r *http.Request, code int, t
 		data.ErrorDetails = fmt.Sprintf("Request: %s %s", r.Method, r.URL.Path)
 	}
 
+	// Guard against nil renderer (e.g. during tests or early startup)
+	if s.renderer == nil {
+		http.Error(w, fmt.Sprintf("%d - %s: %s", code, title, message), code)
+		return
+	}
 	if err := s.renderer.Render(w, "error", data); err != nil {
 		// Fallback to plain text
 		http.Error(w, fmt.Sprintf("%d - %s: %s", code, title, message), code)

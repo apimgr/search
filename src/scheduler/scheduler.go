@@ -8,17 +8,11 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
-	"github.com/robfig/cron/v3"
-)
-
-// cronParser parses both standard 5-field cron expressions and @descriptor
-// forms (@hourly, @daily, @weekly, @monthly, @every Xm) per AI.md PART 18.
-// We use github.com/robfig/cron/v3 — never a hand-rolled parser.
-var cronParser = cron.NewParser(
-	cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor,
+	"github.com/go-co-op/gocron/v2"
 )
 
 // defaultTimezone is the default timezone for the scheduler (allows testing)
@@ -655,7 +649,7 @@ func (s *Scheduler) runTask(task *Task) {
 
 // calculateNextRun calculates the next run time from a cron expression or
 // @descriptor (handles @every Xm, @hourly, @daily, @weekly, @monthly, and
-// standard 5-field cron) using github.com/robfig/cron/v3 per AI.md PART 18.
+// standard 5-field cron) using github.com/go-co-op/gocron/v2 per AI.md PART 3.
 // On a parse error the scheduler falls back to a 1-hour interval so a bad
 // schedule entry never wedges the loop.
 //
@@ -682,12 +676,55 @@ func calculateNextRunWithLoc(schedule string, loc *time.Location) time.Time {
 	}
 	now := time.Now().In(loc)
 
-	sched, err := cronParser.Parse(schedule)
+	// Handle @every <duration> directly — no external parser needed.
+	if strings.HasPrefix(schedule, "@every ") {
+		d, err := time.ParseDuration(strings.TrimPrefix(schedule, "@every "))
+		if err != nil {
+			log.Printf("[Scheduler] Invalid @every duration %q: %v", schedule, err)
+			return now.Add(time.Hour)
+		}
+		return now.Add(d)
+	}
+
+	// Map @descriptor aliases to standard 5-field cron expressions.
+	switch schedule {
+	case "@hourly":
+		schedule = "0 * * * *"
+	case "@daily":
+		schedule = "0 0 * * *"
+	case "@weekly":
+		schedule = "0 0 * * 0"
+	case "@monthly":
+		schedule = "0 0 1 * *"
+	}
+
+	// Use gocron/v2 (AI.md PART 3) for all cron expression parsing.
+	// NewScheduler + Start populates nextScheduled synchronously before Start returns.
+	gs, err := gocron.NewScheduler(gocron.WithLocation(loc))
+	if err != nil {
+		log.Printf("[Scheduler] Failed to create gocron scheduler: %v", err)
+		return now.Add(time.Hour)
+	}
+	job, err := gs.NewJob(
+		gocron.CronJob(schedule, false),
+		gocron.NewTask(func() {}),
+	)
 	if err != nil {
 		log.Printf("[Scheduler] Invalid schedule %q: %v", schedule, err)
-		return now.Add(1 * time.Hour)
+		_ = gs.Shutdown()
+		return now.Add(time.Hour)
 	}
-	return sched.Next(now)
+	// Start synchronously computes nextScheduled for all registered jobs.
+	gs.Start()
+	next, nextErr := job.NextRun()
+	shutCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_ = gs.ShutdownWithContext(shutCtx)
+	if nextErr != nil || next.IsZero() {
+		log.Printf("[Scheduler] Could not determine next run for %q", schedule)
+		return now.Add(time.Hour)
+	}
+	return next
 }
 
 // catchUpMissedTasks runs tasks that were missed during downtime

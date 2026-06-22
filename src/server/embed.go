@@ -613,21 +613,24 @@ func formatViewCount(count int64) string {
 		if v >= 10 {
 			return fmt.Sprintf("%.0fB", v)
 		}
-		return strings.TrimSuffix(fmt.Sprintf("%.1fB", v), ".0B") + ""
+		s := fmt.Sprintf("%.1f", v)
+		return strings.TrimSuffix(s, ".0") + "B"
 	}
 	if count >= 1000000 {
 		v := float64(count) / 1000000
 		if v >= 10 {
 			return fmt.Sprintf("%.0fM", v)
 		}
-		return strings.TrimSuffix(fmt.Sprintf("%.1fM", v), ".0M") + ""
+		s := fmt.Sprintf("%.1f", v)
+		return strings.TrimSuffix(s, ".0") + "M"
 	}
 	if count >= 1000 {
 		v := float64(count) / 1000
 		if v >= 10 {
 			return fmt.Sprintf("%.0fK", v)
 		}
-		return strings.TrimSuffix(fmt.Sprintf("%.1fK", v), ".0K") + ""
+		s := fmt.Sprintf("%.1f", v)
+		return strings.TrimSuffix(s, ".0") + "K"
 	}
 	return fmt.Sprintf("%d", count)
 }

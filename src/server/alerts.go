@@ -380,6 +380,11 @@ func (s *Server) renderAlertError(w http.ResponseWriter, r *http.Request, status
 		data.ErrorDetails = fmt.Sprintf("Request: %s %s", r.Method, r.URL.Path)
 	}
 	w.WriteHeader(status)
+	// Guard against nil renderer (e.g. during tests or early startup)
+	if s.renderer == nil {
+		http.Error(w, message, status)
+		return
+	}
 	if err := s.renderer.Render(w, "error", data); err != nil {
 		http.Error(w, message, status)
 	}

@@ -1,9 +1,11 @@
 package httputil
 
 import (
+	"crypto/tls"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/version"
 )
 
@@ -237,5 +239,263 @@ func TestClientTypeConstants(t *testing.T) {
 	}
 	if ClientTypeBrowser != 1 {
 		t.Errorf("ClientTypeBrowser = %d, want 1", ClientTypeBrowser)
+	}
+}
+
+func TestNormalizeBasePath(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"empty string", "", "/"},
+		{"root slash", "/", "/"},
+		{"simple path", "/app", "/app"},
+		{"trailing slash stripped", "/app/", "/app"},
+		{"no leading slash added", "app", "/app"},
+		// double leading slash: already starts with "/" so no prefix added, trailing slash stripped
+		{"double slash normalized", "//app/", "//app"},
+		{"nested path trailing slash stripped", "/app/sub/", "/app/sub"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := normalizeBasePath(tt.input)
+			if got != tt.want {
+				t.Errorf("normalizeBasePath(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetProtoFromRequest(t *testing.T) {
+	tests := []struct {
+		name              string
+		forwardedProto    string
+		forwardedSsl      string
+		tlsConnectionState bool
+		want              string
+	}{
+		{"X-Forwarded-Proto https", "https", "", false, "https"},
+		{"X-Forwarded-Proto http", "http", "", false, "http"},
+		{"X-Forwarded-Proto uppercase HTTPS", "HTTPS", "", false, "https"},
+		{"X-Forwarded-Ssl on", "", "on", false, "https"},
+		{"X-Forwarded-Ssl off", "", "off", false, "http"},
+		{"TLS connection state set", "", "", true, "https"},
+		{"no headers no TLS", "", "", false, "http"},
+		// X-Forwarded-Proto takes priority over X-Forwarded-Ssl
+		{"X-Forwarded-Proto overrides Ssl", "http", "on", false, "http"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/", nil)
+			if tt.forwardedProto != "" {
+				req.Header.Set("X-Forwarded-Proto", tt.forwardedProto)
+			}
+			if tt.forwardedSsl != "" {
+				req.Header.Set("X-Forwarded-Ssl", tt.forwardedSsl)
+			}
+			if tt.tlsConnectionState {
+				req.TLS = &tls.ConnectionState{}
+			}
+			got := GetProtoFromRequest(req)
+			if got != tt.want {
+				t.Errorf("GetProtoFromRequest() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetHostFromRequest(t *testing.T) {
+	tests := []struct {
+		name            string
+		forwardedHost   string
+		requestHost     string
+		want            string
+	}{
+		{"X-Forwarded-Host single", "example.com", "", "example.com"},
+		{"X-Forwarded-Host multiple takes first", "example.com, proxy.internal", "", "example.com"},
+		{"X-Forwarded-Host with port", "example.com:8443", "", "example.com:8443"},
+		{"falls back to r.Host", "", "localhost:8080", "localhost:8080"},
+		{"no headers no host", "", "", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/", nil)
+			if tt.forwardedHost != "" {
+				req.Header.Set("X-Forwarded-Host", tt.forwardedHost)
+			}
+			// httptest.NewRequest sets r.Host from the URL; override it explicitly
+			req.Host = tt.requestHost
+			got := GetHostFromRequest(req)
+			if got != tt.want {
+				t.Errorf("GetHostFromRequest() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetPortFromRequest(t *testing.T) {
+	tests := []struct {
+		name           string
+		forwardedPort  string
+		forwardedProto string
+		forwardedHost  string
+		requestHost    string
+		want           string
+	}{
+		{"X-Forwarded-Port explicit", "8443", "", "", "", "8443"},
+		{"port extracted from host header", "", "", "", "example.com:9090", "9090"},
+		// no port in host, no TLS → proto defaults to http → port 80
+		{"default port for http", "", "", "", "example.com", "80"},
+		// no port in host, X-Forwarded-Proto https → port 443
+		{"default port for https", "", "https", "", "example.com", "443"},
+		// X-Forwarded-Port takes priority over everything
+		{"forwarded port overrides host port", "8080", "", "", "example.com:9090", "8080"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/", nil)
+			if tt.forwardedPort != "" {
+				req.Header.Set("X-Forwarded-Port", tt.forwardedPort)
+			}
+			if tt.forwardedProto != "" {
+				req.Header.Set("X-Forwarded-Proto", tt.forwardedProto)
+			}
+			if tt.forwardedHost != "" {
+				req.Header.Set("X-Forwarded-Host", tt.forwardedHost)
+			}
+			req.Host = tt.requestHost
+			got := GetPortFromRequest(req)
+			if got != tt.want {
+				t.Errorf("GetPortFromRequest() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetBaseURLFromRequest(t *testing.T) {
+	tests := []struct {
+		name            string
+		forwardedPrefix string
+		forwardedPath   string
+		scriptName      string
+		want            string
+	}{
+		{"X-Forwarded-Prefix used first", "/myapp", "/other", "/alt", "/myapp"},
+		{"X-Forwarded-Path used when no prefix", "", "/myapp", "/alt", "/myapp"},
+		{"X-Script-Name used as fallback", "", "", "/myapp", "/myapp"},
+		// trailing slash on prefix is normalized away
+		{"prefix trailing slash stripped", "/myapp/", "", "", "/myapp"},
+		// no headers: falls back to config.GetBaseURL()
+		{"no headers falls back to config", "", "", "", "/"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset config override to "/" so the fallback is predictable
+			config.SetBaseURLOverride("/")
+			req := httptest.NewRequest("GET", "/", nil)
+			if tt.forwardedPrefix != "" {
+				req.Header.Set("X-Forwarded-Prefix", tt.forwardedPrefix)
+			}
+			if tt.forwardedPath != "" {
+				req.Header.Set("X-Forwarded-Path", tt.forwardedPath)
+			}
+			if tt.scriptName != "" {
+				req.Header.Set("X-Script-Name", tt.scriptName)
+			}
+			got := GetBaseURLFromRequest(req)
+			if got != tt.want {
+				t.Errorf("GetBaseURLFromRequest() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBuildFullURL(t *testing.T) {
+	tests := []struct {
+		name           string
+		forwardedProto string
+		forwardedHost  string
+		forwardedPort  string
+		forwardedPrefix string
+		requestHost    string
+		path           string
+		want           string
+	}{
+		{
+			name:        "plain http localhost with port",
+			requestHost: "localhost:8080",
+			path:        "/search",
+			want:        "http://localhost:8080/search",
+		},
+		{
+			name:           "https via forwarded headers default port omitted",
+			forwardedProto: "https",
+			forwardedHost:  "example.com",
+			forwardedPort:  "443",
+			path:           "/search",
+			want:           "https://example.com/search",
+		},
+		{
+			name:           "http default port 80 omitted from host",
+			forwardedProto: "http",
+			forwardedHost:  "example.com",
+			forwardedPort:  "80",
+			path:           "/search",
+			want:           "http://example.com/search",
+		},
+		{
+			name:            "base path prepended to path",
+			requestHost:     "host",
+			forwardedPrefix: "/app",
+			path:            "/results",
+			want:            "http://host/app/results",
+		},
+		{
+			name:           "non-default https port kept in host",
+			forwardedProto: "https",
+			forwardedHost:  "example.com:8443",
+			forwardedPort:  "8443",
+			path:           "/search",
+			want:           "https://example.com:8443/search",
+		},
+		{
+			name:        "path without leading slash gets one added",
+			requestHost: "localhost:9000",
+			path:        "search",
+			want:        "http://localhost:9000/search",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset config base URL so no stored state bleeds between sub-tests
+			config.SetBaseURLOverride("/")
+			req := httptest.NewRequest("GET", "/", nil)
+			if tt.forwardedProto != "" {
+				req.Header.Set("X-Forwarded-Proto", tt.forwardedProto)
+			}
+			if tt.forwardedHost != "" {
+				req.Header.Set("X-Forwarded-Host", tt.forwardedHost)
+			}
+			if tt.forwardedPort != "" {
+				req.Header.Set("X-Forwarded-Port", tt.forwardedPort)
+			}
+			if tt.forwardedPrefix != "" {
+				req.Header.Set("X-Forwarded-Prefix", tt.forwardedPrefix)
+			}
+			if tt.requestHost != "" {
+				req.Host = tt.requestHost
+			}
+			got := BuildFullURL(req, tt.path)
+			if got != tt.want {
+				t.Errorf("BuildFullURL() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

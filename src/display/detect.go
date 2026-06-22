@@ -42,7 +42,8 @@ func InitOutput(colorFlag string) {
 		emojiEnabled = false
 		return
 	}
-	// "auto" or empty - continue with detection
+	// "auto" or empty - reset any forced state and continue with detection
+	colorForce = nil
 
 	// Check NO_COLOR environment variable (standard)
 	if os.Getenv("NO_COLOR") != "" {

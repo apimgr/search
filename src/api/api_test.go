@@ -2333,3 +2333,1537 @@ func TestSearchEndpointEmptyResultsNotFatal(t *testing.T) {
 		})
 	}
 }
+
+// ============================================================================
+// Tests for server info page handlers (handleServerAbout, Privacy, Help, Terms)
+// ============================================================================
+
+func TestHandleServerAbout(t *testing.T) {
+	handler := newTestHandler()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/about", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleServerAbout(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", http.StatusOK, w.Code)
+	}
+
+	var resp APIResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !resp.OK {
+		t.Error("OK = false, want true")
+	}
+
+	data, ok := resp.Data.(map[string]interface{})
+	if !ok {
+		t.Fatal("data is not a map")
+	}
+	if data["title"] == nil {
+		t.Error("expected title in response")
+	}
+	if data["sections"] == nil {
+		t.Error("expected sections in response")
+	}
+}
+
+func TestHandleServerAboutMethodNotAllowed(t *testing.T) {
+	handler := newTestHandler()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/server/about", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleServerAbout(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
+
+func TestHandleServerAboutFallbackTitle(t *testing.T) {
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Title: "FallbackTitle",
+		},
+	}
+	registry := engine.NewRegistry()
+	aggregator := search.NewAggregatorSimple(nil, 30*time.Second)
+	handler := NewHandler(cfg, registry, aggregator)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/about", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleServerAbout(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", http.StatusOK, w.Code)
+	}
+
+	body := w.Body.String()
+	if !strings.Contains(body, "FallbackTitle") {
+		preview := body
+		if len(preview) > 200 {
+			preview = preview[:200]
+		}
+		t.Errorf("expected FallbackTitle in body, got %q", preview)
+	}
+}
+
+func TestHandleServerPrivacy(t *testing.T) {
+	handler := newTestHandler()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/privacy", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleServerPrivacy(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", http.StatusOK, w.Code)
+	}
+
+	var resp APIResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !resp.OK {
+		t.Error("OK = false, want true")
+	}
+
+	data, ok := resp.Data.(map[string]interface{})
+	if !ok {
+		t.Fatal("data is not a map")
+	}
+	if data["title"] != "Privacy Policy" {
+		t.Errorf("title = %v, want 'Privacy Policy'", data["title"])
+	}
+	sections, ok := data["sections"].([]interface{})
+	if !ok || len(sections) == 0 {
+		t.Error("expected sections slice with at least one entry")
+	}
+}
+
+func TestHandleServerPrivacyMethodNotAllowed(t *testing.T) {
+	handler := newTestHandler()
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/server/privacy", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleServerPrivacy(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
+
+func TestHandleServerHelp(t *testing.T) {
+	handler := newTestHandler()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/help", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleServerHelp(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", http.StatusOK, w.Code)
+	}
+
+	var resp APIResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !resp.OK {
+		t.Error("OK = false, want true")
+	}
+
+	data, ok := resp.Data.(map[string]interface{})
+	if !ok {
+		t.Fatal("data is not a map")
+	}
+	if data["title"] != "Help & Documentation" {
+		t.Errorf("title = %v, want 'Help & Documentation'", data["title"])
+	}
+}
+
+func TestHandleServerHelpMethodNotAllowed(t *testing.T) {
+	handler := newTestHandler()
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/server/help", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleServerHelp(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
+
+func TestHandleServerTerms(t *testing.T) {
+	handler := newTestHandler()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/terms", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleServerTerms(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", http.StatusOK, w.Code)
+	}
+
+	var resp APIResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !resp.OK {
+		t.Error("OK = false, want true")
+	}
+
+	data, ok := resp.Data.(map[string]interface{})
+	if !ok {
+		t.Fatal("data is not a map")
+	}
+	if data["title"] != "Terms of Service" {
+		t.Errorf("title = %v, want 'Terms of Service'", data["title"])
+	}
+	sections, ok := data["sections"].([]interface{})
+	if !ok || len(sections) == 0 {
+		t.Error("expected sections with entries")
+	}
+}
+
+func TestHandleServerTermsMethodNotAllowed(t *testing.T) {
+	handler := newTestHandler()
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/server/terms", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleServerTerms(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
+
+// ============================================================================
+// Tests for handleServerContact
+// ============================================================================
+
+func TestHandleServerContactGETJSON(t *testing.T) {
+	handler := newTestHandler()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/contact", nil)
+	req.Header.Set("Accept", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.handleServerContact(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", http.StatusOK, w.Code)
+	}
+
+	var resp APIResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !resp.OK {
+		t.Error("OK = false, want true")
+	}
+}
+
+func TestHandleServerContactGETRedirect(t *testing.T) {
+	handler := newTestHandler()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/contact", nil)
+	req.Header.Set("Accept", "text/html")
+	w := httptest.NewRecorder()
+
+	handler.handleServerContact(w, req)
+
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d (should redirect for HTML request)", http.StatusSeeOther, w.Code)
+	}
+}
+
+func TestHandleServerContactMethodNotAllowed(t *testing.T) {
+	handler := newTestHandler()
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/server/contact", nil)
+	req.Header.Set("Accept", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.handleServerContact(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
+
+func TestHandleServerContactPOSTDisabled(t *testing.T) {
+	handler := newTestHandler()
+
+	body := `{"name":"Test","email":"test@example.com","subject":"Hello","message":"World"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/server/contact", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.handleServerContact(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d (contact disabled by default)", http.StatusNotFound, w.Code)
+	}
+}
+
+func TestHandleServerContactPOSTEnabled(t *testing.T) {
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Title: "Test Search",
+			Contact: config.ContactConfig{
+				Enabled: true,
+			},
+		},
+	}
+	registry := engine.NewRegistry()
+	aggregator := search.NewAggregatorSimple(nil, 30*time.Second)
+	handler := NewHandler(cfg, registry, aggregator)
+
+	body := `{"name":"Alice","email":"alice@example.com","subject":"Bug Report","message":"Found a bug"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/server/contact", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.handleServerContact(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", http.StatusOK, w.Code)
+	}
+
+	var resp APIResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !resp.OK {
+		t.Errorf("OK = false, want true; message = %q", resp.Message)
+	}
+}
+
+func TestHandleServerContactPOSTMissingFields(t *testing.T) {
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Title: "Test Search",
+			Contact: config.ContactConfig{
+				Enabled: true,
+			},
+		},
+	}
+	registry := engine.NewRegistry()
+	aggregator := search.NewAggregatorSimple(nil, 30*time.Second)
+	handler := NewHandler(cfg, registry, aggregator)
+
+	tests := []struct {
+		name string
+		body string
+	}{
+		{"missing name", `{"email":"a@b.com","subject":"Hi","message":"Hello"}`},
+		{"missing email", `{"name":"Alice","subject":"Hi","message":"Hello"}`},
+		{"missing subject", `{"name":"Alice","email":"a@b.com","message":"Hello"}`},
+		{"missing message", `{"name":"Alice","email":"a@b.com","subject":"Hi"}`},
+		{"all empty", `{"name":"","email":"","subject":"","message":""}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/server/contact", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+
+			handler.handleServerContact(w, req)
+
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d for %s", w.Code, http.StatusBadRequest, tt.name)
+			}
+		})
+	}
+}
+
+func TestHandleServerContactPOSTInvalidJSON(t *testing.T) {
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Title: "Test Search",
+			Contact: config.ContactConfig{
+				Enabled: true,
+			},
+		},
+	}
+	registry := engine.NewRegistry()
+	aggregator := search.NewAggregatorSimple(nil, 30*time.Second)
+	handler := NewHandler(cfg, registry, aggregator)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/server/contact", strings.NewReader("not json"))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.handleServerContact(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+// ============================================================================
+// Tests for handlePreferences
+// ============================================================================
+
+func TestHandlePreferencesGET(t *testing.T) {
+	handler := newTestHandler()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/preferences", nil)
+	w := httptest.NewRecorder()
+
+	handler.handlePreferences(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", http.StatusOK, w.Code)
+	}
+
+	var resp APIResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !resp.OK {
+		t.Error("OK = false, want true")
+	}
+
+	data, ok := resp.Data.(map[string]interface{})
+	if !ok {
+		t.Fatal("data is not a map")
+	}
+	if data["storage"] != "client-side" {
+		t.Errorf("storage = %v, want 'client-side'", data["storage"])
+	}
+	if data["fields"] == nil {
+		t.Error("expected fields in response")
+	}
+}
+
+func TestHandlePreferencesPOST(t *testing.T) {
+	handler := newTestHandler()
+
+	body := `{"theme":"dark","language":"en"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/preferences", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.handlePreferences(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", http.StatusOK, w.Code)
+	}
+
+	var resp APIResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !resp.OK {
+		t.Error("OK = false, want true")
+	}
+}
+
+func TestHandlePreferencesMethodNotAllowed(t *testing.T) {
+	handler := newTestHandler()
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/preferences", nil)
+	w := httptest.NewRecorder()
+
+	handler.handlePreferences(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
+
+// ============================================================================
+// Tests for handleFavicon
+// ============================================================================
+
+func TestHandleFaviconNoURL(t *testing.T) {
+	handler := newTestHandler()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/favicon", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleFavicon(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", http.StatusOK, w.Code)
+	}
+
+	ct := w.Header().Get("Content-Type")
+	if ct != "image/png" {
+		t.Errorf("Content-Type = %q, want 'image/png' (fallback PNG)", ct)
+	}
+}
+
+func TestHandleFaviconEmptyURL(t *testing.T) {
+	handler := newTestHandler()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/favicon?url=", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleFavicon(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", http.StatusOK, w.Code)
+	}
+
+	ct := w.Header().Get("Content-Type")
+	if ct != "image/png" {
+		t.Errorf("Content-Type = %q, want 'image/png' (fallback)", ct)
+	}
+}
+
+func TestHandleFaviconRemoteError(t *testing.T) {
+	handler := newTestHandler()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/favicon?url=https://nonexistent.invalid/page", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleFavicon(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d (fallback on error)", http.StatusOK, w.Code)
+	}
+
+	ct := w.Header().Get("Content-Type")
+	if ct != "image/png" {
+		t.Errorf("Content-Type = %q, want 'image/png' (fallback on fetch error)", ct)
+	}
+}
+
+func TestHandleFaviconFromTLSTestServer(t *testing.T) {
+	faviconContent := []byte("\x89PNG\r\n\x1a\n" + strings.Repeat("x", 50))
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/x-icon")
+		w.WriteHeader(http.StatusOK)
+		w.Write(faviconContent)
+	}))
+	defer ts.Close()
+
+	handler := newTestHandler()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/favicon?url="+ts.URL+"/page", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleFavicon(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", http.StatusOK, w.Code)
+	}
+
+	ct := w.Header().Get("Content-Type")
+	if ct != "image/png" && ct != "image/x-icon" {
+		t.Errorf("Content-Type = %q, want image/png (fallback) or image/x-icon (direct)", ct)
+	}
+}
+
+// TestServeFaviconFallback directly tests the fallback PNG helper
+func TestServeFaviconFallback(t *testing.T) {
+	handler := newTestHandler()
+	w := httptest.NewRecorder()
+
+	handler.serveFaviconFallback(w)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", http.StatusOK, w.Code)
+	}
+
+	ct := w.Header().Get("Content-Type")
+	if ct != "image/png" {
+		t.Errorf("Content-Type = %q, want 'image/png'", ct)
+	}
+
+	if w.Body.Len() == 0 {
+		t.Error("expected non-empty body for fallback PNG")
+	}
+
+	cc := w.Header().Get("Cache-Control")
+	if cc != "public, max-age=3600" {
+		t.Errorf("Cache-Control = %q, want 'public, max-age=3600'", cc)
+	}
+}
+
+// ============================================================================
+// Tests for handleDirectAnswer
+// ============================================================================
+
+func TestHandleDirectAnswerMethodNotAllowed(t *testing.T) {
+	handler := newTestHandler()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/direct/dns/example.com", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleDirectAnswer(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
+
+func TestHandleDirectAnswerMissingType(t *testing.T) {
+	handler := newTestHandler()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/direct/", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleDirectAnswer(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestHandleDirectAnswerMissingTerm(t *testing.T) {
+	handler := newTestHandler()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/direct/dns/", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleDirectAnswer(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestHandleDirectAnswerNoManager(t *testing.T) {
+	handler := newTestHandler()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/direct/dns/example.com", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleDirectAnswer(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d (graceful degradation)", http.StatusOK, w.Code)
+	}
+
+	var resp APIResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !resp.OK {
+		t.Error("OK = false, want true")
+	}
+
+	data, ok := resp.Data.(map[string]interface{})
+	if !ok {
+		t.Fatal("data is not a map")
+	}
+	if data["found"] != false {
+		t.Errorf("found = %v, want false (no direct manager)", data["found"])
+	}
+	if data["type"] != "dns" {
+		t.Errorf("type = %v, want 'dns'", data["type"])
+	}
+	if data["term"] != "example.com" {
+		t.Errorf("term = %v, want 'example.com'", data["term"])
+	}
+}
+
+func TestHandleDirectAnswerTableDriven(t *testing.T) {
+	handler := newTestHandler()
+
+	tests := []struct {
+		name           string
+		method         string
+		path           string
+		wantStatus     int
+		wantOK         bool
+		wantFoundFalse bool
+	}{
+		{"GET dns valid", http.MethodGet, "/api/v1/direct/dns/example.com", http.StatusOK, true, true},
+		{"GET whois valid", http.MethodGet, "/api/v1/direct/whois/example.com", http.StatusOK, true, true},
+		{"GET http code", http.MethodGet, "/api/v1/direct/http/404", http.StatusOK, true, true},
+		{"GET regex", http.MethodGet, "/api/v1/direct/regex/%5Ba-z%5D%2B", http.StatusOK, true, true},
+		{"POST not allowed", http.MethodPost, "/api/v1/direct/dns/example.com", http.StatusMethodNotAllowed, false, false},
+		{"GET no type or term", http.MethodGet, "/api/v1/direct/", http.StatusBadRequest, false, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(tt.method, tt.path, nil)
+			w := httptest.NewRecorder()
+
+			handler.handleDirectAnswer(w, req)
+
+			if w.Code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d", w.Code, tt.wantStatus)
+			}
+		})
+	}
+}
+
+// ============================================================================
+// Tests for http_errors.go: localizedHTTPError
+// ============================================================================
+
+func TestLocalizedHTTPError(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+
+	localizedHTTPError(w, req, http.StatusBadRequest, "errors.bad_request")
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	if w.Body.Len() == 0 {
+		t.Error("expected non-empty body from localizedHTTPError")
+	}
+}
+
+func TestLocalizedHTTPErrorWithArgs(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+
+	localizedHTTPError(w, req, http.StatusNotFound, "errors.not_found", "test-resource")
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+}
+
+func TestLocalizedHTTPErrorInternalServer(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+
+	localizedHTTPError(w, req, http.StatusInternalServerError, "errors.internal")
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusInternalServerError)
+	}
+}
+
+// ============================================================================
+// Tests for baseURLFromRequest and additional alerts.go coverage
+// ============================================================================
+
+func TestBaseURLFromRequestWithConfigBaseURL(t *testing.T) {
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			BaseURL: "https://search.example.com/",
+		},
+	}
+	registry := engine.NewRegistry()
+	aggregator := search.NewAggregatorSimple(nil, 30*time.Second)
+	handler := NewHandler(cfg, registry, aggregator)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	result := baseURLFromRequest(handler, req)
+
+	if result != "https://search.example.com" {
+		t.Errorf("baseURLFromRequest = %q, want 'https://search.example.com'", result)
+	}
+}
+
+func TestBaseURLFromRequestHTTP(t *testing.T) {
+	handler := newTestHandler()
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Host = "localhost:8080"
+	result := baseURLFromRequest(handler, req)
+
+	if result != "http://localhost:8080" {
+		t.Errorf("baseURLFromRequest = %q, want 'http://localhost:8080'", result)
+	}
+}
+
+func TestBaseURLFromRequestHTTPS(t *testing.T) {
+	handler := newTestHandler()
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Host = "secure.example.com"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	result := baseURLFromRequest(handler, req)
+
+	if result != "https://secure.example.com" {
+		t.Errorf("baseURLFromRequest = %q, want 'https://secure.example.com'", result)
+	}
+}
+
+func TestClientIPForAPIWithXFF(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("X-Forwarded-For", "10.0.0.1, 10.0.0.2")
+
+	ip := clientIPForAPI(req)
+	if ip != "10.0.0.1" {
+		t.Errorf("clientIPForAPI = %q, want '10.0.0.1'", ip)
+	}
+}
+
+func TestClientIPForAPIWithRemoteAddr(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "192.168.1.50:4321"
+
+	ip := clientIPForAPI(req)
+	if ip != "192.168.1.50" {
+		t.Errorf("clientIPForAPI = %q, want '192.168.1.50'", ip)
+	}
+}
+
+func TestClientIPForAPIBareAddr(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "192.168.1.99"
+
+	ip := clientIPForAPI(req)
+	if ip != "192.168.1.99" {
+		t.Errorf("clientIPForAPI = %q, want '192.168.1.99'", ip)
+	}
+}
+
+// ============================================================================
+// Tests for decodeAlertPauseState
+// ============================================================================
+
+func TestDecodeAlertPauseStateTrueExplicit(t *testing.T) {
+	body := strings.NewReader(`{"paused":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/", body)
+	req.Header.Set("Content-Type", "application/json")
+
+	paused, err := decodeAlertPauseState(req)
+	if err != nil {
+		t.Fatalf("error = %v, want nil", err)
+	}
+	if !paused {
+		t.Error("paused = false, want true")
+	}
+}
+
+func TestDecodeAlertPauseStateFalseExplicit(t *testing.T) {
+	body := strings.NewReader(`{"paused":false}`)
+	req := httptest.NewRequest(http.MethodPost, "/", body)
+	req.Header.Set("Content-Type", "application/json")
+
+	paused, err := decodeAlertPauseState(req)
+	if err != nil {
+		t.Fatalf("error = %v, want nil", err)
+	}
+	if paused {
+		t.Error("paused = true, want false")
+	}
+}
+
+func TestDecodeAlertPauseStateEmptyBody(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+
+	paused, err := decodeAlertPauseState(req)
+	if err != nil {
+		t.Fatalf("error = %v, want nil", err)
+	}
+	if !paused {
+		t.Error("paused = false, want true (default)")
+	}
+}
+
+func TestDecodeAlertPauseStateQueryParam(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/?paused=false", nil)
+
+	paused, err := decodeAlertPauseState(req)
+	if err != nil {
+		t.Fatalf("error = %v, want nil", err)
+	}
+	if paused {
+		t.Error("paused = true, want false (from query param)")
+	}
+}
+
+func TestDecodeAlertPauseStateQueryParamTrue(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/?paused=true", nil)
+
+	paused, err := decodeAlertPauseState(req)
+	if err != nil {
+		t.Fatalf("error = %v, want nil", err)
+	}
+	if !paused {
+		t.Error("paused = false, want true (from query param)")
+	}
+}
+
+func TestDecodeAlertPauseStateEmptyBodyNoPauseField(t *testing.T) {
+	body := strings.NewReader(`{}`)
+	req := httptest.NewRequest(http.MethodPost, "/", body)
+	req.Header.Set("Content-Type", "application/json")
+
+	paused, err := decodeAlertPauseState(req)
+	if err != nil {
+		t.Fatalf("error = %v, want nil", err)
+	}
+	if !paused {
+		t.Error("paused = false, want true (default when field absent)")
+	}
+}
+
+// ============================================================================
+// Tests for handleAlerts (alerts.go POST handler)
+// ============================================================================
+
+func TestHandleAlertsNoManager(t *testing.T) {
+	handler := newTestHandler()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/alerts", strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.handleAlerts(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d (no alert manager)", http.StatusServiceUnavailable, w.Code)
+	}
+
+	var resp APIResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.OK {
+		t.Error("OK = true, want false (no alert manager)")
+	}
+	if resp.Error != "NOT_AVAILABLE" {
+		t.Errorf("error code = %q, want 'NOT_AVAILABLE'", resp.Error)
+	}
+}
+
+func TestHandleAlertsMethodNotAllowed(t *testing.T) {
+	handler, _, db := newAlertAPIHandler(t)
+	defer db.Close()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/alerts", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleAlerts(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
+
+func TestHandleAlertsInvalidJSON(t *testing.T) {
+	handler, _, db := newAlertAPIHandler(t)
+	defer db.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/alerts", strings.NewReader("not json"))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.handleAlerts(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestHandleAlertsValidCreate(t *testing.T) {
+	handler, _, db := newAlertAPIHandler(t)
+	defer db.Close()
+
+	body := `{
+		"query": "privacy news",
+		"category": "general",
+		"language": "en",
+		"frequency": "daily",
+		"email": "user@example.com",
+		"deliver_rss": true
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/alerts", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Host = "localhost:8080"
+	w := httptest.NewRecorder()
+
+	handler.handleAlerts(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body = %s", w.Code, http.StatusCreated, w.Body.String())
+	}
+
+	var resp APIResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !resp.OK {
+		t.Errorf("OK = false, want true; message = %q", resp.Message)
+	}
+
+	data, ok := resp.Data.(map[string]interface{})
+	if !ok {
+		t.Fatal("data is not a map")
+	}
+	if data["manage_token"] == nil || data["manage_token"] == "" {
+		t.Error("expected manage_token in response")
+	}
+	if data["rss_token"] == nil || data["rss_token"] == "" {
+		t.Error("expected rss_token in response")
+	}
+	if data["manage_url"] == nil {
+		t.Error("expected manage_url in response")
+	}
+	if data["rss_url"] == nil {
+		t.Error("expected rss_url in response")
+	}
+}
+
+// ============================================================================
+// Tests for handleAlertByToken (alert GET/PATCH/DELETE/pause/rss)
+// ============================================================================
+
+func TestHandleAlertByTokenNoManager(t *testing.T) {
+	handler := newTestHandler()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/alerts/sometoken", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleAlertByToken(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", http.StatusServiceUnavailable, w.Code)
+	}
+}
+
+func TestHandleAlertByTokenGetNotFound(t *testing.T) {
+	handler, _, db := newAlertAPIHandler(t)
+	defer db.Close()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/alerts/nonexistenttoken", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleAlertByToken(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", http.StatusNotFound, w.Code)
+	}
+}
+
+func TestHandleAlertByTokenDeleteNotFound(t *testing.T) {
+	handler, _, db := newAlertAPIHandler(t)
+	defer db.Close()
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/alerts/nonexistenttoken", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleAlertByToken(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", http.StatusNotFound, w.Code)
+	}
+}
+
+func TestHandleAlertByTokenMethodNotAllowed(t *testing.T) {
+	handler, _, db := newAlertAPIHandler(t)
+	defer db.Close()
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/alerts/sometoken", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleAlertByToken(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
+
+
+func TestHandleAlertByTokenGetSuccess(t *testing.T) {
+	handler, _, db := newAlertAPIHandler(t)
+	defer db.Close()
+
+	body := `{
+		"query": "golang news",
+		"category": "general",
+		"language": "en",
+		"frequency": "daily",
+		"email": "godev@example.com",
+		"deliver_rss": true
+	}`
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/alerts", strings.NewReader(body))
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.Host = "localhost:8080"
+	createW := httptest.NewRecorder()
+	handler.handleAlerts(createW, createReq)
+
+	if createW.Code != http.StatusCreated {
+		t.Fatalf("create: status = %d; body = %s", createW.Code, createW.Body.String())
+	}
+
+	var createResp APIResponse
+	if err := json.NewDecoder(createW.Body).Decode(&createResp); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+	manageToken := createResp.Data.(map[string]interface{})["manage_token"].(string)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/alerts/"+manageToken, nil)
+	req.Host = "localhost:8080"
+	w := httptest.NewRecorder()
+
+	handler.handleAlertByToken(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET alert: status = %d; body = %s", w.Code, w.Body.String())
+	}
+
+	var resp APIResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode GET: %v", err)
+	}
+	if !resp.OK {
+		t.Errorf("OK = false, want true")
+	}
+
+	data := resp.Data.(map[string]interface{})
+	if data["manage_token"] == nil {
+		t.Error("expected manage_token in GET response")
+	}
+}
+
+func TestHandleAlertByTokenDeleteSuccess(t *testing.T) {
+	handler, _, db := newAlertAPIHandler(t)
+	defer db.Close()
+
+	body := `{
+		"query": "delete me",
+		"category": "general",
+		"language": "en",
+		"frequency": "weekly",
+		"email": "delete@example.com",
+		"deliver_rss": true
+	}`
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/alerts", strings.NewReader(body))
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.Host = "localhost:8080"
+	createW := httptest.NewRecorder()
+	handler.handleAlerts(createW, createReq)
+
+	if createW.Code != http.StatusCreated {
+		t.Fatalf("create: status = %d", createW.Code)
+	}
+
+	var createResp APIResponse
+	json.NewDecoder(createW.Body).Decode(&createResp)
+	manageToken := createResp.Data.(map[string]interface{})["manage_token"].(string)
+
+	delReq := httptest.NewRequest(http.MethodDelete, "/api/v1/alerts/"+manageToken, nil)
+	delW := httptest.NewRecorder()
+
+	handler.handleAlertByToken(delW, delReq)
+
+	if delW.Code != http.StatusOK {
+		t.Fatalf("DELETE: status = %d; body = %s", delW.Code, delW.Body.String())
+	}
+
+	var delResp APIResponse
+	if err := json.NewDecoder(delW.Body).Decode(&delResp); err != nil {
+		t.Fatalf("decode DELETE: %v", err)
+	}
+	if !delResp.OK {
+		t.Error("OK = false on DELETE, want true")
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/alerts/"+manageToken, nil)
+	getW := httptest.NewRecorder()
+	handler.handleAlertByToken(getW, getReq)
+
+	if getW.Code != http.StatusNotFound {
+		t.Fatalf("GET after DELETE: status = %d, want %d", getW.Code, http.StatusNotFound)
+	}
+}
+
+func TestHandleAlertByTokenPatchSuccess(t *testing.T) {
+	handler, _, db := newAlertAPIHandler(t)
+	defer db.Close()
+
+	body := `{
+		"query": "original query",
+		"category": "general",
+		"language": "en",
+		"frequency": "daily",
+		"email": "patch@example.com",
+		"deliver_rss": true
+	}`
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/alerts", strings.NewReader(body))
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.Host = "localhost:8080"
+	createW := httptest.NewRecorder()
+	handler.handleAlerts(createW, createReq)
+
+	if createW.Code != http.StatusCreated {
+		t.Fatalf("create: status = %d", createW.Code)
+	}
+
+	var createResp APIResponse
+	json.NewDecoder(createW.Body).Decode(&createResp)
+	manageToken := createResp.Data.(map[string]interface{})["manage_token"].(string)
+
+	patchBody := `{
+		"query": "updated query",
+		"category": "news",
+		"language": "en",
+		"frequency": "weekly",
+		"deliver_rss": true
+	}`
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/v1/alerts/"+manageToken, strings.NewReader(patchBody))
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchReq.Host = "localhost:8080"
+	patchW := httptest.NewRecorder()
+
+	handler.handleAlertByToken(patchW, patchReq)
+
+	if patchW.Code != http.StatusOK {
+		t.Fatalf("PATCH: status = %d; body = %s", patchW.Code, patchW.Body.String())
+	}
+
+	var patchResp APIResponse
+	if err := json.NewDecoder(patchW.Body).Decode(&patchResp); err != nil {
+		t.Fatalf("decode PATCH: %v", err)
+	}
+	if !patchResp.OK {
+		t.Errorf("OK = false on PATCH, want true; message = %q", patchResp.Message)
+	}
+}
+
+func TestHandleAlertByTokenPatchInvalidJSON(t *testing.T) {
+	handler, _, db := newAlertAPIHandler(t)
+	defer db.Close()
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/alerts/anytoken", strings.NewReader("not json"))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler.handleAlertByToken(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleAlertByTokenPauseNoBody(t *testing.T) {
+	handler, _, db := newAlertAPIHandler(t)
+	defer db.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/alerts/nonexistent/pause", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleAlertByToken(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d (unknown token)", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleAlertByTokenRSSNotFound(t *testing.T) {
+	handler, _, db := newAlertAPIHandler(t)
+	defer db.Close()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/alerts/badtoken/rss", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleAlertByToken(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+}
+
+// ============================================================================
+// Tests for DirectAnswerResponse serialization
+// ============================================================================
+
+func TestDirectAnswerResponseSerialization(t *testing.T) {
+	resp := DirectAnswerResponse{
+		Type:        "dns",
+		Term:        "example.com",
+		Title:       "DNS Records for example.com",
+		Description: "DNS lookup results",
+		Content:     "A 93.184.216.34",
+		Data:        map[string]interface{}{"a": []string{"93.184.216.34"}},
+		Source:      "dns_lookup",
+		SourceURL:   "https://example.com",
+		CacheTTL:    3600,
+		Found:       true,
+	}
+
+	data, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var unmarshaled DirectAnswerResponse
+	if err := json.Unmarshal(data, &unmarshaled); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if unmarshaled.Type != resp.Type {
+		t.Errorf("Type = %q, want %q", unmarshaled.Type, resp.Type)
+	}
+	if unmarshaled.Term != resp.Term {
+		t.Errorf("Term = %q, want %q", unmarshaled.Term, resp.Term)
+	}
+	if unmarshaled.Found != resp.Found {
+		t.Errorf("Found = %v, want %v", unmarshaled.Found, resp.Found)
+	}
+	if unmarshaled.CacheTTL != resp.CacheTTL {
+		t.Errorf("CacheTTL = %d, want %d", unmarshaled.CacheTTL, resp.CacheTTL)
+	}
+}
+
+// ============================================================================
+// Tests for ServerPageResponse serialization
+// ============================================================================
+
+func TestServerPageResponseSerialization(t *testing.T) {
+	resp := ServerPageResponse{
+		Title:       "About Us",
+		Description: "About page description",
+		Content:     "Long about content here",
+		Sections: []PageSection{
+			{ID: "intro", Title: "Introduction", Content: "Welcome to our service"},
+		},
+		Metadata: map[string]string{"version": "1.0.0"},
+	}
+
+	data, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var unmarshaled ServerPageResponse
+	if err := json.Unmarshal(data, &unmarshaled); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if unmarshaled.Title != resp.Title {
+		t.Errorf("Title = %q, want %q", unmarshaled.Title, resp.Title)
+	}
+	if len(unmarshaled.Sections) != 1 {
+		t.Errorf("Sections len = %d, want 1", len(unmarshaled.Sections))
+	}
+	if unmarshaled.Sections[0].ID != "intro" {
+		t.Errorf("Section[0].ID = %q, want 'intro'", unmarshaled.Sections[0].ID)
+	}
+}
+
+// ============================================================================
+// Tests for SetTorService and SetDirectManager
+// ============================================================================
+
+func TestSetTorService(t *testing.T) {
+	handler := newTestHandler()
+
+	if handler.torService != nil {
+		t.Error("torService should be nil initially")
+	}
+
+	handler.SetTorService(nil)
+
+	if handler.torService != nil {
+		t.Error("torService should still be nil after setting to nil")
+	}
+}
+
+func TestSetDirectManager(t *testing.T) {
+	handler := newTestHandler()
+
+	if handler.directManager != nil {
+		t.Error("directManager should be nil initially")
+	}
+
+	handler.SetDirectManager(nil)
+
+	if handler.directManager != nil {
+		t.Error("directManager should still be nil after setting to nil")
+	}
+}
+
+func TestSetAlertManager(t *testing.T) {
+	handler := newTestHandler()
+
+	if handler.alertManager != nil {
+		t.Error("alertManager should be nil initially")
+	}
+
+	handler.SetAlertManager(nil)
+
+	if handler.alertManager != nil {
+		t.Error("alertManager should still be nil after setting to nil")
+	}
+}
+
+// ============================================================================
+// Test APIBasePath helper
+// ============================================================================
+
+func TestAPIBasePath(t *testing.T) {
+	path := APIBasePath()
+	if path != "/api/v1" {
+		t.Errorf("APIBasePath() = %q, want '/api/v1'", path)
+	}
+}
+
+// ============================================================================
+// Tests for handleEngines with real engine registered
+// ============================================================================
+
+func TestHandleEnginesWithRegisteredEngine(t *testing.T) {
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Title: "Test Search",
+		},
+	}
+	registry := engine.NewRegistry()
+
+	eng := &emptyResultEngine{cfg: model.NewEngineConfig("testengine")}
+	eng.cfg.DisplayName = "Test Engine"
+	eng.cfg.Enabled = true
+	eng.cfg.Priority = 100
+	registry.Register(eng)
+
+	aggregator := search.NewAggregatorSimple(nil, 30*time.Second)
+	handler := NewHandler(cfg, registry, aggregator)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/engines", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleEngines(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp APIResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	engines, ok := resp.Data.([]interface{})
+	if !ok {
+		t.Fatal("data is not a slice")
+	}
+	if len(engines) != 1 {
+		t.Fatalf("len(engines) = %d, want 1", len(engines))
+	}
+
+	eng0 := engines[0].(map[string]interface{})
+	if eng0["id"] != "testengine" {
+		t.Errorf("id = %v, want 'testengine'", eng0["id"])
+	}
+	if eng0["enabled"] != true {
+		t.Errorf("enabled = %v, want true", eng0["enabled"])
+	}
+}
+
+func TestHandleEngineByIDFound(t *testing.T) {
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Title: "Test Search",
+		},
+	}
+	registry := engine.NewRegistry()
+
+	eng := &emptyResultEngine{cfg: model.NewEngineConfig("myengine")}
+	eng.cfg.DisplayName = "My Engine"
+	eng.cfg.Enabled = true
+	registry.Register(eng)
+
+	aggregator := search.NewAggregatorSimple(nil, 30*time.Second)
+	handler := NewHandler(cfg, registry, aggregator)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/engines/myengine", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleEngineByID(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp APIResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	data := resp.Data.(map[string]interface{})
+	if data["id"] != "myengine" {
+		t.Errorf("id = %v, want 'myengine'", data["id"])
+	}
+}
+
+// ============================================================================
+// Tests for handleInfo with nil registry (edge case)
+// ============================================================================
+
+func TestHandleInfoNilRegistry(t *testing.T) {
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Title: "NilRegistryTest",
+		},
+	}
+
+	registry := engine.NewRegistry()
+	aggregator := search.NewAggregatorSimple(nil, 30*time.Second)
+	handler := NewHandler(cfg, registry, aggregator)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/info", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleInfo(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+}
+
+// ============================================================================
+// Test for errorResponse with 5xx detail logging path
+// ============================================================================
+
+func TestErrorResponseWith5xxDetail(t *testing.T) {
+	handler := newTestHandler()
+
+	w := httptest.NewRecorder()
+	w.Header().Set("X-Request-ID", "req-abc123")
+
+	handler.errorResponse(w, http.StatusInternalServerError, "Internal error", "some internal detail")
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusInternalServerError)
+	}
+
+	var resp APIResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.OK {
+		t.Error("OK = true, want false for error response")
+	}
+	if resp.Error == "" {
+		t.Error("expected error code")
+	}
+}
+
+func TestErrorResponseWith4xx(t *testing.T) {
+	handler := newTestHandler()
+
+	w := httptest.NewRecorder()
+
+	handler.errorResponse(w, http.StatusBadRequest, "Bad request", "detail not logged for 4xx")
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	var resp APIResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.OK {
+		t.Error("OK = true, want false")
+	}
+}
+
