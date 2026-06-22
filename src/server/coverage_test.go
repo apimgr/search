@@ -1386,6 +1386,51 @@ func TestHasValidCertificate(t *testing.T) {
 	}
 }
 
+// TestHasValidCertificate_CertExistsKeyMissing confirms HasValidCertificate returns false
+// when the cert file exists but the key file does not.
+func TestHasValidCertificate_CertExistsKeyMissing(t *testing.T) {
+	dir := t.TempDir()
+	certPath := filepath.Join(dir, "cert.pem")
+	keyPath := filepath.Join(dir, "key.pem")
+
+	if err := os.WriteFile(certPath, []byte("placeholder"), 0644); err != nil {
+		t.Fatalf("writing cert file: %v", err)
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.Server.SSL.CertFile = certPath
+	cfg.Server.SSL.KeyFile = keyPath
+	m := NewSSLManager(cfg)
+
+	if m.HasValidCertificate() {
+		t.Error("HasValidCertificate() = true when key file missing, want false")
+	}
+}
+
+// TestHasValidCertificate_BothExistInvalidContent confirms HasValidCertificate returns false
+// when both files exist but contain invalid cert/key content.
+func TestHasValidCertificate_BothExistInvalidContent(t *testing.T) {
+	dir := t.TempDir()
+	certPath := filepath.Join(dir, "cert.pem")
+	keyPath := filepath.Join(dir, "key.pem")
+
+	if err := os.WriteFile(certPath, []byte("not-a-cert"), 0644); err != nil {
+		t.Fatalf("writing cert file: %v", err)
+	}
+	if err := os.WriteFile(keyPath, []byte("not-a-key"), 0644); err != nil {
+		t.Fatalf("writing key file: %v", err)
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.Server.SSL.CertFile = certPath
+	cfg.Server.SSL.KeyFile = keyPath
+	m := NewSSLManager(cfg)
+
+	if m.HasValidCertificate() {
+		t.Error("HasValidCertificate() = true for invalid cert content, want false")
+	}
+}
+
 // TestSSLManagerGetCertificatePaths verifies GetCertificatePaths returns non-empty strings.
 func TestSSLManagerGetCertificatePaths(t *testing.T) {
 	cfg := config.DefaultConfig()
@@ -3451,6 +3496,38 @@ func TestRemovePIDFile_NoFile(t *testing.T) {
 	s.removePIDFile()
 }
 
+// TestCreatePIDFile_UsingDataDirEnv calls createPIDFile() via the DATA_DIR env override
+// so GetDataDir() returns a test-owned temp directory instead of the real data dir.
+func TestCreatePIDFile_UsingDataDirEnv(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("DATA_DIR", dir)
+
+	s := newTestServer(t)
+	origPIDFile := s.pidFile
+	t.Cleanup(func() { s.pidFile = origPIDFile })
+
+	if err := s.createPIDFile(); err != nil {
+		t.Fatalf("createPIDFile() error = %v", err)
+	}
+
+	if s.pidFile == "" {
+		t.Fatal("createPIDFile() did not set s.pidFile")
+	}
+
+	data, err := os.ReadFile(s.pidFile)
+	if err != nil {
+		t.Fatalf("reading PID file %q: %v", s.pidFile, err)
+	}
+	if string(data) == "" {
+		t.Error("PID file is empty, want non-empty PID")
+	}
+
+	s.removePIDFile()
+	if _, err := os.Stat(s.pidFile); !os.IsNotExist(err) {
+		t.Error("PID file should not exist after removePIDFile")
+	}
+}
+
 // ---------- debug.go: registerDebugRoutes with DEBUG env var ----------
 
 // TestRegisterDebugRoutes_DebugEnabled confirms debug routes are registered when
@@ -3480,6 +3557,19 @@ func TestNewFuncMap_FunctionsPresent(t *testing.T) {
 		if _, ok := fm[name]; !ok {
 			t.Errorf("newFuncMap() missing function %q", name)
 		}
+	}
+}
+
+// TestHandleDebugRoutes_WithRouter calls handleDebugRoutes on a server that has had
+// setupRoutes() called (so s.router is non-nil) and expects a 200 response.
+func TestHandleDebugRoutes_WithRouter(t *testing.T) {
+	s := newTestServer(t)
+	s.setupRoutes()
+	req := httptest.NewRequest(http.MethodGet, "/debug/routes", nil)
+	rec := httptest.NewRecorder()
+	s.handleDebugRoutes(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("handleDebugRoutes: status = %d, want 200", rec.Code)
 	}
 }
 

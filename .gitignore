@@ -107,6 +107,9 @@ binaries/
 releases/
 coverage.out
 
+# Go test binaries produced by go test -c
+*.test
+
 # Go build cache and XDG runtime dirs (should never be committed)
 .cache/
 .local/
