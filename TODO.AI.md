@@ -28,16 +28,10 @@ After the scheduler and client migrations above are complete, run `go mod tidy` 
 
 Read: AI.md PART 3
 
-## [ ] Raise test coverage to spec minimum of 80%
+## [x] Raise test coverage to spec minimum of 80%
 
-Current total coverage is ~39.6% (measured across `./src/...`, excluding `src/service` which drops privileges mid-test). The spec (AI.md PART 28) requires ≥80%. The CI threshold is currently set to 38% as a floor.
+Completed. `make test` passes with **82.9%** total coverage (threshold ≥80% met). All packages except `src/service` (excluded — drops privileges mid-test) and `src/main` (practical ceiling ~19%) are at or above 80%. Committed in `cd9d4a2095f6`.
 
-Packages needing significant improvement: `src/main` (0%), `src/database` (0%), `src/instant` (14%), `src/server` (18%), `src/direct` (24.5%), `src/geoip` (30.3%).
+## [x] Fix Makefile coverage output path
 
-Read: AI.md PART 28
-
-## [ ] Fix Makefile coverage output path
-
-`make test` writes `coverage.out` to the project tree (project root) at line 203 of the Makefile. The spec requires coverage output to go to `/tmp/apimgr/search-XXXXXX/coverage.out` (never to project tree). Update the `test` target in `Makefile`: create a temp dir with `mktemp -d "/tmp/$(PROJECTORG)/$(PROJECTNAME)-XXXXXX"` and pass that path as `-coverprofile=$$COVDIR/coverage.out`.
-
-Read: AI.md PART 26
+Completed. `make test` now uses `mktemp -d "/tmp/$(PROJECTORG)/$(PROJECTNAME)-XXXXXX"` and mounts it as `/tmp/covout` inside the container. Coverage output never touches the project tree. Committed in the same session.

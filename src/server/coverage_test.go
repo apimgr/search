@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"html/template"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -4024,6 +4025,256 @@ func TestAlertEngineOptions_WithSelected(t *testing.T) {
 	opts := s.alertEngineOptions([]string{"google"})
 	if opts == nil {
 		t.Error("alertEngineOptions([google]): returned nil, want non-nil slice")
+	}
+}
+
+// ---------- embed.go: newFuncMap — exhaustive helper invocation ----------
+
+// TestNewFuncMap_StringHelpers invokes all string helper functions in the returned FuncMap.
+// The function map is returned as a plain map[string]interface{}; each value is a callable.
+// This test ensures the closures themselves execute (coverage), not just that they are present.
+func TestNewFuncMap_StringHelpers(t *testing.T) {
+	tr := &TemplateRenderer{}
+	fm := tr.newFuncMap(nil)
+
+	// safe* helpers — return typed HTML/URL/CSS/JS wrappers
+	safe := fm["safe"].(func(string) template.HTML)
+	if got := safe("<b>hi</b>"); string(got) != "<b>hi</b>" {
+		t.Errorf("safe: got %q", got)
+	}
+	safeHTML := fm["safeHTML"].(func(string) template.HTML)
+	if got := safeHTML("<em>x</em>"); string(got) != "<em>x</em>" {
+		t.Errorf("safeHTML: got %q", got)
+	}
+	safeURL := fm["safeURL"].(func(string) template.URL)
+	if got := safeURL("https://example.com"); string(got) != "https://example.com" {
+		t.Errorf("safeURL: got %q", got)
+	}
+	safeCSS := fm["safeCSS"].(func(string) template.CSS)
+	if got := safeCSS("color:red"); string(got) != "color:red" {
+		t.Errorf("safeCSS: got %q", got)
+	}
+	safeJS := fm["safeJS"].(func(string) template.JS)
+	if got := safeJS("alert(1)"); string(got) != "alert(1)" {
+		t.Errorf("safeJS: got %q", got)
+	}
+
+	// string transformation helpers
+	lower := fm["lower"].(func(string) string)
+	if got := lower("HELLO"); got != "hello" {
+		t.Errorf("lower: got %q", got)
+	}
+	upper := fm["upper"].(func(string) string)
+	if got := upper("hello"); got != "HELLO" {
+		t.Errorf("upper: got %q", got)
+	}
+	contains := fm["contains"].(func(string, string) bool)
+	if !contains("foobar", "oba") {
+		t.Error("contains: expected true")
+	}
+	hasPrefix := fm["hasPrefix"].(func(string, string) bool)
+	if !hasPrefix("foobar", "foo") {
+		t.Error("hasPrefix: expected true")
+	}
+	hasSuffix := fm["hasSuffix"].(func(string, string) bool)
+	if !hasSuffix("foobar", "bar") {
+		t.Error("hasSuffix: expected true")
+	}
+	replace := fm["replace"].(func(string, string, string) string)
+	if got := replace("aabbcc", "bb", "XX"); got != "aaXXcc" {
+		t.Errorf("replace: got %q", got)
+	}
+	trim := fm["trim"].(func(string) string)
+	if got := trim("  hello  "); got != "hello" {
+		t.Errorf("trim: got %q", got)
+	}
+	join := fm["join"].(func([]string, string) string)
+	if got := join([]string{"a", "b", "c"}, "-"); got != "a-b-c" {
+		t.Errorf("join: got %q", got)
+	}
+	split := fm["split"].(func(string, string) []string)
+	parts := split("a,b,c", ",")
+	if len(parts) != 3 {
+		t.Errorf("split: got %d parts, want 3", len(parts))
+	}
+	urlquery := fm["urlquery"].(func(string) string)
+	if got := urlquery("hello world"); got != "hello+world" {
+		t.Errorf("urlquery: got %q", got)
+	}
+}
+
+// TestNewFuncMap_LogicHelpers invokes default, eq, ne, seq, config, version, year.
+func TestNewFuncMap_LogicHelpers(t *testing.T) {
+	tr := &TemplateRenderer{}
+	fm := tr.newFuncMap(nil)
+
+	// default helper: val==nil returns def; val non-empty returns val
+	defFn := fm["default"].(func(interface{}, interface{}) interface{})
+	if got := defFn("fallback", nil); got != "fallback" {
+		t.Errorf("default(nil): got %v", got)
+	}
+	if got := defFn("fallback", "actual"); got != "actual" {
+		t.Errorf("default(actual): got %v", got)
+	}
+	// default: empty string falls back to def
+	if got := defFn("fallback", ""); got != "fallback" {
+		t.Errorf("default(empty): got %v", got)
+	}
+
+	// eq / ne
+	eqFn := fm["eq"].(func(interface{}, interface{}) bool)
+	if !eqFn("x", "x") {
+		t.Error("eq(x,x): want true")
+	}
+	neFn := fm["ne"].(func(interface{}, interface{}) bool)
+	if !neFn("x", "y") {
+		t.Error("ne(x,y): want true")
+	}
+
+	// seq: produces inclusive range
+	seqFn := fm["seq"].(func(int, int) []int)
+	got := seqFn(1, 3)
+	if len(got) != 3 || got[0] != 1 || got[2] != 3 {
+		t.Errorf("seq(1,3): got %v", got)
+	}
+	// seq: empty range (start > end)
+	empty := seqFn(5, 3)
+	if len(empty) != 0 {
+		t.Errorf("seq(5,3): got %v, want empty", empty)
+	}
+
+	// version returns a non-empty string
+	versionFn := fm["version"].(func() string)
+	if versionFn() == "" {
+		t.Error("version(): want non-empty string")
+	}
+
+	// year returns the current year
+	yearFn := fm["year"].(func() int)
+	if yr := yearFn(); yr < 2024 {
+		t.Errorf("year(): got %d, want >= 2024", yr)
+	}
+}
+
+// TestNewFuncMap_i18nWithRealFuncs verifies i18n functions dispatch to provided implementations.
+func TestNewFuncMap_i18nWithRealFuncs(t *testing.T) {
+	tr := &TemplateRenderer{}
+	provided := template.FuncMap{
+		"t":     func(key string, args ...interface{}) string { return "translated:" + key },
+		"lang":  func() string { return "fr" },
+		"isRTL": func() bool { return true },
+		"dir":   func() string { return "rtl" },
+	}
+	fm := tr.newFuncMap(provided)
+
+	tFn := fm["t"].(func(string, ...interface{}) string)
+	if got := tFn("hello.world"); got != "translated:hello.world" {
+		t.Errorf("t() with real funcs: got %q", got)
+	}
+	langFn := fm["lang"].(func() string)
+	if got := langFn(); got != "fr" {
+		t.Errorf("lang() with real funcs: got %q", got)
+	}
+	isRTLFn := fm["isRTL"].(func() bool)
+	if !isRTLFn() {
+		t.Error("isRTL() with real funcs: want true")
+	}
+	dirFn := fm["dir"].(func() string)
+	if got := dirFn(); got != "rtl" {
+		t.Errorf("dir() with real funcs: got %q", got)
+	}
+}
+
+// ---------- middleware.go: RateLimit exceeded path ----------
+
+// TestRateLimit_ExceededReturns429 exhausts the rate limiter for an IP and confirms 429.
+func TestRateLimit_ExceededReturns429(t *testing.T) {
+	cfg := config.DefaultConfig()
+	mw := NewMiddleware(cfg, nil)
+	// Create a limiter with rate=1/min, burst=1, so the second immediate request is denied.
+	limiter := NewRateLimiter(&config.RateLimitConfig{
+		Enabled:           true,
+		RequestsPerMinute: 1,
+		BurstSize:         1,
+	})
+
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := mw.RateLimit(limiter)(inner)
+
+	// First request: should pass
+	req1 := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req1.RemoteAddr = "10.0.0.1:1234"
+	rec1 := httptest.NewRecorder()
+	handler.ServeHTTP(rec1, req1)
+	if rec1.Code != http.StatusOK {
+		t.Fatalf("RateLimit: first request status = %d, want 200", rec1.Code)
+	}
+
+	// Second request from same IP: rate limit exhausted — must return 429
+	req2 := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req2.RemoteAddr = "10.0.0.1:1234"
+	rec2 := httptest.NewRecorder()
+	handler.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusTooManyRequests {
+		t.Errorf("RateLimit: second request status = %d, want 429", rec2.Code)
+	}
+}
+
+// ---------- middleware.go: Recovery middleware panic path ----------
+
+// TestRecovery_PanicReturns500 verifies the Recovery middleware catches a panic and returns 500.
+func TestRecovery_PanicReturns500(t *testing.T) {
+	cfg := config.DefaultConfig()
+	mw := NewMiddleware(cfg, nil)
+
+	panicking := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		panic("deliberate test panic")
+	})
+	handler := mw.Recovery(panicking)
+
+	req := httptest.NewRequest(http.MethodGet, "/crash", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("Recovery: panic status = %d, want 500", rec.Code)
+	}
+}
+
+// TestRecovery_PanicErrorType verifies Recovery handles error-type panics.
+func TestRecovery_PanicErrorType(t *testing.T) {
+	cfg := config.DefaultConfig()
+	mw := NewMiddleware(cfg, nil)
+
+	panicking := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		panic(fmt.Errorf("error type panic"))
+	})
+	handler := mw.Recovery(panicking)
+
+	req := httptest.NewRequest(http.MethodGet, "/crash", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("Recovery error-type: status = %d, want 500", rec.Code)
+	}
+}
+
+// TestRecovery_NoPanicPassesThrough verifies Recovery does not interfere with normal requests.
+func TestRecovery_NoPanicPassesThrough(t *testing.T) {
+	cfg := config.DefaultConfig()
+	mw := NewMiddleware(cfg, nil)
+
+	normal := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := mw.Recovery(normal)
+
+	req := httptest.NewRequest(http.MethodGet, "/ok", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("Recovery no-panic: status = %d, want 200", rec.Code)
 	}
 }
 
