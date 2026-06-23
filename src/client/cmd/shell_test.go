@@ -327,8 +327,9 @@ func TestHandleShellFlagWithOtherFlags(t *testing.T) {
 // Tests for shellCmd
 
 func TestShellCmdUse(t *testing.T) {
-	if shellCmd.Use != "shell" {
-		t.Errorf("shellCmd.Use = %q, want 'shell'", shellCmd.Use)
+	// The shell command's usage string documents its actions and shells.
+	if shellCmd.Use == "" {
+		t.Error("shellCmd.Use should not be empty")
 	}
 }
 
@@ -338,153 +339,93 @@ func TestShellCmdShort(t *testing.T) {
 	}
 }
 
-// Tests for completionsCmd
+// Tests for the "completions" action of the shell command.
 
-func TestCompletionsCmdUse(t *testing.T) {
-	if completionsCmd.Use == "" {
-		t.Error("completionsCmd.Use should not be empty")
-	}
-}
-
-func TestCompletionsCmdValidArgs(t *testing.T) {
-	validArgs := completionsCmd.ValidArgs
-
-	if len(validArgs) == 0 {
-		t.Error("completionsCmd.ValidArgs should not be empty")
-	}
-
-	expectedArgs := []string{"bash", "zsh", "fish", "powershell", "pwsh"}
-	for _, expected := range expectedArgs {
-		found := false
-		for _, arg := range validArgs {
-			if arg == expected {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("completionsCmd.ValidArgs should contain %q", expected)
-		}
-	}
-}
-
-// Tests for initCmd
-
-func TestInitCmdUse(t *testing.T) {
-	if initCmd.Use == "" {
-		t.Error("initCmd.Use should not be empty")
-	}
-}
-
-func TestInitCmdValidArgs(t *testing.T) {
-	validArgs := initCmd.ValidArgs
-
-	if len(validArgs) == 0 {
-		t.Error("initCmd.ValidArgs should not be empty")
-	}
-
-	expectedArgs := []string{"bash", "zsh", "fish", "powershell", "pwsh"}
-	for _, expected := range expectedArgs {
-		found := false
-		for _, arg := range validArgs {
-			if arg == expected {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("initCmd.ValidArgs should contain %q", expected)
-		}
-	}
-}
-
-// Tests for completionsCmd.RunE
-
-func TestCompletionsCmdRunEAutoDetect(t *testing.T) {
+func TestCompletionsActionAutoDetect(t *testing.T) {
 	os.Setenv("SHELL", "/bin/bash")
 	defer os.Unsetenv("SHELL")
 
-	_, err := captureStdout(func() error {
-		return completionsCmd.RunE(completionsCmd, []string{})
+	out, err := captureStdout(func() error {
+		return shellCmd.run([]string{"completions"})
 	})
 
 	if err != nil {
-		t.Fatalf("completionsCmd.RunE() auto-detect error = %v", err)
+		t.Fatalf("shell completions auto-detect error = %v", err)
+	}
+	if len(out) == 0 {
+		t.Error("shell completions auto-detect produced no output")
 	}
 }
 
-func TestCompletionsCmdRunEWithArg(t *testing.T) {
-	_, err := captureStdout(func() error {
-		return completionsCmd.RunE(completionsCmd, []string{"zsh"})
+func TestCompletionsActionWithArg(t *testing.T) {
+	out, err := captureStdout(func() error {
+		return shellCmd.run([]string{"completions", "zsh"})
 	})
 
 	if err != nil {
-		t.Fatalf("completionsCmd.RunE(['zsh']) error = %v", err)
+		t.Fatalf("shell completions zsh error = %v", err)
+	}
+	if len(out) == 0 {
+		t.Error("shell completions zsh produced no output")
 	}
 }
 
-// Tests for initCmd.RunE
+// Tests for the "init" action of the shell command.
 
-func TestInitCmdRunEAutoDetect(t *testing.T) {
+func TestInitActionAutoDetect(t *testing.T) {
 	os.Setenv("SHELL", "/bin/bash")
 	defer os.Unsetenv("SHELL")
 
-	_, err := captureStdout(func() error {
-		return initCmd.RunE(initCmd, []string{})
+	out, err := captureStdout(func() error {
+		return shellCmd.run([]string{"init"})
 	})
 
 	if err != nil {
-		t.Fatalf("initCmd.RunE() auto-detect error = %v", err)
+		t.Fatalf("shell init auto-detect error = %v", err)
+	}
+	if len(out) == 0 {
+		t.Error("shell init auto-detect produced no output")
 	}
 }
 
-func TestInitCmdRunEWithArg(t *testing.T) {
-	_, err := captureStdout(func() error {
-		return initCmd.RunE(initCmd, []string{"fish"})
+func TestInitActionWithArg(t *testing.T) {
+	out, err := captureStdout(func() error {
+		return shellCmd.run([]string{"init", "fish"})
 	})
 
 	if err != nil {
-		t.Fatalf("initCmd.RunE(['fish']) error = %v", err)
+		t.Fatalf("shell init fish error = %v", err)
+	}
+	if len(out) == 0 {
+		t.Error("shell init fish produced no output")
+	}
+}
+
+// TestShellActionUnknown verifies an unknown action returns an error.
+func TestShellActionUnknown(t *testing.T) {
+	err := shellCmd.run([]string{"bogus"})
+	if err == nil {
+		t.Error("shell run with unknown action should return error")
+	}
+}
+
+// TestShellActionHelp verifies the help action prints usage without error.
+func TestShellActionHelp(t *testing.T) {
+	out, err := captureStdout(func() error {
+		return shellCmd.run([]string{"--help"})
+	})
+	if err != nil {
+		t.Fatalf("shell --help error = %v", err)
+	}
+	if len(out) == 0 {
+		t.Error("shell --help produced no output")
 	}
 }
 
 // Test shell command is added to root
 
 func TestShellCommandRegistered(t *testing.T) {
-	found := false
-	for _, cmd := range rootCmd.Commands() {
-		if cmd.Use == "shell" {
-			found = true
-			break
-		}
-	}
-
-	if !found {
+	if _, ok := rootCmd.subcommands["shell"]; !ok {
 		t.Error("shell command should be registered with rootCmd")
-	}
-}
-
-// Test completions and init subcommands are registered
-
-func TestShellSubcommandsRegistered(t *testing.T) {
-	subCommands := shellCmd.Commands()
-
-	hasCompletions := false
-	hasInit := false
-
-	for _, cmd := range subCommands {
-		if cmd.Use == "completions [bash|zsh|fish|powershell]" {
-			hasCompletions = true
-		}
-		if cmd.Use == "init [bash|zsh|fish|powershell]" {
-			hasInit = true
-		}
-	}
-
-	if !hasCompletions {
-		t.Error("completions subcommand should be registered with shellCmd")
-	}
-	if !hasInit {
-		t.Error("init subcommand should be registered with shellCmd")
 	}
 }

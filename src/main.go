@@ -361,8 +361,9 @@ func runServer() {
 		os.Setenv("SEARCH_LOG_DIR", "/var/log/apimgr/search")
 		os.Setenv("SEARCH_CACHE_DIR", "/var/cache/apimgr/search")
 
-		// Step 8e-f: Port binding for privileged ports happens in server.Start()
-		// Pre-binding not implemented yet - using AmbientCapabilities as fallback
+		// Step 8e-f: Privileged ports (<1024) are bound in server.Start() after
+		// the privilege drop, relying on the systemd AmbientCapabilities grant
+		// (CAP_NET_BIND_SERVICE) so the unprivileged search user can bind them.
 
 		// Step 8g: Drop privileges to search user
 		log.Printf("[Startup] Dropping privileges to user: %s", svcUser.Name)

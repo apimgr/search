@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/spf13/viper"
+	"github.com/apimgr/search/src/client/clicfg"
 )
 
 // Tests for CacheConfig
@@ -33,10 +33,10 @@ func TestCacheConfigStruct(t *testing.T) {
 
 func TestGetCacheConfig(t *testing.T) {
 	// Reset viper for test
-	viper.Reset()
-	viper.Set("cache.enabled", true)
-	viper.Set("cache.ttl", 600)
-	viper.Set("cache.max_size", 200)
+	clicfg.Reset()
+	clicfg.Set("cache.enabled", true)
+	clicfg.Set("cache.ttl", 600)
+	clicfg.Set("cache.max_size", 200)
 
 	cfg := GetCacheConfig()
 
@@ -52,7 +52,7 @@ func TestGetCacheConfig(t *testing.T) {
 }
 
 func TestGetCacheConfigDefaults(t *testing.T) {
-	viper.Reset()
+	clicfg.Reset()
 
 	cfg := GetCacheConfig()
 
@@ -132,12 +132,12 @@ func TestInitCache(t *testing.T) {
 	// Reset state for test
 	cliCache = nil
 	cliCacheOnce = sync.Once{}
-	viper.Reset()
+	clicfg.Reset()
 
 	tempDir := t.TempDir()
-	viper.Set("cache.enabled", true)
-	viper.Set("cache.ttl", 300)
-	viper.Set("cache.max_size", 100)
+	clicfg.Set("cache.enabled", true)
+	clicfg.Set("cache.ttl", 300)
+	clicfg.Set("cache.max_size", 100)
 
 	// Override cache dir through viper isn't straightforward,
 	// but we can test the function runs without error
@@ -165,7 +165,7 @@ func TestInitCacheDefaults(t *testing.T) {
 	// Reset state
 	cliCache = nil
 	cliCacheOnce = sync.Once{}
-	viper.Reset()
+	clicfg.Reset()
 
 	err := InitCache()
 	if err != nil {
@@ -184,7 +184,7 @@ func TestCacheReturnsInstance(t *testing.T) {
 	// Reset state
 	cliCache = nil
 	cliCacheOnce = sync.Once{}
-	viper.Reset()
+	clicfg.Reset()
 
 	cache := Cache()
 	if cache == nil {
@@ -196,7 +196,7 @@ func TestCacheReturnsSameInstance(t *testing.T) {
 	// Reset state
 	cliCache = nil
 	cliCacheOnce = sync.Once{}
-	viper.Reset()
+	clicfg.Reset()
 
 	cache1 := Cache()
 	cache2 := Cache()

@@ -10,8 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/spf13/viper"
-
+	"github.com/apimgr/search/src/client/clicfg"
 	"github.com/apimgr/search/src/client/path"
 )
 
@@ -26,12 +25,12 @@ type CacheConfig struct {
 	MaxSize int
 }
 
-// GetCacheConfig returns cache configuration from viper
+// GetCacheConfig returns cache configuration from the config store
 func GetCacheConfig() CacheConfig {
 	return CacheConfig{
-		Enabled: viper.GetBool("cache.enabled"),
-		TTL:     viper.GetInt("cache.ttl"),
-		MaxSize: viper.GetInt("cache.max_size"),
+		Enabled: clicfg.GetBool("cache.enabled"),
+		TTL:     clicfg.GetInt("cache.ttl"),
+		MaxSize: clicfg.GetInt("cache.max_size"),
 	}
 }
 
@@ -77,7 +76,7 @@ func InitCache() error {
 
 	// Default enabled is true
 	enabled := cfg.Enabled
-	if !viper.IsSet("cache.enabled") {
+	if !clicfg.IsSet("cache.enabled") {
 		enabled = true
 	}
 

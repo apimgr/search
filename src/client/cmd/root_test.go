@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/spf13/viper"
+	"github.com/apimgr/search/src/client/clicfg"
 
 	"github.com/apimgr/search/src/client/api"
 	"github.com/apimgr/search/src/version"
@@ -70,7 +70,7 @@ func TestBuildDate(t *testing.T) {
 // Tests for resolveServerAddress
 
 func TestResolveServerAddressFromFlag(t *testing.T) {
-	viper.Reset()
+	clicfg.Reset()
 	server = "https://flag.example.com"
 
 	addr, shouldSave := resolveServerAddress()
@@ -86,8 +86,8 @@ func TestResolveServerAddressFromFlag(t *testing.T) {
 }
 
 func TestResolveServerAddressFromFlagWithExistingConfig(t *testing.T) {
-	viper.Reset()
-	viper.Set("server.primary", "https://existing.example.com")
+	clicfg.Reset()
+	clicfg.Set("server.primary", "https://existing.example.com")
 	server = "https://flag.example.com"
 
 	addr, shouldSave := resolveServerAddress()
@@ -103,9 +103,9 @@ func TestResolveServerAddressFromFlagWithExistingConfig(t *testing.T) {
 }
 
 func TestResolveServerAddressFromPrimary(t *testing.T) {
-	viper.Reset()
+	clicfg.Reset()
 	server = ""
-	viper.Set("server.primary", "https://primary.example.com")
+	clicfg.Set("server.primary", "https://primary.example.com")
 
 	addr, shouldSave := resolveServerAddress()
 
@@ -118,9 +118,9 @@ func TestResolveServerAddressFromPrimary(t *testing.T) {
 }
 
 func TestResolveServerAddressFromLegacy(t *testing.T) {
-	viper.Reset()
+	clicfg.Reset()
 	server = ""
-	viper.Set("server.address", "https://legacy.example.com")
+	clicfg.Set("server.address", "https://legacy.example.com")
 
 	addr, shouldSave := resolveServerAddress()
 
@@ -133,7 +133,7 @@ func TestResolveServerAddressFromLegacy(t *testing.T) {
 }
 
 func TestResolveServerAddressEmpty(t *testing.T) {
-	viper.Reset()
+	clicfg.Reset()
 	server = ""
 	// Clear env and compiled default so the empty-case test remains meaningful
 	t.Setenv("SEARCH_SERVER", "")
@@ -154,7 +154,7 @@ func TestResolveServerAddressEmpty(t *testing.T) {
 // Tests for getToken
 
 func TestGetTokenFromFlag(t *testing.T) {
-	viper.Reset()
+	clicfg.Reset()
 	token = "flag-token"
 
 	// Set HOME to temp directory per AI.md PART 13 (test data goes to temp dirs)
@@ -172,7 +172,7 @@ func TestGetTokenFromFlag(t *testing.T) {
 }
 
 func TestGetTokenFromFile(t *testing.T) {
-	viper.Reset()
+	clicfg.Reset()
 	token = ""
 
 	tempDir := t.TempDir()
@@ -194,7 +194,7 @@ func TestGetTokenFromFile(t *testing.T) {
 }
 
 func TestGetTokenFromEnv(t *testing.T) {
-	viper.Reset()
+	clicfg.Reset()
 	token = ""
 	tokenFile = ""
 	os.Setenv("SEARCH_TOKEN", "env-token")
@@ -213,11 +213,11 @@ func TestGetTokenFromEnv(t *testing.T) {
 }
 
 func TestGetTokenFromConfig(t *testing.T) {
-	viper.Reset()
+	clicfg.Reset()
 	token = ""
 	tokenFile = ""
 	os.Unsetenv("SEARCH_TOKEN")
-	viper.Set("server.token", "config-token")
+	clicfg.Set("server.token", "config-token")
 
 	// Set HOME to temp directory per AI.md PART 13 (test data goes to temp dirs)
 	tempDir := t.TempDir()
@@ -232,7 +232,7 @@ func TestGetTokenFromConfig(t *testing.T) {
 }
 
 func TestGetTokenFromDefaultFile(t *testing.T) {
-	viper.Reset()
+	clicfg.Reset()
 	token = ""
 	tokenFile = ""
 	os.Unsetenv("SEARCH_TOKEN")
@@ -250,10 +250,10 @@ func TestGetTokenFromDefaultFile(t *testing.T) {
 }
 
 func TestGetTokenPriority(t *testing.T) {
-	viper.Reset()
+	clicfg.Reset()
 	token = "flag-token"
 	os.Setenv("SEARCH_TOKEN", "env-token")
-	viper.Set("server.token", "config-token")
+	clicfg.Set("server.token", "config-token")
 	defer os.Unsetenv("SEARCH_TOKEN")
 
 	// Set HOME to temp directory per AI.md PART 13 (test data goes to temp dirs)
@@ -284,7 +284,7 @@ func TestGetBinaryName(t *testing.T) {
 // Tests for getOutputFormat
 
 func TestGetOutputFormatFromFlag(t *testing.T) {
-	viper.Reset()
+	clicfg.Reset()
 	output = "json"
 
 	result := getOutputFormat()
@@ -297,9 +297,9 @@ func TestGetOutputFormatFromFlag(t *testing.T) {
 }
 
 func TestGetOutputFormatFromConfig(t *testing.T) {
-	viper.Reset()
+	clicfg.Reset()
 	output = ""
-	viper.Set("output.format", "plain")
+	clicfg.Set("output.format", "plain")
 
 	result := getOutputFormat()
 
@@ -309,7 +309,7 @@ func TestGetOutputFormatFromConfig(t *testing.T) {
 }
 
 func TestGetOutputFormatDefault(t *testing.T) {
-	viper.Reset()
+	clicfg.Reset()
 	output = ""
 
 	result := getOutputFormat()
@@ -321,7 +321,7 @@ func TestGetOutputFormatDefault(t *testing.T) {
 // Tests for saveServerToConfig
 
 func TestSaveServerToConfig(t *testing.T) {
-	viper.Reset()
+	clicfg.Reset()
 	tempDir := t.TempDir()
 
 	// Set HOME to temp directory per AI.md PART 13 (test data goes to temp dirs)
@@ -329,11 +329,11 @@ func TestSaveServerToConfig(t *testing.T) {
 	// HOME restored by TestMain
 
 	// Set config path
-	viper.Set("server.primary", "")
+	clicfg.Set("server.primary", "")
 
 	saveServerToConfig("https://saved.example.com")
 
-	if viper.GetString("server.primary") != "https://saved.example.com" {
+	if clicfg.GetString("server.primary") != "https://saved.example.com" {
 		t.Error("saveServerToConfig() should set server.primary")
 	}
 }
@@ -341,7 +341,7 @@ func TestSaveServerToConfig(t *testing.T) {
 // Tests for initClient
 
 func TestInitClientNoServer(t *testing.T) {
-	viper.Reset()
+	clicfg.Reset()
 	server = ""
 	apiClient = nil
 	// Clear env and compiled default so that no server is found
@@ -371,7 +371,7 @@ func TestInitClientWithServer(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	viper.Reset()
+	clicfg.Reset()
 	server = testServer.URL
 	apiClient = nil
 
@@ -394,7 +394,7 @@ func TestInitClientWithUserContext(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	viper.Reset()
+	clicfg.Reset()
 	server = testServer.URL
 	userCtx = "@testuser"
 	apiClient = nil
@@ -419,7 +419,7 @@ func TestInitClientWithTimeout(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	viper.Reset()
+	clicfg.Reset()
 	server = testServer.URL
 	timeout = 60
 	apiClient = nil
@@ -464,7 +464,7 @@ func TestBackgroundAutodiscoverWithResponse(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	viper.Reset()
+	clicfg.Reset()
 	apiClient = api.NewClient(testServer.URL, "", 30)
 
 	backgroundAutodiscover()
@@ -497,7 +497,7 @@ func TestRunSearchSuccess(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	viper.Reset()
+	clicfg.Reset()
 	apiClient = api.NewClient(testServer.URL, "", 30)
 	output = "plain"
 	page = 1
@@ -530,7 +530,7 @@ func TestRunSearchJSONOutput(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	viper.Reset()
+	clicfg.Reset()
 	apiClient = api.NewClient(testServer.URL, "", 30)
 	output = "json"
 
@@ -563,7 +563,7 @@ func TestRunSearchTableOutput(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	viper.Reset()
+	clicfg.Reset()
 	apiClient = api.NewClient(testServer.URL, "", 30)
 	output = "table"
 
@@ -586,7 +586,7 @@ func TestRunSearchInitializesClient(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	viper.Reset()
+	clicfg.Reset()
 	server = testServer.URL
 	apiClient = nil
 	output = "plain"
@@ -607,7 +607,7 @@ func TestRunSearchError(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	viper.Reset()
+	clicfg.Reset()
 	apiClient = api.NewClient(testServer.URL, "", 30)
 
 	err := runSearch("test")
@@ -620,7 +620,7 @@ func TestRunSearchError(t *testing.T) {
 // Tests for initConfig
 
 func TestInitConfig(t *testing.T) {
-	viper.Reset()
+	clicfg.Reset()
 	cfgFile = ""
 
 	tempDir := t.TempDir()
@@ -636,7 +636,7 @@ func TestInitConfigWithFile(t *testing.T) {
 	configPath := filepath.Join(tempDir, "test.yml")
 	os.WriteFile(configPath, []byte("server:\n  primary: https://test.example.com\n"), 0600)
 
-	viper.Reset()
+	clicfg.Reset()
 	cfgFile = configPath
 
 	initConfig()
@@ -645,7 +645,7 @@ func TestInitConfigWithFile(t *testing.T) {
 }
 
 func TestInitConfigDefaults(t *testing.T) {
-	viper.Reset()
+	clicfg.Reset()
 	cfgFile = ""
 
 	tempDir := t.TempDir()
@@ -655,14 +655,14 @@ func TestInitConfigDefaults(t *testing.T) {
 	initConfig()
 
 	// Verify defaults are set
-	if viper.GetInt("server.timeout") != 30 {
-		t.Errorf("default server.timeout = %d, want 30", viper.GetInt("server.timeout"))
+	if clicfg.GetInt("server.timeout") != 30 {
+		t.Errorf("default server.timeout = %d, want 30", clicfg.GetInt("server.timeout"))
 	}
-	if viper.GetString("output.format") != "table" {
-		t.Errorf("default output.format = %q, want 'table'", viper.GetString("output.format"))
+	if clicfg.GetString("output.format") != "table" {
+		t.Errorf("default output.format = %q, want 'table'", clicfg.GetString("output.format"))
 	}
-	if viper.GetInt("cache.ttl") != 300 {
-		t.Errorf("default cache.ttl = %d, want 300", viper.GetInt("cache.ttl"))
+	if clicfg.GetInt("cache.ttl") != 300 {
+		t.Errorf("default cache.ttl = %d, want 300", clicfg.GetInt("cache.ttl"))
 	}
 }
 

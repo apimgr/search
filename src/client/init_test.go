@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/spf13/viper"
+	"github.com/apimgr/search/src/client/clicfg"
 )
 
 // Tests for InitCLI
@@ -16,7 +16,7 @@ func TestInitCLI(t *testing.T) {
 	loggerOnce = sync.Once{}
 	cliCache = nil
 	cliCacheOnce = sync.Once{}
-	viper.Reset()
+	clicfg.Reset()
 
 	// Set up temp directories
 	tempDir := t.TempDir()
@@ -35,7 +35,7 @@ func TestInitCLIWithExistingDirs(t *testing.T) {
 	loggerOnce = sync.Once{}
 	cliCache = nil
 	cliCacheOnce = sync.Once{}
-	viper.Reset()
+	clicfg.Reset()
 
 	tempDir := t.TempDir()
 	os.Setenv("HOME", tempDir)
@@ -59,7 +59,7 @@ func TestInitCLIMultipleCalls(t *testing.T) {
 	loggerOnce = sync.Once{}
 	cliCache = nil
 	cliCacheOnce = sync.Once{}
-	viper.Reset()
+	clicfg.Reset()
 
 	tempDir := t.TempDir()
 	os.Setenv("HOME", tempDir)
@@ -84,7 +84,7 @@ func TestInitCLILoggingInitialized(t *testing.T) {
 	loggerOnce = sync.Once{}
 	cliCache = nil
 	cliCacheOnce = sync.Once{}
-	viper.Reset()
+	clicfg.Reset()
 
 	tempDir := t.TempDir()
 	os.Setenv("HOME", tempDir)
@@ -105,7 +105,7 @@ func TestInitCLICacheInitialized(t *testing.T) {
 	loggerOnce = sync.Once{}
 	cliCache = nil
 	cliCacheOnce = sync.Once{}
-	viper.Reset()
+	clicfg.Reset()
 
 	tempDir := t.TempDir()
 	os.Setenv("HOME", tempDir)
@@ -128,7 +128,7 @@ func TestInitCLIHandlesLoggingError(t *testing.T) {
 	loggerOnce = sync.Once{}
 	cliCache = nil
 	cliCacheOnce = sync.Once{}
-	viper.Reset()
+	clicfg.Reset()
 
 	tempDir := t.TempDir()
 	os.Setenv("HOME", tempDir)
@@ -147,7 +147,7 @@ func TestInitCLIHandlesCacheError(t *testing.T) {
 	loggerOnce = sync.Once{}
 	cliCache = nil
 	cliCacheOnce = sync.Once{}
-	viper.Reset()
+	clicfg.Reset()
 
 	tempDir := t.TempDir()
 	os.Setenv("HOME", tempDir)
@@ -168,7 +168,7 @@ func TestInitCLISequence(t *testing.T) {
 	loggerOnce = sync.Once{}
 	cliCache = nil
 	cliCacheOnce = sync.Once{}
-	viper.Reset()
+	clicfg.Reset()
 
 	tempDir := t.TempDir()
 	os.Setenv("HOME", tempDir)
@@ -211,22 +211,22 @@ func TestInitCLISequence(t *testing.T) {
 
 // Tests for InitCLI with config
 
-func TestInitCLIWithViperConfig(t *testing.T) {
+func TestInitCLIWithConfigStore(t *testing.T) {
 	// Reset state
 	logger = nil
 	loggerOnce = sync.Once{}
 	cliCache = nil
 	cliCacheOnce = sync.Once{}
-	viper.Reset()
+	clicfg.Reset()
 
 	tempDir := t.TempDir()
 	os.Setenv("HOME", tempDir)
 	defer os.Unsetenv("HOME")
 
 	// Set some config values
-	viper.Set("logging.level", "debug")
-	viper.Set("cache.enabled", true)
-	viper.Set("cache.ttl", 600)
+	clicfg.Set("logging.level", "debug")
+	clicfg.Set("cache.enabled", true)
+	clicfg.Set("cache.ttl", 600)
 
 	err := InitCLI()
 	if err != nil {
@@ -240,13 +240,13 @@ func TestInitCLIWithDisabledCache(t *testing.T) {
 	loggerOnce = sync.Once{}
 	cliCache = nil
 	cliCacheOnce = sync.Once{}
-	viper.Reset()
+	clicfg.Reset()
 
 	tempDir := t.TempDir()
 	os.Setenv("HOME", tempDir)
 	defer os.Unsetenv("HOME")
 
-	viper.Set("cache.enabled", false)
+	clicfg.Set("cache.enabled", false)
 
 	err := InitCLI()
 	if err != nil {
@@ -262,7 +262,7 @@ func TestInitCLIConcurrent(t *testing.T) {
 	loggerOnce = sync.Once{}
 	cliCache = nil
 	cliCacheOnce = sync.Once{}
-	viper.Reset()
+	clicfg.Reset()
 
 	tempDir := t.TempDir()
 	os.Setenv("HOME", tempDir)

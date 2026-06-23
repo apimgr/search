@@ -7,26 +7,31 @@ import (
 	"fmt"
 	"os"
 	"time"
-
-	"github.com/spf13/cobra"
 )
 
-var statusCmd = &cobra.Command{
-	Use:   "status",
-	Short: "Check server status and health",
-	Long: `Check server status and health.
+// statusCmd is the "status" subcommand, registered on the root command.
+var statusCmd = newStatusCommand()
+
+// newStatusCommand constructs the status subcommand using the stdlib-flag
+// command tree, preserving the previous cobra metadata and behavior.
+func newStatusCommand() *command {
+	return &command{
+		Use:   "status",
+		Short: "Check server status and health",
+		Long: `Check server status and health.
 Exits with code 0 if healthy, 1 if unhealthy.
 
 Examples:
   ` + getBinaryName() + ` status
   ` + getBinaryName() + ` status --output json`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return runStatus()
-	},
+		run: func(args []string) error {
+			return runStatus()
+		},
+	}
 }
 
 func init() {
-	rootCmd.AddCommand(statusCmd)
+	rootCmd.addCommand("status", statusCmd)
 }
 
 func runStatus() error {

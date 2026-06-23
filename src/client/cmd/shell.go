@@ -7,64 +7,60 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/spf13/cobra"
 )
 
-var shellCmd = &cobra.Command{
-	Use:   "shell",
-	Short: "Shell integration commands",
-	Long:  `Shell integration for completions and init scripts.`,
-}
+// shellCmd is the "shell" subcommand handling completions and init scripts.
+var shellCmd = newShellCommand()
 
-var completionsCmd = &cobra.Command{
-	Use:   "completions [bash|zsh|fish|powershell]",
-	Short: "Generate shell completions",
-	Long: `Generate shell completion script for the specified shell.
-If no shell is specified, auto-detects from $SHELL environment variable.
-
-Examples:
-  # Auto-detect shell
-  ` + getBinaryName() + ` shell completions > ~/.local/share/bash-completion/completions/` + getBinaryName() + `
-
-  # Specific shell
-  ` + getBinaryName() + ` shell completions bash > ~/.local/share/bash-completion/completions/` + getBinaryName() + `
-  ` + getBinaryName() + ` shell completions zsh > ~/.zsh/completions/_` + getBinaryName() + `
-  ` + getBinaryName() + ` shell completions fish > ~/.config/fish/completions/` + getBinaryName() + `.fish`,
-	Args:      cobra.MaximumNArgs(1),
-	ValidArgs: []string{"bash", "zsh", "fish", "powershell", "pwsh"},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		shell := detectShell()
-		if len(args) > 0 {
-			shell = args[0]
-		}
-		return printCompletions(shell)
-	},
-}
-
-var initCmd = &cobra.Command{
-	Use:   "init [bash|zsh|fish|powershell]",
-	Short: "Generate shell init command",
-	Long: `Generate shell init command for eval.
-If no shell is specified, auto-detects from $SHELL environment variable.
-
-Add to your shell rc file:
-  eval "$(` + getBinaryName() + ` shell init)"`,
-	Args:      cobra.MaximumNArgs(1),
-	ValidArgs: []string{"bash", "zsh", "fish", "powershell", "pwsh"},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		shell := detectShell()
-		if len(args) > 0 {
-			shell = args[0]
-		}
-		return printInit(shell)
-	},
+// newShellCommand constructs the shell subcommand. It dispatches to its own
+// "completions" and "init" sub-actions based on the first positional argument,
+// preserving the previous cobra command tree behavior.
+func newShellCommand() *command {
+	return &command{
+		Use:   "shell [completions|init] [bash|zsh|fish|powershell]",
+		Short: "Shell integration commands",
+		Long:  `Shell integration for completions and init scripts.`,
+		run: func(args []string) error {
+			if len(args) == 0 {
+				printShellHelp()
+				return nil
+			}
+			action := args[0]
+			shell := detectShell()
+			if len(args) > 1 {
+				shell = args[1]
+			}
+			switch action {
+			case "completions":
+				return printCompletions(shell)
+			case "init":
+				return printInit(shell)
+			case "--help", "-h", "help":
+				printShellHelp()
+				return nil
+			default:
+				return fmt.Errorf("unknown shell action: %s\nSupported: completions, init", action)
+			}
+		},
+	}
 }
 
 func init() {
-	shellCmd.AddCommand(completionsCmd)
-	shellCmd.AddCommand(initCmd)
-	rootCmd.AddCommand(shellCmd)
+	rootCmd.addCommand("shell", shellCmd)
+}
+
+// printShellHelp prints usage for the shell subcommand.
+func printShellHelp() {
+	fmt.Println("Shell integration commands:")
+	fmt.Println("")
+	fmt.Println("  completions [SHELL]  Generate shell completions")
+	fmt.Println("  init [SHELL]         Generate shell init command")
+	fmt.Println("")
+	fmt.Println("Supported shells: bash, zsh, fish, powershell")
+	fmt.Println("")
+	fmt.Println("Examples:")
+	fmt.Printf("  %s shell completions bash > ~/.local/share/bash-completion/completions/%s\n", getBinaryName(), getBinaryName())
+	fmt.Printf("  eval \"$(%s shell init)\"\n", getBinaryName())
 }
 
 // detectShell auto-detects shell from $SHELL environment variable
@@ -83,20 +79,26 @@ func detectShell() string {
 	return base
 }
 
-// printCompletions generates and prints shell completion script
+// printCompletions generates and prints a shell completion script.
+// The scripts are hand-written (replacing cobra's generators) and cover the
+// subcommands and flags exposed by the CLI.
 // Per AI.md PART 32 line 43143-43159
 func printCompletions(shell string) error {
 	binaryName := getBinaryName()
 
 	switch shell {
 	case "bash":
-		return rootCmd.GenBashCompletionV2(os.Stdout, true)
+		fmt.Print(bashCompletion(binaryName))
+		return nil
 	case "zsh":
-		return rootCmd.GenZshCompletion(os.Stdout)
+		fmt.Print(zshCompletion(binaryName))
+		return nil
 	case "fish":
-		return rootCmd.GenFishCompletion(os.Stdout, true)
+		fmt.Print(fishCompletion(binaryName))
+		return nil
 	case "powershell", "pwsh":
-		return rootCmd.GenPowerShellCompletionWithDesc(os.Stdout)
+		fmt.Print(powershellCompletion(binaryName))
+		return nil
 	case "sh", "dash", "ksh":
 		// Basic POSIX completions
 		fmt.Printf("# POSIX shell completions for %s\n", binaryName)
@@ -105,6 +107,113 @@ func printCompletions(shell string) error {
 	default:
 		return fmt.Errorf("unsupported shell: %s\nSupported: bash, zsh, fish, powershell", shell)
 	}
+}
+
+// completionFlags lists the flags offered for completion (without leading --).
+var completionFlags = []string{
+	"config", "server", "token", "token-file", "user", "output",
+	"color", "shell", "lang", "timeout", "debug", "page", "limit",
+	"help", "version",
+}
+
+// completionSubcommands lists the subcommands offered for completion.
+var completionSubcommands = []string{"status", "shell"}
+
+// bashCompletion returns a hand-written bash completion script.
+func bashCompletion(bin string) string {
+	flags := ""
+	for _, f := range completionFlags {
+		flags += "--" + f + " "
+	}
+	subs := strings.Join(completionSubcommands, " ")
+	return fmt.Sprintf(`# bash completion for %[1]s
+_%[1]s_completions() {
+    local cur prev
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    local subcommands="%[2]s"
+    local flags="%[3]s"
+    if [[ "$cur" == -* ]]; then
+        COMPREPLY=( $(compgen -W "$flags" -- "$cur") )
+        return 0
+    fi
+    if [[ "$prev" == "--output" ]]; then
+        COMPREPLY=( $(compgen -W "json table plain" -- "$cur") )
+        return 0
+    fi
+    if [[ "$prev" == "--color" ]]; then
+        COMPREPLY=( $(compgen -W "auto yes no" -- "$cur") )
+        return 0
+    fi
+    COMPREPLY=( $(compgen -W "$subcommands $flags" -- "$cur") )
+    return 0
+}
+complete -F _%[1]s_completions %[1]s
+`, bin, subs, strings.TrimSpace(flags))
+}
+
+// zshCompletion returns a hand-written zsh completion script.
+func zshCompletion(bin string) string {
+	flags := ""
+	for _, f := range completionFlags {
+		flags += "'--" + f + "' "
+	}
+	subs := strings.Join(completionSubcommands, " ")
+	return fmt.Sprintf(`#compdef %[1]s
+# zsh completion for %[1]s
+_%[1]s() {
+    local -a subcommands flags
+    subcommands=(%[2]s)
+    flags=(%[3]s)
+    _arguments \
+        '1: :->cmds' \
+        '*: :->args'
+    case $state in
+        cmds)
+            _describe 'command' subcommands
+            compadd -- $flags
+            ;;
+        *)
+            compadd -- $flags
+            ;;
+    esac
+}
+compdef _%[1]s %[1]s
+`, bin, subs, strings.TrimSpace(flags))
+}
+
+// fishCompletion returns a hand-written fish completion script.
+func fishCompletion(bin string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# fish completion for %s\n", bin)
+	for _, s := range completionSubcommands {
+		fmt.Fprintf(&b, "complete -c %s -f -n '__fish_use_subcommand' -a '%s'\n", bin, s)
+	}
+	for _, f := range completionFlags {
+		fmt.Fprintf(&b, "complete -c %s -l %s\n", bin, f)
+	}
+	return b.String()
+}
+
+// powershellCompletion returns a hand-written PowerShell completion script.
+func powershellCompletion(bin string) string {
+	items := append([]string{}, completionSubcommands...)
+	for _, f := range completionFlags {
+		items = append(items, "--"+f)
+	}
+	var quoted []string
+	for _, it := range items {
+		quoted = append(quoted, "'"+it+"'")
+	}
+	return fmt.Sprintf(`# PowerShell completion for %[1]s
+Register-ArgumentCompleter -Native -CommandName %[1]s -ScriptBlock {
+    param($wordToComplete, $commandAst, $cursorPosition)
+    $items = @(%[2]s)
+    $items | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {
+        [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
+    }
+}
+`, bin, strings.Join(quoted, ", "))
 }
 
 // printInit generates shell init command for eval
@@ -129,8 +238,9 @@ func printInit(shell string) error {
 	return nil
 }
 
-// HandleShellFlag processes --shell flag when used as a flag instead of subcommand.
-// Called from main() before cobra to support the --shell completions|init pattern per PART 8.
+// HandleShellFlag processes the --shell flag when used as a flag instead of a
+// subcommand. Called from main() before the main parse to support the
+// "--shell completions|init" pattern per PART 8. Signature preserved.
 func HandleShellFlag(args []string) bool {
 	if len(args) < 2 {
 		return false
@@ -161,16 +271,7 @@ func HandleShellFlag(args []string) bool {
 				}
 				os.Exit(0)
 			case "--help":
-				fmt.Println("Shell integration commands:")
-				fmt.Println("")
-				fmt.Println("  completions [SHELL]  Generate shell completions")
-				fmt.Println("  init [SHELL]         Generate shell init command")
-				fmt.Println("")
-				fmt.Println("Supported shells: bash, zsh, fish, powershell")
-				fmt.Println("")
-				fmt.Println("Examples:")
-				fmt.Printf("  %s --shell completions bash > ~/.local/share/bash-completion/completions/%s\n", getBinaryName(), getBinaryName())
-				fmt.Printf("  eval \"$(%s --shell init)\"\n", getBinaryName())
+				printShellHelp()
 				os.Exit(0)
 			}
 			return true

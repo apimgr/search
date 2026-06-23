@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/spf13/viper"
+	"github.com/apimgr/search/src/client/clicfg"
 
 	"github.com/apimgr/search/src/client/api"
 	"github.com/apimgr/search/src/version"
@@ -69,7 +69,7 @@ func TestRunStatusHealthy(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	viper.Reset()
+	clicfg.Reset()
 	server = testServer.URL
 	apiClient = nil
 	output = "table"
@@ -96,7 +96,7 @@ func TestRunStatusHealthyJSON(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	viper.Reset()
+	clicfg.Reset()
 	server = testServer.URL
 	apiClient = nil
 	output = "json"
@@ -122,7 +122,7 @@ func TestRunStatusWithUptime(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	viper.Reset()
+	clicfg.Reset()
 	server = testServer.URL
 	apiClient = nil
 	output = "table"
@@ -152,7 +152,7 @@ func TestRunStatusWithChecks(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	viper.Reset()
+	clicfg.Reset()
 	server = testServer.URL
 	apiClient = nil
 	output = "table"
@@ -177,7 +177,7 @@ func TestRunStatusNoVersion(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	viper.Reset()
+	clicfg.Reset()
 	server = testServer.URL
 	apiClient = nil
 	output = "table"
@@ -203,7 +203,7 @@ func TestRunStatusNoUptime(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	viper.Reset()
+	clicfg.Reset()
 	server = testServer.URL
 	apiClient = nil
 	output = "table"
@@ -229,7 +229,7 @@ func TestRunStatusNoChecks(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	viper.Reset()
+	clicfg.Reset()
 	server = testServer.URL
 	apiClient = nil
 	output = "table"
@@ -245,7 +245,7 @@ func TestRunStatusNoChecks(t *testing.T) {
 }
 
 func TestRunStatusInitClientError(t *testing.T) {
-	viper.Reset()
+	clicfg.Reset()
 	server = ""
 	apiClient = nil
 	// Clear env and compiled default so that no server is found
@@ -261,7 +261,7 @@ func TestRunStatusInitClientError(t *testing.T) {
 	}
 }
 
-// Tests for statusCmd.RunE
+// Tests for the status command's run function
 
 func TestStatusCmdRunE(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -273,15 +273,15 @@ func TestStatusCmdRunE(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	viper.Reset()
+	clicfg.Reset()
 	server = testServer.URL
 	apiClient = nil
 	output = "table"
 
-	err := statusCmd.RunE(statusCmd, []string{})
+	err := statusCmd.run([]string{})
 
 	if err != nil {
-		t.Fatalf("statusCmd.RunE() error = %v", err)
+		t.Fatalf("statusCmd.run() error = %v", err)
 	}
 
 	server = ""
@@ -309,7 +309,7 @@ func TestRunStatusOutputFormats(t *testing.T) {
 
 	for _, format := range formats {
 		t.Run(format, func(t *testing.T) {
-			viper.Reset()
+			clicfg.Reset()
 			server = testServer.URL
 			apiClient = nil
 			output = format
@@ -337,7 +337,7 @@ func TestRunStatusResponseTime(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	viper.Reset()
+	clicfg.Reset()
 	server = testServer.URL
 	apiClient = nil
 	output = "table"
@@ -364,7 +364,7 @@ func TestRunStatusOkStatus(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	viper.Reset()
+	clicfg.Reset()
 	server = testServer.URL
 	apiClient = nil
 	output = "table"
@@ -388,7 +388,7 @@ func TestRunStatusHealthyStatus(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	viper.Reset()
+	clicfg.Reset()
 	server = testServer.URL
 	apiClient = nil
 	output = "table"
@@ -414,7 +414,7 @@ func TestRunStatusExistingClient(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	viper.Reset()
+	clicfg.Reset()
 	// Pre-initialize client
 	apiClient = api.NewClient(testServer.URL, "", 30)
 	output = "table"
@@ -450,7 +450,7 @@ func TestRunStatusMultipleChecks(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	viper.Reset()
+	clicfg.Reset()
 	server = testServer.URL
 	apiClient = nil
 	output = "table"
@@ -481,7 +481,7 @@ func TestRunStatusJSONOutput(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	viper.Reset()
+	clicfg.Reset()
 	server = testServer.URL
 	apiClient = nil
 	output = "json"

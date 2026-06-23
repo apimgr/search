@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/spf13/viper"
+	"github.com/apimgr/search/src/client/clicfg"
 )
 
 // Tests for LogConfig
@@ -37,11 +37,11 @@ func TestLogConfigStruct(t *testing.T) {
 }
 
 func TestGetLogConfig(t *testing.T) {
-	viper.Reset()
-	viper.Set("logging.level", "error")
-	viper.Set("logging.file", "/tmp/test.log")
-	viper.Set("logging.max_size", 20)
-	viper.Set("logging.max_files", 10)
+	clicfg.Reset()
+	clicfg.Set("logging.level", "error")
+	clicfg.Set("logging.file", "/tmp/test.log")
+	clicfg.Set("logging.max_size", 20)
+	clicfg.Set("logging.max_files", 10)
 
 	cfg := GetLogConfig()
 
@@ -60,7 +60,7 @@ func TestGetLogConfig(t *testing.T) {
 }
 
 func TestGetLogConfigDefaults(t *testing.T) {
-	viper.Reset()
+	clicfg.Reset()
 
 	cfg := GetLogConfig()
 
@@ -82,14 +82,14 @@ func TestInitLogging(t *testing.T) {
 	// Reset state
 	logger = nil
 	loggerOnce = sync.Once{}
-	viper.Reset()
+	clicfg.Reset()
 
 	tempDir := t.TempDir()
 	logFile := filepath.Join(tempDir, "test.log")
-	viper.Set("logging.file", logFile)
-	viper.Set("logging.level", "debug")
-	viper.Set("logging.max_size", 10)
-	viper.Set("logging.max_files", 5)
+	clicfg.Set("logging.file", logFile)
+	clicfg.Set("logging.level", "debug")
+	clicfg.Set("logging.max_size", 10)
+	clicfg.Set("logging.max_files", 5)
 
 	err := InitLogging()
 	if err != nil {
@@ -107,11 +107,11 @@ func TestInitLoggingDefaultLevel(t *testing.T) {
 	// Reset state
 	logger = nil
 	loggerOnce = sync.Once{}
-	viper.Reset()
+	clicfg.Reset()
 
 	tempDir := t.TempDir()
 	logFile := filepath.Join(tempDir, "test.log")
-	viper.Set("logging.file", logFile)
+	clicfg.Set("logging.file", logFile)
 	// No level set - should default to warn
 
 	err := InitLogging()
@@ -128,12 +128,12 @@ func TestInitLoggingLevels(t *testing.T) {
 			// Reset state
 			logger = nil
 			loggerOnce = sync.Once{}
-			viper.Reset()
+			clicfg.Reset()
 
 			tempDir := t.TempDir()
 			logFile := filepath.Join(tempDir, "test.log")
-			viper.Set("logging.file", logFile)
-			viper.Set("logging.level", level)
+			clicfg.Set("logging.file", logFile)
+			clicfg.Set("logging.level", level)
 
 			err := InitLogging()
 			if err != nil {
@@ -147,12 +147,12 @@ func TestInitLoggingUnknownLevel(t *testing.T) {
 	// Reset state
 	logger = nil
 	loggerOnce = sync.Once{}
-	viper.Reset()
+	clicfg.Reset()
 
 	tempDir := t.TempDir()
 	logFile := filepath.Join(tempDir, "test.log")
-	viper.Set("logging.file", logFile)
-	viper.Set("logging.level", "unknown")
+	clicfg.Set("logging.file", logFile)
+	clicfg.Set("logging.level", "unknown")
 
 	err := InitLogging()
 	if err != nil {
@@ -165,14 +165,14 @@ func TestInitLoggingWithTilde(t *testing.T) {
 	// Reset state
 	logger = nil
 	loggerOnce = sync.Once{}
-	viper.Reset()
+	clicfg.Reset()
 
 	// Get home directory for comparison
 	home, _ := os.UserHomeDir()
 
 	tempSubDir := "test-cli-log-" + filepath.Base(t.TempDir())
 	logPath := "~/" + tempSubDir + "/test.log"
-	viper.Set("logging.file", logPath)
+	clicfg.Set("logging.file", logPath)
 
 	err := InitLogging()
 	if err != nil {
@@ -187,11 +187,11 @@ func TestInitLoggingDefaultMaxValues(t *testing.T) {
 	// Reset state
 	logger = nil
 	loggerOnce = sync.Once{}
-	viper.Reset()
+	clicfg.Reset()
 
 	tempDir := t.TempDir()
 	logFile := filepath.Join(tempDir, "test.log")
-	viper.Set("logging.file", logFile)
+	clicfg.Set("logging.file", logFile)
 	// No max_size or max_files set - should use defaults
 
 	err := InitLogging()
@@ -206,11 +206,11 @@ func TestLoggerReturnsInstance(t *testing.T) {
 	// Reset state
 	logger = nil
 	loggerOnce = sync.Once{}
-	viper.Reset()
+	clicfg.Reset()
 
 	tempDir := t.TempDir()
 	logFile := filepath.Join(tempDir, "test.log")
-	viper.Set("logging.file", logFile)
+	clicfg.Set("logging.file", logFile)
 
 	_ = InitLogging()
 	l := Logger()
@@ -240,12 +240,12 @@ func TestLogDebug(t *testing.T) {
 	// Reset state
 	logger = nil
 	loggerOnce = sync.Once{}
-	viper.Reset()
+	clicfg.Reset()
 
 	tempDir := t.TempDir()
 	logFile := filepath.Join(tempDir, "test.log")
-	viper.Set("logging.file", logFile)
-	viper.Set("logging.level", "debug")
+	clicfg.Set("logging.file", logFile)
+	clicfg.Set("logging.level", "debug")
 
 	_ = InitLogging()
 
@@ -257,12 +257,12 @@ func TestLogInfo(t *testing.T) {
 	// Reset state
 	logger = nil
 	loggerOnce = sync.Once{}
-	viper.Reset()
+	clicfg.Reset()
 
 	tempDir := t.TempDir()
 	logFile := filepath.Join(tempDir, "test.log")
-	viper.Set("logging.file", logFile)
-	viper.Set("logging.level", "info")
+	clicfg.Set("logging.file", logFile)
+	clicfg.Set("logging.level", "info")
 
 	_ = InitLogging()
 
@@ -274,12 +274,12 @@ func TestLogWarn(t *testing.T) {
 	// Reset state
 	logger = nil
 	loggerOnce = sync.Once{}
-	viper.Reset()
+	clicfg.Reset()
 
 	tempDir := t.TempDir()
 	logFile := filepath.Join(tempDir, "test.log")
-	viper.Set("logging.file", logFile)
-	viper.Set("logging.level", "warn")
+	clicfg.Set("logging.file", logFile)
+	clicfg.Set("logging.level", "warn")
 
 	_ = InitLogging()
 
@@ -291,12 +291,12 @@ func TestLogError(t *testing.T) {
 	// Reset state
 	logger = nil
 	loggerOnce = sync.Once{}
-	viper.Reset()
+	clicfg.Reset()
 
 	tempDir := t.TempDir()
 	logFile := filepath.Join(tempDir, "test.log")
-	viper.Set("logging.file", logFile)
-	viper.Set("logging.level", "error")
+	clicfg.Set("logging.file", logFile)
+	clicfg.Set("logging.level", "error")
 
 	_ = InitLogging()
 
@@ -323,12 +323,12 @@ func TestLogFunctionsWithMultipleArgs(t *testing.T) {
 	// Reset state
 	logger = nil
 	loggerOnce = sync.Once{}
-	viper.Reset()
+	clicfg.Reset()
 
 	tempDir := t.TempDir()
 	logFile := filepath.Join(tempDir, "test.log")
-	viper.Set("logging.file", logFile)
-	viper.Set("logging.level", "debug")
+	clicfg.Set("logging.file", logFile)
+	clicfg.Set("logging.level", "debug")
 
 	_ = InitLogging()
 
@@ -479,12 +479,12 @@ func TestConcurrentLogging(t *testing.T) {
 	// Reset state
 	logger = nil
 	loggerOnce = sync.Once{}
-	viper.Reset()
+	clicfg.Reset()
 
 	tempDir := t.TempDir()
 	logFile := filepath.Join(tempDir, "test.log")
-	viper.Set("logging.file", logFile)
-	viper.Set("logging.level", "debug")
+	clicfg.Set("logging.file", logFile)
+	clicfg.Set("logging.level", "debug")
 
 	_ = InitLogging()
 
@@ -515,12 +515,12 @@ func TestInitLoggingOnce(t *testing.T) {
 	// Reset state
 	logger = nil
 	loggerOnce = sync.Once{}
-	viper.Reset()
+	clicfg.Reset()
 
 	tempDir := t.TempDir()
 	logFile := filepath.Join(tempDir, "test.log")
-	viper.Set("logging.file", logFile)
-	viper.Set("logging.level", "debug")
+	clicfg.Set("logging.file", logFile)
+	clicfg.Set("logging.level", "debug")
 
 	// Call multiple times
 	err1 := InitLogging()

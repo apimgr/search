@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/spf13/viper"
 	"gopkg.in/natefinch/lumberjack.v2"
 
+	"github.com/apimgr/search/src/client/clicfg"
 	"github.com/apimgr/search/src/client/path"
 )
 
@@ -35,13 +35,13 @@ type LogConfig struct {
 	MaxFiles int
 }
 
-// GetLogConfig returns logging configuration from viper
+// GetLogConfig returns logging configuration from the config store
 func GetLogConfig() LogConfig {
 	return LogConfig{
-		Level:    viper.GetString("logging.level"),
-		File:     viper.GetString("logging.file"),
-		MaxSize:  viper.GetInt("logging.max_size"),
-		MaxFiles: viper.GetInt("logging.max_files"),
+		Level:    clicfg.GetString("logging.level"),
+		File:     clicfg.GetString("logging.file"),
+		MaxSize:  clicfg.GetInt("logging.max_size"),
+		MaxFiles: clicfg.GetInt("logging.max_files"),
 	}
 }
 

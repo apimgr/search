@@ -4,17 +4,17 @@ package cmd
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
 
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"golang.org/x/term"
 
 	"github.com/apimgr/search/src/client/api"
+	"github.com/apimgr/search/src/client/clicfg"
 	"github.com/apimgr/search/src/client/path"
 	"github.com/apimgr/search/src/client/tui"
 )
@@ -51,28 +51,117 @@ var (
 	apiClient *api.Client
 )
 
-var rootCmd = &cobra.Command{
-	Use:   getBinaryName() + " [query]",
-	Short: "CLI client for Search API",
-	Long:  `search-cli is a command-line interface for interacting with the Search API server.`,
-	// Per AI.md PART 32 line 42776: Bare args = search term
-	Args: cobra.ArbitraryArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		// Per AI.md PART 32 line 40972-40978: Mode detection
-		// No args + interactive terminal = TUI mode
-		// Args provided = CLI mode (search)
+// command describes a CLI command in the stdlib-flag command tree.
+// It replaces the previous cobra.Command usage while preserving the metadata
+// fields the tests inspect (Use, Short, Long) and flag lookup behavior.
+type command struct {
+	// Use is the usage string (e.g. "status" or "search [query]").
+	Use string
+	// Short is a one-line description.
+	Short string
+	// Long is the full help text.
+	Long string
+	// run executes the command with the remaining positional args.
+	run func(args []string) error
+	// flags holds the persistent flags registered on the root command.
+	flags *flag.FlagSet
+	// localFlags holds command-local flags such as --version and --help.
+	localFlags *flag.FlagSet
+	// subcommands maps a subcommand name to its command.
+	subcommands map[string]*command
+}
+
+// PersistentFlags returns the persistent flag set, mirroring the cobra method
+// used by the tests to verify registered flags.
+func (c *command) PersistentFlags() *flag.FlagSet {
+	return c.flags
+}
+
+// Flags returns the command-local flag set, mirroring the cobra method used by
+// the tests to verify --version and --help registration.
+func (c *command) Flags() *flag.FlagSet {
+	return c.localFlags
+}
+
+// Commands returns the registered subcommands, mirroring the cobra method used
+// by the tests to verify command registration.
+func (c *command) Commands() []*command {
+	cmds := make([]*command, 0, len(c.subcommands))
+	for _, sub := range c.subcommands {
+		cmds = append(cmds, sub)
+	}
+	return cmds
+}
+
+// rootCmd is the top-level CLI command.
+var rootCmd = newRootCommand()
+
+// newRootCommand constructs the root command, registers all flags, and wires
+// the search/TUI behavior. Per AI.md PART 32: bare args = search term,
+// no args + interactive terminal = TUI mode.
+func newRootCommand() *command {
+	c := &command{
+		Use:         getBinaryName() + " [query]",
+		Short:       "CLI client for Search API",
+		Long:        `search-cli is a command-line interface for interacting with the Search API server.`,
+		subcommands: make(map[string]*command),
+	}
+
+	// Persistent flags (apply to the root command and subcommands).
+	fs := flag.NewFlagSet(getBinaryName(), flag.ContinueOnError)
+	// Suppress flag package's default error printing; we report errors ourselves.
+	fs.SetOutput(os.Stderr)
+	fs.StringVar(&cfgFile, "config", "", "config file path")
+	fs.StringVar(&server, "server", "", "server address")
+	fs.StringVar(&token, "token", "", "API token")
+	fs.StringVar(&tokenFile, "token-file", "", "read token from file")
+	fs.StringVar(&userCtx, "user", "", "user or org context (@user, +org, or auto-detect)")
+	fs.StringVar(&output, "output", "table", "output format: json, table, plain")
+	// Per AI.md PART 8: --color {auto|yes|no} (not --no-color bool); NO_COLOR env is also respected
+	fs.StringVar(&colorMode, "color", "auto", "color output: auto, yes, no")
+	// Per AI.md PART 8: --shell flag for shell completions (mirrors server binary)
+	fs.StringVar(&shellFlag, "shell", "", "shell integration: completions|init|--help")
+	// Per AI.md PART 8: --lang flag for output language
+	fs.StringVar(&langFlag, "lang", "", "output language code (e.g. en, es, zh, fr, ar, de, ja)")
+	fs.IntVar(&timeout, "timeout", 0, "request timeout in seconds")
+	fs.BoolVar(&debugMode, "debug", false, "enable debug output")
+	fs.IntVar(&page, "page", 1, "page number")
+	fs.IntVar(&limit, "limit", 10, "results per page")
+	c.flags = fs
+
+	// Command-local flags: -h/--help and -v/--version.
+	// Per AI.md PART 32 line 42627: -h and -v are FLAGS, not commands.
+	lfs := flag.NewFlagSet("root-local", flag.ContinueOnError)
+	lfs.Bool("version", false, "Show version")
+	lfs.Bool("v", false, "Show version")
+	lfs.Bool("help", false, "Show help")
+	lfs.Bool("h", false, "Show help")
+	c.localFlags = lfs
+
+	c.run = func(args []string) error {
+		// Per AI.md PART 32 line 40972-40978: Mode detection.
+		// No args + interactive terminal = TUI mode; args provided = CLI search.
 		if len(args) == 0 {
 			if term.IsTerminal(int(os.Stdout.Fd())) {
-				// TUI mode - launch TUI
 				return runTUI()
 			}
 			// Non-interactive with no args = error
 			return fmt.Errorf("no search query provided")
 		}
-
-		// CLI mode - perform search
 		return runSearch(strings.Join(args, " "))
-	},
+	}
+
+	return c
+}
+
+// addCommand registers a subcommand under the root command.
+func (c *command) addCommand(name string, sub *command) {
+	c.subcommands[name] = sub
+}
+
+// versionString renders the version banner per the previous cobra template.
+func versionString() string {
+	return fmt.Sprintf("%s %s (%s) built %s\n", getBinaryName(), Version, CommitID, BuildDate)
 }
 
 // runTUI launches the TUI interface
@@ -145,7 +234,7 @@ Or edit ~/.config/apimgr/%s/cli.yml directly`, getBinaryName(), ProjectName)
 	// Per AI.md PART 32 line 41436-41469: Token sources (priority order)
 	tokenVal := getToken()
 
-	timeoutVal := viper.GetInt("server.timeout")
+	timeoutVal := clicfg.GetInt("server.timeout")
 	if timeout > 0 {
 		timeoutVal = timeout
 	}
@@ -180,9 +269,9 @@ func resolveServerAddress() (string, bool) {
 	// 1. --server flag (explicit override)
 	if server != "" {
 		// Per AI.md PART 32: save to config if current config is empty
-		currentPrimary := viper.GetString("server.primary")
+		currentPrimary := clicfg.GetString("server.primary")
 		if currentPrimary == "" {
-			currentPrimary = viper.GetString("server.address")
+			currentPrimary = clicfg.GetString("server.address")
 		}
 		return server, currentPrimary == ""
 	}
@@ -193,11 +282,11 @@ func resolveServerAddress() (string, bool) {
 	}
 
 	// 3. cli.yml → server.primary
-	if primary := viper.GetString("server.primary"); primary != "" {
+	if primary := clicfg.GetString("server.primary"); primary != "" {
 		return primary, false
 	}
 	// Also check legacy address key
-	if addr := viper.GetString("server.address"); addr != "" {
+	if addr := clicfg.GetString("server.address"); addr != "" {
 		return addr, false
 	}
 
@@ -212,9 +301,9 @@ func resolveServerAddress() (string, bool) {
 // saveServerToConfig saves server address to config file
 // Per AI.md PART 32 line 42834: Save --server to server.primary
 func saveServerToConfig(serverAddr string) {
-	viper.Set("server.primary", serverAddr)
+	clicfg.Set("server.primary", serverAddr)
 	configPath := path.ConfigFile()
-	_ = viper.WriteConfigAs(configPath)
+	_ = clicfg.WriteConfigAs(configPath)
 }
 
 // backgroundAutodiscover performs autodiscovery and checks for CLI updates.
@@ -299,7 +388,7 @@ func getToken() string {
 	}
 
 	// 4. Config file: cli.yml -> token
-	if cfgToken := viper.GetString("server.token"); cfgToken != "" {
+	if cfgToken := clicfg.GetString("server.token"); cfgToken != "" {
 		return cfgToken
 	}
 
@@ -313,116 +402,137 @@ func getToken() string {
 	return ""
 }
 
+// ExecuteClientCLI is the CLI entry point. It parses os.Args, applies global
+// configuration, dispatches to a subcommand if present, and otherwise runs the
+// root search/TUI behavior. It returns an error on failure (handled by main).
 func ExecuteClientCLI() error {
-	return rootCmd.Execute()
+	return executeArgs(os.Args[1:])
 }
 
-func init() {
-	cobra.OnInitialize(initConfig)
+// executeArgs runs the command tree against the provided argument slice.
+// It is separated from ExecuteClientCLI so behavior can be exercised in tests.
+func executeArgs(args []string) error {
+	// Detect -h/--help and -v/--version before flag parsing so they work in any
+	// position, mirroring the previous cobra short-flag handling.
+	for _, a := range args {
+		switch a {
+		case "-h", "--help":
+			printRootHelp()
+			return nil
+		case "-v", "--version":
+			fmt.Print(versionString())
+			return nil
+		}
+	}
 
-	// Per AI.md PART 32 line 42627: -h and -v are FLAGS, not commands
-	// Per AI.md PART 32 line 42563-42564: Only -h and -v have short flags
-	rootCmd.Flags().BoolP("version", "v", false, "Show version")
-	rootCmd.Flags().BoolP("help", "h", false, "Show help")
+	if err := rootCmd.flags.Parse(args); err != nil {
+		return err
+	}
 
-	// Long-form flags only (no short flags per PART 32)
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file path")
-	rootCmd.PersistentFlags().StringVar(&server, "server", "", "server address")
-	rootCmd.PersistentFlags().StringVar(&token, "token", "", "API token")
-	rootCmd.PersistentFlags().StringVar(&tokenFile, "token-file", "", "read token from file")
-	rootCmd.PersistentFlags().StringVar(&userCtx, "user", "", "user or org context (@user, +org, or auto-detect)")
-	rootCmd.PersistentFlags().StringVar(&output, "output", "table", "output format: json, table, plain")
-	// Per AI.md PART 8: --color {auto|yes|no} (not --no-color bool); NO_COLOR env is also respected
-	rootCmd.PersistentFlags().StringVar(&colorMode, "color", "auto", "color output: auto, yes, no")
-	// Per AI.md PART 8: --shell flag for shell completions (mirrors server binary)
-	rootCmd.PersistentFlags().StringVar(&shellFlag, "shell", "", "shell integration: completions|init|--help")
-	// Per AI.md PART 8: --lang flag for output language
-	rootCmd.PersistentFlags().StringVar(&langFlag, "lang", "", "output language code (e.g. en, es, zh, fr, ar, de, ja)")
-	rootCmd.PersistentFlags().IntVar(&timeout, "timeout", 0, "request timeout in seconds")
-	rootCmd.PersistentFlags().BoolVar(&debugMode, "debug", false, "enable debug output")
-	rootCmd.PersistentFlags().IntVar(&page, "page", 1, "page number")
-	rootCmd.PersistentFlags().IntVar(&limit, "limit", 10, "results per page")
+	// Initialize configuration (defaults, file, color, lang).
+	initConfig()
 
-	// Custom version handling
-	rootCmd.SetVersionTemplate(fmt.Sprintf("%s %s (%s) built %s\n", getBinaryName(), Version, CommitID, BuildDate))
-	rootCmd.Version = Version
+	rest := rootCmd.flags.Args()
+
+	// Dispatch to a subcommand if the first positional matches one.
+	if len(rest) > 0 {
+		if sub, ok := rootCmd.subcommands[rest[0]]; ok {
+			return sub.run(rest[1:])
+		}
+	}
+
+	return rootCmd.run(rest)
 }
 
+// printRootHelp prints the root command usage and flag descriptions.
+func printRootHelp() {
+	fmt.Printf("%s\n\n%s\n\nUsage:\n  %s\n\nFlags:\n", rootCmd.Short, rootCmd.Long, rootCmd.Use)
+	rootCmd.flags.SetOutput(os.Stdout)
+	rootCmd.flags.PrintDefaults()
+	if len(rootCmd.subcommands) > 0 {
+		fmt.Printf("\nCommands:\n")
+		for name, sub := range rootCmd.subcommands {
+			fmt.Printf("  %-12s %s\n", name, sub.Short)
+		}
+	}
+}
+
+// initConfig sets defaults, loads the config file, and applies lang/color.
+// Per AI.md PART 32: CLI Startup Sequence (NON-NEGOTIABLE).
 func initConfig() {
-	// Per AI.md PART 32: CLI Startup Sequence (NON-NEGOTIABLE)
-	// Ensure all CLI directories exist with correct permissions
+	// Ensure all CLI directories exist with correct permissions.
 	if err := path.EnsureDirs(); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to create CLI directories: %v\n", err)
 	}
 
-	// Per AI.md PART 8: apply --lang flag (set env so i18n layer picks it up)
+	// Per AI.md PART 8: apply --lang flag (set env so i18n layer picks it up).
 	if langFlag != "" {
 		os.Setenv("SEARCH_LANG", langFlag)
 		os.Setenv("LANG", langFlag)
 	}
 
-	// Per AI.md PART 8: apply --color / NO_COLOR priority chain
-	// Priority: --color flag → config output.color → NO_COLOR env → TTY auto-detect
+	// Per AI.md PART 8: apply --color / NO_COLOR priority chain.
+	// Priority: --color flag → config output.color → NO_COLOR env → TTY auto-detect.
 	applyColorMode()
 
 	if cfgFile != "" {
-		// Resolve config path (handles relative/absolute paths and extensions)
+		// Resolve config path (handles relative/absolute paths and extensions).
 		resolvedPath, err := path.ResolveConfigPath(cfgFile)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: invalid config path: %v\n", err)
 		} else {
-			viper.SetConfigFile(resolvedPath)
+			clicfg.SetConfigFile(resolvedPath)
 		}
 	} else {
-		// Per AI.md PART 32 line 40579: Config at ~/.config/apimgr/search/cli.yml
+		// Per AI.md PART 32 line 40579: Config at ~/.config/apimgr/search/cli.yml.
 		configDir := path.ConfigDir()
-		viper.AddConfigPath(configDir)
-		viper.SetConfigName("cli")
-		viper.SetConfigType("yaml")
+		clicfg.AddConfigPath(configDir)
+		clicfg.SetConfigName("cli")
+		clicfg.SetConfigType("yaml")
 	}
 
-	// Per AI.md PART 32 lines 42709-42772: Full cli.yml configuration
-	// Server connection defaults
-	viper.SetDefault("server.primary", "")
-	viper.SetDefault("server.api_version", "v1")
-	viper.SetDefault("server.timeout", 30)
-	viper.SetDefault("server.retry", 3)
-	viper.SetDefault("server.retry_delay", 1)
+	// Per AI.md PART 32 lines 42709-42772: Full cli.yml configuration.
+	// Server connection defaults.
+	clicfg.SetDefault("server.primary", "")
+	clicfg.SetDefault("server.api_version", "v1")
+	clicfg.SetDefault("server.timeout", 30)
+	clicfg.SetDefault("server.retry", 3)
+	clicfg.SetDefault("server.retry_delay", 1)
 
-	// Authentication defaults (legacy keys for backwards compat)
-	viper.SetDefault("server.address", "")
-	viper.SetDefault("server.token", "")
-	viper.SetDefault("auth.token", "")
-	viper.SetDefault("auth.token_file", "")
+	// Authentication defaults (legacy keys for backwards compat).
+	clicfg.SetDefault("server.address", "")
+	clicfg.SetDefault("server.token", "")
+	clicfg.SetDefault("auth.token", "")
+	clicfg.SetDefault("auth.token_file", "")
 
-	// Output preferences defaults
-	viper.SetDefault("output.format", "table")
-	viper.SetDefault("output.color", "auto")
-	viper.SetDefault("output.pager", "auto")
-	viper.SetDefault("output.quiet", false)
-	viper.SetDefault("output.verbose", false)
+	// Output preferences defaults.
+	clicfg.SetDefault("output.format", "table")
+	clicfg.SetDefault("output.color", "auto")
+	clicfg.SetDefault("output.pager", "auto")
+	clicfg.SetDefault("output.quiet", false)
+	clicfg.SetDefault("output.verbose", false)
 
-	// TUI preferences defaults
-	viper.SetDefault("tui.enabled", true)
-	viper.SetDefault("tui.theme", "dark")
-	viper.SetDefault("tui.mouse", true)
-	viper.SetDefault("tui.unicode", true)
+	// TUI preferences defaults.
+	clicfg.SetDefault("tui.enabled", true)
+	clicfg.SetDefault("tui.theme", "dark")
+	clicfg.SetDefault("tui.mouse", true)
+	clicfg.SetDefault("tui.unicode", true)
 
-	// Logging defaults - Per AI.md PART 32 lines 42749-42755
-	viper.SetDefault("logging.level", "warn")
-	viper.SetDefault("logging.file", "")
-	viper.SetDefault("logging.max_size", 10)
-	viper.SetDefault("logging.max_files", 5)
+	// Logging defaults - Per AI.md PART 32 lines 42749-42755.
+	clicfg.SetDefault("logging.level", "warn")
+	clicfg.SetDefault("logging.file", "")
+	clicfg.SetDefault("logging.max_size", 10)
+	clicfg.SetDefault("logging.max_files", 5)
 
-	// Cache defaults - Per AI.md PART 32 lines 42756-42760
-	viper.SetDefault("cache.enabled", true)
-	viper.SetDefault("cache.ttl", 300)
-	viper.SetDefault("cache.max_size", 100)
+	// Cache defaults - Per AI.md PART 32 lines 42756-42760.
+	clicfg.SetDefault("cache.enabled", true)
+	clicfg.SetDefault("cache.ttl", 300)
+	clicfg.SetDefault("cache.max_size", 100)
 
-	// Debug default
-	viper.SetDefault("debug", false)
+	// Debug default.
+	clicfg.SetDefault("debug", false)
 
-	viper.ReadInConfig()
+	clicfg.ReadInConfig()
 }
 
 func getBinaryName() string {
@@ -433,7 +543,7 @@ func getOutputFormat() string {
 	if output != "" {
 		return output
 	}
-	return viper.GetString("output.format")
+	return clicfg.GetString("output.format")
 }
 
 // applyColorMode applies the NO_COLOR/--color priority chain per AI.md PART 8.
@@ -442,24 +552,24 @@ func getOutputFormat() string {
 func applyColorMode() {
 	resolved := colorMode
 
-	// 1. --color flag (already in colorMode from PersistentFlags)
-	// Only override from config/env if flag is at its default "auto"
+	// 1. --color flag (already in colorMode from flags).
+	// Only override from config/env if flag is at its default "auto".
 	if resolved == "auto" || resolved == "" {
-		// 2. Config file: output.color
-		if cfgColor := viper.GetString("output.color"); cfgColor != "" && cfgColor != "auto" {
+		// 2. Config file: output.color.
+		if cfgColor := clicfg.GetString("output.color"); cfgColor != "" && cfgColor != "auto" {
 			resolved = cfgColor
 		}
 	}
 
 	if resolved == "auto" || resolved == "" {
-		// 3. NO_COLOR env var: non-empty = disable colors
+		// 3. NO_COLOR env var: non-empty = disable colors.
 		if os.Getenv("NO_COLOR") != "" {
 			resolved = "no"
 		}
 	}
 
 	if resolved == "auto" || resolved == "" {
-		// 4. TTY auto-detect
+		// 4. TTY auto-detect.
 		if !term.IsTerminal(int(os.Stdout.Fd())) || os.Getenv("TERM") == "dumb" {
 			resolved = "no"
 		} else {

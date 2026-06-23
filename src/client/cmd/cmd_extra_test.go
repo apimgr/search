@@ -17,7 +17,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/spf13/viper"
+	"github.com/apimgr/search/src/client/clicfg"
 
 	"github.com/apimgr/search/src/client/api"
 )
@@ -71,7 +71,7 @@ func TestApplyColorModeNOCOLOR(t *testing.T) {
 
 	colorMode = "auto"
 	os.Setenv("NO_COLOR", "1")
-	viper.Reset()
+	clicfg.Reset()
 
 	applyColorMode()
 
@@ -90,7 +90,7 @@ func TestApplyColorModeExplicitYes(t *testing.T) {
 	}()
 
 	colorMode = "yes"
-	viper.Reset()
+	clicfg.Reset()
 
 	applyColorMode()
 
@@ -109,7 +109,7 @@ func TestApplyColorModeExplicitNo(t *testing.T) {
 	}()
 
 	colorMode = "no"
-	viper.Reset()
+	clicfg.Reset()
 
 	applyColorMode()
 
@@ -126,13 +126,13 @@ func TestApplyColorModeFromConfig(t *testing.T) {
 		colorMode = orig
 		os.Unsetenv("NO_COLOR")
 		os.Unsetenv("SEARCH_COLOR")
-		viper.Reset()
+		clicfg.Reset()
 	}()
 
 	colorMode = "auto"
 	os.Unsetenv("NO_COLOR")
-	viper.Reset()
-	viper.Set("output.color", "no")
+	clicfg.Reset()
+	clicfg.Set("output.color", "no")
 
 	applyColorMode()
 
@@ -151,13 +151,13 @@ func TestApplyColorModeTTYAutoDetect(t *testing.T) {
 		os.Setenv("TERM", origTERM)
 		os.Unsetenv("NO_COLOR")
 		os.Unsetenv("SEARCH_COLOR")
-		viper.Reset()
+		clicfg.Reset()
 	}()
 
 	colorMode = "auto"
 	os.Unsetenv("NO_COLOR")
 	os.Setenv("TERM", "dumb")
-	viper.Reset()
+	clicfg.Reset()
 
 	applyColorMode()
 
@@ -191,7 +191,7 @@ func TestBackgroundAutodiscoverCLIVersionsAvailable(t *testing.T) {
 	// Set Version to a real value (not "dev") so the version check runs.
 	Version = "0.0.1"
 
-	viper.Reset()
+	clicfg.Reset()
 	apiClient = api.NewClient(testServer.URL, "", 30)
 	defer func() { apiClient = nil }()
 
@@ -220,7 +220,7 @@ func TestBackgroundAutodiscoverDevVersionSkipsCheck(t *testing.T) {
 	// Version == "dev" should skip the min-version and update checks.
 	Version = "dev"
 
-	viper.Reset()
+	clicfg.Reset()
 	apiClient = api.NewClient(testServer.URL, "", 30)
 	defer func() { apiClient = nil }()
 
@@ -249,7 +249,7 @@ func TestBackgroundAutodiscoverNoCLIVersionsForPlatform(t *testing.T) {
 
 	Version = "1.0.0"
 
-	viper.Reset()
+	clicfg.Reset()
 	apiClient = api.NewClient(testServer.URL, "", 30)
 	defer func() { apiClient = nil }()
 
