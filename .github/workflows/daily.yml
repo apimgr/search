@@ -22,11 +22,6 @@ jobs:
   build:
     name: Daily build (${{ matrix.goos }}/${{ matrix.goarch }})
     runs-on: ubuntu-latest
-    container:
-      image: casjaysdev/go:latest
-    env:
-      CGO_ENABLED: "0"
-      GOFLAGS: "-buildvcs=false"
     strategy:
       matrix:
         include:
@@ -49,13 +44,7 @@ jobs:
             echo "OFFICIALSITE=${{ secrets.OFFICIALSITE }}" >> "$GITHUB_ENV"
           fi
 
-      - name: Download modules
-        run: go mod download
-
       - name: Build server
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
         run: |
           LDFLAGS="-s -w \
             -X 'github.com/apimgr/search/src/config.Version=${VERSION}' \
@@ -65,7 +54,13 @@ jobs:
             -X 'github.com/apimgr/search/src/version.Version=${VERSION}' \
             -X 'github.com/apimgr/search/src/version.Commit=${COMMIT_ID}' \
             -X 'github.com/apimgr/search/src/version.BuildDate=${BUILD_DATE}'"
-          go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" \
-            -o /tmp/${PROJECTNAME}-${{ matrix.goos }}-${{ matrix.goarch }} ./src
-          ls -lh /tmp/${PROJECTNAME}-${{ matrix.goos }}-${{ matrix.goarch }}
-          echo "Build OK: ${{ matrix.goos }}/${{ matrix.goarch }}"
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            -e CGO_ENABLED=0 \
+            -e GOFLAGS=-buildvcs=false \
+            -e "GOOS=${{ matrix.goos }}" \
+            -e "GOARCH=${{ matrix.goarch }}" \
+            -e "LDFLAGS=${LDFLAGS}" \
+            casjaysdev/go:latest \
+            sh -c 'go mod download && go build -buildvcs=false -trimpath -ldflags "$LDFLAGS" -o /tmp/verify-binary ./src && echo "Build OK: $GOOS/$GOARCH"'

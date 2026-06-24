@@ -1803,19 +1803,6 @@ func TestFormatCheatContent(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestFormatDictContent(t *testing.T) {
-	type defStruct struct {
-		Definition string   `json:"definition"`
-		Example    string   `json:"example"`
-		Synonyms   []string `json:"synonyms"`
-		Antonyms   []string `json:"antonyms"`
-	}
-	type meaningStruct struct {
-		PartOfSpeech string      `json:"partOfSpeech"`
-		Definitions  []defStruct `json:"definitions"`
-		Synonyms     []string    `json:"synonyms"`
-		Antonyms     []string    `json:"antonyms"`
-	}
-
 	meanings := []struct {
 		PartOfSpeech string `json:"partOfSpeech"`
 		Definitions  []struct {

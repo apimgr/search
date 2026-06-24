@@ -1883,15 +1883,6 @@ func TestHandleInternalError_JSONResponse(t *testing.T) {
 
 // ---------- locales.go ----------
 
-// newChiCtx returns a context with chi URL parameters attached.
-func newChiCtx(params map[string]string) context.Context {
-	rctx := chi.NewRouteContext()
-	for k, v := range params {
-		rctx.URLParams.Add(k, v)
-	}
-	return context.WithValue(context.Background(), chi.RouteCtxKey, rctx)
-}
-
 // TestHandleLocale_ValidLocale returns 200 with JSON for known locales served under /locales/{lang}.json.
 func TestHandleLocale_ValidLocale(t *testing.T) {
 	s := newTestServer(t)

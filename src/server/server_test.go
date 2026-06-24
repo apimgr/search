@@ -3105,5 +3105,3 @@ func (r *testChiRouter) Middlewares() chi.Middlewares                  { return 
 func (r *testChiRouter) Match(rctx *chi.Context, method, path string) bool { return false }
 func (r *testChiRouter) Find(rctx *chi.Context, method, path string) string { return "" }
 
-// verifyRouteCount returns the number of /debug routes registered on this router.
-func (r *testChiRouter) routeCount() int { return len(r.routes) }

@@ -3,7 +3,6 @@ package geoip
 import (
 	"encoding/binary"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -1131,7 +1130,7 @@ func TestUpdateDatabasesWithMockServer(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(mmdbBytes)))
 		w.WriteHeader(http.StatusOK)
-		_, _ = io.WriteString(w, string(mmdbBytes))
+		_, _ = w.Write(mmdbBytes)
 	}))
 	defer srv.Close()
 

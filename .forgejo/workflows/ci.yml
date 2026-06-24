@@ -22,26 +22,26 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    container:
-      image: casjaysdev/go:latest
-    env:
-      CGO_ENABLED: "0"
-      GOFLAGS: "-buildvcs=false"
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
-      - name: Download modules
-        run: go mod download
-
       - name: Run tests with coverage
         run: |
-          PKGS=$(go list ./... | grep -v '/src/service')
-          mkdir -p "/tmp/${PROJECTORG}"
+          mkdir -p "/tmp/${{ env.PROJECTORG }}"
           COVDIR=$(mktemp -d "/tmp/${PROJECTORG}/${PROJECTNAME}-XXXXXX")
-          go test -cover -coverprofile="$COVDIR/coverage.out" $PKGS
-          go tool cover -func="$COVDIR/coverage.out"
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -v "$COVDIR:/tmp/covout" \
+            -w /workspace \
+            -e CGO_ENABLED=0 \
+            -e GOFLAGS=-buildvcs=false \
+            casjaysdev/go:latest \
+            sh -c 'go mod download && PKGS=$(go list ./... | grep -v /src/service) && go test -cover -coverprofile=/tmp/covout/coverage.out $PKGS && go tool cover -func=/tmp/covout/coverage.out'
           THRESHOLD=80
-          PCT=$(go tool cover -func="$COVDIR/coverage.out" | awk '/^total:/ {gsub("%","",$3); print int($3)}')
+          PCT=$(docker run --rm \
+            -v "$COVDIR:/tmp/covout" \
+            casjaysdev/go:latest \
+            go tool cover -func=/tmp/covout/coverage.out | awk '/^total:/ {gsub("%","",$3); print int($3)}')
           if [ "$PCT" -lt "$THRESHOLD" ]; then
             echo "::error::coverage ${PCT}% is below threshold ${THRESHOLD}%"
             exit 1
@@ -51,32 +51,33 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
-    container:
-      image: casjaysdev/go:latest
-    env:
-      CGO_ENABLED: "0"
-      GOFLAGS: "-buildvcs=false"
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
-      - name: Download modules
-        run: go mod download
-
       - name: go vet
-        run: go vet ./...
+        run: |
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            -e CGO_ENABLED=0 \
+            -e GOFLAGS=-buildvcs=false \
+            casjaysdev/go:latest \
+            sh -c 'go mod download && go vet ./...'
 
       - name: staticcheck
-        run: staticcheck ./...
+        run: |
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            -e CGO_ENABLED=0 \
+            -e GOFLAGS=-buildvcs=false \
+            casjaysdev/go:latest \
+            sh -c 'go mod download && staticcheck ./...'
 
   build:
     name: Build
     needs: [test, lint]
     runs-on: ubuntu-latest
-    container:
-      image: casjaysdev/go:latest
-    env:
-      CGO_ENABLED: "0"
-      GOFLAGS: "-buildvcs=false"
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
@@ -90,9 +91,6 @@ jobs:
           else
             echo "OFFICIALSITE=${{ secrets.OFFICIALSITE }}" >> "$GITHUB_ENV"
           fi
-
-      - name: Download modules
-        run: go mod download
 
       - name: Build binaries
         run: |
@@ -112,35 +110,41 @@ jobs:
             -X 'github.com/apimgr/search/src/client/cmd.OfficialSite=${OFFICIALSITE}' \
             -X 'github.com/apimgr/search/src/client/api.ProjectName=${PROJECTNAME}' \
             -X 'github.com/apimgr/search/src/client/api.Version=${VERSION}'"
-          GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath \
-            -ldflags "${LDFLAGS}" -o /tmp/search-linux-amd64 ./src
-          GOOS=linux GOARCH=arm64 go build -buildvcs=false -trimpath \
-            -ldflags "${LDFLAGS}" -o /tmp/search-linux-arm64 ./src
-          if [ -d src/client ]; then
-            GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath \
-              -ldflags "${CLI_LDFLAGS}" -o /tmp/search-cli-linux-amd64 ./src/client
-            GOOS=linux GOARCH=arm64 go build -buildvcs=false -trimpath \
-              -ldflags "${CLI_LDFLAGS}" -o /tmp/search-cli-linux-arm64 ./src/client
-            ls -lh /tmp/search-linux-amd64 /tmp/search-linux-arm64 \
-              /tmp/search-cli-linux-amd64 /tmp/search-cli-linux-arm64
-          else
-            ls -lh /tmp/search-linux-amd64 /tmp/search-linux-arm64
-          fi
-          echo "Build OK"
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            -e CGO_ENABLED=0 \
+            -e GOFLAGS=-buildvcs=false \
+            -e "LDFLAGS=${LDFLAGS}" \
+            -e "CLI_LDFLAGS=${CLI_LDFLAGS}" \
+            casjaysdev/go:latest \
+            sh -c '
+              go mod download
+              GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath \
+                -ldflags "$LDFLAGS" -o /tmp/search-linux-amd64 ./src
+              GOOS=linux GOARCH=arm64 go build -buildvcs=false -trimpath \
+                -ldflags "$LDFLAGS" -o /tmp/search-linux-arm64 ./src
+              if [ -d src/client ]; then
+                GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath \
+                  -ldflags "$CLI_LDFLAGS" -o /tmp/search-cli-linux-amd64 ./src/client
+                GOOS=linux GOARCH=arm64 go build -buildvcs=false -trimpath \
+                  -ldflags "$CLI_LDFLAGS" -o /tmp/search-cli-linux-arm64 ./src/client
+              fi
+              echo "Build OK"
+            '
 
   vuln-scan:
     name: Vulnerability scan
     runs-on: ubuntu-latest
-    container:
-      image: casjaysdev/go:latest
-    env:
-      CGO_ENABLED: "0"
-      GOFLAGS: "-buildvcs=false"
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
-      - name: Download modules
-        run: go mod download
-
       - name: Run govulncheck
-        run: govulncheck ./...
+        run: |
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            -e CGO_ENABLED=0 \
+            -e GOFLAGS=-buildvcs=false \
+            casjaysdev/go:latest \
+            sh -c 'go mod download && govulncheck ./...'

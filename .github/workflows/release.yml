@@ -20,11 +20,6 @@ jobs:
   build:
     name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
     runs-on: ubuntu-latest
-    container:
-      image: casjaysdev/go:latest
-    env:
-      CGO_ENABLED: "0"
-      GOFLAGS: "-buildvcs=false"
     strategy:
       matrix:
         include:
@@ -64,14 +59,10 @@ jobs:
           else
             echo "OFFICIALSITE=${{ secrets.OFFICIALSITE }}" >> "$GITHUB_ENV"
           fi
-
-      - name: Download modules
-        run: go mod download
+          echo "OUTPUT=${PROJECTNAME}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" >> "$GITHUB_ENV"
+          echo "CLI_OUTPUT=${PROJECTNAME}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" >> "$GITHUB_ENV"
 
       - name: Build server
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
         run: |
           LDFLAGS="-s -w \
             -X 'github.com/apimgr/search/src/config.Version=${VERSION}' \
@@ -81,14 +72,20 @@ jobs:
             -X 'github.com/apimgr/search/src/version.Version=${VERSION}' \
             -X 'github.com/apimgr/search/src/version.Commit=${COMMIT_ID}' \
             -X 'github.com/apimgr/search/src/version.BuildDate=${BUILD_DATE}'"
-          go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" \
-            -o "${PROJECTNAME}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" ./src
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            -e CGO_ENABLED=0 \
+            -e GOFLAGS=-buildvcs=false \
+            -e "GOOS=${{ matrix.goos }}" \
+            -e "GOARCH=${{ matrix.goarch }}" \
+            -e "OUTPUT=${OUTPUT}" \
+            -e "LDFLAGS=${LDFLAGS}" \
+            casjaysdev/go:latest \
+            sh -c 'go mod download && go build -buildvcs=false -trimpath -ldflags "$LDFLAGS" -o "/workspace/$OUTPUT" ./src'
 
       - name: Build CLI
         if: hashFiles('src/client/') != ''
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
         run: |
           CLI_LDFLAGS="-s -w \
             -X 'github.com/apimgr/search/src/client/cmd.ProjectName=${PROJECTNAME}' \
@@ -98,8 +95,17 @@ jobs:
             -X 'github.com/apimgr/search/src/client/cmd.OfficialSite=${OFFICIALSITE}' \
             -X 'github.com/apimgr/search/src/client/api.ProjectName=${PROJECTNAME}' \
             -X 'github.com/apimgr/search/src/client/api.Version=${VERSION}'"
-          go build -buildvcs=false -trimpath -ldflags "${CLI_LDFLAGS}" \
-            -o "${PROJECTNAME}-cli-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" ./src/client
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            -e CGO_ENABLED=0 \
+            -e GOFLAGS=-buildvcs=false \
+            -e "GOOS=${{ matrix.goos }}" \
+            -e "GOARCH=${{ matrix.goarch }}" \
+            -e "CLI_OUTPUT=${CLI_OUTPUT}" \
+            -e "CLI_LDFLAGS=${CLI_LDFLAGS}" \
+            casjaysdev/go:latest \
+            sh -c 'go mod download && go build -buildvcs=false -trimpath -ldflags "$CLI_LDFLAGS" -o "/workspace/$CLI_OUTPUT" ./src/client'
 
       - name: Upload server artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
