@@ -1,0 +1,69 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Scan secrets (push — incremental)
+        if: github.event_name == 'push'
+        uses: trufflesecurity/trufflehog@30d5bb91af1a771378349dbbb0c82129392acf70  # v3.95.6
+        with:
+          base: ${{ github.event.before }}
+          head: ${{ github.event.after }}
+          extra_args: --only-verified
+
+      - name: Scan secrets (scheduled — full history)
+        if: github.event_name != 'push'
+        uses: trufflesecurity/trufflehog@30d5bb91af1a771378349dbbb0c82129392acf70  # v3.95.6
+        with:
+          extra_args: --only-verified
+
+  vuln-scan:
+    name: Vulnerability scan
+    runs-on: ubuntu-latest
+    container:
+      image: casjaysdev/go:latest
+    env:
+      CGO_ENABLED: "0"
+      GOFLAGS: "-buildvcs=false"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Run govulncheck
+        run: govulncheck ./...
+
+  workflow-policy:
+    name: Workflow SHA policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Check for tag-pinned actions
+        run: |
+          VIOLATIONS=$(grep -rn 'uses:.*@v[0-9]' \
+            .github/workflows/ .gitea/workflows/ .forgejo/workflows/ 2>/dev/null || true)
+          if [ -n "$VIOLATIONS" ]; then
+            echo "ERROR: Tag-pinned actions found — pin to full commit SHA:"
+            echo "$VIOLATIONS"
+            exit 1
+          fi
+          echo "OK: all actions pinned to SHA"

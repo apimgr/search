@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    container:
+      image: casjaysdev/go:latest
+    env:
+      CGO_ENABLED: "0"
+      GOFLAGS: "-buildvcs=false"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Download modules
+        run: go mod download
+
+      - name: Run tests with coverage
+        run: |
+          PKGS=$(go list ./... | grep -v '/src/service')
+          mkdir -p /tmp/apimgr
+          COVDIR=$(mktemp -d /tmp/apimgr/search-XXXXXX)
+          go test -v -cover -coverprofile="$COVDIR/coverage.out" $PKGS
+          go tool cover -func="$COVDIR/coverage.out"
+          COVERAGE=$(go tool cover -func="$COVDIR/coverage.out" | \
+            awk '/^total:/{gsub(/%/,""); print $3}')
+          echo "Total coverage: ${COVERAGE}%"
+          awk "BEGIN{if (${COVERAGE}+0 < 80){print \"ERROR: Coverage ${COVERAGE}% < 80%\"; exit 1}}"
+
+  lint:
+    name: Lint
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    container:
+      image: casjaysdev/go:latest
+    env:
+      CGO_ENABLED: "0"
+      GOFLAGS: "-buildvcs=false"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Download modules
+        run: go mod download
+
+      - name: Run golangci-lint
+        run: golangci-lint run ./...
+
+  build:
+    name: Build
+    if: github.event_name != 'schedule'
+    needs: [test, lint]
+    runs-on: ubuntu-latest
+    container:
+      image: casjaysdev/go:latest
+    env:
+      CGO_ENABLED: "0"
+      GOFLAGS: "-buildvcs=false"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Set version variables
+        run: |
+          VERSION=$(cat release.txt 2>/dev/null || echo "devel")
+          COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          OFFICIALSITE=$(cat site.txt 2>/dev/null || echo "")
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "COMMIT=$COMMIT" >> "$GITHUB_ENV"
+          echo "BUILD_DATE=$BUILD_DATE" >> "$GITHUB_ENV"
+          echo "OFFICIALSITE=$OFFICIALSITE" >> "$GITHUB_ENV"
+
+      - name: Download modules
+        run: go mod download
+
+      - name: Build linux/amd64 and linux/arm64
+        run: |
+          LDFLAGS="-s -w \
+            -X 'github.com/apimgr/search/src/config.Version=${VERSION}' \
+            -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT}' \
+            -X 'github.com/apimgr/search/src/config.BuildDate=${BUILD_DATE}' \
+            -X 'github.com/apimgr/search/src/config.OfficialSite=${OFFICIALSITE}' \
+            -X 'github.com/apimgr/search/src/version.Version=${VERSION}' \
+            -X 'github.com/apimgr/search/src/version.Commit=${COMMIT}' \
+            -X 'github.com/apimgr/search/src/version.BuildDate=${BUILD_DATE}'"
+          GOOS=linux GOARCH=amd64 go build -ldflags="$LDFLAGS" -o /tmp/search-linux-amd64 ./src
+          GOOS=linux GOARCH=arm64 go build -ldflags="$LDFLAGS" -o /tmp/search-linux-arm64 ./src
+          ls -lh /tmp/search-linux-amd64 /tmp/search-linux-arm64
+          echo "Build OK"
+
+  vuln-scan:
+    name: Vulnerability scan
+    runs-on: ubuntu-latest
+    container:
+      image: casjaysdev/go:latest
+    env:
+      CGO_ENABLED: "0"
+      GOFLAGS: "-buildvcs=false"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Download modules
+        run: go mod download
+
+      - name: Run govulncheck
+        run: govulncheck ./...

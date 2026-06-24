@@ -1,0 +1,102 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - '[0-9]*.[0-9]*.[0-9]*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build release artifacts
+    runs-on: ubuntu-latest
+    container:
+      image: casjaysdev/go:latest
+    env:
+      CGO_ENABLED: "0"
+      GOFLAGS: "-buildvcs=false"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Set version variables
+        run: |
+          VERSION=$(cat release.txt 2>/dev/null || echo "${GITHUB_REF_NAME}")
+          COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          OFFICIALSITE=$(cat site.txt 2>/dev/null || echo "")
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "COMMIT=$COMMIT" >> "$GITHUB_ENV"
+          echo "BUILD_DATE=$BUILD_DATE" >> "$GITHUB_ENV"
+          echo "OFFICIALSITE=$OFFICIALSITE" >> "$GITHUB_ENV"
+
+      - name: Download modules
+        run: go mod download
+
+      - name: Build all platforms
+        run: |
+          mkdir -p /tmp/release
+          LDFLAGS="-s -w \
+            -X 'github.com/apimgr/search/src/config.Version=${VERSION}' \
+            -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT}' \
+            -X 'github.com/apimgr/search/src/config.BuildDate=${BUILD_DATE}' \
+            -X 'github.com/apimgr/search/src/config.OfficialSite=${OFFICIALSITE}' \
+            -X 'github.com/apimgr/search/src/version.Version=${VERSION}' \
+            -X 'github.com/apimgr/search/src/version.Commit=${COMMIT}' \
+            -X 'github.com/apimgr/search/src/version.BuildDate=${BUILD_DATE}'"
+          for pair in \
+            linux/amd64 linux/arm64 \
+            darwin/amd64 darwin/arm64 \
+            windows/amd64 windows/arm64 \
+            freebsd/amd64 freebsd/arm64; do
+            OS="${pair%/*}"
+            ARCH="${pair#*/}"
+            OUTPUT="/tmp/release/search-${OS}-${ARCH}"
+            [ "$OS" = "windows" ] && OUTPUT="${OUTPUT}.exe"
+            GOOS="$OS" GOARCH="$ARCH" go build \
+              -ldflags="$LDFLAGS" \
+              -o "$OUTPUT" ./src
+          done
+          cd /tmp/release && sha256sum * > checksums.txt
+          ls -lh /tmp/release/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: release-artifacts
+          path: /tmp/release/
+          retention-days: 1
+
+  release:
+    name: Create release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Download artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: release-artifacts
+          path: /tmp/release/
+
+      - name: Publish release via tea
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION=$(cat release.txt 2>/dev/null || echo "$TAG")
+          tea release delete "$TAG" --yes 2>/dev/null || true
+          tea release create "$TAG" \
+            --title "search ${VERSION}" \
+            --note "Release ${VERSION}" \
+            --asset /tmp/release/ || true
+          echo "Release published: $TAG"
