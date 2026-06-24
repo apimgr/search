@@ -1,32 +1,16 @@
 # TODO.AI.md — Outstanding bootstrap items
 
-## [ ] Replace forbidden scheduler library
+## [x] Replace forbidden scheduler library
 
-`src/scheduler/scheduler.go` and its test file import `github.com/robfig/cron/v3`, which is explicitly forbidden by the spec. Replace all usage with `github.com/go-co-op/gocron/v2` (already added to go.mod). The scheduler package must be rewritten to use gocron/v2's API. All tests must continue to pass after the migration.
+Completed. `src/scheduler/scheduler.go` was rewritten to use `github.com/go-co-op/gocron/v2` directly. `github.com/robfig/cron/v3` has no direct imports in the codebase; it only appears as an indirect transitive dependency of gocron/v2.
 
-Read: AI.md PART 18
+## [x] Remove spf13/viper from codebase
 
-## [ ] Remove spf13/viper from codebase
+Completed. `github.com/spf13/viper` has been fully removed from `go.mod` and all source files. The client configuration layer was replaced with a custom `src/client/clicfg` package that provides a compatible API using `gopkg.in/yaml.v3` directly. No direct viper imports remain anywhere in the codebase.
 
-`github.com/spf13/viper` is forbidden by the spec; config must use direct YAML parsing with `gopkg.in/yaml.v3` only. The following files import viper and must be migrated:
-- `src/client/cmd/root.go`
-- `src/client/cmd/root_test.go`
-- `src/client/init_test.go`
-- `src/client/logging.go`
-- `src/client/cache.go`
-- `src/client/cache_test.go`
-- `src/client/logging_test.go`
-- `src/client/cmd/status_test.go`
+## [x] Move gocron/v2 and required libs from indirect to direct in go.mod
 
-After migration, remove `github.com/spf13/viper` from `go.mod` with `go mod tidy`.
-
-Read: AI.md PART 5
-
-## [ ] Move gocron/v2 and required libs from indirect to direct in go.mod
-
-After the scheduler and client migrations above are complete, run `go mod tidy` inside Docker to promote `github.com/go-co-op/gocron/v2`, `github.com/go-playground/validator/v10`, `github.com/rs/cors`, and `golang.org/x/time` from indirect to direct dependencies (once they are imported in source code).
-
-Read: AI.md PART 3
+Completed. `github.com/go-co-op/gocron/v2` is now a direct dependency. `github.com/go-playground/validator/v10`, `github.com/rs/cors`, and `golang.org/x/time` are present in `go.mod` as required.
 
 ## [x] Raise test coverage to spec minimum of 80%
 

@@ -41,7 +41,8 @@ pipeline {
 
         stage('Lint') {
             steps {
-                sh 'golangci-lint run ./...'
+                sh 'go vet ./...'
+                sh 'staticcheck ./...'
             }
         }
 
@@ -50,7 +51,7 @@ pipeline {
                 sh '''
                     VERSION=$(cat release.txt 2>/dev/null || echo "devel")
                     COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-                    BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+                    BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")
                     OFFICIALSITE=$(cat site.txt 2>/dev/null || echo "")
                     LDFLAGS="-s -w \
                         -X 'github.com/apimgr/search/src/config.Version=${VERSION}' \

@@ -1,0 +1,71 @@
+name: Daily Build
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PROJECTNAME: search
+  PROJECTORG: apimgr
+
+jobs:
+  build:
+    name: Daily build (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    container:
+      image: casjaysdev/go:latest
+    env:
+      CGO_ENABLED: "0"
+      GOFLAGS: "-buildvcs=false"
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Set build info
+        run: |
+          echo "VERSION=$(cat release.txt 2>/dev/null || echo "devel")" >> "$GITHUB_ENV"
+          echo "COMMIT_ID=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")" >> "$GITHUB_ENV"
+          echo "BUILD_DATE=$(date +"%a %b %d, %Y at %H:%M:%S %Z")" >> "$GITHUB_ENV"
+          if [ -f site.txt ]; then
+            echo "OFFICIALSITE=$(cat site.txt)" >> "$GITHUB_ENV"
+          else
+            echo "OFFICIALSITE=${{ secrets.OFFICIALSITE }}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Download modules
+        run: go mod download
+
+      - name: Build server
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          LDFLAGS="-s -w \
+            -X 'github.com/apimgr/search/src/config.Version=${VERSION}' \
+            -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT_ID}' \
+            -X 'github.com/apimgr/search/src/config.BuildDate=${BUILD_DATE}' \
+            -X 'github.com/apimgr/search/src/config.OfficialSite=${OFFICIALSITE}' \
+            -X 'github.com/apimgr/search/src/version.Version=${VERSION}' \
+            -X 'github.com/apimgr/search/src/version.Commit=${COMMIT_ID}' \
+            -X 'github.com/apimgr/search/src/version.BuildDate=${BUILD_DATE}'"
+          go build -buildvcs=false -trimpath -ldflags "${LDFLAGS}" \
+            -o /tmp/${PROJECTNAME}-${{ matrix.goos }}-${{ matrix.goarch }} ./src
+          ls -lh /tmp/${PROJECTNAME}-${{ matrix.goos }}-${{ matrix.goarch }}
+          echo "Build OK: ${{ matrix.goos }}/${{ matrix.goarch }}"
