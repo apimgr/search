@@ -17,6 +17,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/apimgr/search/src/client/path"
+	"github.com/apimgr/search/src/config"
 )
 
 // store holds the configuration state behind a single mutex.
@@ -322,7 +323,7 @@ func toBool(v any) bool {
 	case bool:
 		return val
 	case string:
-		b, err := strconv.ParseBool(strings.TrimSpace(val))
+		b, err := config.ParseBool(strings.TrimSpace(val), false)
 		if err != nil {
 			return false
 		}
