@@ -52,12 +52,17 @@ RELDIR := releases
 # Build targets (8 platforms minimum per AI.md PART 25)
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64 freebsd/amd64 freebsd/arm64
 
-# Docker (per AI.md PART 25: always use casjaysdev/go:latest; named volume for Go state)
+# Docker (per AI.md PART 25: always use casjaysdev/go:latest; host dirs for Go cache)
 REGISTRY ?= ghcr.io/$(PROJECTORG)/$(PROJECTNAME)
+# GO_CACHE maps host module cache into container GOPATH/pkg/mod
+GO_CACHE  ?= $(HOME)/go/pkg/mod
+# GO_BUILD maps host build cache into container GOCACHE
+GO_BUILD  ?= $(HOME)/.cache/go-build
 GO_DOCKER := docker run --rm \
 	--name $(PROJECTNAME)-$$(tr -dc 'a-z0-9' </dev/urandom | head -c8) \
 	-v $(PWD):/app \
-	-v go-state:/usr/local/share/go \
+	-v $(GO_CACHE):/usr/local/share/go/pkg/mod \
+	-v $(GO_BUILD):/usr/local/share/go/cache \
 	-w /app \
 	-e CGO_ENABLED=0 \
 	-e GOFLAGS=-buildvcs=false \
@@ -203,12 +208,13 @@ docker:
 # Per AI.md PART 28: test artifacts go to /tmp/apimgr/search-XXXXXX/, NEVER project dir
 test:
 	@echo "Running tests with coverage..."
-	@mkdir -p "/tmp/$(PROJECTORG)" && \
+	@mkdir -p "/tmp/$(PROJECTORG)" $(GO_CACHE) $(GO_BUILD) && \
 	COVDIR=$$(mktemp -d "/tmp/$(PROJECTORG)/$(PROJECTNAME)-XXXXXX") && \
 	docker run --rm \
 		--name $(PROJECTNAME)-test-$$(tr -dc 'a-z0-9' </dev/urandom | head -c8) \
 		-v $(PWD):/app \
-		-v go-state:/usr/local/share/go \
+		-v $(GO_CACHE):/usr/local/share/go/pkg/mod \
+		-v $(GO_BUILD):/usr/local/share/go/cache \
 		-v $$COVDIR:/tmp/covout \
 		-w /app \
 		-e CGO_ENABLED=0 \

@@ -55,6 +55,12 @@ print_info "Using Docker: $USE_DOCKER"
 print_info "Coverage: $COVERAGE"
 print_info "Verbose: $VERBOSE"
 
+# Coverage output always goes to /tmp/apimgr/search-XXXXXX/ — never to the project tree
+PROJECTORG="apimgr"
+PROJECTNAME="search"
+mkdir -p "/tmp/$PROJECTORG"
+COVDIR=$(mktemp -d "/tmp/$PROJECTORG/$PROJECTNAME-XXXXXX")
+
 # Prepare test command
 TEST_CMD="go test ./..."
 TEST_ARGS=""
@@ -64,20 +70,23 @@ if [ "$VERBOSE" = "true" ]; then
 fi
 
 if [ "$COVERAGE" = "true" ]; then
-    TEST_ARGS="$TEST_ARGS -coverprofile=coverage.out -covermode=atomic"
+    TEST_ARGS="$TEST_ARGS -coverprofile=/tmp/covout/coverage.out -covermode=atomic"
 fi
 
 # Run tests
 if [ "$USE_DOCKER" = "true" ]; then
     print_info "Running tests in Docker..."
     docker run --rm \
-        -v "$(pwd):/app" \
+        -v "$PWD:/app" \
+        -v "$COVDIR:/tmp/covout" \
         -w /app \
-        golang:latest \
+        -e CGO_ENABLED=0 \
+        -e GOFLAGS=-buildvcs=false \
+        casjaysdev/go:latest \
         sh -c "$TEST_CMD $TEST_ARGS"
 else
     print_info "Running tests locally..."
-    eval "$TEST_CMD $TEST_ARGS"
+    eval "CGO_ENABLED=0 $TEST_CMD $TEST_ARGS"
 fi
 
 TEST_EXIT_CODE=$?
@@ -87,16 +96,15 @@ if [ "$COVERAGE" = "true" ] && [ $TEST_EXIT_CODE -eq 0 ]; then
     print_info "Generating coverage report..."
     if [ "$USE_DOCKER" = "true" ]; then
         docker run --rm \
-            -v "$(pwd):/app" \
-            -w /app \
-            golang:latest \
-            go tool cover -func=coverage.out
+            -v "$COVDIR:/tmp/covout" \
+            -e CGO_ENABLED=0 \
+            casjaysdev/go:latest \
+            go tool cover -func=/tmp/covout/coverage.out
     else
-        go tool cover -func=coverage.out
+        go tool cover -func="$COVDIR/coverage.out"
     fi
-    
-    print_info "Coverage report saved to coverage.out"
-    print_info "View HTML report: go tool cover -html=coverage.out"
+
+    print_info "Coverage report saved to $COVDIR/coverage.out"
 fi
 
 # Exit with test result

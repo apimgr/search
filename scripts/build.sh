@@ -51,12 +51,13 @@ build_binary() {
     
     if [ "$USE_DOCKER" = "true" ]; then
         docker run --rm \
-            -v "$(pwd):/app" \
+            -v "$PWD:/app" \
             -w /app \
             -e GOOS="$goos" \
             -e GOARCH="$goarch" \
             -e CGO_ENABLED=0 \
-            golang:latest \
+            -e GOFLAGS=-buildvcs=false \
+            casjaysdev/go:latest \
             go build -ldflags "-X main.Version=$VERSION -s -w" \
             -o "$output_path" \
             src/main.go
