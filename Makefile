@@ -2,6 +2,9 @@
 PROJECTNAME := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)(\.git)?$$|\1|' || basename "$$(pwd)")
 PROJECTORG := $(shell git remote get-url origin 2>/dev/null | sed -E 's|.*/([^/]+)/[^/]+(\.git)?$$|\1|' || basename "$$(dirname "$$(pwd)")")
 
+# Binary name — NEVER hardcode; always reference this variable in build targets
+BINARY := $(PROJECTNAME)
+
 # Version precedence: release.txt > env/default fallback
 VERSION ?= $(shell cat release.txt 2>/dev/null || echo "devel")
 # Per AI.md PART 25: add v prefix ONLY to numeric semver (e.g. 1.2.3 → v1.2.3)
@@ -72,14 +75,14 @@ dev:
 	@mkdir -p "$${TMPDIR:-/tmp}/$(PROJECTORG)" && \
 	BUILD_DIR=$$(mktemp -d "$${TMPDIR:-/tmp}/$(PROJECTORG)/$(PROJECTNAME)-XXXXXX") && \
 	echo "Quick dev build to $$BUILD_DIR..." && \
-	$(GO_DOCKER) go build -o $(BINDIR)/.dev-$(PROJECTNAME) ./src && \
-	mv $(BINDIR)/.dev-$(PROJECTNAME) "$$BUILD_DIR/$(PROJECTNAME)" && \
+	$(GO_DOCKER) go build -o $(BINDIR)/.dev-$(BINARY) ./src && \
+	mv $(BINDIR)/.dev-$(BINARY) "$$BUILD_DIR/$(BINARY)" && \
 	if [ -d "src/client" ]; then \
-		$(GO_DOCKER) go build -o $(BINDIR)/.dev-$(PROJECTNAME)-cli ./src/client && \
-		mv $(BINDIR)/.dev-$(PROJECTNAME)-cli "$$BUILD_DIR/$(PROJECTNAME)-cli"; \
+		$(GO_DOCKER) go build -o $(BINDIR)/.dev-$(BINARY)-cli ./src/client && \
+		mv $(BINDIR)/.dev-$(BINARY)-cli "$$BUILD_DIR/$(BINARY)-cli"; \
 	fi && \
-	echo "Built: $$BUILD_DIR/$(PROJECTNAME)" && \
-	echo "Test:  docker run --rm -it --name $(PROJECTNAME)-test -v $$BUILD_DIR:/app alpine:latest /app/$(PROJECTNAME) --help"
+	echo "Built: $$BUILD_DIR/$(BINARY)" && \
+	echo "Test:  docker run --rm --name $(BINARY)-test -v $$BUILD_DIR:/app alpine:latest /app/$(BINARY) --help"
 
 # =============================================================================
 # LOCAL - Build for current OS/ARCH with version suffix (per AI.md PART 25)
@@ -92,14 +95,14 @@ local:
 	@$(GO_DOCKER) go mod tidy
 	@$(GO_DOCKER) go mod download
 	@$(GO_DOCKER) sh -c "GOOS=\$$(go env GOOS) GOARCH=\$$(go env GOARCH) \
-		go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(PROJECTNAME)-$(VERSION) ./src"
+		go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(BINARY)-$(VERSION) ./src"
 	@if [ -d "src/client" ]; then \
 		echo "Building local CLI $(VERSION)..."; \
 		$(GO_DOCKER) sh -c "GOOS=\$$(go env GOOS) GOARCH=\$$(go env GOARCH) \
-			go build -ldflags \"$(CLI_LDFLAGS)\" -o $(BINDIR)/$(PROJECTNAME)-cli-$(VERSION) ./src/client"; \
+			go build -ldflags \"$(CLI_LDFLAGS)\" -o $(BINDIR)/$(BINARY)-cli-$(VERSION) ./src/client"; \
 	fi
 	@echo ""
-	@echo "Built: $(BINDIR)/$(PROJECTNAME)-$(VERSION)"
+	@echo "Built: $(BINDIR)/$(BINARY)-$(VERSION)"
 
 # =============================================================================
 # BUILD - Build all platforms + host binary (via Docker with cached modules)
@@ -113,11 +116,11 @@ build:
 	@$(GO_DOCKER) go mod download
 	@echo "Building host binary..."
 	@$(GO_DOCKER) sh -c "GOOS=\$$(go env GOOS) GOARCH=\$$(go env GOARCH) \
-		go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(PROJECTNAME) ./src"
+		go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(BINARY) ./src"
 	@for platform in $(PLATFORMS); do \
 		OS=$${platform%/*}; \
 		ARCH=$${platform#*/}; \
-		OUTPUT=$(BINDIR)/$(PROJECTNAME)-$$OS-$$ARCH; \
+		OUTPUT=$(BINDIR)/$(BINARY)-$$OS-$$ARCH; \
 		[ "$$OS" = "windows" ] && OUTPUT=$$OUTPUT.exe; \
 		echo "Building server $$OS/$$ARCH..."; \
 		$(GO_DOCKER) sh -c "GOOS=$$OS GOARCH=$$ARCH \
@@ -127,11 +130,11 @@ build:
 	@if [ -d "src/client" ]; then \
 		echo "Building CLI..."; \
 		$(GO_DOCKER) sh -c "GOOS=\$$(go env GOOS) GOARCH=\$$(go env GOARCH) \
-			go build -ldflags \"$(CLI_LDFLAGS)\" -o $(BINDIR)/$(PROJECTNAME)-cli ./src/client"; \
+			go build -ldflags \"$(CLI_LDFLAGS)\" -o $(BINDIR)/$(BINARY)-cli ./src/client"; \
 		for platform in $(PLATFORMS); do \
 			OS=$${platform%/*}; \
 			ARCH=$${platform#*/}; \
-			OUTPUT=$(BINDIR)/$(PROJECTNAME)-cli-$$OS-$$ARCH; \
+			OUTPUT=$(BINDIR)/$(BINARY)-cli-$$OS-$$ARCH; \
 			[ "$$OS" = "windows" ] && OUTPUT=$$OUTPUT.exe; \
 			echo "Building CLI $$OS/$$ARCH..."; \
 			$(GO_DOCKER) sh -c "GOOS=$$OS GOARCH=$$ARCH \
@@ -148,13 +151,13 @@ release: build
 	@mkdir -p $(RELDIR)
 	@echo "Preparing release $(VERSION)..."
 	@echo "$(VERSION)" > $(RELDIR)/version.txt
-	@for f in $(BINDIR)/$(PROJECTNAME)-*; do \
+	@for f in $(BINDIR)/$(BINARY)-*; do \
 		[ -f "$$f" ] || continue; \
 		echo "$$f" | grep -q "\-cli" && continue; \
 		strip "$$f" 2>/dev/null || true; \
 		cp "$$f" $(RELDIR)/; \
 	done
-	@for f in $(BINDIR)/$(PROJECTNAME)-cli-*; do \
+	@for f in $(BINDIR)/$(BINARY)-cli-*; do \
 		[ -f "$$f" ] || continue; \
 		strip "$$f" 2>/dev/null || true; \
 		cp "$$f" $(RELDIR)/; \
@@ -209,6 +212,7 @@ test:
 		-v $$COVDIR:/tmp/covout \
 		-w /app \
 		-e CGO_ENABLED=0 \
+		-e GOFLAGS=-buildvcs=false \
 		casjaysdev/go:latest \
 		ash -c 'set -e; PKGS=$$(go list ./... | grep -v "/src/service"); go mod download; go test -v -cover -coverprofile=/tmp/covout/coverage.out $$PKGS; COVERAGE=$$(go tool cover -func=/tmp/covout/coverage.out | grep total | awk "{print \$$3}" | sed "s/%//"); echo "Coverage: $$COVERAGE%"; if [ $$(echo "$$COVERAGE < 80" | bc -l) -eq 1 ]; then echo "ERROR: Coverage is $$COVERAGE%, must be >= 80%"; exit 1; fi'
 	@echo "Tests complete"
@@ -231,12 +235,12 @@ build-arm64:
 	@echo "Building server linux/arm64..."
 	@$(GO_DOCKER) sh -c "GOOS=linux GOARCH=arm64 \
 		go build -ldflags \"$(LDFLAGS)\" \
-		-o $(BINDIR)/$(PROJECTNAME)-linux-arm64 ./src"
+		-o $(BINDIR)/$(BINARY)-linux-arm64 ./src"
 	@if [ -d "src/client" ]; then \
 		echo "Building CLI linux/arm64..."; \
 		$(GO_DOCKER) sh -c "GOOS=linux GOARCH=arm64 \
 			go build -ldflags \"$(CLI_LDFLAGS)\" \
-			-o $(BINDIR)/$(PROJECTNAME)-cli-linux-arm64 ./src/client"; \
+			-o $(BINDIR)/$(BINARY)-cli-linux-arm64 ./src/client"; \
 	fi
 	@echo "ARM64 build complete"
 
@@ -251,9 +255,9 @@ clean:
 # INSTALL - Copy binary to /usr/local/bin/
 # =============================================================================
 install:
-	@[ -f $(BINDIR)/$(PROJECTNAME) ] || $(MAKE) build
-	@cp $(BINDIR)/$(PROJECTNAME) /usr/local/bin/$(PROJECTNAME)
-	@echo "Installed: /usr/local/bin/$(PROJECTNAME)"
+	@[ -f $(BINDIR)/$(BINARY) ] || $(MAKE) build
+	@cp $(BINDIR)/$(BINARY) /usr/local/bin/$(BINARY)
+	@echo "Installed: /usr/local/bin/$(BINARY)"
 
 # =============================================================================
 # DOCKER-BUILD - Build Docker image (alias for docker)
