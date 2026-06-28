@@ -210,9 +210,9 @@ func findAvailableUnixSystemID() (int, error) {
 		}
 	}
 
-	// Find first available ID in safe system range (200-899)
-	// Per AI.md PART 24: Avoids 100-199 (well-known) and 900-999 (docker, etc.)
-	for id := 200; id < 900; id++ {
+	// Scan descending from 899 to 200 to reserve low IDs for traditional services.
+	// Per AI.md PART 23: highest available safe ID selected first.
+	for id := 899; id >= 200; id-- {
 		if !usedIDs[id] {
 			return id, nil
 		}
@@ -246,9 +246,9 @@ func findAvailableMacOSSystemID() (int, error) {
 		}
 	}
 
-	// Find first available ID in macOS safe range (200-399)
-	// Per AI.md PART 24: macOS safe range is 200-399
-	for id := 200; id < 400; id++ {
+	// Scan descending from 399 to 200 to reserve low IDs for traditional services.
+	// Per AI.md PART 23: highest available safe ID selected first.
+	for id := 399; id >= 200; id-- {
 		if !usedIDs[id] {
 			return id, nil
 		}
@@ -285,7 +285,7 @@ func createLinuxSystemUser(name string) (*SystemUser, error) {
 			UID:   uid,
 			GID:   gid,
 			Home:  u.HomeDir,
-			Shell: "/bin/false",
+			Shell: "/usr/sbin/nologin",
 		}, nil
 	}
 
@@ -305,12 +305,12 @@ func createLinuxSystemUser(name string) (*SystemUser, error) {
 		}
 	}
 
-	// Create user
+	// Create user with org-scoped home path per AI.md PART 23
 	cmd = exec.Command("useradd", "-r",
 		"-u", strconv.Itoa(id),
 		"-g", name,
-		"-d", "/var/lib/"+name,
-		"-s", "/bin/false",
+		"-d", "/var/lib/apimgr/"+name,
+		"-s", "/usr/sbin/nologin",
 		"-c", name+" service account",
 		name)
 	if err := cmd.Run(); err != nil {
@@ -321,8 +321,8 @@ func createLinuxSystemUser(name string) (*SystemUser, error) {
 		Name:  name,
 		UID:   id,
 		GID:   id,
-		Home:  "/var/lib/" + name,
-		Shell: "/bin/false",
+		Home:  "/var/lib/apimgr/" + name,
+		Shell: "/usr/sbin/nologin",
 	}, nil
 }
 
@@ -421,11 +421,11 @@ func createFreeBSDSystemUser(name string) (*SystemUser, error) {
 		return nil, fmt.Errorf("failed to find available ID: %w", err)
 	}
 
-	// Create user with pw command
+	// Create user with pw command using org-scoped home path per AI.md PART 23
 	cmd := exec.Command("pw", "useradd", name,
 		"-u", strconv.Itoa(id),
 		"-g", strconv.Itoa(id),
-		"-d", "/var/db/"+name,
+		"-d", "/var/lib/apimgr/"+name,
 		"-s", "/usr/sbin/nologin",
 		"-c", name+" service account")
 	if err := cmd.Run(); err != nil {
@@ -436,7 +436,7 @@ func createFreeBSDSystemUser(name string) (*SystemUser, error) {
 		Name:  name,
 		UID:   id,
 		GID:   id,
-		Home:  "/var/db/" + name,
+		Home:  "/var/lib/apimgr/" + name,
 		Shell: "/usr/sbin/nologin",
 	}, nil
 }
@@ -525,9 +525,35 @@ func DropPrivileges(userName string) error {
 	return dropPrivilegesUnix(uid, gid)
 }
 
-// IsRunningAsRoot returns true if the process is running as root
+// IsRunningAsRoot returns true if the process is running with elevated privileges
 func IsRunningAsRoot() bool {
-	return os.Geteuid() == 0
+	return isElevated()
+}
+
+// ReExecWithPrivileges re-executes the current process with elevated privileges.
+// Per AI.md PART 7: never call sudo directly in business logic — use this wrapper.
+// Returns nil if already elevated. The current process should exit after calling
+// this function, as the elevated child process takes over.
+func ReExecWithPrivileges() error {
+	if os.Geteuid() == 0 {
+		return nil
+	}
+
+	escalator := NewPrivilegeEscalator()
+	if !escalator.IsAvailable() {
+		return fmt.Errorf("no privilege escalation method available (not in sudo/wheel group)")
+	}
+
+	self, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("failed to determine executable path: %w", err)
+	}
+
+	cmd := escalator.EscalateCommand(self, os.Args[1:]...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 // VerifyPrivilegesDropped verifies that privileges have been dropped
@@ -542,4 +568,32 @@ func VerifyPrivilegesDropped() error {
 	}
 
 	return nil
+}
+
+// handleEscalation manages privilege escalation for service installation operations.
+// Per AI.md PART 7: sudo must never be called directly in business logic — use this instead.
+// Flow: already elevated → proceed; canEscalate → prompt then re-exec; else → user service path.
+func handleEscalation() error {
+	if isElevated() {
+		return nil
+	}
+	if !canEscalate() {
+		fmt.Println("No admin access available, falling back to user service installation.")
+		return nil
+	}
+	fmt.Print("Install system service? Requires elevated privileges. [Y/n]: ")
+	var answer string
+	fmt.Scanln(&answer)
+	answer = strings.TrimSpace(answer)
+	if strings.EqualFold(answer, "n") || strings.EqualFold(answer, "no") {
+		fmt.Println("Installing as user service...")
+		return nil
+	}
+	return execElevated()
+}
+
+// HandleEscalation is the exported entry point for privilege escalation during service installation.
+// Per AI.md PART 7: call sites in main and service code must use this instead of ad-hoc sudo checks.
+func HandleEscalation() error {
+	return handleEscalation()
 }

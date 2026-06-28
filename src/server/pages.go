@@ -8,7 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"math/big"
 	"net/http"
 	"os"
@@ -50,7 +50,8 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 
 // handleAbout renders the about page
 func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
-	data := s.newPageData(w, r, "About", "about")
+	data := s.newPageData(w, r, "", "about")
+	data.Title = s.getI18nManager().T(data.Lang, "nav.about")
 	data.CSRFToken = s.getCSRFToken(r)
 
 	if err := s.renderer.Render(w, "about", data); err != nil {
@@ -408,14 +409,19 @@ func (s *Server) respondHealthHTML(w http.ResponseWriter, r *http.Request, healt
 // handleNotFound renders a 404 error page or JSON response for API routes
 // Per AI.md PART 13/14: API errors return JSON with NOT_FOUND code
 func (s *Server) handleNotFound(w http.ResponseWriter, r *http.Request) {
+	lang := s.getI18nManager().DetectLanguage(r)
 	// Return JSON for API routes per AI.md PART 14
 	if strings.HasPrefix(r.URL.Path, "/api/") {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
-		_, _ = w.Write([]byte(`{"ok":false,"error":"NOT_FOUND","message":"Resource not found"}`))
+		msg := s.getI18nManager().T(lang, "errors.not_found")
+		msgJSON, _ := json.Marshal(msg)
+		_, _ = w.Write([]byte(`{"ok":false,"error":"NOT_FOUND","message":` + string(msgJSON) + `}`))
 		return
 	}
-	s.handleError(w, r, http.StatusNotFound, "Page Not Found", "The page you're looking for doesn't exist.")
+	title := s.getI18nManager().T(lang, "errors.not_found_title")
+	msg := s.getI18nManager().T(lang, "errors.not_found_message")
+	s.handleError(w, r, http.StatusNotFound, title, msg)
 }
 
 // handleError renders an error page
@@ -451,9 +457,12 @@ func (s *Server) handleError(w http.ResponseWriter, r *http.Request, code int, t
 // Per AI.md PART 9: User sees "Minimal, helpful" messages; internal details go to logs only.
 func (s *Server) handleInternalError(w http.ResponseWriter, r *http.Request, context string, err error) {
 	// Log the actual error with context for debugging
-	log.Printf("[ERROR] %s: %s %s - %v", context, r.Method, r.URL.Path, err)
+	slog.Error("internal error", "context", context, "method", r.Method, "path", r.URL.Path, "err", err)
+	lang := s.getI18nManager().DetectLanguage(r)
+	title := s.getI18nManager().T(lang, "errors.server_error_title")
 	// Show generic message to user - never expose internal error details
-	s.handleError(w, r, http.StatusInternalServerError, "Error", "An error occurred. Please try again.")
+	msg := s.getI18nManager().T(lang, "errors.server_error_message")
+	s.handleError(w, r, http.StatusInternalServerError, title, msg)
 }
 
 // signCaptcha creates an HMAC-signed captcha ID containing the expected answer

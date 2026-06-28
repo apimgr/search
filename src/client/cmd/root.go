@@ -19,6 +19,14 @@ import (
 	"github.com/apimgr/search/src/client/tui"
 )
 
+// fatalVersionCh carries a non-nil error when the server mandates a newer CLI version.
+// Buffered size 1 so backgroundAutodiscover never blocks; main.go drains it and exits.
+var fatalVersionCh = make(chan error, 1)
+
+// FatalVersionCh returns the channel that receives a fatal version error.
+// main() must select on this channel and call os.Exit(1) when it fires.
+func FatalVersionCh() <-chan error { return fatalVersionCh }
+
 var (
 	// Build info - set via -ldflags at build time
 	// Per AI.md PART 26: LDFLAGS must include Version, CommitID, BuildDate, OfficialSite
@@ -221,14 +229,7 @@ func initClient() error {
 	// 3. Error with setup instructions
 	serverAddr, shouldSave := resolveServerAddress()
 	if serverAddr == "" {
-		return fmt.Errorf(`no server configured
-
-To configure a server, run:
-  //your-server.example.com list
-  %s --server https:
-
-This will save the server address for future commands.
-Or edit ~/.config/apimgr/%s/cli.yml directly`, getBinaryName(), ProjectName)
+		return fmt.Errorf("no server configured; run %s to complete setup", getBinaryName())
 	}
 
 	// Per AI.md PART 32 line 41436-41469: Token sources (priority order)
@@ -321,9 +322,12 @@ func backgroundAutodiscover() {
 	// Per AI.md PART 32: check cli_min_version — refuse further requests if too old
 	if info.CLIMinVersion != "" && Version != "dev" {
 		if versionLessThan(Version, info.CLIMinVersion) {
-			fmt.Fprintf(os.Stderr, "this CLI is too old; the server requires %s — run '%s --update yes' to upgrade.\n",
+			msg := fmt.Sprintf("this CLI is too old; the server requires %s — run '%s --update yes' to upgrade.",
 				info.CLIMinVersion, getBinaryName())
-			os.Exit(1)
+			fmt.Fprintln(os.Stderr, msg)
+			// Signal main() to call os.Exit(1); os.Exit is forbidden outside main per AI.md PART 7.
+			fatalVersionCh <- fmt.Errorf("%s", msg)
+			return
 		}
 	}
 
@@ -393,9 +397,12 @@ func getToken() string {
 	}
 
 	// 5. Default token file: {config_dir}/token
-	tokenPath := filepath.Join(path.ConfigDir(), "token")
-	if data, err := os.ReadFile(tokenPath); err == nil {
-		return strings.TrimSpace(string(data))
+	configDir := path.ConfigDir()
+	if configDir != "" {
+		tokenPath := filepath.Join(configDir, "token")
+		if data, err := os.ReadFile(tokenPath); err == nil {
+			return strings.TrimSpace(string(data))
+		}
 	}
 
 	// No token (anonymous access if allowed)

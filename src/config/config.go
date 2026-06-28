@@ -1,11 +1,13 @@
 package config
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +15,7 @@ import (
 	"time"
 
 	"github.com/apimgr/search/src/display"
+	"github.com/fsnotify/fsnotify"
 	"gopkg.in/yaml.v3"
 )
 
@@ -23,8 +26,18 @@ var (
 	CommitID  = "unknown"
 	BuildDate = "unknown"
 	// Default, can be overridden via -ldflags
-	OfficialSite = "https://scour.li"
+	OfficialSite = "https://search.apimgr.us"
 )
+
+// debugOverride is set by the --debug CLI flag before config is loaded.
+// It is applied to Config.debugEnabled in Initialize().
+var debugOverride bool
+
+// SetDebugOverride records the --debug CLI flag state before config is loaded.
+// Call this from applyCliOverrides() when --debug is present.
+func SetDebugOverride(enabled bool) {
+	debugOverride = enabled
+}
 
 // Config represents the complete application configuration
 type Config struct {
@@ -33,6 +46,8 @@ type Config struct {
 	configPath string
 	// True if this is first run (no config existed)
 	firstRun bool
+	// debugEnabled is set by the --debug CLI flag; takes precedence over DEBUG env var
+	debugEnabled bool
 
 	Server  ServerConfig            `yaml:"server"`
 	Search  SearchConfig            `yaml:"search"`
@@ -43,6 +58,14 @@ type Config struct {
 // Per AI.md PART 14: First run shows setup token for admin creation
 func (c *Config) IsFirstRun() bool {
 	return c.firstRun
+}
+
+// SetDebug explicitly enables or disables debug mode on this Config instance.
+// Called when the --debug CLI flag is present; takes precedence over the DEBUG env var.
+func (c *Config) SetDebug(enabled bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.debugEnabled = enabled
 }
 
 // SetPath sets the config file path for reload
@@ -112,6 +135,71 @@ func (c *Config) Reload() error {
 	return nil
 }
 
+// watcherDebounce is the delay between receiving a filesystem event and reloading
+// the config. Multiple rapid writes (e.g. editor swap files) collapse into one reload.
+const watcherDebounce = 250 * time.Millisecond
+
+// StartWatcher watches the config file for changes and calls Reload() on write or create
+// events. It debounces rapid events by 250 ms. The watcher stops when ctx is cancelled.
+// Per AI.md PART 5: Hot reload — watch server.yml for changes, reload without restart.
+func (c *Config) StartWatcher(ctx context.Context) error {
+	path := c.GetPath()
+	if path == "" {
+		return fmt.Errorf("config path not set, cannot start watcher")
+	}
+
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return fmt.Errorf("failed to create config file watcher: %w", err)
+	}
+
+	if err := watcher.Add(path); err != nil {
+		watcher.Close()
+		return fmt.Errorf("failed to watch config file %s: %w", path, err)
+	}
+
+	go func() {
+		defer watcher.Close()
+
+		var debounce *time.Timer
+
+		for {
+			select {
+			case <-ctx.Done():
+				if debounce != nil {
+					debounce.Stop()
+				}
+				return
+
+			case event, ok := <-watcher.Events:
+				if !ok {
+					return
+				}
+				if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) {
+					if debounce != nil {
+						debounce.Stop()
+					}
+					debounce = time.AfterFunc(watcherDebounce, func() {
+						if err := c.Reload(); err != nil {
+							slog.Error("config hot-reload failed", "err", err, "path", path)
+						} else {
+							slog.Info("config reloaded", "path", path)
+						}
+					})
+				}
+
+			case err, ok := <-watcher.Errors:
+				if !ok {
+					return
+				}
+				slog.Error("config watcher error", "err", err, "path", path)
+			}
+		}
+	}()
+
+	return nil
+}
+
 // ServerConfig represents server configuration
 type ServerConfig struct {
 	// Core settings
@@ -125,6 +213,18 @@ type ServerConfig struct {
 	Mode      string `yaml:"mode"`
 	SecretKey string `yaml:"secret_key"`
 	BaseURL   string `yaml:"base_url"`
+	// Fully qualified domain name — auto-detected from host if empty
+	FQDN string `yaml:"fqdn"`
+	// API version prefix used in /api/{api_version}/ routes
+	APIVersion string `yaml:"api_version"`
+	// PID file path; "true" uses the default platform path, "false" disables
+	PIDFile string `yaml:"pidfile"`
+	// Daemonize on start — detach from terminal (false for modern service managers)
+	Daemonize bool `yaml:"daemonize"`
+	// Service user the binary runs as after privilege drop
+	User string `yaml:"user"`
+	// Service group the binary runs as after privilege drop
+	Group string `yaml:"group"`
 
 	// SSL/TLS
 	SSL SSLConfig `yaml:"ssl"`
@@ -191,6 +291,9 @@ type ServerConfig struct {
 	// I18n (Internationalization)
 	I18n I18nConfig `yaml:"i18n"`
 
+	// Healthz controls whether /healthz is also registered at the root path
+	Healthz HealthzConfig `yaml:"healthz"`
+
 	// Maintenance mode - when enabled, shows maintenance page to all users
 	MaintenanceMode bool `yaml:"maintenance_mode"`
 
@@ -199,6 +302,12 @@ type ServerConfig struct {
 
 	// Compliance configuration per AI.md PART 22
 	Compliance ComplianceConfig `yaml:"compliance"`
+
+	// Database driver and connection configuration
+	Database DatabaseDriverConfig `yaml:"database"`
+
+	// Maintenance mode self-healing configuration
+	Maintenance MaintenanceSelfHealConfig `yaml:"maintenance"`
 }
 
 // SSLConfig represents SSL/TLS configuration
@@ -687,7 +796,7 @@ type GeoIPConfig struct {
 // Per AI.md PART 21: Metrics configuration
 type MetricsConfig struct {
 	Enabled bool `yaml:"enabled"`
-	// Endpoint path (default: /metrics)
+	// Endpoint path (default: /server/metrics)
 	Endpoint string `yaml:"endpoint"`
 	// Include system metrics (CPU, memory, disk)
 	IncludeSystem bool `yaml:"include_system"`
@@ -737,6 +846,67 @@ type BackupRetentionConfig struct {
 type ComplianceConfig struct {
 	// HIPAA, SOC2, etc. compliance mode
 	Enabled bool `yaml:"enabled"`
+}
+
+// HealthzConfig controls the /healthz root-level alias per AI.md PART 13.
+// The canonical endpoint is always /server/healthz; the root alias is opt-in.
+type HealthzConfig struct {
+	Root struct {
+		// Enabled controls whether /healthz and /healthz.txt are registered.
+		// Default: false (root alias disabled; use /server/healthz instead).
+		Enabled bool `yaml:"enabled"`
+	} `yaml:"root"`
+}
+
+// DatabaseDriverConfig represents database driver and connection configuration
+// Per AI.md PART 5: server.database.driver and server.database.url
+type DatabaseDriverConfig struct {
+	// Driver: sqlite (default, pure Go) or libsql for remote Turso/libsql
+	Driver string `yaml:"driver"`
+	// URL: auto-created sqlite path for sqlite driver, or libsql://... for remote
+	URL string `yaml:"url"`
+}
+
+// MaintenanceSelfHealConfig represents maintenance mode and self-healing configuration
+// Per AI.md PART 5: server.maintenance block with self-healing settings
+type MaintenanceSelfHealConfig struct {
+	// SelfHealing retry settings
+	SelfHealing MaintenanceSelfHealingConfig `yaml:"self_healing"`
+	// Cleanup thresholds for auto-cleanup
+	Cleanup MaintenanceCleanupConfig `yaml:"cleanup"`
+	// Notification settings for maintenance transitions
+	Notify MaintenanceNotifyConfig `yaml:"notify"`
+}
+
+// MaintenanceSelfHealingConfig holds retry settings for the self-healing loop
+// Per AI.md PART 5: enabled, retry_interval, max_attempts
+type MaintenanceSelfHealingConfig struct {
+	// Enable automatic self-healing attempts
+	Enabled bool `yaml:"enabled"`
+	// Duration between retry attempts (e.g., "30s")
+	RetryInterval string `yaml:"retry_interval"`
+	// Maximum retry attempts before giving up; 0 = unlimited
+	MaxAttempts int `yaml:"max_attempts"`
+}
+
+// MaintenanceCleanupConfig holds auto-cleanup thresholds used during maintenance
+// Per AI.md PART 5: disk_threshold, log_retention_days, backup_keep_count
+type MaintenanceCleanupConfig struct {
+	// Start cleanup when disk usage exceeds this percentage
+	DiskThreshold int `yaml:"disk_threshold"`
+	// Delete logs older than this many days during cleanup
+	LogRetentionDays int `yaml:"log_retention_days"`
+	// Keep this many backups during cleanup
+	BackupKeepCount int `yaml:"backup_keep_count"`
+}
+
+// MaintenanceNotifyConfig holds notification triggers for maintenance mode transitions
+// Per AI.md PART 5: on_enter, on_exit
+type MaintenanceNotifyConfig struct {
+	// Send notification when entering maintenance mode
+	OnEnter bool `yaml:"on_enter"`
+	// Send notification when exiting maintenance mode
+	OnExit bool `yaml:"on_exit"`
 }
 
 // ImageProxyConfig represents image proxy configuration
@@ -992,12 +1162,22 @@ func DefaultConfig() *Config {
 		Server: ServerConfig{
 			Title:       "Scour",
 			Description: "Privacy-Respecting Metasearch Engine",
-			Port:        64580,
+			Port:        0,
 			Address:     "[::]",
 			Mode:        "production",
 			SecretKey:   generateSecret(),
 			// Empty = auto-detect from request headers
 			BaseURL: "",
+			// Empty = auto-detected from hostname at runtime
+			FQDN: "",
+			// API version prefix used in /api/{api_version}/ routes
+			APIVersion: "v1",
+			// "true" = create PID file at default platform path
+			PIDFile:   "true",
+			Daemonize: false,
+			// System service user and group (auto-created by binary on first root run)
+			User:  "search",
+			Group: "search",
 			SSL: SSLConfig{
 				Enabled: false,
 				AutoTLS: false,
@@ -1148,7 +1328,7 @@ func DefaultConfig() *Config {
 					OriginAgentCluster    bool   `yaml:"origin_agent_cluster"`
 					CrossDomainPolicies   string `yaml:"cross_domain_policies"`
 				}{
-					XFrameOptions:         "SAMEORIGIN",
+					XFrameOptions:         "DENY",
 					XContentTypeOptions:   "nosniff",
 					XXSSProtection:        "1; mode=block",
 					ReferrerPolicy:        "strict-origin-when-cross-origin",
@@ -1273,7 +1453,7 @@ func DefaultConfig() *Config {
 			},
 			Metrics: MetricsConfig{
 				Enabled:       false,
-				Endpoint:      "/metrics",
+				Endpoint:      "/server/metrics",
 				IncludeSystem: true,
 				Token:         "",
 			},
@@ -1339,6 +1519,35 @@ func DefaultConfig() *Config {
 				RTLLanguages:       []string{"ar", "he", "fa", "ur"},
 				TranslationsDir:    "/data/translations",
 				FallbackLanguage:   "en",
+			},
+			// Per AI.md PART 13: /healthz root alias is opt-in; disabled by default
+			Healthz: HealthzConfig{
+				Root: struct {
+					Enabled bool `yaml:"enabled"`
+				}{Enabled: false},
+			},
+			Database: DatabaseDriverConfig{
+				// Pure Go SQLite driver (CGO_ENABLED=0 compliant)
+				Driver: "sqlite",
+				// Empty = auto-generated from data dir at runtime
+				URL: "",
+			},
+			Maintenance: MaintenanceSelfHealConfig{
+				SelfHealing: MaintenanceSelfHealingConfig{
+					Enabled:       true,
+					RetryInterval: "30s",
+					// 0 = unlimited retries
+					MaxAttempts: 0,
+				},
+				Cleanup: MaintenanceCleanupConfig{
+					DiskThreshold:    90,
+					LogRetentionDays: 7,
+					BackupKeepCount:  5,
+				},
+				Notify: MaintenanceNotifyConfig{
+					OnEnter: true,
+					OnExit:  true,
+				},
 			},
 		},
 		Search: SearchConfig{
@@ -1602,6 +1811,15 @@ func addConfigComments(node *yaml.Node) {
 		"maintenance_mode": "Enable maintenance mode to show maintenance page",
 		"backup":           "Backup configuration",
 		"compliance":       "Compliance settings (GDPR, etc.)",
+		"healthz":          "Healthz endpoint configuration (root alias /healthz)",
+		"fqdn":             "Fully qualified domain name (auto-detected from hostname if empty)",
+		"api_version":      "API version prefix used in /api/{api_version}/ routes",
+		"pidfile":          "PID file: true = default platform path, false = disabled, or an explicit path",
+		"daemonize":        "Daemonize on start (detach from terminal); false for modern service managers",
+		"user":             "System user the binary runs as after privilege drop",
+		"group":            "System group the binary runs as after privilege drop",
+		"database":         "Database driver and connection settings",
+		"maintenance":      "Maintenance mode self-healing configuration",
 	}
 
 	// Add comments to top-level sections
@@ -1725,6 +1943,20 @@ func (c *Config) ApplyEnv(env *EnvConfig) {
 	// Tor: Per AI.md PART 32, Tor is auto-enabled if binary found
 	// No env vars needed - detection happens at runtime in TorService.Start()
 
+	// Per AI.md PART 5: Init-only env vars applied only on first run (created==true)
+	if env.Listen != "" {
+		c.Server.Address = env.Listen
+	}
+	if env.ApplicationTagline != "" {
+		c.Server.Branding.Tagline = env.ApplicationTagline
+	}
+	if env.DatabaseDir != "" {
+		SetDatabaseDirOverride(env.DatabaseDir)
+	}
+	if env.BackupDir != "" {
+		SetBackupDirOverride(env.BackupDir)
+	}
+
 	// Engines
 	if c.Engines != nil {
 		if engine, ok := c.Engines["google"]; ok {
@@ -1739,6 +1971,52 @@ func (c *Config) ApplyEnv(env *EnvConfig) {
 			engine.Enabled = env.EnableBing
 			c.Engines["bing"] = engine
 		}
+	}
+}
+
+// ApplyRuntimeEnv applies runtime environment variable overrides to config.
+// Per AI.md PART 5: Runtime env vars (MODE, DOMAIN, DATABASE_DRIVER, DATABASE_URL, SMTP_*)
+// are always checked on every startup, not just on first run.
+// DATABASE_DRIVER and DATABASE_URL have no dedicated Config fields; they are consumed
+// directly from os.Getenv() by the database package via GetDatabaseDriver() and
+// GetDatabaseURL(), satisfying the 'always checked' requirement without Config storage.
+func (c *Config) ApplyRuntimeEnv(env *EnvConfig) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// MODE — always override config file value
+	if env.Mode != "" {
+		c.Server.Mode = env.GetMode()
+	}
+
+	// DOMAIN — set BaseURL from DOMAIN when BASE_URL is not set; DOMAIN has highest FQDN priority
+	if env.BaseURL != "" {
+		c.Server.BaseURL = env.BaseURL
+	} else if env.Domain != "" {
+		c.Server.BaseURL = "https://" + env.Domain
+	}
+
+	// SMTP_* — always override config file SMTP settings
+	if env.SMTPHost != "" {
+		c.Server.Email.SMTP.Host = env.SMTPHost
+	}
+	if env.SMTPPort != 0 {
+		c.Server.Email.SMTP.Port = env.SMTPPort
+	}
+	if env.SMTPUsername != "" {
+		c.Server.Email.SMTP.Username = env.SMTPUsername
+	}
+	if env.SMTPPassword != "" {
+		c.Server.Email.SMTP.Password = env.SMTPPassword
+	}
+	if env.SMTPTLS != "" {
+		c.Server.Email.SMTP.TLS = env.SMTPTLS
+	}
+	if env.SMTPFromName != "" {
+		c.Server.Email.From.Name = env.SMTPFromName
+	}
+	if env.SMTPFromEmail != "" {
+		c.Server.Email.From.Email = env.SMTPFromEmail
 	}
 }
 
@@ -1804,7 +2082,7 @@ func GetConfigPath() string {
 }
 
 // Initialize initializes the configuration system
-// Per AI.md PART 3: Environment variables only work on first run
+// Per AI.md PART 5: Runtime env vars are always applied; init-only vars apply on first run only.
 func Initialize() (*Config, error) {
 	// Ensure directories exist
 	if err := EnsureDirectories(); err != nil {
@@ -1823,13 +2101,22 @@ func Initialize() (*Config, error) {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Per AI.md PART 3: Environment overrides only apply on first run
-	// After config exists, environment variables are ignored
+	// Per AI.md PART 5: Runtime env vars (MODE, DOMAIN, DATABASE_DRIVER, DATABASE_URL, SMTP_*)
+	// are always applied on every startup, regardless of whether this is first run.
+	cfg.ApplyRuntimeEnv(env)
+
+	// Per AI.md PART 5: Init-only env vars (PORT, APPLICATION_NAME, CONFIG_DIR, etc.)
+	// are applied only on first run, then persisted in server.yml.
 	if created {
-		// Apply environment overrides only on first run
 		cfg.ApplyEnv(env)
 
-		// Save config with env overrides applied
+		// Per AI.md PART 5: First run selects a random port in 64000-64999 and persists it.
+		// Port 0 means "not yet assigned"; resolve it now so the saved value is stable.
+		if cfg.Server.Port == 0 {
+			cfg.Server.Port = GetRandomPort()
+		}
+
+		// Save config with first-run overrides and resolved port applied
 		if err := cfg.Save(configPath); err != nil {
 			// Log but don't print to console - banner handles output
 			_ = err
@@ -1839,6 +2126,11 @@ func Initialize() (*Config, error) {
 		// Per AI.md PART 14: Admin credentials NOT auto-generated
 		// User creates admin via setup wizard with setup token
 		cfg.firstRun = true
+	}
+
+	// Apply --debug CLI flag state recorded before config was loaded
+	if debugOverride {
+		cfg.debugEnabled = true
 	}
 
 	return cfg, nil
@@ -1857,10 +2149,13 @@ func (c *Config) IsProduction() bool {
 	return !c.IsDevelopment()
 }
 
-// IsDebug returns true if debug mode is enabled via --debug flag or DEBUG=true env var.
-// Per AI.md PART 6: Debug detection uses config.IsTruthy() (NON-NEGOTIABLE)
+// IsDebug returns true if debug mode is enabled.
+// Per AI.md PART 6: Priority is --debug CLI flag > DEBUG env var > default false.
+// c.debugEnabled is set by the --debug flag; the env var is the fallback.
 func (c *Config) IsDebug() bool {
-	return IsTruthy(os.Getenv("DEBUG"))
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.debugEnabled || IsTruthy(os.Getenv("DEBUG"))
 }
 
 // Sanitized returns a copy of the config with all sensitive values redacted.
@@ -1878,7 +2173,7 @@ func (c *Config) Sanitized() map[string]any {
 		"ssl": map[string]any{
 			"enabled": c.Server.SSL.Enabled,
 		},
-		"debug": IsTruthy(os.Getenv("DEBUG")),
+		"debug": c.debugEnabled || IsTruthy(os.Getenv("DEBUG")),
 	}
 }
 
@@ -2015,7 +2310,7 @@ func (c *Config) ValidateAndApplyDefaults() []ValidationWarning {
 
 	// Metrics configuration
 	if c.Server.Metrics.Enabled && c.Server.Metrics.Endpoint == "" {
-		c.Server.Metrics.Endpoint = "/metrics"
+		c.Server.Metrics.Endpoint = "/server/metrics"
 	}
 
 	// Compression configuration

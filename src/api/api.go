@@ -2,12 +2,14 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -27,6 +29,7 @@ import (
 	"github.com/apimgr/search/src/version"
 	"github.com/apimgr/search/src/widget"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-playground/validator/v10"
 )
 
 // APIVersion is the current API version. Derived from version.APIVersion.
@@ -54,6 +57,8 @@ type Handler struct {
 	torService   *service.TorService
 	startTime    time.Time
 	alertManager *alert.Manager
+	// validate is the input validator per AI.md PART 3 requirement
+	validate *validator.Validate
 }
 
 // NewHandler creates a new API handler
@@ -63,6 +68,7 @@ func NewHandler(cfg *config.Config, registry *engine.Registry, aggregator *searc
 		registry:   registry,
 		aggregator: aggregator,
 		startTime:  time.Now(),
+		validate:   validator.New(),
 	}
 }
 
@@ -151,6 +157,10 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.HandleFunc(APIPrefix+"/favicon", h.handleFavicon)
 	r.HandleFunc(APIPrefix+"/alerts", h.handleAlerts)
 	r.HandleFunc(APIPrefix+"/alerts/*", h.handleAlertByToken)
+
+	// Operator-gated server status and config — per AI.md PART 14
+	r.Get(APIPrefix+"/server/status", h.requireOperator(h.handleServerStatus))
+	r.Get(APIPrefix+"/server/config", h.requireOperator(h.handleServerConfig))
 }
 
 // Response types
@@ -338,14 +348,14 @@ type SystemInfo struct {
 
 // SearchRequest represents a search API request
 type SearchRequest struct {
-	Query      string   `json:"query"`
-	Category   string   `json:"category"`
-	Page       int      `json:"page"`
-	Limit      int      `json:"limit"`
+	Query      string   `json:"query"                  validate:"required,min=1,max=500"`
+	Category   string   `json:"category"               validate:"omitempty,max=50"`
+	Page       int      `json:"page"                   validate:"omitempty,min=1,max=1000"`
+	Limit      int      `json:"limit"                  validate:"omitempty,min=1,max=100"`
 	Engines    []string `json:"engines,omitempty"`
-	SafeSearch string   `json:"safe_search,omitempty"`
+	SafeSearch string   `json:"safe_search,omitempty"  validate:"omitempty,oneof=0 1 2"`
 	TimeRange  string   `json:"time_range,omitempty"`
-	Language   string   `json:"language,omitempty"`
+	Language   string   `json:"language,omitempty"     validate:"omitempty,max=10"`
 }
 
 // Pagination represents standard pagination info per AI.md PART 14
@@ -600,9 +610,9 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 		req.Language = strings.TrimSpace(r.URL.Query().Get("lang"))
 	}
 
-	// Validate
-	if req.Query == "" {
-		h.errorResponse(w, http.StatusBadRequest, "Query parameter is required", "")
+	// Validate all request fields per AI.md PART 3 using go-playground/validator
+	if err := h.validate.Struct(req); err != nil {
+		h.errorResponse(w, http.StatusBadRequest, "Invalid request parameters", err.Error())
 		return
 	}
 
@@ -921,7 +931,7 @@ func (h *Handler) errorResponse(w http.ResponseWriter, status int, message, deta
 	// Log the internal detail for operators — never exposed in the API response
 	// (Tier 3 per AI.md PART 11: internal error details are debug-only)
 	if detail != "" && status >= 500 {
-		log.Printf("API error [%s] %s: %s", requestID, message, detail)
+		slog.Error("API error", "request_id", requestID, "message", message, "detail", detail)
 	}
 
 	h.jsonResponse(w, status, &APIResponse{
@@ -1706,7 +1716,7 @@ func (h *Handler) handleFavicon(w http.ResponseWriter, r *http.Request) {
 
 	req, err := http.NewRequestWithContext(r.Context(), "GET", faviconURL, nil)
 	if err != nil {
-		log.Printf("[DEBUG] favicon request error for %s: %v", domain, err)
+		slog.Debug("favicon error", "domain", domain, "err", err)
 		h.serveFaviconFallback(w)
 		return
 	}
@@ -1717,7 +1727,7 @@ func (h *Handler) handleFavicon(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("[DEBUG] favicon fetch error for %s: %v", domain, err)
+		slog.Debug("favicon error", "domain", domain, "err", err)
 		h.serveFaviconFallback(w)
 		return
 	}
@@ -1748,7 +1758,7 @@ func (h *Handler) handleFavicon(w http.ResponseWriter, r *http.Request) {
 	limitedReader := io.LimitReader(resp.Body, 100*1024)
 	body, err := io.ReadAll(limitedReader)
 	if err != nil {
-		log.Printf("[DEBUG] favicon read error for %s: %v", domain, err)
+		slog.Debug("favicon error", "domain", domain, "err", err)
 		h.serveFaviconFallback(w)
 		return
 	}
@@ -1819,7 +1829,7 @@ func (h *Handler) handleServerContact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[Contact/API] From: %s <%s>, Subject: %s", body.Name, body.Email, body.Subject)
+	slog.Info("contact form submission", "subject", body.Subject)
 
 	h.jsonResponse(w, http.StatusOK, &APIResponse{
 		OK: true,
@@ -1887,4 +1897,91 @@ func getClientIP(r *http.Request) string {
 		ip = ip[:colonIdx]
 	}
 	return ip
+}
+
+// requireOperator wraps a handler and rejects requests without a valid operator
+// bearer token. Per AI.md PART 14: operator-gated endpoints use Bearer auth.
+// Token comparison is constant-time over SHA-256 digests to prevent timing leaks.
+func (h *Handler) requireOperator(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		expected := h.config.Get().Token
+		if expected == "" {
+			h.errorResponse(w, http.StatusUnauthorized, "Operator token not configured", "")
+			return
+		}
+		hdr := r.Header.Get("Authorization")
+		const prefix = "Bearer "
+		if len(hdr) <= len(prefix) || !strings.EqualFold(hdr[:len(prefix)], prefix) {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="operator"`)
+			h.errorResponse(w, http.StatusUnauthorized, "Operator token required", "")
+			return
+		}
+		presented := strings.TrimSpace(hdr[len(prefix):])
+		expectedSum := sha256.Sum256([]byte(expected))
+		presentedSum := sha256.Sum256([]byte(presented))
+		if subtle.ConstantTimeCompare(expectedSum[:], presentedSum[:]) != 1 {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="operator"`)
+			h.errorResponse(w, http.StatusUnauthorized, "Invalid operator token", "")
+			return
+		}
+		next(w, r)
+	}
+}
+
+// handleServerStatus handles GET /api/v1/server/status (operator token required).
+// Per AI.md PART 14: operator-gated JSON status endpoint mirrors /server/status HTML page.
+func (h *Handler) handleServerStatus(w http.ResponseWriter, r *http.Request) {
+	cfg := h.config.Get()
+	uptime := h.formatDuration(time.Since(h.startTime))
+
+	status := "healthy"
+	if cfg.MaintenanceMode {
+		status = "maintenance"
+	}
+
+	torRunning := h.torService != nil && h.torService.IsRunning()
+
+	h.jsonResponse(w, http.StatusOK, &APIResponse{
+		OK: true,
+		Data: map[string]interface{}{
+			"status":     status,
+			"version":    APIVersion,
+			"mode":       cfg.Mode,
+			"uptime":     uptime,
+			"go_version": runtime.Version(),
+			"tor": map[string]interface{}{
+				"enabled": cfg.Tor.Enabled,
+				"running": torRunning,
+			},
+		},
+	})
+}
+
+// handleServerConfig handles GET /api/v1/server/config (operator token required).
+// Per AI.md PART 14: returns a redacted view of the current server configuration.
+// Sensitive fields (token, secret_key) are never included in the response.
+func (h *Handler) handleServerConfig(w http.ResponseWriter, r *http.Request) {
+	cfg := h.config.Get()
+
+	h.jsonResponse(w, http.StatusOK, &APIResponse{
+		OK: true,
+		Data: map[string]interface{}{
+			"mode":        cfg.Mode,
+			"port":        cfg.Port,
+			"https_port":  cfg.HTTPSPort,
+			"address":     cfg.Address,
+			"base_url":    cfg.BaseURL,
+			"maintenance": cfg.MaintenanceMode,
+			"branding": map[string]string{
+				"title":       cfg.Branding.Title,
+				"tagline":     cfg.Branding.Tagline,
+				"description": cfg.Branding.Description,
+			},
+			"features": map[string]bool{
+				"tor":     cfg.Tor.Enabled,
+				"geoip":   cfg.GeoIP.Enabled,
+				"metrics": cfg.Metrics.Enabled,
+			},
+		},
+	})
 }

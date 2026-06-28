@@ -15,6 +15,8 @@ var truthyValues = map[string]bool{
 	"aye": true, "si": true, "oui": true, "da": true, "hai": true,
 	"affirmative": true, "accept": true, "allow": true, "grant": true,
 	"sure": true, "totally": true,
+	// HTML checkbox value
+	"checked": true,
 }
 
 // Falsy values (case-insensitive)

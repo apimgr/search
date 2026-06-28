@@ -4,6 +4,9 @@ package service
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
+	"os/user"
 	"syscall"
 )
 
@@ -27,4 +30,91 @@ func dropPrivilegesUnix(uid, gid int) error {
 	}
 
 	return nil
+}
+
+// isElevated returns true when the process effective UID is 0 (root).
+// Per AI.md PART 7: platform-independent privilege check (Unix variant).
+func isElevated() bool {
+	return os.Geteuid() == 0
+}
+
+// canEscalate returns true when a privilege escalation tool or privileged group membership exists.
+// Per AI.md PART 7: checks sudo/doas availability and wheel/sudo/admin group membership.
+func canEscalate() bool {
+	for _, tool := range []string{"sudo", "doas"} {
+		if _, err := exec.LookPath(tool); err == nil {
+			return true
+		}
+	}
+	u, err := user.Current()
+	if err != nil {
+		return false
+	}
+	gids, err := u.GroupIds()
+	if err != nil {
+		return false
+	}
+	privilegedGroups := map[string]bool{"wheel": true, "sudo": true, "admin": true}
+	for _, gid := range gids {
+		g, err := user.LookupGroupId(gid)
+		if err != nil {
+			continue
+		}
+		if privilegedGroups[g.Name] {
+			return true
+		}
+	}
+	return false
+}
+
+// execElevated re-executes the current binary via sudo or doas with the same arguments.
+// Per AI.md PART 7: re-exec self via sudo — never call sudo directly in business logic.
+func execElevated() error {
+	self, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("failed to resolve executable path: %w", err)
+	}
+	var tool string
+	for _, t := range []string{"sudo", "doas"} {
+		if _, err := exec.LookPath(t); err == nil {
+			tool = t
+			break
+		}
+	}
+	if tool == "" {
+		return fmt.Errorf("no privilege escalation tool available (sudo/doas not found)")
+	}
+	args := append([]string{self}, os.Args[1:]...)
+	cmd := exec.Command(tool, args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// CanEscalate checks if the current user can escalate privileges.
+// Per AI.md PART 23: Smart escalation flow — only prompt if user actually can escalate.
+func CanEscalate() bool {
+	return canEscalate()
+}
+
+// ExecElevated re-executes the given binary path with the provided args under sudo/doas.
+// Per AI.md PART 23: Re-exec with escalation tool when user confirms escalation.
+func ExecElevated(args []string) error {
+	var tool string
+	for _, t := range []string{"sudo", "doas"} {
+		if _, err := exec.LookPath(t); err == nil {
+			tool = t
+			break
+		}
+	}
+	if tool == "" {
+		return fmt.Errorf("no privilege escalation tool available (sudo/doas not found)")
+	}
+	sudoArgs := append([]string{tool}, args...)
+	cmd := exec.Command(sudoArgs[0], sudoArgs[1:]...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }

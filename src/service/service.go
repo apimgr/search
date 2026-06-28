@@ -263,8 +263,7 @@ func (sm *ServiceManager) Disable() error {
 // Service starts as root, binary drops to search user after port binding
 const systemdTemplate = `[Unit]
 Description=search service
-//apimgr.github.io/search
-Documentation=https:
+Documentation=https://apimgr.github.io/search
 After=network-online.target
 Wants=network-online.target
 
@@ -280,6 +279,7 @@ StandardError=journal
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
+NoNewPrivileges=true
 ReadWritePaths=/etc/apimgr/search
 ReadWritePaths=/var/lib/apimgr/search
 ReadWritePaths=/var/cache/apimgr/search
@@ -346,7 +346,7 @@ func (sm *ServiceManager) ensureSystemUser() error {
 		"--system",
 		"--no-create-home",
 		"--home-dir", homeDir,
-		"--shell", "/bin/false",
+		"--shell", "/sbin/nologin",
 		"--gid", userName,
 		userName,
 	)
@@ -622,7 +622,7 @@ const launchdTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>apimgr.search</string>
+    <string>io.github.apimgr.search</string>
     <key>ProgramArguments</key>
     <array>
         <string>/usr/local/bin/search</string>
@@ -640,7 +640,7 @@ const launchdTemplate = `<?xml version="1.0" encoding="UTF-8"?>
 `
 
 func (sm *ServiceManager) getLaunchdPath() string {
-	return "/Library/LaunchDaemons/apimgr.search.plist"
+	return "/Library/LaunchDaemons/io.github.apimgr.search.plist"
 }
 
 func (sm *ServiceManager) installLaunchd() error {
@@ -682,11 +682,11 @@ func (sm *ServiceManager) uninstallLaunchd() error {
 }
 
 func (sm *ServiceManager) statusLaunchd() (string, error) {
-	out, err := exec.Command("launchctl", "list", "apimgr.search").Output()
+	out, err := exec.Command("launchctl", "list", "io.github.apimgr.search").Output()
 	if err != nil {
 		return "inactive", nil
 	}
-	if strings.Contains(string(out), "apimgr.search") {
+	if strings.Contains(string(out), "io.github.apimgr.search") {
 		return "active", nil
 	}
 	return "inactive", nil
@@ -807,6 +807,111 @@ func appendToFile(path, content string) error {
 	_, err = f.WriteString(content)
 	return err
 }
+
+// InstallUserService installs a user-level service (no root required).
+// Per AI.md PART 23: Fallback when user cannot or declines to escalate.
+func (sm *ServiceManager) InstallUserService() error {
+	switch runtime.GOOS {
+	case "linux":
+		return sm.installSystemdUserService()
+	case "darwin":
+		return sm.installLaunchdUserAgent()
+	default:
+		return fmt.Errorf("user service not supported on %s", runtime.GOOS)
+	}
+}
+
+// installSystemdUserService installs a systemd --user service unit.
+// Per AI.md PART 23/24: ~/.config/systemd/user/search.service
+func (sm *ServiceManager) installSystemdUserService() error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to determine home directory: %w", err)
+	}
+
+	unitDir := filepath.Join(homeDir, ".config", "systemd", "user")
+	if err := os.MkdirAll(unitDir, 0755); err != nil {
+		return fmt.Errorf("failed to create systemd user unit directory: %w", err)
+	}
+
+	unitPath := filepath.Join(unitDir, "search.service")
+	if err := os.WriteFile(unitPath, []byte(systemdUserTemplate), 0644); err != nil {
+		return fmt.Errorf("failed to write user service unit: %w", err)
+	}
+
+	// Reload the user daemon
+	if err := runCommand("systemctl", "--user", "daemon-reload"); err != nil {
+		return fmt.Errorf("failed to reload systemd user daemon: %w", err)
+	}
+
+	// Enable the user service
+	if err := runCommand("systemctl", "--user", "enable", "search"); err != nil {
+		return fmt.Errorf("failed to enable user service: %w", err)
+	}
+
+	return nil
+}
+
+// installLaunchdUserAgent installs a macOS LaunchAgent (user-level).
+// Per AI.md PART 23/24: ~/Library/LaunchAgents/io.github.apimgr.search.plist
+func (sm *ServiceManager) installLaunchdUserAgent() error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to determine home directory: %w", err)
+	}
+
+	agentDir := filepath.Join(homeDir, "Library", "LaunchAgents")
+	if err := os.MkdirAll(agentDir, 0755); err != nil {
+		return fmt.Errorf("failed to create LaunchAgents directory: %w", err)
+	}
+
+	plistPath := filepath.Join(agentDir, "io.github.apimgr.search.plist")
+	if err := os.WriteFile(plistPath, []byte(launchdUserAgentTemplate), 0644); err != nil {
+		return fmt.Errorf("failed to write LaunchAgent plist: %w", err)
+	}
+
+	return nil
+}
+
+// systemdUserTemplate is the systemd user service unit template.
+// Per AI.md PART 23/24: User service runs as calling user, ports >1024 only.
+const systemdUserTemplate = `[Unit]
+Description=Search - Privacy-respecting self-hosted metasearch engine
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/search
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+`
+
+// launchdUserAgentTemplate is the macOS LaunchAgent plist template.
+// Per AI.md PART 23/24: User agent runs as calling user under ~/Library/LaunchAgents.
+const launchdUserAgentTemplate = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>io.github.apimgr.search</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/local/bin/search</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>StandardOutPath</key>
+	<string>/tmp/apimgr/search.log</string>
+	<key>StandardErrorPath</key>
+	<string>/tmp/apimgr/search.err</string>
+</dict>
+</plist>
+`
 
 // GetServiceStatus returns formatted service status information
 func GetServiceStatus() string {

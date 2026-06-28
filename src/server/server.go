@@ -6,11 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"html"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -183,10 +184,10 @@ func NewServer(cfg *config.Config) *Server {
 		}
 		geoLookup = geoip.NewLookup(geoCfg)
 		if err := geoLookup.LoadDatabases(); err != nil {
-			log.Printf("[GeoIP] Warning: Failed to load GeoIP databases: %v", err)
+			slog.Warn("GeoIP database load failed", "err", err)
 			geoLookup = nil
 		} else {
-			log.Printf("[GeoIP] Loaded MMDB databases from %s", geoDir)
+			slog.Info("GeoIP databases loaded", "dir", geoDir)
 		}
 	}
 
@@ -271,7 +272,7 @@ func NewServer(cfg *config.Config) *Server {
 			},
 		}
 		mailer = email.NewMailer(emailCfg)
-		log.Printf("[Email] Mailer configured (SMTP: %s:%d)", cfg.Server.Email.SMTP.Host, cfg.Server.Email.SMTP.Port)
+		slog.Info("Email mailer configured", "smtp_host", cfg.Server.Email.SMTP.Host, "smtp_port", cfg.Server.Email.SMTP.Port)
 	}
 
 	// Scheduler is initialized after Server struct creation per AI.md PART 19
@@ -290,12 +291,12 @@ func NewServer(cfg *config.Config) *Server {
 	}
 	dbMgr, err = database.NewDatabaseManager(dbConfig)
 	if err != nil {
-		log.Printf("[Database] Warning: Failed to initialize database: %v", err)
+		slog.Warn("Database initialization failed", "err", err)
 	} else {
 		if err := database.InitSchema(context.Background(), dbMgr); err != nil {
-			log.Printf("[Database] Warning: Failed to initialize schema: %v", err)
+			slog.Warn("Database schema initialization failed", "err", err)
 		} else {
-			log.Printf("[Database] Schema initialized successfully")
+			slog.Info("Database schema initialized")
 		}
 	}
 
@@ -308,10 +309,9 @@ func NewServer(cfg *config.Config) *Server {
 	// Initialize i18n manager per AI.md PART 32
 	i18nMgr, err := i18n.DefaultManager()
 	if err != nil {
-		log.Printf("[I18N] Warning: Failed to initialize i18n manager: %v", err)
-		// Continue without translations - will use keys as fallback
+		slog.Warn("i18n manager initialization failed, falling back to key passthrough", "err", err)
 	} else {
-		log.Printf("[I18N] Translations loaded for %d languages", len(i18n.DefaultSupportedLanguages()))
+		slog.Info("i18n translations loaded", "language_count", len(i18n.DefaultSupportedLanguages()))
 	}
 
 	renderer = NewTemplateRenderer(cfg, i18nMgr)
@@ -405,7 +405,7 @@ func (s *Server) StartHTTPServer() error {
 	// Start Tor service if enabled
 	if s.torService != nil {
 		if err := s.torService.StartTorService(); err != nil {
-			log.Printf("[Tor] Warning: Failed to start Tor service: %v", err)
+			slog.Warn("Tor service start failed", "err", err)
 		}
 	}
 
@@ -418,7 +418,7 @@ func (s *Server) StartHTTPServer() error {
 	// Resolve HTTP port (0 means random port in 64xxx range)
 	httpPort := s.config.Server.GetHTTPPort()
 	if httpPort != s.config.Server.Port {
-		log.Printf("[Server] Using random HTTP port: %d", httpPort)
+		slog.Info("Using random HTTP port", "port", httpPort)
 		s.config.Server.Port = httpPort
 	}
 
@@ -428,8 +428,7 @@ func (s *Server) StartHTTPServer() error {
 	var torAddr string
 	if s.torService != nil && s.torService.IsRunning() {
 		torAddr = s.torService.GetOnionAddress()
-		// Log Tor address
-		log.Printf("[Server] Tor hidden service: %s", torAddr)
+		slog.Info("Tor hidden service active", "onion_address", torAddr)
 	}
 
 	// Banner is printed by main.go per AI.md PART 7/14
@@ -475,9 +474,9 @@ func (s *Server) startDualPortMode(mux http.Handler, httpPort int) error {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	log.Printf("[Server] Dual port mode enabled")
-	log.Printf("[Server] HTTP listening on: http://%s", httpAddr)
-	log.Printf("[Server] HTTPS listening on: https://%s", httpsAddr)
+	slog.Info("Dual port mode enabled")
+	slog.Info("HTTP server listening", "addr", "http://"+httpAddr)
+	slog.Info("HTTPS server listening", "addr", "https://"+httpsAddr)
 
 	// Start HTTP server in goroutine
 	errChan := make(chan error, 2)
@@ -524,7 +523,7 @@ func (s *Server) startSinglePortMode(mux http.Handler, port int) error {
 			s.httpServer.Handler = s.tlsManager.GetHTTPSHandler(mux)
 		}
 
-		log.Printf("[Server] Listening on: https://%s", addr)
+		slog.Info("Server listening", "addr", "https://"+addr)
 
 		// Start HTTP->HTTPS redirect server on port 80 if configured
 		if s.config.Server.SSL.AutoTLS {
@@ -538,7 +537,7 @@ func (s *Server) startSinglePortMode(mux http.Handler, port int) error {
 			return fmt.Errorf("server error: %w", err)
 		}
 	} else {
-		log.Printf("[Server] Listening on: http://%s", addr)
+		slog.Info("Server listening", "addr", "http://"+addr)
 
 		// Start HTTP server (blocking)
 		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -557,7 +556,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	// Stop scheduler
 	if s.scheduler != nil {
 		s.scheduler.StopTaskScheduler()
-		log.Printf("[Scheduler] Stopped")
+		slog.Info("Scheduler stopped")
 	}
 
 	// Stop Tor service
@@ -576,7 +575,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	// Shutdown HTTPS server if running (dual port mode)
 	if s.httpsServer != nil {
 		if err := s.httpsServer.Shutdown(ctx); err != nil {
-			log.Printf("[Server] HTTPS server shutdown error: %v", err)
+			slog.Error("HTTPS server shutdown error", "err", err)
 		}
 	}
 
@@ -590,21 +589,21 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	// Close database connections
 	if s.dbManager != nil {
 		if err := s.dbManager.Close(); err != nil {
-			log.Printf("[Database] Close error: %v", err)
+			slog.Error("Database close error", "err", err)
 		}
 	}
 
 	// Close log files
 	s.logManager.Close()
 
-	log.Println("[Server] Stopped gracefully")
+	slog.Info("Server stopped gracefully")
 	return nil
 }
 
 // UpdateConfig updates the server configuration
 func (s *Server) UpdateConfig(cfg *config.Config) {
 	s.config = cfg
-	log.Println("[Server] Configuration updated")
+	slog.Info("Server configuration updated")
 }
 
 // newPageData creates PageData with Tor status and theme automatically set
@@ -701,13 +700,15 @@ func (s *Server) setupRoutes() http.Handler {
 	r.NotFound(s.handleNotFound)
 
 	// Health check endpoints per AI.md PART 13
-	// Canonical frontend route: /server/healthz (content-negotiated HTML/JSON/text)
-	// Root alias: /healthz → /server/healthz (optional; treated as always-on here)
+	// Canonical route: /server/healthz (content-negotiated HTML/JSON/text)
+	// Root alias (/healthz) is opt-in via server.healthz.root.enabled in server.yml (default: false)
 	// Note: /api/v1/server/healthz and /api/v1/healthz are registered by apiHandler.RegisterRoutes()
 	r.HandleFunc("/server/healthz", s.handleHealthz)
 	r.HandleFunc("/server/healthz.txt", s.handleHealthz)
-	r.HandleFunc("/healthz", s.handleHealthz)
-	r.HandleFunc("/healthz.txt", s.handleHealthz)
+	if s.config.Server.Healthz.Root.Enabled {
+		r.HandleFunc("/healthz", s.handleHealthz)
+		r.HandleFunc("/healthz.txt", s.handleHealthz)
+	}
 	r.HandleFunc("/readyz", s.handleReadyz)
 	r.HandleFunc("/livez", s.handleLivez)
 
@@ -725,6 +726,10 @@ func (s *Server) setupRoutes() http.Handler {
 
 	// Autocomplete (per AI.md PART 32 line 28280)
 	r.HandleFunc("/autocomplete", s.handleAutocomplete)
+
+	// Operator-gated server management endpoints per API.md PART 13/14
+	r.Get("/server/status", s.RequireOperator(s.handleServerStatus))
+	r.Get("/server/config", s.RequireOperator(s.handleServerConfig))
 
 	// Standard server pages (per AI.md spec)
 	// /server → /server/about redirect per AI.md line 17696
@@ -791,7 +796,7 @@ func (s *Server) setupRoutes() http.Handler {
 	if s.config.Server.Metrics.Enabled {
 		metricsPath := s.config.Server.Metrics.Endpoint
 		if metricsPath == "" {
-			metricsPath = "/metrics"
+			metricsPath = "/server/metrics"
 		}
 		r.HandleFunc(metricsPath, s.metrics.AuthenticatedHandler())
 	}
@@ -926,7 +931,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if queryStr == "" {
-		s.handleError(w, r, http.StatusBadRequest, "Search Error", "Please enter a search query.")
+		s.handleError(w, r, http.StatusBadRequest, i18n.RequestString(r, "search.error_title"), i18n.RequestString(r, "search.empty_query"))
 		return
 	}
 
@@ -993,7 +998,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDirect(w http.ResponseWriter, r *http.Request) {
 	// Only allow GET requests
 	if r.Method != http.MethodGet {
-		s.handleError(w, r, http.StatusMethodNotAllowed, "Method Not Allowed", "Only GET requests are allowed.")
+		s.handleError(w, r, http.StatusMethodNotAllowed, i18n.RequestString(r, "errors.method_not_allowed_title"), i18n.RequestString(r, "errors.method_not_allowed_message"))
 		return
 	}
 
@@ -1001,7 +1006,7 @@ func (s *Server) handleDirect(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/direct/")
 	parts := strings.SplitN(path, "/", 2)
 	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
-		s.handleError(w, r, http.StatusBadRequest, "Invalid Request", "Please specify a direct answer type and term. Example: /direct/tldr/git")
+		s.handleError(w, r, http.StatusBadRequest, i18n.RequestString(r, "errors.invalid_request_title"), i18n.RequestString(r, "errors.invalid_request_direct"))
 		return
 	}
 
@@ -1013,7 +1018,7 @@ func (s *Server) handleDirect(w http.ResponseWriter, r *http.Request) {
 	term = strings.TrimSpace(term)
 
 	if term == "" {
-		s.handleError(w, r, http.StatusBadRequest, "Invalid Request", "Please specify a term to look up.")
+		s.handleError(w, r, http.StatusBadRequest, i18n.RequestString(r, "errors.invalid_request_title"), i18n.RequestString(r, "errors.invalid_request_term"))
 		return
 	}
 
@@ -1186,20 +1191,19 @@ footer a{color:var(--accent);text-decoration:none}
 // renderSearchError renders an error page
 // Per AI.md PART 9: Never expose internal error details to users
 func (s *Server) renderSearchError(w http.ResponseWriter, r *http.Request, query string, err error) {
-	// Log actual error for debugging
-	// Privacy: never log user queries (privacy is the product per CLAUDE.md rule #10)
-	log.Printf("[ERROR] search error: %v", err)
+	// Log actual error for debugging (no query logged — privacy is the product)
+	slog.Error("Search error", "err", err)
 
 	// Use newPageData for TorAddress support per AI.md PART 32
-	baseData := s.newPageData(w, r, "Search Error", "error")
-	baseData.Description = "An error occurred while searching"
+	baseData := s.newPageData(w, r, i18n.RequestString(r, "search.error_title"), "error")
+	baseData.Description = i18n.RequestString(r, "search.error_description")
 	baseData.Query = query
 
 	data := &ErrorPageData{
 		PageData:   *baseData,
 		StatusCode: http.StatusInternalServerError,
-		StatusText: "Search Error",
-		Message:    "An error occurred while processing your search. Please try again.",
+		StatusText: i18n.RequestString(r, "search.error_title"),
+		Message:    i18n.RequestString(r, "search.error_message"),
 	}
 
 	if renderErr := s.renderer.Render(w, "error", data); renderErr != nil {
@@ -1311,4 +1315,35 @@ func sanitizeInput(input string) string {
 	}
 
 	return result.String()
+}
+
+// handleServerStatus returns runtime detail as JSON, gated by operator token.
+// Per API.md PART 13/14: /server/status returns uptime, goroutines, memory, version, mode.
+func (s *Server) handleServerStatus(w http.ResponseWriter, r *http.Request) {
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
+	respondJSON(w, http.StatusOK, map[string]any{
+		"ok": true,
+		"data": map[string]any{
+			"version":    getVersion(),
+			"mode":       s.config.Server.Mode,
+			"uptime":     formatDuration(time.Since(s.startTime)),
+			"goroutines": runtime.NumGoroutine(),
+			"memory": map[string]any{
+				"alloc_bytes":       memStats.Alloc,
+				"total_alloc_bytes": memStats.TotalAlloc,
+				"sys_bytes":         memStats.Sys,
+				"num_gc":            memStats.NumGC,
+			},
+		},
+	})
+}
+
+// handleServerConfig returns the sanitized running configuration as JSON, gated by operator token.
+// Per API.md PART 13/14: /server/config exposes redacted config to operators.
+func (s *Server) handleServerConfig(w http.ResponseWriter, r *http.Request) {
+	respondJSON(w, http.StatusOK, map[string]any{
+		"ok":   true,
+		"data": s.config.Sanitized(),
+	})
 }

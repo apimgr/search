@@ -15,8 +15,9 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Server.Address != "[::]" {
 		t.Errorf("Server.Address = %q, want %q", cfg.Server.Address, "[::]")
 	}
-	if cfg.Server.Port != 64580 {
-		t.Errorf("Server.Port = %d, want %d", cfg.Server.Port, 64580)
+	// DefaultConfig returns Port 0 (unset); first run assigns a random 64000-64999 port
+	if cfg.Server.Port != 0 {
+		t.Errorf("Server.Port = %d, want 0 (unset default)", cfg.Server.Port)
 	}
 	if cfg.Server.Mode != "production" {
 		t.Errorf("Server.Mode = %q, want %q", cfg.Server.Mode, "production")

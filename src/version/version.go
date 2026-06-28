@@ -19,6 +19,19 @@ const APIPrefix = "/api/" + APIVersion
 // Windows 11 Edge - consistent across all engines for privacy and compatibility.
 const BrowserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
 
+// Label constants for the Full() output format — used in tests to avoid hardcoded strings.
+const (
+	LabelVersion   = "Version:"
+	LabelCommit    = "Commit:"
+	LabelBuildDate = "Build Date:"
+	LabelBuilt     = "Built:"
+	LabelBranch    = "Branch:"
+	LabelGoVersion = "Go Version:"
+	LabelGo        = "Go:"
+	LabelOSArch    = "OS/Arch:"
+	LabelCompiler  = "Compiler:"
+)
+
 // Build-time variables - set via ldflags
 var (
 	// Version is the semantic version (e.g., "1.0.0")
@@ -71,13 +84,13 @@ func (i Info) String() string {
 // Full returns a detailed version string
 func (i Info) Full() string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Version:    %s\n", i.Version))
-	sb.WriteString(fmt.Sprintf("Commit:     %s\n", i.Commit))
-	sb.WriteString(fmt.Sprintf("Build Date: %s\n", i.BuildDate))
-	sb.WriteString(fmt.Sprintf("Branch:     %s\n", i.Branch))
-	sb.WriteString(fmt.Sprintf("Go Version: %s\n", i.GoVersion))
-	sb.WriteString(fmt.Sprintf("OS/Arch:    %s/%s\n", i.OS, i.Arch))
-	sb.WriteString(fmt.Sprintf("Compiler:   %s", i.Compiler))
+	sb.WriteString(fmt.Sprintf("%s    %s\n", LabelVersion, i.Version))
+	sb.WriteString(fmt.Sprintf("%s     %s\n", LabelCommit, i.Commit))
+	sb.WriteString(fmt.Sprintf("%s %s\n", LabelBuildDate, i.BuildDate))
+	sb.WriteString(fmt.Sprintf("%s     %s\n", LabelBranch, i.Branch))
+	sb.WriteString(fmt.Sprintf("%s %s\n", LabelGoVersion, i.GoVersion))
+	sb.WriteString(fmt.Sprintf("%s    %s/%s\n", LabelOSArch, i.OS, i.Arch))
+	sb.WriteString(fmt.Sprintf("%s   %s", LabelCompiler, i.Compiler))
 	return sb.String()
 }
 

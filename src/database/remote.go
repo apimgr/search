@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -138,8 +138,7 @@ func (rdb *RemoteDB) connect() error {
 	}
 
 	rdb.ready = true
-	log.Printf("[Database] Connected to remote %s database at %s:%d",
-		rdb.driver, rdb.config.Host, rdb.config.Port)
+	slog.Info("database connected", "driver", rdb.driver, "host", rdb.config.Host, "port", rdb.config.Port)
 
 	return nil
 }
@@ -250,7 +249,7 @@ func (mm *MigrationManager) MigrateToRemote(ctx context.Context, progress chan<-
 		// Count rows for progress
 		totalRows, err := mm.countRows(ctx, table)
 		if err != nil {
-			log.Printf("[Migration] Warning: failed to count rows in %s: %v", table, err)
+			slog.Warn("migration failed to count rows", "table", table, "err", err)
 		}
 
 		// Migrate data
@@ -273,7 +272,7 @@ func (mm *MigrationManager) MigrateToRemote(ctx context.Context, progress chan<-
 			}
 		}
 
-		log.Printf("[Migration] Migrated table %s: %d rows", table, migratedRows)
+		slog.Info("migration table completed", "table", table, "rows", migratedRows)
 	}
 
 	if progress != nil {
@@ -317,8 +316,11 @@ func (mm *MigrationManager) getTableSchema(ctx context.Context, table string) (s
 	return schema, err
 }
 
-// validIdentifier checks that a table or column name contains only safe characters
-// Per AI.md PART 10: Parameterized queries only - identifiers must be validated
+// validIdentifier enforces the identifier-validation pattern: SQL identifiers (table/column names)
+// cannot be passed as bind parameters, so they must be whitelisted to [a-zA-Z0-9_] only.
+// This is the ONLY acceptable deviation from parameterized queries per AI.md PART 10.
+// Every fmt.Sprintf SQL construction in this file MUST call validIdentifier first and return
+// an error immediately if it fails — never embed an unvalidated identifier in a query.
 func validIdentifier(name string) bool {
 	if name == "" || len(name) > 128 {
 		return false
@@ -336,6 +338,8 @@ func (mm *MigrationManager) countRows(ctx context.Context, table string) (int64,
 	if !validIdentifier(table) {
 		return 0, fmt.Errorf("invalid table name: %q", table)
 	}
+	// Identifier-validation pattern: table name is whitelisted to [a-zA-Z0-9_] by validIdentifier above.
+	// SQL identifiers cannot be bind parameters; this fmt.Sprintf is the only acceptable deviation per AI.md PART 10.
 	var count int64
 	err := mm.sourceDB.QueryRow(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM "%s"`, table)).Scan(&count)
 	return count, err
@@ -350,7 +354,7 @@ func (mm *MigrationManager) createTargetTable(ctx context.Context, table, schema
 	if err != nil {
 		// Table might already exist
 		if strings.Contains(err.Error(), "already exists") {
-			log.Printf("[Migration] Table %s already exists in target", table)
+			slog.Info("migration table already exists in target", "table", table)
 			return nil
 		}
 		return err
@@ -419,7 +423,9 @@ func (mm *MigrationManager) migrateTableData(ctx context.Context, table string, 
 		}
 	}
 
-	// Build SELECT query
+	// Identifier-validation pattern: all column names and the table name are whitelisted to
+	// [a-zA-Z0-9_] by validIdentifier above. SQL identifiers cannot be bind parameters;
+	// these fmt.Sprintf calls are the only acceptable deviation per AI.md PART 10.
 	selectQuery := fmt.Sprintf(`SELECT "%s" FROM "%s"`, strings.Join(columns, `", "`), table)
 
 	rows, err := mm.sourceDB.Query(ctx, selectQuery)
@@ -490,6 +496,8 @@ func (mm *MigrationManager) getTableColumns(ctx context.Context, table string) (
 	if !validIdentifier(table) {
 		return nil, fmt.Errorf("invalid table name: %q", table)
 	}
+	// Identifier-validation pattern: table name is whitelisted to [a-zA-Z0-9_] by validIdentifier above.
+	// SQLite PRAGMA does not support bind parameters for the table name; this is the only acceptable deviation per AI.md PART 10.
 	rows, err := mm.sourceDB.Query(ctx, fmt.Sprintf(`PRAGMA table_info("%s")`, table))
 	if err != nil {
 		return nil, err
@@ -539,7 +547,7 @@ func (mm *MigrationManager) BackupBeforeMigration(dbPath string) (string, error)
 		return "", fmt.Errorf("failed to copy data: %w", err)
 	}
 
-	log.Printf("[Migration] Created backup: %s", backupPath)
+	slog.Info("migration backup created", "path", backupPath)
 	return backupPath, nil
 }
 

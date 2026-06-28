@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"time"
 
@@ -23,7 +23,7 @@ func (s *Server) initScheduler(db *sql.DB) {
 	// Configure timezone
 	if tz := s.config.Server.Scheduler.Timezone; tz != "" {
 		if err := sched.SetTimezone(tz); err != nil {
-			log.Printf("[Scheduler] Invalid timezone %s, using default: %v", tz, err)
+			slog.Warn("invalid timezone, using default", "timezone", tz, "err", err)
 		}
 	}
 
@@ -56,7 +56,7 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 	return &scheduler.TaskHandlers{
 		// SSL Renewal - check and renew certs 7 days before expiry
 		SSLRenewal: func(ctx context.Context) error {
-			log.Println("[Task] SSL certificate renewal check complete")
+			slog.Info("SSL certificate renewal check complete")
 			return nil
 		},
 
@@ -66,31 +66,31 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 				// GeoIP is disabled; skip update
 				return nil
 			}
-			log.Println("[Task] GeoIP database update complete")
+			slog.Info("GeoIP database update complete")
 			return nil
 		},
 
 		// Blocklist Update - download IP/domain blocklists
 		BlocklistUpdate: func(ctx context.Context) error {
-			log.Println("[Task] Blocklist update complete")
+			slog.Info("blocklist update complete")
 			return nil
 		},
 
 		// CVE Update - download security databases (optional feature)
 		CVEUpdate: func(ctx context.Context) error {
-			log.Println("[Task] CVE update check complete")
+			slog.Info("CVE update check complete")
 			return nil
 		},
 
 		// Token Cleanup - remove expired tokens
 		TokenCleanup: func(ctx context.Context) error {
-			log.Println("[Task] Token cleanup complete")
+			slog.Info("token cleanup complete")
 			return nil
 		},
 
 		// Log Rotation - rotate and compress old logs
 		LogRotation: func(ctx context.Context) error {
-			log.Println("[Task] Log rotation complete")
+			slog.Info("log rotation complete")
 			return nil
 		},
 
@@ -113,7 +113,7 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 					return err
 				}
 			}
-			log.Println("[Task] Self health check passed")
+			slog.Info("self health check passed")
 			return nil
 		},
 
@@ -123,9 +123,9 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 				// Tor is disabled; skip health check
 				return nil
 			}
-			log.Println("[Task] Checking Tor health...")
+			slog.Info("checking Tor health")
 			if s.torService != nil && !s.torService.IsRunning() {
-				log.Println("[Task] Tor is down, attempting restart...")
+				slog.Warn("Tor is down, attempting restart")
 				return s.torService.RestartTorService()
 			}
 			return nil
@@ -210,8 +210,11 @@ func (e *TaskNotFoundError) Error() string {
 // Per AI.md PART 19: Failed tasks trigger notifications (if configured)
 func (s *Server) handleTaskFailureNotification(notification *scheduler.TaskFailureNotification) {
 	// Log the failure
-	log.Printf("[Scheduler] Task failure notification: %s (%s) failed after %d attempts: %s",
-		notification.TaskName, notification.TaskID, notification.Attempts, notification.Error)
+	slog.Error("task failure notification",
+		"task_name", notification.TaskName,
+		"task_id", notification.TaskID,
+		"attempts", notification.Attempts,
+		"error", notification.Error)
 
 	// Send email notification if mailer is configured
 	if s.mailer != nil && s.mailer.IsEnabled() {
@@ -237,9 +240,9 @@ This is an automated notification from the scheduler.
 			notification.FailCount)
 
 		if err := s.mailer.SendAlert("Task Failure", body); err != nil {
-			log.Printf("[Scheduler] Failed to send task failure notification email: %v", err)
+			slog.Error("failed to send task failure notification email", "err", err)
 		} else {
-			log.Printf("[Scheduler] Task failure notification email sent for %s", notification.TaskID)
+			slog.Info("task failure notification email sent", "task_id", notification.TaskID)
 		}
 	}
 
@@ -257,7 +260,7 @@ This is an automated notification from the scheduler.
 // - Decrypt test (if encrypted)
 // Only delete old backups if new backup passes ALL verification checks.
 func (s *Server) performScheduledBackup(ctx context.Context, backupType string) error {
-	log.Printf("[Backup] Starting %s backup...", backupType)
+	slog.Info("starting scheduled backup", "type", backupType)
 
 	// Create backup manager
 	mgr := backup.NewManager()
@@ -276,7 +279,7 @@ func (s *Server) performScheduledBackup(ctx context.Context, backupType string) 
 	if complianceEnabled {
 		if backupPassword == "" {
 			// Per AI.md PART 22: Scheduled backups skip with audit log warning
-			log.Printf("[Backup] WARNING: Compliance mode enabled but BACKUP_PASSWORD not set - backup skipped")
+			slog.Warn("compliance mode enabled but BACKUP_PASSWORD not set, backup skipped")
 			s.logAuditEvent("backup.skipped", "Compliance mode requires backup encryption but password not set")
 			return fmt.Errorf("compliance mode requires backup encryption but BACKUP_PASSWORD not set")
 		}
@@ -313,14 +316,14 @@ func (s *Server) performScheduledBackup(ctx context.Context, backupType string) 
 
 	if err != nil {
 		// Per AI.md PART 22: On failure, DO NOT delete any existing backups
-		log.Printf("[Backup] %s backup failed: %v", backupType, err)
+		slog.Error("backup failed", "type", backupType, "err", err)
 		s.logAuditEvent("backup.verification_failed", fmt.Sprintf("%s backup failed: %v", backupType, err))
 		return err
 	}
 
 	// Log verification results
 	if verifyResult != nil && verifyResult.AllPassed {
-		log.Printf("[Backup] %s backup created and verified: %s", backupType, backupPath)
+		slog.Info("backup created and verified", "type", backupType, "path", backupPath)
 		s.logAuditEvent("backup.created", fmt.Sprintf("%s backup created: %s (verified: file=%v, size=%v, checksum=%v, manifest=%v)",
 			backupType, backupPath, verifyResult.FileExists, verifyResult.SizeValid, verifyResult.ChecksumValid, verifyResult.ManifestValid))
 	}
@@ -329,7 +332,7 @@ func (s *Server) performScheduledBackup(ctx context.Context, backupType string) 
 	// Per AI.md PART 22: Only delete old backups if new backup passes ALL verification checks
 	if err := mgr.ScheduledBackupWithVerification(maxBackups); err != nil {
 		// Don't fail the task, just log the retention cleanup error
-		log.Printf("[Backup] Warning: retention cleanup failed: %v", err)
+		slog.Warn("backup retention cleanup failed", "err", err)
 	}
 
 	// Apply advanced retention policy if configured
@@ -344,13 +347,13 @@ func (s *Server) performScheduledBackup(ctx context.Context, backupType string) 
 			Year:  retention.KeepYearly,
 		}
 		if err := mgr.ApplyRetention(policy); err != nil {
-			log.Printf("[Backup] Warning: advanced retention policy failed: %v", err)
+			slog.Warn("advanced retention policy failed", "err", err)
 		} else {
 			s.logAuditEvent("backup.retention_cleanup", "Applied retention policy")
 		}
 	}
 
-	log.Printf("[Backup] %s backup complete", backupType)
+	slog.Info("backup complete", "type", backupType)
 	return nil
 }
 
@@ -368,6 +371,6 @@ func (s *Server) logAuditEvent(event, details string) {
 		VALUES (?, ?, 'scheduler', 'internal', CURRENT_TIMESTAMP)`
 
 	if _, err := s.dbManager.ServerDB().Exec(ctx, query, event, details); err != nil {
-		log.Printf("[Audit] Failed to log event %s: %v", event, err)
+		slog.Error("failed to log audit event", "event", event, "err", err)
 	}
 }

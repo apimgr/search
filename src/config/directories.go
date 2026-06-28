@@ -62,6 +62,13 @@ func SetBackupDirOverride(dir string) {
 	cliOverrides["backup"] = dir
 }
 
+// SetDatabaseDirOverride sets a CLI override for the database directory
+func SetDatabaseDirOverride(dir string) {
+	cliOverrideMu.Lock()
+	defer cliOverrideMu.Unlock()
+	cliOverrides["database"] = dir
+}
+
 // SetColorMode sets the color output mode
 // Per AI.md PART 8: --color {always|never|auto} flag
 // Priority: CLI flag > Config > NO_COLOR env > Auto-detect
@@ -523,7 +530,12 @@ func GetSSLDir() string {
 
 // GetDatabaseDir returns the OS-appropriate database directory
 func GetDatabaseDir() string {
-	// Check environment variable first
+	// Check CLI override first
+	if dir, ok := getOverride("database"); ok && dir != "" {
+		return dir
+	}
+
+	// Check environment variable
 	if dir := os.Getenv("SEARCH_DATABASE_DIR"); dir != "" {
 		return dir
 	}
@@ -563,25 +575,25 @@ func GetDatabaseDir() string {
 }
 
 // GetGeoIPDir returns the OS-appropriate GeoIP database directory
-// Per AI.md PART 4: Security DBs are under config/security/ (geoip, blocklists, cve, trivy)
+// Per AI.md PART 4: Security DBs are under the data directory (geoip, blocklists, cve, trivy)
 func GetGeoIPDir() string {
 	// Container paths (per AI.md PART 4)
 	if IsRunningInContainer() {
-		return "/config/" + ProjectName + "/security/geoip"
+		return "/data/" + ProjectName + "/security/geoip"
 	}
 
-	return filepath.Join(GetConfigDir(), "security", "geoip")
+	return filepath.Join(GetDataDir(), "security", "geoip")
 }
 
 // GetSecurityDir returns the OS-appropriate security directory
-// Per AI.md PART 4: Contains geoip/, blocklists/, cve/, trivy/
+// Per AI.md PART 4: Contains geoip/, blocklists/, cve/, trivy/ — lives under data directory
 func GetSecurityDir() string {
 	// Container paths (per AI.md PART 4)
 	if IsRunningInContainer() {
-		return "/config/" + ProjectName + "/security"
+		return "/data/" + ProjectName + "/security"
 	}
 
-	return filepath.Join(GetConfigDir(), "security")
+	return filepath.Join(GetDataDir(), "security")
 }
 
 // GetTorDir returns the OS-appropriate Tor data directory
@@ -665,7 +677,7 @@ func EnsureDirectories() error {
 		GetTorDir(),
 		GetTorKeysDir(),
 		GetSSLDir(),
-		filepath.Join(GetConfigDir(), "security"),
+		GetSecurityDir(),
 	}
 
 	// PID file directory
@@ -792,9 +804,9 @@ func GetServiceFile() string {
 
 	case "darwin":
 		if IsPrivileged() {
-			return "/Library/LaunchDaemons/com." + ProjectOrg + "." + ProjectName + ".plist"
+			return "/Library/LaunchDaemons/io.github." + ProjectOrg + "." + ProjectName + ".plist"
 		}
-		return os.ExpandEnv("$HOME/Library/LaunchAgents/com." + ProjectOrg + "." + ProjectName + ".plist")
+		return os.ExpandEnv("$HOME/Library/LaunchAgents/io.github." + ProjectOrg + "." + ProjectName + ".plist")
 
 	// Windows uses Service Manager, not a file
 	case "windows":

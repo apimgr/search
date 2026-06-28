@@ -37,6 +37,12 @@ type EnvConfig struct {
 	ConfigDir string
 	LogDir    string
 
+	// Init-only env vars (per AI.md PART 5: applied only on first run)
+	Listen             string
+	ApplicationTagline string
+	DatabaseDir        string
+	BackupDir          string
+
 	// Tor: Per AI.md PART 32, auto-enabled if binary found - no env vars needed
 
 	// SMTP - Per AI.md PART 18: SMTP_* env vars override config file
@@ -90,6 +96,12 @@ func LoadFromEnv() *EnvConfig {
 	cfg.DataDir = getEnv("SEARCH_DATA_DIR", "DATA_DIR")
 	cfg.ConfigDir = getEnv("SEARCH_CONFIG_DIR", "CONFIG_DIR")
 	cfg.LogDir = getEnv("SEARCH_LOG_DIR", "LOG_DIR")
+
+	// Per AI.md PART 5: Init-only env vars (first-run seeding only)
+	cfg.Listen = getEnv("LISTEN")
+	cfg.ApplicationTagline = getEnv("APPLICATION_TAGLINE")
+	cfg.DatabaseDir = getEnv("SEARCH_DATABASE_DIR", "DATABASE_DIR")
+	cfg.BackupDir = getEnv("SEARCH_BACKUP_DIR", "BACKUP_DIR")
 
 	// Tor - Auto-detection per AI.md PART 29
 	// Tor: Per AI.md PART 32, auto-enabled if binary found at runtime
@@ -164,25 +176,11 @@ func TrimmedPostFormValue(r *http.Request, key string) string {
 	return strings.TrimSpace(r.PostFormValue(key))
 }
 
-// ParseFormBool parses boolean from HTML form values
-// Per AI.md PART 4: Extended boolean handling
-// HTML checkboxes send "on" when checked, nothing when unchecked
-// HTML radio buttons send their value attribute
+// ParseFormBool parses boolean from HTML form values using the canonical ParseBool parser
+// Delegates to ParseBool to cover the full extended truthy/falsy set from AI.md PART 4
 func ParseFormBool(val string) bool {
-	if val == "" {
-		return false
-	}
-
-	val = strings.ToLower(strings.TrimSpace(val))
-
-	// HTML checkbox sends "on" when checked
-	// Other common form values
-	switch val {
-	case "1", "true", "yes", "on", "checked":
-		return true
-	}
-
-	return false
+	result, _ := ParseBool(val, false)
+	return result
 }
 
 // ParseBoolDefault parses boolean with a default value
