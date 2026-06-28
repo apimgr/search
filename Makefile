@@ -57,9 +57,10 @@ GO_DOCKER := docker run --rm \
 	-v go-state:/usr/local/share/go \
 	-w /app \
 	-e CGO_ENABLED=0 \
+	-e GOFLAGS=-buildvcs=false \
 	casjaysdev/go:latest
 
-.PHONY: dev local build release docker test
+.PHONY: dev local build build-arm64 release docker docker-build test lint clean install
 
 # =============================================================================
 # DEV - Quick dev build to temp directory (per AI.md PART 25)
@@ -211,4 +212,51 @@ test:
 		casjaysdev/go:latest \
 		ash -c 'set -e; PKGS=$$(go list ./... | grep -v "/src/service"); go mod download; go test -v -cover -coverprofile=/tmp/covout/coverage.out $$PKGS; COVERAGE=$$(go tool cover -func=/tmp/covout/coverage.out | grep total | awk "{print \$$3}" | sed "s/%//"); echo "Coverage: $$COVERAGE%"; if [ $$(echo "$$COVERAGE < 80" | bc -l) -eq 1 ]; then echo "ERROR: Coverage is $$COVERAGE%, must be >= 80%"; exit 1; fi'
 	@echo "Tests complete"
+
+# =============================================================================
+# LINT - Static analysis (go vet + staticcheck) via Docker
+# =============================================================================
+lint:
+	@echo "Running go vet..."
+	@$(GO_DOCKER) sh -c 'go mod download && go vet ./...'
+	@echo "Running staticcheck..."
+	@$(GO_DOCKER) sh -c 'go mod download && staticcheck ./...'
+	@echo "Lint complete"
+
+# =============================================================================
+# BUILD-ARM64 - Compile server + CLI for linux/arm64
+# =============================================================================
+build-arm64:
+	@mkdir -p $(BINDIR)
+	@echo "Building server linux/arm64..."
+	@$(GO_DOCKER) sh -c "GOOS=linux GOARCH=arm64 \
+		go build -ldflags \"$(LDFLAGS)\" \
+		-o $(BINDIR)/$(PROJECTNAME)-linux-arm64 ./src"
+	@if [ -d "src/client" ]; then \
+		echo "Building CLI linux/arm64..."; \
+		$(GO_DOCKER) sh -c "GOOS=linux GOARCH=arm64 \
+			go build -ldflags \"$(CLI_LDFLAGS)\" \
+			-o $(BINDIR)/$(PROJECTNAME)-cli-linux-arm64 ./src/client"; \
+	fi
+	@echo "ARM64 build complete"
+
+# =============================================================================
+# CLEAN - Remove build artifacts
+# =============================================================================
+clean:
+	@rm -rf $(BINDIR) $(RELDIR)
+	@echo "Clean complete"
+
+# =============================================================================
+# INSTALL - Copy binary to /usr/local/bin/
+# =============================================================================
+install:
+	@[ -f $(BINDIR)/$(PROJECTNAME) ] || $(MAKE) build
+	@cp $(BINDIR)/$(PROJECTNAME) /usr/local/bin/$(PROJECTNAME)
+	@echo "Installed: /usr/local/bin/$(PROJECTNAME)"
+
+# =============================================================================
+# DOCKER-BUILD - Build Docker image (alias for docker)
+# =============================================================================
+docker-build: docker
 
