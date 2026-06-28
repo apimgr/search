@@ -32,15 +32,6 @@ cleanup() {
 trap cleanup SIGTERM SIGINT SIGQUIT
 
 # =============================================================================
-# Start services (add supervisord, etc. here if needed)
-# =============================================================================
-# Example: Start supervisord for multi-service containers
-# if [ -f /etc/supervisord.conf ]; then
-#     /usr/bin/supervisord -c /etc/supervisord.conf &
-#     PIDS+=($!)
-# fi
-
-# =============================================================================
 # Start main application
 # =============================================================================
 log "Starting ${APP_NAME}..."
