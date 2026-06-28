@@ -69,7 +69,7 @@ func TestGetBool(t *testing.T) {
 		{"bool true", true, true},
 		{"bool false", false, false},
 		{"string true", "true", true},
-		{"string yes is not parsebool", "yes", false},
+		{"string yes via parsebool", "yes", true},
 		{"int nonzero", 1, true},
 		{"int zero", 0, false},
 		{"float nonzero", 2.5, true},
