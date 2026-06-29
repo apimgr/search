@@ -35,9 +35,10 @@
     </footer>
     {{end}}
 
-    {{/* Navigation back to search */}}
+    {{/* Navigation back to home - links to home since direct answer queries
+         would redirect back to this page (wiki:Python → /direct/wiki/Python) */}}
     <nav class="direct-nav">
-        <a href="/search?q={{urlquery .Query}}" class="back-to-search">
+        <a href="/" class="back-to-search">
             <span class="back-icon">&larr;</span> {{t "direct.back_to_search"}}
         </a>
         {{/* Quick reference to other direct answer types */}}
