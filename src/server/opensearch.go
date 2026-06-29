@@ -133,26 +133,26 @@ func (s *Server) handleOpenSearch(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleBangProxy(w http.ResponseWriter, r *http.Request) {
 	targetURL := r.URL.Query().Get("url")
 	if targetURL == "" {
-		s.handleError(w, r, http.StatusBadRequest, "Bad Request", "Missing URL parameter")
+		localizedHTTPError(w, r, http.StatusBadRequest, "opensearch.missing_url")
 		return
 	}
 
 	// Validate URL
 	parsedURL, err := url.Parse(targetURL)
 	if err != nil {
-		s.handleError(w, r, http.StatusBadRequest, "Bad Request", "Invalid URL")
+		localizedHTTPError(w, r, http.StatusBadRequest, "opensearch.invalid_url")
 		return
 	}
 
 	// Only allow HTTP/HTTPS
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		s.handleError(w, r, http.StatusBadRequest, "Bad Request", "Invalid URL scheme")
+		localizedHTTPError(w, r, http.StatusBadRequest, "opensearch.invalid_url_scheme")
 		return
 	}
 
 	// SSRF prevention: reject localhost and private/internal IPs
 	if err := validateNotPrivateProxy(parsedURL.Hostname()); err != nil {
-		s.handleError(w, r, http.StatusBadRequest, "Bad Request", "URL not allowed")
+		localizedHTTPError(w, r, http.StatusBadRequest, "opensearch.url_not_allowed")
 		return
 	}
 
@@ -174,7 +174,7 @@ func (s *Server) handleBangProxy(w http.ResponseWriter, r *http.Request) {
 	// Create request
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, targetURL, nil)
 	if err != nil {
-		s.handleError(w, r, http.StatusInternalServerError, "Error", "Failed to create request")
+		localizedHTTPError(w, r, http.StatusInternalServerError, "opensearch.request_create_failed")
 		return
 	}
 

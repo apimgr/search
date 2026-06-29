@@ -38,6 +38,9 @@ type BannerInfo struct {
 
 // PrintBanner prints a responsive startup banner per AI.md spec
 // Uses box drawing characters and emojis for visual appeal
+// fmt.Fprintln(os.Stdout, ...) is used throughout this function: this is intentional
+// terminal-only banner output, not application logging; log/slog must not be used here
+// as it would prepend timestamps and log levels to visual border characters.
 func PrintBanner(info *BannerInfo) {
 	// Get terminal width for responsive layout
 	width := getTerminalWidth()
@@ -51,8 +54,8 @@ func PrintBanner(info *BannerInfo) {
 	// Inner width (excluding borders)
 	innerWidth := width - 4
 
-	// Print banner
-	fmt.Println()
+	// Blank line before banner (terminal-only output, not application logging)
+	fmt.Fprintln(os.Stdout)
 	printTopBorder(width)
 	printHeaderLine(info, innerWidth)
 	printSeparator(width)
@@ -63,7 +66,8 @@ func PrintBanner(info *BannerInfo) {
 	printListenLine(info, innerWidth)
 	printTimestampLine(innerWidth)
 	printBottomBorder(width)
-	fmt.Println()
+	// Blank line after banner (terminal-only output, not application logging)
+	fmt.Fprintln(os.Stdout)
 }
 
 // getTerminalWidth returns the terminal width or a default
@@ -77,39 +81,43 @@ func getTerminalWidth() int {
 
 // printTopBorder prints the top border
 // Per AI.md PART 8: Respects NO_COLOR for border colors
+// fmt.Fprintln(os.Stdout) is intentional terminal banner output, not application logging
 func printTopBorder(width int) {
 	border := "╭" + strings.Repeat("─", width-2) + "╮"
-	fmt.Println(color("\033[36m", border))
+	fmt.Fprintln(os.Stdout, color("\033[36m", border))
 }
 
 // printBottomBorder prints the bottom border
 // Per AI.md PART 8: Respects NO_COLOR for border colors
+// fmt.Fprintln(os.Stdout) is intentional terminal banner output, not application logging
 func printBottomBorder(width int) {
 	border := "╰" + strings.Repeat("─", width-2) + "╯"
-	fmt.Println(color("\033[36m", border))
+	fmt.Fprintln(os.Stdout, color("\033[36m", border))
 }
 
 // printSeparator prints a separator line
 // Per AI.md PART 8: Respects NO_COLOR for border colors
+// fmt.Fprintln(os.Stdout) is intentional terminal banner output, not application logging
 func printSeparator(width int) {
 	separator := "├" + strings.Repeat("─", width-2) + "┤"
-	fmt.Println(color("\033[36m", separator))
+	fmt.Fprintln(os.Stdout, color("\033[36m", separator))
 }
 
 // printLine prints a padded line within the banner
 // Per AI.md PART 8: Respects NO_COLOR for border colors
+// fmt.Fprint/Fprintln(os.Stdout) is intentional terminal banner output, not application logging
 func printLine(content string, innerWidth int) {
 	border := color("\033[36m", "│")
-	fmt.Print(border + "  ")
+	fmt.Fprint(os.Stdout, border+"  ")
 	// Calculate visible length (ignoring ANSI codes)
 	visibleLen := visibleLength(content)
 	padding := innerWidth - visibleLen
 	if padding < 0 {
 		padding = 0
 	}
-	fmt.Print(content)
-	fmt.Print(strings.Repeat(" ", padding))
-	fmt.Println(border)
+	fmt.Fprint(os.Stdout, content)
+	fmt.Fprint(os.Stdout, strings.Repeat(" ", padding))
+	fmt.Fprintln(os.Stdout, border)
 }
 
 // visibleLength calculates the visible length of a string (ignoring ANSI escape codes)

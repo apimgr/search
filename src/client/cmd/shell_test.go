@@ -293,33 +293,45 @@ func TestPrintInitUnsupported(t *testing.T) {
 // Tests for HandleShellFlag
 
 func TestHandleShellFlagNoArgs(t *testing.T) {
-	result := HandleShellFlag([]string{})
+	handled, err := HandleShellFlag([]string{})
 
-	if result {
+	if err != nil {
+		t.Errorf("HandleShellFlag([]) unexpected error = %v", err)
+	}
+	if handled {
 		t.Error("HandleShellFlag([]) should return false")
 	}
 }
 
 func TestHandleShellFlagSingleArg(t *testing.T) {
-	result := HandleShellFlag([]string{"test"})
+	handled, err := HandleShellFlag([]string{"test"})
 
-	if result {
+	if err != nil {
+		t.Errorf("HandleShellFlag(['test']) unexpected error = %v", err)
+	}
+	if handled {
 		t.Error("HandleShellFlag(['test']) should return false")
 	}
 }
 
 func TestHandleShellFlagNoShellFlag(t *testing.T) {
-	result := HandleShellFlag([]string{"test", "command", "arg"})
+	handled, err := HandleShellFlag([]string{"test", "command", "arg"})
 
-	if result {
+	if err != nil {
+		t.Errorf("HandleShellFlag without --shell unexpected error = %v", err)
+	}
+	if handled {
 		t.Error("HandleShellFlag without --shell should return false")
 	}
 }
 
 func TestHandleShellFlagWithOtherFlags(t *testing.T) {
-	result := HandleShellFlag([]string{"--config", "file.yml", "--server", "url"})
+	handled, err := HandleShellFlag([]string{"--config", "file.yml", "--server", "url"})
 
-	if result {
+	if err != nil {
+		t.Errorf("HandleShellFlag without --shell unexpected error = %v", err)
+	}
+	if handled {
 		t.Error("HandleShellFlag without --shell should return false")
 	}
 }

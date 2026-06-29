@@ -260,11 +260,14 @@ func TestBackgroundAutodiscoverNoCLIVersionsForPlatform(t *testing.T) {
 
 // TestHandleShellFlagReturnsTrueForUnknownSubcmd covers the path where --shell
 // is present but the subcommand doesn't match any case — the loop returns true
-// without calling os.Exit.
+// without an error.
 func TestHandleShellFlagReturnsTrueForUnknownSubcmd(t *testing.T) {
-	// "--shell unknownsubcmd" → falls through switch without matching, returns true.
-	result := HandleShellFlag([]string{"search", "--shell", "unknownsubcmd"})
-	if !result {
+	// "--shell unknownsubcmd" → falls through switch without matching, returns (true, nil).
+	handled, err := HandleShellFlag([]string{"search", "--shell", "unknownsubcmd"})
+	if err != nil {
+		t.Errorf("HandleShellFlag with unknown subCmd unexpected error = %v", err)
+	}
+	if !handled {
 		t.Error("HandleShellFlag(['search', '--shell', 'unknownsubcmd']) should return true")
 	}
 }
@@ -272,9 +275,12 @@ func TestHandleShellFlagReturnsTrueForUnknownSubcmd(t *testing.T) {
 // TestHandleShellFlagReturnsTrueWithShellArg covers the path where --shell is
 // followed by a subcommand and a shell arg (3 args), and subcommand is unknown.
 func TestHandleShellFlagReturnsTrueWithShellArg(t *testing.T) {
-	// "--shell unknownsubcmd bash" → shell=bash, subCmd=unknownsubcmd, returns true.
-	result := HandleShellFlag([]string{"search", "--shell", "unknownsubcmd", "bash"})
-	if !result {
+	// "--shell unknownsubcmd bash" → shell=bash, subCmd=unknownsubcmd, returns (true, nil).
+	handled, err := HandleShellFlag([]string{"search", "--shell", "unknownsubcmd", "bash"})
+	if err != nil {
+		t.Errorf("HandleShellFlag with unknown subCmd and shell arg unexpected error = %v", err)
+	}
+	if !handled {
 		t.Error("HandleShellFlag with 3 args and unknown subCmd should return true")
 	}
 }
@@ -286,8 +292,11 @@ func TestHandleShellFlagAutoDetectShell(t *testing.T) {
 	defer os.Unsetenv("SHELL")
 
 	// "--shell unknownsubcmd" with next arg being a flag → shell=detectShell()
-	result := HandleShellFlag([]string{"search", "--shell", "unknownsubcmd", "--some-flag"})
-	if !result {
+	handled, err := HandleShellFlag([]string{"search", "--shell", "unknownsubcmd", "--some-flag"})
+	if err != nil {
+		t.Errorf("HandleShellFlag auto-detect shell unexpected error = %v", err)
+	}
+	if !handled {
 		t.Error("HandleShellFlag with --shell flag arg and unknown subCmd should return true")
 	}
 }

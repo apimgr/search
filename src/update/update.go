@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/service"
 )
 
 // ReleasesURL is the URL to check for releases
@@ -329,6 +331,23 @@ func (m *Manager) VerifyChecksum(filePath, checksumURL string) error {
 // checksumURL, if non-empty, points to a checksums.txt file used to verify
 // the archive SHA-256 before extraction per AI.md PART 22.
 func (m *Manager) InstallUpdate(archivePath, checksumURL string) error {
+	// Per AI.md PART 22: check binary path is writable before proceeding;
+	// escalate privileges if not, then return so the elevated process continues.
+	// ErrNotExist is skipped — the backup step will fail with a clearer message.
+	f, err := os.OpenFile(m.binaryPath, os.O_WRONLY, 0)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		if errors.Is(err, os.ErrPermission) {
+			if escalateErr := service.ReExecWithPrivileges(); escalateErr != nil {
+				return fmt.Errorf("binary path %s is not writable and privilege escalation failed: %w", m.binaryPath, escalateErr)
+			}
+			return nil
+		}
+		return fmt.Errorf("failed to check binary path writability: %w", err)
+	}
+	if err == nil {
+		f.Close()
+	}
+
 	// Per AI.md PART 22: verify SHA-256 before installing
 	if err := m.VerifyChecksum(archivePath, checksumURL); err != nil {
 		return fmt.Errorf("checksum verification failed: %w", err)

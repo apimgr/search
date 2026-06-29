@@ -428,11 +428,22 @@ func TestManagerFetchReleasesWithMockServer(t *testing.T) {
 
 func TestManagerCheckForUpdatesLogic(t *testing.T) {
 	// Test the logic of CheckForUpdates by examining the code paths
+	apimgrDir := filepath.Join(os.TempDir(), "apimgr")
+	if mkErr := os.MkdirAll(apimgrDir, 0o755); mkErr != nil {
+		t.Fatalf("failed to create apimgr temp base dir: %v", mkErr)
+	}
+	tmpBase, err := os.MkdirTemp(apimgrDir, "search-")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpBase)
+	binaryPath := filepath.Join(tmpBase, "search")
+	backupDir := filepath.Join(tmpBase, "backup")
 	m := &Manager{
 		currentVersion: "1.0.0",
-		binaryPath:     "/tmp/test",
-		backupDir:      "/tmp/backup",
-		tempDir:        "/tmp",
+		binaryPath:     binaryPath,
+		backupDir:      backupDir,
+		tempDir:        tmpBase,
 	}
 
 	// The function requires network access, so we test related helper functions

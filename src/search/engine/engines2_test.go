@@ -160,7 +160,8 @@ func TestArXivSearchMoreThanThreeAuthors(t *testing.T) {
 }
 
 func TestArXivSearchLongSummaryTruncated(t *testing.T) {
-	longSummary := strings.Repeat("x", 400)
+	// Use 600 chars to exceed the 500 char limit
+	longSummary := strings.Repeat("x", 600)
 	entry := `<entry>
 		<id>http://arxiv.org/abs/2303.00001v1</id>
 		<title>Long Abstract Paper</title>
@@ -752,18 +753,18 @@ func TestExtractTextBlock(t *testing.T) {
 			wantText: "",
 		},
 		{
-			name:     "long text truncated at 300 chars",
-			input:    strings.Repeat("word ", 100),
-			wantText: strings.TrimSpace(strings.Repeat("word ", 60)),
+			name:     "long text truncated at 500 chars",
+			input:    strings.Repeat("word ", 200),
+			wantText: strings.TrimSpace(strings.Repeat("word ", 100)),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := extractTextBlock(tt.input)
-			if tt.name == "long text truncated at 300 chars" {
-				if len(got) > 305 {
-					t.Errorf("extractTextBlock() returned %d chars, want <= 305", len(got))
+			if tt.name == "long text truncated at 500 chars" {
+				if len(got) > 505 {
+					t.Errorf("extractTextBlock() returned %d chars, want <= 505", len(got))
 				}
 				return
 			}

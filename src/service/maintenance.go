@@ -80,6 +80,9 @@ type MaintenanceService struct {
 	serverDBCheck func(ctx context.Context) error
 	usersDBCheck  func(ctx context.Context) error
 
+	// fileWriteDir is the data directory used for the write-ability health check
+	fileWriteDir string
+
 	// Recovery functions
 	recoveryFuncs map[string]func(ctx context.Context) error
 }
@@ -132,7 +135,8 @@ func (m *MaintenanceService) initializeHealthStatus() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	components := []string{"server_db", "users_db", "cache", "tor", "scheduler"}
+	// file_write and server_db/users_db are the two critical components per PART 6
+	components := []string{"server_db", "users_db", "file_write", "cache", "tor", "scheduler"}
 	now := time.Now()
 
 	for _, comp := range components {
@@ -171,15 +175,50 @@ func (m *MaintenanceService) performHealthChecks() {
 	ctx, cancel := context.WithTimeout(m.ctx, 10*time.Second)
 	defer cancel()
 
-	// Check server database
+	// Check server database (critical — triggers maintenance on failure)
 	if m.serverDBCheck != nil {
 		m.checkComponent(ctx, "server_db", m.serverDBCheck)
 	}
 
-	// Check users database
+	// Check users database (critical — triggers maintenance on failure)
 	if m.usersDBCheck != nil {
 		m.checkComponent(ctx, "users_db", m.usersDBCheck)
 	}
+
+	// Check file-write ability (critical — triggers maintenance on failure per PART 6)
+	m.checkComponent(ctx, "file_write", func(_ context.Context) error {
+		return m.checkFileWrite()
+	})
+}
+
+// checkFileWrite verifies that the data directory is writable by writing a temp file
+func (m *MaintenanceService) checkFileWrite() error {
+	m.mu.RLock()
+	dir := m.fileWriteDir
+	m.mu.RUnlock()
+
+	if dir == "" {
+		dir = os.TempDir()
+	}
+
+	tmpFile := filepath.Join(dir, ".search_write_check")
+	if err := os.WriteFile(tmpFile, []byte("ok"), 0600); err != nil {
+		return fmt.Errorf("cannot write files in data directory: %w", err)
+	}
+
+	// Remove probe file; log but do not fail on cleanup error
+	if err := os.Remove(tmpFile); err != nil {
+		log.Printf("[Maintenance] Warning: failed to remove write-check probe: %v", err)
+	}
+
+	return nil
+}
+
+// SetFileWriteDir sets the directory used for the write-ability health check
+func (m *MaintenanceService) SetFileWriteDir(dir string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.fileWriteDir = dir
 }
 
 // checkComponent checks a single component and updates its health status
@@ -208,41 +247,42 @@ func (m *MaintenanceService) checkComponent(ctx context.Context, name string, ch
 	}
 }
 
-// evaluateSystemHealth evaluates overall system health and adjusts mode
+// evaluateSystemHealth evaluates overall system health and adjusts mode.
+// Per AI.md PART 6: only two critical failures trigger maintenance — database
+// connection failure and cannot-write-files. All other unhealthy components are
+// logged and self-heal without changing the public-facing mode.
 func (m *MaintenanceService) evaluateSystemHealth() {
 	m.mu.RLock()
-	var unhealthyCount int
 	var criticalUnhealthy bool
+	var criticalReason string
 
 	for name, status := range m.health {
 		if !status.Healthy {
-			unhealthyCount++
-			// Databases are critical
-			if name == "server_db" || name == "users_db" {
+			switch name {
+			case "server_db", "users_db", "file_write":
 				criticalUnhealthy = true
+				criticalReason = name + ": " + status.Message
+			default:
+				// Non-critical — log and allow self-healing; never change public mode
+				log.Printf("[Maintenance] Non-critical component unhealthy (self-healing): %s: %s", name, status.Message)
 			}
 		}
 	}
 	m.mu.RUnlock()
 
-	// Determine appropriate mode based on health
-	var newMode MaintenanceMode
+	currentMode := MaintenanceMode(atomic.LoadInt32(&m.mode))
 
-	switch {
-	case unhealthyCount == 0:
-		newMode = ModeNormal
-	case criticalUnhealthy:
-		newMode = ModeEmergency
-	case unhealthyCount >= 2:
-		newMode = ModeDegraded
-	default:
-		newMode = ModeDegraded
+	// Only a critical failure triggers ModeEmergency; recovery clears it back to Normal
+	if criticalUnhealthy {
+		if currentMode != ModeMaintenance && currentMode != ModeEmergency {
+			m.SetMode(ModeEmergency, criticalReason)
+		}
+		return
 	}
 
-	// Only change mode if different and not manually set to maintenance
-	currentMode := MaintenanceMode(atomic.LoadInt32(&m.mode))
-	if currentMode != ModeMaintenance && currentMode != newMode {
-		m.SetMode(newMode, "")
+	// All critical components are healthy; exit emergency mode if we were in it
+	if currentMode == ModeEmergency {
+		m.SetMode(ModeNormal, "")
 	}
 }
 

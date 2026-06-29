@@ -303,8 +303,8 @@ func TestSearchServerError(t *testing.T) {
 
 func TestHealth(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != version.APIPrefix+"/healthz" {
-			t.Errorf("Expected path %s, got %s", version.APIPrefix+"/healthz", r.URL.Path)
+		if r.URL.Path != "/server/healthz" {
+			t.Errorf("Expected path /server/healthz, got %s", r.URL.Path)
 		}
 
 		// Per AI.md PART 14: Wrapped response format {"ok": true, "data": {...}}

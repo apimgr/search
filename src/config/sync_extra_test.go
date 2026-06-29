@@ -8,7 +8,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// openTestDB opens an in-memory SQLite database and creates the server_settings table.
+// openTestDB opens an in-memory SQLite database and creates the config table.
 func openTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 	db, err := sql.Open("sqlite", ":memory:")
@@ -17,7 +17,7 @@ func openTestDB(t *testing.T) *sql.DB {
 	}
 
 	_, err = db.Exec(`
-		CREATE TABLE IF NOT EXISTS server_settings (
+		CREATE TABLE IF NOT EXISTS config (
 			key TEXT PRIMARY KEY,
 			value TEXT,
 			updated_at TEXT
@@ -45,7 +45,7 @@ func TestWriteToDatabaseSuccess(t *testing.T) {
 	}
 
 	var value string
-	row := db.QueryRow("SELECT value FROM server_settings WHERE key = ?", "server.title")
+	row := db.QueryRow("SELECT value FROM config WHERE key = ?", "server.title")
 	if err := row.Scan(&value); err != nil {
 		t.Fatalf("QueryRow() error = %v", err)
 	}
@@ -72,7 +72,7 @@ func TestWriteToDatabaseUpsert(t *testing.T) {
 	}
 
 	var value string
-	row := db.QueryRow("SELECT value FROM server_settings WHERE key = ?", "server.port")
+	row := db.QueryRow("SELECT value FROM config WHERE key = ?", "server.port")
 	if err := row.Scan(&value); err != nil {
 		t.Fatalf("QueryRow() error = %v", err)
 	}

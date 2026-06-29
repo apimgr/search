@@ -13,12 +13,36 @@ func respondJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// mapHTTPStatusToCode returns the canonical machine-readable error code for an HTTP status.
+// Per AI.md PART 9: error field must be a machine-readable code, not http.StatusText.
+func mapHTTPStatusToCode(status int) string {
+	switch status {
+	case http.StatusBadRequest:
+		return "BAD_REQUEST"
+	case http.StatusUnauthorized:
+		return "UNAUTHORIZED"
+	case http.StatusForbidden:
+		return "FORBIDDEN"
+	case http.StatusNotFound:
+		return "NOT_FOUND"
+	case http.StatusTooManyRequests:
+		return "RATE_LIMITED"
+	case http.StatusServiceUnavailable:
+		return "MAINTENANCE"
+	case http.StatusInternalServerError:
+		return "SERVER_ERROR"
+	default:
+		return "SERVER_ERROR"
+	}
+}
+
 // respondError writes a JSON error response using the spec-required format.
-// Per AI.md PART 9: {"ok":false,"error":"ERROR_CODE","message":"..."}
+// Per AI.md PART 9: {"ok":false,"error":"ERROR_CODE","message":"...","details":{}}
 func respondError(w http.ResponseWriter, status int, message string) {
 	respondJSON(w, status, map[string]interface{}{
 		"ok":      false,
-		"error":   http.StatusText(status),
+		"error":   mapHTTPStatusToCode(status),
 		"message": message,
+		"details": map[string]interface{}{},
 	})
 }

@@ -169,8 +169,9 @@ func (e *Google) parseWebResults(html string, query *model.Query) []model.Result
 		}
 
 		// Extract snippet from the text immediately following the title closing tag.
+		// Expanded window to capture more context for better result previews.
 		snippetStart := idx[1]
-		snippetEnd := snippetStart + 600
+		snippetEnd := snippetStart + 1200
 		if snippetEnd > len(html) {
 			snippetEnd = len(html)
 		}
@@ -398,6 +399,7 @@ func isVideoURL(rawURL string) bool {
 
 // extractTextBlock strips tags from a short HTML fragment and returns the
 // first meaningful run of prose text (≥20 chars, not a bare URL).
+// Expanded to 500 chars for better result previews.
 func extractTextBlock(fragment string) string {
 	text := gTagRe.ReplaceAllString(fragment, " ")
 	text = googleDecodeEntities(text)
@@ -412,7 +414,7 @@ func extractTextBlock(fragment string) string {
 			continue
 		}
 		parts = append(parts, w)
-		if len(strings.Join(parts, " ")) >= 300 {
+		if len(strings.Join(parts, " ")) >= 500 {
 			break
 		}
 	}

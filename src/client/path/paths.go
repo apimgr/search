@@ -21,86 +21,117 @@ var osGetter = func() string { return runtime.GOOS }
 // chmodFunc wraps os.Chmod for testing.
 var chmodFunc = os.Chmod
 
-// ConfigDir returns the CLI config directory
+// ConfigDir returns the CLI config directory.
 // Linux: ~/.config/apimgr/search/
 // Windows: %APPDATA%\apimgr\search\
-func ConfigDir() string {
+func ConfigDir() (string, error) {
 	if osGetter() == "windows" {
-		return filepath.Join(os.Getenv("APPDATA"), projectOrg, projectName)
+		return filepath.Join(os.Getenv("APPDATA"), projectOrg, projectName), nil
 	}
-	home := getHomeDir()
-	return filepath.Join(home, ".config", projectOrg, projectName)
+	home, err := getHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".config", projectOrg, projectName), nil
 }
 
 // getHomeDir returns the user's home directory.
 // Uses HOME env var first (respects test overrides), falls back to os.UserHomeDir().
-// Panics if no home directory can be determined (fatal configuration error).
-func getHomeDir() string {
+// Returns an error if no home directory can be determined.
+func getHomeDir() (string, error) {
 	// Check HOME env var first (allows test overrides)
 	if home := os.Getenv("HOME"); home != "" {
-		return home
+		return home, nil
 	}
 	// Fall back to os.UserHomeDir()
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		return home
+		return home, nil
 	}
-	// Cannot determine home directory - this is a fatal configuration error
-	panic("cannot determine home directory: HOME env var not set and os.UserHomeDir() failed")
+	return "", fmt.Errorf("cannot determine home directory: HOME not set and UserHomeDir failed")
 }
 
-// DataDir returns the CLI data directory
+// DataDir returns the CLI data directory.
 // Linux: ~/.local/share/apimgr/search/
 // Windows: %LOCALAPPDATA%\apimgr\search\data\
-func DataDir() string {
+func DataDir() (string, error) {
 	if osGetter() == "windows" {
-		return filepath.Join(os.Getenv("LOCALAPPDATA"), projectOrg, projectName, "data")
+		return filepath.Join(os.Getenv("LOCALAPPDATA"), projectOrg, projectName, "data"), nil
 	}
-	home := getHomeDir()
-	return filepath.Join(home, ".local", "share", projectOrg, projectName)
+	home, err := getHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".local", "share", projectOrg, projectName), nil
 }
 
-// CacheDir returns the CLI cache directory
+// CacheDir returns the CLI cache directory.
 // Linux: ~/.cache/apimgr/search/
 // Windows: %LOCALAPPDATA%\apimgr\search\cache\
-func CacheDir() string {
+func CacheDir() (string, error) {
 	if osGetter() == "windows" {
-		return filepath.Join(os.Getenv("LOCALAPPDATA"), projectOrg, projectName, "cache")
+		return filepath.Join(os.Getenv("LOCALAPPDATA"), projectOrg, projectName, "cache"), nil
 	}
-	home := getHomeDir()
-	return filepath.Join(home, ".cache", projectOrg, projectName)
+	home, err := getHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".cache", projectOrg, projectName), nil
 }
 
-// LogDir returns the CLI log directory
+// LogDir returns the CLI log directory.
 // Linux: ~/.local/log/apimgr/search/
 // Windows: %LOCALAPPDATA%\apimgr\search\log\
-func LogDir() string {
+func LogDir() (string, error) {
 	if osGetter() == "windows" {
-		return filepath.Join(os.Getenv("LOCALAPPDATA"), projectOrg, projectName, "log")
+		return filepath.Join(os.Getenv("LOCALAPPDATA"), projectOrg, projectName, "log"), nil
 	}
-	home := getHomeDir()
-	return filepath.Join(home, ".local", "log", projectOrg, projectName)
+	home, err := getHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".local", "log", projectOrg, projectName), nil
 }
 
-// ConfigFile returns the CLI config file path
-func ConfigFile() string {
-	return filepath.Join(ConfigDir(), "cli.yml")
+// ConfigFile returns the CLI config file path.
+func ConfigFile() (string, error) {
+	dir, err := ConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "cli.yml"), nil
 }
 
-// LogFile returns the CLI log file path
-func LogFile() string {
-	return filepath.Join(LogDir(), "cli.log")
+// LogFile returns the CLI log file path.
+func LogFile() (string, error) {
+	dir, err := LogDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "cli.log"), nil
 }
 
 // EnsureDirs creates all CLI directories with correct permissions.
 // Called on every startup before any file operations.
 // Per AI.md PART 32: CLI Startup Sequence (NON-NEGOTIABLE)
 func EnsureDirs() error {
-	dirs := []string{
-		ConfigDir(),
-		DataDir(),
-		CacheDir(),
-		LogDir(),
+	configDir, err := ConfigDir()
+	if err != nil {
+		return fmt.Errorf("resolve config dir: %w", err)
 	}
+	dataDir, err := DataDir()
+	if err != nil {
+		return fmt.Errorf("resolve data dir: %w", err)
+	}
+	cacheDir, err := CacheDir()
+	if err != nil {
+		return fmt.Errorf("resolve cache dir: %w", err)
+	}
+	logDir, err := LogDir()
+	if err != nil {
+		return fmt.Errorf("resolve log dir: %w", err)
+	}
+
+	dirs := []string{configDir, dataDir, cacheDir, logDir}
 
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0700); err != nil {
@@ -129,12 +160,15 @@ func EnsureFile(path string, perm os.FileMode) error {
 func ResolveConfigPath(configFlag string) (string, error) {
 	if configFlag == "" {
 		// Default: cli.yml
-		return ConfigFile(), nil
+		return ConfigFile()
 	}
 
 	// Expand ~ to home directory
 	if strings.HasPrefix(configFlag, "~/") {
-		home := getHomeDir()
+		home, err := getHomeDir()
+		if err != nil {
+			return "", err
+		}
 		configFlag = filepath.Join(home, configFlag[2:])
 	}
 
@@ -144,7 +178,11 @@ func ResolveConfigPath(configFlag string) (string, error) {
 	}
 
 	// Relative path - resolve from config dir
-	fullPath := filepath.Join(ConfigDir(), configFlag)
+	dir, err := ConfigDir()
+	if err != nil {
+		return "", err
+	}
+	fullPath := filepath.Join(dir, configFlag)
 	return addExtIfNeeded(fullPath)
 }
 

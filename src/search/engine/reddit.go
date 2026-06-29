@@ -107,8 +107,8 @@ func (e *Reddit) Search(ctx context.Context, query *model.Query) ([]model.Result
 		// Add a snippet of selftext if available
 		if item.Selftext != "" && len(item.Selftext) > 0 {
 			snippet := item.Selftext
-			if len(snippet) > 150 {
-				snippet = snippet[:150] + "..."
+			if len(snippet) > 400 {
+				snippet = snippet[:400] + "..."
 			}
 			content += " | " + snippet
 		}

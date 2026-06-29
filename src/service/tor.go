@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -30,7 +30,7 @@ func findTorBinary(configPath string) string {
 		if _, err := os.Stat(configPath); err == nil {
 			return configPath
 		}
-		log.Printf("[Tor] Configured binary not found: %s", configPath)
+		slog.Info("Tor configured binary not found", "path", configPath)
 	}
 
 	// 2) Search PATH
@@ -271,13 +271,13 @@ func (t *TorService) StartTorService() error {
 	torBinary := findTorBinary(torConfig.Binary)
 	if torBinary == "" {
 		// Per AI.md PART 32: "NOT FOUND: Log INFO, disable Tor features, continue without Tor"
-		log.Println("[Tor] Tor binary not found, hidden service disabled")
+		slog.Info("Tor binary not found, hidden service disabled")
 		// Not an error - Tor is optional
 		return nil
 	}
 
 	torConfig.Enabled = true
-	log.Printf("[Tor] Found binary: %s", torBinary)
+	slog.Info("Tor binary found", "path", torBinary)
 
 	// Create directories with proper permissions
 	if err := t.ensureTorDirs(); err != nil {
@@ -295,7 +295,7 @@ func (t *TorService) StartTorService() error {
 		if err := os.WriteFile(torrcPath, []byte(torrcContent), 0600); err != nil {
 			return fmt.Errorf("failed to write torrc: %w", err)
 		}
-		log.Printf("[Tor] Created torrc: %s", torrcPath)
+		slog.Info("Tor created torrc", "path", torrcPath)
 	} else {
 		if existing, err := os.ReadFile(torrcPath); err == nil {
 			sanitized := sanitizeTorrcContent(string(existing), t.dataDir)
@@ -303,7 +303,7 @@ func (t *TorService) StartTorService() error {
 				if err := os.WriteFile(torrcPath, []byte(sanitized), 0600); err != nil {
 					return fmt.Errorf("failed to migrate torrc: %w", err)
 				}
-				log.Printf("[Tor] Updated legacy torrc: %s", torrcPath)
+				slog.Info("Tor updated legacy torrc", "path", torrcPath)
 			}
 		}
 		// Always enforce correct permissions on existing torrc
@@ -326,7 +326,7 @@ func (t *TorService) StartTorService() error {
 
 	// Per AI.md PART 32 bootstrap logging: start silently; show "Tor: connecting..."
 	// only if bootstrap takes >30s; show address on success.
-	log.Println("[Tor] Starting Tor process...")
+	slog.Info("Tor starting process")
 
 	// Start OUR OWN Tor process - completely separate from system Tor
 	torInstance, err := tor.Start(t.ctx, conf)
@@ -356,7 +356,7 @@ func (t *TorService) StartTorService() error {
 		slowTimer.Stop()
 	case <-slowTimer.C:
 		// Slow bootstrap — let user know
-		log.Println("Tor: connecting...")
+		slog.Info("Tor: connecting")
 		err = <-bootstrapDone
 	}
 	if err != nil {
@@ -372,9 +372,9 @@ func (t *TorService) StartTorService() error {
 		keyBlob := strings.TrimSpace(string(keyData))
 		if k, err := control.ED25519KeyFromBlob(keyBlob); err == nil {
 			existingKey = k
-			log.Println("[Tor] Loaded existing hidden service key")
+			slog.Info("Tor loaded existing hidden service key")
 		} else {
-			log.Printf("[Tor] Warning: failed to parse hidden service key: %v", err)
+			slog.Warn("Tor failed to parse hidden service key", "err", err)
 		}
 	}
 
@@ -416,9 +416,9 @@ func (t *TorService) StartTorService() error {
 		if err := os.MkdirAll(filepath.Dir(keyPath), 0700); err == nil {
 			keyBlob := resp.Key.Blob()
 			if err := os.WriteFile(keyPath, []byte(keyBlob), 0600); err != nil {
-				log.Printf("[Tor] Warning: failed to save hidden service key: %v", err)
+				slog.Warn("Tor failed to save hidden service key", "err", err)
 			} else {
-				log.Println("[Tor] Saved new hidden service key")
+				slog.Info("Tor saved new hidden service key")
 			}
 		}
 	}
@@ -432,14 +432,14 @@ func (t *TorService) StartTorService() error {
 	if torConfig.UseNetwork || torConfig.AllowUserPreference {
 		dialer, err := torInstance.Dialer(t.ctx, nil)
 		if err != nil {
-			log.Printf("[Tor] Warning: outbound dialer failed: %v", err)
+			slog.Warn("Tor outbound dialer failed", "err", err)
 		} else {
 			t.dialer = dialer
 		}
 	}
 
 	// Per AI.md PART 32 success log: "Tor: {onion_address}" (short, once at startup)
-	log.Printf("Tor: %s", t.onionAddr)
+	slog.Info("Tor hidden service active", "onion_address", t.onionAddr)
 
 	// Start monitoring goroutine
 	go t.monitorTor()
@@ -459,7 +459,7 @@ func (t *TorService) StopTorService() error {
 	// Close Tor instance (this also removes the onion service)
 	if t.tor != nil {
 		if err := t.tor.Close(); err != nil {
-			log.Printf("[Tor] Warning: error closing tor: %v", err)
+			slog.Warn("Tor error closing instance", "err", err)
 		}
 		t.tor = nil
 	}
@@ -468,7 +468,7 @@ func (t *TorService) StopTorService() error {
 	t.running = false
 	t.onionAddr = ""
 	t.serviceID = ""
-	log.Println("[Tor] Service stopped")
+	slog.Info("Tor service stopped")
 	return nil
 }
 
@@ -566,14 +566,14 @@ func (t *TorService) RegenerateAddress() (string, error) {
 	if resp.Key != nil {
 		keyBlob := resp.Key.Blob()
 		if err := os.WriteFile(keyPath, []byte(keyBlob), 0600); err != nil {
-			log.Printf("[Tor] Warning: failed to save new key: %v", err)
+			slog.Warn("Tor failed to save new key", "err", err)
 		}
 	}
 
 	t.serviceID = resp.ServiceID
 	t.onionAddr = resp.ServiceID + ".onion"
 
-	log.Printf("[Tor] New hidden service address: %s", t.onionAddr)
+	slog.Info("Tor new hidden service address", "onion_address", t.onionAddr)
 	return t.onionAddr, nil
 }
 
@@ -598,9 +598,9 @@ func (t *TorService) monitorTor() {
 
 			// Check if Tor is still responsive via control connection
 			if _, err := torInstance.Control.GetInfo("version"); err != nil {
-				log.Printf("[Tor] Process unresponsive, restarting: %v", err)
+				slog.Warn("Tor process unresponsive, restarting", "err", err)
 				if err := t.RestartTorService(); err != nil {
-					log.Printf("[Tor] Failed to restart: %v", err)
+					slog.Error("Tor failed to restart", "err", err)
 				}
 			}
 		}
@@ -756,8 +756,7 @@ func (t *TorService) runVanityGeneration(ctx context.Context, prefix string) {
 				vanityGen.progress.Found = true
 				vanityGen.progress.Address = address
 				vanityGen.mu.Unlock()
-				log.Printf("[Tor] Vanity address found: %s.onion (after %d attempts)",
-					address, vanityGen.progress.Attempts)
+				slog.Info("Tor vanity address found", "address", address+".onion", "attempts", vanityGen.progress.Attempts)
 				return
 			}
 		}
@@ -865,6 +864,6 @@ func (t *TorService) ImportKeys(privateKey []byte) (string, error) {
 		return "", fmt.Errorf("failed to restart tor: %w", err)
 	}
 
-	log.Printf("[Tor] Imported external keys, new address: %s", t.onionAddr)
+	slog.Info("Tor imported external keys", "onion_address", t.onionAddr)
 	return t.onionAddr, nil
 }

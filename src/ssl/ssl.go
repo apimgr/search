@@ -55,12 +55,64 @@ func NewManager(cfg *config.SSLConfig, dataDir string) *Manager {
 	return NewManagerWithSecret(cfg, dataDir, "")
 }
 
+// discoverCertificate performs the 4-step certificate auto-detection per AI.md PART 15.
+// Search order: system certbot (literal "domain"), system certbot (fqdn), app-managed, user-managed.
+// Returns the discovered certificate and whether discovery succeeded.
+func discoverCertificate(sslDir, fqdn string) (tls.Certificate, bool) {
+	type candidate struct {
+		certPath string
+		keyPath  string
+		label    string
+	}
+	candidates := []candidate{
+		{
+			certPath: "/etc/letsencrypt/live/domain/fullchain.pem",
+			keyPath:  "/etc/letsencrypt/live/domain/privkey.pem",
+			label:    "system (certbot literal)",
+		},
+		{
+			certPath: filepath.Join("/etc/letsencrypt/live", fqdn, "fullchain.pem"),
+			keyPath:  filepath.Join("/etc/letsencrypt/live", fqdn, "privkey.pem"),
+			label:    "system (certbot fqdn)",
+		},
+		{
+			certPath: filepath.Join(sslDir, "letsencrypt", fqdn, "fullchain.pem"),
+			keyPath:  filepath.Join(sslDir, "letsencrypt", fqdn, "privkey.pem"),
+			label:    "app-managed (letsencrypt)",
+		},
+		{
+			certPath: filepath.Join(sslDir, "local", fqdn, "cert.pem"),
+			keyPath:  filepath.Join(sslDir, "local", fqdn, "key.pem"),
+			label:    "user-managed (local)",
+		},
+	}
+	for _, c := range candidates {
+		cert, err := tls.LoadX509KeyPair(c.certPath, c.keyPath)
+		if err == nil {
+			log.Printf("[TLS] Auto-discovered certificate [%s] for %s", c.label, fqdn)
+			return cert, true
+		}
+	}
+	return tls.Certificate{}, false
+}
+
 // NewManagerWithSecret creates a new TLS manager with a secret key for DNS-01 credential decryption
 func NewManagerWithSecret(cfg *config.SSLConfig, dataDir, secretKey string) *Manager {
 	m := &Manager{
 		config:    cfg,
 		dataDir:   dataDir,
 		secretKey: secretKey,
+	}
+
+	// Run 4-step certificate discovery per AI.md PART 15 before checking explicit config.
+	// This allows the server to find existing certbot or user-placed certs automatically.
+	fqdn := GetFQDN(config.ProjectName)
+	sslDir := config.GetSSLDir()
+	if cert, ok := discoverCertificate(sslDir, fqdn); ok {
+		m.mu.Lock()
+		m.tlsConfig = m.createTLSConfig(cert)
+		m.mu.Unlock()
+		return m
 	}
 
 	if cfg.LetsEncrypt.Enabled {
@@ -303,9 +355,13 @@ func (m *Manager) obtainCertificateDNS01() error {
 // createTLSConfig creates a TLS config with the given certificate
 func (m *Manager) createTLSConfig(cert tls.Certificate) *tls.Config {
 	return &tls.Config{
-		Certificates:             []tls.Certificate{cert},
-		MinVersion:               tls.VersionTLS12,
-		PreferServerCipherSuites: true,
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS12,
+		CurvePreferences: []tls.CurveID{
+			tls.X25519,
+			tls.CurveP256,
+			tls.CurveP384,
+		},
 		CipherSuites: []uint16{
 			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
 			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
@@ -348,19 +404,7 @@ func (m *Manager) initManualCerts() {
 		return
 	}
 
-	m.tlsConfig = &tls.Config{
-		Certificates:             []tls.Certificate{cert},
-		MinVersion:               tls.VersionTLS12,
-		PreferServerCipherSuites: true,
-		CipherSuites: []uint16{
-			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
-			tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
-			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-		},
-	}
+	m.tlsConfig = m.createTLSConfig(cert)
 
 	log.Printf("[TLS] Loaded certificates from %s and %s", m.config.CertFile, m.config.KeyFile)
 }

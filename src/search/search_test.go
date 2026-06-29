@@ -51,84 +51,98 @@ func (m *mockEngine) Calls() int {
 
 // Tests for BaseEngine
 
-func TestNewBaseEngine(t *testing.T) {
-	cfg := &model.EngineConfig{
-		Name:        "test",
-		DisplayName: "Test Engine",
-		Enabled:     true,
-		Priority:    50,
-		Categories:  []string{string(model.CategoryGeneral)},
+func TestBaseEngine(t *testing.T) {
+	tests := []struct {
+		name  string
+		cfg   *model.EngineConfig
+		check func(t *testing.T, cfg *model.EngineConfig, engine *BaseEngine)
+	}{
+		{
+			name: "constructor returns non-nil with config set",
+			cfg: &model.EngineConfig{
+				Name:        "test",
+				DisplayName: "Test Engine",
+				Enabled:     true,
+				Priority:    50,
+				Categories:  []string{string(model.CategoryGeneral)},
+			},
+			check: func(t *testing.T, cfg *model.EngineConfig, engine *BaseEngine) {
+				if engine == nil {
+					t.Fatal("NewBaseEngine() returned nil")
+				}
+				if engine.config != cfg {
+					t.Error("Config not set correctly")
+				}
+			},
+		},
+		{
+			name: "Name returns configured name",
+			cfg:  &model.EngineConfig{Name: "testengine"},
+			check: func(t *testing.T, cfg *model.EngineConfig, engine *BaseEngine) {
+				if engine.Name() != "testengine" {
+					t.Errorf("Name() = %q, want %q", engine.Name(), "testengine")
+				}
+			},
+		},
+		{
+			name: "DisplayName returns configured display name",
+			cfg:  &model.EngineConfig{DisplayName: "Test Engine Display"},
+			check: func(t *testing.T, cfg *model.EngineConfig, engine *BaseEngine) {
+				if engine.DisplayName() != "Test Engine Display" {
+					t.Errorf("DisplayName() = %q, want %q", engine.DisplayName(), "Test Engine Display")
+				}
+			},
+		},
+		{
+			name: "IsEnabled returns true when enabled",
+			cfg:  &model.EngineConfig{Enabled: true},
+			check: func(t *testing.T, cfg *model.EngineConfig, engine *BaseEngine) {
+				if !engine.IsEnabled() {
+					t.Error("IsEnabled() should return true")
+				}
+			},
+		},
+		{
+			name: "GetPriority returns configured priority",
+			cfg:  &model.EngineConfig{Priority: 75},
+			check: func(t *testing.T, cfg *model.EngineConfig, engine *BaseEngine) {
+				if engine.GetPriority() != 75 {
+					t.Errorf("GetPriority() = %d, want 75", engine.GetPriority())
+				}
+			},
+		},
+		{
+			name: "SupportsCategory returns correct membership",
+			cfg: &model.EngineConfig{
+				Categories: []string{string(model.CategoryGeneral), string(model.CategoryImages)},
+			},
+			check: func(t *testing.T, cfg *model.EngineConfig, engine *BaseEngine) {
+				if !engine.SupportsCategory(model.CategoryGeneral) {
+					t.Error("SupportsCategory(General) should return true")
+				}
+				if !engine.SupportsCategory(model.CategoryImages) {
+					t.Error("SupportsCategory(Images) should return true")
+				}
+				if engine.SupportsCategory(model.CategoryNews) {
+					t.Error("SupportsCategory(News) should return false")
+				}
+			},
+		},
+		{
+			name: "GetConfig returns the original config pointer",
+			cfg:  &model.EngineConfig{Name: "test"},
+			check: func(t *testing.T, cfg *model.EngineConfig, engine *BaseEngine) {
+				if engine.GetConfig() != cfg {
+					t.Error("GetConfig() returned wrong config")
+				}
+			},
+		},
 	}
-
-	engine := NewBaseEngine(cfg)
-
-	if engine == nil {
-		t.Fatal("NewBaseEngine() returned nil")
-	}
-	if engine.config != cfg {
-		t.Error("Config not set correctly")
-	}
-}
-
-func TestBaseEngineName(t *testing.T) {
-	cfg := &model.EngineConfig{Name: "testengine"}
-	engine := NewBaseEngine(cfg)
-
-	if engine.Name() != "testengine" {
-		t.Errorf("Name() = %q, want %q", engine.Name(), "testengine")
-	}
-}
-
-func TestBaseEngineDisplayName(t *testing.T) {
-	cfg := &model.EngineConfig{DisplayName: "Test Engine Display"}
-	engine := NewBaseEngine(cfg)
-
-	if engine.DisplayName() != "Test Engine Display" {
-		t.Errorf("DisplayName() = %q, want %q", engine.DisplayName(), "Test Engine Display")
-	}
-}
-
-func TestBaseEngineIsEnabled(t *testing.T) {
-	cfg := &model.EngineConfig{Enabled: true}
-	engine := NewBaseEngine(cfg)
-
-	if !engine.IsEnabled() {
-		t.Error("IsEnabled() should return true")
-	}
-}
-
-func TestBaseEngineGetPriority(t *testing.T) {
-	cfg := &model.EngineConfig{Priority: 75}
-	engine := NewBaseEngine(cfg)
-
-	if engine.GetPriority() != 75 {
-		t.Errorf("GetPriority() = %d, want 75", engine.GetPriority())
-	}
-}
-
-func TestBaseEngineSupportsCategory(t *testing.T) {
-	cfg := &model.EngineConfig{
-		Categories: []string{string(model.CategoryGeneral), string(model.CategoryImages)},
-	}
-	engine := NewBaseEngine(cfg)
-
-	if !engine.SupportsCategory(model.CategoryGeneral) {
-		t.Error("SupportsCategory(General) should return true")
-	}
-	if !engine.SupportsCategory(model.CategoryImages) {
-		t.Error("SupportsCategory(Images) should return true")
-	}
-	if engine.SupportsCategory(model.CategoryNews) {
-		t.Error("SupportsCategory(News) should return false")
-	}
-}
-
-func TestBaseEngineGetConfig(t *testing.T) {
-	cfg := &model.EngineConfig{Name: "test"}
-	engine := NewBaseEngine(cfg)
-
-	if engine.GetConfig() != cfg {
-		t.Error("GetConfig() returned wrong config")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			engine := NewBaseEngine(tt.cfg)
+			tt.check(t, tt.cfg, engine)
+		})
 	}
 }
 

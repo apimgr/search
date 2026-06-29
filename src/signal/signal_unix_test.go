@@ -256,7 +256,7 @@ func TestSetupSignalsDoesNotPanic(t *testing.T) {
 		LogFlushTimeout: 2 * time.Second,
 	}
 
-	setupSignals(cfg)
+	setupSignals(cfg, make(chan struct{}))
 }
 
 // TestSetupSignalsWithCallbacks tests setupSignals with all callbacks
@@ -279,7 +279,7 @@ func TestSetupSignalsWithCallbacks(t *testing.T) {
 		GetChildPIDs:    func() []int { return nil },
 	}
 
-	setupSignals(cfg)
+	setupSignals(cfg, make(chan struct{}))
 }
 
 // TestKillProcessSelfProcess tests trying to kill self (current process)
@@ -559,7 +559,7 @@ func TestSetupSignalsNoPanic(t *testing.T) {
 					t.Errorf("setupSignals panicked: %v", r)
 				}
 			}()
-			setupSignals(tc.cfg)
+			setupSignals(tc.cfg, make(chan struct{}))
 		})
 	}
 }
@@ -645,7 +645,7 @@ func TestSetupSignalsSIGUSR1(t *testing.T) {
 	}
 
 	// Set up signal handlers
-	setupSignals(cfg)
+	setupSignals(cfg, make(chan struct{}))
 
 	// Give signal handler time to be set up
 	time.Sleep(50 * time.Millisecond)
@@ -684,7 +684,7 @@ func TestSetupSignalsSIGUSR2(t *testing.T) {
 	}
 
 	// Set up signal handlers
-	setupSignals(cfg)
+	setupSignals(cfg, make(chan struct{}))
 
 	// Give signal handler time to be set up
 	time.Sleep(50 * time.Millisecond)
@@ -719,7 +719,7 @@ func TestSetupSignalsSIGUSR1NoCallback(t *testing.T) {
 	}
 
 	// Set up signal handlers
-	setupSignals(cfg)
+	setupSignals(cfg, make(chan struct{}))
 
 	// Give signal handler time to be set up
 	time.Sleep(50 * time.Millisecond)
@@ -749,7 +749,7 @@ func TestSetupSignalsSIGUSR2NoCallback(t *testing.T) {
 	}
 
 	// Set up signal handlers
-	setupSignals(cfg)
+	setupSignals(cfg, make(chan struct{}))
 
 	// Give signal handler time to be set up
 	time.Sleep(50 * time.Millisecond)
@@ -780,7 +780,7 @@ func TestSetupSignalsMultipleSIGUSR1(t *testing.T) {
 		},
 	}
 
-	setupSignals(cfg)
+	setupSignals(cfg, make(chan struct{}))
 	time.Sleep(50 * time.Millisecond)
 
 	proc, _ := os.FindProcess(os.Getpid())
@@ -813,7 +813,7 @@ func TestSetupSignalsMultipleSIGUSR2(t *testing.T) {
 		},
 	}
 
-	setupSignals(cfg)
+	setupSignals(cfg, make(chan struct{}))
 	time.Sleep(50 * time.Millisecond)
 
 	proc, _ := os.FindProcess(os.Getpid())

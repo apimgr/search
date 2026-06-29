@@ -148,8 +148,8 @@ func (e *ArXiv) Search(ctx context.Context, query *model.Query) ([]model.Result,
 
 		// Build content with author and category info
 		content := cleanArXivText(entry.Summary)
-		if len(content) > 300 {
-			content = content[:300] + "..."
+		if len(content) > 500 {
+			content = content[:500] + "..."
 		}
 		if authorStr != "" {
 			content = fmt.Sprintf("%s — %s", authorStr, content)

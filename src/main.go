@@ -428,7 +428,7 @@ func runServer() {
 
 	// Setup signal handling per AI.md PART 7
 	// Uses platform-dependent signal handling via src/signal package
-	sigsvc.Setup(sigsvc.ShutdownConfig{
+	shutdownDone := sigsvc.Setup(sigsvc.ShutdownConfig{
 		ShutdownFunc: srv.Shutdown,
 		PIDFile:      config.GetPIDFile(),
 	})
@@ -437,6 +437,11 @@ func runServer() {
 	if err := srv.StartHTTPServer(); err != nil {
 		log.Fatalf(display.Emoji("❌", "[ERROR]")+" Server failed: %v", err)
 	}
+
+	// Wait for graceful shutdown to complete before exiting.
+	// Per AI.md PART 7: os.Exit() belongs only in main().
+	<-shutdownDone
+	exitFunc(0)
 }
 
 func printVersion() {
@@ -1597,15 +1602,14 @@ func findSourceDir() (string, error) {
 func buildWithDocker(srcDir, outputPath, goos, goarch string) error {
 	outputName := filepath.Base(outputPath)
 
-	// Docker command to build
-	// Per AI.md PART 23: Must use golang:alpine for builds
+	// Docker command to build using the required build image per AI.md PART 7
 	cmd := exec.Command("docker", "run", "--rm",
 		"-v", srcDir+":/app",
 		"-w", "/app",
 		"-e", "CGO_ENABLED=0",
 		"-e", "GOOS="+goos,
 		"-e", "GOARCH="+goarch,
-		"golang:alpine",
+		"casjaysdev/go:latest",
 		"go", "build",
 		"-ldflags", fmt.Sprintf("-s -w -X github.com/apimgr/search/src/config.Version=%s -X github.com/apimgr/search/src/config.BuildDate=%s",
 			config.Version, time.Now().Format("Mon Jan 02, 2006 at 15:04:05 MST")),

@@ -103,8 +103,8 @@ func (e *HackerNews) Search(ctx context.Context, query *model.Query) ([]model.Re
 		// Add a snippet of story text if available (for Ask HN, Show HN, etc.)
 		if item.StoryText != "" && len(item.StoryText) > 0 {
 			snippet := item.StoryText
-			if len(snippet) > 150 {
-				snippet = snippet[:150] + "..."
+			if len(snippet) > 400 {
+				snippet = snippet[:400] + "..."
 			}
 			content += " | " + snippet
 		}

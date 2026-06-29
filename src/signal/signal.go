@@ -58,9 +58,10 @@ func setShuttingDown(v bool) {
 	shuttingDown = v
 }
 
-// Setup configures signal handling with the given config
-// This is the main entry point - it calls the platform-specific setupSignals
-func Setup(cfg ShutdownConfig) {
+// Setup configures signal handling with the given config.
+// It returns a channel that is closed when graceful shutdown completes;
+// main() should receive from it and then call os.Exit(0).
+func Setup(cfg ShutdownConfig) <-chan struct{} {
 	// Apply defaults
 	if cfg.InFlightTimeout == 0 {
 		cfg.InFlightTimeout = 30 * time.Second
@@ -75,12 +76,16 @@ func Setup(cfg ShutdownConfig) {
 		cfg.LogFlushTimeout = 2 * time.Second
 	}
 
-	setupSignals(cfg)
+	done := make(chan struct{})
+	setupSignals(cfg, done)
+	return done
 }
 
-// gracefulShutdown performs orderly shutdown (cross-platform)
-// Per AI.md PART 7: Shutdown sequence with specific timeouts
-func gracefulShutdown(cfg ShutdownConfig) {
+// gracefulShutdown performs orderly shutdown (cross-platform).
+// It closes done when all shutdown steps complete, signalling main() to call os.Exit(0).
+// Per AI.md PART 7: Shutdown sequence with specific timeouts.
+// Per AI.md PART 7: os.Exit() is forbidden outside main(); done channel conveys exit intent.
+func gracefulShutdown(cfg ShutdownConfig, done chan struct{}) {
 	// Step 1-3: Set shutdown flag for health checks (returns 503)
 	setShuttingDown(true)
 	log.Println("Shutdown flag set, health checks now return 503")
@@ -109,13 +114,13 @@ func gracefulShutdown(cfg ShutdownConfig) {
 	// Step 5: Close database connections
 	if cfg.OnCloseDatabase != nil {
 		log.Printf("Closing database connections (timeout: %v)...", cfg.DatabaseTimeout)
-		done := make(chan struct{})
+		dbDone := make(chan struct{})
 		go func() {
 			cfg.OnCloseDatabase()
-			close(done)
+			close(dbDone)
 		}()
 		select {
-		case <-done:
+		case <-dbDone:
 			log.Println("Database connections closed")
 		case <-time.After(cfg.DatabaseTimeout):
 			log.Println("WARNING: Database close timeout exceeded, continuing shutdown")
@@ -125,13 +130,13 @@ func gracefulShutdown(cfg ShutdownConfig) {
 	// Step 6: Flush logs and metrics
 	if cfg.OnFlushLogs != nil {
 		log.Printf("Flushing logs (timeout: %v)...", cfg.LogFlushTimeout)
-		done := make(chan struct{})
+		logDone := make(chan struct{})
 		go func() {
 			cfg.OnFlushLogs()
-			close(done)
+			close(logDone)
 		}()
 		select {
-		case <-done:
+		case <-logDone:
 			log.Println("Logs flushed")
 		case <-time.After(cfg.LogFlushTimeout):
 			log.Println("WARNING: Log flush timeout exceeded, skipping")
@@ -156,9 +161,9 @@ func gracefulShutdown(cfg ShutdownConfig) {
 		}
 	}
 
-	// Step 10: Exit 0
+	// Step 10: Signal completion so main() can call os.Exit(0)
 	log.Println("Graceful shutdown complete")
-	os.Exit(0)
+	close(done)
 }
 
 // reopenLogs calls the log reopen callback if configured

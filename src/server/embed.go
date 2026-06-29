@@ -154,7 +154,7 @@ func (tr *TemplateRenderer) loadTemplates() error {
 	tr.templates = make(map[string]map[string]*template.Template)
 
 	// Load layout template
-	layoutContent, err := fs.ReadFile(EmbeddedFS, "template/layout/base.tmpl")
+	layoutContent, err := fs.ReadFile(EmbeddedFS, "template/layout/public.tmpl")
 	if err != nil {
 		return err
 	}
@@ -277,7 +277,7 @@ func (tr *TemplateRenderer) Render(w io.Writer, name string, data interface{}) e
 		return &TemplateNotFoundError{Name: name}
 	}
 
-	return tmpl.ExecuteTemplate(w, "base", data)
+	return tmpl.ExecuteTemplate(w, "public", data)
 }
 
 func (tr *TemplateRenderer) supportedLanguages() []string {

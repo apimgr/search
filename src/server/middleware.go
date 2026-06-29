@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"html"
 	"io"
-	"log"
 	"log/slog"
 	"net"
 	"net/http"
@@ -25,6 +24,8 @@ import (
 	"github.com/apimgr/search/src/i18n"
 	"github.com/apimgr/search/src/logging"
 	"github.com/google/uuid"
+	"github.com/rs/cors"
+	"golang.org/x/time/rate"
 )
 
 // contextKey is a package-local type for context keys to avoid collisions.
@@ -174,147 +175,92 @@ func (m *Middleware) SecurityHeaders(next http.Handler) http.Handler {
 	})
 }
 
-// CORS handles Cross-Origin Resource Sharing per AI.md PART 16.
+// CORS handles Cross-Origin Resource Sharing via github.com/rs/cors per AI.md PART 16.
 // Config key: server.web.cors (string). Default: "*" (all origins, no credentials).
-// - "*"       → Access-Control-Allow-Origin: * (no credentials per CORS spec)
-// - "a,b,..."  → match request Origin against list; reflect matched origin + credentials
-// - ""         → no CORS headers (same-origin only)
+// - "*"        → AllowedOrigins: ["*"] (no credentials per CORS spec)
+// - "a,b,..."  → AllowedOrigins: listed origins; credentials allowed
+// - ""         → CORS middleware not applied (same-origin only)
 func (m *Middleware) CORS(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		corsPolicy := m.config.Server.Web.CORS
-		if corsPolicy == "" {
-			next.ServeHTTP(w, r)
-			return
-		}
+	corsPolicy := m.config.Server.Web.CORS
+	if corsPolicy == "" {
+		return next
+	}
 
-		const (
-			corsAllowMethods = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-			corsAllowHeaders = "*"
-			corsMaxAge       = "86400"
-		)
-
-		origin := r.Header.Get("Origin")
-		if origin != "" {
-			if corsPolicy == "*" {
-				w.Header().Set("Access-Control-Allow-Origin", "*")
-			} else {
-				for _, allowed := range strings.Split(corsPolicy, ",") {
-					if strings.TrimSpace(allowed) == origin {
-						w.Header().Set("Access-Control-Allow-Origin", origin)
-						w.Header().Set("Access-Control-Allow-Credentials", "true")
-						break
-					}
-				}
+	var allowedOrigins []string
+	allowCredentials := false
+	if corsPolicy == "*" {
+		allowedOrigins = []string{"*"}
+	} else {
+		for _, o := range strings.Split(corsPolicy, ",") {
+			if trimmed := strings.TrimSpace(o); trimmed != "" {
+				allowedOrigins = append(allowedOrigins, trimmed)
 			}
 		}
+		allowCredentials = true
+	}
 
-		if r.Method == http.MethodOptions {
-			w.Header().Set("Access-Control-Allow-Methods", corsAllowMethods)
-			w.Header().Set("Access-Control-Allow-Headers", corsAllowHeaders)
-			w.Header().Set("Access-Control-Max-Age", corsMaxAge)
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-
-		next.ServeHTTP(w, r)
+	c := cors.New(cors.Options{
+		AllowedOrigins:       allowedOrigins,
+		AllowedMethods:       []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
+		AllowedHeaders:       []string{"*"},
+		AllowCredentials:     allowCredentials,
+		MaxAge:               86400,
+		OptionsSuccessStatus: http.StatusNoContent,
 	})
+	return c.Handler(next)
 }
 
-// RateLimiter implements token bucket rate limiting
+// RateLimiter implements per-IP token bucket rate limiting via golang.org/x/time/rate.
 type RateLimiter struct {
-	mu       sync.RWMutex
-	visitors map[string]*visitor
+	mu       sync.Mutex
+	visitors map[string]*rate.Limiter
 	rate     int
 	burst    int
 	enabled  bool
 }
 
-type visitor struct {
-	tokens    float64
-	lastSeen  time.Time
-	blocked   bool
-	blockTime time.Time
-}
-
-// NewRateLimiter creates a new rate limiter
+// NewRateLimiter creates a new rate limiter backed by golang.org/x/time/rate.
 func NewRateLimiter(cfg *config.RateLimitConfig) *RateLimiter {
 	rl := &RateLimiter{
-		visitors: make(map[string]*visitor),
+		visitors: make(map[string]*rate.Limiter),
 		rate:     cfg.RequestsPerMinute,
 		burst:    cfg.BurstSize,
 		enabled:  cfg.Enabled,
 	}
-
-	// Start cleanup goroutine
 	go rl.cleanup()
-
 	return rl
 }
 
-// cleanup removes old entries periodically
+// cleanup replaces the visitors map periodically to evict stale per-IP limiters.
 func (rl *RateLimiter) cleanup() {
 	for {
 		time.Sleep(5 * time.Minute)
-
 		rl.mu.Lock()
-		for ip, v := range rl.visitors {
-			if time.Since(v.lastSeen) > 10*time.Minute {
-				delete(rl.visitors, ip)
-			}
-		}
+		rl.visitors = make(map[string]*rate.Limiter)
 		rl.mu.Unlock()
 	}
 }
 
-// Allow checks if a request is allowed
+// Allow checks if a request from the given IP is permitted.
 func (rl *RateLimiter) Allow(ip string) bool {
 	if !rl.enabled {
 		return true
 	}
 
 	rl.mu.Lock()
-	defer rl.mu.Unlock()
-
-	v, exists := rl.visitors[ip]
+	lim, exists := rl.visitors[ip]
 	if !exists {
-		rl.visitors[ip] = &visitor{
-			tokens:   float64(rl.burst - 1),
-			lastSeen: time.Now(),
-		}
-		return true
+		// rate.Every converts requests-per-minute to a per-second rate.Limit
+		lim = rate.NewLimiter(rate.Every(time.Minute/time.Duration(rl.rate)), rl.burst)
+		rl.visitors[ip] = lim
 	}
+	rl.mu.Unlock()
 
-	// Check if still blocked
-	if v.blocked {
-		if time.Since(v.blockTime) < time.Minute {
-			return false
-		}
-		v.blocked = false
-	}
-
-	// Refill tokens based on time passed
-	elapsed := time.Since(v.lastSeen).Seconds()
-	refillRate := float64(rl.rate) / 60.0
-	v.tokens += elapsed * refillRate
-	if v.tokens > float64(rl.burst) {
-		v.tokens = float64(rl.burst)
-	}
-
-	v.lastSeen = time.Now()
-
-	if v.tokens >= 1 {
-		v.tokens--
-		return true
-	}
-
-	// Block for 1 minute if exhausted
-	v.blocked = true
-	v.blockTime = time.Now()
-	return false
+	return lim.Allow()
 }
 
-// EndpointRateLimiter implements per-endpoint rate limiting
-// Per AI.md PART 11: login (5/15min), password reset (3/1hr), registration (5/1hr)
+// EndpointRateLimiter implements per-endpoint, per-IP rate limiting via golang.org/x/time/rate.
+// Per AI.md PART 11: login (5/15min), password reset (3/1hr), registration (5/1hr).
 type EndpointRateLimiter struct {
 	mu      sync.Mutex
 	entries map[string]*endpointEntry
@@ -323,11 +269,11 @@ type EndpointRateLimiter struct {
 }
 
 type endpointEntry struct {
-	attempts int
-	firstAt  time.Time
+	limiter *rate.Limiter
+	firstAt time.Time
 }
 
-// NewEndpointRateLimiter creates a rate limiter for a specific endpoint
+// NewEndpointRateLimiter creates a per-endpoint rate limiter backed by golang.org/x/time/rate.
 func NewEndpointRateLimiter(limit int, window time.Duration) *EndpointRateLimiter {
 	erl := &EndpointRateLimiter{
 		entries: make(map[string]*endpointEntry),
@@ -338,7 +284,7 @@ func NewEndpointRateLimiter(limit int, window time.Duration) *EndpointRateLimite
 	return erl
 }
 
-// cleanup removes expired entries periodically
+// cleanup removes expired entries periodically.
 func (erl *EndpointRateLimiter) cleanup() {
 	for {
 		time.Sleep(5 * time.Minute)
@@ -352,39 +298,22 @@ func (erl *EndpointRateLimiter) cleanup() {
 	}
 }
 
-// Allow checks if a request from the given IP is allowed
+// Allow checks if a request from the given IP is permitted within the window.
 func (erl *EndpointRateLimiter) Allow(ip string) bool {
 	erl.mu.Lock()
 	defer erl.mu.Unlock()
 
 	entry, exists := erl.entries[ip]
-	if !exists {
-		erl.entries[ip] = &endpointEntry{
-			attempts: 1,
-			firstAt:  time.Now(),
-		}
-		return true
+	if !exists || time.Since(entry.firstAt) > erl.window {
+		lim := rate.NewLimiter(rate.Every(erl.window/time.Duration(erl.limit)), erl.limit)
+		erl.entries[ip] = &endpointEntry{limiter: lim, firstAt: time.Now()}
+		return lim.Allow()
 	}
 
-	// Window expired, reset
-	if time.Since(entry.firstAt) > erl.window {
-		erl.entries[ip] = &endpointEntry{
-			attempts: 1,
-			firstAt:  time.Now(),
-		}
-		return true
-	}
-
-	// Within window, check limit
-	if entry.attempts >= erl.limit {
-		return false
-	}
-
-	entry.attempts++
-	return true
+	return entry.limiter.Allow()
 }
 
-// RemainingTime returns how long until the rate limit window resets for an IP
+// RemainingTime returns how long until the rate limit window resets for an IP.
 func (erl *EndpointRateLimiter) RemainingTime(ip string) time.Duration {
 	erl.mu.Lock()
 	defer erl.mu.Unlock()
@@ -652,17 +581,15 @@ func (m *Middleware) Logger(next http.Handler) http.Handler {
 			m.logManager.Access().LogRequest(r, wrapped.statusCode, int64(wrapped.bytesWritten), duration)
 		}
 
-		// Also log to stdout in development mode
-		// Privacy: never log client IP (privacy is the product per CLAUDE.md rule #10).
+		// Debug-mode request log — never log client IP (privacy is the product)
 		if m.config.Server.Mode == "development" {
-			log.Printf("- - - [%s] \"%s %s %s\" %d %d \"%.3fms\"",
-				time.Now().Format("02/Jan/2006:15:04:05 -0700"),
-				r.Method,
-				r.URL.Path,
-				r.Proto,
-				wrapped.statusCode,
-				wrapped.bytesWritten,
-				float64(duration.Microseconds())/1000.0,
+			slog.Debug("request",
+				"method", r.Method,
+				"path", r.URL.Path,
+				"proto", r.Proto,
+				"status", wrapped.statusCode,
+				"bytes", wrapped.bytesWritten,
+				"duration_ms", float64(duration.Microseconds())/1000.0,
 			)
 		}
 	})
@@ -726,19 +653,6 @@ func (m *Middleware) Recovery(next http.Handler) http.Handler {
 				}
 
 				slog.LogAttrs(r.Context(), slog.LevelError, "PANIC recovered", attrs...)
-
-				// Also log to standard log for backward compatibility
-				if requestID != "" {
-					log.Printf("PANIC (request_id=%s): %s", requestID, errMsg)
-				} else {
-					log.Printf("PANIC: %s", errMsg)
-				}
-
-				// In development mode, show detailed error
-				if m.config.Server.Mode == "development" {
-					http.Error(w, i18n.RequestString(r, "errors.server_error")+": "+errMsg, http.StatusInternalServerError)
-					return
-				}
 
 				localizedHTTPError(w, r, http.StatusInternalServerError, "errors.server_error")
 			}

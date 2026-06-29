@@ -580,10 +580,10 @@ func TestRedditSearchSuccess(t *testing.T) {
 	}
 }
 
-// TestRedditSearchLongSelftext verifies that long selftext is truncated to 150 chars + "...".
+// TestRedditSearchLongSelftext verifies that long selftext is truncated to 400 chars + "...".
 func TestRedditSearchLongSelftext(t *testing.T) {
-	// 200-character selftext
-	longText := strings.Repeat("A", 200)
+	// 500-character selftext (exceeds 400 limit)
+	longText := strings.Repeat("A", 500)
 	redditResp := map[string]interface{}{
 		"data": map[string]interface{}{
 			"children": []map[string]interface{}{

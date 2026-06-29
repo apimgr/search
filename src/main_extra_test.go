@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/version"
 )
 
 // ============================================================
@@ -234,20 +235,20 @@ func TestPrintVersion(t *testing.T) {
 	out := captureStdout(t, printVersion)
 
 	t.Run("contains Built: line", func(t *testing.T) {
-		if !strings.Contains(out, "Built:") {
-			t.Errorf("printVersion() output missing 'Built:'\n%s", out)
+		if !strings.Contains(out, version.LabelBuilt) {
+			t.Errorf("printVersion() output missing %q\n%s", version.LabelBuilt, out)
 		}
 	})
 
 	t.Run("contains Go: line", func(t *testing.T) {
-		if !strings.Contains(out, "Go:") {
-			t.Errorf("printVersion() output missing 'Go:'\n%s", out)
+		if !strings.Contains(out, version.LabelGo) {
+			t.Errorf("printVersion() output missing %q\n%s", version.LabelGo, out)
 		}
 	})
 
 	t.Run("contains OS/Arch: line", func(t *testing.T) {
-		if !strings.Contains(out, "OS/Arch:") {
-			t.Errorf("printVersion() output missing 'OS/Arch:'\n%s", out)
+		if !strings.Contains(out, version.LabelOSArch) {
+			t.Errorf("printVersion() output missing %q\n%s", version.LabelOSArch, out)
 		}
 	})
 

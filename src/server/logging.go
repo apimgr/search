@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -88,7 +87,7 @@ func NewLogger(cfg *config.Config) *Logger {
 	// Set up file logging if configured
 	if cfg.Server.Logs.File != "" {
 		if err := l.setupFileLogging(cfg.Server.Logs.File); err != nil {
-			log.Printf("Failed to setup file logging: %v", err)
+			fmt.Fprintf(os.Stderr, "failed to setup file logging: %v\n", err)
 		}
 	}
 
@@ -305,10 +304,9 @@ func (l *Logger) Error(msg string, args ...interface{}) {
 	l.log(LevelError, msg, args...)
 }
 
-// Fatal logs a fatal message and exits
+// Fatal logs a fatal message at FATAL level and returns; the caller must handle process termination.
 func (l *Logger) Fatal(msg string, args ...interface{}) {
 	l.log(LevelFatal, msg, args...)
-	os.Exit(1)
 }
 
 // RequestLogger returns a logger for HTTP requests

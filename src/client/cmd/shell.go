@@ -240,10 +240,12 @@ func printInit(shell string) error {
 
 // HandleShellFlag processes the --shell flag when used as a flag instead of a
 // subcommand. Called from main() before the main parse to support the
-// "--shell completions|init" pattern per PART 8. Signature preserved.
-func HandleShellFlag(args []string) bool {
+// "--shell completions|init" pattern per PART 8.
+// Returns (true, nil) on success, (true, err) on failure, (false, nil) when not handled.
+// The caller in main() is responsible for calling os.Exit based on the returned values.
+func HandleShellFlag(args []string) (bool, error) {
 	if len(args) < 2 {
-		return false
+		return false, nil
 	}
 
 	// Check for --shell flag pattern
@@ -259,23 +261,15 @@ func HandleShellFlag(args []string) bool {
 
 			switch subCmd {
 			case "completions":
-				if err := printCompletions(shell); err != nil {
-					fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-					os.Exit(1)
-				}
-				os.Exit(0)
+				return true, printCompletions(shell)
 			case "init":
-				if err := printInit(shell); err != nil {
-					fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-					os.Exit(1)
-				}
-				os.Exit(0)
+				return true, printInit(shell)
 			case "--help":
 				printShellHelp()
-				os.Exit(0)
+				return true, nil
 			}
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }

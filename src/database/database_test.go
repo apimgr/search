@@ -393,9 +393,13 @@ func TestInitSchema_CreatesAllTables(t *testing.T) {
 
 	// Verify a representative set of tables exist
 	expectedTables := []string{
-		"scheduler_state",
+		"scheduler_tasks",
+		"scheduler_history",
 		"audit_log",
-		"server_settings",
+		"config",
+		"config_meta",
+		"rate_limits",
+		"backups",
 		"api_tokens",
 		"search_stats",
 		"engine_stats",

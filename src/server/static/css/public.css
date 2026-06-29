@@ -2598,7 +2598,7 @@ html:not([data-theme-mode]) .theme-label-auto { display: none; }
     a[href^="http"]:after {
         content: " (" attr(href) ")";
         font-size: 0.8em;
-        color: #666;
+        color: var(--text-muted);
     }
 
     /* Don't break inside important elements */
@@ -4682,7 +4682,7 @@ html:not([data-theme-mode]) .theme-label-auto { display: none; }
 }
 
 .qr-placeholder {
-    color: #666;
+    color: var(--text-muted);
     font-size: 0.75rem;
     padding: 20px;
 }
@@ -6272,22 +6272,22 @@ html:not([data-theme-mode]) .theme-label-auto { display: none; }
 
 .badge-production {
     background: rgba(34, 197, 94, 0.15);
-    color: #22c55e;
+    color: var(--accent-success);
 }
 
 .badge-development {
     background: rgba(234, 179, 8, 0.15);
-    color: #eab308;
+    color: var(--accent-warning);
 }
 
 .badge-success {
     background: rgba(34, 197, 94, 0.15);
-    color: #22c55e;
+    color: var(--accent-success);
 }
 
 .badge-error {
     background: rgba(239, 68, 68, 0.15);
-    color: #ef4444;
+    color: var(--accent-error);
 }
 
 .badge-primary {
@@ -6326,12 +6326,12 @@ html:not([data-theme-mode]) .theme-label-auto { display: none; }
 
 .component-ok .component-icon {
     background: rgba(34, 197, 94, 0.15);
-    color: #22c55e;
+    color: var(--accent-success);
 }
 
 .component-error .component-icon {
     background: rgba(239, 68, 68, 0.15);
-    color: #ef4444;
+    color: var(--accent-error);
 }
 
 .component-name {
@@ -6380,12 +6380,12 @@ html:not([data-theme-mode]) .theme-label-auto { display: none; }
 
 .section-card .feature-status.status-ok {
     background: rgba(34, 197, 94, 0.15);
-    color: #22c55e;
+    color: var(--accent-success);
 }
 
 .section-card .feature-status.status-warning {
     background: rgba(234, 179, 8, 0.15);
-    color: #eab308;
+    color: var(--accent-warning);
 }
 
 .section-card .feature-detail {

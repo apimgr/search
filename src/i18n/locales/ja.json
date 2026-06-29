@@ -67,6 +67,10 @@
   "search": {
     "placeholder": "ウェブを検索...",
     "button": "検索",
+    "error_title": "Search Error",
+    "empty_query": "Please enter a search query.",
+    "error_description": "An error occurred while searching",
+    "error_message": "An error occurred while processing your search. Please try again.",
     "results": "結果",
     "no_results": "結果が見つかりません",
     "results_for": "の検索結果",
@@ -289,6 +293,11 @@
     "unauthorized": "認証が必要です",
     "bad_request": "不正なリクエスト",
     "method_not_allowed": "許可されていないメソッドです",
+    "method_not_allowed_title": "Method Not Allowed",
+    "method_not_allowed_message": "Only GET requests are allowed.",
+    "invalid_request_title": "Invalid Request",
+    "invalid_request_direct": "Please specify a direct answer type and term. Example: /direct/tldr/git",
+    "invalid_request_term": "Please specify a term to look up.",
     "server_error": "サーバーエラー",
     "rate_limit": "リクエストが多すぎます。しばらくしてからお試しください",
     "session_expired": "セッションが期限切れです。再度ログインしてください",
@@ -298,7 +307,11 @@
     "csrf_expired": "CSRFトークンの有効期限が切れています",
     "network_error": "ネットワークエラー。接続を確認してください",
     "technical_details": "技術的な詳細",
-    "go_home": "ホームへ戻る"
+    "go_home": "ホームへ戻る",
+    "not_found_message": "The page you're looking for doesn't exist.",
+    "not_found_title": "Page Not Found",
+    "server_error_message": "An error occurred. Please try again.",
+    "server_error_title": "Error"
   },
   "widgets": {
     "weather": "天気",
@@ -1544,5 +1557,12 @@
   "form": {
     "save": "Save",
     "cancel": "Cancel"
+  },
+  "opensearch": {
+    "missing_url": "Missing URL parameter",
+    "invalid_url": "Invalid URL",
+    "invalid_url_scheme": "Invalid URL scheme",
+    "url_not_allowed": "URL not allowed",
+    "request_create_failed": "Failed to create request"
   }
 }

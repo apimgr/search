@@ -3,7 +3,7 @@ package server
 import (
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"sort"
@@ -96,7 +96,7 @@ func (s *Server) handleAlertNew(w http.ResponseWriter, r *http.Request) {
 		data.Frequency = string(alert.FrequencyDaily)
 	}
 	if err := s.renderer.Render(w, "alerts-new", data); err != nil {
-		log.Printf("[Server] template render error: %v", err)
+		slog.Error("template render error", "err", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 	}
 }
@@ -154,7 +154,7 @@ func (s *Server) handleAlerts(w http.ResponseWriter, r *http.Request) {
 		RSSURL:    s.getBaseURL(r) + "/alerts/" + created.RSSToken + ".rss",
 	}
 	if err := s.renderer.Render(w, "alerts-created", data); err != nil {
-		log.Printf("[Server] template render error: %v", err)
+		slog.Error("template render error", "err", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 	}
 }
@@ -226,7 +226,7 @@ func (s *Server) renderManageAlert(w http.ResponseWriter, r *http.Request, token
 		Success:          strings.TrimSpace(r.URL.Query().Get("success")),
 	}
 	if err := s.renderer.Render(w, "alerts-manage", data); err != nil {
-		log.Printf("[Server] template render error: %v", err)
+		slog.Error("template render error", "err", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 	}
 }

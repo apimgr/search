@@ -545,6 +545,42 @@ func (a *Aggregator) applyFilters(results []model.Result, query *model.Query) []
 			}
 		}
 
+		// InTitle filter - result title must contain the term
+		if query.InTitle != "" {
+			if !strings.Contains(strings.ToLower(r.Title), strings.ToLower(query.InTitle)) {
+				continue
+			}
+		}
+
+		// InURL filter - result URL must contain the term
+		if query.InURL != "" {
+			if !strings.Contains(strings.ToLower(r.URL), strings.ToLower(query.InURL)) {
+				continue
+			}
+		}
+
+		// InText filter - result content must contain the term
+		if query.InText != "" {
+			if !strings.Contains(strings.ToLower(r.Content), strings.ToLower(query.InText)) {
+				continue
+			}
+		}
+
+		// Exact phrases filter - all phrases must appear in title or content
+		if len(query.ExactPhrases) > 0 {
+			matchAll := true
+			text := strings.ToLower(r.Title + " " + r.Content)
+			for _, phrase := range query.ExactPhrases {
+				if !strings.Contains(text, strings.ToLower(phrase)) {
+					matchAll = false
+					break
+				}
+			}
+			if !matchAll {
+				continue
+			}
+		}
+
 		// Date range filter
 		if !r.PublishedAt.IsZero() {
 			if query.DateBefore != "" {

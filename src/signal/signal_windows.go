@@ -15,14 +15,14 @@ import (
 
 // setupSignals configures graceful shutdown (Windows)
 // Per AI.md PART 7: Windows only supports os.Interrupt (Ctrl+C, Ctrl+Break)
-func setupSignals(cfg ShutdownConfig) {
+func setupSignals(cfg ShutdownConfig, done chan struct{}) {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt)
 
 	go func() {
 		for sig := range sigChan {
 			log.Printf("Received %v, starting graceful shutdown...", sig)
-			gracefulShutdown(cfg)
+			gracefulShutdown(cfg, done)
 		}
 	}()
 }

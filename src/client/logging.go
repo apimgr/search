@@ -55,7 +55,12 @@ func InitLogging() error {
 		// Determine log file path
 		logPath := cfg.File
 		if logPath == "" {
-			logPath = path.LogFile()
+			var logFileErr error
+			logPath, logFileErr = path.LogFile()
+			if logFileErr != nil {
+				initErr = fmt.Errorf("resolve log file: %w", logFileErr)
+				return
+			}
 		}
 
 		// Expand ~ to home directory

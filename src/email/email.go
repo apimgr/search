@@ -32,6 +32,8 @@ type Config struct {
 	SMTP        SMTPConfig
 	From        FromConfig
 	AdminEmails []string
+	// AppTitle is the configured application title used in email subjects
+	AppTitle string
 }
 
 // SMTPConfig represents SMTP server configuration
@@ -297,7 +299,11 @@ func (ml *Mailer) SendToAdmins(subject, body string) error {
 
 // SendAlert sends an alert email to admins
 func (ml *Mailer) SendAlert(alertType, message string) error {
-	subject := fmt.Sprintf("[Scour Alert] %s", alertType)
+	appTitle := ml.config.AppTitle
+	if appTitle == "" {
+		appTitle = "Search"
+	}
+	subject := fmt.Sprintf("[%s Alert] %s", appTitle, alertType)
 	body := fmt.Sprintf("Alert Type: %s\nTime: %s\n\nMessage:\n%s",
 		alertType,
 		time.Now().Format(time.RFC3339),
@@ -308,7 +314,11 @@ func (ml *Mailer) SendAlert(alertType, message string) error {
 
 // SendSecurityAlert sends a security alert email
 func (ml *Mailer) SendSecurityAlert(event, ip, details string) error {
-	subject := fmt.Sprintf("[Scour Security] %s from %s", event, ip)
+	appTitle := ml.config.AppTitle
+	if appTitle == "" {
+		appTitle = "Search"
+	}
+	subject := fmt.Sprintf("[%s Security] %s from %s", appTitle, event, ip)
 	body := fmt.Sprintf("Security Event: %s\nIP Address: %s\nTime: %s\n\nDetails:\n%s",
 		event,
 		ip,
@@ -391,25 +401,39 @@ type DetectedSMTP struct {
 	AuthRequired bool
 }
 
-// DetectSMTP auto-detects SMTP servers on the local system
-// Per AI.md PART 18: SMTP auto-detection on first run
-// Check order: localhost, 127.0.0.1, Docker host (172.17.0.1), Gateway IP
-// Ports: 25, 587, 465
-func DetectSMTP() *DetectedSMTP {
-	// Per AI.md PART 18: Hosts to check in order
+// DetectSMTP auto-detects SMTP servers on the local system.
+// Per AI.md PART 17: SMTP auto-detection on first run.
+// Probe order: localhost → 127.0.0.1 → fqdn → globalIPv4 → mail.fqdn → smtp.fqdn → Docker host (172.17.0.1) → gateway IP.
+// fqdn and globalIPv4 are the server's configured FQDN and global IPv4 address; pass empty strings if unknown.
+// Ports: 25, 587, 465.
+func DetectSMTP(fqdn, globalIPv4 string) *DetectedSMTP {
+	// Per AI.md PART 17: Hosts to check in priority order
 	hosts := []string{
 		"localhost",
 		"127.0.0.1",
-		// Docker host
-		"172.17.0.1",
 	}
+
+	if fqdn != "" {
+		hosts = append(hosts, fqdn)
+	}
+
+	if globalIPv4 != "" {
+		hosts = append(hosts, globalIPv4)
+	}
+
+	if fqdn != "" {
+		hosts = append(hosts, "mail."+fqdn, "smtp."+fqdn)
+	}
+
+	// Docker bridge host
+	hosts = append(hosts, "172.17.0.1")
 
 	// Try to get gateway IP
 	if gateway := getDefaultGateway(); gateway != "" {
 		hosts = append(hosts, gateway)
 	}
 
-	// Per AI.md PART 18: Ports to check (25, 587, 465)
+	// Per AI.md PART 17: Ports to check (25, 587, 465)
 	ports := []struct {
 		port     int
 		tls      bool
@@ -518,10 +542,11 @@ func tryDetectSMTP(host string, port int, useTLS bool) *DetectedSMTP {
 	}
 }
 
-// DetectAndConfigure detects SMTP and returns a configured Config
-// Per AI.md PART 18: SMTP auto-detection on first run
-func DetectAndConfigure() *Config {
-	detected := DetectSMTP()
+// DetectAndConfigure detects SMTP and returns a configured Config.
+// Per AI.md PART 17: SMTP auto-detection on first run.
+// fqdn and globalIPv4 are passed to DetectSMTP for extended host probing; pass empty strings if unknown.
+func DetectAndConfigure(fqdn, globalIPv4 string) *Config {
+	detected := DetectSMTP(fqdn, globalIPv4)
 	if detected == nil {
 		return DefaultConfig()
 	}
@@ -549,5 +574,5 @@ func DetectAndConfigure() *Config {
 
 // IsLocalSMTPAvailable checks if a local SMTP server is available
 func IsLocalSMTPAvailable() bool {
-	return DetectSMTP() != nil
+	return DetectSMTP("", "") != nil
 }

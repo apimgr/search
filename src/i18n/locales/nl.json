@@ -67,6 +67,10 @@
   "search": {
     "placeholder": "Zoeken op het web...",
     "button": "Zoeken",
+    "error_title": "Search Error",
+    "empty_query": "Please enter a search query.",
+    "error_description": "An error occurred while searching",
+    "error_message": "An error occurred while processing your search. Please try again.",
     "results": "Resultaten",
     "no_results": "Geen resultaten gevonden",
     "results_for": "Resultaten voor",
@@ -289,6 +293,11 @@
     "unauthorized": "Niet geautoriseerd",
     "bad_request": "Ongeldige aanvraag",
     "method_not_allowed": "Methode niet toegestaan",
+    "method_not_allowed_title": "Method Not Allowed",
+    "method_not_allowed_message": "Only GET requests are allowed.",
+    "invalid_request_title": "Invalid Request",
+    "invalid_request_direct": "Please specify a direct answer type and term. Example: /direct/tldr/git",
+    "invalid_request_term": "Please specify a term to look up.",
     "server_error": "Serverfout",
     "rate_limit": "Te veel verzoeken, probeer het later opnieuw",
     "session_expired": "Sessie verlopen, log opnieuw in",
@@ -298,7 +307,11 @@
     "csrf_expired": "CSRF-token verlopen",
     "network_error": "Netwerkfout, controleer je verbinding",
     "technical_details": "Technische details",
-    "go_home": "Ga naar startpagina"
+    "go_home": "Ga naar startpagina",
+    "not_found_message": "The page you're looking for doesn't exist.",
+    "not_found_title": "Page Not Found",
+    "server_error_message": "An error occurred. Please try again.",
+    "server_error_title": "Error"
   },
   "widgets": {
     "weather": "Weer",
@@ -1544,5 +1557,12 @@
   "form": {
     "save": "Opslaan",
     "cancel": "Annuleren"
+  },
+  "opensearch": {
+    "missing_url": "Missing URL parameter",
+    "invalid_url": "Invalid URL",
+    "invalid_url_scheme": "Invalid URL scheme",
+    "url_not_allowed": "URL not allowed",
+    "request_create_failed": "Failed to create request"
   }
 }

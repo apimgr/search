@@ -25,7 +25,8 @@ func TestNewManager(t *testing.T) {
 		Enabled: false,
 	}
 
-	m := NewManager(cfg, "/tmp/test")
+	testDir := t.TempDir()
+	m := NewManager(cfg, testDir)
 
 	if m == nil {
 		t.Fatal("NewManager() returned nil")
@@ -33,8 +34,8 @@ func TestNewManager(t *testing.T) {
 	if m.config != cfg {
 		t.Error("Config not set correctly")
 	}
-	if m.dataDir != "/tmp/test" {
-		t.Errorf("dataDir = %q, want %q", m.dataDir, "/tmp/test")
+	if m.dataDir != testDir {
+		t.Errorf("dataDir = %q, want %q", m.dataDir, testDir)
 	}
 }
 
@@ -43,7 +44,7 @@ func TestNewManagerWithSecret(t *testing.T) {
 		Enabled: false,
 	}
 
-	m := NewManagerWithSecret(cfg, "/tmp/test", "secret123")
+	m := NewManagerWithSecret(cfg, t.TempDir(), "secret123")
 
 	if m == nil {
 		t.Fatal("NewManagerWithSecret() returned nil")
@@ -134,7 +135,7 @@ func TestManagerIsEnabled(t *testing.T) {
 	cfg := &config.SSLConfig{
 		Enabled: false,
 	}
-	m := NewManager(cfg, "/tmp/test")
+	m := NewManager(cfg, t.TempDir())
 
 	if m.IsEnabled() {
 		t.Error("IsEnabled() should return false when disabled")
@@ -183,7 +184,7 @@ func TestManagerGetTLSConfig(t *testing.T) {
 	cfg := &config.SSLConfig{
 		Enabled: false,
 	}
-	m := NewManager(cfg, "/tmp/test")
+	m := NewManager(cfg, t.TempDir())
 
 	tlsCfg := m.GetTLSConfig()
 	// Should be nil when TLS is not configured
@@ -194,7 +195,7 @@ func TestManagerGetHTTPSHandler(t *testing.T) {
 	cfg := &config.SSLConfig{
 		Enabled: false,
 	}
-	m := NewManager(cfg, "/tmp/test")
+	m := NewManager(cfg, t.TempDir())
 
 	fallback := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -276,7 +277,7 @@ func TestManagerGetCertInfoNoCert(t *testing.T) {
 	cfg := &config.SSLConfig{
 		Enabled: false,
 	}
-	m := NewManager(cfg, "/tmp/test")
+	m := NewManager(cfg, t.TempDir())
 
 	_, err := m.GetCertInfo()
 	if err == nil {
@@ -416,7 +417,7 @@ func TestManagerReloadCertificatesLetsEncrypt(t *testing.T) {
 		Enabled: true,
 	}
 	cfg.LetsEncrypt.Enabled = true
-	m := NewManager(cfg, "/tmp/test")
+	m := NewManager(cfg, t.TempDir())
 
 	// Should return nil for Let's Encrypt (handles its own renewal)
 	err := m.ReloadCertificates()
@@ -430,7 +431,7 @@ func TestManagerReloadCertificatesNoFiles(t *testing.T) {
 		Enabled: true,
 	}
 	// LetsEncrypt.Enabled defaults to false
-	m := NewManager(cfg, "/tmp/test")
+	m := NewManager(cfg, t.TempDir())
 
 	err := m.ReloadCertificates()
 	if err == nil {
@@ -523,7 +524,7 @@ func TestManagerInitManualCertsInvalid(t *testing.T) {
 		KeyFile:  "/nonexistent/key.pem",
 	}
 
-	m := NewManager(cfg, "/tmp/test")
+	m := NewManager(cfg, t.TempDir())
 
 	// Should not panic, just log error
 	if m.tlsConfig != nil {
@@ -660,7 +661,7 @@ func TestManagerLoadOrCreateAccountKeyInvalidExisting(t *testing.T) {
 
 func TestManagerRenewCertificateDNS01NoClient(t *testing.T) {
 	cfg := &config.SSLConfig{Enabled: true}
-	m := NewManager(cfg, "/tmp/test")
+	m := NewManager(cfg, t.TempDir())
 
 	// Should return nil when legoClient is nil
 	err := m.RenewCertificateDNS01(context.TODO())
@@ -671,7 +672,7 @@ func TestManagerRenewCertificateDNS01NoClient(t *testing.T) {
 
 func TestManagerRenewCertificateDNS01WithContext(t *testing.T) {
 	cfg := &config.SSLConfig{Enabled: true}
-	m := NewManager(cfg, "/tmp/test")
+	m := NewManager(cfg, t.TempDir())
 
 	ctx := context.Background()
 	err := m.RenewCertificateDNS01(ctx)

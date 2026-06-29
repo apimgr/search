@@ -198,20 +198,25 @@ func TestMiddlewareCORS(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodOptions, version.APIPrefix+"/search", nil)
 		req.Header.Set("Origin", "https://app.example.com")
+		req.Header.Set("Access-Control-Request-Method", "POST")
+		req.Header.Set("Access-Control-Request-Headers", "Content-Type, X-Api-Key")
 		rec := httptest.NewRecorder()
 		wrapped.ServeHTTP(rec, req)
 
 		if rec.Code != http.StatusNoContent {
 			t.Errorf("preflight status = %d, want %d", rec.Code, http.StatusNoContent)
 		}
+		// rs/cors v1.11+ echoes the requested method (not all allowed methods) per CORS spec.
 		methods := rec.Header().Get("Access-Control-Allow-Methods")
-		for _, m := range []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"} {
-			if !strings.Contains(methods, m) {
-				t.Errorf("preflight: Access-Control-Allow-Methods missing %q (got %q)", m, methods)
-			}
+		if !strings.Contains(methods, "POST") {
+			t.Errorf("preflight: Access-Control-Allow-Methods missing %q (got %q)", "POST", methods)
 		}
-		if rec.Header().Get("Access-Control-Allow-Headers") != "*" {
-			t.Errorf("preflight: Access-Control-Allow-Headers = %q, want *", rec.Header().Get("Access-Control-Allow-Headers"))
+		// rs/cors v1.11+ echoes the requested headers (not a wildcard).
+		allowedHeaders := rec.Header().Get("Access-Control-Allow-Headers")
+		for _, h := range []string{"Content-Type", "X-Api-Key"} {
+			if !strings.Contains(strings.ToLower(allowedHeaders), strings.ToLower(h)) {
+				t.Errorf("preflight: Access-Control-Allow-Headers missing %q (got %q)", h, allowedHeaders)
+			}
 		}
 		if rec.Header().Get("Access-Control-Max-Age") != "86400" {
 			t.Errorf("preflight: Access-Control-Max-Age = %q, want 86400", rec.Header().Get("Access-Control-Max-Age"))
@@ -825,8 +830,8 @@ func TestMetrics(t *testing.T) {
 		if rec.Code != http.StatusUnauthorized {
 			t.Errorf("Status without token = %d, want %d", rec.Code, http.StatusUnauthorized)
 		}
-		if body := strings.TrimSpace(rec.Body.String()); body != "Nicht autorisiert" {
-			t.Errorf("Body without token = %q, want %q", body, "Nicht autorisiert")
+		if body := strings.TrimSpace(rec.Body.String()); !strings.Contains(body, "Nicht autorisiert") {
+			t.Errorf("Body without token = %q, want JSON containing %q", body, "Nicht autorisiert")
 		}
 
 		// Test with invalid token

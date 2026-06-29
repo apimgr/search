@@ -19,7 +19,7 @@ var findProcessFunc = os.FindProcess
 
 // setupSignals configures graceful shutdown (Unix)
 // Per AI.md PART 7: Unix signals table
-func setupSignals(cfg ShutdownConfig) {
+func setupSignals(cfg ShutdownConfig, done chan struct{}) {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan,
 		// 15 - kill (default), graceful shutdown
@@ -55,7 +55,7 @@ func setupSignals(cfg ShutdownConfig) {
 			default:
 				// Graceful shutdown: SIGTERM, SIGINT, SIGQUIT, SIGRTMIN+3
 				log.Printf("Received %v, starting graceful shutdown...", sig)
-				gracefulShutdown(cfg)
+				gracefulShutdown(cfg, done)
 			}
 		}
 	}()

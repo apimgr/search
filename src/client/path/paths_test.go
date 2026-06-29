@@ -11,7 +11,10 @@ import (
 // Tests for ConfigDir
 
 func TestConfigDir(t *testing.T) {
-	dir := ConfigDir()
+	dir, err := ConfigDir()
+	if err != nil {
+		t.Fatalf("ConfigDir() error = %v", err)
+	}
 
 	if dir == "" {
 		t.Error("ConfigDir() returned empty string")
@@ -27,7 +30,10 @@ func TestConfigDir(t *testing.T) {
 }
 
 func TestConfigDirPlatformSpecific(t *testing.T) {
-	dir := ConfigDir()
+	dir, err := ConfigDir()
+	if err != nil {
+		t.Fatalf("ConfigDir() error = %v", err)
+	}
 
 	if runtime.GOOS == "windows" {
 		// Should use APPDATA on Windows
@@ -46,7 +52,10 @@ func TestConfigDirPlatformSpecific(t *testing.T) {
 // Tests for DataDir
 
 func TestDataDir(t *testing.T) {
-	dir := DataDir()
+	dir, err := DataDir()
+	if err != nil {
+		t.Fatalf("DataDir() error = %v", err)
+	}
 
 	if dir == "" {
 		t.Error("DataDir() returned empty string")
@@ -61,7 +70,10 @@ func TestDataDir(t *testing.T) {
 }
 
 func TestDataDirPlatformSpecific(t *testing.T) {
-	dir := DataDir()
+	dir, err := DataDir()
+	if err != nil {
+		t.Fatalf("DataDir() error = %v", err)
+	}
 
 	if runtime.GOOS == "windows" {
 		// Should use LOCALAPPDATA on Windows
@@ -84,7 +96,10 @@ func TestDataDirPlatformSpecific(t *testing.T) {
 // Tests for CacheDir
 
 func TestCacheDir(t *testing.T) {
-	dir := CacheDir()
+	dir, err := CacheDir()
+	if err != nil {
+		t.Fatalf("CacheDir() error = %v", err)
+	}
 
 	if dir == "" {
 		t.Error("CacheDir() returned empty string")
@@ -99,7 +114,10 @@ func TestCacheDir(t *testing.T) {
 }
 
 func TestCacheDirPlatformSpecific(t *testing.T) {
-	dir := CacheDir()
+	dir, err := CacheDir()
+	if err != nil {
+		t.Fatalf("CacheDir() error = %v", err)
+	}
 
 	if runtime.GOOS == "windows" {
 		// Should use LOCALAPPDATA on Windows
@@ -122,7 +140,10 @@ func TestCacheDirPlatformSpecific(t *testing.T) {
 // Tests for LogDir
 
 func TestLogDir(t *testing.T) {
-	dir := LogDir()
+	dir, err := LogDir()
+	if err != nil {
+		t.Fatalf("LogDir() error = %v", err)
+	}
 
 	if dir == "" {
 		t.Error("LogDir() returned empty string")
@@ -137,7 +158,10 @@ func TestLogDir(t *testing.T) {
 }
 
 func TestLogDirPlatformSpecific(t *testing.T) {
-	dir := LogDir()
+	dir, err := LogDir()
+	if err != nil {
+		t.Fatalf("LogDir() error = %v", err)
+	}
 
 	if runtime.GOOS == "windows" {
 		// Should have 'log' subdirectory
@@ -155,7 +179,10 @@ func TestLogDirPlatformSpecific(t *testing.T) {
 // Tests for ConfigFile
 
 func TestConfigFile(t *testing.T) {
-	file := ConfigFile()
+	file, err := ConfigFile()
+	if err != nil {
+		t.Fatalf("ConfigFile() error = %v", err)
+	}
 
 	if file == "" {
 		t.Error("ConfigFile() returned empty string")
@@ -167,15 +194,22 @@ func TestConfigFile(t *testing.T) {
 	}
 
 	// Should be under ConfigDir
-	if !strings.HasPrefix(file, ConfigDir()) {
-		t.Errorf("ConfigFile() = %q, should be under ConfigDir() = %q", file, ConfigDir())
+	configDir, err := ConfigDir()
+	if err != nil {
+		t.Fatalf("ConfigDir() error = %v", err)
+	}
+	if !strings.HasPrefix(file, configDir) {
+		t.Errorf("ConfigFile() = %q, should be under ConfigDir() = %q", file, configDir)
 	}
 }
 
 // Tests for LogFile
 
 func TestLogFile(t *testing.T) {
-	file := LogFile()
+	file, err := LogFile()
+	if err != nil {
+		t.Fatalf("LogFile() error = %v", err)
+	}
 
 	if file == "" {
 		t.Error("LogFile() returned empty string")
@@ -187,8 +221,12 @@ func TestLogFile(t *testing.T) {
 	}
 
 	// Should be under LogDir
-	if !strings.HasPrefix(file, LogDir()) {
-		t.Errorf("LogFile() = %q, should be under LogDir() = %q", file, LogDir())
+	logDir, err := LogDir()
+	if err != nil {
+		t.Fatalf("LogDir() error = %v", err)
+	}
+	if !strings.HasPrefix(file, logDir) {
+		t.Errorf("LogFile() = %q, should be under LogDir() = %q", file, logDir)
 	}
 }
 
@@ -243,14 +281,18 @@ func TestEnsureFileExistingDir(t *testing.T) {
 // Tests for ResolveConfigPath
 
 func TestResolveConfigPathEmpty(t *testing.T) {
-	path, err := ResolveConfigPath("")
+	resolvedPath, err := ResolveConfigPath("")
 	if err != nil {
 		t.Fatalf("ResolveConfigPath('') error = %v", err)
 	}
 
 	// Should return default ConfigFile
-	if path != ConfigFile() {
-		t.Errorf("ResolveConfigPath('') = %q, want %q", path, ConfigFile())
+	defaultFile, err := ConfigFile()
+	if err != nil {
+		t.Fatalf("ConfigFile() error = %v", err)
+	}
+	if resolvedPath != defaultFile {
+		t.Errorf("ResolveConfigPath('') = %q, want %q", resolvedPath, defaultFile)
 	}
 }
 
@@ -261,13 +303,13 @@ func TestResolveConfigPathWithExtension(t *testing.T) {
 	// Create the file
 	os.WriteFile(testFile, []byte{}, 0600)
 
-	path, err := ResolveConfigPath(testFile)
+	resolvedPath, err := ResolveConfigPath(testFile)
 	if err != nil {
 		t.Fatalf("ResolveConfigPath() error = %v", err)
 	}
 
-	if path != testFile {
-		t.Errorf("ResolveConfigPath() = %q, want %q", path, testFile)
+	if resolvedPath != testFile {
+		t.Errorf("ResolveConfigPath() = %q, want %q", resolvedPath, testFile)
 	}
 }
 
@@ -278,13 +320,13 @@ func TestResolveConfigPathWithYamlExtension(t *testing.T) {
 	// Create the file
 	os.WriteFile(testFile, []byte{}, 0600)
 
-	path, err := ResolveConfigPath(testFile)
+	resolvedPath, err := ResolveConfigPath(testFile)
 	if err != nil {
 		t.Fatalf("ResolveConfigPath() error = %v", err)
 	}
 
-	if path != testFile {
-		t.Errorf("ResolveConfigPath() = %q, want %q", path, testFile)
+	if resolvedPath != testFile {
+		t.Errorf("ResolveConfigPath() = %q, want %q", resolvedPath, testFile)
 	}
 }
 
@@ -292,27 +334,32 @@ func TestResolveConfigPathTildeExpansion(t *testing.T) {
 	home, _ := os.UserHomeDir()
 	input := "~/custom.yml"
 
-	path, err := ResolveConfigPath(input)
+	resolvedPath, err := ResolveConfigPath(input)
 	if err != nil {
 		t.Fatalf("ResolveConfigPath() error = %v", err)
 	}
 
 	expected := filepath.Join(home, "custom.yml")
-	if path != expected {
-		t.Errorf("ResolveConfigPath('~/custom.yml') = %q, want %q", path, expected)
+	if resolvedPath != expected {
+		t.Errorf("ResolveConfigPath('~/custom.yml') = %q, want %q", resolvedPath, expected)
 	}
 }
 
 func TestResolveConfigPathRelative(t *testing.T) {
-	path, err := ResolveConfigPath("myconfig")
+	configDir, err := ConfigDir()
+	if err != nil {
+		t.Fatalf("ConfigDir() error = %v", err)
+	}
+
+	resolvedPath, err := ResolveConfigPath("myconfig")
 	if err != nil {
 		t.Fatalf("ResolveConfigPath() error = %v", err)
 	}
 
 	// Should be resolved relative to ConfigDir with .yml extension
-	expected := filepath.Join(ConfigDir(), "myconfig.yml")
-	if path != expected {
-		t.Errorf("ResolveConfigPath('myconfig') = %q, want %q", path, expected)
+	expected := filepath.Join(configDir, "myconfig.yml")
+	if resolvedPath != expected {
+		t.Errorf("ResolveConfigPath('myconfig') = %q, want %q", resolvedPath, expected)
 	}
 }
 
@@ -408,10 +455,22 @@ func TestAddExtIfNeededOtherExtension(t *testing.T) {
 // Tests for directory structure consistency
 
 func TestAllDirsAreDifferent(t *testing.T) {
-	configDir := ConfigDir()
-	dataDir := DataDir()
-	cacheDir := CacheDir()
-	logDir := LogDir()
+	configDir, err := ConfigDir()
+	if err != nil {
+		t.Fatalf("ConfigDir() error = %v", err)
+	}
+	dataDir, err := DataDir()
+	if err != nil {
+		t.Fatalf("DataDir() error = %v", err)
+	}
+	cacheDir, err := CacheDir()
+	if err != nil {
+		t.Fatalf("CacheDir() error = %v", err)
+	}
+	logDir, err := LogDir()
+	if err != nil {
+		t.Fatalf("LogDir() error = %v", err)
+	}
 
 	if configDir == dataDir {
 		t.Error("ConfigDir and DataDir should be different")
@@ -454,6 +513,15 @@ func TestResolveConfigPathTableDriven(t *testing.T) {
 	os.WriteFile(ymlFile, []byte{}, 0600)
 	os.WriteFile(yamlFile, []byte{}, 0600)
 
+	defaultFile, err := ConfigFile()
+	if err != nil {
+		t.Fatalf("ConfigFile() error = %v", err)
+	}
+	configDir, err := ConfigDir()
+	if err != nil {
+		t.Fatalf("ConfigDir() error = %v", err)
+	}
+
 	tests := []struct {
 		name     string
 		input    string
@@ -462,7 +530,7 @@ func TestResolveConfigPathTableDriven(t *testing.T) {
 		{
 			name:     "empty input returns default",
 			input:    "",
-			expected: ConfigFile(),
+			expected: defaultFile,
 		},
 		{
 			name:     "tilde expansion",
@@ -482,22 +550,22 @@ func TestResolveConfigPathTableDriven(t *testing.T) {
 		{
 			name:     "relative path without extension",
 			input:    "myconfig",
-			expected: filepath.Join(ConfigDir(), "myconfig.yml"),
+			expected: filepath.Join(configDir, "myconfig.yml"),
 		},
 		{
 			name:     "relative path with yml extension",
 			input:    "myconfig.yml",
-			expected: filepath.Join(ConfigDir(), "myconfig.yml"),
+			expected: filepath.Join(configDir, "myconfig.yml"),
 		},
 		{
 			name:     "relative path with yaml extension",
 			input:    "myconfig.yaml",
-			expected: filepath.Join(ConfigDir(), "myconfig.yaml"),
+			expected: filepath.Join(configDir, "myconfig.yaml"),
 		},
 		{
 			name:     "relative path with other extension",
 			input:    "myconfig.json",
-			expected: filepath.Join(ConfigDir(), "myconfig.json"),
+			expected: filepath.Join(configDir, "myconfig.json"),
 		},
 	}
 
@@ -733,14 +801,14 @@ func TestResolveConfigPathAbsoluteNoExtension(t *testing.T) {
 
 	// Pass absolute path without extension
 	input := filepath.Join(tempDir, "absconfig")
-	path, err := ResolveConfigPath(input)
+	resolvedPath, err := ResolveConfigPath(input)
 	if err != nil {
 		t.Fatalf("ResolveConfigPath() error = %v", err)
 	}
 
 	// Should find the existing .yml file
-	if path != ymlFile {
-		t.Errorf("ResolveConfigPath(%q) = %q, want %q", input, path, ymlFile)
+	if resolvedPath != ymlFile {
+		t.Errorf("ResolveConfigPath(%q) = %q, want %q", input, resolvedPath, ymlFile)
 	}
 }
 
@@ -753,14 +821,14 @@ func TestResolveConfigPathAbsoluteYamlOnly(t *testing.T) {
 
 	// Pass absolute path without extension
 	input := filepath.Join(tempDir, "absconfig")
-	path, err := ResolveConfigPath(input)
+	resolvedPath, err := ResolveConfigPath(input)
 	if err != nil {
 		t.Fatalf("ResolveConfigPath() error = %v", err)
 	}
 
 	// Should find the existing .yaml file
-	if path != yamlFile {
-		t.Errorf("ResolveConfigPath(%q) = %q, want %q", input, path, yamlFile)
+	if resolvedPath != yamlFile {
+		t.Errorf("ResolveConfigPath(%q) = %q, want %q", input, resolvedPath, yamlFile)
 	}
 }
 
@@ -768,14 +836,14 @@ func TestResolveConfigPathTildeWithSubdirs(t *testing.T) {
 	home, _ := os.UserHomeDir()
 	input := "~/configs/custom.yml"
 
-	path, err := ResolveConfigPath(input)
+	resolvedPath, err := ResolveConfigPath(input)
 	if err != nil {
 		t.Fatalf("ResolveConfigPath() error = %v", err)
 	}
 
 	expected := filepath.Join(home, "configs", "custom.yml")
-	if path != expected {
-		t.Errorf("ResolveConfigPath(%q) = %q, want %q", input, path, expected)
+	if resolvedPath != expected {
+		t.Errorf("ResolveConfigPath(%q) = %q, want %q", input, resolvedPath, expected)
 	}
 }
 
@@ -797,15 +865,15 @@ func TestResolveConfigPathTildeNoExtension(t *testing.T) {
 	os.WriteFile(yamlFile, []byte{}, 0600)
 
 	input := "~/tildetest/config"
-	path, err := ResolveConfigPath(input)
+	resolvedPath, err := ResolveConfigPath(input)
 	if err != nil {
 		t.Fatalf("ResolveConfigPath() error = %v", err)
 	}
 
 	// Should find the existing .yaml file
 	expected := filepath.Join(tempDir, "tildetest", "config.yaml")
-	if path != expected {
-		t.Errorf("ResolveConfigPath(%q) = %q, want %q (home=%s)", input, path, expected, home)
+	if resolvedPath != expected {
+		t.Errorf("ResolveConfigPath(%q) = %q, want %q (home=%s)", input, resolvedPath, expected, home)
 	}
 }
 
@@ -814,22 +882,34 @@ func TestResolveConfigPathTildeNoExtension(t *testing.T) {
 func TestPathSeparators(t *testing.T) {
 	sep := string(filepath.Separator)
 
-	configDir := ConfigDir()
+	configDir, err := ConfigDir()
+	if err != nil {
+		t.Fatalf("ConfigDir() error = %v", err)
+	}
 	if !strings.Contains(configDir, sep) {
 		t.Errorf("ConfigDir() = %q, should contain path separator %q", configDir, sep)
 	}
 
-	dataDir := DataDir()
+	dataDir, err := DataDir()
+	if err != nil {
+		t.Fatalf("DataDir() error = %v", err)
+	}
 	if !strings.Contains(dataDir, sep) {
 		t.Errorf("DataDir() = %q, should contain path separator %q", dataDir, sep)
 	}
 
-	cacheDir := CacheDir()
+	cacheDir, err := CacheDir()
+	if err != nil {
+		t.Fatalf("CacheDir() error = %v", err)
+	}
 	if !strings.Contains(cacheDir, sep) {
 		t.Errorf("CacheDir() = %q, should contain path separator %q", cacheDir, sep)
 	}
 
-	logDir := LogDir()
+	logDir, err := LogDir()
+	if err != nil {
+		t.Fatalf("LogDir() error = %v", err)
+	}
 	if !strings.Contains(logDir, sep) {
 		t.Errorf("LogDir() = %q, should contain path separator %q", logDir, sep)
 	}
@@ -840,7 +920,7 @@ func TestPathSeparators(t *testing.T) {
 func TestDirsAreAbsolute(t *testing.T) {
 	dirs := []struct {
 		name string
-		fn   func() string
+		fn   func() (string, error)
 	}{
 		{"ConfigDir", ConfigDir},
 		{"DataDir", DataDir},
@@ -850,9 +930,12 @@ func TestDirsAreAbsolute(t *testing.T) {
 
 	for _, d := range dirs {
 		t.Run(d.name, func(t *testing.T) {
-			path := d.fn()
-			if !filepath.IsAbs(path) {
-				t.Errorf("%s() = %q, should be absolute path", d.name, path)
+			dirPath, err := d.fn()
+			if err != nil {
+				t.Fatalf("%s() error = %v", d.name, err)
+			}
+			if !filepath.IsAbs(dirPath) {
+				t.Errorf("%s() = %q, should be absolute path", d.name, dirPath)
 			}
 		})
 	}
@@ -863,7 +946,7 @@ func TestDirsAreAbsolute(t *testing.T) {
 func TestFilesAreAbsolute(t *testing.T) {
 	files := []struct {
 		name string
-		fn   func() string
+		fn   func() (string, error)
 	}{
 		{"ConfigFile", ConfigFile},
 		{"LogFile", LogFile},
@@ -871,9 +954,12 @@ func TestFilesAreAbsolute(t *testing.T) {
 
 	for _, f := range files {
 		t.Run(f.name, func(t *testing.T) {
-			path := f.fn()
-			if !filepath.IsAbs(path) {
-				t.Errorf("%s() = %q, should be absolute path", f.name, path)
+			filePath, err := f.fn()
+			if err != nil {
+				t.Fatalf("%s() error = %v", f.name, err)
+			}
+			if !filepath.IsAbs(filePath) {
+				t.Errorf("%s() = %q, should be absolute path", f.name, filePath)
 			}
 		})
 	}
@@ -1000,8 +1086,14 @@ func TestAddExtIfNeededEdgeCases(t *testing.T) {
 // Test ConfigFile and LogFile composition
 
 func TestConfigFileComposition(t *testing.T) {
-	configDir := ConfigDir()
-	configFile := ConfigFile()
+	configDir, err := ConfigDir()
+	if err != nil {
+		t.Fatalf("ConfigDir() error = %v", err)
+	}
+	configFile, err := ConfigFile()
+	if err != nil {
+		t.Fatalf("ConfigFile() error = %v", err)
+	}
 
 	expectedFile := filepath.Join(configDir, "cli.yml")
 	if configFile != expectedFile {
@@ -1010,8 +1102,14 @@ func TestConfigFileComposition(t *testing.T) {
 }
 
 func TestLogFileComposition(t *testing.T) {
-	logDir := LogDir()
-	logFile := LogFile()
+	logDir, err := LogDir()
+	if err != nil {
+		t.Fatalf("LogDir() error = %v", err)
+	}
+	logFile, err := LogFile()
+	if err != nil {
+		t.Fatalf("LogFile() error = %v", err)
+	}
 
 	expectedFile := filepath.Join(logDir, "cli.log")
 	if logFile != expectedFile {
@@ -1026,28 +1124,40 @@ func TestDirectoryHierarchy(t *testing.T) {
 
 	if runtime.GOOS != "windows" {
 		// On non-Windows, config should be under .config
-		configDir := ConfigDir()
+		configDir, err := ConfigDir()
+		if err != nil {
+			t.Fatalf("ConfigDir() error = %v", err)
+		}
 		expectedPrefix := filepath.Join(home, ".config")
 		if !strings.HasPrefix(configDir, expectedPrefix) {
 			t.Errorf("ConfigDir() = %q, should start with %q", configDir, expectedPrefix)
 		}
 
 		// Data should be under .local/share
-		dataDir := DataDir()
+		dataDir, err := DataDir()
+		if err != nil {
+			t.Fatalf("DataDir() error = %v", err)
+		}
 		expectedPrefix = filepath.Join(home, ".local", "share")
 		if !strings.HasPrefix(dataDir, expectedPrefix) {
 			t.Errorf("DataDir() = %q, should start with %q", dataDir, expectedPrefix)
 		}
 
 		// Cache should be under .cache
-		cacheDir := CacheDir()
+		cacheDir, err := CacheDir()
+		if err != nil {
+			t.Fatalf("CacheDir() error = %v", err)
+		}
 		expectedPrefix = filepath.Join(home, ".cache")
 		if !strings.HasPrefix(cacheDir, expectedPrefix) {
 			t.Errorf("CacheDir() = %q, should start with %q", cacheDir, expectedPrefix)
 		}
 
 		// Log should be under .local/log
-		logDir := LogDir()
+		logDir, err := LogDir()
+		if err != nil {
+			t.Fatalf("LogDir() error = %v", err)
+		}
 		expectedPrefix = filepath.Join(home, ".local", "log")
 		if !strings.HasPrefix(logDir, expectedPrefix) {
 			t.Errorf("LogDir() = %q, should start with %q", logDir, expectedPrefix)

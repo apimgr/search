@@ -4,10 +4,16 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"time"
 )
+
+// ErrUnhealthy is returned by runStatus when the server reports an unhealthy
+// state or the health endpoint cannot be reached. main() converts this sentinel
+// into os.Exit(1) so that os.Exit never appears outside of main().
+var ErrUnhealthy = errors.New("server is unhealthy")
 
 // statusCmd is the "status" subcommand, registered on the root command.
 var statusCmd = newStatusCommand()
@@ -64,8 +70,7 @@ func runStatus() error {
 			fmt.Printf("Error: %v\n", err)
 			fmt.Printf("Response time: %dms\n", elapsed.Milliseconds())
 		}
-		os.Exit(1)
-		return nil
+		return ErrUnhealthy
 	}
 
 	// Output health in requested format
@@ -98,9 +103,9 @@ func runStatus() error {
 		}
 	}
 
-	// Exit code based on status
+	// Return ErrUnhealthy when status is not ok/healthy so main() can call os.Exit(1)
 	if health.Status != "ok" && health.Status != "healthy" {
-		os.Exit(1)
+		return ErrUnhealthy
 	}
 	return nil
 }

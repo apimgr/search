@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -104,8 +104,7 @@ func NewMixedModeManager(cfg *MixedModeConfig) (*MixedModeManager, error) {
 	}
 	mm.usersDB = usersDB
 
-	log.Printf("[MixedMode] Connected: server=%s, users=%s",
-		cfg.ServerDB.Driver, cfg.UsersDB.Driver)
+	slog.Info("database connected", "server_driver", cfg.ServerDB.Driver, "users_driver", cfg.UsersDB.Driver)
 
 	return mm, nil
 }

@@ -67,6 +67,10 @@
   "search": {
     "placeholder": "جستجو در وب...",
     "button": "جستجو",
+    "error_title": "Search Error",
+    "empty_query": "Please enter a search query.",
+    "error_description": "An error occurred while searching",
+    "error_message": "An error occurred while processing your search. Please try again.",
     "results": "نتایج",
     "no_results": "نتیجه‌ای یافت نشد",
     "results_for": "نتایج برای",
@@ -289,6 +293,11 @@
     "unauthorized": "غیرمجاز",
     "bad_request": "درخواست نامعتبر",
     "method_not_allowed": "روش مجاز نیست",
+    "method_not_allowed_title": "Method Not Allowed",
+    "method_not_allowed_message": "Only GET requests are allowed.",
+    "invalid_request_title": "Invalid Request",
+    "invalid_request_direct": "Please specify a direct answer type and term. Example: /direct/tldr/git",
+    "invalid_request_term": "Please specify a term to look up.",
     "server_error": "خطای سرور",
     "rate_limit": "درخواست‌های زیاد، لطفاً بعداً تلاش کنید",
     "session_expired": "نشست منقضی شد، دوباره وارد شوید",
@@ -298,7 +307,11 @@
     "csrf_expired": "توکن CSRF منقضی شده است",
     "network_error": "خطای شبکه، اتصال خود را بررسی کنید",
     "technical_details": "جزئیات فنی",
-    "go_home": "بازگشت به خانه"
+    "go_home": "بازگشت به خانه",
+    "not_found_message": "The page you're looking for doesn't exist.",
+    "not_found_title": "Page Not Found",
+    "server_error_message": "An error occurred. Please try again.",
+    "server_error_title": "Error"
   },
   "widgets": {
     "weather": "آب‌وهوا",
@@ -1544,5 +1557,12 @@
   "form": {
     "save": "Save",
     "cancel": "Cancel"
+  },
+  "opensearch": {
+    "missing_url": "Missing URL parameter",
+    "invalid_url": "Invalid URL",
+    "invalid_url_scheme": "Invalid URL scheme",
+    "url_not_allowed": "URL not allowed",
+    "request_create_failed": "Failed to create request"
   }
 }

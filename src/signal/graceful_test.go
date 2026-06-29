@@ -11,8 +11,8 @@ import (
 )
 
 // These tests verify the gracefulShutdown function's internal logic
-// Since gracefulShutdown calls os.Exit(0), we test individual components
-// and use subprocess testing for the full flow
+// and use subprocess testing to exercise the full shutdown flow without
+// affecting the test process.
 
 // TestGracefulShutdownInSubprocess tests gracefulShutdown via subprocess
 func TestGracefulShutdownInSubprocess(t *testing.T) {
@@ -24,8 +24,7 @@ func TestGracefulShutdownInSubprocess(t *testing.T) {
 			DatabaseTimeout: 100 * time.Millisecond,
 			LogFlushTimeout: 100 * time.Millisecond,
 		}
-		gracefulShutdown(cfg)
-		// Should not reach here due to os.Exit(0)
+		gracefulShutdown(cfg, make(chan struct{}))
 		return
 	}
 
@@ -55,7 +54,7 @@ func TestGracefulShutdownWithServerInSubprocess(t *testing.T) {
 			DatabaseTimeout: 100 * time.Millisecond,
 			LogFlushTimeout: 100 * time.Millisecond,
 		}
-		gracefulShutdown(cfg)
+		gracefulShutdown(cfg, make(chan struct{}))
 		return
 	}
 
@@ -84,7 +83,7 @@ func TestGracefulShutdownWithShutdownFuncInSubprocess(t *testing.T) {
 			DatabaseTimeout: 100 * time.Millisecond,
 			LogFlushTimeout: 100 * time.Millisecond,
 		}
-		gracefulShutdown(cfg)
+		gracefulShutdown(cfg, make(chan struct{}))
 		return
 	}
 
@@ -113,7 +112,7 @@ func TestGracefulShutdownWithShutdownFuncErrorInSubprocess(t *testing.T) {
 			DatabaseTimeout: 100 * time.Millisecond,
 			LogFlushTimeout: 100 * time.Millisecond,
 		}
-		gracefulShutdown(cfg)
+		gracefulShutdown(cfg, make(chan struct{}))
 		return
 	}
 
@@ -142,7 +141,7 @@ func TestGracefulShutdownWithCallbacksInSubprocess(t *testing.T) {
 			OnCloseDatabase: func() {},
 			OnFlushLogs:     func() {},
 		}
-		gracefulShutdown(cfg)
+		gracefulShutdown(cfg, make(chan struct{}))
 		return
 	}
 
@@ -172,7 +171,7 @@ func TestGracefulShutdownWithDatabaseTimeoutInSubprocess(t *testing.T) {
 				time.Sleep(200 * time.Millisecond)
 			},
 		}
-		gracefulShutdown(cfg)
+		gracefulShutdown(cfg, make(chan struct{}))
 		return
 	}
 
@@ -202,7 +201,7 @@ func TestGracefulShutdownWithLogFlushTimeoutInSubprocess(t *testing.T) {
 				time.Sleep(200 * time.Millisecond)
 			},
 		}
-		gracefulShutdown(cfg)
+		gracefulShutdown(cfg, make(chan struct{}))
 		return
 	}
 
@@ -237,7 +236,7 @@ func TestGracefulShutdownWithPIDFileInSubprocess(t *testing.T) {
 			DatabaseTimeout: 100 * time.Millisecond,
 			LogFlushTimeout: 100 * time.Millisecond,
 		}
-		gracefulShutdown(cfg)
+		gracefulShutdown(cfg, make(chan struct{}))
 		return
 	}
 
@@ -264,7 +263,7 @@ func TestGracefulShutdownWithNonexistentPIDFileInSubprocess(t *testing.T) {
 			DatabaseTimeout: 100 * time.Millisecond,
 			LogFlushTimeout: 100 * time.Millisecond,
 		}
-		gracefulShutdown(cfg)
+		gracefulShutdown(cfg, make(chan struct{}))
 		return
 	}
 
@@ -294,7 +293,7 @@ func TestGracefulShutdownWithChildPIDsInSubprocess(t *testing.T) {
 				return []int{999999}
 			},
 		}
-		gracefulShutdown(cfg)
+		gracefulShutdown(cfg, make(chan struct{}))
 		return
 	}
 
@@ -323,7 +322,7 @@ func TestGracefulShutdownWithEmptyChildPIDsInSubprocess(t *testing.T) {
 				return []int{}
 			},
 		}
-		gracefulShutdown(cfg)
+		gracefulShutdown(cfg, make(chan struct{}))
 		return
 	}
 
@@ -365,7 +364,7 @@ func TestGracefulShutdownWithAllOptionsInSubprocess(t *testing.T) {
 				return []int{}
 			},
 		}
-		gracefulShutdown(cfg)
+		gracefulShutdown(cfg, make(chan struct{}))
 		return
 	}
 
@@ -397,7 +396,7 @@ func TestGracefulShutdownSetsShuttingDownFlag(t *testing.T) {
 			LogFlushTimeout: 100 * time.Millisecond,
 		}
 		// gracefulShutdown sets the flag to true
-		gracefulShutdown(cfg)
+		gracefulShutdown(cfg, make(chan struct{}))
 		return
 	}
 
@@ -455,7 +454,7 @@ func TestGracefulShutdownPIDFileRemovalError(t *testing.T) {
 			DatabaseTimeout: 100 * time.Millisecond,
 			LogFlushTimeout: 100 * time.Millisecond,
 		}
-		gracefulShutdown(cfg)
+		gracefulShutdown(cfg, make(chan struct{}))
 		return
 	}
 
@@ -486,7 +485,7 @@ func TestGracefulShutdownWithServerErrorInSubprocess(t *testing.T) {
 			DatabaseTimeout: 100 * time.Millisecond,
 			LogFlushTimeout: 100 * time.Millisecond,
 		}
-		gracefulShutdown(cfg)
+		gracefulShutdown(cfg, make(chan struct{}))
 		return
 	}
 
@@ -522,9 +521,9 @@ func TestGracefulShutdownWithBothServerAndFuncInSubprocess(t *testing.T) {
 		}
 
 		// Per the code, ShutdownFunc takes priority over Server
-		gracefulShutdown(cfg)
+		gracefulShutdown(cfg, make(chan struct{}))
 
-		// This won't be reached due to os.Exit, but it documents the expected behavior
+		// Verify ShutdownFunc was called (not the Server.Shutdown path)
 		if !shutdownFuncCalled {
 			os.Exit(1)
 		}
@@ -568,7 +567,7 @@ func TestGracefulShutdownWithServerShutdownErrorInSubprocess(t *testing.T) {
 			LogFlushTimeout: 100 * time.Millisecond,
 		}
 
-		gracefulShutdown(cfg)
+		gracefulShutdown(cfg, make(chan struct{}))
 		return
 	}
 
@@ -606,7 +605,7 @@ func TestGracefulShutdownWithRealActualChildProcessesInSubprocess(t *testing.T) 
 			},
 		}
 
-		gracefulShutdown(cfg)
+		gracefulShutdown(cfg, make(chan struct{}))
 		return
 	}
 
@@ -637,7 +636,7 @@ func TestGracefulShutdownPIDFilePermissionErrorInSubprocess(t *testing.T) {
 			LogFlushTimeout: 100 * time.Millisecond,
 		}
 
-		gracefulShutdown(cfg)
+		gracefulShutdown(cfg, make(chan struct{}))
 		return
 	}
 
@@ -689,7 +688,7 @@ func TestGracefulShutdownWithRunningServerAndTimeoutInSubprocess(t *testing.T) {
 			LogFlushTimeout: 100 * time.Millisecond,
 		}
 
-		gracefulShutdown(cfg)
+		gracefulShutdown(cfg, make(chan struct{}))
 		return
 	}
 

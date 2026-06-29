@@ -548,7 +548,7 @@ func TestDetectAndConfigureNoServer(t *testing.T) {
 		return nil, fmt.Errorf("blocked")
 	}
 
-	cfg := DetectAndConfigure()
+	cfg := DetectAndConfigure("", "")
 	if cfg == nil {
 		t.Fatal("DetectAndConfigure() should return non-nil config")
 	}

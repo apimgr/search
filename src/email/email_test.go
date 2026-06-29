@@ -693,7 +693,7 @@ func TestConfigMultipleAdminEmails(t *testing.T) {
 // Tests for DetectSMTP
 
 func TestDetectSMTP(t *testing.T) {
-	result := DetectSMTP()
+	result := DetectSMTP("", "")
 	_ = result
 }
 
@@ -1829,7 +1829,7 @@ func TestGetDefaultGatewayReturn(t *testing.T) {
 // Tests for DetectAndConfigure
 
 func TestDetectAndConfigureFull(t *testing.T) {
-	cfg := DetectAndConfigure()
+	cfg := DetectAndConfigure("", "")
 
 	if cfg == nil {
 		t.Fatal("DetectAndConfigure() returned nil")

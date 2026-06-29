@@ -80,19 +80,24 @@ func InitCache() error {
 		enabled = true
 	}
 
+	cacheDir, err := path.CacheDir()
+	if err != nil {
+		return fmt.Errorf("resolve cache dir: %w", err)
+	}
+
 	cliCacheOnce.Do(func() {
 		cliCache = &CLICache{
 			memory: make(map[string]CacheEntry),
 			ttl:    time.Duration(ttl) * time.Second,
 			// MB to bytes
 			maxSize:  int64(maxSize) * 1024 * 1024,
-			cacheDir: path.CacheDir(),
+			cacheDir: cacheDir,
 			enabled:  enabled,
 		}
 	})
 
 	// Ensure cache directory exists
-	if err := os.MkdirAll(path.CacheDir(), 0700); err != nil {
+	if err := os.MkdirAll(cacheDir, 0700); err != nil {
 		return err
 	}
 

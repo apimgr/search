@@ -69,7 +69,7 @@ func (cs *ConfigSync) writeToDatabase(key string, value interface{}) error {
 	}
 
 	query := `
-		INSERT INTO server_settings (key, value, updated_at)
+		INSERT INTO config (key, value, updated_at)
 		VALUES (?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = CURRENT_TIMESTAMP
 	`

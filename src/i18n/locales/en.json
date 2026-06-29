@@ -162,7 +162,11 @@
       "operator_or_search": "OR search",
       "operator_or_search_placeholder": "term1 OR term2",
       "dialog_opened": "Advanced search dialog opened"
-    }
+    },
+    "error_title": "Search Error",
+    "empty_query": "Please enter a search query.",
+    "error_description": "An error occurred while searching",
+    "error_message": "An error occurred while processing your search. Please try again."
   },
   "preferences": {
     "title": "Preferences",
@@ -285,11 +289,15 @@
     "user_exists": "User already exists",
     "invalid_credentials": "Invalid credentials",
     "not_found": "Not found",
+    "not_found_title": "Page Not Found",
+    "not_found_message": "The page you're looking for doesn't exist.",
     "forbidden": "Access denied",
     "unauthorized": "Unauthorized",
     "bad_request": "Bad request",
     "method_not_allowed": "Method not allowed",
     "server_error": "Server error",
+    "server_error_title": "Error",
+    "server_error_message": "An error occurred. Please try again.",
     "rate_limit": "Too many requests, please try again later",
     "session_expired": "Session expired, please log in again",
     "invalid_token": "Invalid token",
@@ -298,7 +306,12 @@
     "csrf_expired": "CSRF token expired",
     "network_error": "Network error, please check your connection",
     "technical_details": "Technical Details",
-    "go_home": "Go Home"
+    "go_home": "Go Home",
+    "method_not_allowed_title": "Method Not Allowed",
+    "method_not_allowed_message": "Only GET requests are allowed.",
+    "invalid_request_title": "Invalid Request",
+    "invalid_request_direct": "Please specify a direct answer type and term. Example: /direct/tldr/git",
+    "invalid_request_term": "Please specify a term to look up."
   },
   "widgets": {
     "weather": "Weather",
@@ -1544,5 +1557,12 @@
   "form": {
     "save": "Save",
     "cancel": "Cancel"
+  },
+  "opensearch": {
+    "missing_url": "Missing URL parameter",
+    "invalid_url": "Invalid URL",
+    "invalid_url_scheme": "Invalid URL scheme",
+    "url_not_allowed": "URL not allowed",
+    "request_create_failed": "Failed to create request"
   }
 }

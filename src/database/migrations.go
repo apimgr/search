@@ -21,8 +21,8 @@ func InitSchema(ctx context.Context, dm *DatabaseManager) error {
 // initServerSchema creates all tables for server.db.
 func initServerSchema(ctx context.Context, db *DB) error {
 	statements := []string{
-		// Scheduler state
-		`CREATE TABLE IF NOT EXISTS scheduler_state (
+		// Scheduler task definitions
+		`CREATE TABLE IF NOT EXISTS scheduler_tasks (
 			task_id TEXT PRIMARY KEY,
 			last_run DATETIME,
 			next_run DATETIME,
@@ -31,6 +31,16 @@ func initServerSchema(ctx context.Context, db *DB) error {
 			run_count INTEGER DEFAULT 0,
 			enabled INTEGER DEFAULT 1
 		)`,
+		// Scheduler execution history
+		`CREATE TABLE IF NOT EXISTS scheduler_history (
+			id TEXT PRIMARY KEY,
+			task_id TEXT NOT NULL,
+			started_at DATETIME NOT NULL,
+			finished_at DATETIME,
+			success INTEGER NOT NULL DEFAULT 0,
+			error TEXT
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_scheduler_history_task ON scheduler_history(task_id, started_at)`,
 		// Audit log
 		`CREATE TABLE IF NOT EXISTS audit_log (
 			id TEXT PRIMARY KEY,
@@ -50,11 +60,34 @@ func initServerSchema(ctx context.Context, db *DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_audit_log_actor ON audit_log(actor_type, actor_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action)`,
 		`CREATE INDEX IF NOT EXISTS idx_audit_log_resource ON audit_log(resource_type, resource_id)`,
-		// Server settings (key-value store)
-		`CREATE TABLE IF NOT EXISTS server_settings (
+		// Configuration key-value store
+		`CREATE TABLE IF NOT EXISTS config (
 			key TEXT PRIMARY KEY,
 			value TEXT,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)`,
+		// Configuration defaults and restart flags
+		`CREATE TABLE IF NOT EXISTS config_meta (
+			key TEXT PRIMARY KEY,
+			default_value TEXT,
+			requires_restart INTEGER NOT NULL DEFAULT 0
+		)`,
+		// Rate limiting counters
+		`CREATE TABLE IF NOT EXISTS rate_limits (
+			ip TEXT NOT NULL,
+			endpoint TEXT NOT NULL,
+			count INTEGER NOT NULL DEFAULT 0,
+			window_start DATETIME NOT NULL,
+			PRIMARY KEY (ip, endpoint)
+		)`,
+		// Backup metadata
+		`CREATE TABLE IF NOT EXISTS backups (
+			id TEXT PRIMARY KEY,
+			path TEXT NOT NULL,
+			size INTEGER NOT NULL DEFAULT 0,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			type TEXT NOT NULL,
+			verified INTEGER NOT NULL DEFAULT 0
 		)`,
 		// API tokens (SHA-256 hashed)
 		`CREATE TABLE IF NOT EXISTS api_tokens (

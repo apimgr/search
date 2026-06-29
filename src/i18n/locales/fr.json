@@ -67,6 +67,10 @@
   "search": {
     "placeholder": "Rechercher sur le web...",
     "button": "Rechercher",
+    "error_title": "Search Error",
+    "empty_query": "Please enter a search query.",
+    "error_description": "An error occurred while searching",
+    "error_message": "An error occurred while processing your search. Please try again.",
     "results": "Résultats",
     "no_results": "Aucun résultat trouvé",
     "results_for": "Résultats pour",
@@ -289,6 +293,11 @@
     "unauthorized": "Non autorisé",
     "bad_request": "Requête invalide",
     "method_not_allowed": "Méthode non autorisée",
+    "method_not_allowed_title": "Method Not Allowed",
+    "method_not_allowed_message": "Only GET requests are allowed.",
+    "invalid_request_title": "Invalid Request",
+    "invalid_request_direct": "Please specify a direct answer type and term. Example: /direct/tldr/git",
+    "invalid_request_term": "Please specify a term to look up.",
     "server_error": "Erreur serveur",
     "rate_limit": "Trop de requêtes, veuillez réessayer plus tard",
     "session_expired": "Session expirée, veuillez vous reconnecter",
@@ -298,7 +307,11 @@
     "csrf_expired": "Jeton CSRF expiré",
     "network_error": "Erreur réseau, vérifiez votre connexion",
     "technical_details": "Détails techniques",
-    "go_home": "Retour à l'accueil"
+    "go_home": "Retour à l'accueil",
+    "not_found_message": "The page you're looking for doesn't exist.",
+    "not_found_title": "Page Not Found",
+    "server_error_message": "An error occurred. Please try again.",
+    "server_error_title": "Error"
   },
   "widgets": {
     "weather": "Météo",
@@ -1544,5 +1557,12 @@
   "form": {
     "save": "Enregistrer",
     "cancel": "Annuler"
+  },
+  "opensearch": {
+    "missing_url": "Missing URL parameter",
+    "invalid_url": "Invalid URL",
+    "invalid_url_scheme": "Invalid URL scheme",
+    "url_not_allowed": "URL not allowed",
+    "request_create_failed": "Failed to create request"
   }
 }

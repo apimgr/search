@@ -303,7 +303,7 @@ func resolveServerAddress() (string, bool) {
 // Per AI.md PART 32 line 42834: Save --server to server.primary
 func saveServerToConfig(serverAddr string) {
 	clicfg.Set("server.primary", serverAddr)
-	configPath := path.ConfigFile()
+	configPath, _ := path.ConfigFile()
 	_ = clicfg.WriteConfigAs(configPath)
 }
 
@@ -397,7 +397,7 @@ func getToken() string {
 	}
 
 	// 5. Default token file: {config_dir}/token
-	configDir := path.ConfigDir()
+	configDir, _ := path.ConfigDir()
 	if configDir != "" {
 		tokenPath := filepath.Join(configDir, "token")
 		if data, err := os.ReadFile(tokenPath); err == nil {
@@ -492,7 +492,7 @@ func initConfig() {
 		}
 	} else {
 		// Per AI.md PART 32 line 40579: Config at ~/.config/apimgr/search/cli.yml.
-		configDir := path.ConfigDir()
+		configDir, _ := path.ConfigDir()
 		clicfg.AddConfigPath(configDir)
 		clicfg.SetConfigName("cli")
 		clicfg.SetConfigType("yaml")
