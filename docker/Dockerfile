@@ -27,7 +27,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
 # =============================================================================
 # Runtime Stage - Minimal Alpine image
 # =============================================================================
-FROM alpine:latest
+FROM casjaysdev/alpine:latest
 
 # ARGs for build-time values (set by docker build --build-arg)
 ARG VERSION=dev
@@ -35,11 +35,12 @@ ARG BUILD_DATE
 ARG COMMIT_ID
 ARG LICENSE=MIT
 
-# No LABEL blocks — all image metadata is applied as OCI annotations at build time.
-# Pass --annotation flags to docker buildx build (or use docker/metadata-action
-# annotations: output in GitHub Actions). Annotations attach to the manifest index
-# and are visible on multiarch pulls. LABEL applies only to per-platform layers.
-# See dockerfile_conventions.md -> OCI Annotations.
+# OCI Labels (required per docker-rules.md PART 27)
+# Dynamic labels (version, created, revision) injected via --label flags at build time
+LABEL org.opencontainers.image.title="search" \
+      org.opencontainers.image.description="Privacy-respecting self-hosted metasearch engine" \
+      org.opencontainers.image.source="https://github.com/apimgr/search" \
+      org.opencontainers.image.licenses="MIT"
 
 # Install required packages
 # NOTE: Tor binary installed but NOT configured here - binary handles all Tor setup (see PART 31)
@@ -70,7 +71,7 @@ RUN chmod 755 /usr/local/bin/*
 # Set environment
 # Note: Tor available (binary installed) but server binary controls Tor startup (see PART 31)
 # DATABASE_DIR: SQLite location (binary auto-detects container, but explicit is clearer)
-ENV MODE=development \
+ENV MODE=production \
     TZ=America/New_York \
     DATABASE_DIR=/data/db/sqlite
 
