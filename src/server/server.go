@@ -397,10 +397,8 @@ func NewServer(cfg *config.Config) *Server {
 
 // Start starts the HTTP server
 func (s *Server) StartHTTPServer() error {
-	// Create PID file
-	if err := s.createPIDFile(); err != nil {
-		return fmt.Errorf("failed to create PID file: %w", err)
-	}
+	// PID file is already written by main.go per AI.md PART 8 step 12
+	// Do not create a duplicate PID file here
 
 	// Start Tor service if enabled
 	if s.torService != nil {
