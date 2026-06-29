@@ -5292,6 +5292,29 @@ html:not([data-theme-mode]) .theme-label-auto { display: none; }
     padding: 2rem 1rem;
 }
 
+/* Unified page header for all static pages */
+.page-header {
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.page-header h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 0;
+    color: var(--text-primary);
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.page-header .subtitle,
+.page-header .tagline {
+    font-size: 1.1rem;
+    color: var(--text-secondary);
+    margin-top: 0.5rem;
+}
+
 .static-page h1 {
     font-size: 2rem;
     font-weight: 700;
