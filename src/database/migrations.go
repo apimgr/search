@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 // InitSchema creates all database tables idempotently on startup.
@@ -18,11 +19,28 @@ func InitSchema(ctx context.Context, dm *DatabaseManager) error {
 	return nil
 }
 
+// serverTablePrefix returns the table prefix for server tables.
+// Per AI.md PART 10: remote/libsql uses "srv_" prefix, local sqlite uses no prefix.
+func serverTablePrefix(db *DB) string {
+	if db.driver == "libsql" {
+		return "srv_"
+	}
+	return ""
+}
+
 // initServerSchema creates all tables for server.db.
+// Per AI.md PART 10: Server tables use srv_ prefix when using libSQL/Turso remote database.
 func initServerSchema(ctx context.Context, db *DB) error {
+	prefix := serverTablePrefix(db)
+
+	// applyPrefix replaces {prefix} placeholders with the actual prefix
+	applyPrefix := func(sql string) string {
+		return strings.ReplaceAll(sql, "{prefix}", prefix)
+	}
+
 	statements := []string{
 		// Scheduler task definitions
-		`CREATE TABLE IF NOT EXISTS scheduler_tasks (
+		`CREATE TABLE IF NOT EXISTS {prefix}scheduler_tasks (
 			task_id TEXT PRIMARY KEY,
 			last_run DATETIME,
 			next_run DATETIME,
@@ -32,7 +50,7 @@ func initServerSchema(ctx context.Context, db *DB) error {
 			enabled INTEGER DEFAULT 1
 		)`,
 		// Scheduler execution history
-		`CREATE TABLE IF NOT EXISTS scheduler_history (
+		`CREATE TABLE IF NOT EXISTS {prefix}scheduler_history (
 			id TEXT PRIMARY KEY,
 			task_id TEXT NOT NULL,
 			started_at DATETIME NOT NULL,
@@ -40,9 +58,9 @@ func initServerSchema(ctx context.Context, db *DB) error {
 			success INTEGER NOT NULL DEFAULT 0,
 			error TEXT
 		)`,
-		`CREATE INDEX IF NOT EXISTS idx_scheduler_history_task ON scheduler_history(task_id, started_at)`,
+		`CREATE INDEX IF NOT EXISTS {prefix}idx_scheduler_history_task ON {prefix}scheduler_history(task_id, started_at)`,
 		// Audit log
-		`CREATE TABLE IF NOT EXISTS audit_log (
+		`CREATE TABLE IF NOT EXISTS {prefix}audit_log (
 			id TEXT PRIMARY KEY,
 			timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
 			actor_type TEXT NOT NULL,
@@ -56,24 +74,24 @@ func initServerSchema(ctx context.Context, db *DB) error {
 			severity TEXT DEFAULT 'info',
 			category TEXT
 		)`,
-		`CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp)`,
-		`CREATE INDEX IF NOT EXISTS idx_audit_log_actor ON audit_log(actor_type, actor_id)`,
-		`CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action)`,
-		`CREATE INDEX IF NOT EXISTS idx_audit_log_resource ON audit_log(resource_type, resource_id)`,
+		`CREATE INDEX IF NOT EXISTS {prefix}idx_audit_log_timestamp ON {prefix}audit_log(timestamp)`,
+		`CREATE INDEX IF NOT EXISTS {prefix}idx_audit_log_actor ON {prefix}audit_log(actor_type, actor_id)`,
+		`CREATE INDEX IF NOT EXISTS {prefix}idx_audit_log_action ON {prefix}audit_log(action)`,
+		`CREATE INDEX IF NOT EXISTS {prefix}idx_audit_log_resource ON {prefix}audit_log(resource_type, resource_id)`,
 		// Configuration key-value store
-		`CREATE TABLE IF NOT EXISTS config (
+		`CREATE TABLE IF NOT EXISTS {prefix}config (
 			key TEXT PRIMARY KEY,
 			value TEXT,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		)`,
 		// Configuration defaults and restart flags
-		`CREATE TABLE IF NOT EXISTS config_meta (
+		`CREATE TABLE IF NOT EXISTS {prefix}config_meta (
 			key TEXT PRIMARY KEY,
 			default_value TEXT,
 			requires_restart INTEGER NOT NULL DEFAULT 0
 		)`,
 		// Rate limiting counters
-		`CREATE TABLE IF NOT EXISTS rate_limits (
+		`CREATE TABLE IF NOT EXISTS {prefix}rate_limits (
 			ip TEXT NOT NULL,
 			endpoint TEXT NOT NULL,
 			count INTEGER NOT NULL DEFAULT 0,
@@ -81,7 +99,7 @@ func initServerSchema(ctx context.Context, db *DB) error {
 			PRIMARY KEY (ip, endpoint)
 		)`,
 		// Backup metadata
-		`CREATE TABLE IF NOT EXISTS backups (
+		`CREATE TABLE IF NOT EXISTS {prefix}backups (
 			id TEXT PRIMARY KEY,
 			path TEXT NOT NULL,
 			size INTEGER NOT NULL DEFAULT 0,
@@ -90,7 +108,7 @@ func initServerSchema(ctx context.Context, db *DB) error {
 			verified INTEGER NOT NULL DEFAULT 0
 		)`,
 		// API tokens (SHA-256 hashed)
-		`CREATE TABLE IF NOT EXISTS api_tokens (
+		`CREATE TABLE IF NOT EXISTS {prefix}api_tokens (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			name TEXT NOT NULL,
 			token_hash TEXT UNIQUE NOT NULL,
@@ -103,10 +121,10 @@ func initServerSchema(ctx context.Context, db *DB) error {
 			expires_at DATETIME,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		)`,
-		`CREATE INDEX IF NOT EXISTS idx_api_tokens_hash ON api_tokens(token_hash)`,
-		`CREATE INDEX IF NOT EXISTS idx_api_tokens_prefix ON api_tokens(token_prefix)`,
+		`CREATE INDEX IF NOT EXISTS {prefix}idx_api_tokens_hash ON {prefix}api_tokens(token_hash)`,
+		`CREATE INDEX IF NOT EXISTS {prefix}idx_api_tokens_prefix ON {prefix}api_tokens(token_prefix)`,
 		// Search statistics
-		`CREATE TABLE IF NOT EXISTS search_stats (
+		`CREATE TABLE IF NOT EXISTS {prefix}search_stats (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			date DATE NOT NULL,
 			hour INTEGER NOT NULL,
@@ -117,9 +135,9 @@ func initServerSchema(ctx context.Context, db *DB) error {
 			categories TEXT,
 			UNIQUE(date, hour)
 		)`,
-		`CREATE INDEX IF NOT EXISTS idx_search_stats_date ON search_stats(date)`,
+		`CREATE INDEX IF NOT EXISTS {prefix}idx_search_stats_date ON {prefix}search_stats(date)`,
 		// Engine statistics
-		`CREATE TABLE IF NOT EXISTS engine_stats (
+		`CREATE TABLE IF NOT EXISTS {prefix}engine_stats (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			date DATE NOT NULL,
 			engine TEXT NOT NULL,
@@ -129,10 +147,10 @@ func initServerSchema(ctx context.Context, db *DB) error {
 			avg_response_time REAL DEFAULT 0,
 			UNIQUE(date, engine)
 		)`,
-		`CREATE INDEX IF NOT EXISTS idx_engine_stats_date ON engine_stats(date)`,
-		`CREATE INDEX IF NOT EXISTS idx_engine_stats_engine ON engine_stats(engine)`,
+		`CREATE INDEX IF NOT EXISTS {prefix}idx_engine_stats_date ON {prefix}engine_stats(date)`,
+		`CREATE INDEX IF NOT EXISTS {prefix}idx_engine_stats_engine ON {prefix}engine_stats(engine)`,
 		// Blocked IPs
-		`CREATE TABLE IF NOT EXISTS blocked_ips (
+		`CREATE TABLE IF NOT EXISTS {prefix}blocked_ips (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			ip_address TEXT UNIQUE NOT NULL,
 			reason TEXT,
@@ -140,9 +158,9 @@ func initServerSchema(ctx context.Context, db *DB) error {
 			expires_at DATETIME,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		)`,
-		`CREATE INDEX IF NOT EXISTS idx_blocked_ips_ip ON blocked_ips(ip_address)`,
+		`CREATE INDEX IF NOT EXISTS {prefix}idx_blocked_ips_ip ON {prefix}blocked_ips(ip_address)`,
 		// Custom bangs
-		`CREATE TABLE IF NOT EXISTS custom_bangs (
+		`CREATE TABLE IF NOT EXISTS {prefix}custom_bangs (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			shortcut TEXT UNIQUE NOT NULL,
 			name TEXT NOT NULL,
@@ -152,9 +170,9 @@ func initServerSchema(ctx context.Context, db *DB) error {
 			active INTEGER DEFAULT 1,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		)`,
-		`CREATE INDEX IF NOT EXISTS idx_custom_bangs_shortcut ON custom_bangs(shortcut)`,
+		`CREATE INDEX IF NOT EXISTS {prefix}idx_custom_bangs_shortcut ON {prefix}custom_bangs(shortcut)`,
 		// Search alerts
-		`CREATE TABLE IF NOT EXISTS search_alerts (
+		`CREATE TABLE IF NOT EXISTS {prefix}search_alerts (
 			id TEXT PRIMARY KEY,
 			email TEXT NOT NULL,
 			query TEXT NOT NULL,
@@ -186,12 +204,12 @@ func initServerSchema(ctx context.Context, db *DB) error {
 			manage_token_encrypted TEXT NOT NULL DEFAULT '',
 			rss_token_encrypted TEXT NOT NULL DEFAULT ''
 		)`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS idx_search_alerts_manage_token ON search_alerts(manage_token_hash)`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS idx_search_alerts_rss_token ON search_alerts(rss_token_hash)`,
-		`CREATE INDEX IF NOT EXISTS idx_search_alerts_verify_token ON search_alerts(verify_token_hash)`,
-		`CREATE INDEX IF NOT EXISTS idx_search_alerts_status_frequency ON search_alerts(status, frequency)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS {prefix}idx_search_alerts_manage_token ON {prefix}search_alerts(manage_token_hash)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS {prefix}idx_search_alerts_rss_token ON {prefix}search_alerts(rss_token_hash)`,
+		`CREATE INDEX IF NOT EXISTS {prefix}idx_search_alerts_verify_token ON {prefix}search_alerts(verify_token_hash)`,
+		`CREATE INDEX IF NOT EXISTS {prefix}idx_search_alerts_status_frequency ON {prefix}search_alerts(status, frequency)`,
 		// Search alert results
-		`CREATE TABLE IF NOT EXISTS search_alert_results (
+		`CREATE TABLE IF NOT EXISTS {prefix}search_alert_results (
 			id TEXT PRIMARY KEY,
 			alert_id TEXT NOT NULL,
 			fingerprint TEXT NOT NULL,
@@ -203,15 +221,16 @@ func initServerSchema(ctx context.Context, db *DB) error {
 			first_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			notified_email_at DATETIME,
 			notified_webhook_at DATETIME,
-			FOREIGN KEY (alert_id) REFERENCES search_alerts(id) ON DELETE CASCADE,
+			FOREIGN KEY (alert_id) REFERENCES {prefix}search_alerts(id) ON DELETE CASCADE,
 			UNIQUE(alert_id, fingerprint)
 		)`,
-		`CREATE INDEX IF NOT EXISTS idx_search_alert_results_alert ON search_alert_results(alert_id, first_seen_at)`,
+		`CREATE INDEX IF NOT EXISTS {prefix}idx_search_alert_results_alert ON {prefix}search_alert_results(alert_id, first_seen_at)`,
 	}
 
 	for _, stmt := range statements {
-		if _, err := db.Exec(ctx, stmt); err != nil {
-			return fmt.Errorf("schema statement failed: %w\nSQL: %s", err, stmt)
+		sql := applyPrefix(stmt)
+		if _, err := db.Exec(ctx, sql); err != nil {
+			return fmt.Errorf("schema statement failed: %w\nSQL: %s", err, sql)
 		}
 	}
 	return nil
@@ -223,4 +242,10 @@ func initServerSchema(ctx context.Context, db *DB) error {
 func initUsersSchema(ctx context.Context, db *DB) error {
 	_ = db
 	return nil
+}
+
+// ServerTableName returns the prefixed table name for server database queries.
+// Use this helper when building queries to ensure correct prefix is applied.
+func ServerTableName(db *DB, table string) string {
+	return serverTablePrefix(db) + table
 }
