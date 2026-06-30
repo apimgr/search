@@ -16,6 +16,21 @@ func (s *Server) handleWellKnownChangePassword(w http.ResponseWriter, r *http.Re
 	http.NotFound(w, r)
 }
 
+// handleWellKnownCatchAll handles unknown /.well-known/* paths per AI.md PART 11.
+// Per spec: unsupported entries MUST return 404 Not Found.
+// Per spec: GET and HEAD are the only valid methods; other methods return 405.
+// Per spec: /.well-known/ itself MUST NOT list a directory index.
+func (s *Server) handleWellKnownCatchAll(w http.ResponseWriter, r *http.Request) {
+	// Only GET and HEAD are valid for /.well-known/**
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	// Unknown well-known path — return 404
+	http.NotFound(w, r)
+}
+
 // handleRobotsTxt serves robots.txt per AI.md spec
 // This is the enhanced handler that replaces the basic one
 func (s *Server) handleRobotsTxt(w http.ResponseWriter, r *http.Request) {
@@ -132,4 +147,64 @@ func extractHostFromURL(urlStr string) string {
 	}
 
 	return host
+}
+
+// handleLlmsTxt serves /.well-known/llms.txt and /llms.txt per AI.md spec.
+// Tells AI agents what the application does and what API endpoints are available.
+func (s *Server) handleLlmsTxt(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	// Cache for 1 day per AI.md spec
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+
+	baseURL := s.getBaseURL(r)
+	apiVersion := s.config.Server.APIVersion
+	if apiVersion == "" {
+		apiVersion = "v1"
+	}
+
+	// Header
+	fmt.Fprintf(w, "# %s\n", s.config.Server.Title)
+	if s.config.Server.Branding.Tagline != "" {
+		fmt.Fprintf(w, "> %s\n", s.config.Server.Branding.Tagline)
+	}
+	fmt.Fprintln(w)
+
+	// API section
+	fmt.Fprintln(w, "## API")
+	fmt.Fprintf(w, "Base URL: %s/api/%s\n", baseURL, apiVersion)
+	fmt.Fprintln(w, "Authentication: Bearer token (operator token for admin endpoints)")
+	fmt.Fprintf(w, "Rate limit: %d requests/minute\n", s.config.Server.RateLimit.RequestsPerMinute)
+	fmt.Fprintln(w)
+
+	// Endpoints section - public API endpoints
+	fmt.Fprintln(w, "## Endpoints")
+	fmt.Fprintln(w, "- GET /server/healthz - Health check (no auth)")
+	fmt.Fprintln(w, "- GET /server/status - Server status (operator auth)")
+	fmt.Fprintf(w, "- GET /api/%s/search - Search API (no auth, rate limited)\n", apiVersion)
+	fmt.Fprintf(w, "- GET /api/%s/engines - List search engines (no auth)\n", apiVersion)
+	fmt.Fprintf(w, "- GET /api/%s/instant - Instant answers (no auth)\n", apiVersion)
+	fmt.Fprintf(w, "- GET /api/%s/preferences - User preferences (no auth)\n", apiVersion)
+	fmt.Fprintln(w)
+
+	// Capabilities
+	fmt.Fprintln(w, "## Capabilities")
+	fmt.Fprintln(w, "- Privacy-respecting metasearch across multiple engines")
+	fmt.Fprintln(w, "- Instant answers (calculator, unit conversion, definitions)")
+	fmt.Fprintln(w, "- Direct answers (wiki:, dns:, http:, tldr:, port:)")
+	fmt.Fprintln(w, "- No tracking, no ads, no user accounts required")
+	fmt.Fprintln(w)
+
+	// Contact
+	fmt.Fprintln(w, "## Contact")
+	security := s.config.Server.Web.Security
+	contact := security.Contact
+	if contact == "" && s.config.Server.Contact.Email != "" {
+		contact = s.config.Server.Contact.Email
+	}
+	if contact == "" {
+		fqdn := extractHostFromURL(baseURL)
+		contact = "security@" + fqdn
+	}
+	fmt.Fprintf(w, "Security: %s\n", contact)
+	fmt.Fprintf(w, "Source: https://github.com/apimgr/search\n")
 }

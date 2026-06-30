@@ -748,9 +748,19 @@ func (s *Server) setupRoutes() http.Handler {
 	r.HandleFunc("/sitemap.xml", s.handleSitemap)
 	r.HandleFunc("/.well-known/security.txt", s.handleSecurityTxtEnhanced)
 
+	// llms.txt - AI agent discovery file per AI.md PART 14
+	// Served at both /.well-known/llms.txt and /llms.txt (alias)
+	r.HandleFunc("/.well-known/llms.txt", s.handleLlmsTxt)
+	r.HandleFunc("/llms.txt", s.handleLlmsTxt)
+
 	// Well-known URIs per RFC 8615
 	// Password change redirect per AI.md PART 11
 	r.HandleFunc("/.well-known/change-password", s.handleWellKnownChangePassword)
+
+	// Catch-all for unknown /.well-known/* paths — returns 404 per AI.md PART 11
+	// Must be registered after specific handlers
+	r.HandleFunc("/.well-known/*", s.handleWellKnownCatchAll)
+	r.HandleFunc("/.well-known/", s.handleWellKnownCatchAll)
 
 	// OpenSearch
 	if s.config.Search.OpenSearch.Enabled {
