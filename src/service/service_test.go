@@ -50,8 +50,9 @@ func TestServiceManagerGetLaunchdPath(t *testing.T) {
 	sm := NewServiceManager(cfg)
 
 	path := sm.getLaunchdPath()
-	if path != "/Library/LaunchDaemons/apimgr.search.plist" {
-		t.Errorf("getLaunchdPath() = %q, want %q", path, "/Library/LaunchDaemons/apimgr.search.plist")
+	// Per AI.md PART 24: macOS plist uses reverse DNS format: io.github.apimgr.search
+	if path != "/Library/LaunchDaemons/io.github.apimgr.search.plist" {
+		t.Errorf("getLaunchdPath() = %q, want %q", path, "/Library/LaunchDaemons/io.github.apimgr.search.plist")
 	}
 }
 

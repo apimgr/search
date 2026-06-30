@@ -32,6 +32,7 @@ import (
 	"github.com/apimgr/search/src/search"
 	"github.com/apimgr/search/src/search/bang"
 	"github.com/apimgr/search/src/search/engine"
+	"github.com/apimgr/search/src/security"
 	"github.com/apimgr/search/src/service"
 	"github.com/apimgr/search/src/ssl"
 	"github.com/apimgr/search/src/widget"
@@ -63,10 +64,11 @@ type Server struct {
 	directManager  *direct.Manager
 	geoipLookup    *geoip.Lookup
 	mailer         *email.Mailer
-	scheduler      *scheduler.Scheduler
-	metrics        *Metrics
-	dbManager      *database.DatabaseManager
-	alertManager   *alert.Manager
+	scheduler        *scheduler.Scheduler
+	metrics          *Metrics
+	dbManager        *database.DatabaseManager
+	alertManager     *alert.Manager
+	blocklistManager *security.BlocklistManager
 	// Per AI.md PART 5: config sync persists settings back to server.yml
 	configSync *config.ConfigSync
 
@@ -321,6 +323,13 @@ func NewServer(cfg *config.Config) *Server {
 		alertMgr = alert.NewManager(dbMgr.ServerDB().SQL(), cfg, aggregator, mailer)
 	}
 
+	// Create blocklist manager per AI.md PART 18
+	blocklistMgr := security.NewBlocklistManager(config.GetDataDir(), nil)
+	// Load any previously downloaded blocklists
+	if err := blocklistMgr.LoadFromDisk(); err != nil {
+		slog.Warn("blocklist load from disk failed", "err", err)
+	}
+
 	// Set debug accessor for cache per AI.md PART 6
 	var resultCache *search.ResultCache
 	if aggregator != nil {
@@ -352,10 +361,11 @@ func NewServer(cfg *config.Config) *Server {
 		geoipLookup:    geoLookup,
 		mailer:         mailer,
 		// scheduler is initialized below after Server creation
-		metrics:      metrics,
-		dbManager:    dbMgr,
-		alertManager: alertMgr,
-		i18nManager:  i18nMgr,
+		metrics:          metrics,
+		dbManager:        dbMgr,
+		alertManager:     alertMgr,
+		blocklistManager: blocklistMgr,
+		i18nManager:      i18nMgr,
 		// Debug accessors per AI.md PART 6
 		cache: resultCache,
 		db:    serverDB,

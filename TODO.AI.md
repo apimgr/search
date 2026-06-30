@@ -27,30 +27,15 @@ Completed. Uses `casjaysdev/alpine:latest`, includes OCI labels.
 
 ## IMPORTANT — Pending Implementation
 
-### [ ] Database srv_ prefix for remote/libsql (PART 10)
+### [x] Database srv_ prefix for remote/libsql (PART 10)
 
-**Spec:** Server tables must use `srv_` prefix when using libSQL/Turso remote database.
-
-**Location:** `src/database/migrations.go`
-
-**Task:**
-- Add table prefix logic to `initServerSchema()` when driver is libsql
-- Tables: `srv_scheduler_tasks`, `srv_audit_log`, `srv_config`, `srv_config_meta`, `srv_rate_limits`, `srv_backups`, `srv_api_tokens`
-- Local SQLite: no prefix (current behavior)
+Completed. `src/database/migrations.go` now uses `{prefix}` placeholders that resolve to `srv_` for libsql driver and empty string for local sqlite.
 
 ---
 
-### [ ] Blocklist update scheduler handler (PART 18)
+### [x] Blocklist update scheduler handler (PART 18)
 
-**Spec:** `blocklist_update` task downloads/updates IP and domain blocklists daily at 04:00.
-
-**Location:** `src/server/scheduler.go` line 74 (currently a stub)
-
-**Task:**
-- Create `src/security/blocklist.go` package
-- Download blocklists from configured sources
-- Parse and store in `{data_dir}/security/blocklists/`
-- Update in-memory cache for `BlocklistMiddleware`
+Completed. `src/security/blocklist.go` implements BlocklistManager with Update(), IsBlocked(), LoadFromDisk(). Wired up to scheduler in `src/server/scheduler.go`.
 
 ---
 

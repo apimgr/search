@@ -71,8 +71,17 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 		},
 
 		// Blocklist Update - download IP/domain blocklists
+		// Per AI.md PART 18: blocklist_update runs daily at 04:00
 		BlocklistUpdate: func(ctx context.Context) error {
-			slog.Info("blocklist update complete")
+			if s.blocklistManager == nil {
+				return nil
+			}
+			if err := s.blocklistManager.Update(ctx); err != nil {
+				slog.Error("blocklist update failed", "err", err)
+				return err
+			}
+			ips, nets := s.blocklistManager.Count()
+			slog.Info("blocklist update complete", "blocked_ips", ips, "blocked_nets", nets)
 			return nil
 		},
 
