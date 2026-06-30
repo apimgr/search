@@ -39,16 +39,9 @@ Completed. `src/security/blocklist.go` implements BlocklistManager with Update()
 
 ---
 
-### [ ] CVE update scheduler handler (PART 18)
+### [x] CVE update scheduler handler (PART 18)
 
-**Spec:** `cve_update` task downloads/updates CVE/security databases daily at 05:00.
-
-**Location:** `src/server/scheduler.go` line 80 (currently a stub)
-
-**Task:**
-- Create `src/security/cve.go` package
-- Download CVE database (NVD, GitHub Advisory, etc.)
-- Store in `{data_dir}/security/cve/`
+Completed. `src/security/cve.go` implements CVEManager with Update(), Lookup(), Search(), LoadFromDisk(). Downloads from CISA KEV catalog. Wired up to scheduler in `src/server/scheduler.go`.
 
 ---
 

@@ -87,7 +87,14 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 
 		// CVE Update - download security databases (optional feature)
 		CVEUpdate: func(ctx context.Context) error {
-			slog.Info("CVE update check complete")
+			if s.cveManager == nil {
+				return nil
+			}
+			if err := s.cveManager.Update(ctx); err != nil {
+				slog.Error("CVE update failed", "err", err)
+				return err
+			}
+			slog.Info("CVE update complete", "entries", s.cveManager.Count())
 			return nil
 		},
 

@@ -69,6 +69,7 @@ type Server struct {
 	dbManager        *database.DatabaseManager
 	alertManager     *alert.Manager
 	blocklistManager *security.BlocklistManager
+	cveManager       *security.CVEManager
 	// Per AI.md PART 5: config sync persists settings back to server.yml
 	configSync *config.ConfigSync
 
@@ -330,6 +331,13 @@ func NewServer(cfg *config.Config) *Server {
 		slog.Warn("blocklist load from disk failed", "err", err)
 	}
 
+	// Create CVE manager per AI.md PART 18
+	cveMgr := security.NewCVEManager(config.GetDataDir(), nil)
+	// Load any previously downloaded CVE data
+	if err := cveMgr.LoadFromDisk(); err != nil {
+		slog.Warn("CVE data load from disk failed", "err", err)
+	}
+
 	// Set debug accessor for cache per AI.md PART 6
 	var resultCache *search.ResultCache
 	if aggregator != nil {
@@ -365,6 +373,7 @@ func NewServer(cfg *config.Config) *Server {
 		dbManager:        dbMgr,
 		alertManager:     alertMgr,
 		blocklistManager: blocklistMgr,
+		cveManager:       cveMgr,
 		i18nManager:      i18nMgr,
 		// Debug accessors per AI.md PART 6
 		cache: resultCache,
