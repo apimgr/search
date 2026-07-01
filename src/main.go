@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -265,7 +265,7 @@ func applyCliOverrides() {
 	// Per AI.md PART 6: All directory flags MUST create directories if they don't exist
 	if flagData != "" || flagConfig != "" || flagCache != "" || flagLog != "" || flagBackup != "" || flagPID != "" {
 		if err := config.EnsureDirectories(); err != nil {
-			log.Printf("Warning: Failed to create directories: %v", err)
+			slog.Warn("Failed to create directories", "err", err)
 		}
 	}
 }
@@ -289,13 +289,13 @@ func handleLegacyArgs() {
 		if len(os.Args) > 2 {
 			runService(os.Args[2])
 		} else {
-			fmt.Println("Usage: search --service {start,stop,restart,reload,status,--install,--uninstall,--disable,--help}")
+			slog.Error("Missing service subcommand", "usage", "search --service {start,stop,restart,reload,status,--install,--uninstall,--disable,--help}")
 		}
 	case "--maintenance":
 		if len(os.Args) > 2 {
 			runMaintenance(os.Args[2])
 		} else {
-			fmt.Println("Usage: search --maintenance <backup|restore|update|mode>")
+			slog.Error("Missing maintenance subcommand", "usage", "search --maintenance <backup|restore|update|mode>")
 		}
 	case "--update":
 		subCmd := "yes"
@@ -320,8 +320,7 @@ func handleLegacyArgs() {
 		flagDaemon = true
 		runServer()
 	default:
-		fmt.Printf("Unknown command: %s\n", os.Args[1])
-		fmt.Println("Use --help for usage information")
+		slog.Error("Unknown command", "cmd", os.Args[1], "hint", "Use --help for usage information")
 	}
 }
 
@@ -330,7 +329,8 @@ func runServer() {
 	// Check if we should daemonize (only for manual starts, not --service start)
 	if flagDaemon && os.Getenv("_DAEMON_CHILD") != "1" {
 		if err := daemonize(); err != nil {
-			log.Fatalf(display.Emoji("❌", "[ERROR]")+" Failed to daemonize: %v", err)
+			slog.Error("Failed to daemonize", "err", err)
+			os.Exit(1)
 		}
 		// Parent exits in daemonize(), only child continues
 	}
@@ -338,20 +338,22 @@ func runServer() {
 	// Per AI.md PART 8: If running as root, setup system resources then drop privileges
 	// Skip privilege dropping in container mode - container entrypoint handles this
 	if service.IsRunningAsRoot() && !config.IsRunningInContainer() {
-		log.Println("[Startup] Running as root - performing privileged setup")
+		slog.Info("Running as root - performing privileged setup")
 
 		// Step 8a: Create system user
 		svcUser, err := service.CreateSystemUser("search")
 		if err != nil {
-			log.Fatalf(display.Emoji("❌", "[ERROR]")+" Failed to create system user: %v", err)
+			slog.Error("Failed to create system user", "err", err)
+			os.Exit(1)
 		}
-		log.Printf("[Startup] System user ready: %s (uid=%d, gid=%d)", svcUser.Name, svcUser.UID, svcUser.GID)
+		slog.Info("System user ready", "user", svcUser.Name, "uid", svcUser.UID, "gid", svcUser.GID)
 
 		// Step 8b-d: Create directories and set ownership (while still root)
 		if err := config.EnsureSystemDirectories("search"); err != nil {
-			log.Fatalf(display.Emoji("❌", "[ERROR]")+" Failed to create system directories: %v", err)
+			slog.Error("Failed to create system directories", "err", err)
+			os.Exit(1)
 		}
-		log.Println("[Startup] System directories created")
+		slog.Info("System directories created")
 
 		// Set environment for the service user (HOME points to data dir)
 		// This ensures config.Initialize() uses the correct paths after privilege drop
@@ -366,38 +368,44 @@ func runServer() {
 		// (CAP_NET_BIND_SERVICE) so the unprivileged search user can bind them.
 
 		// Step 8g: Drop privileges to search user
-		log.Printf("[Startup] Dropping privileges to user: %s", svcUser.Name)
+		slog.Info("Dropping privileges", "user", svcUser.Name)
 		if err := service.DropPrivileges(svcUser.Name); err != nil {
-			log.Fatalf(display.Emoji("❌", "[ERROR]")+" Failed to drop privileges: %v", err)
+			slog.Error("Failed to drop privileges", "err", err)
+			os.Exit(1)
 		}
 
 		// Step 8h: Verify privilege drop succeeded
 		if err := service.VerifyPrivilegesDropped(); err != nil {
-			log.Fatalf(display.Emoji("❌", "[ERROR]")+" %v", err)
+			slog.Error("Privilege verification failed", "err", err)
+			os.Exit(1)
 		}
-		log.Println("[Startup] Privileges dropped successfully")
+		slog.Info("Privileges dropped successfully")
 	}
 
 	// Step 11: Check PID file for existing running instance (stale PID detection)
 	// Per AI.md PART 8: Startup sequence step 11 — check before writing
 	pidFile := config.GetPIDFile()
 	if running, existingPID, err := server.CheckPIDFile(pidFile); err != nil {
-		log.Fatalf(display.Emoji("❌", "[ERROR]")+" PID file check failed: %v", err)
+		slog.Error("PID file check failed", "err", err)
+		os.Exit(1)
 	} else if running {
-		log.Fatalf(display.Emoji("❌", "[ERROR]")+" Server already running (pid %d)", existingPID)
+		slog.Error("Server already running", "pid", existingPID)
+		os.Exit(1)
 	}
 
 	// Step 12: Write PID file
 	// Per AI.md PART 8: Startup sequence step 12 — write after stale check passes
 	if err := server.WritePIDFile(pidFile); err != nil {
-		log.Fatalf(display.Emoji("❌", "[ERROR]")+" Failed to write PID file: %v", err)
+		slog.Error("Failed to write PID file", "err", err)
+		os.Exit(1)
 	}
 	defer server.RemovePIDFile(pidFile)
 
 	// Initialize configuration
 	cfg, err := config.Initialize()
 	if err != nil {
-		log.Fatalf(display.Emoji("❌", "[ERROR]")+" Configuration failed: %v", err)
+		slog.Error("Configuration failed", "err", err)
+		os.Exit(1)
 	}
 
 	// Build listen URLs for banner
@@ -435,7 +443,8 @@ func runServer() {
 
 	// Start server
 	if err := srv.StartHTTPServer(); err != nil {
-		log.Fatalf(display.Emoji("❌", "[ERROR]")+" Server failed: %v", err)
+		slog.Error("Server failed", "err", err)
+		os.Exit(1)
 	}
 
 	// Wait for graceful shutdown to complete before exiting.
@@ -582,7 +591,7 @@ func runInit() {
 
 	cfg, err := config.Initialize()
 	if err != nil {
-		log.Printf(display.Emoji("❌", "[ERROR]")+" Initialization failed: %v", err)
+		slog.Error("Initialization failed", "err", err)
 		exitFunc(1)
 		return
 	}
@@ -1355,7 +1364,8 @@ func runTest() {
 			fmt.Println(display.Emoji("⚠️", "[WARN]") + "  No results found")
 			return
 		}
-		log.Fatalf(display.Emoji("❌", "[ERROR]")+" Search failed: %v", err)
+		slog.Error("Search failed", "err", err)
+		os.Exit(1)
 	}
 
 	// Display results
