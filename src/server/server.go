@@ -18,6 +18,7 @@ import (
 
 	"github.com/apimgr/search/src/alert"
 	"github.com/apimgr/search/src/api"
+	"github.com/apimgr/search/src/cache"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/database"
 	"github.com/apimgr/search/src/direct"
@@ -110,13 +111,53 @@ func NewServer(cfg *config.Config) *Server {
 	// Get all enabled engines (already filtered by IsEnabled())
 	enabledEngines := registry.GetEnabled()
 
+	// Create cache backend based on config
+	// Per AI.md PART 9: Redis/Valkey cache wire-up when configured
+	var cacheBackend cache.Cache
+	cacheType := strings.ToLower(cfg.Server.Cache.Type)
+	if cacheType == "redis" || cacheType == "valkey" {
+		timeout := 5 * time.Second
+		if cfg.Server.Cache.Timeout != "" {
+			if d, err := time.ParseDuration(cfg.Server.Cache.Timeout); err == nil {
+				timeout = d
+			}
+		}
+		redisCfg := &cache.RedisConfig{
+			Type:     cacheType,
+			URL:      cfg.Server.Cache.URL,
+			Host:     cfg.Server.Cache.Host,
+			Port:     cfg.Server.Cache.Port,
+			Password: cfg.Server.Cache.Password,
+			DB:       cfg.Server.Cache.DB,
+			PoolSize: cfg.Server.Cache.PoolSize,
+			MinIdle:  cfg.Server.Cache.MinIdle,
+			Timeout:  timeout,
+			Prefix:   cfg.Server.Cache.Prefix,
+		}
+		if redisCfg.Prefix == "" {
+			redisCfg.Prefix = "search:"
+		}
+		redisCache, err := cache.NewRedisCache(redisCfg)
+		if err != nil {
+			slog.Warn("Redis cache init failed, using memory cache", "err", err)
+		} else {
+			if err := redisCache.Ping(context.Background()); err != nil {
+				slog.Warn("Redis ping failed, using memory cache", "err", err)
+				redisCache.Close()
+			} else {
+				cacheBackend = redisCache
+				slog.Info("Redis cache enabled", "type", cacheType)
+			}
+		}
+	}
+
 	// Create aggregator with 30 second timeout and caching
 	aggregator := search.NewAggregator(enabledEngines, search.AggregatorConfig{
 		Timeout:       time.Duration(cfg.Search.Timeout) * time.Second,
 		CacheEnabled:  true,
 		CacheTTL:      5 * time.Minute,
 		MaxConcurrent: cfg.Search.MaxConcurrent,
-		// Cache backend defaults to in-memory; set Cache field to use Valkey/Redis
+		Cache:         cacheBackend,
 	})
 
 	// Create middleware with logging

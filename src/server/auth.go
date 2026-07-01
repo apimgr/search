@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/logging"
 )
 
 // ValidateOperatorToken returns true when the request carries a valid operator
@@ -68,13 +69,56 @@ func extractBearerToken(r *http.Request) (string, bool) {
 }
 
 // RequireOperator wraps an http.HandlerFunc and rejects requests that do not
-// present a valid operator token.
+// present a valid operator token. Per AI.md PART 10: logs auth attempts to audit log.
 func (s *Server) RequireOperator(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		clientIP := getClientIPSimple(r)
 		if !ValidateOperatorToken(r, s.config) {
+			// Log failed auth attempt to audit log
+			if s.logManager != nil && s.logManager.Audit() != nil {
+				s.logManager.Audit().Log(logging.AuditEntry{
+					Event:    logging.AuditActionInvalidToken,
+					Category: logging.AuditCategorySecurity,
+					Severity: logging.AuditSeverityWarning,
+					Actor: logging.AuditActor{
+						Type:      "anonymous",
+						IP:        clientIP,
+						UserAgent: r.UserAgent(),
+					},
+					Target: &logging.AuditTarget{
+						Type: "endpoint",
+						ID:   r.URL.Path,
+					},
+					Result: "failure",
+					Details: map[string]any{
+						"method": r.Method,
+					},
+				})
+			}
 			w.Header().Set("WWW-Authenticate", `Bearer realm="operator"`)
 			localizedHTTPError(w, r, http.StatusUnauthorized, "errors.unauthorized")
 			return
+		}
+		// Log successful auth to audit log
+		if s.logManager != nil && s.logManager.Audit() != nil {
+			s.logManager.Audit().Log(logging.AuditEntry{
+				Event:    logging.AuditActionConfigChange,
+				Category: logging.AuditCategorySecurity,
+				Severity: logging.AuditSeverityInfo,
+				Actor: logging.AuditActor{
+					Type:      "operator",
+					IP:        clientIP,
+					UserAgent: r.UserAgent(),
+				},
+				Target: &logging.AuditTarget{
+					Type: "endpoint",
+					ID:   r.URL.Path,
+				},
+				Result: "success",
+				Details: map[string]any{
+					"method": r.Method,
+				},
+			})
 		}
 		next(w, r)
 	}
