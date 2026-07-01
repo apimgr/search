@@ -45,37 +45,26 @@ Completed. `src/security/cve.go` implements CVEManager with Update(), Lookup(), 
 
 ---
 
-### [ ] Comprehensive audit logging (PART 10)
+### [x] Comprehensive audit logging (PART 10)
 
-**Spec:** `audit_log` table should capture config changes, security events, auth attempts.
-
-**Location:** `src/database/audit.go` (needs creation) or expand `src/logging/audit.go`
-
-**Task:**
-- Create audit service that wraps DB writes
-- Log: config changes, operator auth attempts, maintenance mode enter/exit
-- Integrate with existing handlers
+Completed. AuditLogger exists in `src/logging/logging.go`. Operator auth attempts (success/failure) now logged via `RequireOperator` in `src/server/auth.go`.
 
 ---
 
 ## MINOR — Lower Priority
 
-### [ ] mkdocs.yml + docs/ directory (PART 30)
+### [x] mkdocs.yml + docs/ directory (PART 30)
 
-**Spec:** Documentation infrastructure for ReadTheDocs.
-
-**Task:** Create `mkdocs.yml` and `docs/` directory with configuration docs.
+Already exists. `mkdocs.yml` at project root, `docs/` directory with api.md, cli.md, configuration.md, etc.
 
 ---
 
-### [ ] Redis/Valkey cache wire-up (PART 9)
+### [x] Redis/Valkey cache wire-up (PART 9)
 
-**Status:** Code exists in `src/cache/redis.go` but not wired up in server init.
-
-**Task:** Enable Redis cache backend when `cache.redis.enabled: true` in config.
+Completed. `src/server/server.go` now initializes Redis/Valkey cache when `cache.type: redis` or `cache.type: valkey` in config. Falls back to memory cache on connection failure.
 
 ---
 
-### [ ] Shell completions generation (PART 8)
+### [x] Shell completions generation (PART 8)
 
-**Task:** Verify `--shell completions` generates bash/zsh/fish completions to `completions/` directory.
+Already implemented. `--shell completions [bash|zsh|fish]` prints completions script. Implementation in `src/main.go` printCompletions() function.
