@@ -7,7 +7,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -499,7 +499,7 @@ func (s *Scheduler) StartTaskScheduler() {
 	s.wg.Add(1)
 	go s.run()
 
-	log.Println("[Scheduler] Started - always running per AI.md PART 19")
+	slog.Info("Scheduler started - always running per AI.md PART 19")
 }
 
 // run is the main scheduler loop
@@ -573,7 +573,7 @@ func (s *Scheduler) runTask(task *Task) {
 				s.saveTaskState(task)
 			}
 
-			log.Printf("[Scheduler] Task %s retry %d/%d in %v", task.ID, attempt, maxRetries, backoffDelay)
+			slog.Info("Task retry scheduled", "task", task.ID, "attempt", attempt, "max_retries", maxRetries, "backoff", backoffDelay)
 
 			// Wait for backoff duration or context cancellation
 			select {
@@ -610,11 +610,11 @@ func (s *Scheduler) runTask(task *Task) {
 				s.saveTaskState(task)
 			}
 
-			log.Printf("[Scheduler] Task %s completed successfully", task.ID)
+			slog.Info("Task completed successfully", "task", task.ID)
 			return
 		}
 
-		log.Printf("[Scheduler] Task %s attempt %d/%d failed: %v", task.ID, attempt+1, maxRetries+1, lastErr)
+		slog.Warn("Task attempt failed", "task", task.ID, "attempt", attempt+1, "max_attempts", maxRetries+1, "err", lastErr)
 	}
 
 	// All retries exhausted - task failed
@@ -632,7 +632,7 @@ func (s *Scheduler) runTask(task *Task) {
 		s.saveTaskState(task)
 	}
 
-	log.Printf("[Scheduler] Task %s failed after %d attempts: %v", task.ID, maxRetries+1, lastErr)
+	slog.Error("Task failed after all attempts", "task", task.ID, "attempts", maxRetries+1, "err", lastErr)
 
 	// Per AI.md PART 19: Failed tasks trigger notifications (if configured)
 	if notifyFn != nil {
@@ -680,7 +680,7 @@ func calculateNextRunWithLoc(schedule string, loc *time.Location) time.Time {
 	if strings.HasPrefix(schedule, "@every ") {
 		d, err := time.ParseDuration(strings.TrimPrefix(schedule, "@every "))
 		if err != nil {
-			log.Printf("[Scheduler] Invalid @every duration %q: %v", schedule, err)
+			slog.Warn("Invalid @every duration", "schedule", schedule, "err", err)
 			return now.Add(time.Hour)
 		}
 		return now.Add(d)
@@ -702,7 +702,7 @@ func calculateNextRunWithLoc(schedule string, loc *time.Location) time.Time {
 	// NewScheduler + Start populates nextScheduled synchronously before Start returns.
 	gs, err := gocron.NewScheduler(gocron.WithLocation(loc))
 	if err != nil {
-		log.Printf("[Scheduler] Failed to create gocron scheduler: %v", err)
+		slog.Warn("Failed to create gocron scheduler", "err", err)
 		return now.Add(time.Hour)
 	}
 	job, err := gs.NewJob(
@@ -710,7 +710,7 @@ func calculateNextRunWithLoc(schedule string, loc *time.Location) time.Time {
 		gocron.NewTask(func() {}),
 	)
 	if err != nil {
-		log.Printf("[Scheduler] Invalid schedule %q: %v", schedule, err)
+		slog.Warn("Invalid schedule", "schedule", schedule, "err", err)
 		_ = gs.Shutdown()
 		return now.Add(time.Hour)
 	}
@@ -721,7 +721,7 @@ func calculateNextRunWithLoc(schedule string, loc *time.Location) time.Time {
 	defer cancel()
 	_ = gs.ShutdownWithContext(shutCtx)
 	if nextErr != nil || next.IsZero() {
-		log.Printf("[Scheduler] Could not determine next run for %q", schedule)
+		slog.Warn("Could not determine next run", "schedule", schedule)
 		return now.Add(time.Hour)
 	}
 	return next
@@ -746,7 +746,7 @@ func (s *Scheduler) catchUpMissedTasks() {
 
 		// Check if task was missed (last run before catch-up window and next run in the past)
 		if task.LastRun.Before(catchUpDeadline) && task.NextRun.Before(now) {
-			log.Printf("[Scheduler] Catching up missed task: %s (last run: %s)", task.ID, task.LastRun)
+			slog.Info("Catching up missed task", "task", task.ID, "last_run", task.LastRun)
 			go s.runTask(task)
 		}
 	}
@@ -766,7 +766,7 @@ func (s *Scheduler) runStartupTasks() {
 
 	// Run startup tasks sequentially per spec (in order of original scheduled time)
 	for _, task := range startupTasks {
-		log.Printf("[Scheduler] Running startup task: %s", task.ID)
+		slog.Info("Running startup task", "task", task.ID)
 		s.runTask(task)
 	}
 }
@@ -798,7 +798,7 @@ func (s *Scheduler) initDatabase() {
 		)
 	`
 	if _, err := s.db.ExecContext(initCtx, query); err != nil {
-		log.Printf("[Scheduler] Failed to create tasks table: %v", err)
+		slog.Error("Failed to create tasks table", "err", err)
 	}
 
 	// Add retry columns to existing tables (idempotent migration)
@@ -831,7 +831,7 @@ func (s *Scheduler) loadTaskState(task *Task) {
 	}
 
 	if err != nil {
-		log.Printf("[Scheduler] Failed to load task state for %s: %v", task.ID, err)
+		slog.Warn("Failed to load task state", "task", task.ID, "err", err)
 		return
 	}
 
@@ -893,7 +893,7 @@ func (s *Scheduler) saveTaskState(task *Task) {
 	)
 
 	if err != nil {
-		log.Printf("[Scheduler] Failed to save task state for %s: %v", task.ID, err)
+		slog.Error("Failed to save task state", "task", task.ID, "err", err)
 	}
 }
 
@@ -913,7 +913,7 @@ func (s *Scheduler) acquireTaskLock(task *Task) bool {
 	defer lockCancel()
 	result, err := s.db.ExecContext(lockCtx, query, s.nodeID, now, string(task.ID), s.nodeID, now.Add(-lockTimeout))
 	if err != nil {
-		log.Printf("[Scheduler] Failed to acquire lock for %s: %v", task.ID, err)
+		slog.Warn("Failed to acquire lock", "task", task.ID, "err", err)
 		return false
 	}
 
@@ -1005,7 +1005,7 @@ func (s *Scheduler) StopTaskScheduler() {
 
 	s.cancel()
 	s.wg.Wait()
-	log.Println("[Scheduler] Stopped")
+	slog.Info("Scheduler stopped")
 }
 
 // IsRunning returns whether the scheduler is running

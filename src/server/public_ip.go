@@ -13,7 +13,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"strings"
@@ -71,11 +71,11 @@ func (s *Server) refreshPublicIP(ctx context.Context) error {
 		// Hand the value to ssl so GetFQDN can use it for FQDN detection.
 		ssl.SetCachedPublicIP(ip)
 		if previous != ip {
-			log.Printf("[PublicIP] Refreshed public IP via %s", url)
+			slog.Info("Refreshed public IP", "provider", url)
 		}
 		return nil
 	}
-	log.Printf("[PublicIP] WARN: all providers failed, keeping previous value: %v", lastErr)
+	slog.Warn("All public IP providers failed, keeping previous value", "err", lastErr)
 	if lastErr == nil {
 		lastErr = fmt.Errorf("no public IP providers configured")
 	}

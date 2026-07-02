@@ -7,7 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -110,7 +110,7 @@ func (m *MaintenanceService) StartMaintenanceService() error {
 	m.running = true
 	m.mu.Unlock()
 
-	log.Println("[Maintenance] Service started")
+	slog.Info("Maintenance service started")
 
 	// Initialize health status for known components
 	m.initializeHealthStatus()
@@ -127,7 +127,7 @@ func (m *MaintenanceService) StopMaintenanceService() {
 	m.mu.Lock()
 	m.running = false
 	m.mu.Unlock()
-	log.Println("[Maintenance] Service stopped")
+	slog.Info("Maintenance service stopped")
 }
 
 // initializeHealthStatus initializes health tracking for components
@@ -208,7 +208,7 @@ func (m *MaintenanceService) checkFileWrite() error {
 
 	// Remove probe file; log but do not fail on cleanup error
 	if err := os.Remove(tmpFile); err != nil {
-		log.Printf("[Maintenance] Warning: failed to remove write-check probe: %v", err)
+		slog.Warn("Failed to remove write-check probe", "err", err)
 	}
 
 	return nil
@@ -238,7 +238,7 @@ func (m *MaintenanceService) checkComponent(ctx context.Context, name string, ch
 		status.Healthy = false
 		status.Message = err.Error()
 		status.ErrorCount++
-		log.Printf("[Maintenance] Component %s unhealthy: %v", name, err)
+		slog.Warn("Component unhealthy", "component", name, "err", err)
 	} else {
 		status.Healthy = true
 		status.Message = ""
@@ -264,7 +264,7 @@ func (m *MaintenanceService) evaluateSystemHealth() {
 				criticalReason = name + ": " + status.Message
 			default:
 				// Non-critical — log and allow self-healing; never change public mode
-				log.Printf("[Maintenance] Non-critical component unhealthy (self-healing): %s: %s", name, status.Message)
+				slog.Info("Non-critical component unhealthy, self-healing", "component", name, "message", status.Message)
 			}
 		}
 	}
@@ -312,11 +312,11 @@ func (m *MaintenanceService) attemptRecovery() {
 
 	for _, comp := range unhealthyComponents {
 		if recoveryFunc, exists := m.recoveryFuncs[comp]; exists {
-			log.Printf("[Maintenance] Attempting recovery of %s", comp)
+			slog.Info("Attempting recovery", "component", comp)
 			if err := recoveryFunc(ctx); err != nil {
-				log.Printf("[Maintenance] Recovery of %s failed: %v", comp, err)
+				slog.Error("Recovery failed", "component", comp, "err", err)
 			} else {
-				log.Printf("[Maintenance] Recovery of %s successful", comp)
+				slog.Info("Recovery successful", "component", comp)
 				m.mu.Lock()
 				if status, exists := m.health[comp]; exists {
 					status.ErrorCount = 0
@@ -340,7 +340,7 @@ func (m *MaintenanceService) SetMode(mode MaintenanceMode, message string) {
 	m.mu.Unlock()
 
 	if oldMode != mode {
-		log.Printf("[Maintenance] Mode changed: %s -> %s", oldMode, mode)
+		slog.Info("Maintenance mode changed", "old_mode", oldMode.String(), "new_mode", mode.String())
 
 		// Notify callbacks
 		m.mu.RLock()
@@ -416,7 +416,7 @@ func (m *MaintenanceService) DisableMaintenance() {
 	m.mu.Unlock()
 
 	m.SetMode(ModeNormal, "")
-	log.Println("[Maintenance] Maintenance mode disabled")
+	slog.Info("Maintenance mode disabled")
 }
 
 // GetScheduledEnd returns when maintenance is scheduled to end
@@ -510,7 +510,7 @@ func (m *MaintenanceService) CheckDatabaseIntegrity(db *sql.DB) error {
 	}
 
 	if len(issues) > 0 {
-		log.Printf("[Maintenance] Database integrity issues found: %v", issues)
+		slog.Warn("Database integrity issues found", "issues", issues)
 		return fmt.Errorf("database integrity issues: %v", issues)
 	}
 
@@ -520,14 +520,14 @@ func (m *MaintenanceService) CheckDatabaseIntegrity(db *sql.DB) error {
 // RepairDatabase attempts to repair a corrupted database
 // Per AI.md PART 6: Database corruption handling
 func (m *MaintenanceService) RepairDatabase(dbPath string) error {
-	log.Printf("[Maintenance] Attempting database repair: %s", dbPath)
+	slog.Info("Attempting database repair", "path", dbPath)
 
 	// Create backup first
 	backupPath := dbPath + ".backup." + time.Now().Format("20060102-150405")
 	if err := copyFile(dbPath, backupPath); err != nil {
 		return fmt.Errorf("failed to create backup: %w", err)
 	}
-	log.Printf("[Maintenance] Backup created: %s", backupPath)
+	slog.Info("Backup created", "path", backupPath)
 
 	// Open a new connection
 	db, err := sql.Open("sqlite", dbPath)
@@ -543,13 +543,13 @@ func (m *MaintenanceService) RepairDatabase(dbPath string) error {
 	// First try VACUUM INTO to create a clean copy
 	cleanPath := dbPath + ".clean"
 	if _, err := db.ExecContext(ctx, fmt.Sprintf("VACUUM INTO '%s'", cleanPath)); err != nil {
-		log.Printf("[Maintenance] VACUUM INTO failed: %v, trying reindex", err)
+		slog.Warn("VACUUM INTO failed, trying reindex", "err", err)
 
 		// Try REINDEX as fallback
 		if _, err := db.ExecContext(ctx, "REINDEX"); err != nil {
 			return fmt.Errorf("repair failed: %w", err)
 		}
-		log.Println("[Maintenance] REINDEX completed")
+		slog.Info("REINDEX completed")
 		return nil
 	}
 
@@ -559,7 +559,7 @@ func (m *MaintenanceService) RepairDatabase(dbPath string) error {
 		return fmt.Errorf("failed to replace with clean database: %w", err)
 	}
 
-	log.Println("[Maintenance] Database repair completed successfully")
+	slog.Info("Database repair completed successfully")
 	return nil
 }
 
@@ -579,15 +579,15 @@ func (m *MaintenanceService) BackupDatabase(dbPath, backupDir string) (string, e
 	// Create checksum
 	checksum, err := fileChecksum(backupPath)
 	if err != nil {
-		log.Printf("[Maintenance] Warning: failed to create checksum: %v", err)
+		slog.Warn("Failed to create checksum", "err", err)
 	} else {
 		checksumPath := backupPath + ".sha256"
 		if err := os.WriteFile(checksumPath, []byte(checksum), 0600); err != nil {
-			log.Printf("[Maintenance] Warning: failed to write checksum: %v", err)
+			slog.Warn("Failed to write checksum", "err", err)
 		}
 	}
 
-	log.Printf("[Maintenance] Database backup created: %s", backupPath)
+	slog.Info("Database backup created", "path", backupPath)
 	return backupPath, nil
 }
 
@@ -609,14 +609,14 @@ func (m *MaintenanceService) RestoreDatabase(backupPath, dbPath string) error {
 		if actualChecksum != expectedChecksum {
 			return fmt.Errorf("backup checksum mismatch")
 		}
-		log.Println("[Maintenance] Backup checksum verified")
+		slog.Info("Backup checksum verified")
 	}
 
 	// Create backup of current database
 	if _, err := os.Stat(dbPath); err == nil {
 		currentBackup := dbPath + ".before-restore." + time.Now().Format("20060102-150405")
 		if err := copyFile(dbPath, currentBackup); err != nil {
-			log.Printf("[Maintenance] Warning: failed to backup current database: %v", err)
+			slog.Warn("Failed to backup current database", "err", err)
 		}
 	}
 
@@ -625,7 +625,7 @@ func (m *MaintenanceService) RestoreDatabase(backupPath, dbPath string) error {
 		return fmt.Errorf("failed to restore database: %w", err)
 	}
 
-	log.Printf("[Maintenance] Database restored from: %s", backupPath)
+	slog.Info("Database restored", "path", backupPath)
 	return nil
 }
 
@@ -687,7 +687,7 @@ func (g *GracefulDegradation) MarkDegraded(feature string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.degradedFeatures[feature] = true
-	log.Printf("[Degradation] Feature marked as degraded: %s", feature)
+	slog.Info("Feature marked as degraded", "feature", feature)
 }
 
 // MarkHealthy marks a feature as healthy
@@ -695,7 +695,7 @@ func (g *GracefulDegradation) MarkHealthy(feature string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	delete(g.degradedFeatures, feature)
-	log.Printf("[Degradation] Feature marked as healthy: %s", feature)
+	slog.Info("Feature marked as healthy", "feature", feature)
 }
 
 // IsDegraded checks if a feature is degraded

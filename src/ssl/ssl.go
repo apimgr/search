@@ -9,7 +9,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -89,7 +89,7 @@ func discoverCertificate(sslDir, fqdn string) (tls.Certificate, bool) {
 	for _, c := range candidates {
 		cert, err := tls.LoadX509KeyPair(c.certPath, c.keyPath)
 		if err == nil {
-			log.Printf("[TLS] Auto-discovered certificate [%s] for %s", c.label, fqdn)
+			slog.Info("Auto-discovered certificate", "label", c.label, "fqdn", fqdn)
 			return cert, true
 		}
 	}
@@ -126,7 +126,7 @@ func NewManagerWithSecret(cfg *config.SSLConfig, dataDir, secretKey string) *Man
 		switch challenge {
 		case "dns-01":
 			if err := m.initDNS01(); err != nil {
-				log.Printf("[TLS] DNS-01 initialization failed: %v, falling back to HTTP-01", err)
+				slog.Warn("DNS-01 initialization failed, falling back to HTTP-01", "err", err)
 				m.initLetsEncrypt()
 			}
 		default:
@@ -171,9 +171,9 @@ func (m *Manager) initLetsEncrypt() {
 		tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
 	}
 
-	log.Printf("[TLS] Let's Encrypt enabled for domains: %v", m.config.LetsEncrypt.Domains)
+	slog.Info("Let's Encrypt enabled", "domains", m.config.LetsEncrypt.Domains)
 	if m.config.LetsEncrypt.Staging {
-		log.Printf("[TLS] Using Let's Encrypt STAGING environment")
+		slog.Info("Using Let's Encrypt STAGING environment")
 	}
 }
 
@@ -253,10 +253,9 @@ func (m *Manager) initDNS01() error {
 		return fmt.Errorf("failed to obtain certificate: %w", err)
 	}
 
-	log.Printf("[TLS] DNS-01 challenge enabled for domains: %v (provider: %s)",
-		m.config.LetsEncrypt.Domains, m.config.DNS01.Provider)
+	slog.Info("DNS-01 challenge enabled", "domains", m.config.LetsEncrypt.Domains, "provider", m.config.DNS01.Provider)
 	if m.config.LetsEncrypt.Staging {
-		log.Printf("[TLS] Using Let's Encrypt STAGING environment")
+		slog.Info("Using Let's Encrypt STAGING environment")
 	}
 
 	return nil
@@ -287,7 +286,7 @@ func (m *Manager) loadOrCreateAccountKey() (crypto.PrivateKey, error) {
 		return nil, err
 	}
 	if err := os.WriteFile(keyPath, keyBytes, 0600); err != nil {
-		log.Printf("[TLS] Warning: failed to save account key: %v", err)
+		slog.Warn("Failed to save account key", "err", err)
 	}
 
 	return key, nil
@@ -313,7 +312,7 @@ func (m *Manager) obtainCertificateDNS01() error {
 				m.mu.Lock()
 				m.tlsConfig = m.createTLSConfig(cert)
 				m.mu.Unlock()
-				log.Printf("[TLS] Loaded existing certificate (expires: %v)", parsed.NotAfter)
+				slog.Info("Loaded existing certificate", "expires", parsed.NotAfter)
 				return nil
 			}
 		}
@@ -348,7 +347,7 @@ func (m *Manager) obtainCertificateDNS01() error {
 	m.tlsConfig = m.createTLSConfig(cert)
 	m.mu.Unlock()
 
-	log.Printf("[TLS] Obtained new certificate via DNS-01 for: %v", m.config.LetsEncrypt.Domains)
+	slog.Info("Obtained new certificate via DNS-01", "domains", m.config.LetsEncrypt.Domains)
 	return nil
 }
 
@@ -392,7 +391,7 @@ func (m *Manager) RenewCertificateDNS01(ctx context.Context) error {
 		return nil
 	}
 
-	log.Printf("[TLS] Certificate expiring soon, renewing via DNS-01...")
+	slog.Info("Certificate expiring soon, renewing via DNS-01")
 	return m.obtainCertificateDNS01()
 }
 
@@ -400,13 +399,13 @@ func (m *Manager) RenewCertificateDNS01(ctx context.Context) error {
 func (m *Manager) initManualCerts() {
 	cert, err := tls.LoadX509KeyPair(m.config.CertFile, m.config.KeyFile)
 	if err != nil {
-		log.Printf("[TLS] Error loading certificates: %v", err)
+		slog.Error("Error loading certificates", "err", err)
 		return
 	}
 
 	m.tlsConfig = m.createTLSConfig(cert)
 
-	log.Printf("[TLS] Loaded certificates from %s and %s", m.config.CertFile, m.config.KeyFile)
+	slog.Info("Loaded certificates", "cert", m.config.CertFile, "key", m.config.KeyFile)
 }
 
 // GetTLSConfig returns the TLS configuration
@@ -450,7 +449,7 @@ func (m *Manager) ReloadCertificates() error {
 	defer m.mu.Unlock()
 
 	m.tlsConfig.Certificates = []tls.Certificate{cert}
-	log.Printf("[TLS] Certificates reloaded")
+	slog.Info("Certificates reloaded")
 	return nil
 }
 
@@ -472,9 +471,9 @@ func StartHTTPSRedirect(addr string, httpsPort int) *http.Server {
 	}
 
 	go func() {
-		log.Printf("[TLS] HTTP->HTTPS redirect server on %s", addr)
+		slog.Info("HTTP->HTTPS redirect server started", "addr", addr)
 		if err := redirect.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("[TLS] Redirect server error: %v", err)
+			slog.Error("Redirect server error", "err", err)
 		}
 	}()
 

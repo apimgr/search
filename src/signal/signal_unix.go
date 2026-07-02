@@ -6,7 +6,7 @@
 package signal
 
 import (
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -45,16 +45,16 @@ func setupSignals(cfg ShutdownConfig, done chan struct{}) {
 		for sig := range sigChan {
 			switch sig {
 			case syscall.SIGUSR1:
-				log.Println("Received SIGUSR1, reopening logs...")
+				slog.Info("Received SIGUSR1, reopening logs")
 				reopenLogs(cfg)
 
 			case syscall.SIGUSR2:
-				log.Println("Received SIGUSR2, dumping status...")
+				slog.Info("Received SIGUSR2, dumping status")
 				dumpStatus(cfg)
 
 			default:
 				// Graceful shutdown: SIGTERM, SIGINT, SIGQUIT, SIGRTMIN+3
-				log.Printf("Received %v, starting graceful shutdown...", sig)
+				slog.Info("Starting graceful shutdown", "signal", sig)
 				gracefulShutdown(cfg, done)
 			}
 		}
@@ -68,13 +68,13 @@ func stopChildProcesses(pids []int, timeout time.Duration) {
 	for _, pid := range pids {
 		process, err := findProcessFunc(pid)
 		if err != nil {
-			log.Printf("Failed to find process %d: %v", pid, err)
+			slog.Error("Failed to find process", "pid", pid, "err", err)
 			continue
 		}
 		if err := process.Signal(syscall.SIGTERM); err != nil {
-			log.Printf("Failed to send SIGTERM to process %d: %v", pid, err)
+			slog.Error("Failed to send SIGTERM", "pid", pid, "err", err)
 		} else {
-			log.Printf("Sent SIGTERM to process %d", pid)
+			slog.Info("Sent SIGTERM", "pid", pid)
 		}
 	}
 
@@ -90,7 +90,7 @@ func stopChildProcesses(pids []int, timeout time.Duration) {
 		for time.Now().Before(deadline) {
 			// Signal 0 checks if process exists without sending anything
 			if err := process.Signal(syscall.Signal(0)); err != nil {
-				log.Printf("Process %d has exited", pid)
+				slog.Info("Process has exited", "pid", pid)
 				// Process exited
 				break
 			}
@@ -99,7 +99,7 @@ func stopChildProcesses(pids []int, timeout time.Duration) {
 
 		// Force kill if still running (after timeout)
 		if err := process.Signal(syscall.Signal(0)); err == nil {
-			log.Printf("Process %d still running after timeout, sending SIGKILL", pid)
+			slog.Warn("Process still running after timeout, sending SIGKILL", "pid", pid)
 			process.Signal(syscall.SIGKILL)
 		}
 	}

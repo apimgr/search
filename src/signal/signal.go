@@ -4,7 +4,7 @@ package signal
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"sync"
@@ -88,7 +88,7 @@ func Setup(cfg ShutdownConfig) <-chan struct{} {
 func gracefulShutdown(cfg ShutdownConfig, done chan struct{}) {
 	// Step 1-3: Set shutdown flag for health checks (returns 503)
 	setShuttingDown(true)
-	log.Println("Shutdown flag set, health checks now return 503")
+	slog.Info("Shutdown flag set, health checks now return 503")
 
 	// Step 4: Stop accepting new connections, wait for in-flight requests
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.InFlightTimeout)
@@ -96,24 +96,24 @@ func gracefulShutdown(cfg ShutdownConfig, done chan struct{}) {
 
 	// Use ShutdownFunc if provided, otherwise use Server.Shutdown
 	if cfg.ShutdownFunc != nil {
-		log.Printf("Calling shutdown function (timeout: %v)...", cfg.InFlightTimeout)
+		slog.Info("Calling shutdown function", "timeout", cfg.InFlightTimeout)
 		if err := cfg.ShutdownFunc(ctx); err != nil {
-			log.Printf("Shutdown function error: %v", err)
+			slog.Error("Shutdown function error", "err", err)
 		} else {
-			log.Println("Shutdown function completed successfully")
+			slog.Info("Shutdown function completed successfully")
 		}
 	} else if cfg.Server != nil {
-		log.Printf("Waiting up to %v for in-flight requests...", cfg.InFlightTimeout)
+		slog.Info("Waiting for in-flight requests", "timeout", cfg.InFlightTimeout)
 		if err := cfg.Server.Shutdown(ctx); err != nil {
-			log.Printf("HTTP server shutdown error: %v", err)
+			slog.Error("HTTP server shutdown error", "err", err)
 		} else {
-			log.Println("HTTP server stopped accepting connections")
+			slog.Info("HTTP server stopped accepting connections")
 		}
 	}
 
 	// Step 5: Close database connections
 	if cfg.OnCloseDatabase != nil {
-		log.Printf("Closing database connections (timeout: %v)...", cfg.DatabaseTimeout)
+		slog.Info("Closing database connections", "timeout", cfg.DatabaseTimeout)
 		dbDone := make(chan struct{})
 		go func() {
 			cfg.OnCloseDatabase()
@@ -121,15 +121,15 @@ func gracefulShutdown(cfg ShutdownConfig, done chan struct{}) {
 		}()
 		select {
 		case <-dbDone:
-			log.Println("Database connections closed")
+			slog.Info("Database connections closed")
 		case <-time.After(cfg.DatabaseTimeout):
-			log.Println("WARNING: Database close timeout exceeded, continuing shutdown")
+			slog.Warn("Database close timeout exceeded, continuing shutdown")
 		}
 	}
 
 	// Step 6: Flush logs and metrics
 	if cfg.OnFlushLogs != nil {
-		log.Printf("Flushing logs (timeout: %v)...", cfg.LogFlushTimeout)
+		slog.Info("Flushing logs", "timeout", cfg.LogFlushTimeout)
 		logDone := make(chan struct{})
 		go func() {
 			cfg.OnFlushLogs()
@@ -137,9 +137,9 @@ func gracefulShutdown(cfg ShutdownConfig, done chan struct{}) {
 		}()
 		select {
 		case <-logDone:
-			log.Println("Logs flushed")
+			slog.Info("Logs flushed")
 		case <-time.After(cfg.LogFlushTimeout):
-			log.Println("WARNING: Log flush timeout exceeded, skipping")
+			slog.Warn("Log flush timeout exceeded, skipping")
 		}
 	}
 
@@ -147,7 +147,7 @@ func gracefulShutdown(cfg ShutdownConfig, done chan struct{}) {
 	if cfg.GetChildPIDs != nil {
 		pids := cfg.GetChildPIDs()
 		if len(pids) > 0 {
-			log.Printf("Stopping %d child processes (timeout: %v)...", len(pids), cfg.ChildTimeout)
+			slog.Info("Stopping child processes", "count", len(pids), "timeout", cfg.ChildTimeout)
 			stopChildProcesses(pids, cfg.ChildTimeout)
 		}
 	}
@@ -155,14 +155,14 @@ func gracefulShutdown(cfg ShutdownConfig, done chan struct{}) {
 	// Step 9: Remove PID file
 	if cfg.PIDFile != "" {
 		if err := os.Remove(cfg.PIDFile); err != nil && !os.IsNotExist(err) {
-			log.Printf("Failed to remove PID file: %v", err)
+			slog.Error("Failed to remove PID file", "path", cfg.PIDFile, "err", err)
 		} else {
-			log.Printf("Removed PID file: %s", cfg.PIDFile)
+			slog.Info("Removed PID file", "path", cfg.PIDFile)
 		}
 	}
 
 	// Step 10: Signal completion so main() can call os.Exit(0)
-	log.Println("Graceful shutdown complete")
+	slog.Info("Graceful shutdown complete")
 	close(done)
 }
 
@@ -171,7 +171,7 @@ func reopenLogs(cfg ShutdownConfig) {
 	if cfg.OnReopenLogs != nil {
 		cfg.OnReopenLogs()
 	} else {
-		log.Println("Log reopen requested but no handler configured")
+		slog.Warn("Log reopen requested but no handler configured")
 	}
 }
 
@@ -180,6 +180,6 @@ func dumpStatus(cfg ShutdownConfig) {
 	if cfg.OnDumpStatus != nil {
 		cfg.OnDumpStatus()
 	} else {
-		log.Println("Status dump requested but no handler configured")
+		slog.Warn("Status dump requested but no handler configured")
 	}
 }

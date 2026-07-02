@@ -7,7 +7,7 @@
 package signal
 
 import (
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"time"
@@ -21,7 +21,7 @@ func setupSignals(cfg ShutdownConfig, done chan struct{}) {
 
 	go func() {
 		for sig := range sigChan {
-			log.Printf("Received %v, starting graceful shutdown...", sig)
+			slog.Info("Starting graceful shutdown", "signal", sig)
 			gracefulShutdown(cfg, done)
 		}
 	}()
@@ -33,14 +33,14 @@ func stopChildProcesses(pids []int, timeout time.Duration) {
 	for _, pid := range pids {
 		process, err := os.FindProcess(pid)
 		if err != nil {
-			log.Printf("Failed to find process %d: %v", pid, err)
+			slog.Error("Failed to find process", "pid", pid, "err", err)
 			continue
 		}
 		// Windows: Kill() calls TerminateProcess - no graceful option
 		if err := process.Kill(); err != nil {
-			log.Printf("Failed to terminate process %d: %v", pid, err)
+			slog.Error("Failed to terminate process", "pid", pid, "err", err)
 		} else {
-			log.Printf("Terminated process %d", pid)
+			slog.Info("Terminated process", "pid", pid)
 		}
 	}
 }
