@@ -937,7 +937,7 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 		{"/server/privacy", "0.3", "monthly"},
 		{"/server/help", "0.5", "monthly"},
 		{"/server/terms", "0.3", "monthly"},
-		{"/server/docs/swagger", "0.4", "weekly"},
+		{"/openapi", "0.4", "weekly"},
 		{"/server/docs/graphql", "0.4", "weekly"},
 		{"/server/healthz", "0.2", "always"},
 	}
