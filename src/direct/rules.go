@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// RulesHandler handles rules:{query} and rotl:{query} queries.
+// RulesHandler handles rules:{query} and rule:{query} queries.
 // Easter egg: Rules of the Internet
 type RulesHandler struct{}
 
@@ -194,11 +194,11 @@ func (h *RulesHandler) ruleByNumber(num int) (*Answer, error) {
 
 			html.WriteString("<p class=\"rules-nav\">")
 			if num > 1 {
-				html.WriteString(fmt.Sprintf("<a href=\"/search?q=rotl:%d\">← Rule %d</a> | ", num-1, num-1))
+				html.WriteString(fmt.Sprintf("<a href=\"/search?q=rule:%d\">← Rule %d</a> | ", num-1, num-1))
 			}
-			html.WriteString("<a href=\"/search?q=rotl:all\">All Rules</a>")
+			html.WriteString("<a href=\"/search?q=rule:all\">All Rules</a>")
 			if num < 100 {
-				html.WriteString(fmt.Sprintf(" | <a href=\"/search?q=rotl:%d\">Rule %d →</a>", num+1, num+1))
+				html.WriteString(fmt.Sprintf(" | <a href=\"/search?q=rule:%d\">Rule %d →</a>", num+1, num+1))
 			}
 			html.WriteString("</p>")
 			html.WriteString("</div>")
@@ -238,7 +238,7 @@ func (h *RulesHandler) searchRules(term string) (*Answer, error) {
 		html.WriteString("<div class=\"rules-content\">")
 		html.WriteString(fmt.Sprintf("<h1>Search: \"%s\"</h1>", escapeHTML(term)))
 		html.WriteString("<p>No rules found matching your search.</p>")
-		html.WriteString("<p><a href=\"/search?q=rotl:all\">View all rules</a></p>")
+		html.WriteString("<p><a href=\"/search?q=rule:all\">View all rules</a></p>")
 		html.WriteString("</div>")
 
 		return &Answer{
@@ -270,7 +270,7 @@ func (h *RulesHandler) searchRules(term string) (*Answer, error) {
 	}
 
 	html.WriteString("</ol>")
-	html.WriteString("<p><a href=\"/search?q=rotl:all\">View all rules</a></p>")
+	html.WriteString("<p><a href=\"/search?q=rule:all\">View all rules</a></p>")
 	html.WriteString("</div>")
 
 	return &Answer{

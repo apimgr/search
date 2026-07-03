@@ -47,10 +47,13 @@ func TestParse(t *testing.T) {
 		{"http:404", AnswerTypeHTTP, "404"},
 		{"chmod:755", AnswerTypeChmod, "755"},
 		{"cron:* * * * *", AnswerTypeCron, "* * * * *"},
-		{"rotl:34", AnswerTypeRules, "34"},
-		{"rotl: all", AnswerTypeRules, "all"},
-		{"rotl:", AnswerTypeRules, ""},
+		{"rule:34", AnswerTypeRules, "34"},
+		{"rule: all", AnswerTypeRules, "all"},
+		{"rule:", AnswerTypeRules, ""},
 		{"rules:", AnswerTypeRules, ""},
+		{"roti:34", AnswerTypeRules, "34"},
+		{"roti: all", AnswerTypeRules, "all"},
+		{"roti:", AnswerTypeRules, ""},
 		{"", "", ""},
 		{"notacommand", "", ""},
 		{"invalid:", "", ""},
@@ -81,8 +84,10 @@ func TestIsDirectAnswer(t *testing.T) {
 		{"tldr:git", true},
 		{"dns:example.com", true},
 		{"wiki:Python", true},
-		{"rotl:33", true},
-		{"rotl:", true},
+		{"rule:33", true},
+		{"rule:", true},
+		{"roti:33", true},
+		{"roti:", true},
 		{"regular search query", false},
 		{"not:ahandler", false},
 		{"", false},
@@ -102,12 +107,12 @@ func TestRulesAliasProcess(t *testing.T) {
 	m := NewManager()
 	ctx := context.Background()
 
-	answer, err := m.Process(ctx, "rotl:34")
+	answer, err := m.Process(ctx, "rule:34")
 	if err != nil {
-		t.Fatalf("Process(rotl:34) error: %v", err)
+		t.Fatalf("Process(rule:34) error: %v", err)
 	}
 	if answer == nil {
-		t.Fatal("Process(rotl:34) returned nil answer")
+		t.Fatal("Process(rule:34) returned nil answer")
 	}
 	if answer.Type != AnswerTypeRules {
 		t.Fatalf("answer type = %v, want %v", answer.Type, AnswerTypeRules)
@@ -116,12 +121,12 @@ func TestRulesAliasProcess(t *testing.T) {
 		t.Fatalf("answer title = %q, want %q", answer.Title, "Rule 34 of the Internet")
 	}
 
-	answer, err = m.Process(ctx, "rotl:")
+	answer, err = m.Process(ctx, "rule:")
 	if err != nil {
-		t.Fatalf("Process(rotl:) error: %v", err)
+		t.Fatalf("Process(rule:) error: %v", err)
 	}
 	if answer == nil {
-		t.Fatal("Process(rotl:) returned nil answer")
+		t.Fatal("Process(rule:) returned nil answer")
 	}
 	if answer.Title != "Rules of the Internet" {
 		t.Fatalf("answer title = %q, want %q", answer.Title, "Rules of the Internet")
@@ -2521,7 +2526,7 @@ func TestProcessIdempotency(t *testing.T) {
 		"http:200",
 		"chmod:755",
 		"cron:* * * * *",
-		"rotl:1",
+		"rule:1",
 	}
 	for _, q := range queries {
 		t.Run(q, func(t *testing.T) {

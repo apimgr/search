@@ -1465,10 +1465,10 @@ func TestManagerProcessTypeUnknown(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Parse — rotl: prefix
+// Parse — rule: prefix
 // ---------------------------------------------------------------------------
 
-func TestManagerParseROTL(t *testing.T) {
+func TestManagerParseRules(t *testing.T) {
 	m := NewManager()
 
 	tests := []struct {
@@ -1476,8 +1476,10 @@ func TestManagerParseROTL(t *testing.T) {
 		wantType AnswerType
 		wantTerm string
 	}{
-		{"rotl:42", AnswerTypeRules, "42"},
-		{"ROTL:42", AnswerTypeRules, "42"},
+		{"rule:42", AnswerTypeRules, "42"},
+		{"RULE:42", AnswerTypeRules, "42"},
+		{"roti:42", AnswerTypeRules, "42"},
+		{"ROTI:42", AnswerTypeRules, "42"},
 		{"rules:", AnswerTypeRules, ""},
 	}
 	for _, tt := range tests {
@@ -2827,7 +2829,7 @@ func TestManagerParseAdditionalPrefixes(t *testing.T) {
 		{"case:upper:hello", AnswerTypeCase},
 		{"slug:hello world", AnswerTypeSlug},
 		{"diff:hello:world", AnswerTypeDiff},
-		{"ROTL:hello", AnswerTypeRules},
+		{"roti:hello", AnswerTypeRules},
 		{"beautify:json:{}", AnswerTypeBeautify},
 		{"lorem:5", AnswerTypeLorem},
 		{"word:freq:hello", AnswerTypeWord},

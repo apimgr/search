@@ -278,8 +278,12 @@ func (m *Manager) Parse(query string) (AnswerType, string) {
 	}
 
 	lowerQuery := strings.ToLower(query)
-	if strings.HasPrefix(lowerQuery, "rotl:") {
-		return AnswerTypeRules, strings.TrimSpace(query[len("rotl:"):])
+	// Support rule: and roti: as aliases for rules (NOT rotl:)
+	if strings.HasPrefix(lowerQuery, "rule:") {
+		return AnswerTypeRules, strings.TrimSpace(query[len("rule:"):])
+	}
+	if strings.HasPrefix(lowerQuery, "roti:") {
+		return AnswerTypeRules, strings.TrimSpace(query[len("roti:"):])
 	}
 	if strings.HasPrefix(lowerQuery, "rules:") && strings.TrimSpace(query[len("rules:"):]) == "" {
 		return AnswerTypeRules, ""
@@ -291,7 +295,8 @@ func (m *Manager) Parse(query string) (AnswerType, string) {
 	}
 
 	answerType := AnswerType(strings.ToLower(matches[1]))
-	if answerType == "rotl" {
+	// Map aliases to canonical types
+	if answerType == "rule" || answerType == "roti" {
 		answerType = AnswerTypeRules
 	}
 	term := strings.TrimSpace(matches[2])
