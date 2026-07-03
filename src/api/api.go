@@ -1574,7 +1574,7 @@ func (h *Handler) handleServerHelp(w http.ResponseWriter, r *http.Request) {
 		{
 			ID:      "answers",
 			Title:   "Instant and Direct Answers",
-			Content: "Direct answers use the type:term format and open as full-page results, for example dns:example.com, whois:example.com, http:404, regex:[a-z]+, jwt:decode token, useragent:my, and rotl:34. Instant answers also work from the normal search box for queries such as 2 + 2, convert 10 km to miles, time in tokyo, what is my ip, or #ff5733.",
+			Content: "Direct answers use the type:term format and open as full-page results, for example dns:example.com, whois:example.com, http:404, regex:[a-z]+, jwt:decode token, useragent:my, and rule:34. Instant answers also work from the normal search box for queries such as 2 + 2, convert 10 km to miles, time in tokyo, what is my ip, or #ff5733.",
 		},
 		{
 			ID:      "search_tips",
