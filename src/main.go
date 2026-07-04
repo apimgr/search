@@ -666,28 +666,49 @@ func showConfigInfo() {
 	}
 
 	fmt.Println()
-	fmt.Println("Environment Variables:")
-	if env.InstanceName != "Search" {
-		fmt.Println("  INSTANCE_NAME:", env.InstanceName)
-	}
-	if env.Port != "" {
-		fmt.Println("  PORT:", env.Port)
+	fmt.Println("Environment Variables (per AI.md PART 5):")
+
+	// Runtime Variables (Always Checked)
+	if env.Domain != "" {
+		fmt.Println("  DOMAIN:", env.Domain)
 	}
 	if env.Mode != "production" {
 		fmt.Println("  MODE:", env.Mode)
 	}
-	if env.Debug {
-		fmt.Println("  DEBUG: enabled")
+	if config.IsNoColor() {
+		fmt.Println("  NO_COLOR: set")
 	}
-	// Per AI.md PART 32: Tor is auto-enabled at runtime if binary found, not via env var
-	if config.IsTorAvailable() {
-		fmt.Println("  TOR: available (auto-enabled)")
+	if config.IsDumbTerminal() {
+		fmt.Println("  TERM: dumb")
 	}
+	if config.GetDatabaseDriver() != "" {
+		fmt.Println("  DATABASE_DRIVER:", config.GetDatabaseDriver())
+	}
+	if config.GetDatabaseURL() != "" {
+		fmt.Println("  DATABASE_URL: [set]")
+	}
+	if env.SMTPHost != "" {
+		fmt.Println("  SMTP_HOST:", env.SMTPHost)
+	}
+
+	// Init-Only Variables (First Run Only)
 	if env.ConfigDir != "" {
 		fmt.Println("  CONFIG_DIR:", env.ConfigDir)
 	}
 	if env.DataDir != "" {
 		fmt.Println("  DATA_DIR:", env.DataDir)
+	}
+	if env.LogDir != "" {
+		fmt.Println("  LOG_DIR:", env.LogDir)
+	}
+	if env.Port != "" {
+		fmt.Println("  PORT:", env.Port)
+	}
+	if env.Listen != "" {
+		fmt.Println("  LISTEN:", env.Listen)
+	}
+	if env.ApplicationName != "" {
+		fmt.Println("  APPLICATION_NAME:", env.ApplicationName)
 	}
 }
 

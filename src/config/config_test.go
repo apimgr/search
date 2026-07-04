@@ -164,16 +164,19 @@ func TestConfigValidateAndApplyDefaults(t *testing.T) {
 
 func TestConfigApplyEnv(t *testing.T) {
 	cfg := DefaultConfig()
+	// Per AI.md PART 5: Init-only variables
 	env := &EnvConfig{
-		Port:   "9090",
-		Debug:  true,
-		Secret: "test-secret",
+		Port:            "9090",
+		ApplicationName: "TestApp",
 	}
 
 	cfg.ApplyEnv(env)
 
 	if cfg.Server.Port != 9090 {
 		t.Errorf("After ApplyEnv, Server.Port = %d, want 9090", cfg.Server.Port)
+	}
+	if cfg.Server.Title != "TestApp" {
+		t.Errorf("After ApplyEnv, Server.Title = %q, want TestApp", cfg.Server.Title)
 	}
 }
 
@@ -1045,18 +1048,12 @@ func TestMigrateYamlToYml(t *testing.T) {
 
 func TestApplyEnvComprehensive(t *testing.T) {
 	cfg := DefaultConfig()
+	// Per AI.md PART 5: Only init-only variables in ApplyEnv
 	env := &EnvConfig{
-		InstanceName:     "TestInstance",
-		Secret:           "test-secret",
-		Port:             "9090",
-		Mode:             "development",
-		BaseURL:          "https://test.example.com",
-		Autocomplete:     "google",
-		ImageProxyURL:    "https://proxy.example.com",
-		ImageProxyKey:    "proxy-key",
-		EnableGoogle:     false,
-		EnableDuckDuckGo: false,
-		EnableBing:       false,
+		Port:               "9090",
+		ApplicationName:    "TestInstance",
+		ApplicationTagline: "Test tagline",
+		Listen:             "0.0.0.0:9090",
 	}
 
 	cfg.ApplyEnv(env)
@@ -1064,40 +1061,54 @@ func TestApplyEnvComprehensive(t *testing.T) {
 	if cfg.Server.Title != "TestInstance" {
 		t.Errorf("Title not applied, got %q", cfg.Server.Title)
 	}
-	if cfg.Server.SecretKey != "test-secret" {
-		t.Errorf("SecretKey not applied, got %q", cfg.Server.SecretKey)
-	}
 	if cfg.Server.Port != 9090 {
 		t.Errorf("Port not applied, got %d", cfg.Server.Port)
+	}
+	if cfg.Server.Branding.Tagline != "Test tagline" {
+		t.Errorf("Tagline not applied, got %q", cfg.Server.Branding.Tagline)
+	}
+	if cfg.Server.Address != "0.0.0.0:9090" {
+		t.Errorf("Address not applied, got %q", cfg.Server.Address)
+	}
+}
+
+func TestApplyRuntimeEnvComprehensive(t *testing.T) {
+	cfg := DefaultConfig()
+	// Per AI.md PART 5: Runtime variables in ApplyRuntimeEnv
+	env := &EnvConfig{
+		Domain: "test.example.com",
+		Mode:   "development",
+	}
+
+	cfg.ApplyRuntimeEnv(env)
+
+	if cfg.Server.FQDN != "test.example.com" {
+		t.Errorf("FQDN not applied, got %q", cfg.Server.FQDN)
 	}
 	if cfg.Server.Mode != "development" {
 		t.Errorf("Mode not applied, got %q", cfg.Server.Mode)
 	}
-	if cfg.Server.BaseURL != "https://test.example.com" {
-		t.Errorf("BaseURL not applied, got %q", cfg.Server.BaseURL)
-	}
-	if cfg.Search.Autocomplete != "google" {
-		t.Errorf("Autocomplete not applied, got %q", cfg.Search.Autocomplete)
-	}
-	if !cfg.Server.ImageProxy.Enabled {
-		t.Error("ImageProxy should be enabled when URL is set")
-	}
-	if cfg.Server.ImageProxy.URL != "https://proxy.example.com" {
-		t.Errorf("ImageProxy.URL not applied, got %q", cfg.Server.ImageProxy.URL)
-	}
-	if cfg.Server.ImageProxy.Key != "proxy-key" {
-		t.Errorf("ImageProxy.Key not applied, got %q", cfg.Server.ImageProxy.Key)
+}
+
+func TestApplyEnvSMTP(t *testing.T) {
+	cfg := DefaultConfig()
+	// Per AI.md PART 5: SMTP_* are runtime variables
+	env := &EnvConfig{
+		SMTPHost:     "smtp.example.com",
+		SMTPPort:     587,
+		SMTPUsername: "user",
+		SMTPPassword: "pass",
+		SMTPFromName: "Test",
+		SMTPTLS:      "starttls",
 	}
 
-	// Check engines
-	if cfg.Engines["google"].Enabled {
-		t.Error("Google should be disabled")
+	cfg.ApplyRuntimeEnv(env)
+
+	if cfg.Server.Email.SMTP.Host != "smtp.example.com" {
+		t.Errorf("SMTP Host not applied, got %q", cfg.Server.Email.SMTP.Host)
 	}
-	if cfg.Engines["duckduckgo"].Enabled {
-		t.Error("DuckDuckGo should be disabled")
-	}
-	if cfg.Engines["bing"].Enabled {
-		t.Error("Bing should be disabled")
+	if cfg.Server.Email.SMTP.Port != 587 {
+		t.Errorf("SMTP Port not applied, got %d", cfg.Server.Email.SMTP.Port)
 	}
 }
 

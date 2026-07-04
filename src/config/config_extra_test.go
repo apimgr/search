@@ -267,15 +267,16 @@ func TestValidateAndApplyDefaultsEmptyMode(t *testing.T) {
 	_ = warnings
 }
 
-// TestGetConfigPathFromEnv verifies GetConfigPath returns env-specified path.
+// TestGetConfigPathFromEnv verifies GetConfigPath uses CONFIG_DIR env var.
+// Per AI.md PART 5: CONFIG_DIR is the init-only variable for config directory.
 func TestGetConfigPathFromEnv(t *testing.T) {
-	original := os.Getenv("SEARCH_SETTINGS_PATH")
-	defer os.Setenv("SEARCH_SETTINGS_PATH", original)
+	original := os.Getenv("CONFIG_DIR")
+	defer os.Setenv("CONFIG_DIR", original)
 
-	os.Setenv("SEARCH_SETTINGS_PATH", "/custom/path/server.yml")
+	os.Setenv("CONFIG_DIR", "/custom/path")
 	got := GetConfigPath()
 	if got != "/custom/path/server.yml" {
-		t.Errorf("GetConfigPath() with SEARCH_SETTINGS_PATH = %q, want '/custom/path/server.yml'", got)
+		t.Errorf("GetConfigPath() with CONFIG_DIR = %q, want '/custom/path/server.yml'", got)
 	}
 }
 

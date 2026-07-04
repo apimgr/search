@@ -1902,54 +1902,16 @@ func migrateYamlToYml(yamlPath, ymlPath string) error {
 	return nil
 }
 
-// ApplyEnv applies environment variable overrides to config
+// ApplyEnv applies init-only environment variable overrides to config.
+// Per AI.md PART 5: Init-only variables are used ONCE during first run, then ignored.
+// This function is called only when created==true (first run).
 func (c *Config) ApplyEnv(env *EnvConfig) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if env.InstanceName != "" {
-		c.Server.Title = env.InstanceName
-	}
-	if env.Secret != "" {
-		c.Server.SecretKey = env.Secret
-	}
-	if env.Port != "" {
-		// Convert port string to int
-		var port int
-		fmt.Sscanf(env.Port, "%d", &port)
-		if port > 0 {
-			c.Server.Port = port
-		}
-	}
-	if env.Mode != "" {
-		c.Server.Mode = env.GetMode()
-	}
-	if env.BaseURL != "" {
-		c.Server.BaseURL = env.BaseURL
-	}
-	if env.Autocomplete != "" {
-		c.Search.Autocomplete = env.Autocomplete
-	}
-
-	// Image proxy
-	if env.ImageProxyURL != "" {
-		c.Server.ImageProxy.Enabled = true
-		c.Server.ImageProxy.URL = env.ImageProxyURL
-	}
-	if env.ImageProxyKey != "" {
-		c.Server.ImageProxy.Key = env.ImageProxyKey
-	}
-
-	// Tor: Per AI.md PART 32, Tor is auto-enabled if binary found
-	// No env vars needed - detection happens at runtime in TorService.Start()
-
-	// Per AI.md PART 5: Init-only env vars applied only on first run (created==true)
-	if env.Listen != "" {
-		c.Server.Address = env.Listen
-	}
-	if env.ApplicationTagline != "" {
-		c.Server.Branding.Tagline = env.ApplicationTagline
-	}
+	// Per AI.md PART 5: Init-Only Variables (First Run Only)
+	// CONFIG_DIR, DATA_DIR, LOG_DIR — handled by directory functions
+	// DATABASE_DIR, BACKUP_DIR — directory overrides
 	if env.DatabaseDir != "" {
 		SetDatabaseDirOverride(env.DatabaseDir)
 	}
@@ -1957,66 +1919,85 @@ func (c *Config) ApplyEnv(env *EnvConfig) {
 		SetBackupDirOverride(env.BackupDir)
 	}
 
-	// Engines
-	if c.Engines != nil {
-		if engine, ok := c.Engines["google"]; ok {
-			engine.Enabled = env.EnableGoogle
-			c.Engines["google"] = engine
+	// PORT — server port
+	if env.Port != "" {
+		var port int
+		fmt.Sscanf(env.Port, "%d", &port)
+		if port > 0 {
+			c.Server.Port = port
 		}
-		if engine, ok := c.Engines["duckduckgo"]; ok {
-			engine.Enabled = env.EnableDuckDuckGo
-			c.Engines["duckduckgo"] = engine
-		}
-		if engine, ok := c.Engines["bing"]; ok {
-			engine.Enabled = env.EnableBing
-			c.Engines["bing"] = engine
-		}
+	}
+
+	// LISTEN — listen address
+	if env.Listen != "" {
+		c.Server.Address = env.Listen
+	}
+
+	// APPLICATION_NAME — application title
+	if env.ApplicationName != "" {
+		c.Server.Title = env.ApplicationName
+		c.Server.Branding.Title = env.ApplicationName
+	}
+
+	// APPLICATION_TAGLINE — application description
+	if env.ApplicationTagline != "" {
+		c.Server.Branding.Tagline = env.ApplicationTagline
 	}
 }
 
 // ApplyRuntimeEnv applies runtime environment variable overrides to config.
-// Per AI.md PART 5: Runtime env vars (MODE, DOMAIN, DATABASE_DRIVER, DATABASE_URL, SMTP_*)
-// are always checked on every startup, not just on first run.
-// DATABASE_DRIVER and DATABASE_URL have no dedicated Config fields; they are consumed
-// directly from os.Getenv() by the database package via GetDatabaseDriver() and
-// GetDatabaseURL(), satisfying the 'always checked' requirement without Config storage.
+// Per AI.md PART 5: Runtime variables are always checked on every startup.
+// NO_COLOR and TERM are checked directly where needed via IsNoColor()/IsDumbTerminal().
+// DATABASE_DRIVER and DATABASE_URL are consumed directly by the database package
+// via GetDatabaseDriver() and GetDatabaseURL().
 func (c *Config) ApplyRuntimeEnv(env *EnvConfig) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// MODE — always override config file value
+	// DOMAIN — FQDN override (highest priority for hostname resolution)
+	// Per AI.md PART 5: Sets FQDN directly, not just BaseURL
+	if env.Domain != "" {
+		c.Server.FQDN = env.Domain
+	}
+
+	// MODE — production (default) or development
 	if env.Mode != "" {
 		c.Server.Mode = env.GetMode()
 	}
 
-	// DOMAIN — set BaseURL from DOMAIN when BASE_URL is not set; DOMAIN has highest FQDN priority
-	if env.BaseURL != "" {
-		c.Server.BaseURL = env.BaseURL
-	} else if env.Domain != "" {
-		c.Server.BaseURL = "https://" + env.Domain
-	}
-
-	// SMTP_* — always override config file SMTP settings
+	// SMTP_HOST — SMTP server hostname
 	if env.SMTPHost != "" {
 		c.Server.Email.SMTP.Host = env.SMTPHost
 	}
+
+	// SMTP_PORT — SMTP server port
 	if env.SMTPPort != 0 {
 		c.Server.Email.SMTP.Port = env.SMTPPort
 	}
+
+	// SMTP_USERNAME — SMTP authentication username
 	if env.SMTPUsername != "" {
 		c.Server.Email.SMTP.Username = env.SMTPUsername
 	}
+
+	// SMTP_PASSWORD — SMTP authentication password
 	if env.SMTPPassword != "" {
 		c.Server.Email.SMTP.Password = env.SMTPPassword
 	}
-	if env.SMTPTLS != "" {
-		c.Server.Email.SMTP.TLS = env.SMTPTLS
-	}
+
+	// SMTP_FROM_NAME — Sender name
 	if env.SMTPFromName != "" {
 		c.Server.Email.From.Name = env.SMTPFromName
 	}
+
+	// SMTP_FROM_EMAIL — Sender email
 	if env.SMTPFromEmail != "" {
 		c.Server.Email.From.Email = env.SMTPFromEmail
+	}
+
+	// SMTP_TLS — TLS mode: auto, starttls, tls, none
+	if env.SMTPTLS != "" {
+		c.Server.Email.SMTP.TLS = env.SMTPTLS
 	}
 }
 
@@ -2067,12 +2048,7 @@ func (c *ServerConfig) GetHTTPSPort() int {
 func GetConfigPath() string {
 	env := LoadFromEnv()
 
-	// Use environment variable if set
-	if env.SettingsPath != "" {
-		return env.SettingsPath
-	}
-
-	// Use config directory
+	// Use CONFIG_DIR env var if set (AI.md PART 5: init-only variable)
 	configDir := env.ConfigDir
 	if configDir == "" {
 		configDir = GetConfigDir()

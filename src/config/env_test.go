@@ -265,11 +265,7 @@ func TestEnvConfigIsProduction(t *testing.T) {
 	}
 }
 
-func TestIsTorAvailable(t *testing.T) {
-	// This just tests that the function doesn't panic
-	// Actual availability depends on system
-	_ = IsTorAvailable()
-}
+// TestIsTorAvailable removed - IsTorAvailable is no longer in env.go
 
 func TestGetDomain(t *testing.T) {
 	// Test returns empty when DOMAIN not set
@@ -298,66 +294,22 @@ func TestGetDatabaseURL(t *testing.T) {
 	_ = url
 }
 
-func TestGetEnvWithFallback(t *testing.T) {
-	// Save and restore env vars
-	original1 := os.Getenv("TEST_ENV_1")
-	original2 := os.Getenv("TEST_ENV_2")
-	defer func() {
-		os.Setenv("TEST_ENV_1", original1)
-		os.Setenv("TEST_ENV_2", original2)
-	}()
-
-	// Test first key present
-	os.Setenv("TEST_ENV_1", "value1")
-	os.Setenv("TEST_ENV_2", "value2")
-	got := getEnv("TEST_ENV_1", "TEST_ENV_2")
-	if got != "value1" {
-		t.Errorf("getEnv() = %q, want %q", got, "value1")
-	}
-
-	// Test fallback to second key
-	os.Setenv("TEST_ENV_1", "")
-	got = getEnv("TEST_ENV_1", "TEST_ENV_2")
-	if got != "value2" {
-		t.Errorf("getEnv() with fallback = %q, want %q", got, "value2")
-	}
-
-	// Test both empty
-	os.Setenv("TEST_ENV_2", "")
-	got = getEnv("TEST_ENV_1", "TEST_ENV_2")
-	if got != "" {
-		t.Errorf("getEnv() with both empty = %q, want empty", got)
-	}
-
-	// Test with no keys
-	got = getEnv()
-	if got != "" {
-		t.Errorf("getEnv() with no keys = %q, want empty", got)
-	}
-}
+// TestGetEnvWithFallback removed - getEnv variadic function is no longer in env.go
+// Per AI.md PART 5: Only documented env vars are supported, no fallback chains
 
 func TestLoadFromEnvWithEnvVars(t *testing.T) {
-	// Save and restore env vars
+	// Per AI.md PART 5: Only documented env vars are tested
+	// Runtime Variables: DOMAIN, MODE, DATABASE_DRIVER, DATABASE_URL, SMTP_*
+	// Init-Only Variables: CONFIG_DIR, DATA_DIR, LOG_DIR, DATABASE_DIR, BACKUP_DIR, PORT, LISTEN, APPLICATION_NAME, APPLICATION_TAGLINE
 	envVars := []string{
-		"SEARCH_SETTINGS_PATH", "SETTINGS_PATH",
-		"DEBUG", "SEARCH_DEBUG",
-		"SECRET_KEY", "SEARCH_SECRET",
-		"BIND_ADDRESS", "SEARCH_BIND_ADDRESS",
-		"INSTANCE_NAME", "APPLICATION_NAME",
-		"AUTOCOMPLETE",
-		"BASE_URL",
 		"DOMAIN",
+		"MODE",
 		"DATABASE_DRIVER",
 		"DATABASE_URL",
-		"IMAGE_PROXY_URL", "MORTY_URL",
-		"IMAGE_PROXY_KEY", "MORTY_KEY",
-		"SEARCH_PORT", "PORT",
-		"SEARCH_MODE", "MODE",
 		"SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD",
 		"SMTP_TLS", "SMTP_FROM_NAME", "SMTP_FROM_EMAIL",
-		"ENABLE_GOOGLE", "SEARCH_ENGINES_GOOGLE",
-		"ENABLE_DUCKDUCKGO", "SEARCH_ENGINES_DUCKDUCKGO",
-		"ENABLE_BING", "SEARCH_ENGINES_BING",
+		"CONFIG_DIR", "DATA_DIR", "LOG_DIR", "DATABASE_DIR", "BACKUP_DIR",
+		"PORT", "LISTEN", "APPLICATION_NAME", "APPLICATION_TAGLINE",
 	}
 
 	originalValues := make(map[string]string)
@@ -375,18 +327,11 @@ func TestLoadFromEnvWithEnvVars(t *testing.T) {
 		os.Setenv(v, "")
 	}
 
-	// Set test values
-	os.Setenv("SEARCH_SETTINGS_PATH", "/test/settings.yml")
-	os.Setenv("DEBUG", "true")
-	os.Setenv("SECRET_KEY", "test-secret")
-	os.Setenv("INSTANCE_NAME", "TestInstance")
-	os.Setenv("AUTOCOMPLETE", "google")
-	os.Setenv("BASE_URL", "https://test.example.com")
+	// Set test values per AI.md PART 5
 	os.Setenv("DOMAIN", "example.com,www.example.com")
-	os.Setenv("IMAGE_PROXY_URL", "https://proxy.example.com")
-	os.Setenv("IMAGE_PROXY_KEY", "proxy-key")
-	os.Setenv("SEARCH_PORT", "9090")
-	os.Setenv("SEARCH_MODE", "development")
+	os.Setenv("MODE", "development")
+	os.Setenv("DATABASE_DRIVER", "sqlite")
+	os.Setenv("DATABASE_URL", "file:test.db")
 	os.Setenv("SMTP_HOST", "smtp.example.com")
 	os.Setenv("SMTP_PORT", "587")
 	os.Setenv("SMTP_USERNAME", "user")
@@ -394,45 +339,30 @@ func TestLoadFromEnvWithEnvVars(t *testing.T) {
 	os.Setenv("SMTP_TLS", "starttls")
 	os.Setenv("SMTP_FROM_NAME", "TestApp")
 	os.Setenv("SMTP_FROM_EMAIL", "noreply@example.com")
-	os.Setenv("ENABLE_GOOGLE", "false")
-	os.Setenv("ENABLE_DUCKDUCKGO", "false")
-	os.Setenv("ENABLE_BING", "false")
+	os.Setenv("CONFIG_DIR", "/test/config")
+	os.Setenv("DATA_DIR", "/test/data")
+	os.Setenv("LOG_DIR", "/test/log")
+	os.Setenv("DATABASE_DIR", "/test/db")
+	os.Setenv("BACKUP_DIR", "/test/backup")
+	os.Setenv("PORT", "9090")
+	os.Setenv("LISTEN", "0.0.0.0:9090")
+	os.Setenv("APPLICATION_NAME", "TestInstance")
+	os.Setenv("APPLICATION_TAGLINE", "Test tagline")
 
 	cfg := LoadFromEnv()
 
-	// Verify values
-	if cfg.SettingsPath != "/test/settings.yml" {
-		t.Errorf("SettingsPath = %q, want %q", cfg.SettingsPath, "/test/settings.yml")
-	}
-	if !cfg.Debug {
-		t.Error("Debug should be true")
-	}
-	if cfg.Secret != "test-secret" {
-		t.Errorf("Secret = %q, want %q", cfg.Secret, "test-secret")
-	}
-	if cfg.InstanceName != "TestInstance" {
-		t.Errorf("InstanceName = %q, want %q", cfg.InstanceName, "TestInstance")
-	}
-	if cfg.Autocomplete != "google" {
-		t.Errorf("Autocomplete = %q, want %q", cfg.Autocomplete, "google")
-	}
-	if cfg.BaseURL != "https://test.example.com" {
-		t.Errorf("BaseURL = %q, want %q", cfg.BaseURL, "https://test.example.com")
-	}
+	// Verify runtime variables
 	if cfg.Domain != "example.com,www.example.com" {
 		t.Errorf("Domain = %q, want %q", cfg.Domain, "example.com,www.example.com")
 	}
-	if cfg.ImageProxyURL != "https://proxy.example.com" {
-		t.Errorf("ImageProxyURL = %q, want %q", cfg.ImageProxyURL, "https://proxy.example.com")
-	}
-	if cfg.ImageProxyKey != "proxy-key" {
-		t.Errorf("ImageProxyKey = %q, want %q", cfg.ImageProxyKey, "proxy-key")
-	}
-	if cfg.Port != "9090" {
-		t.Errorf("Port = %q, want %q", cfg.Port, "9090")
-	}
 	if cfg.Mode != "development" {
 		t.Errorf("Mode = %q, want %q", cfg.Mode, "development")
+	}
+	if cfg.DatabaseDriver != "sqlite" {
+		t.Errorf("DatabaseDriver = %q, want %q", cfg.DatabaseDriver, "sqlite")
+	}
+	if cfg.DatabaseURL != "file:test.db" {
+		t.Errorf("DatabaseURL = %q, want %q", cfg.DatabaseURL, "file:test.db")
 	}
 	if cfg.SMTPHost != "smtp.example.com" {
 		t.Errorf("SMTPHost = %q, want %q", cfg.SMTPHost, "smtp.example.com")
@@ -455,65 +385,71 @@ func TestLoadFromEnvWithEnvVars(t *testing.T) {
 	if cfg.SMTPFromEmail != "noreply@example.com" {
 		t.Errorf("SMTPFromEmail = %q, want %q", cfg.SMTPFromEmail, "noreply@example.com")
 	}
-	if cfg.EnableGoogle {
-		t.Error("EnableGoogle should be false")
+
+	// Verify init-only variables
+	if cfg.ConfigDir != "/test/config" {
+		t.Errorf("ConfigDir = %q, want %q", cfg.ConfigDir, "/test/config")
 	}
-	if cfg.EnableDuckDuckGo {
-		t.Error("EnableDuckDuckGo should be false")
+	if cfg.DataDir != "/test/data" {
+		t.Errorf("DataDir = %q, want %q", cfg.DataDir, "/test/data")
 	}
-	if cfg.EnableBing {
-		t.Error("EnableBing should be false")
+	if cfg.LogDir != "/test/log" {
+		t.Errorf("LogDir = %q, want %q", cfg.LogDir, "/test/log")
+	}
+	if cfg.DatabaseDir != "/test/db" {
+		t.Errorf("DatabaseDir = %q, want %q", cfg.DatabaseDir, "/test/db")
+	}
+	if cfg.BackupDir != "/test/backup" {
+		t.Errorf("BackupDir = %q, want %q", cfg.BackupDir, "/test/backup")
+	}
+	if cfg.Port != "9090" {
+		t.Errorf("Port = %q, want %q", cfg.Port, "9090")
+	}
+	if cfg.Listen != "0.0.0.0:9090" {
+		t.Errorf("Listen = %q, want %q", cfg.Listen, "0.0.0.0:9090")
+	}
+	if cfg.ApplicationName != "TestInstance" {
+		t.Errorf("ApplicationName = %q, want %q", cfg.ApplicationName, "TestInstance")
+	}
+	if cfg.ApplicationTagline != "Test tagline" {
+		t.Errorf("ApplicationTagline = %q, want %q", cfg.ApplicationTagline, "Test tagline")
 	}
 }
 
-func TestLoadFromEnvBindAddressParsing(t *testing.T) {
-	// Save and restore env vars
-	originalAddr := os.Getenv("BIND_ADDRESS")
-	originalPort := os.Getenv("SEARCH_PORT")
-	originalPort2 := os.Getenv("PORT")
+func TestLoadFromEnvListenParsing(t *testing.T) {
+	// Per AI.md PART 5: LISTEN is the init-only var for bind address
+	originalListen := os.Getenv("LISTEN")
+	originalPort := os.Getenv("PORT")
 	defer func() {
-		os.Setenv("BIND_ADDRESS", originalAddr)
-		os.Setenv("SEARCH_PORT", originalPort)
-		os.Setenv("PORT", originalPort2)
+		os.Setenv("LISTEN", originalListen)
+		os.Setenv("PORT", originalPort)
 	}()
 
 	// Clear env vars
-	os.Setenv("BIND_ADDRESS", "")
-	os.Setenv("SEARCH_PORT", "")
+	os.Setenv("LISTEN", "")
 	os.Setenv("PORT", "")
 
-	// Test BIND_ADDRESS with port extraction
-	os.Setenv("BIND_ADDRESS", "0.0.0.0:8080")
+	// Test LISTEN with address:port format
+	os.Setenv("LISTEN", "0.0.0.0:8080")
 	cfg := LoadFromEnv()
 
-	if cfg.BindAddress != "0.0.0.0:8080" {
-		t.Errorf("BindAddress = %q, want %q", cfg.BindAddress, "0.0.0.0:8080")
-	}
-	if cfg.Port != "8080" {
-		t.Errorf("Port extracted from BindAddress = %q, want %q", cfg.Port, "8080")
+	if cfg.Listen != "0.0.0.0:8080" {
+		t.Errorf("Listen = %q, want %q", cfg.Listen, "0.0.0.0:8080")
 	}
 }
 
-func TestLoadFromEnvDebugToMode(t *testing.T) {
-	// Save and restore env vars
-	originalDebug := os.Getenv("DEBUG")
-	originalMode := os.Getenv("SEARCH_MODE")
-	defer func() {
-		os.Setenv("DEBUG", originalDebug)
-		os.Setenv("SEARCH_MODE", originalMode)
-	}()
+func TestLoadFromEnvModeDefault(t *testing.T) {
+	// Per AI.md PART 5: MODE defaults to production
+	originalMode := os.Getenv("MODE")
+	defer os.Setenv("MODE", originalMode)
 
-	// Clear env vars
-	os.Setenv("DEBUG", "")
-	os.Setenv("SEARCH_MODE", "")
+	// Clear env var
 	os.Setenv("MODE", "")
 
-	// Test DEBUG=true sets mode to development
-	os.Setenv("DEBUG", "true")
 	cfg := LoadFromEnv()
 
-	if cfg.Mode != "development" {
-		t.Errorf("Mode with DEBUG=true = %q, want %q", cfg.Mode, "development")
+	if cfg.Mode != "production" {
+		t.Errorf("Mode default = %q, want %q", cfg.Mode, "production")
 	}
 }
 
@@ -654,11 +590,9 @@ func TestParseDurationEdgeCases(t *testing.T) {
 	}
 }
 
-func TestParseBoolInEnv(t *testing.T) {
-	// Test the internal parseBool function through LoadFromEnv
-	original := os.Getenv("DEBUG")
-	defer os.Setenv("DEBUG", original)
-
+func TestParseBoolFunction(t *testing.T) {
+	// Per AI.md PART 5: Test config.ParseBool directly
+	// DEBUG env var is not in AI.md PART 5, test parseBool() helper instead
 	tests := []struct {
 		name  string
 		value string
@@ -676,10 +610,9 @@ func TestParseBoolInEnv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			os.Setenv("DEBUG", tt.value)
-			cfg := LoadFromEnv()
-			if cfg.Debug != tt.want {
-				t.Errorf("LoadFromEnv() Debug with %q = %v, want %v", tt.value, cfg.Debug, tt.want)
+			got := parseBool(tt.value)
+			if got != tt.want {
+				t.Errorf("parseBool(%q) = %v, want %v", tt.value, got, tt.want)
 			}
 		})
 	}
