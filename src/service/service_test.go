@@ -1474,9 +1474,10 @@ func TestMaintenanceServiceEvaluateSystemHealthMultipleUnhealthy(t *testing.T) {
 
 	ms.evaluateSystemHealth()
 
-	// Should be degraded mode
-	if ms.GetMode() != ModeDegraded {
-		t.Errorf("Mode should be ModeDegraded when multiple non-critical unhealthy, got %v", ms.GetMode())
+	// Per AI.md PART 6: only critical components (database, file_write) trigger mode
+	// changes. Non-critical components self-heal without affecting public mode.
+	if ms.GetMode() != ModeNormal {
+		t.Errorf("Mode should remain ModeNormal when only non-critical unhealthy, got %v", ms.GetMode())
 	}
 }
 
@@ -1985,9 +1986,10 @@ func TestMaintenanceServiceEvaluateSystemHealthSingleUnhealthy(t *testing.T) {
 
 	ms.evaluateSystemHealth()
 
-	// Should be degraded mode (single non-critical unhealthy)
-	if ms.GetMode() != ModeDegraded {
-		t.Errorf("Mode should be ModeDegraded, got %v", ms.GetMode())
+	// Per AI.md PART 6: only critical components (database, file_write) trigger mode
+	// changes. Non-critical components self-heal without affecting public mode.
+	if ms.GetMode() != ModeNormal {
+		t.Errorf("Mode should remain ModeNormal when only non-critical unhealthy, got %v", ms.GetMode())
 	}
 }
 

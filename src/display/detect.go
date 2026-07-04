@@ -25,17 +25,19 @@ var (
 
 // InitOutput initializes color and emoji output state based on environment
 // Per AI.md PART 8: Must be called early, before any output
-// colorFlag: "always", "never", or "auto" (from --color flag)
+// colorFlag: "auto", "yes", or "no" (from --color flag)
+// Also accepts "always"/"never" for backwards compatibility
 func InitOutput(colorFlag string) {
 	// Handle --color flag (highest priority)
+	// Per AI.md PART 8: --color {auto|yes|no}
 	switch colorFlag {
-	case "always":
+	case "yes", "always":
 		t := true
 		colorForce = &t
 		colorEnabled = true
 		emojiEnabled = true
 		return
-	case "never":
+	case "no", "never":
 		f := false
 		colorForce = &f
 		colorEnabled = false

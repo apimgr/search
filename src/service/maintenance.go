@@ -75,6 +75,8 @@ type MaintenanceService struct {
 	message      string
 	scheduledEnd time.Time
 	callbacks    []func(MaintenanceMode)
+	// done signals that the healthMonitor goroutine has exited
+	done         chan struct{}
 
 	// Database connections for health checks
 	serverDBCheck func(ctx context.Context) error
@@ -96,6 +98,7 @@ func NewMaintenanceService(cfg *config.Config) *MaintenanceService {
 		health:        make(map[string]*HealthStatus),
 		ctx:           ctx,
 		cancel:        cancel,
+		done:          make(chan struct{}),
 		recoveryFuncs: make(map[string]func(ctx context.Context) error),
 	}
 }
@@ -123,10 +126,19 @@ func (m *MaintenanceService) StartMaintenanceService() error {
 
 // Stop stops the maintenance service
 func (m *MaintenanceService) StopMaintenanceService() {
-	m.cancel()
 	m.mu.Lock()
+	wasRunning := m.running
 	m.running = false
 	m.mu.Unlock()
+
+	if !wasRunning {
+		return
+	}
+
+	// Signal shutdown
+	m.cancel()
+	// Wait for healthMonitor goroutine to exit
+	<-m.done
 	slog.Info("Maintenance service stopped")
 }
 
@@ -152,11 +164,18 @@ func (m *MaintenanceService) initializeHealthStatus() {
 
 // healthMonitor continuously monitors system health
 func (m *MaintenanceService) healthMonitor() {
+	defer close(m.done)
+
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
-	// Initial check
-	m.performHealthChecks()
+	// Initial check — but only if context isn't already cancelled
+	select {
+	case <-m.ctx.Done():
+		return
+	default:
+		m.performHealthChecks()
+	}
 
 	for {
 		select {
@@ -223,6 +242,11 @@ func (m *MaintenanceService) SetFileWriteDir(dir string) {
 
 // checkComponent checks a single component and updates its health status
 func (m *MaintenanceService) checkComponent(ctx context.Context, name string, check func(context.Context) error) {
+	// Run the check without holding the lock — check functions may need their own
+	// locks (e.g., checkFileWrite uses RLock to read fileWriteDir)
+	err := check(ctx)
+
+	// Now update the status under the lock
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -234,7 +258,7 @@ func (m *MaintenanceService) checkComponent(ctx context.Context, name string, ch
 
 	status.LastCheck = time.Now()
 
-	if err := check(ctx); err != nil {
+	if err != nil {
 		status.Healthy = false
 		status.Message = err.Error()
 		status.ErrorCount++

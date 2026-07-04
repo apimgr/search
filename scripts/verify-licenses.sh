@@ -2,15 +2,15 @@
 # scripts/verify-licenses.sh
 # Per AI.md PART 2: License Verification Script (NON-NEGOTIABLE)
 
-set -e
+set -eo pipefail
 
 echo "Checking for incompatible licenses..."
 
-# Install go-licenses if not present
-if ! command -v go-licenses &> /dev/null; then
-    echo "Installing go-licenses..."
-    go install github.com/google/go-licenses@latest
-fi
+# Require go-licenses — it is pre-installed in casjaysdev/go:latest; never install inline.
+command -v go-licenses >/dev/null 2>&1 || {
+    echo "ERROR: go-licenses not found — run inside casjaysdev/go:latest"
+    exit 1
+}
 
 # Check for copyleft licenses
 echo "Scanning dependencies..."

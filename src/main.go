@@ -98,7 +98,8 @@ func init() {
 	flag.StringVar(&flagAddress, "address", "", "Set listen address")
 	flag.IntVar(&flagPort, "port", 0, "Set listen port")
 	flag.StringVar(&flagBaseURL, "baseurl", "", "Set URL path prefix for reverse proxy (default: /)")
-	flag.StringVar(&flagColor, "color", "", "Set color output mode (always|never|auto)")
+	// Per AI.md PART 8: --color {auto|yes|no}
+	flag.StringVar(&flagColor, "color", "", "Set color output mode (auto|yes|no)")
 	// Per AI.md PART 8: --lang sets language for output (default: auto, from LANG env)
 	flag.StringVar(&flagLang, "lang", "", "Set language for output (default: auto)")
 }
@@ -490,7 +491,7 @@ Runtime Flags:
   --address <addr>         Set listen address
   --port <port>            Set listen port
   --baseurl <path>         Set URL path prefix for reverse proxy (default: /)
-  --color <mode>           Set color output mode (always|never|auto)
+  --color <mode>           Set color output mode (auto|yes|no)
   --lang <code>            Set language for output (default: auto, from LANG env)
   --daemon                 Daemonize (detach from terminal, Unix only)
   --debug                  Enable debug mode (verbose logging, debug endpoints)
@@ -528,8 +529,11 @@ Maintenance:
                            Use BACKUP_PASSWORD env var for encryption
     restore <file>         Restore from backup
                            Use BACKUP_PASSWORD env var if encrypted
-    rotate-token           Rotate the operator bearer token (server.token)
+    update                 Alias for --update yes
     mode                   Toggle maintenance mode
+    setup                  Reset configuration to defaults
+    pgp <action>           PGP keypair management (generate/export/import)
+    rotate-token           Rotate the operator bearer token (server.token)
 
 Updates:
   --update [subcommand]    Update management:
@@ -1190,7 +1194,134 @@ func runMaintenance(action string) {
 		fmt.Println("Send as: Authorization: Bearer " + newToken)
 		fmt.Println("Also written to: " + config.GetConfigPath())
 
-	case "help":
+	case "setup":
+		// Per AI.md PART 8: --maintenance setup resets server configuration to defaults
+		// Authorization: first-run only OR root
+		fmt.Println(display.Emoji("🔧", "[*]") + " Setup / Reset Configuration")
+		fmt.Println()
+
+		// Check authorization
+		cfg, err := config.Initialize()
+		if err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to load config: %v\n", err)
+			exitFunc(1)
+			return
+		}
+
+		isFirstRun := cfg.IsFirstRun()
+		isRoot := config.IsPrivileged()
+
+		if !isFirstRun && !isRoot {
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " Setup already completed.")
+			fmt.Println()
+			fmt.Println("To reconfigure:")
+			fmt.Println("  1. Edit server.yml directly and restart the server")
+			fmt.Println("  2. Run as root: sudo search --maintenance setup")
+			exitFunc(1)
+			return
+		}
+
+		if !isFirstRun {
+			// Root user re-running setup - confirm
+			fmt.Println(display.Emoji("⚠️", "[WARN]") + " This will reset configuration to defaults!")
+			fmt.Print("Type 'RESET' to confirm: ")
+			var confirm string
+			fmt.Scanln(&confirm)
+			if confirm != "RESET" {
+				fmt.Println("Cancelled.")
+				return
+			}
+		}
+
+		// Reset to defaults
+		newCfg := config.DefaultConfig()
+		// Preserve token if regenerating (operator must have it)
+		if !isFirstRun {
+			newCfg.Server.Token = cfg.Server.Token
+		}
+		if err := newCfg.Save(config.GetConfigPath()); err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to save config: %v\n", err)
+			exitFunc(1)
+			return
+		}
+
+		fmt.Println(display.Emoji("✅", "[OK]") + " Configuration reset to defaults")
+		fmt.Println("   Config: " + config.GetConfigPath())
+
+	case "pgp":
+		// Per AI.md PART 8 and SECURITY.txt spec: PGP keypair management
+		// Subcommands: generate, rotate, publish, export, import, delete
+		pgpAction := ""
+		if len(os.Args) > 3 {
+			pgpAction = os.Args[3]
+		}
+
+		switch pgpAction {
+		case "generate":
+			fmt.Println(display.Emoji("🔐", "[PGP]") + " Generate PGP Keypair")
+			fmt.Println()
+			fmt.Println("This feature is not yet implemented.")
+			fmt.Println("See AI.md PART 30 (SECURITY.txt) for the full specification.")
+
+		case "rotate":
+			fmt.Println(display.Emoji("🔐", "[PGP]") + " Rotate PGP Keypair")
+			fmt.Println()
+			fmt.Println("This feature is not yet implemented.")
+
+		case "publish":
+			fmt.Println(display.Emoji("🔐", "[PGP]") + " Publish PGP Key to Keyservers")
+			fmt.Println()
+			fmt.Println("This feature is not yet implemented.")
+
+		case "export":
+			keyType := ""
+			if len(os.Args) > 4 {
+				keyType = os.Args[4]
+			}
+			switch keyType {
+			case "public":
+				fmt.Println(display.Emoji("🔐", "[PGP]") + " Export Public Key")
+				fmt.Println()
+				fmt.Println("This feature is not yet implemented.")
+			case "private":
+				fmt.Println(display.Emoji("🔐", "[PGP]") + " Export Private Key")
+				fmt.Println()
+				fmt.Println("This feature is not yet implemented.")
+			default:
+				fmt.Println(display.Emoji("❌", "[ERROR]") + " Please specify key type: public or private")
+				fmt.Println("Usage: search --maintenance pgp export <public|private> [path]")
+			}
+
+		case "import":
+			fmt.Println(display.Emoji("🔐", "[PGP]") + " Import PGP Key")
+			fmt.Println()
+			fmt.Println("This feature is not yet implemented.")
+
+		case "delete":
+			fmt.Println(display.Emoji("🔐", "[PGP]") + " Delete PGP Keypair")
+			fmt.Println()
+			fmt.Println("This feature is not yet implemented.")
+
+		case "help", "--help", "":
+			fmt.Println("PGP Keypair Management:")
+			fmt.Println()
+			fmt.Println("  generate              Generate a new Ed25519/Curve25519 keypair")
+			fmt.Println("  rotate                Rotate keypair (signs new with old)")
+			fmt.Println("  publish               Publish public key to configured keyservers")
+			fmt.Println("  export public [path]  Export public key to stdout or file")
+			fmt.Println("  export private <path> Export private key (requires confirmation)")
+			fmt.Println("  import <file>         Import existing keypair from file")
+			fmt.Println("  delete                Delete keypair (requires confirmation)")
+			fmt.Println()
+			fmt.Println("Keys are stored in: " + config.GetConfigDir() + "/security/")
+			fmt.Println("Public key served at: /.well-known/pgp-key.asc")
+
+		default:
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown PGP action: %s\n", pgpAction)
+			fmt.Println("Valid actions: generate, rotate, publish, export, import, delete, help")
+		}
+
+	case "help", "--help":
 		fmt.Println("Maintenance Commands:")
 		fmt.Println()
 		fmt.Println("  backup [file]     Create backup archive")
@@ -1200,6 +1331,8 @@ func runMaintenance(action string) {
 		fmt.Println("  list              List available backups")
 		fmt.Println("  update            Check and install updates")
 		fmt.Println("  mode              Toggle maintenance mode")
+		fmt.Println("  setup             Reset configuration to defaults (first-run or root)")
+		fmt.Println("  pgp <action>      PGP keypair management (run 'pgp help' for details)")
 		fmt.Println("  rotate-token      Rotate server.token (operator bearer token)")
 		fmt.Println("  help              Show this help")
 		fmt.Println()
@@ -1209,7 +1342,7 @@ func runMaintenance(action string) {
 
 	default:
 		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown action: %s\n", action)
-		fmt.Println("Valid actions: backup, restore, list, update, mode, rotate-token, help")
+		fmt.Println("Valid actions: backup, restore, list, update, mode, setup, pgp, rotate-token, help")
 	}
 }
 
