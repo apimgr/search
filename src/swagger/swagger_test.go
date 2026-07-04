@@ -222,7 +222,8 @@ func TestGenerateSpecHasRequiredPaths(t *testing.T) {
 	cfg := &config.Config{}
 	spec := GenerateSpec(cfg, "http://localhost:8080")
 
-	requiredPaths := []string{"/healthz", "/api/v1/healthz", "/api/v1/search", "/api/v1/autocomplete"}
+	// Per AI.md PART 13: canonical routes use /server/healthz
+	requiredPaths := []string{"/server/healthz", "/api/v1/server/healthz", "/api/v1/search", "/api/v1/autocomplete"}
 	for _, path := range requiredPaths {
 		if _, exists := spec.Paths[path]; !exists {
 			t.Errorf("Missing required path: %s", path)
@@ -264,9 +265,9 @@ func TestGeneratePaths(t *testing.T) {
 		t.Error("generatePaths() returned empty map")
 	}
 
-	// Health endpoint should exist
-	if _, exists := paths["/healthz"]; !exists {
-		t.Error("Health endpoint should exist")
+	// Per AI.md PART 13: canonical route is /server/healthz
+	if _, exists := paths["/server/healthz"]; !exists {
+		t.Error("Health endpoint should exist at /server/healthz")
 	}
 
 	// Search endpoint should exist with parameters
@@ -1021,12 +1022,13 @@ func TestContactStruct(t *testing.T) {
 }
 
 // TestGeneratePathsHealthEndpoint tests health endpoint details
+// Per AI.md PART 13: canonical route is /server/healthz
 func TestGeneratePathsHealthEndpoint(t *testing.T) {
 	paths := generatePaths()
 
-	health := paths["/healthz"]
+	health := paths["/server/healthz"]
 	if health.Get == nil {
-		t.Fatal("Health endpoint should have GET operation")
+		t.Fatal("Health endpoint should have GET operation at /server/healthz")
 	}
 
 	if health.Get.Summary != "Health check" {
@@ -1299,17 +1301,19 @@ func TestSwaggerThemeConstants(t *testing.T) {
 }
 
 // TestAPIv1HealthzEndpoint tests that API v1 healthz matches root healthz
+// Per AI.md PART 13: canonical route is /server/healthz
 func TestAPIv1HealthzEndpoint(t *testing.T) {
 	paths := generatePaths()
 
-	rootHealth := paths["/healthz"]
-	apiHealth := paths["/api/v1/healthz"]
+	// Canonical routes per AI.md PART 13
+	rootHealth := paths["/server/healthz"]
+	apiHealth := paths["/api/v1/server/healthz"]
 
 	if rootHealth.Get == nil {
-		t.Fatal("Root health endpoint should have GET")
+		t.Fatal("Root health endpoint should have GET at /server/healthz")
 	}
 	if apiHealth.Get == nil {
-		t.Fatal("API v1 health endpoint should have GET")
+		t.Fatal("API v1 health endpoint should have GET at /api/v1/server/healthz")
 	}
 
 	// They should be the same operation

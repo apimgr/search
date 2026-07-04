@@ -825,8 +825,9 @@ func (m *Middleware) MaintenanceMode(handler MaintenanceHandler) func(http.Handl
 
 			path := r.URL.Path
 
-			// Always allow health checks
-			if path == "/healthz" || path == api.APIPrefix+"/healthz" {
+			// Always allow health checks - canonical: /server/healthz per AI.md PART 13
+			if path == "/server/healthz" || path == api.APIPrefix+"/server/healthz" ||
+				path == "/healthz" || path == api.APIPrefix+"/healthz" {
 				next.ServeHTTP(w, r)
 				return
 			}

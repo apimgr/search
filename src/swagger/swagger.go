@@ -119,11 +119,11 @@ func GenerateSpec(cfg *config.Config, baseURL string) *OpenAPISpec {
 func generatePaths() map[string]PathItem {
 	paths := make(map[string]PathItem)
 
-	// Health check
-	paths["/healthz"] = PathItem{
+	// Health check - canonical route is /server/healthz per AI.md PART 13
+	paths["/server/healthz"] = PathItem{
 		Get: &Operation{
 			Summary:     "Health check",
-			Description: "Returns server health status",
+			Description: "Returns server health status. Canonical route: /server/healthz",
 			Tags:        []string{"System"},
 			Responses: map[string]Response{
 				"200": {
@@ -145,8 +145,8 @@ func generatePaths() map[string]PathItem {
 		},
 	}
 
-	// API v1 health check
-	paths[api.APIPrefix+"/healthz"] = paths["/healthz"]
+	// API v1 health check - canonical route is /api/v1/server/healthz per AI.md PART 13/14
+	paths[api.APIPrefix+"/server/healthz"] = paths["/server/healthz"]
 
 	// Search endpoint
 	paths[api.APIPrefix+"/search"] = PathItem{
