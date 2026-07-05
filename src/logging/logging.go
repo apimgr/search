@@ -20,7 +20,6 @@ import (
 // Testable variables for error path testing
 var (
 	osHostname = os.Hostname
-	osExit     = os.Exit
 )
 
 // LogType represents different log types
@@ -765,14 +764,15 @@ func (l *ServerLogger) Error(msg string, fields ...map[string]interface{}) {
 	l.log(LevelError, msg, f)
 }
 
-// Fatal logs a fatal message and exits
+// Fatal logs a fatal message.
+// Per AI.md PART 7: os.Exit() is forbidden outside main(). Callers must handle
+// the fatal condition themselves (e.g., return an error to main() which then exits).
 func (l *ServerLogger) Fatal(msg string, fields ...map[string]interface{}) {
 	var f map[string]interface{}
 	if len(fields) > 0 {
 		f = fields[0]
 	}
 	l.log(LevelFatal, msg, f)
-	osExit(1)
 }
 
 // Rotate rotates the server log file

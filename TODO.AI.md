@@ -68,3 +68,26 @@ Completed. `src/server/server.go` now initializes Redis/Valkey cache when `cache
 ### [x] Shell completions generation (PART 8)
 
 Already implemented. `--shell completions [bash|zsh|fish]` prints completions script. Implementation in `src/main.go` printCompletions() function.
+
+---
+
+## VIOLATIONS FOUND (2024-07-04 Audit)
+
+### [ ] Email templates missing i18n (PART 30) — HIGH
+
+**Files affected:**
+- `src/email/email.go:307` — `SendAlert()` uses hardcoded English strings
+- `src/email/email.go:322` — `SendSecurityAlert()` uses hardcoded English strings
+- `src/server/scheduler.go:237-256` — Task failure email body is hardcoded English
+
+**Fix:** Import `github.com/apimgr/search/src/i18n` and use `i18n.T(lang, "email.alert_subject")` pattern for all user-facing email content. Add corresponding keys to `src/i18n/locales/en.json`.
+
+---
+
+### [ ] RepairDatabase path validation (PART 10) — MEDIUM
+
+**File:** `src/service/maintenance.go:569`
+
+**Issue:** `RepairDatabase(dbPath string)` uses `fmt.Sprintf("VACUUM INTO '%s'", cleanPath)` without validating the path. If called with malicious input, this is a potential SQL injection.
+
+**Fix:** Add path validation using `filepath.Clean()` and ensure path is within allowed directories before using in SQL.
