@@ -1,0 +1,13 @@
+Subject: Weekly Report - {app_name}
+---
+WEEKLY REPORT
+
+From: {app_name} ({fqdn})
+Period: {period_start} to {period_end}
+
+Total searches: {total_searches}
+Errors:         {error_count}
+
+--
+{app_name}
+{app_url}

@@ -2,6 +2,7 @@ package email
 
 import (
 	"bytes"
+	"embed"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +11,27 @@ import (
 
 	"github.com/apimgr/search/src/config"
 )
+
+// defaultTemplateFS holds the embedded default email templates.
+// Per AI.md PART 17, default templates are embedded in the binary; operators
+// override them by placing files in {config_dir}/template/email/.
+//
+//go:embed templates/*.txt
+var defaultTemplateFS embed.FS
+
+// loadDefaultTemplate returns the embedded default template text for the given
+// type, or false if no embedded default exists.
+func loadDefaultTemplate(templateType TemplateType) (string, bool) {
+	data, err := defaultTemplateFS.ReadFile("templates/" + string(templateType) + ".txt")
+	if err != nil {
+		return "", false
+	}
+	text := strings.TrimSpace(string(data))
+	if text == "" {
+		return "", false
+	}
+	return text, true
+}
 
 // TemplateType represents an email template type
 type TemplateType string
@@ -77,7 +99,7 @@ func NewEmailTemplate() *EmailTemplate {
 func (et *EmailTemplate) Render(templateType TemplateType, vars map[string]string) (subject string, body string, err error) {
 	text, ok := loadCustomTemplate(templateType)
 	if !ok {
-		text, ok = rawTemplates[templateType]
+		text, ok = loadDefaultTemplate(templateType)
 		if !ok {
 			return "", "", fmt.Errorf("template %s not found", templateType)
 		}
@@ -250,222 +272,4 @@ func GetAllTemplateTypes() []TemplateInfo {
 // This project has no user accounts; all templates are operator/system notifications.
 func IsAccountEmail(_ TemplateType) bool {
 	return false
-}
-
-// rawTemplates contains the built-in plain text templates.
-// Format: "Subject: {subject}\n---\nbody with {variable} substitutions"
-// Custom templates override these by placing files in {config_dir}/template/email/.
-var rawTemplates = map[TemplateType]string{
-	TemplateSecurityAlert: `Subject: Security Alert - {app_name}
----
-SECURITY ALERT
-
-From: {app_name} ({fqdn})
-Time: {timestamp}
-
-{event}
-
-Details:
-  Source IP: {ip}
-  {details}
-
---
-{app_name}
-{app_url}`,
-
-	TemplateBackupCompleted: `Subject: Backup Complete - {app_name}
----
-BACKUP COMPLETE
-
-From: {app_name} ({fqdn})
-Time: {timestamp}
-
-Your backup completed successfully.
-
-Filename: {filename}
-Size: {size}
-
---
-{app_name}
-{app_url}`,
-
-	TemplateBackupFailed: `Subject: Backup Failed - {app_name}
----
-BACKUP FAILED
-
-From: {app_name} ({fqdn})
-Time: {timestamp}
-
-A backup has failed.
-
-Filename: {filename}
-Error: {error}
-
-Please check your backup configuration and ensure sufficient disk space is available.
-
---
-{app_name}
-{app_url}`,
-
-	TemplateSSLExpiring: `Subject: SSL Certificate Expiring - {app_name}
----
-SSL CERTIFICATE EXPIRING
-
-From: {app_name} ({fqdn})
-Time: {timestamp}
-
-Your SSL certificate for {domain} is expiring soon.
-
-Domain:      {domain}
-Expires in:  {expires_in}
-Expiry date: {expiry_date}
-
-Please renew your certificate before it expires to ensure uninterrupted secure connections.
-
---
-{app_name}
-{app_url}`,
-
-	TemplateSSLRenewed: `Subject: SSL Certificate Renewed - {app_name}
----
-SSL CERTIFICATE RENEWED
-
-From: {app_name} ({fqdn})
-Time: {timestamp}
-
-Your SSL certificate for {domain} has been successfully renewed.
-
-Domain:      {domain}
-Valid until: {valid_until}
-
-Your secure connections will continue without interruption.
-
---
-{app_name}
-{app_url}`,
-
-	TemplateSchedulerError: `Subject: Scheduled Task Failed - {app_name}
----
-SCHEDULED TASK FAILED
-
-From: {app_name} ({fqdn})
-Time: {timestamp}
-
-The scheduled task "{task_name}" failed.
-
-Error:    {error}
-Next run: {next_run}
-
-Please review the task configuration and check system logs for more details.
-
---
-{app_name}
-{app_url}`,
-
-	TemplateTest: `Subject: Test Email - {app_name}
----
-TEST EMAIL
-
-From: {app_name} ({fqdn})
-Time: {timestamp}
-
-This is a test email from {app_name}.
-
-If you received this email, your email configuration is working correctly.
-
-Sent at:    {sent_at}
-Server URL: {app_url}
-
---
-{app_name}
-{app_url}`,
-
-	TemplateAdminAlert: `Subject: [{alert_level}] {alert_type} - {app_name}
----
-ADMIN ALERT
-
-From: {app_name} ({fqdn})
-Time: {timestamp}
-
-Level:   {alert_level}
-Type:    {alert_type}
-Message: {message}
-
---
-{app_name}
-{app_url}`,
-
-	TemplateWeeklyReport: `Subject: Weekly Report - {app_name}
----
-WEEKLY REPORT
-
-From: {app_name} ({fqdn})
-Period: {period_start} to {period_end}
-
-Total searches: {total_searches}
-Errors:         {error_count}
-
---
-{app_name}
-{app_url}`,
-
-	TemplateUpdateAvailable: `Subject: Update Available - {app_name}
----
-UPDATE AVAILABLE
-
-From: {app_name} ({fqdn})
-Time: {timestamp}
-
-A new version of {app_name} is available.
-
-Current version: {current_version}
-New version:     {new_version}
-Release date:    {release_date}
-
-Release notes:
-{release_notes}
-
-View update: {update_url}
-
---
-{app_name}
-{app_url}`,
-
-	TemplateMaintenanceNotice: `Subject: Scheduled Maintenance - {app_name}
----
-SCHEDULED MAINTENANCE
-
-From: {app_name} ({fqdn})
-Time: {timestamp}
-
-Scheduled maintenance has been planned for {app_name}.
-
-Scheduled at:      {scheduled_at}
-Expected duration: {duration}
-Reason:            {reason}
-Affected services: {affected_services}
-
-During maintenance, the service may be temporarily unavailable.
-
---
-{app_name}
-{app_url}`,
-
-	TemplateBreachAdminAlert: `Subject: [{severity}] Security Breach Detected - {app_name}
----
-SECURITY BREACH DETECTED
-
-From: {app_name} ({fqdn})
-Time: {timestamp}
-
-Severity:        {severity}
-Description:     {breach_description}
-Affected users:  {affected_users}
-Source IPs:      {ip_addresses}
-
-ACTION REQUIRED: {action_required}
-
---
-{app_name}
-{app_url}`,
 }

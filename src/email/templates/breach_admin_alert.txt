@@ -1,0 +1,17 @@
+Subject: [{severity}] Security Breach Detected - {app_name}
+---
+SECURITY BREACH DETECTED
+
+From: {app_name} ({fqdn})
+Time: {timestamp}
+
+Severity:        {severity}
+Description:     {breach_description}
+Affected users:  {affected_users}
+Source IPs:      {ip_addresses}
+
+ACTION REQUIRED: {action_required}
+
+--
+{app_name}
+{app_url}

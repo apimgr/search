@@ -1,0 +1,14 @@
+Subject: [{alert_level}] {alert_type} - {app_name}
+---
+ADMIN ALERT
+
+From: {app_name} ({fqdn})
+Time: {timestamp}
+
+Level:   {alert_level}
+Type:    {alert_type}
+Message: {message}
+
+--
+{app_name}
+{app_url}

@@ -1203,54 +1203,63 @@ func TestReplaceVarsNoPlaceholders(t *testing.T) {
 	}
 }
 
-// Tests for rawTemplates map
+// Tests for embedded default templates (loadDefaultTemplate)
 
-func TestRawTemplatesExist(t *testing.T) {
+func TestDefaultTemplatesExist(t *testing.T) {
 	templates := GetAllTemplateTypes()
 
 	for _, info := range templates {
-		if _, ok := rawTemplates[info.Type]; !ok {
-			t.Errorf("rawTemplates should contain template for %s", info.Type)
+		if _, ok := loadDefaultTemplate(info.Type); !ok {
+			t.Errorf("embedded default template missing for %s", info.Type)
 		}
 	}
 }
 
-func TestRawTemplatesNotEmpty(t *testing.T) {
-	for tt, tmpl := range rawTemplates {
-		if tmpl == "" {
-			t.Errorf("rawTemplates[%s] should not be empty", tt)
+func TestDefaultTemplatesNotEmpty(t *testing.T) {
+	for _, info := range GetAllTemplateTypes() {
+		tmpl, ok := loadDefaultTemplate(info.Type)
+		if !ok || tmpl == "" {
+			t.Errorf("default template for %s should not be empty", info.Type)
 		}
 	}
 }
 
-func TestRawTemplatesContainSubjectLine(t *testing.T) {
-	for tt, tmpl := range rawTemplates {
+func TestDefaultTemplatesContainSubjectLine(t *testing.T) {
+	for _, info := range GetAllTemplateTypes() {
+		tmpl, ok := loadDefaultTemplate(info.Type)
+		if !ok {
+			t.Errorf("default template missing for %s", info.Type)
+			continue
+		}
 		lines := strings.Split(tmpl, "\n")
 		if len(lines) < 3 {
-			t.Errorf("rawTemplates[%s] should have at least 3 lines (subject, ---, body)", tt)
+			t.Errorf("default template %s should have at least 3 lines (subject, ---, body)", info.Type)
 		}
 		firstLine := strings.TrimSpace(lines[0])
 		if !strings.HasPrefix(firstLine, "Subject:") {
-			t.Errorf("rawTemplates[%s] first line should start with 'Subject:', got %q", tt, firstLine)
+			t.Errorf("default template %s first line should start with 'Subject:', got %q", info.Type, firstLine)
 		}
 	}
 }
 
-func TestRawTemplatesContainSeparator(t *testing.T) {
-	for tt, tmpl := range rawTemplates {
+func TestDefaultTemplatesContainSeparator(t *testing.T) {
+	for _, info := range GetAllTemplateTypes() {
+		tmpl, ok := loadDefaultTemplate(info.Type)
+		if !ok {
+			t.Errorf("default template missing for %s", info.Type)
+			continue
+		}
 		if !strings.Contains(tmpl, "\n---\n") {
-			t.Errorf("rawTemplates[%s] should contain '---' separator", tt)
+			t.Errorf("default template %s should contain '---' separator", info.Type)
 		}
 	}
 }
 
-func TestRawTemplatesCountMatchesGetAllTemplateTypes(t *testing.T) {
-	allTypes := GetAllTemplateTypes()
-	rawCount := len(rawTemplates)
-	allTypesCount := len(allTypes)
-
-	if rawCount != allTypesCount {
-		t.Errorf("rawTemplates has %d entries but GetAllTemplateTypes returns %d entries", rawCount, allTypesCount)
+func TestDefaultTemplatesCoverAllTemplateTypes(t *testing.T) {
+	for _, info := range GetAllTemplateTypes() {
+		if _, ok := loadDefaultTemplate(info.Type); !ok {
+			t.Errorf("no embedded default template for declared type %s", info.Type)
+		}
 	}
 }
 

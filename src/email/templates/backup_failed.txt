@@ -1,0 +1,17 @@
+Subject: Backup Failed - {app_name}
+---
+BACKUP FAILED
+
+From: {app_name} ({fqdn})
+Time: {timestamp}
+
+A backup has failed.
+
+Filename: {filename}
+Error: {error}
+
+Please check your backup configuration and ensure sufficient disk space is available.
+
+--
+{app_name}
+{app_url}

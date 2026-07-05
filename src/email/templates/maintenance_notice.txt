@@ -1,0 +1,19 @@
+Subject: Scheduled Maintenance - {app_name}
+---
+SCHEDULED MAINTENANCE
+
+From: {app_name} ({fqdn})
+Time: {timestamp}
+
+Scheduled maintenance has been planned for {app_name}.
+
+Scheduled at:      {scheduled_at}
+Expected duration: {duration}
+Reason:            {reason}
+Affected services: {affected_services}
+
+During maintenance, the service may be temporarily unavailable.
+
+--
+{app_name}
+{app_url}
