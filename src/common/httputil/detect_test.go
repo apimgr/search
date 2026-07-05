@@ -290,6 +290,8 @@ func TestGetProtoFromRequest(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest("GET", "/", nil)
+			// Loopback so the trust gate passes for X-Forwarded-* headers
+			req.RemoteAddr = "127.0.0.1:1234"
 			if tt.forwardedProto != "" {
 				req.Header.Set("X-Forwarded-Proto", tt.forwardedProto)
 			}
@@ -324,6 +326,8 @@ func TestGetHostFromRequest(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest("GET", "/", nil)
+			// Loopback so the trust gate passes for X-Forwarded-* headers
+			req.RemoteAddr = "127.0.0.1:1234"
 			if tt.forwardedHost != "" {
 				req.Header.Set("X-Forwarded-Host", tt.forwardedHost)
 			}
@@ -359,6 +363,8 @@ func TestGetPortFromRequest(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest("GET", "/", nil)
+			// Loopback so the trust gate passes for X-Forwarded-* headers
+			req.RemoteAddr = "127.0.0.1:1234"
 			if tt.forwardedPort != "" {
 				req.Header.Set("X-Forwarded-Port", tt.forwardedPort)
 			}
@@ -399,6 +405,8 @@ func TestGetBaseURLFromRequest(t *testing.T) {
 			// Reset config override to "/" so the fallback is predictable
 			config.SetBaseURLOverride("/")
 			req := httptest.NewRequest("GET", "/", nil)
+			// Loopback so the trust gate passes for X-Forwarded-* headers
+			req.RemoteAddr = "127.0.0.1:1234"
 			if tt.forwardedPrefix != "" {
 				req.Header.Set("X-Forwarded-Prefix", tt.forwardedPrefix)
 			}
@@ -477,6 +485,8 @@ func TestBuildFullURL(t *testing.T) {
 			// Reset config base URL so no stored state bleeds between sub-tests
 			config.SetBaseURLOverride("/")
 			req := httptest.NewRequest("GET", "/", nil)
+			// Loopback so the trust gate passes for X-Forwarded-* headers
+			req.RemoteAddr = "127.0.0.1:1234"
 			if tt.forwardedProto != "" {
 				req.Header.Set("X-Forwarded-Proto", tt.forwardedProto)
 			}

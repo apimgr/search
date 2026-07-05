@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/apimgr/search/src/common/httputil"
 	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/config"
 )
@@ -170,26 +171,11 @@ func serveSwaggerUI(w http.ResponseWriter, r *http.Request, baseURL string) {
 	w.Write([]byte(html))
 }
 
-// buildBaseURL constructs the base URL from the request
-// Per AI.md PART 5: URL Variables (NON-NEGOTIABLE)
+// buildBaseURL constructs the base URL from the request.
+// Per AI.md PART 12: reverse-proxy headers honored only from trusted proxies.
 func buildBaseURL(r *http.Request) string {
-	proto := "http"
-	if r.TLS != nil {
-		proto = "https"
-	}
-
-	// Check X-Forwarded-Proto header (reverse proxy)
-	if forwardedProto := r.Header.Get("X-Forwarded-Proto"); forwardedProto != "" {
-		proto = forwardedProto
-	}
-
-	host := r.Host
-
-	// Check X-Forwarded-Host header (reverse proxy)
-	if forwardedHost := r.Header.Get("X-Forwarded-Host"); forwardedHost != "" {
-		host = forwardedHost
-	}
-
+	proto := httputil.GetProtoFromRequest(r)
+	host := httputil.GetHostFromRequest(r)
 	return proto + "://" + host
 }
 

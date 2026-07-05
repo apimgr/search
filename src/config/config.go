@@ -200,6 +200,26 @@ func (c *Config) StartWatcher(ctx context.Context) error {
 	return nil
 }
 
+// TrustedProxiesConfig holds the trusted proxy configuration.
+// Private ranges are always trusted; additional lists extra public IPs/CIDRs.
+type TrustedProxiesConfig struct {
+	// Additional IPs/CIDRs to trust beyond always-trusted private ranges.
+	// Format: IPv4/CIDR, IPv6/CIDR, or plain IP (auto-expands to /32 or /128).
+	Additional []string `yaml:"additional"`
+}
+
+// AllowlistEntry is a single entry in the IP allowlist.
+type AllowlistEntry struct {
+	// CIDR or plain IP (auto-expands to /32 for IPv4, /128 for IPv6).
+	CIDR string `yaml:"cidr" json:"cidr"`
+	// Human-readable label.
+	Description string `yaml:"description" json:"description"`
+	// Set at runtime when loaded from config; not persisted to YAML.
+	AddedAt time.Time `json:"-"`
+	// "config" when loaded from YAML, "operator" for API additions.
+	AddedBy string `json:"-"`
+}
+
 // ServerConfig represents server configuration
 type ServerConfig struct {
 	// Core settings
@@ -287,6 +307,10 @@ type ServerConfig struct {
 
 	// Compression
 	Compression CompressionConfig `yaml:"compression"`
+
+	// TrustedProxies controls which proxy IPs can set X-Forwarded-* headers.
+	// Private ranges are always trusted; additional lists extra public proxies.
+	TrustedProxies TrustedProxiesConfig `yaml:"trusted_proxies"`
 
 	// Request Limits per AI.md PART 18
 	Limits LimitsConfig `yaml:"limits"`
@@ -557,11 +581,9 @@ type SecurityConfig struct {
 		IncludeSubDomains bool    `yaml:"include_subdomains"`
 		SampleRate        float64 `yaml:"sample_rate"`
 	} `yaml:"nel"`
-	// TrustedProxies lists IPs/CIDRs whose X-Forwarded-* headers are trusted
-	TrustedProxies []string `yaml:"trusted_proxies"`
-	// AllowedIPs lists IPs/prefixes that bypass blocklist, rate-limit, and GeoIP checks
-	AllowedIPs []string `yaml:"allowed_ips"`
-	// BlockedIPs lists IPs/prefixes that are always rejected (403) before any other check
+	// Allowlist lists IPs/CIDRs that bypass blocklist, rate-limit, and GeoIP checks.
+	Allowlist []AllowlistEntry `yaml:"allowlist"`
+	// BlockedIPs lists IPs/prefixes that are always rejected (403) before any other check.
 	BlockedIPs []string `yaml:"blocked_ips"`
 }
 

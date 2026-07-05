@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net"
 	"net/http"
 	"strings"
 
 	"github.com/apimgr/search/src/alert"
+	"github.com/apimgr/search/src/common/httputil"
 	"github.com/apimgr/search/src/config"
 )
 
@@ -199,23 +199,14 @@ func baseURLFromRequest(h *Handler, r *http.Request) string {
 	if h.config.Server.BaseURL != "" {
 		return strings.TrimRight(h.config.Server.BaseURL, "/")
 	}
-	scheme := "http"
-	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
-		scheme = "https"
-	}
-	return scheme + "://" + r.Host
+	scheme := httputil.GetProtoFromRequest(r)
+	host := httputil.GetHostFromRequest(r)
+	return scheme + "://" + host
 }
 
 func clientIPForAPI(r *http.Request) string {
-	if xff := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); xff != "" {
-		parts := strings.Split(xff, ",")
-		return strings.TrimSpace(parts[0])
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err == nil && host != "" {
-		return host
-	}
-	return r.RemoteAddr
+	// Delegates to httputil which gates header trust on the package-level proxy state.
+	return httputil.GetClientIP(r)
 }
 
 func decodeAlertPauseState(r *http.Request) (bool, error) {

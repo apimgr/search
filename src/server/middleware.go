@@ -346,9 +346,20 @@ func (erl *EndpointRateLimiter) RemainingTime(ip string) time.Duration {
 // and GeoIP checks downstream — but NOT auth.
 func (m *Middleware) Allowlist(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ip := getClientIP(r, m.config.Server.Security.TrustedProxies)
-		for _, allowed := range m.config.Server.Security.AllowedIPs {
-			if ip == allowed || strings.HasPrefix(ip, allowed) {
+		ip := getClientIP(r, m.config.Server.TrustedProxies.Additional)
+		parsedIP := net.ParseIP(ip)
+		for _, entry := range m.config.Server.Security.Allowlist {
+			_, ipNet, err := net.ParseCIDR(entry.CIDR)
+			if err != nil {
+				// Try plain IP comparison
+				if entryIP := net.ParseIP(entry.CIDR); entryIP != nil && parsedIP != nil && entryIP.Equal(parsedIP) {
+					ctx := context.WithValue(r.Context(), allowlistedCtxKey{}, true)
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+				continue
+			}
+			if parsedIP != nil && ipNet.Contains(parsedIP) {
 				ctx := context.WithValue(r.Context(), allowlistedCtxKey{}, true)
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
@@ -367,7 +378,7 @@ func (m *Middleware) Blocklist(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		ip := getClientIP(r, m.config.Server.Security.TrustedProxies)
+		ip := getClientIP(r, m.config.Server.TrustedProxies.Additional)
 		for _, blocked := range m.config.Server.Security.BlockedIPs {
 			if ip == blocked || strings.HasPrefix(ip, blocked) {
 				// Per AI.md PART 11: no IP logging — privacy is the product.
@@ -391,7 +402,7 @@ func (m *Middleware) RateLimit(limiter *RateLimiter) func(http.Handler) http.Han
 				next.ServeHTTP(w, r)
 				return
 			}
-			ip := getClientIP(r, m.config.Server.Security.TrustedProxies)
+			ip := getClientIP(r, m.config.Server.TrustedProxies.Additional)
 			if !limiter.Allow(ip) {
 				// Per AI.md PART 11: no IP logging — privacy is the product.
 				if m.logManager != nil {
@@ -406,38 +417,82 @@ func (m *Middleware) RateLimit(limiter *RateLimiter) func(http.Handler) http.Han
 	}
 }
 
-// getClientIP extracts the real client IP from request
-func getClientIP(r *http.Request, trustedProxies []string) string {
-	// Check X-Forwarded-For header if from trusted proxy
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		remoteIP, _, _ := net.SplitHostPort(r.RemoteAddr)
-		for _, trusted := range trustedProxies {
-			if remoteIP == trusted || strings.HasPrefix(remoteIP, trusted) {
-				// Get first IP in chain
-				ips := strings.Split(xff, ",")
-				if len(ips) > 0 {
-					return strings.TrimSpace(ips[0])
-				}
-			}
-		}
-	}
-
-	// Check X-Real-IP header
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		remoteIP, _, _ := net.SplitHostPort(r.RemoteAddr)
-		for _, trusted := range trustedProxies {
-			if remoteIP == trusted || strings.HasPrefix(remoteIP, trusted) {
-				return xri
-			}
-		}
-	}
-
-	// Use RemoteAddr
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+// getClientIP extracts the real client IP from request.
+// Per AI.md PART 12: X-Forwarded-* headers only honored from trusted proxies.
+// Header priority (from trusted proxy only): CF-Connecting-IP → True-Client-IP → X-Client-IP → X-Real-IP → X-Forwarded-For → RemoteAddr
+func getClientIP(r *http.Request, additionalTrustedProxies []string) string {
+	remoteIP, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		return r.RemoteAddr
+		remoteIP = r.RemoteAddr
 	}
-	return ip
+	if isTrustedProxy(remoteIP, additionalTrustedProxies) {
+		// Cloudflare passes the real client IP in CF-Connecting-IP
+		if ip := r.Header.Get("CF-Connecting-IP"); ip != "" {
+			return strings.TrimSpace(ip)
+		}
+		// Cloudflare/Akamai True-Client-IP
+		if ip := r.Header.Get("True-Client-IP"); ip != "" {
+			return strings.TrimSpace(ip)
+		}
+		// X-Client-IP (HAProxy and others)
+		if ip := r.Header.Get("X-Client-IP"); ip != "" {
+			return strings.TrimSpace(ip)
+		}
+		// X-Real-IP (nginx standard)
+		if xri := r.Header.Get("X-Real-IP"); xri != "" {
+			return strings.TrimSpace(xri)
+		}
+		// X-Forwarded-For — use leftmost (client) IP
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			ips := strings.Split(xff, ",")
+			if len(ips) > 0 {
+				return strings.TrimSpace(ips[0])
+			}
+		}
+	}
+	return remoteIP
+}
+
+// isTrustedProxy checks if the given IP string is a trusted proxy.
+// Always trusts: loopback, RFC1918, link-local. Also checks the additional list.
+func isTrustedProxy(ipStr string, additional []string) bool {
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return false
+	}
+	// Always-trusted private/loopback ranges
+	alwaysTrusted := []string{
+		"127.0.0.0/8", "::1/128",
+		"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+		"fc00::/7",
+		"169.254.0.0/16", "fe80::/10",
+	}
+	for _, cidr := range alwaysTrusted {
+		_, ipNet, err := net.ParseCIDR(cidr)
+		if err == nil && ipNet.Contains(ip) {
+			return true
+		}
+	}
+	// Additional configured proxies
+	for _, entry := range additional {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		_, ipNet, err := net.ParseCIDR(entry)
+		if err != nil {
+			// Try plain IP comparison
+			entryIP := net.ParseIP(entry)
+			if entryIP != nil && entryIP.Equal(ip) {
+				return true
+			}
+			continue
+		}
+		if ipNet.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // CSRF middleware handles Cross-Site Request Forgery protection
@@ -780,7 +835,7 @@ func (m *Middleware) GeoBlock(lookup *geoip.Lookup) func(http.Handler) http.Hand
 			}
 
 			// Get client IP
-			ip := getClientIP(r, m.config.Server.Security.TrustedProxies)
+			ip := getClientIP(r, m.config.Server.TrustedProxies.Additional)
 
 			// Get configured allowed/denied countries
 			allowedCountries := m.config.Server.GeoIP.AllowedCountries

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/apimgr/search/src/api"
+	"github.com/apimgr/search/src/common/httputil"
 	"github.com/apimgr/search/src/version"
 )
 
@@ -249,38 +250,14 @@ func (s *Server) handlePreferencesSave(w http.ResponseWriter, r *http.Request) {
 }
 
 // getBaseURL returns the base URL for the server.
-// Detects HTTPS from direct TLS, configured BaseURL, and all common
-// reverse proxy headers (nginx, Caddy, Traefik, Apache, HAProxy, etc.).
+// Honors reverse-proxy headers only from trusted proxies (per AI.md PART 12).
 func (s *Server) getBaseURL(r *http.Request) string {
 	// Use configured base URL if available
 	if s.config.Server.BaseURL != "" {
 		return strings.TrimRight(s.config.Server.BaseURL, "/")
 	}
-
-	// Detect HTTPS — check all common reverse proxy headers
-	scheme := "http"
-	switch {
-	case r.TLS != nil:
-		scheme = "https"
-	case r.Header.Get("X-Forwarded-Proto") == "https":
-		scheme = "https"
-	case r.Header.Get("X-Forwarded-Protocol") == "https":
-		scheme = "https"
-	case r.Header.Get("X-Forwarded-Ssl") == "on":
-		scheme = "https"
-	case r.Header.Get("X-Scheme") == "https":
-		scheme = "https"
-	case strings.Contains(r.Header.Get("Forwarded"), "proto=https"):
-		// RFC 7239: Forwarded: for=...; proto=https
-		scheme = "https"
-	}
-
-	host := r.Host
-	// Prefer X-Forwarded-Host for reverse proxy setups; take first value if comma-separated
-	if fwdHost := r.Header.Get("X-Forwarded-Host"); fwdHost != "" {
-		host = strings.TrimSpace(strings.SplitN(fwdHost, ",", 2)[0])
-	}
-
+	scheme := httputil.GetProtoFromRequest(r)
+	host := httputil.GetHostFromRequest(r)
 	return fmt.Sprintf("%s://%s", scheme, host)
 }
 

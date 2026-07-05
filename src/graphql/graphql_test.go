@@ -263,6 +263,8 @@ func TestBuildBaseURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			// Loopback is always a trusted proxy — X-Forwarded-* headers are honored.
+			req.RemoteAddr = "127.0.0.1:1234"
 			req.Host = tt.host
 			for k, v := range tt.headers {
 				req.Header.Set(k, v)
@@ -499,6 +501,8 @@ func TestBuildBaseURLWithTLS(t *testing.T) {
 func TestBuildBaseURLWithTLSAndForwardedProto(t *testing.T) {
 	// When X-Forwarded-Proto is set, it should override TLS detection
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	// Loopback is always a trusted proxy — X-Forwarded-Proto is honored.
+	req.RemoteAddr = "127.0.0.1:1234"
 	req.Host = "localhost:8443"
 	req.TLS = &tls.ConnectionState{}
 	// Override to http

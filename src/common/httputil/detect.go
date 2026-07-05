@@ -1,8 +1,10 @@
 package httputil
 
 import (
+	"net"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/apimgr/search/src/config"
 )
@@ -10,7 +12,7 @@ import (
 // ProjectName is the name of this project, used for CLI client detection
 const ProjectName = "search"
 
-// isOurCliClient detects our own CLI client
+// IsOurCliClient detects our own CLI client
 // Our CLI is INTERACTIVE (TUI/GUI) - receives JSON, renders itself
 // Per AI.md PART 14: Client Type Detection & Response
 func IsOurCliClient(r *http.Request) bool {
@@ -224,84 +226,244 @@ func GetPreferredFormat(r *http.Request) string {
 	}
 }
 
-// GetBaseURLFromRequest returns the base URL path prefix from the request
-// Per AI.md PART 5: {baseurl} resolution from reverse proxy headers
+// additionalTrustedProxies holds extra IPs/CIDRs beyond always-trusted private ranges.
+// Set once at startup via SetAdditionalTrustedProxies.
+var (
+	additionalTrustedProxies   []*net.IPNet
+	additionalTrustedProxiesMu sync.RWMutex
+)
+
+// alwaysTrustedCIDRs lists private and loopback ranges that are always trusted.
+// Per AI.md PART 12: loopback, RFC1918, fc00::/7, link-local always trusted.
+var alwaysTrustedCIDRs = func() []*net.IPNet {
+	cidrs := []string{
+		"127.0.0.0/8",    // Loopback IPv4
+		"::1/128",        // Loopback IPv6
+		"10.0.0.0/8",     // RFC 1918
+		"172.16.0.0/12",  // RFC 1918
+		"192.168.0.0/16", // RFC 1918
+		"fc00::/7",       // RFC 4193 unique-local
+		"169.254.0.0/16", // Link-local IPv4
+		"fe80::/10",      // Link-local IPv6
+	}
+	nets := make([]*net.IPNet, 0, len(cidrs))
+	for _, cidr := range cidrs {
+		_, ipNet, err := net.ParseCIDR(cidr)
+		if err == nil {
+			nets = append(nets, ipNet)
+		}
+	}
+	return nets
+}()
+
+// SetAdditionalTrustedProxies configures extra IPs/CIDRs beyond always-trusted private ranges.
+// Call once at startup with server.trusted_proxies.additional from config.
+// Plain IPs are auto-expanded to /32 (IPv4) or /128 (IPv6).
+func SetAdditionalTrustedProxies(additional []string) {
+	parsed := make([]*net.IPNet, 0, len(additional))
+	for _, s := range additional {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		// Try parsing as CIDR first
+		_, ipNet, err := net.ParseCIDR(s)
+		if err == nil {
+			parsed = append(parsed, ipNet)
+			continue
+		}
+		// Try as plain IP, expand to /32 (IPv4) or /128 (IPv6)
+		ip := net.ParseIP(s)
+		if ip == nil {
+			continue
+		}
+		cidr := s + "/32"
+		if ip.To4() == nil {
+			cidr = s + "/128"
+		}
+		_, ipNet, err = net.ParseCIDR(cidr)
+		if err == nil {
+			parsed = append(parsed, ipNet)
+		}
+	}
+	additionalTrustedProxiesMu.Lock()
+	additionalTrustedProxies = parsed
+	additionalTrustedProxiesMu.Unlock()
+}
+
+// isTrustedProxy returns true if remoteAddr is in the always-trusted private ranges
+// or in the configured additional trusted proxies list.
+// remoteAddr should be in "IP:port" or "IP" format (from r.RemoteAddr).
+func isTrustedProxy(remoteAddr string) bool {
+	ipStr, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		// No port — use as-is
+		ipStr = remoteAddr
+	}
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return false
+	}
+	// Check always-trusted private/loopback ranges
+	for _, cidr := range alwaysTrustedCIDRs {
+		if cidr.Contains(ip) {
+			return true
+		}
+	}
+	// Check additional configured proxies
+	additionalTrustedProxiesMu.RLock()
+	additional := additionalTrustedProxies
+	additionalTrustedProxiesMu.RUnlock()
+	for _, cidr := range additional {
+		if cidr.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// GetClientIP extracts the real client IP from the request.
+// Per AI.md PART 12: X-Forwarded-* headers honored only from trusted proxies.
+// Header priority (from trusted proxy only): CF-Connecting-IP → True-Client-IP → X-Client-IP → X-Real-IP → X-Forwarded-For → RemoteAddr
+func GetClientIP(r *http.Request) string {
+	remoteIP, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		remoteIP = r.RemoteAddr
+	}
+	if isTrustedProxy(r.RemoteAddr) {
+		// Cloudflare passes the real client IP in CF-Connecting-IP
+		if ip := r.Header.Get("CF-Connecting-IP"); ip != "" {
+			return strings.TrimSpace(ip)
+		}
+		// Cloudflare/Akamai True-Client-IP
+		if ip := r.Header.Get("True-Client-IP"); ip != "" {
+			return strings.TrimSpace(ip)
+		}
+		// X-Client-IP (HAProxy and others)
+		if ip := r.Header.Get("X-Client-IP"); ip != "" {
+			return strings.TrimSpace(ip)
+		}
+		// X-Real-IP (nginx standard)
+		if xri := r.Header.Get("X-Real-IP"); xri != "" {
+			return strings.TrimSpace(xri)
+		}
+		// X-Forwarded-For — use leftmost (client) IP
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			ips := strings.Split(xff, ",")
+			if len(ips) > 0 {
+				return strings.TrimSpace(ips[0])
+			}
+		}
+	}
+	return remoteIP
+}
+
+// GetBaseURLFromRequest returns the base URL path prefix from the request.
+// Per AI.md PART 12: X-Forwarded headers only honored from trusted proxies.
 // Priority: X-Forwarded-Prefix → X-Forwarded-Path → X-Script-Name → config → "/"
 func GetBaseURLFromRequest(r *http.Request) string {
-	// Check reverse proxy headers first (highest priority)
-	if prefix := r.Header.Get("X-Forwarded-Prefix"); prefix != "" {
-		return normalizeBasePath(prefix)
+	if isTrustedProxy(r.RemoteAddr) {
+		if prefix := r.Header.Get("X-Forwarded-Prefix"); prefix != "" {
+			return normalizeBasePath(prefix)
+		}
+		if path := r.Header.Get("X-Forwarded-Path"); path != "" {
+			return normalizeBasePath(path)
+		}
+		if scriptName := r.Header.Get("X-Script-Name"); scriptName != "" {
+			return normalizeBasePath(scriptName)
+		}
 	}
-	if path := r.Header.Get("X-Forwarded-Path"); path != "" {
-		return normalizeBasePath(path)
-	}
-	if scriptName := r.Header.Get("X-Script-Name"); scriptName != "" {
-		return normalizeBasePath(scriptName)
-	}
-
-	// Fall back to config
 	return config.GetBaseURL()
 }
 
-// GetProtoFromRequest returns the protocol from the request
-// Per AI.md PART 5: {proto} resolution from reverse proxy headers
-// Priority: X-Forwarded-Proto → X-Forwarded-Ssl → TLS detection → "http"
+// GetProtoFromRequest returns the protocol from the request.
+// Per AI.md PART 12: X-Forwarded headers only honored from trusted proxies.
+// Priority: X-Forwarded-Proto → X-Forwarded-Protocol → X-Forwarded-Ssl → X-Url-Scheme → X-Scheme → Forwarded → TLS → "http"
 func GetProtoFromRequest(r *http.Request) string {
-	// Check X-Forwarded-Proto
-	if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
-		return strings.ToLower(proto)
-	}
-
-	// Check X-Forwarded-Ssl
-	if ssl := r.Header.Get("X-Forwarded-Ssl"); ssl != "" {
-		if strings.ToLower(ssl) == "on" {
-			return "https"
+	if isTrustedProxy(r.RemoteAddr) {
+		if proto := r.Header.Get("X-Forwarded-Proto"); proto != "" {
+			return strings.ToLower(proto)
+		}
+		// X-Forwarded-Protocol is an alternate spelling used by some load balancers
+		if proto := r.Header.Get("X-Forwarded-Protocol"); proto != "" {
+			return strings.ToLower(proto)
+		}
+		if ssl := r.Header.Get("X-Forwarded-Ssl"); ssl != "" {
+			if strings.ToLower(ssl) == "on" {
+				return "https"
+			}
+			return "http"
+		}
+		if scheme := r.Header.Get("X-Url-Scheme"); scheme != "" {
+			return strings.ToLower(scheme)
+		}
+		// X-Scheme is used by some nginx configurations
+		if scheme := r.Header.Get("X-Scheme"); scheme != "" {
+			return strings.ToLower(scheme)
+		}
+		// RFC 7239 Forwarded header: parse proto=https
+		if fwd := r.Header.Get("Forwarded"); fwd != "" {
+			if proto := parseForwardedProto(fwd); proto != "" {
+				return proto
+			}
 		}
 	}
-
-	// Check if TLS connection
 	if r.TLS != nil {
 		return "https"
 	}
-
 	return "http"
 }
 
-// GetHostFromRequest returns the host from the request
-// Per AI.md PART 5: {fqdn} resolution from reverse proxy headers
-// Priority: X-Forwarded-Host → Host header → Request.Host
-func GetHostFromRequest(r *http.Request) string {
-	// Check X-Forwarded-Host
-	if host := r.Header.Get("X-Forwarded-Host"); host != "" {
-		// May contain multiple hosts, use first one
-		if idx := strings.Index(host, ","); idx != -1 {
-			return strings.TrimSpace(host[:idx])
+// parseForwardedProto extracts the proto value from an RFC 7239 Forwarded header.
+// Example: "for=10.0.0.1; proto=https" → "https"
+func parseForwardedProto(fwd string) string {
+	for _, part := range strings.Split(fwd, ";") {
+		part = strings.TrimSpace(part)
+		if after, ok := strings.CutPrefix(strings.ToLower(part), "proto="); ok {
+			return strings.Trim(strings.TrimSpace(after), `"`)
 		}
-		return host
 	}
+	return ""
+}
 
-	// Use Host header or Request.Host
+// GetHostFromRequest returns the host from the request.
+// Per AI.md PART 12: X-Forwarded headers only honored from trusted proxies.
+// Priority: X-Forwarded-Host → X-Real-Host → X-Original-Host → Host header
+func GetHostFromRequest(r *http.Request) string {
+	if isTrustedProxy(r.RemoteAddr) {
+		if host := r.Header.Get("X-Forwarded-Host"); host != "" {
+			// May contain multiple hosts — use first one
+			if idx := strings.Index(host, ","); idx != -1 {
+				return strings.TrimSpace(host[:idx])
+			}
+			return host
+		}
+		if host := r.Header.Get("X-Real-Host"); host != "" {
+			return host
+		}
+		if host := r.Header.Get("X-Original-Host"); host != "" {
+			return host
+		}
+	}
 	return r.Host
 }
 
-// GetPortFromRequest returns the port from the request
-// Per AI.md PART 5: {port} resolution from reverse proxy headers
-// Priority: X-Forwarded-Port → Host header → Server port → Proto default
+// GetPortFromRequest returns the port from the request.
+// Per AI.md PART 12: X-Forwarded headers only honored from trusted proxies.
+// Priority: X-Forwarded-Port → Host header → Proto default
 func GetPortFromRequest(r *http.Request) string {
-	// Check X-Forwarded-Port
-	if port := r.Header.Get("X-Forwarded-Port"); port != "" {
-		return port
+	if isTrustedProxy(r.RemoteAddr) {
+		if port := r.Header.Get("X-Forwarded-Port"); port != "" {
+			return port
+		}
 	}
-
-	// Extract from Host header
 	host := GetHostFromRequest(r)
 	if idx := strings.LastIndex(host, ":"); idx != -1 {
-		// Make sure it's not IPv6 bracket
+		// Make sure it's not an IPv6 bracket
 		if !strings.Contains(host[idx:], "]") {
 			return host[idx+1:]
 		}
 	}
-
 	// Default based on protocol
 	if GetProtoFromRequest(r) == "https" {
 		return "443"
@@ -309,40 +471,51 @@ func GetPortFromRequest(r *http.Request) string {
 	return "80"
 }
 
-// BuildFullURL builds a full URL from request context
-// Per AI.md PART 5: URL Variables (NON-NEGOTIABLE)
-func BuildFullURL(r *http.Request, path string) string {
-	proto := GetProtoFromRequest(r)
-	host := GetHostFromRequest(r)
-	baseURL := GetBaseURLFromRequest(r)
-
-	// Remove port from host if it's the default port
-	port := GetPortFromRequest(r)
-	if (proto == "http" && port == "80") || (proto == "https" && port == "443") {
-		// Strip default port from host if present
-		if idx := strings.LastIndex(host, ":"); idx != -1 {
-			hostPort := host[idx+1:]
-			if hostPort == port {
-				host = host[:idx]
-			}
-		}
+// GetURLVars returns the resolved proto, fqdn, and port from the request.
+// Port is the empty string when it is the default for the protocol (80/443).
+// Per AI.md PART 12: reverse-proxy headers honored only from trusted proxies.
+func GetURLVars(r *http.Request) (proto, fqdn, port string) {
+	proto = GetProtoFromRequest(r)
+	fqdn = GetHostFromRequest(r)
+	// Strip port from fqdn if present, capture it separately
+	if idx := strings.LastIndex(fqdn, ":"); idx != -1 && !strings.Contains(fqdn[idx:], "]") {
+		port = fqdn[idx+1:]
+		fqdn = fqdn[:idx]
+	} else {
+		port = GetPortFromRequest(r)
 	}
+	// Suppress default ports (80 for http, 443 for https)
+	if (proto == "http" && port == "80") || (proto == "https" && port == "443") {
+		port = ""
+	}
+	return proto, fqdn, port
+}
 
-	// Normalize paths
-	baseURL = normalizeBasePath(baseURL)
+// BuildURL constructs a full URL from request context.
+// Default ports (:80 and :443) are never included in the output.
+// Per AI.md PART 12: reverse-proxy headers honored only from trusted proxies.
+func BuildURL(r *http.Request, path string) string {
+	proto, fqdn, port := GetURLVars(r)
+	baseURL := GetBaseURLFromRequest(r)
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
-
-	// Combine base URL and path, avoiding double slashes at the join point
 	var fullPath string
 	if baseURL == "/" {
 		fullPath = path
 	} else {
-		fullPath = baseURL + path
+		fullPath = strings.TrimRight(baseURL, "/") + path
 	}
+	if port == "" {
+		return proto + "://" + fqdn + fullPath
+	}
+	return proto + "://" + fqdn + ":" + port + fullPath
+}
 
-	return proto + "://" + host + fullPath
+// BuildFullURL is a backward-compatible alias for BuildURL.
+// Deprecated: use BuildURL instead.
+func BuildFullURL(r *http.Request, path string) string {
+	return BuildURL(r, path)
 }
 
 // normalizeBasePath normalizes a base path

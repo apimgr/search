@@ -377,7 +377,7 @@ func TestExtractHostFromURL(t *testing.T) {
 // TestAllowlistMiddleware verifies that a matching IP sets the allowlisted flag.
 func TestAllowlistMiddleware(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Server.Security.AllowedIPs = []string{"10.0.0.1"}
+	cfg.Server.Security.Allowlist = []config.AllowlistEntry{{CIDR: "10.0.0.1/32", Description: "test"}}
 	mw := NewMiddleware(cfg, nil)
 
 	var gotAllowlisted bool
@@ -985,6 +985,8 @@ func TestGetBaseURL(t *testing.T) {
 			t.Cleanup(func() { s.config.Server.BaseURL = origURL })
 
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			// Loopback is always a trusted proxy — X-Forwarded-* headers are honored.
+			req.RemoteAddr = "127.0.0.1:1234"
 			req.Host = tt.host
 			for k, v := range tt.headers {
 				req.Header.Set(k, v)
@@ -1589,6 +1591,8 @@ func TestIsAllowlisted(t *testing.T) {
 func TestGetBaseURL_XForwardedHostComma(t *testing.T) {
 	s := newTestServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	// Loopback is always a trusted proxy — X-Forwarded-Host is honored.
+	req.RemoteAddr = "127.0.0.1:1234"
 	req.Header.Set("X-Forwarded-Host", "primary.example.com, secondary.example.com")
 	req.Host = "original.example.com"
 

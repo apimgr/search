@@ -343,11 +343,12 @@ func TestGetClientIP(t *testing.T) {
 			expectedIP:     "203.0.113.50",
 		},
 		{
-			name:           "X-Forwarded-For ignored if not trusted",
-			remoteAddr:     "192.168.1.1:12345",
+			name: "X-Forwarded-For ignored if not trusted",
+			// 203.0.113.0/24 is TEST-NET-3 (RFC 5737) — routable, not private, not trusted
+			remoteAddr:     "203.0.113.100:12345",
 			xForwardedFor:  "203.0.113.50",
 			trustedProxies: []string{},
-			expectedIP:     "192.168.1.1",
+			expectedIP:     "203.0.113.100",
 		},
 		{
 			name:           "from X-Real-IP with trusted proxy",
@@ -2890,6 +2891,8 @@ func TestGetBaseURLConfiguredTrailingSlash(t *testing.T) {
 func TestGetBaseURLXForwardedProto(t *testing.T) {
 	s := &Server{config: &config.Config{}}
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	// Loopback is always a trusted proxy — X-Forwarded-Proto is honored.
+	r.RemoteAddr = "127.0.0.1:1234"
 	r.Host = "example.com"
 	r.Header.Set("X-Forwarded-Proto", "https")
 
@@ -2902,6 +2905,8 @@ func TestGetBaseURLXForwardedProto(t *testing.T) {
 func TestGetBaseURLXForwardedHost(t *testing.T) {
 	s := &Server{config: &config.Config{}}
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	// Loopback is always a trusted proxy — X-Forwarded-Host is honored.
+	r.RemoteAddr = "127.0.0.1:1234"
 	r.Host = "internal.host"
 	r.Header.Set("X-Forwarded-Host", "public.example.com, extra.host")
 
@@ -2925,6 +2930,8 @@ func TestGetBaseURLHTTP(t *testing.T) {
 func TestGetBaseURLForwardedHeader(t *testing.T) {
 	s := &Server{config: &config.Config{}}
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	// Loopback is always a trusted proxy — Forwarded header is honored.
+	r.RemoteAddr = "127.0.0.1:1234"
 	r.Host = "example.com"
 	r.Header.Set("Forwarded", "for=10.0.0.1; proto=https")
 

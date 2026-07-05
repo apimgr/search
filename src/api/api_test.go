@@ -3084,6 +3084,8 @@ func TestBaseURLFromRequestHTTPS(t *testing.T) {
 	handler := newTestHandler()
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	// Loopback is always a trusted proxy — X-Forwarded-Proto is honored.
+	req.RemoteAddr = "127.0.0.1:1234"
 	req.Host = "secure.example.com"
 	req.Header.Set("X-Forwarded-Proto", "https")
 	result := baseURLFromRequest(handler, req)
@@ -3095,6 +3097,8 @@ func TestBaseURLFromRequestHTTPS(t *testing.T) {
 
 func TestClientIPForAPIWithXFF(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	// Loopback is always a trusted proxy — XFF header is honored.
+	req.RemoteAddr = "127.0.0.1:1234"
 	req.Header.Set("X-Forwarded-For", "10.0.0.1, 10.0.0.2")
 
 	ip := clientIPForAPI(req)
