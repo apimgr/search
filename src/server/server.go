@@ -19,6 +19,7 @@ import (
 	"github.com/apimgr/search/src/alert"
 	"github.com/apimgr/search/src/api"
 	"github.com/apimgr/search/src/cache"
+	"github.com/apimgr/search/src/common/httputil"
 	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/database"
@@ -162,6 +163,14 @@ func NewServer(cfg *config.Config) *Server {
 
 	// Create middleware with logging
 	mw := NewMiddleware(cfg, logMgr)
+
+	// Wire additional trusted proxies into the httputil trust gate.
+	// Private ranges (loopback, RFC1918, link-local) are always trusted without config.
+	httputil.SetAdditionalTrustedProxies(cfg.Server.TrustedProxies.Additional)
+	// Re-sync on every hot-reload so a live server.yml change takes effect immediately.
+	cfg.OnReload(func(c *config.Config) {
+		httputil.SetAdditionalTrustedProxies(c.Server.TrustedProxies.Additional)
+	})
 
 	// Create rate limiter
 	rl := NewRateLimiter(&cfg.Server.RateLimit)

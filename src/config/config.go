@@ -48,10 +48,22 @@ type Config struct {
 	firstRun bool
 	// debugEnabled is set by the --debug CLI flag; takes precedence over DEBUG env var
 	debugEnabled bool
+	// reloadHooks are called after every successful Reload(); guarded by reloadHooksMu
+	reloadHooks   []func(*Config)
+	reloadHooksMu sync.Mutex
 
 	Server  ServerConfig            `yaml:"server"`
 	Search  SearchConfig            `yaml:"search"`
 	Engines map[string]EngineConfig `yaml:"engines"`
+}
+
+// OnReload registers a hook that is called after every successful hot-reload.
+// Hooks run in registration order and receive the updated Config pointer.
+// Safe to call from any goroutine.
+func (c *Config) OnReload(hook func(*Config)) {
+	c.reloadHooksMu.Lock()
+	defer c.reloadHooksMu.Unlock()
+	c.reloadHooks = append(c.reloadHooks, hook)
 }
 
 // IsFirstRun returns true if this is the first run (config was just created)
@@ -109,27 +121,41 @@ func (c *Config) Reload() error {
 		return fmt.Errorf("failed to parse config file: %w", err)
 	}
 
-	// Update all reloadable settings
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	// Update all reloadable settings under the write lock, then fire hooks outside it.
+	var hooks []func(*Config)
+	func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
 
-	// Preserve path and mutex
-	newCfg.configPath = c.configPath
+		// Preserve path and mutex
+		newCfg.configPath = c.configPath
 
-	// Copy all reloadable settings
-	// Note: Port and Address changes require restart
-	oldPort := c.Server.Port
-	oldAddress := c.Server.Address
+		// Copy all reloadable settings
+		// Note: Port and Address changes require restart
+		oldPort := c.Server.Port
+		oldAddress := c.Server.Address
 
-	c.Server = newCfg.Server
-	c.Search = newCfg.Search
-	c.Engines = newCfg.Engines
+		c.Server = newCfg.Server
+		c.Search = newCfg.Search
+		c.Engines = newCfg.Engines
 
-	// Restore port/address if changed (require restart)
-	if c.Server.Port != oldPort || c.Server.Address != oldAddress {
-		// Log warning that port/address changes require restart
-		c.Server.Port = oldPort
-		c.Server.Address = oldAddress
+		// Restore port/address if changed (require restart)
+		if c.Server.Port != oldPort || c.Server.Address != oldAddress {
+			// Log warning that port/address changes require restart
+			c.Server.Port = oldPort
+			c.Server.Address = oldAddress
+		}
+
+		// Snapshot hooks while still inside the write lock to keep ordering consistent.
+		c.reloadHooksMu.Lock()
+		hooks = make([]func(*Config), len(c.reloadHooks))
+		copy(hooks, c.reloadHooks)
+		c.reloadHooksMu.Unlock()
+	}()
+
+	// Fire reload hooks outside the write lock to avoid deadlocks.
+	for _, hook := range hooks {
+		hook(c)
 	}
 
 	return nil
