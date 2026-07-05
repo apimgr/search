@@ -323,7 +323,7 @@ func TestHandleSecurityTxtEnhanced(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s := newTestServer(t)
 			s.config.Server.Web.Security.Contact = tt.contact
-			s.config.Server.Contact.Email = tt.contactEmail
+			s.config.Server.Contact.Security.Email = tt.contactEmail
 			s.config.Server.Web.Security.Expires = tt.expires
 
 			req := httptest.NewRequest(http.MethodGet, "/.well-known/security.txt", nil)
@@ -377,7 +377,7 @@ func TestExtractHostFromURL(t *testing.T) {
 // TestAllowlistMiddleware verifies that a matching IP sets the allowlisted flag.
 func TestAllowlistMiddleware(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Server.RateLimit.Whitelist = []string{"10.0.0.1"}
+	cfg.Server.Security.AllowedIPs = []string{"10.0.0.1"}
 	mw := NewMiddleware(cfg, nil)
 
 	var gotAllowlisted bool
@@ -412,7 +412,7 @@ func TestAllowlistMiddleware(t *testing.T) {
 // TestBlocklistMiddleware verifies blocked IPs receive 403 and allowlisted bypass.
 func TestBlocklistMiddleware(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.Server.RateLimit.Blacklist = []string{"5.5.5.5"}
+	cfg.Server.Security.BlockedIPs = []string{"5.5.5.5"}
 	mw := NewMiddleware(cfg, nil)
 
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2383,12 +2383,12 @@ func TestHandleRobotsTxt_DenyPaths(t *testing.T) {
 func TestHandleSecurityTxtEnhanced_ContactFallback(t *testing.T) {
 	s := newTestServer(t)
 	origContact := s.config.Server.Web.Security.Contact
-	origEmail := s.config.Server.Contact.Email
+	origEmail := s.config.Server.Contact.Security.Email
 	s.config.Server.Web.Security.Contact = ""
-	s.config.Server.Contact.Email = ""
+	s.config.Server.Contact.Security.Email = ""
 	t.Cleanup(func() {
 		s.config.Server.Web.Security.Contact = origContact
-		s.config.Server.Contact.Email = origEmail
+		s.config.Server.Contact.Security.Email = origEmail
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/.well-known/security.txt", nil)
@@ -4184,9 +4184,9 @@ func TestRateLimit_ExceededReturns429(t *testing.T) {
 	mw := NewMiddleware(cfg, nil)
 	// Create a limiter with rate=1/min, burst=1, so the second immediate request is denied.
 	limiter := NewRateLimiter(&config.RateLimitConfig{
-		Enabled:           true,
-		RequestsPerMinute: 1,
-		BurstSize:         1,
+		Enabled:     true,
+		Read:        config.RateLimitEndpointConfig{Requests: 1, Window: 60},
+		GlobalBurst: 1,
 	})
 
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

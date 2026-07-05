@@ -235,8 +235,8 @@ func TestRateLimitConfigDefaults(t *testing.T) {
 	if !cfg.Server.RateLimit.Enabled {
 		t.Error("RateLimit.Enabled should be true by default")
 	}
-	if cfg.Server.RateLimit.RequestsPerMinute != 1000 {
-		t.Errorf("RateLimit.RequestsPerMinute = %d, want 1000", cfg.Server.RateLimit.RequestsPerMinute)
+	if cfg.Server.RateLimit.Read.Requests != 120 {
+		t.Errorf("RateLimit.Read.Requests = %d, want 120", cfg.Server.RateLimit.Read.Requests)
 	}
 }
 
@@ -898,10 +898,10 @@ func TestValidateAndApplyDefaultsComprehensive(t *testing.T) {
 			Mode: "invalid_mode",
 			RateLimit: RateLimitConfig{
 				Enabled: true,
-				// Invalid
-				RequestsPerMinute: -1,
-				// Invalid
-				BurstSize: 0,
+				// Invalid — triggers default application
+				Read:        RateLimitEndpointConfig{Requests: -1, Window: 0},
+				Write:       RateLimitEndpointConfig{Requests: -1, Window: 0},
+				GlobalBurst: 0,
 			},
 			GeoIP:   GeoIPConfig{Enabled: true, Dir: ""},
 			Metrics: MetricsConfig{Enabled: true, Endpoint: ""},
@@ -929,8 +929,8 @@ func TestValidateAndApplyDefaultsComprehensive(t *testing.T) {
 	if cfg.Server.Mode != "production" {
 		t.Errorf("Mode not fixed, got %q", cfg.Server.Mode)
 	}
-	if cfg.Server.RateLimit.RequestsPerMinute != 1000 {
-		t.Errorf("RateLimit.RequestsPerMinute not fixed, got %d", cfg.Server.RateLimit.RequestsPerMinute)
+	if cfg.Server.RateLimit.Read.Requests != 120 {
+		t.Errorf("RateLimit.Read.Requests not fixed, got %d", cfg.Server.RateLimit.Read.Requests)
 	}
 	if cfg.Server.Compression.Level != 6 {
 		t.Errorf("Compression.Level not fixed, got %d", cfg.Server.Compression.Level)

@@ -36,25 +36,52 @@ type BannerInfo struct {
 	IsHTTPS    bool
 }
 
-// PrintBanner prints a responsive startup banner per AI.md spec
-// Uses box drawing characters and emojis for visual appeal
+// PrintBanner prints a responsive startup banner per AI.md PART 15 spec.
+// Adapts to terminal width: ≥80 full box drawing, 60-79 compact, 40-59 minimal,
+// <40 micro single-line, NO_COLOR/TERM=dumb plain text (no emojis or box drawing).
 // fmt.Fprintln(os.Stdout, ...) is used throughout this function: this is intentional
 // terminal-only banner output, not application logging; log/slog must not be used here
 // as it would prepend timestamps and log levels to visual border characters.
 func PrintBanner(info *BannerInfo) {
-	// Get terminal width for responsive layout
 	width := getTerminalWidth()
-	if width < 50 {
-		width = 60
-	}
-	if width > 80 {
-		width = 80
+
+	// Plain mode: no emojis (NO_COLOR, TERM=dumb)
+	if !display.ColorEnabled() || os.Getenv("TERM") == "dumb" {
+		printBannerPlain(info)
+		return
 	}
 
-	// Inner width (excluding borders)
+	switch {
+	case width >= 80:
+		printBannerFull(info, width)
+	case width >= 60:
+		printBannerCompact(info)
+	case width >= 40:
+		printBannerMinimal(info)
+	default:
+		printBannerMicro(info)
+	}
+}
+
+// getTerminalWidth returns the raw terminal width (unclamped).
+// Returns 80 as default when the terminal size cannot be determined.
+func getTerminalWidth() int {
+	width, _, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil || width < 1 {
+		return 80
+	}
+	return width
+}
+
+// printBannerFull renders the full box-drawing banner for terminals ≥80 columns.
+// Per AI.md PART 15: Full branded banner with icons and URLs.
+func printBannerFull(info *BannerInfo, width int) {
+	// Cap width to avoid overly wide banners on very large terminals
+	if width > 120 {
+		width = 120
+	}
 	innerWidth := width - 4
 
-	// Blank line before banner (terminal-only output, not application logging)
 	fmt.Fprintln(os.Stdout)
 	printTopBorder(width)
 	printHeaderLine(info, innerWidth)
@@ -66,17 +93,139 @@ func PrintBanner(info *BannerInfo) {
 	printListenLine(info, innerWidth)
 	printTimestampLine(innerWidth)
 	printBottomBorder(width)
-	// Blank line after banner (terminal-only output, not application logging)
 	fmt.Fprintln(os.Stdout)
 }
 
-// getTerminalWidth returns the terminal width or a default
-func getTerminalWidth() int {
-	width, _, err := term.GetSize(int(os.Stdout.Fd()))
-	if err != nil || width < 40 {
-		return 60
+// printBannerCompact renders the compact banner for 60-79 column terminals.
+// Per AI.md PART 15: Icons + text only, no box drawing.
+func printBannerCompact(info *BannerInfo) {
+	appName := info.AppName
+	if appName == "" {
+		appName = "Search"
 	}
-	return width
+
+	rocket := display.Emoji("🚀", "*")
+	pkg := display.Emoji("📦", "v")
+	fmt.Fprintf(os.Stdout, "%s %s %s%s\n",
+		color("\033[1;35m", rocket+" "+strings.ToUpper(appName)),
+		"",
+		color("\033[33m", pkg),
+		info.Version)
+
+	modeIcon, modeColor := bannerModeIcon(info.Mode)
+	fmt.Fprintf(os.Stdout, "%s %s\n",
+		modeIcon,
+		color(modeColor, "Mode: "+strings.ToLower(info.Mode)))
+
+	if info.HTTPSAddr != "" {
+		lock := display.Emoji("🔐", "[SSL]")
+		fmt.Fprintf(os.Stdout, "%s %s\n", lock, color("\033[32m", info.HTTPSAddr))
+	}
+	if info.HTTPAddr != "" && (info.HTTPSAddr == "" || info.HTTPSPort > 0) {
+		globe := display.Emoji("🌐", "[WEB]")
+		fmt.Fprintf(os.Stdout, "%s %s\n", globe, color("\033[34m", info.HTTPAddr))
+	}
+	if info.TorAddr != "" {
+		onion := display.Emoji("🧅", "[TOR]")
+		fmt.Fprintf(os.Stdout, "%s %s\n", onion, color("\033[35m", info.TorAddr))
+	}
+
+	proto := "http"
+	if info.IsHTTPS {
+		proto = "https"
+	}
+	listen := display.Emoji("📡", "[LISTEN]")
+	fmt.Fprintf(os.Stdout, "%s %s\n",
+		listen,
+		color("\033[36m", fmt.Sprintf("Listening: %s://%s", proto, info.ListenAddr)))
+
+	ok := display.Emoji("✅", "[OK]")
+	ts := time.Now().Format("Mon Jan 02, 2006 at 15:04:05 MST")
+	fmt.Fprintf(os.Stdout, "%s %s\n", ok, color("\033[32m", "Started: "+ts))
+	fmt.Fprintln(os.Stdout)
+}
+
+// printBannerMinimal renders the minimal banner for 40-59 column terminals.
+// Per AI.md PART 15: Abbreviated, no icons.
+func printBannerMinimal(info *BannerInfo) {
+	appName := info.AppName
+	if appName == "" {
+		appName = "Search"
+	}
+
+	fmt.Fprintf(os.Stdout, "%s %s\n", appName, info.Version)
+	fmt.Fprintf(os.Stdout, "%s\n", strings.ToLower(info.Mode))
+
+	addr := primaryURLHost(info)
+	if addr != "" {
+		fmt.Fprintf(os.Stdout, "%s\n", addr)
+	}
+	fmt.Fprintln(os.Stdout)
+}
+
+// printBannerMicro renders the micro banner for terminals <40 columns.
+// Per AI.md PART 15: Single line only.
+func printBannerMicro(info *BannerInfo) {
+	appName := info.AppName
+	if appName == "" {
+		appName = "Search"
+	}
+
+	addr := primaryURLHost(info)
+	if addr != "" {
+		fmt.Fprintf(os.Stdout, "%s %s\n", appName, addr)
+	} else {
+		fmt.Fprintf(os.Stdout, "%s\n", appName)
+	}
+}
+
+// printBannerPlain renders a plain text banner with no emojis or ANSI codes.
+// Per AI.md PART 15: NO_COLOR / TERM=dumb output.
+func printBannerPlain(info *BannerInfo) {
+	appName := info.AppName
+	if appName == "" {
+		appName = "Search"
+	}
+
+	fmt.Fprintf(os.Stdout, "%s v%s\n", appName, info.Version)
+	fmt.Fprintf(os.Stdout, "Mode: %s\n", strings.ToLower(info.Mode))
+
+	if info.HTTPSAddr != "" {
+		fmt.Fprintf(os.Stdout, "URL: %s\n", info.HTTPSAddr)
+	}
+	if info.HTTPAddr != "" && (info.HTTPSAddr == "" || info.HTTPSPort > 0) {
+		fmt.Fprintf(os.Stdout, "URL: %s\n", info.HTTPAddr)
+	}
+	if info.TorAddr != "" {
+		fmt.Fprintf(os.Stdout, "Tor: %s\n", info.TorAddr)
+	}
+
+	proto := "http"
+	if info.IsHTTPS {
+		proto = "https"
+	}
+	fmt.Fprintf(os.Stdout, "Listening: %s://%s\n", proto, info.ListenAddr)
+	fmt.Fprintf(os.Stdout, "Started: %s\n", time.Now().Format("Mon Jan 02, 2006 at 15:04:05 MST"))
+	fmt.Fprintln(os.Stdout)
+}
+
+// bannerModeIcon returns the emoji/icon and ANSI color for the current mode.
+func bannerModeIcon(mode string) (string, string) {
+	if strings.ToLower(mode) == "production" {
+		return display.Emoji("🔒", "[PROD]"), "\033[32m"
+	}
+	return display.Emoji("🔧", "[DEV]"), "\033[33m"
+}
+
+// primaryURLHost returns the primary display URL (HTTPS preferred over HTTP).
+func primaryURLHost(info *BannerInfo) string {
+	if info.HTTPSAddr != "" {
+		return info.HTTPSAddr
+	}
+	if info.HTTPAddr != "" {
+		return info.HTTPAddr
+	}
+	return ""
 }
 
 // printTopBorder prints the top border
@@ -109,7 +258,6 @@ func printSeparator(width int) {
 func printLine(content string, innerWidth int) {
 	border := color("\033[36m", "│")
 	fmt.Fprint(os.Stdout, border+"  ")
-	// Calculate visible length (ignoring ANSI codes)
 	visibleLen := visibleLength(content)
 	padding := innerWidth - visibleLen
 	if padding < 0 {
@@ -143,7 +291,6 @@ func visibleLength(s string) int {
 // printHeaderLine prints the app name and version
 // Per AI.md PART 8: Uses display.Emoji() for NO_COLOR fallback
 func printHeaderLine(info *BannerInfo, innerWidth int) {
-	// Use project name from config, with emoji
 	appName := info.AppName
 	if appName == "" {
 		appName = "Search"
@@ -162,18 +309,8 @@ func printHeaderLine(info *BannerInfo, innerWidth int) {
 // printModeLine prints the mode and debug status
 // Per AI.md PART 8: Uses display.Emoji() for NO_COLOR fallback
 func printModeLine(info *BannerInfo, innerWidth int) {
-	var modeIcon, modeColor string
+	modeIcon, modeColor := bannerModeIcon(info.Mode)
 	mode := strings.ToLower(info.Mode)
-
-	if mode == "production" {
-		modeIcon = display.Emoji("🔒", "[PROD]")
-		// Green
-		modeColor = "\033[32m"
-	} else {
-		modeIcon = display.Emoji("🔧", "[DEV]")
-		// Yellow
-		modeColor = "\033[33m"
-	}
 
 	modeLine := fmt.Sprintf("%s %s", modeIcon, color(modeColor, "Running in mode: "+mode))
 

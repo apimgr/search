@@ -276,8 +276,11 @@ type ServerConfig struct {
 	// Image Proxy
 	ImageProxy ImageProxyConfig `yaml:"image_proxy"`
 
-	// Contact
+	// Contact — four canonical notification roles per AI.md PART 12
 	Contact ContactConfig `yaml:"contact"`
+
+	// Tracking — server-wide analytics platform per AI.md PART 12
+	Tracking TrackingConfig `yaml:"tracking"`
 
 	// SEO
 	SEO SEOConfig `yaml:"seo"`
@@ -357,17 +360,26 @@ type BrandingConfig struct {
 	PrimaryColor  string `yaml:"primary_color"`
 }
 
-// RateLimitConfig represents rate limiting configuration
+// RateLimitEndpointConfig holds per-endpoint rate limit parameters per AI.md PART 12.
+type RateLimitEndpointConfig struct {
+	// Maximum requests allowed within the window
+	Requests int `yaml:"requests"`
+	// Window duration in seconds
+	Window int `yaml:"window"`
+}
+
+// RateLimitConfig represents per-endpoint rate limiting configuration per AI.md PART 12.
+// read: 120/min, write: 10/min, health: 120/min, global_burst: 240 per-IP sliding window.
 type RateLimitConfig struct {
-	Enabled           bool     `yaml:"enabled"`
-	RequestsPerMinute int      `yaml:"requests_per_minute"`
-	RequestsPerHour   int      `yaml:"requests_per_hour"`
-	RequestsPerDay    int      `yaml:"requests_per_day"`
-	BurstSize         int      `yaml:"burst_size"`
-	ByIP              bool     `yaml:"by_ip"`
-	ByUser            bool     `yaml:"by_user"`
-	Whitelist         []string `yaml:"whitelist"`
-	Blacklist         []string `yaml:"blacklist"`
+	Enabled bool `yaml:"enabled"`
+	// Read endpoints (search, results, static) — default 120 req/60s
+	Read RateLimitEndpointConfig `yaml:"read"`
+	// Write endpoints (prefs, alerts, contact) — default 10 req/60s
+	Write RateLimitEndpointConfig `yaml:"write"`
+	// Health endpoints (/server/healthz, /server/status) — default 120 req/60s
+	Health RateLimitEndpointConfig `yaml:"health"`
+	// GlobalBurst is the maximum burst size per IP across all endpoint types
+	GlobalBurst int `yaml:"global_burst"`
 }
 
 // LogsConfig represents logging configuration
@@ -545,8 +557,12 @@ type SecurityConfig struct {
 		IncludeSubDomains bool    `yaml:"include_subdomains"`
 		SampleRate        float64 `yaml:"sample_rate"`
 	} `yaml:"nel"`
-	// Trusted Proxies
+	// TrustedProxies lists IPs/CIDRs whose X-Forwarded-* headers are trusted
 	TrustedProxies []string `yaml:"trusted_proxies"`
+	// AllowedIPs lists IPs/prefixes that bypass blocklist, rate-limit, and GeoIP checks
+	AllowedIPs []string `yaml:"allowed_ips"`
+	// BlockedIPs lists IPs/prefixes that are always rejected (403) before any other check
+	BlockedIPs []string `yaml:"blocked_ips"`
 }
 
 // AuthConfig represents external authentication configuration per AI.md PART 31
@@ -651,13 +667,23 @@ type Announcement struct {
 	Dismissible bool `yaml:"dismissible"`
 }
 
+// TrackingConfig holds server-wide analytics configuration per AI.md PART 12.
+// Supported types: google, matomo, piwik, owa, fathom, plausible, umami, simple, cloudflare.
+// Empty or "none" disables all analytics.
+type TrackingConfig struct {
+	// Analytics platform type; "" or "none" = disabled
+	Type string `yaml:"type"`
+	// Platform-specific tracking/site ID
+	ID string `yaml:"id"`
+	// Self-hosted URL — required for matomo, piwik, owa, umami; unused for google/fathom/plausible/cloudflare
+	URL string `yaml:"url"`
+}
+
 // CookieConsentConfig represents cookie consent popup settings
 type CookieConsentConfig struct {
 	Enabled   bool   `yaml:"enabled"`
 	Message   string `yaml:"message"`
 	PolicyURL string `yaml:"policy_url"`
-	// Google Analytics ID
-	TrackingID string `yaml:"tracking_id"`
 }
 
 // ActiveAnnouncements returns announcements that are currently active
@@ -916,10 +942,32 @@ type ImageProxyConfig struct {
 	Key     string `yaml:"key"`
 }
 
-// ContactConfig represents contact page configuration
+// WebhookNotifyConfig holds per-transport webhook URLs for a contact role per AI.md PART 12.
+type WebhookNotifyConfig struct {
+	Telegram string `yaml:"telegram"`
+	Discord  string `yaml:"discord"`
+	Slack    string `yaml:"slack"`
+	Generic  string `yaml:"generic"`
+}
+
+// ContactRoleConfig holds the email and webhooks for one contact role per AI.md PART 12.
+type ContactRoleConfig struct {
+	Email    string              `yaml:"email"`
+	Webhooks WebhookNotifyConfig `yaml:"webhooks"`
+}
+
+// ContactConfig holds the four canonical contact roles per AI.md PART 12.
+// admin is required; security defaults to security@{fqdn}; abuse and general default to "".
+// Effective recipient is computed per-dispatch — resolves through the fallback chain at send time.
 type ContactConfig struct {
-	Enabled bool   `yaml:"enabled"`
-	Email   string `yaml:"email"`
+	// Admin is the server-internal recipient — never publicly exposed
+	Admin ContactRoleConfig `yaml:"admin"`
+	// Security is published in security.txt (Contact: mailto:) per RFC 2142
+	Security ContactRoleConfig `yaml:"security"`
+	// Abuse receives DMCA/ToS reports — published when set, RFC 2142 recommends abuse@{fqdn}
+	Abuse ContactRoleConfig `yaml:"abuse"`
+	// General receives /server/contact form submissions — published when set
+	General ContactRoleConfig `yaml:"general"`
 }
 
 // SEOConfig represents SEO configuration
@@ -1193,14 +1241,11 @@ func DefaultConfig() *Config {
 				PrimaryColor: "#bd93f9",
 			},
 			RateLimit: RateLimitConfig{
-				Enabled:           true,
-				RequestsPerMinute: 1000,
-				RequestsPerHour:   20000,
-				RequestsPerDay:    100000,
-				BurstSize:         100,
-				ByIP:              true,
-				ByUser:            false,
-				Whitelist:         []string{"127.0.0.1", "::1"},
+				Enabled:     true,
+				Read:        RateLimitEndpointConfig{Requests: 120, Window: 60},
+				Write:       RateLimitEndpointConfig{Requests: 10, Window: 60},
+				Health:      RateLimitEndpointConfig{Requests: 120, Window: 60},
+				GlobalBurst: 240,
 			},
 			Logs: LogsConfig{
 				Level: "warn",
@@ -1460,9 +1505,7 @@ func DefaultConfig() *Config {
 			ImageProxy: ImageProxyConfig{
 				Enabled: false,
 			},
-			Contact: ContactConfig{
-				Enabled: true,
-			},
+			Contact: ContactConfig{},
 			SEO: SEOConfig{
 				Enabled:            true,
 				DefaultTitle:       "Search",
@@ -2261,18 +2304,38 @@ func (c *Config) ValidateAndApplyDefaults() []ValidationWarning {
 		c.Server.SecretKey = generateSecret()
 	}
 
-	// Rate limit validation
+	// Rate limit validation — warn and apply defaults; never crash per AI.md PART 12
 	if c.Server.RateLimit.Enabled {
-		if c.Server.RateLimit.RequestsPerMinute <= 0 {
+		if c.Server.RateLimit.Read.Requests <= 0 {
 			warnings = append(warnings, ValidationWarning{
-				Field:   "server.rate_limit.requests_per_minute",
-				Message: "Invalid rate limit, using default",
-				Default: 1000,
+				Field:   "server.rate_limit.read.requests",
+				Message: "Invalid read rate limit, using default",
+				Default: 120,
 			})
-			c.Server.RateLimit.RequestsPerMinute = 1000
+			c.Server.RateLimit.Read.Requests = 120
 		}
-		if c.Server.RateLimit.BurstSize <= 0 {
-			c.Server.RateLimit.BurstSize = 100
+		if c.Server.RateLimit.Read.Window <= 0 {
+			c.Server.RateLimit.Read.Window = 60
+		}
+		if c.Server.RateLimit.Write.Requests <= 0 {
+			warnings = append(warnings, ValidationWarning{
+				Field:   "server.rate_limit.write.requests",
+				Message: "Invalid write rate limit, using default",
+				Default: 10,
+			})
+			c.Server.RateLimit.Write.Requests = 10
+		}
+		if c.Server.RateLimit.Write.Window <= 0 {
+			c.Server.RateLimit.Write.Window = 60
+		}
+		if c.Server.RateLimit.Health.Requests <= 0 {
+			c.Server.RateLimit.Health.Requests = 120
+		}
+		if c.Server.RateLimit.Health.Window <= 0 {
+			c.Server.RateLimit.Health.Window = 60
+		}
+		if c.Server.RateLimit.GlobalBurst <= 0 {
+			c.Server.RateLimit.GlobalBurst = 240
 		}
 	}
 

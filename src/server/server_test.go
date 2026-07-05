@@ -250,9 +250,9 @@ func TestMiddlewareCORSDisabled(t *testing.T) {
 
 func TestNewRateLimiter(t *testing.T) {
 	cfg := &config.RateLimitConfig{
-		Enabled:           true,
-		RequestsPerMinute: 60,
-		BurstSize:         10,
+		Enabled:     true,
+		Read:        config.RateLimitEndpointConfig{Requests: 60, Window: 60},
+		GlobalBurst: 10,
 	}
 	rl := NewRateLimiter(cfg)
 
@@ -272,9 +272,9 @@ func TestNewRateLimiter(t *testing.T) {
 
 func TestRateLimiterAllow(t *testing.T) {
 	cfg := &config.RateLimitConfig{
-		Enabled:           true,
-		RequestsPerMinute: 60,
-		BurstSize:         3,
+		Enabled:     true,
+		Read:        config.RateLimitEndpointConfig{Requests: 60, Window: 60},
+		GlobalBurst: 3,
 	}
 	rl := NewRateLimiter(cfg)
 
@@ -298,9 +298,9 @@ func TestRateLimiterAllow(t *testing.T) {
 
 func TestRateLimiterDisabled(t *testing.T) {
 	cfg := &config.RateLimitConfig{
-		Enabled:           false,
-		RequestsPerMinute: 60,
-		BurstSize:         3,
+		Enabled:     false,
+		Read:        config.RateLimitEndpointConfig{Requests: 60, Window: 60},
+		GlobalBurst: 3,
 	}
 	rl := NewRateLimiter(cfg)
 

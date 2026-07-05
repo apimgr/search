@@ -1781,7 +1781,8 @@ func (h *Handler) handleServerContact(w http.ResponseWriter, r *http.Request) {
 	accept := r.Header.Get("Accept")
 	wantsJSON := strings.Contains(accept, "application/json") || !strings.Contains(accept, "text/html")
 
-	contactEnabled := h.config.Server.Contact.Enabled
+	// Contact is enabled when any public-facing email is configured per AI.md PART 12
+	contactEnabled := h.config.Server.Contact.General.Email != "" || h.config.Server.Contact.Admin.Email != ""
 
 	if r.Method == http.MethodGet {
 		if !wantsJSON {

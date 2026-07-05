@@ -220,11 +220,21 @@ type RateLimiter struct {
 }
 
 // NewRateLimiter creates a new rate limiter backed by golang.org/x/time/rate.
+// Uses read.requests as the default per-IP rate and global_burst as the burst size
+// per AI.md PART 12. The EndpointRateLimiter should be used for per-type enforcement.
 func NewRateLimiter(cfg *config.RateLimitConfig) *RateLimiter {
+	readRequests := cfg.Read.Requests
+	if readRequests <= 0 {
+		readRequests = 120
+	}
+	burst := cfg.GlobalBurst
+	if burst <= 0 {
+		burst = 240
+	}
 	rl := &RateLimiter{
 		visitors: make(map[string]*rate.Limiter),
-		rate:     cfg.RequestsPerMinute,
-		burst:    cfg.BurstSize,
+		rate:     readRequests,
+		burst:    burst,
 		enabled:  cfg.Enabled,
 	}
 	go rl.cleanup()
@@ -331,13 +341,13 @@ func (erl *EndpointRateLimiter) RemainingTime(ip string) time.Duration {
 }
 
 // Allowlist is middleware step 5 per AI.md PART 5.
-// Sets the allowlisted flag in the request context when the client IP is in the
-// configured whitelist. Allowlisted requests bypass blocklist, rate-limit, and GeoIP
-// checks downstream — but NOT auth.
+// Sets the allowlisted flag in the request context when the client IP is in
+// server.security.allowed_ips. Allowlisted requests bypass blocklist, rate-limit,
+// and GeoIP checks downstream — but NOT auth.
 func (m *Middleware) Allowlist(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ip := getClientIP(r, m.config.Server.Security.TrustedProxies)
-		for _, allowed := range m.config.Server.RateLimit.Whitelist {
+		for _, allowed := range m.config.Server.Security.AllowedIPs {
 			if ip == allowed || strings.HasPrefix(ip, allowed) {
 				ctx := context.WithValue(r.Context(), allowlistedCtxKey{}, true)
 				next.ServeHTTP(w, r.WithContext(ctx))
@@ -349,7 +359,7 @@ func (m *Middleware) Allowlist(next http.Handler) http.Handler {
 }
 
 // Blocklist is middleware step 6 per AI.md PART 5.
-// Blocks requests from IPs on the configured blacklist.
+// Blocks requests from IPs listed in server.security.blocked_ips.
 // Allowlisted IPs (flag set by Allowlist middleware) skip this check.
 func (m *Middleware) Blocklist(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -358,11 +368,11 @@ func (m *Middleware) Blocklist(next http.Handler) http.Handler {
 			return
 		}
 		ip := getClientIP(r, m.config.Server.Security.TrustedProxies)
-		for _, blacklisted := range m.config.Server.RateLimit.Blacklist {
-			if ip == blacklisted || strings.HasPrefix(ip, blacklisted) {
+		for _, blocked := range m.config.Server.Security.BlockedIPs {
+			if ip == blocked || strings.HasPrefix(ip, blocked) {
 				// Per AI.md PART 11: no IP logging — privacy is the product.
 				if m.logManager != nil {
-					m.logManager.Security().LogBlocked("-", r.URL.Path, "blacklisted")
+					m.logManager.Security().LogBlocked("-", r.URL.Path, "blocked")
 				}
 				localizedHTTPError(w, r, http.StatusForbidden, "errors.forbidden")
 				return
@@ -1020,8 +1030,9 @@ func GetRequestContext(r *http.Request) *RequestContext {
 	return &RequestContext{Type: TargetUnknown}
 }
 
-// PathSecurityMiddleware normalizes paths and blocks traversal attempts
-// Per AI.md PART 5: This middleware MUST be after URLNormalizeMiddleware
+// PathSecurityMiddleware normalizes paths and blocks traversal and uppercase attempts.
+// Per AI.md PART 5: blocks .., %2e%2e, and uppercase letters in path segments.
+// MUST be middleware step 3 — after URLNormalize and RequestID, before all others.
 func PathSecurityMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		original := r.URL.Path
@@ -1033,13 +1044,27 @@ func PathSecurityMiddleware(next http.Handler) http.Handler {
 			rawPath = r.URL.Path
 		}
 
-		// Block path traversal attempts (encoded and decoded)
-		// %2e = . so %2e%2e = ..
+		// Block path traversal attempts (encoded and decoded); %2e = . so %2e%2e = ..
 		if strings.Contains(original, "..") ||
 			strings.Contains(rawPath, "..") ||
 			strings.Contains(strings.ToLower(rawPath), "%2e") {
 			localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
 			return
+		}
+
+		// Block uppercase letters in path segments per AI.md PART 5.
+		// All valid path segments are lowercase; uppercase indicates either a typo
+		// or an attempt to bypass case-sensitive route matching.
+		for _, seg := range strings.Split(strings.Trim(original, "/"), "/") {
+			if seg == "" {
+				continue
+			}
+			for _, ch := range seg {
+				if ch >= 'A' && ch <= 'Z' {
+					localizedHTTPError(w, r, http.StatusBadRequest, "errors.bad_request")
+					return
+				}
+			}
 		}
 
 		// Normalize the path

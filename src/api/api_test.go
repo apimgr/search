@@ -2621,7 +2621,7 @@ func TestHandleServerContactPOSTEnabled(t *testing.T) {
 		Server: config.ServerConfig{
 			Title: "Test Search",
 			Contact: config.ContactConfig{
-				Enabled: true,
+				General: config.ContactRoleConfig{Email: "contact@example.com"},
 			},
 		},
 	}
@@ -2654,7 +2654,7 @@ func TestHandleServerContactPOSTMissingFields(t *testing.T) {
 		Server: config.ServerConfig{
 			Title: "Test Search",
 			Contact: config.ContactConfig{
-				Enabled: true,
+				General: config.ContactRoleConfig{Email: "contact@example.com"},
 			},
 		},
 	}
@@ -2693,7 +2693,7 @@ func TestHandleServerContactPOSTInvalidJSON(t *testing.T) {
 		Server: config.ServerConfig{
 			Title: "Test Search",
 			Contact: config.ContactConfig{
-				Enabled: true,
+				General: config.ContactRoleConfig{Email: "contact@example.com"},
 			},
 		},
 	}

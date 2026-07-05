@@ -80,9 +80,13 @@ func (s *Server) handleSecurityTxtEnhanced(w http.ResponseWriter, r *http.Reques
 
 	// Contact (REQUIRED per RFC 9116)
 	// Must be a URI (mailto:, https://, or tel:)
+	// Uses security.contact then general.contact per AI.md PART 12 fallback chain
 	contact := security.Contact
-	if contact == "" && s.config.Server.Contact.Email != "" {
-		contact = s.config.Server.Contact.Email
+	if contact == "" && s.config.Server.Contact.Security.Email != "" {
+		contact = s.config.Server.Contact.Security.Email
+	}
+	if contact == "" && s.config.Server.Contact.General.Email != "" {
+		contact = s.config.Server.Contact.General.Email
 	}
 	if contact != "" {
 		// Ensure mailto: prefix for email addresses
@@ -173,7 +177,9 @@ func (s *Server) handleLlmsTxt(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, "## API")
 	fmt.Fprintf(w, "Base URL: %s/api/%s\n", baseURL, apiVersion)
 	fmt.Fprintln(w, "Authentication: Bearer token (operator token for admin endpoints)")
-	fmt.Fprintf(w, "Rate limit: %d requests/minute\n", s.config.Server.RateLimit.RequestsPerMinute)
+	fmt.Fprintf(w, "Rate limit: %d requests per %ds (read), %d requests per %ds (write)\n",
+		s.config.Server.RateLimit.Read.Requests, s.config.Server.RateLimit.Read.Window,
+		s.config.Server.RateLimit.Write.Requests, s.config.Server.RateLimit.Write.Window)
 	fmt.Fprintln(w)
 
 	// Endpoints section - public API endpoints
@@ -198,8 +204,11 @@ func (s *Server) handleLlmsTxt(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, "## Contact")
 	security := s.config.Server.Web.Security
 	contact := security.Contact
-	if contact == "" && s.config.Server.Contact.Email != "" {
-		contact = s.config.Server.Contact.Email
+	if contact == "" && s.config.Server.Contact.Security.Email != "" {
+		contact = s.config.Server.Contact.Security.Email
+	}
+	if contact == "" && s.config.Server.Contact.General.Email != "" {
+		contact = s.config.Server.Contact.General.Email
 	}
 	if contact == "" {
 		fqdn := extractHostFromURL(baseURL)
