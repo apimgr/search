@@ -8,6 +8,8 @@ import (
 	"net/smtp"
 	"strings"
 	"time"
+
+	"github.com/apimgr/search/src/i18n"
 )
 
 // Testable variables for dependency injection in tests
@@ -298,31 +300,40 @@ func (ml *Mailer) SendToAdmins(subject, body string) error {
 }
 
 // SendAlert sends an alert email to admins
+// Per AI.md PART 30: All user-facing text uses i18n keys.
 func (ml *Mailer) SendAlert(alertType, message string) error {
 	appTitle := ml.config.AppTitle
 	if appTitle == "" {
 		appTitle = "Search"
 	}
-	subject := fmt.Sprintf("[%s Alert] %s", appTitle, alertType)
-	body := fmt.Sprintf("Alert Type: %s\nTime: %s\n\nMessage:\n%s",
+	subject := i18n.TDefault("email_notifications.alert_subject", appTitle, alertType)
+	body := fmt.Sprintf("%s: %s\n%s: %s\n\n%s:\n%s",
+		i18n.TDefault("email_notifications.alert_type_label"),
 		alertType,
+		i18n.TDefault("email_notifications.alert_time_label"),
 		time.Now().Format(time.RFC3339),
+		i18n.TDefault("email_notifications.alert_message_label"),
 		message,
 	)
 	return ml.SendToAdmins(subject, body)
 }
 
 // SendSecurityAlert sends a security alert email
+// Per AI.md PART 30: All user-facing text uses i18n keys.
 func (ml *Mailer) SendSecurityAlert(event, ip, details string) error {
 	appTitle := ml.config.AppTitle
 	if appTitle == "" {
 		appTitle = "Search"
 	}
-	subject := fmt.Sprintf("[%s Security] %s from %s", appTitle, event, ip)
-	body := fmt.Sprintf("Security Event: %s\nIP Address: %s\nTime: %s\n\nDetails:\n%s",
+	subject := i18n.TDefault("email_notifications.security_subject", appTitle, event, ip)
+	body := fmt.Sprintf("%s: %s\n%s: %s\n%s: %s\n\n%s:\n%s",
+		i18n.TDefault("email_notifications.security_event_label"),
 		event,
+		i18n.TDefault("email_notifications.security_ip_label"),
 		ip,
+		i18n.TDefault("email_notifications.security_time_label"),
 		time.Now().Format(time.RFC3339),
+		i18n.TDefault("email_notifications.security_details_label"),
 		details,
 	)
 	return ml.SendToAdmins(subject, body)

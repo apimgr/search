@@ -543,18 +543,40 @@ func (m *MaintenanceService) CheckDatabaseIntegrity(db *sql.DB) error {
 
 // RepairDatabase attempts to repair a corrupted database
 // Per AI.md PART 6: Database corruption handling
+// Per AI.md PART 10: Path validation is NON-NEGOTIABLE for SQL operations.
 func (m *MaintenanceService) RepairDatabase(dbPath string) error {
-	slog.Info("Attempting database repair", "path", dbPath)
+	// Validate and clean the path to prevent path traversal attacks.
+	// Per AI.md PART 10: All paths must be normalized with filepath.Clean().
+	cleanedPath := filepath.Clean(dbPath)
+	if cleanedPath != dbPath {
+		return fmt.Errorf("invalid database path: contains path traversal")
+	}
+
+	// Ensure the path is absolute to prevent relative path attacks
+	if !filepath.IsAbs(cleanedPath) {
+		return fmt.Errorf("invalid database path: must be absolute")
+	}
+
+	// Ensure the file exists and is a regular file (not a symlink to /etc/passwd, etc.)
+	info, err := os.Lstat(cleanedPath)
+	if err != nil {
+		return fmt.Errorf("invalid database path: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("invalid database path: not a regular file")
+	}
+
+	slog.Info("Attempting database repair", "path", cleanedPath)
 
 	// Create backup first
-	backupPath := dbPath + ".backup." + time.Now().Format("20060102-150405")
-	if err := copyFile(dbPath, backupPath); err != nil {
+	backupPath := cleanedPath + ".backup." + time.Now().Format("20060102-150405")
+	if err := copyFile(cleanedPath, backupPath); err != nil {
 		return fmt.Errorf("failed to create backup: %w", err)
 	}
 	slog.Info("Backup created", "path", backupPath)
 
 	// Open a new connection
-	db, err := sql.Open("sqlite", dbPath)
+	db, err := sql.Open("sqlite", cleanedPath)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
@@ -565,8 +587,9 @@ func (m *MaintenanceService) RepairDatabase(dbPath string) error {
 	defer cancel()
 
 	// First try VACUUM INTO to create a clean copy
-	cleanPath := dbPath + ".clean"
-	if _, err := db.ExecContext(ctx, fmt.Sprintf("VACUUM INTO '%s'", cleanPath)); err != nil {
+	// The cleanPath is derived from our already-validated cleanedPath, so it's safe.
+	vacuumPath := cleanedPath + ".clean"
+	if _, err := db.ExecContext(ctx, fmt.Sprintf("VACUUM INTO '%s'", vacuumPath)); err != nil {
 		slog.Warn("VACUUM INTO failed, trying reindex", "err", err)
 
 		// Try REINDEX as fallback
@@ -579,7 +602,7 @@ func (m *MaintenanceService) RepairDatabase(dbPath string) error {
 
 	// Replace original with clean copy
 	db.Close()
-	if err := os.Rename(cleanPath, dbPath); err != nil {
+	if err := os.Rename(vacuumPath, cleanedPath); err != nil {
 		return fmt.Errorf("failed to replace with clean database: %w", err)
 	}
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/apimgr/search/src/alert"
 	"github.com/apimgr/search/src/backup"
+	"github.com/apimgr/search/src/i18n"
 	"github.com/apimgr/search/src/scheduler"
 )
 
@@ -233,29 +234,27 @@ func (s *Server) handleTaskFailureNotification(notification *scheduler.TaskFailu
 		"error", notification.Error)
 
 	// Send email notification if mailer is configured
+	// Per AI.md PART 30: All user-facing text uses i18n keys.
 	if s.mailer != nil && s.mailer.IsEnabled() {
-		body := fmt.Sprintf(`Scheduled Task Failure Notification
-
-Task: %s
-Task ID: %s
-Error: %s
-
-Attempts: %d (with exponential backoff)
-Last Run: %s
-Total Failures: %d
-
-This task will be retried at its next scheduled time.
-
----
-This is an automated notification from the scheduler.
-`, notification.TaskName,
+		body := fmt.Sprintf("%s\n\n%s: %s\n%s: %s\n%s: %s\n\n%s: %d\n%s: %s\n%s: %d\n\n%s\n\n---\n%s\n",
+			i18n.TDefault("email_notifications.task_failure_title"),
+			i18n.TDefault("email_notifications.task_label"),
+			notification.TaskName,
+			i18n.TDefault("email_notifications.task_id_label"),
 			notification.TaskID,
+			i18n.TDefault("email_notifications.error_label"),
 			notification.Error,
+			i18n.TDefault("email_notifications.attempts_label"),
 			notification.Attempts,
+			i18n.TDefault("email_notifications.last_run_label"),
 			notification.LastRun.Format(time.RFC3339),
-			notification.FailCount)
+			i18n.TDefault("email_notifications.total_failures_label"),
+			notification.FailCount,
+			i18n.TDefault("email_notifications.task_retry_notice"),
+			i18n.TDefault("email_notifications.automated_notice"),
+		)
 
-		if err := s.mailer.SendAlert("Task Failure", body); err != nil {
+		if err := s.mailer.SendAlert(i18n.TDefault("email_notifications.task_failure_subject"), body); err != nil {
 			slog.Error("failed to send task failure notification email", "err", err)
 		} else {
 			slog.Info("task failure notification email sent", "task_id", notification.TaskID)

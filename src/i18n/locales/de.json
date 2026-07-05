@@ -1564,5 +1564,26 @@
     "invalid_url_scheme": "Invalid URL scheme",
     "url_not_allowed": "URL not allowed",
     "request_create_failed": "Failed to create request"
+  },
+  "email_notifications": {
+    "alert_subject": "%s Alert: %s",
+    "alert_type_label": "Alert Type",
+    "alert_time_label": "Time",
+    "alert_message_label": "Message",
+    "security_subject": "%s Security Alert: %s from %s",
+    "security_event_label": "Event",
+    "security_ip_label": "IP Address",
+    "security_time_label": "Time",
+    "security_details_label": "Details",
+    "task_failure_subject": "Task Failed",
+    "task_failure_title": "Scheduled Task Failure",
+    "task_label": "Task",
+    "task_id_label": "Task ID",
+    "error_label": "Error",
+    "attempts_label": "Attempts",
+    "last_run_label": "Last Run",
+    "total_failures_label": "Total Failures",
+    "task_retry_notice": "The scheduler will retry this task according to its retry policy.",
+    "automated_notice": "This is an automated notification from the search server."
   }
 }

@@ -40,6 +40,28 @@ func RequestString(r *http.Request, key string, args ...interface{}) string {
 	return manager.T(manager.DetectLanguage(r), key, args...)
 }
 
+// T translates a key using the cached embedded locale manager with the specified language.
+// Use this for non-HTTP contexts (e.g., email notifications, scheduled tasks).
+// Per AI.md PART 30: All user-facing text must use i18n keys.
+func T(lang, key string, args ...interface{}) string {
+	manager, err := CachedDefaultManager()
+	if err != nil || manager == nil {
+		return key
+	}
+	return manager.T(lang, key, args...)
+}
+
+// TDefault translates a key using the default language.
+// Use this when language preference is unknown (e.g., admin notifications).
+// Per AI.md PART 30: All user-facing text must use i18n keys.
+func TDefault(key string, args ...interface{}) string {
+	manager, err := CachedDefaultManager()
+	if err != nil || manager == nil {
+		return key
+	}
+	return manager.T(manager.DefaultLanguage(), key, args...)
+}
+
 // newManagerFromFS creates a new i18n manager from the given filesystem
 // This is an internal function used by DefaultManager and for testing
 func newManagerFromFS(fs embed.FS, dir, defaultLang string, supported []string) (*Manager, error) {
