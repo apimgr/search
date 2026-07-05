@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/httputil"
 	"github.com/apimgr/search/src/config"
-	"github.com/apimgr/search/src/httputil"
 )
 
 // handleHome renders the home page

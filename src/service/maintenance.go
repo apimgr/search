@@ -76,7 +76,7 @@ type MaintenanceService struct {
 	scheduledEnd time.Time
 	callbacks    []func(MaintenanceMode)
 	// done signals that the healthMonitor goroutine has exited
-	done         chan struct{}
+	done chan struct{}
 
 	// Database connections for health checks
 	serverDBCheck func(ctx context.Context) error

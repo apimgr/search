@@ -19,9 +19,9 @@ import (
 	"time"
 
 	"github.com/apimgr/search/src/api"
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/geoip"
-	"github.com/apimgr/search/src/i18n"
 	"github.com/apimgr/search/src/logging"
 	"github.com/google/uuid"
 	"github.com/rs/cors"

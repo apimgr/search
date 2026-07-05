@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/apimgr/search/src/alert"
+	"github.com/apimgr/search/src/common/display"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/direct"
-	"github.com/apimgr/search/src/display"
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/scheduler"
 	"github.com/go-chi/chi/v5"
@@ -3391,8 +3391,8 @@ func TestSetupRoutes_DoesNotPanic(t *testing.T) {
 type noopMaintenanceHandler struct{}
 
 func (noopMaintenanceHandler) IsInMaintenance() bool { return false }
-func (noopMaintenanceHandler) GetMode() int           { return 0 }
-func (noopMaintenanceHandler) GetMessage() string     { return "" }
+func (noopMaintenanceHandler) GetMode() int          { return 0 }
+func (noopMaintenanceHandler) GetMessage() string    { return "" }
 
 // TestMaintenanceMode_PassThrough passes when maintenance is not active.
 func TestMaintenanceMode_PassThrough(t *testing.T) {
@@ -4268,4 +4268,3 @@ func TestRecovery_NoPanicPassesThrough(t *testing.T) {
 		t.Errorf("Recovery no-panic: status = %d, want 200", rec.Code)
 	}
 }
-

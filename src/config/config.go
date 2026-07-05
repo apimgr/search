@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/apimgr/search/src/display"
+	"github.com/apimgr/search/src/common/display"
 	"github.com/fsnotify/fsnotify"
 	"gopkg.in/yaml.v3"
 )

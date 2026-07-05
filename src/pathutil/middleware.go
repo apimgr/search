@@ -7,7 +7,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/apimgr/search/src/i18n"
+	"github.com/apimgr/search/src/common/i18n"
 )
 
 // PathSecurityMiddleware normalizes paths and blocks traversal attempts

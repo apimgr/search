@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/apimgr/search/src/i18n"
+	"github.com/apimgr/search/src/common/i18n"
 )
 
 // localizedHTTPError writes a canonical JSON error response with the given HTTP status code.

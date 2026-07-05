@@ -1874,7 +1874,7 @@ func TestFormatHeadersData(t *testing.T) {
 		"status":     200,
 		"statusText": "200 OK",
 		"headers": map[string][]string{
-			"Content-Type": {"text/html; charset=utf-8"},
+			"Content-Type":    {"text/html; charset=utf-8"},
 			"X-Frame-Options": {"DENY"},
 		},
 		"security": map[string]interface{}{
@@ -2252,7 +2252,6 @@ func TestUAHandlerBrowser(t *testing.T) {
 // ---------------------------------------------------------------------------
 // CertHandler — type check
 // ---------------------------------------------------------------------------
-
 
 func TestCertHandlerType(t *testing.T) {
 	h := NewCertHandler()

@@ -623,23 +623,23 @@ func TestGoogleParseVideoResults(t *testing.T) {
 		wantCount int
 	}{
 		{
-			name: "youtube.com redirect kept",
-			html: `<a href="/url?q=https://www.youtube.com/watch?v=abc123"><h3>Great Video</h3></a>`,
+			name:      "youtube.com redirect kept",
+			html:      `<a href="/url?q=https://www.youtube.com/watch?v=abc123"><h3>Great Video</h3></a>`,
 			wantCount: 1,
 		},
 		{
-			name: "youtu.be short link kept",
-			html: `<a href="/url?q=https://youtu.be/xyz789"><h3>Short Link Video</h3></a>`,
+			name:      "youtu.be short link kept",
+			html:      `<a href="/url?q=https://youtu.be/xyz789"><h3>Short Link Video</h3></a>`,
 			wantCount: 1,
 		},
 		{
-			name: "vimeo.com URL kept",
-			html: `<a href="/url?q=https://vimeo.com/123456"><h3>Vimeo Video</h3></a>`,
+			name:      "vimeo.com URL kept",
+			html:      `<a href="/url?q=https://vimeo.com/123456"><h3>Vimeo Video</h3></a>`,
 			wantCount: 1,
 		},
 		{
-			name: "non-video URL skipped",
-			html: `<a href="/url?q=https://example.com/page"><h3>Not a video</h3></a>`,
+			name:      "non-video URL skipped",
+			html:      `<a href="/url?q=https://example.com/page"><h3>Not a video</h3></a>`,
 			wantCount: 0,
 		},
 		{
@@ -664,10 +664,10 @@ func TestGoogleParseWebResults(t *testing.T) {
 	query := &model.Query{Text: "golang", Category: model.CategoryGeneral}
 
 	tests := []struct {
-		name      string
-		html      string
-		wantMin   int
-		wantMax   int
+		name    string
+		html    string
+		wantMin int
+		wantMax int
 	}{
 		{
 			name:    "anchor containing h3 pattern matched",

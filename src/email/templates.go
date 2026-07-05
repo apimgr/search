@@ -3,8 +3,12 @@ package email
 import (
 	"bytes"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/apimgr/search/src/config"
 )
 
 // TemplateType represents an email template type
@@ -71,12 +75,35 @@ func NewEmailTemplate() *EmailTemplate {
 // Render renders a template with {variable} substitutions from vars.
 // Returns the subject line and body text.
 func (et *EmailTemplate) Render(templateType TemplateType, vars map[string]string) (subject string, body string, err error) {
-	text, ok := rawTemplates[templateType]
+	text, ok := loadCustomTemplate(templateType)
 	if !ok {
-		return "", "", fmt.Errorf("template %s not found", templateType)
+		text, ok = rawTemplates[templateType]
+		if !ok {
+			return "", "", fmt.Errorf("template %s not found", templateType)
+		}
 	}
 	rendered := ReplaceVars(text, vars)
 	return parseTemplate(rendered)
+}
+
+// loadCustomTemplate returns an operator-provided template override from
+// {config_dir}/template/email/{type}.txt if it exists and is readable.
+// Per AI.md PART 17, custom templates take precedence over embedded defaults.
+func loadCustomTemplate(templateType TemplateType) (string, bool) {
+	configDir := config.GetConfigDir()
+	if configDir == "" {
+		return "", false
+	}
+	path := filepath.Join(configDir, "template", "email", string(templateType)+".txt")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", false
+	}
+	text := strings.TrimSpace(string(data))
+	if text == "" {
+		return "", false
+	}
+	return text, true
 }
 
 // ReplaceVars replaces all {variable} placeholders in text with values from vars

@@ -2156,9 +2156,9 @@ func TestCountJSONArrays(t *testing.T) {
 
 func TestGetJSONStats(t *testing.T) {
 	tests := []struct {
-		name      string
-		input     interface{}
-		wantType  string
+		name     string
+		input    interface{}
+		wantType string
 	}{
 		{"object", map[string]interface{}{"a": 1}, "Object"},
 		{"array", []interface{}{1, 2, 3}, "Array"},

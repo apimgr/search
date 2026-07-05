@@ -8,10 +8,10 @@ import (
 
 func TestCleanTrackingNumber(t *testing.T) {
 	tests := []struct {
-		name        string
-		input       string
-		wantEmpty   bool
-		wantExact   string
+		name      string
+		input     string
+		wantEmpty bool
+		wantExact string
 	}{
 		{"spaces removed leaves only alphanumeric", "1Z 999 AA1 01 2345 678", false, ""},
 		{"hyphens removed", "123-456-789", false, "123456789"},

@@ -1022,9 +1022,9 @@ func TestRenewCertificateDNS01NoCertLoaded(t *testing.T) {
 	defer stop()
 
 	m := &Manager{
-		config:    &config.SSLConfig{Enabled: true},
-		dataDir:   t.TempDir(),
-		tlsConfig: nil,
+		config:     &config.SSLConfig{Enabled: true},
+		dataDir:    t.TempDir(),
+		tlsConfig:  nil,
 		legoClient: legoClient,
 	}
 

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/apimgr/search/src/i18n"
+	"github.com/apimgr/search/src/common/i18n"
 )
 
 func localizedHTTPError(w http.ResponseWriter, r *http.Request, status int, key string, args ...interface{}) {

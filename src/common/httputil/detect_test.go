@@ -270,11 +270,11 @@ func TestNormalizeBasePath(t *testing.T) {
 
 func TestGetProtoFromRequest(t *testing.T) {
 	tests := []struct {
-		name              string
-		forwardedProto    string
-		forwardedSsl      string
+		name               string
+		forwardedProto     string
+		forwardedSsl       string
 		tlsConnectionState bool
-		want              string
+		want               string
 	}{
 		{"X-Forwarded-Proto https", "https", "", false, "https"},
 		{"X-Forwarded-Proto http", "http", "", false, "http"},
@@ -309,10 +309,10 @@ func TestGetProtoFromRequest(t *testing.T) {
 
 func TestGetHostFromRequest(t *testing.T) {
 	tests := []struct {
-		name            string
-		forwardedHost   string
-		requestHost     string
-		want            string
+		name          string
+		forwardedHost string
+		requestHost   string
+		want          string
 	}{
 		{"X-Forwarded-Host single", "example.com", "", "example.com"},
 		{"X-Forwarded-Host multiple takes first", "example.com, proxy.internal", "", "example.com"},
@@ -418,14 +418,14 @@ func TestGetBaseURLFromRequest(t *testing.T) {
 
 func TestBuildFullURL(t *testing.T) {
 	tests := []struct {
-		name           string
-		forwardedProto string
-		forwardedHost  string
-		forwardedPort  string
+		name            string
+		forwardedProto  string
+		forwardedHost   string
+		forwardedPort   string
 		forwardedPrefix string
-		requestHost    string
-		path           string
-		want           string
+		requestHost     string
+		path            string
+		want            string
 	}{
 		{
 			name:        "plain http localhost with port",

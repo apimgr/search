@@ -541,9 +541,9 @@ func TestSportsFetcherFetchLiveWithMockedAPI(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(sportsDBEventsResponse{
 			Events: []sportsDBEvent{
 				{
-					IDEvent:  "12345",
-					StrEvent: "Lakers vs Celtics",
-					StrStatus: "In Progress",
+					IDEvent:     "12345",
+					StrEvent:    "Lakers vs Celtics",
+					StrStatus:   "In Progress",
 					StrHomeTeam: "Lakers",
 					StrAwayTeam: "Celtics",
 				},

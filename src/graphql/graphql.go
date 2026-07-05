@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/config"
-	"github.com/apimgr/search/src/i18n"
 	"github.com/graphql-go/graphql"
 )
 

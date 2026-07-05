@@ -8,9 +8,9 @@ import (
 // TestSetColorMode verifies SetColorMode stores and GetColorMode retrieves the override.
 func TestSetColorMode(t *testing.T) {
 	tests := []struct {
-		name      string
-		mode      string
-		wantMode  string
+		name     string
+		mode     string
+		wantMode string
 	}{
 		{"set always", "always", "always"},
 		{"set never", "never", "never"},

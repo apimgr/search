@@ -422,4 +422,3 @@ func TestRedisCacheHGetAll(t *testing.T) {
 		t.Errorf("HGetAll()[f2] = %q, want %q", result["f2"], "v2")
 	}
 }
-

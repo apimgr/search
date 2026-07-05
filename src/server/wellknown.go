@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apimgr/search/src/i18n"
+	"github.com/apimgr/search/src/common/i18n"
 )
 
 // handleWellKnownChangePassword handles /.well-known/change-password per RFC 8615.

@@ -11,8 +11,8 @@ import (
 	"strings"
 
 	"github.com/apimgr/search/src/alert"
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/config"
-	"github.com/apimgr/search/src/i18n"
 	"github.com/apimgr/search/src/model"
 )
 

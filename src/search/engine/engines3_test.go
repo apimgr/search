@@ -144,10 +144,10 @@ func TestBaiduSearchCategoryURLs(t *testing.T) {
 
 func TestBingSearchWithMockServer(t *testing.T) {
 	tests := []struct {
-		name        string
+		name         string
 		responseHTML string
-		wantCount   int
-		wantErr     bool
+		wantCount    int
+		wantErr      bool
 	}{
 		{
 			name: "valid results",

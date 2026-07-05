@@ -26,13 +26,13 @@ internal_name: search
 | `.claude/rules/ai-rules.md` | 0, 1 | AI behavior, naming conventions |
 | `.claude/rules/project-rules.md` | 2, 3, 4 | License, structure, OS paths |
 | `.claude/rules/config-rules.md` | 5, 6, 12 | Configuration, modes, server config |
-| `.claude/rules/binary-rules.md` | 7, 8, 33 | Binary, server CLI, client |
-| `.claude/rules/backend-rules.md` | 9, 10, 11, 32 | Errors, DB, security, Tor |
+| `.claude/rules/binary-rules.md` | 7, 8, 32 | Binary, server CLI, client |
+| `.claude/rules/backend-rules.md` | 9, 10, 11, 31 | Errors, DB, security, Tor |
 | `.claude/rules/api-rules.md` | 13, 14, 15 | Health, API structure, SSL/TLS |
 | `.claude/rules/frontend-rules.md` | 16 | Web frontend |
 | `.claude/rules/features-rules.md` | 17-22 | Email, scheduler, GeoIP, metrics, backup, update |
 | `.claude/rules/service-rules.md` | 23, 24 | Privilege, service |
-| `.claude/rules/makefile-rules.md` | 26 | Makefile |
-| `.claude/rules/docker-rules.md` | 27 | Docker |
-| `.claude/rules/cicd-rules.md` | 28 | CI/CD |
-| `.claude/rules/testing-rules.md` | 29, 30, 31 | Testing, docs, i18n/a11y |
+| `.claude/rules/makefile-rules.md` | 25 | Makefile |
+| `.claude/rules/docker-rules.md` | 26 | Docker |
+| `.claude/rules/cicd-rules.md` | 27 | CI/CD |
+| `.claude/rules/testing-rules.md` | 28, 29, 30 | Testing, docs, i18n/a11y |

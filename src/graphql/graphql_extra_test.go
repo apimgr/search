@@ -16,12 +16,12 @@ import (
 
 func TestResolveDirectAnswer(t *testing.T) {
 	tests := []struct {
-		name         string
-		answerType   string
-		term         string
-		wantType     string
-		wantTerm     string
-		wantFound    bool
+		name       string
+		answerType string
+		term       string
+		wantType   string
+		wantTerm   string
+		wantFound  bool
 	}{
 		{"dns lookup", "dns", "example.com", "dns", "example.com", false},
 		{"ip lookup", "ip", "8.8.8.8", "ip", "8.8.8.8", false},

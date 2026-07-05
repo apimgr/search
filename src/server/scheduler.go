@@ -10,7 +10,7 @@ import (
 
 	"github.com/apimgr/search/src/alert"
 	"github.com/apimgr/search/src/backup"
-	"github.com/apimgr/search/src/i18n"
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/scheduler"
 )
 

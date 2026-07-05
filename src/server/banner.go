@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/display"
 	"github.com/apimgr/search/src/config"
-	"github.com/apimgr/search/src/display"
 	"golang.org/x/term"
 )
 

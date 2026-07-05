@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/direct"
-	"github.com/apimgr/search/src/i18n"
 	"github.com/apimgr/search/src/version"
 	"github.com/go-chi/chi/v5"
 )
@@ -3088,25 +3088,24 @@ func (r *testChiRouter) Route(pattern string, fn func(chi.Router)) chi.Router {
 	fn(r)
 	return r
 }
-func (r *testChiRouter) Mount(pattern string, h http.Handler)             {}
-func (r *testChiRouter) Handle(pattern string, h http.Handler)            {}
-func (r *testChiRouter) HandleFunc(pattern string, h http.HandlerFunc)    {}
-func (r *testChiRouter) Method(method, pattern string, h http.Handler)    {}
+func (r *testChiRouter) Mount(pattern string, h http.Handler)          {}
+func (r *testChiRouter) Handle(pattern string, h http.Handler)         {}
+func (r *testChiRouter) HandleFunc(pattern string, h http.HandlerFunc) {}
+func (r *testChiRouter) Method(method, pattern string, h http.Handler) {}
 func (r *testChiRouter) MethodFunc(method, pattern string, h http.HandlerFunc) {
 }
-func (r *testChiRouter) Connect(pattern string, h http.HandlerFunc)    {}
-func (r *testChiRouter) Delete(pattern string, h http.HandlerFunc)     {}
-func (r *testChiRouter) Get(pattern string, h http.HandlerFunc)        {}
-func (r *testChiRouter) Head(pattern string, h http.HandlerFunc)       {}
-func (r *testChiRouter) Options(pattern string, h http.HandlerFunc)    {}
-func (r *testChiRouter) Patch(pattern string, h http.HandlerFunc)      {}
-func (r *testChiRouter) Post(pattern string, h http.HandlerFunc)       {}
-func (r *testChiRouter) Put(pattern string, h http.HandlerFunc)        {}
-func (r *testChiRouter) Trace(pattern string, h http.HandlerFunc)      {}
-func (r *testChiRouter) NotFound(h http.HandlerFunc)                   {}
-func (r *testChiRouter) MethodNotAllowed(h http.HandlerFunc)           {}
-func (r *testChiRouter) Routes() []chi.Route                           { return nil }
-func (r *testChiRouter) Middlewares() chi.Middlewares                  { return nil }
-func (r *testChiRouter) Match(rctx *chi.Context, method, path string) bool { return false }
+func (r *testChiRouter) Connect(pattern string, h http.HandlerFunc)         {}
+func (r *testChiRouter) Delete(pattern string, h http.HandlerFunc)          {}
+func (r *testChiRouter) Get(pattern string, h http.HandlerFunc)             {}
+func (r *testChiRouter) Head(pattern string, h http.HandlerFunc)            {}
+func (r *testChiRouter) Options(pattern string, h http.HandlerFunc)         {}
+func (r *testChiRouter) Patch(pattern string, h http.HandlerFunc)           {}
+func (r *testChiRouter) Post(pattern string, h http.HandlerFunc)            {}
+func (r *testChiRouter) Put(pattern string, h http.HandlerFunc)             {}
+func (r *testChiRouter) Trace(pattern string, h http.HandlerFunc)           {}
+func (r *testChiRouter) NotFound(h http.HandlerFunc)                        {}
+func (r *testChiRouter) MethodNotAllowed(h http.HandlerFunc)                {}
+func (r *testChiRouter) Routes() []chi.Route                                { return nil }
+func (r *testChiRouter) Middlewares() chi.Middlewares                       { return nil }
+func (r *testChiRouter) Match(rctx *chi.Context, method, path string) bool  { return false }
 func (r *testChiRouter) Find(rctx *chi.Context, method, path string) string { return "" }
-

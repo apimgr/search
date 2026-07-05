@@ -1599,7 +1599,7 @@ func TestYouTubeParseJSONSuccess(t *testing.T) {
 		"ownerText": map[string]interface{}{
 			"runs": []map[string]interface{}{{"text": "Rick Astley"}},
 		},
-		"viewCountText": map[string]interface{}{"simpleText": "1B views"},
+		"viewCountText":     map[string]interface{}{"simpleText": "1B views"},
 		"publishedTimeText": map[string]interface{}{"simpleText": "15 years ago"},
 	}
 

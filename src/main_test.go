@@ -20,7 +20,7 @@ func TestFormatUptime(t *testing.T) {
 	}{
 		{
 			name: "days hours minutes",
-			d:    (2*24 + 5) * time.Hour + 30*time.Minute,
+			d:    (2*24+5)*time.Hour + 30*time.Minute,
 			want: "2d 5h 30m",
 		},
 		{
@@ -213,11 +213,11 @@ func TestDetectShell(t *testing.T) {
 	})
 
 	tests := []struct {
-		name      string
-		shellEnv  string
+		name       string
+		shellEnv   string
 		unsetShell bool
-		wantFn    func(got string) bool
-		wantDescr string
+		wantFn     func(got string) bool
+		wantDescr  string
 	}{
 		{
 			name:      "bash from full path",

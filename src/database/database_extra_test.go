@@ -733,9 +733,9 @@ func TestMixedDBSupportsUpsert(t *testing.T) {
 // TestMixedDBIsLocal covers IsLocal and IsRemote.
 func TestMixedDBIsLocal(t *testing.T) {
 	tests := []struct {
-		driver   string
-		wantLoc  bool
-		wantRem  bool
+		driver  string
+		wantLoc bool
+		wantRem bool
 	}{
 		{"sqlite", true, false},
 		{"sqlite3", true, false},

@@ -141,10 +141,10 @@ func certPairReadable(certFile, keyFile string) bool {
 // returns the first valid certificate pair together with renewal ownership.
 // Per AI.md PART 15:
 //
-//	1. /etc/letsencrypt/live/domain/          → system-managed (certbot)
-//	2. /etc/letsencrypt/live/{fqdn}/          → system-managed (certbot)
-//	3. {config_dir}/ssl/letsencrypt/{fqdn}/   → app-managed (auto-renew 7d before expiry)
-//	4. {config_dir}/ssl/local/{fqdn}/         → user-managed (no auto-renewal)
+//  1. /etc/letsencrypt/live/domain/          → system-managed (certbot)
+//  2. /etc/letsencrypt/live/{fqdn}/          → system-managed (certbot)
+//  3. {config_dir}/ssl/letsencrypt/{fqdn}/   → app-managed (auto-renew 7d before expiry)
+//  4. {config_dir}/ssl/local/{fqdn}/         → user-managed (no auto-renewal)
 func (m *SSLManager) findCertificatePaths() *certLookupResult {
 	fqdn := m.getFQDN()
 	configDir := config.GetConfigDir()
@@ -178,9 +178,9 @@ func (m *SSLManager) findCertificatePaths() *certLookupResult {
 			ownership: certOwnerApp,
 		},
 		{
-			dir:      filepath.Join(configDir, "ssl", "local", fqdn),
-			certName: "cert.pem",
-			keyName:  "key.pem",
+			dir:       filepath.Join(configDir, "ssl", "local", fqdn),
+			certName:  "cert.pem",
+			keyName:   "key.pem",
 			ownership: certOwnerUser,
 		},
 	}

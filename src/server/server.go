@@ -19,13 +19,13 @@ import (
 	"github.com/apimgr/search/src/alert"
 	"github.com/apimgr/search/src/api"
 	"github.com/apimgr/search/src/cache"
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/database"
 	"github.com/apimgr/search/src/direct"
 	"github.com/apimgr/search/src/email"
 	"github.com/apimgr/search/src/geoip"
 	graphqlpkg "github.com/apimgr/search/src/graphql"
-	"github.com/apimgr/search/src/i18n"
 	"github.com/apimgr/search/src/instant"
 	"github.com/apimgr/search/src/logging"
 	"github.com/apimgr/search/src/model"
@@ -45,26 +45,26 @@ type Server struct {
 	config     *config.Config
 	httpServer *http.Server
 	// For dual port mode
-	httpsServer    *http.Server
-	redirectServer *http.Server
-	pidFile        string
-	registry       *engine.Registry
-	aggregator     *search.Aggregator
-	startTime      time.Time
-	middleware     *Middleware
-	rateLimiter    *RateLimiter
-	csrf           *CSRFMiddleware
-	renderer       *TemplateRenderer
-	apiHandler     *api.Handler
-	torService     *service.TorService
-	bangManager    *bang.Manager
-	widgetManager  *widget.Manager
-	logManager     *logging.Manager
-	tlsManager     *ssl.Manager
-	instantManager *instant.Manager
-	directManager  *direct.Manager
-	geoipLookup    *geoip.Lookup
-	mailer         *email.Mailer
+	httpsServer      *http.Server
+	redirectServer   *http.Server
+	pidFile          string
+	registry         *engine.Registry
+	aggregator       *search.Aggregator
+	startTime        time.Time
+	middleware       *Middleware
+	rateLimiter      *RateLimiter
+	csrf             *CSRFMiddleware
+	renderer         *TemplateRenderer
+	apiHandler       *api.Handler
+	torService       *service.TorService
+	bangManager      *bang.Manager
+	widgetManager    *widget.Manager
+	logManager       *logging.Manager
+	tlsManager       *ssl.Manager
+	instantManager   *instant.Manager
+	directManager    *direct.Manager
+	geoipLookup      *geoip.Lookup
+	mailer           *email.Mailer
 	scheduler        *scheduler.Scheduler
 	metrics          *Metrics
 	dbManager        *database.DatabaseManager
@@ -314,6 +314,9 @@ func NewServer(cfg *config.Config) *Server {
 				Name:  fromName,
 				Email: fromEmail,
 			},
+			AppTitle: fromName,
+			FQDN:     cfg.Server.FQDN,
+			AppURL:   cfg.Server.BaseURL,
 		}
 		mailer = email.NewMailer(emailCfg)
 		slog.Info("Email mailer configured", "smtp_host", cfg.Server.Email.SMTP.Host, "smtp_port", cfg.Server.Email.SMTP.Port)

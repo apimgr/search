@@ -2014,7 +2014,6 @@ func TestNewTranslateFetcher(t *testing.T) {
 	}
 }
 
-
 func TestTranslateFetcherImplementsFetcher(t *testing.T) {
 	var _ Fetcher = (*TranslateFetcher)(nil)
 }

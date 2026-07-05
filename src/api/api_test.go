@@ -3371,7 +3371,6 @@ func TestHandleAlertByTokenMethodNotAllowed(t *testing.T) {
 	}
 }
 
-
 func TestHandleAlertByTokenGetSuccess(t *testing.T) {
 	handler, _, db := newAlertAPIHandler(t)
 	defer db.Close()
@@ -3866,4 +3865,3 @@ func TestErrorResponseWith4xx(t *testing.T) {
 		t.Error("OK = true, want false")
 	}
 }
-

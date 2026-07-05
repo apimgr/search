@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/apimgr/search/src/i18n"
+	"github.com/apimgr/search/src/common/i18n"
 )
 
 // handleLocale serves embedded locale JSON for WebUI JavaScript.

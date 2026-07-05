@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/apimgr/search/src/api"
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/config"
-	"github.com/apimgr/search/src/i18n"
 )
 
 // OpenAPISpec represents the OpenAPI 3.0 specification

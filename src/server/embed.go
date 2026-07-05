@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/config"
-	"github.com/apimgr/search/src/i18n"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )

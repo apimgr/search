@@ -8,8 +8,6 @@ import (
 	"net/smtp"
 	"strings"
 	"time"
-
-	"github.com/apimgr/search/src/i18n"
 )
 
 // Testable variables for dependency injection in tests
@@ -36,6 +34,10 @@ type Config struct {
 	AdminEmails []string
 	// AppTitle is the configured application title used in email subjects
 	AppTitle string
+	// FQDN is the server fully-qualified domain name used in email templates
+	FQDN string
+	// AppURL is the full application URL used in email templates
+	AppURL string
 }
 
 // SMTPConfig represents SMTP server configuration
@@ -299,43 +301,50 @@ func (ml *Mailer) SendToAdmins(subject, body string) error {
 	return ml.Send(msg)
 }
 
-// SendAlert sends an alert email to admins
-// Per AI.md PART 30: All user-facing text uses i18n keys.
-func (ml *Mailer) SendAlert(alertType, message string) error {
-	appTitle := ml.config.AppTitle
-	if appTitle == "" {
-		appTitle = "Search"
+// baseVars returns the global template variables available in every email
+// template (see AI.md PART 17 → Global Variables).
+func (ml *Mailer) baseVars() map[string]string {
+	appName := ml.config.AppTitle
+	if appName == "" {
+		appName = "Search"
 	}
-	subject := i18n.TDefault("email_notifications.alert_subject", appTitle, alertType)
-	body := fmt.Sprintf("%s: %s\n%s: %s\n\n%s:\n%s",
-		i18n.TDefault("email_notifications.alert_type_label"),
-		alertType,
-		i18n.TDefault("email_notifications.alert_time_label"),
-		time.Now().Format(time.RFC3339),
-		i18n.TDefault("email_notifications.alert_message_label"),
-		message,
-	)
+	now := time.Now()
+	return map[string]string{
+		"app_name":  appName,
+		"app_url":   ml.config.AppURL,
+		"fqdn":      ml.config.FQDN,
+		"timestamp": now.Format("2006-01-02 15:04:05 UTC"),
+		"year":      fmt.Sprintf("%d", now.Year()),
+	}
+}
+
+// SendAlert sends an operator alert email to admins.
+// Per AI.md PART 17: email bodies are rendered from {variable} templates,
+// never from i18n keys.
+func (ml *Mailer) SendAlert(alertType, message string) error {
+	vars := ml.baseVars()
+	vars["alert_type"] = alertType
+	vars["alert_level"] = "warning"
+	vars["message"] = message
+	subject, body, err := NewEmailTemplate().Render(TemplateAdminAlert, vars)
+	if err != nil {
+		return err
+	}
 	return ml.SendToAdmins(subject, body)
 }
 
-// SendSecurityAlert sends a security alert email
-// Per AI.md PART 30: All user-facing text uses i18n keys.
+// SendSecurityAlert sends a security alert email.
+// Per AI.md PART 17: email bodies are rendered from {variable} templates,
+// never from i18n keys.
 func (ml *Mailer) SendSecurityAlert(event, ip, details string) error {
-	appTitle := ml.config.AppTitle
-	if appTitle == "" {
-		appTitle = "Search"
+	vars := ml.baseVars()
+	vars["event"] = event
+	vars["ip"] = ip
+	vars["details"] = details
+	subject, body, err := NewEmailTemplate().Render(TemplateSecurityAlert, vars)
+	if err != nil {
+		return err
 	}
-	subject := i18n.TDefault("email_notifications.security_subject", appTitle, event, ip)
-	body := fmt.Sprintf("%s: %s\n%s: %s\n%s: %s\n\n%s:\n%s",
-		i18n.TDefault("email_notifications.security_event_label"),
-		event,
-		i18n.TDefault("email_notifications.security_ip_label"),
-		ip,
-		i18n.TDefault("email_notifications.security_time_label"),
-		time.Now().Format(time.RFC3339),
-		i18n.TDefault("email_notifications.security_details_label"),
-		details,
-	)
 	return ml.SendToAdmins(subject, body)
 }
 

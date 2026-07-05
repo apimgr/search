@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/apimgr/search/src/display"
-	"github.com/apimgr/search/src/terminal"
+	"github.com/apimgr/search/src/common/display"
+	"github.com/apimgr/search/src/common/terminal"
 )
 
 // Per AI.md PART 14 console output format

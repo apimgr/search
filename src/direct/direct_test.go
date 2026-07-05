@@ -574,12 +574,12 @@ func TestManagerGetHandler(t *testing.T) {
 
 func TestHTMLEncodeDecode(t *testing.T) {
 	tests := []struct {
-		name        string
-		input       string
-		encoded     string
+		name    string
+		input   string
+		encoded string
 		// roundTrip is what htmlDecode(htmlEncode(input)) should return.
 		// Empty string means the round-trip should equal input.
-		roundTrip   string
+		roundTrip string
 	}{
 		{"ampersand", "&", "&amp;", ""},
 		{"less_than", "<", "&lt;", ""},
@@ -1120,12 +1120,12 @@ func TestUserAgentHandlerEmptyUsesDefault(t *testing.T) {
 
 func TestParseUserAgent(t *testing.T) {
 	tests := []struct {
-		name     string
-		ua       string
-		browser  string
-		os       string
-		isBot    string
-		arch     string
+		name    string
+		ua      string
+		browser string
+		os      string
+		isBot   string
+		arch    string
 	}{
 		{
 			"windows_10_x64",
@@ -1471,9 +1471,9 @@ func TestRegexHandler(t *testing.T) {
 	ctx := context.Background()
 
 	tests := []struct {
-		name      string
-		term      string
-		wantError string
+		name         string
+		term         string
+		wantError    string
 		wantAnalysis []string
 	}{
 		{
@@ -1744,12 +1744,12 @@ func TestCaseHandlerConversions(t *testing.T) {
 	ctx := context.Background()
 
 	tests := []struct {
-		input           string
-		wantUPPERCASE   string
-		wantLowercase   string
-		wantCamelCase   string
-		wantSnakeCase   string
-		wantKebabCase   string
+		input         string
+		wantUPPERCASE string
+		wantLowercase string
+		wantCamelCase string
+		wantSnakeCase string
+		wantKebabCase string
 	}{
 		{"hello world", "HELLO WORLD", "hello world", "helloWorld", "hello_world", "hello-world"},
 		{"HelloWorld", "HELLOWORLD", "helloworld", "helloWorld", "hello_world", "hello-world"},
@@ -2154,10 +2154,10 @@ func TestRulesHandlerDirect(t *testing.T) {
 
 func TestHighlightTerm(t *testing.T) {
 	tests := []struct {
-		name  string
-		text  string
-		term  string
-		want  string
+		name string
+		text string
+		term string
+		want string
 	}{
 		{"simple_match", "hello world", "world", "hello <mark>world</mark>"},
 		{"case_insensitive", "Hello World", "hello", "<mark>Hello</mark> World"},
@@ -2192,7 +2192,7 @@ func TestGetRuleContext(t *testing.T) {
 		{50, true},
 	}
 	for _, tt := range tests {
-		t.Run(strings.Join([]string{"rule", string(rune('0'+tt.num/10)), string(rune('0'+tt.num%10))}, ""), func(t *testing.T) {
+		t.Run(strings.Join([]string{"rule", string(rune('0' + tt.num/10)), string(rune('0' + tt.num%10))}, ""), func(t *testing.T) {
 			got := getRuleContext(tt.num)
 			isEmpty := got == ""
 			if isEmpty != tt.wantEmpty {
@@ -2283,9 +2283,9 @@ func TestTruncateText(t *testing.T) {
 
 func TestFormatUrbanDictionaryText(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		contains []string
+		name        string
+		input       string
+		contains    []string
 		notContains []string
 	}{
 		{
