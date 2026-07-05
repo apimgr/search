@@ -50,6 +50,9 @@ html.theme-dark {
     --link-color: #8be9fd;
     --link-hover: #bd93f9;
 
+    /* Tor accent color */
+    --tor-accent: #7D4698;
+
     /* Contrast colors for icons on colored backgrounds */
     --icon-on-dark: #282a36;
     --icon-on-light: #f8f8f2;
@@ -88,6 +91,9 @@ html.theme-light {
     --input-focus: #7c3aed;
     --link-color: #0284c7;
     --link-hover: #7c3aed;
+
+    /* Tor accent color */
+    --tor-accent: #6B3A82;
 
     /* Contrast colors for icons on colored backgrounds */
     --icon-on-dark: #f8f8f2;

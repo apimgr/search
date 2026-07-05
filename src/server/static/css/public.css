@@ -2615,7 +2615,7 @@ html:not([data-theme-mode]) .theme-label-auto { display: none; }
 
     table th,
     table td {
-        border: 1px solid #ccc;
+        border: 1px solid var(--border-color);
         padding: 0.5em;
     }
 
@@ -5773,7 +5773,7 @@ html:not([data-theme-mode]) .theme-label-auto { display: none; }
     background: var(--bg-tertiary);
     border-radius: 8px;
     padding: 1.5rem;
-    border-left: 4px solid #7D4698;
+    border-left: 4px solid var(--tor-accent);
 }
 
 .onion-address-box {
