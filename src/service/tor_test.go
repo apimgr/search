@@ -259,14 +259,13 @@ func TestGetTorConfigDoesNotEmitLegacyInvalidOption(t *testing.T) {
 }
 
 func TestSanitizeTorrcContentRemovesLegacyInvalidOption(t *testing.T) {
-	dataDir := "/tmp/search-tor"
 	input := strings.Join([]string{
 		"SafeLogging 1",
 		"MaxStreamsPerCircuit 100",
 		"BandwidthRate 1 MB",
 	}, "\n")
 
-	got := sanitizeTorrcContent(input, dataDir)
+	got := sanitizeTorrcContent(input)
 	if strings.Contains(got, "MaxStreamsPerCircuit ") {
 		t.Fatal("sanitizeTorrcContent() should remove MaxStreamsPerCircuit")
 	}
@@ -276,12 +275,12 @@ func TestSanitizeTorrcContentRemovesLegacyInvalidOption(t *testing.T) {
 }
 
 func TestSanitizeTorrcContentMigratesUnixControlPort(t *testing.T) {
-	dataDir := "/tmp/search-tor"
 	input := "ControlPort unix:/old/control.sock\nSafeLogging 1"
 
-	got := sanitizeTorrcContent(input, dataDir)
-	if !strings.Contains(got, "ControlPort 0") {
-		t.Fatal("sanitizeTorrcContent() should set ControlPort 0 for migrated unix socket config")
+	got := sanitizeTorrcContent(input)
+	// Per AI.md PART 31: all OSes use ControlPort 127.0.0.1:auto — unix socket → TCP
+	if !strings.Contains(got, "ControlPort 127.0.0.1:auto") {
+		t.Fatal("sanitizeTorrcContent() should migrate unix socket to ControlPort 127.0.0.1:auto")
 	}
 	if strings.Contains(got, "ControlSocket ") {
 		t.Fatal("sanitizeTorrcContent() should remove ControlSocket entries from legacy unix socket config")
@@ -296,9 +295,13 @@ func TestSanitizeTorrcContentRemovesControlSocketLine(t *testing.T) {
 		"SafeLogging 1",
 	}, "\n")
 
-	got := sanitizeTorrcContent(input, dataDir)
+	got := sanitizeTorrcContent(input)
 	if strings.Contains(got, "ControlSocket ") {
 		t.Fatal("sanitizeTorrcContent() should strip standalone ControlSocket lines")
+	}
+	// ControlPort 0 should be upgraded to 127.0.0.1:auto per AI.md PART 31
+	if !strings.Contains(got, "ControlPort 127.0.0.1:auto") {
+		t.Fatal("sanitizeTorrcContent() should upgrade ControlPort 0 to 127.0.0.1:auto")
 	}
 }
 
@@ -385,18 +388,20 @@ func TestCheckTorConnection(t *testing.T) {
 }
 
 func TestTryGenerateVanityAddress(t *testing.T) {
-	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
-
-	// Should generate a random address
-	addr, err := ts.tryGenerateVanityAddress("abc")
+	// generateOnionV3Address generates proper ED25519-based v3 onion addresses
+	addr, privKey, err := generateOnionV3Address()
 	if err != nil {
-		t.Fatalf("tryGenerateVanityAddress() error = %v", err)
+		t.Fatalf("generateOnionV3Address() error = %v", err)
 	}
 
 	// Address should be 56 characters (v3 onion)
 	if len(addr) != 56 {
 		t.Errorf("Address length = %d, want 56", len(addr))
+	}
+
+	// Private key must be present
+	if len(privKey) == 0 {
+		t.Error("Private key must not be empty")
 	}
 
 	// Address should only contain valid base32 characters
@@ -596,20 +601,21 @@ func TestTorServiceGenerateVanityCancelsPrevious(t *testing.T) {
 	ts.CancelVanity()
 }
 
-// Test tryGenerateVanityAddress produces valid addresses
+// Test generateOnionV3Address produces valid addresses
 func TestTorServiceTryGenerateVanityAddressMultiple(t *testing.T) {
-	cfg := config.DefaultConfig()
-	ts := NewTorService(cfg)
-
 	// Generate multiple addresses and verify they're all valid
 	for i := 0; i < 10; i++ {
-		addr, err := ts.tryGenerateVanityAddress("test")
+		addr, privKey, err := generateOnionV3Address()
 		if err != nil {
-			t.Fatalf("tryGenerateVanityAddress() error = %v", err)
+			t.Fatalf("generateOnionV3Address() error = %v", err)
 		}
 
 		if len(addr) != 56 {
 			t.Errorf("Address length = %d, want 56", len(addr))
+		}
+
+		if len(privKey) == 0 {
+			t.Error("Private key must not be empty")
 		}
 
 		// Verify all characters are valid base32

@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/base32"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -17,6 +19,7 @@ import (
 	"github.com/apimgr/search/src/config"
 	"github.com/cretz/bine/control"
 	"github.com/cretz/bine/tor"
+	"golang.org/x/crypto/sha3"
 )
 
 // findTorBinary finds the Tor binary using config, PATH, or common locations
@@ -110,9 +113,22 @@ func (t *TorService) ensureTorDirs() error {
 		t.configDir,
 	}
 
+	uid := os.Getuid()
+	gid := os.Getgid()
+
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0700); err != nil {
 			return fmt.Errorf("failed to create directory %s: %w", dir, err)
+		}
+		// Enforce permissions on existing dirs too — per AI.md PART 31: "Enforce on exist"
+		if err := os.Chmod(dir, 0700); err != nil {
+			return fmt.Errorf("chmod tor dir %s: %w", dir, err)
+		}
+		// Enforce ownership (skip on Windows — no chown)
+		if runtime.GOOS != "windows" {
+			if err := os.Chown(dir, uid, gid); err != nil {
+				return fmt.Errorf("chown tor dir %s: %w", dir, err)
+			}
 		}
 	}
 
@@ -131,20 +147,11 @@ func (t *TorService) ensureTorDirs() error {
 func (t *TorService) getTorConfig() string {
 	cfg := &t.config.Server.Tor
 
-	// Platform-specific control connection per AI.md PART 32
-	// NEVER use default port 9051 - use socket (Unix) or runtime port (Windows)
-	var controlConfig string
-	if runtime.GOOS == "windows" {
-		// Windows: Unix sockets NOT SUPPORTED, use localhost TCP
-		// "auto" = Tor picks available high port at runtime (never saved)
-		controlConfig = "ControlPort 127.0.0.1:auto"
-	} else {
-		// Unix/macOS/BSD: bine v0.2.0 still discovers the controller through a
-		// TCP control port file and cannot parse mixed PORT/UNIX_PORT output.
-		// Keep torrc itself on ControlPort 0 and let bine add its own runtime
-		// localhost control port via command-line args.
-		controlConfig = "ControlPort 0"
-	}
+	// All OSes use localhost TCP auto port per AI.md PART 31:
+	// "Use ControlPort 127.0.0.1:auto on all OSes for the current bine-based integration"
+	// "Never hardcode a control port — let Tor choose a free localhost port at runtime"
+	// NEVER use default port 9051 — runtime detection only
+	controlConfig := "ControlPort 127.0.0.1:auto"
 
 	// SocksPort per AI.md PART 32:
 	// - "SocksPort auto" if outbound enabled (UseNetwork or AllowUserPreference)
@@ -233,20 +240,25 @@ DisableDebuggerAttachment 1
 		}(), bandwidthRate, bandwidthBurst, accountingConfig)
 }
 
-func sanitizeTorrcContent(content string, _ string) string {
+// sanitizeTorrcContent migrates legacy torrc files to current spec.
+// Removes deprecated directives and updates control port to 127.0.0.1:auto.
+func sanitizeTorrcContent(content string) string {
 	lines := strings.Split(content, "\n")
 	sanitized := make([]string, 0, len(lines))
 
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
+		// Remove deprecated MaxStreamsPerCircuit (handled via control command now)
 		if strings.HasPrefix(trimmed, "MaxStreamsPerCircuit ") {
 			continue
 		}
+		// Remove Unix socket control directives — spec requires TCP 127.0.0.1:auto
 		if strings.HasPrefix(trimmed, "ControlSocket ") {
 			continue
 		}
-		if strings.HasPrefix(trimmed, "ControlPort unix:") {
-			sanitized = append(sanitized, "ControlPort 0")
+		// Migrate Unix socket or disabled control port to localhost auto port
+		if strings.HasPrefix(trimmed, "ControlPort unix:") || trimmed == "ControlPort 0" {
+			sanitized = append(sanitized, "ControlPort 127.0.0.1:auto")
 			continue
 		}
 		sanitized = append(sanitized, line)
@@ -298,7 +310,7 @@ func (t *TorService) StartTorService() error {
 		slog.Info("Tor created torrc", "path", torrcPath)
 	} else {
 		if existing, err := os.ReadFile(torrcPath); err == nil {
-			sanitized := sanitizeTorrcContent(string(existing), t.dataDir)
+			sanitized := sanitizeTorrcContent(string(existing))
 			if sanitized != string(existing) {
 				if err := os.WriteFile(torrcPath, []byte(sanitized), 0600); err != nil {
 					return fmt.Errorf("failed to migrate torrc: %w", err)
@@ -650,7 +662,7 @@ func CheckTorConnection(socksAddr string) bool {
 }
 
 // VanityProgress represents the progress of vanity address generation
-// Per AI.md PART 32: Vanity address generation (built-in, max 6 chars)
+// Per AI.md PART 31: Vanity address generation (built-in, max 6 chars)
 type VanityProgress struct {
 	Prefix    string
 	Attempts  int64
@@ -658,7 +670,9 @@ type VanityProgress struct {
 	Running   bool
 	Found     bool
 	Address   string
-	Error     string
+	// ED25519 private key for the found address — used by ApplyVanityAddress
+	PrivateKey []byte
+	Error      string
 }
 
 // vanityGenerator holds vanity generation state
@@ -677,14 +691,17 @@ func (t *TorService) GetVanityProgress() *VanityProgress {
 	vanityGen.mu.RLock()
 	defer vanityGen.mu.RUnlock()
 
+	pk := make([]byte, len(vanityGen.progress.PrivateKey))
+	copy(pk, vanityGen.progress.PrivateKey)
 	return &VanityProgress{
-		Prefix:    vanityGen.progress.Prefix,
-		Attempts:  vanityGen.progress.Attempts,
-		StartTime: vanityGen.progress.StartTime,
-		Running:   vanityGen.progress.Running,
-		Found:     vanityGen.progress.Found,
-		Address:   vanityGen.progress.Address,
-		Error:     vanityGen.progress.Error,
+		Prefix:     vanityGen.progress.Prefix,
+		Attempts:   vanityGen.progress.Attempts,
+		StartTime:  vanityGen.progress.StartTime,
+		Running:    vanityGen.progress.Running,
+		Found:      vanityGen.progress.Found,
+		Address:    vanityGen.progress.Address,
+		PrivateKey: pk,
+		Error:      vanityGen.progress.Error,
 	}
 }
 
@@ -743,7 +760,7 @@ func (t *TorService) runVanityGeneration(ctx context.Context, prefix string) {
 			vanityGen.progress.Attempts++
 			vanityGen.mu.Unlock()
 
-			address, err := t.tryGenerateVanityAddress(prefix)
+			address, privKey, err := generateOnionV3Address()
 			if err != nil {
 				vanityGen.mu.Lock()
 				vanityGen.progress.Error = err.Error()
@@ -751,10 +768,11 @@ func (t *TorService) runVanityGeneration(ctx context.Context, prefix string) {
 				continue
 			}
 
-			if strings.HasPrefix(strings.ToLower(address), prefix) {
+			if strings.HasPrefix(address, prefix) {
 				vanityGen.mu.Lock()
 				vanityGen.progress.Found = true
 				vanityGen.progress.Address = address
+				vanityGen.progress.PrivateKey = privKey
 				vanityGen.mu.Unlock()
 				slog.Info("Tor vanity address found", "address", address+".onion", "attempts", vanityGen.progress.Attempts)
 				return
@@ -763,23 +781,34 @@ func (t *TorService) runVanityGeneration(ctx context.Context, prefix string) {
 	}
 }
 
-// tryGenerateVanityAddress attempts to generate a random onion address
-func (t *TorService) tryGenerateVanityAddress(prefix string) (string, error) {
-	// Generate random bytes for ed25519 seed
-	seed := make([]byte, 32)
-	if _, err := rand.Read(seed); err != nil {
-		return "", err
+// generateOnionV3Address generates a fresh ED25519 key pair and derives its v3 onion address.
+// Returns (56-char base32 address without .onion, ed25519 private key, error).
+// Algorithm: address = base32(pubkey[32] || checksum[2] || version[1]) where
+// checksum = SHA3-256(".onion checksum" || pubkey || 0x03)[:2]
+func generateOnionV3Address() (string, []byte, error) {
+	pubKey, privKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return "", nil, err
 	}
 
-	// For simplicity, we return a random base32-like string
-	// A real implementation would use proper ed25519 key generation
-	chars := "abcdefghijklmnopqrstuvwxyz234567"
-	address := make([]byte, 56)
-	for i := range address {
-		address[i] = chars[seed[i%32]%32]
-	}
+	// Compute 2-byte checksum per Tor spec for v3 onion addresses
+	version := byte(0x03)
+	h := sha3.New256()
+	h.Write([]byte(".onion checksum"))
+	h.Write(pubKey)
+	h.Write([]byte{version})
+	checksum := h.Sum(nil)
 
-	return string(address), nil
+	// Build 35-byte payload: pubkey[32] + checksum[2] + version[1]
+	payload := make([]byte, 35)
+	copy(payload[0:32], pubKey)
+	copy(payload[32:34], checksum[:2])
+	payload[34] = version
+
+	// Base32-encode without padding → 56-char lowercase string
+	address := strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(payload))
+
+	return address, []byte(privKey), nil
 }
 
 // CancelVanity cancels any running vanity generation
@@ -794,14 +823,16 @@ func (t *TorService) CancelVanity() {
 	vanityGen.progress.Running = false
 }
 
-// ApplyVanityAddress applies a generated vanity address
+// ApplyVanityAddress applies the generated vanity address by importing its private key
 func (t *TorService) ApplyVanityAddress() (string, error) {
 	progress := t.GetVanityProgress()
 	if !progress.Found {
 		return "", fmt.Errorf("no vanity address has been generated")
 	}
-
-	return t.RegenerateAddress()
+	if len(progress.PrivateKey) == 0 {
+		return "", fmt.Errorf("no private key available for vanity address")
+	}
+	return t.ImportKeys(progress.PrivateKey)
 }
 
 // ExportKeys exports the current Tor hidden service keys
