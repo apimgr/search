@@ -833,8 +833,16 @@ func TestStartHTTPSRedirectActualRequest(t *testing.T) {
 		srv.Shutdown(ctx)
 	}()
 
-	// Wait briefly for the server goroutine to start.
-	time.Sleep(50 * time.Millisecond)
+	// Poll until the server is ready to accept connections (up to 2s).
+	// A fixed sleep is unreliable under parallel test load.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if c, err := net.DialTimeout("tcp", addr, 50*time.Millisecond); err == nil {
+			c.Close()
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 
 	// Use a client that does NOT follow redirects.
 	client := &http.Client{

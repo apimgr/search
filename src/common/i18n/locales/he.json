@@ -41,7 +41,8 @@
     "accept": "אשר",
     "decline": "דחה",
     "dismiss": "סגור",
-    "upload": "Upload"
+    "upload": "Upload",
+    "app_name": "Search"
   },
   "auth": {
     "login": "התחברות",

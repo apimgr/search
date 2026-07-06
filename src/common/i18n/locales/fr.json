@@ -41,7 +41,8 @@
     "accept": "Accepter",
     "decline": "Refuser",
     "dismiss": "Ignorer",
-    "upload": "Téléverser"
+    "upload": "Téléverser",
+    "app_name": "Search"
   },
   "auth": {
     "login": "Connexion",

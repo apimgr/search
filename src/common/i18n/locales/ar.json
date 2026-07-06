@@ -41,7 +41,8 @@
     "accept": "قبول",
     "decline": "رفض",
     "dismiss": "اغلاق",
-    "upload": "Upload"
+    "upload": "Upload",
+    "app_name": "Search"
   },
   "auth": {
     "login": "تسجيل الدخول",

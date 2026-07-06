@@ -41,7 +41,8 @@
     "accept": "接受",
     "decline": "拒绝",
     "dismiss": "关闭",
-    "upload": "Upload"
+    "upload": "Upload",
+    "app_name": "Search"
   },
   "auth": {
     "login": "登录",

@@ -8,6 +8,8 @@ import (
 	"net/smtp"
 	"strings"
 	"time"
+
+	"github.com/apimgr/search/src/common/i18n"
 )
 
 // Testable variables for dependency injection in tests
@@ -306,7 +308,7 @@ func (ml *Mailer) SendToAdmins(subject, body string) error {
 func (ml *Mailer) baseVars() map[string]string {
 	appName := ml.config.AppTitle
 	if appName == "" {
-		appName = "Search"
+		appName = i18n.TDefault("common.app_name")
 	}
 	now := time.Now()
 	return map[string]string{

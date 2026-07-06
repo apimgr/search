@@ -41,7 +41,8 @@
     "accept": "Akzeptieren",
     "decline": "Ablehnen",
     "dismiss": "Schliessen",
-    "upload": "Hochladen"
+    "upload": "Hochladen",
+    "app_name": "Search"
   },
   "auth": {
     "login": "Anmelden",

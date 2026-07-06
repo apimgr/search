@@ -41,7 +41,8 @@
     "accept": "قبول",
     "decline": "مسترد",
     "dismiss": "بند",
-    "upload": "Upload"
+    "upload": "Upload",
+    "app_name": "Search"
   },
   "auth": {
     "login": "لاگ ان",

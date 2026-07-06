@@ -41,7 +41,8 @@
     "accept": "Accetta",
     "decline": "Rifiuta",
     "dismiss": "Chiudi",
-    "upload": "Carica"
+    "upload": "Carica",
+    "app_name": "Search"
   },
   "auth": {
     "login": "Accedi",

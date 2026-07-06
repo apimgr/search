@@ -41,7 +41,8 @@
     "accept": "Aceitar",
     "decline": "Recusar",
     "dismiss": "Dispensar",
-    "upload": "Enviar"
+    "upload": "Enviar",
+    "app_name": "Search"
   },
   "auth": {
     "login": "Entrar",

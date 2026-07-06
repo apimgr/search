@@ -41,7 +41,8 @@
     "accept": "Принять",
     "decline": "Отклонить",
     "dismiss": "Закрыть",
-    "upload": "Загрузить"
+    "upload": "Загрузить",
+    "app_name": "Search"
   },
   "auth": {
     "login": "Войти",

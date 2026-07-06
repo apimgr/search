@@ -586,9 +586,13 @@ func (m *MaintenanceService) RepairDatabase(dbPath string) error {
 	ctx, cancel := context.WithTimeout(m.ctx, 300*time.Second)
 	defer cancel()
 
-	// First try VACUUM INTO to create a clean copy
-	// The cleanPath is derived from our already-validated cleanedPath, so it's safe.
+	// First try VACUUM INTO to create a clean copy.
+	// Per AI.md PART 10: validate the output path stays within the database directory.
 	vacuumPath := cleanedPath + ".clean"
+	dbDir := filepath.Dir(cleanedPath)
+	if filepath.Dir(filepath.Clean(vacuumPath)) != dbDir {
+		return fmt.Errorf("invalid vacuum output path: must be within database directory %s", dbDir)
+	}
 	if _, err := db.ExecContext(ctx, fmt.Sprintf("VACUUM INTO '%s'", vacuumPath)); err != nil {
 		slog.Warn("VACUUM INTO failed, trying reindex", "err", err)
 

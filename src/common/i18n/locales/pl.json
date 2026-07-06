@@ -41,7 +41,8 @@
     "accept": "Akceptuj",
     "decline": "Odrzuc",
     "dismiss": "Odrzuc",
-    "upload": "Prześlij"
+    "upload": "Prześlij",
+    "app_name": "Search"
   },
   "auth": {
     "login": "Zaloguj się",

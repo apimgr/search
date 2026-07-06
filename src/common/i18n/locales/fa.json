@@ -41,7 +41,8 @@
     "accept": "پذيرش",
     "decline": "رد",
     "dismiss": "بستن",
-    "upload": "Upload"
+    "upload": "Upload",
+    "app_name": "Search"
   },
   "auth": {
     "login": "ورود",

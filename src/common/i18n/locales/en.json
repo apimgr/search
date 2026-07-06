@@ -41,7 +41,8 @@
     "accept": "Accept",
     "decline": "Decline",
     "dismiss": "Dismiss",
-    "upload": "Upload"
+    "upload": "Upload",
+    "app_name": "Search"
   },
   "auth": {
     "login": "Log In",
