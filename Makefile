@@ -57,7 +57,7 @@ REGISTRY ?= ghcr.io/$(PROJECTORG)/$(PROJECTNAME)
 # GO_CACHE maps host module cache into container GOPATH/pkg/mod
 GO_CACHE  ?= $(HOME)/go/pkg/mod
 # GO_BUILD maps host build cache into container GOCACHE
-GO_BUILD  ?= $(HOME)/.cache/go-build
+GO_BUILD  ?= $(HOME)/.cache/go-build/$(PROJECTNAME)
 GO_DOCKER := docker run --rm \
 	--name $(PROJECTNAME)-$$(tr -dc 'a-z0-9' </dev/urandom | head -c8) \
 	-v $(PWD):/app \
@@ -76,14 +76,15 @@ GO_DOCKER := docker run --rm \
 # Outputs to /tmp/{project_org}/{project_name}-XXXXXX/ for quick testing
 # ALWAYS uses Docker for building - host has NO Go installed
 dev:
+	@mkdir -p $(GO_CACHE) $(GO_BUILD)
 	@$(GO_DOCKER) go mod tidy
 	@mkdir -p "$${TMPDIR:-/tmp}/$(PROJECTORG)" && \
 	BUILD_DIR=$$(mktemp -d "$${TMPDIR:-/tmp}/$(PROJECTORG)/$(PROJECTNAME)-XXXXXX") && \
 	echo "Quick dev build to $$BUILD_DIR..." && \
-	$(GO_DOCKER) go build -o $(BINDIR)/.dev-$(BINARY) ./src && \
+	$(GO_DOCKER) go build -buildvcs=false -trimpath -o $(BINDIR)/.dev-$(BINARY) ./src && \
 	mv $(BINDIR)/.dev-$(BINARY) "$$BUILD_DIR/$(BINARY)" && \
 	if [ -d "src/client" ]; then \
-		$(GO_DOCKER) go build -o $(BINDIR)/.dev-$(BINARY)-cli ./src/client && \
+		$(GO_DOCKER) go build -buildvcs=false -trimpath -o $(BINDIR)/.dev-$(BINARY)-cli ./src/client && \
 		mv $(BINDIR)/.dev-$(BINARY)-cli "$$BUILD_DIR/$(BINARY)-cli"; \
 	fi && \
 	echo "Built: $$BUILD_DIR/$(BINARY)" && \
@@ -95,16 +96,16 @@ dev:
 # Outputs to binaries/search-VERSION for production testing
 local:
 	@rm -rf $(BINDIR) $(RELDIR)
-	@mkdir -p $(BINDIR)
+	@mkdir -p $(BINDIR) $(GO_CACHE) $(GO_BUILD)
 	@echo "Building local binaries version $(VERSION)..."
 	@$(GO_DOCKER) go mod tidy
 	@$(GO_DOCKER) go mod download
 	@$(GO_DOCKER) sh -c "GOOS=\$$(go env GOOS) GOARCH=\$$(go env GOARCH) \
-		go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(BINARY)-$(VERSION) ./src"
+		go build -buildvcs=false -trimpath -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(BINARY)-$(VERSION) ./src"
 	@if [ -d "src/client" ]; then \
 		echo "Building local CLI $(VERSION)..."; \
 		$(GO_DOCKER) sh -c "GOOS=\$$(go env GOOS) GOARCH=\$$(go env GOARCH) \
-			go build -ldflags \"$(CLI_LDFLAGS)\" -o $(BINDIR)/$(BINARY)-cli-$(VERSION) ./src/client"; \
+			go build -buildvcs=false -trimpath -ldflags \"$(CLI_LDFLAGS)\" -o $(BINDIR)/$(BINARY)-cli-$(VERSION) ./src/client"; \
 	fi
 	@echo ""
 	@echo "Built: $(BINDIR)/$(BINARY)-$(VERSION)"
@@ -114,14 +115,14 @@ local:
 # =============================================================================
 build:
 	@rm -rf $(BINDIR) $(RELDIR)
-	@mkdir -p $(BINDIR)
+	@mkdir -p $(BINDIR) $(GO_CACHE) $(GO_BUILD)
 	@echo "Building version $(VERSION)..."
 	@echo "Tidying and downloading Go modules..."
 	@$(GO_DOCKER) go mod tidy
 	@$(GO_DOCKER) go mod download
 	@echo "Building host binary..."
 	@$(GO_DOCKER) sh -c "GOOS=\$$(go env GOOS) GOARCH=\$$(go env GOARCH) \
-		go build -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(BINARY) ./src"
+		go build -buildvcs=false -trimpath -ldflags \"$(LDFLAGS)\" -o $(BINDIR)/$(BINARY) ./src"
 	@for platform in $(PLATFORMS); do \
 		OS=$${platform%/*}; \
 		ARCH=$${platform#*/}; \
@@ -129,13 +130,13 @@ build:
 		[ "$$OS" = "windows" ] && OUTPUT=$$OUTPUT.exe; \
 		echo "Building server $$OS/$$ARCH..."; \
 		$(GO_DOCKER) sh -c "GOOS=$$OS GOARCH=$$ARCH \
-			go build -ldflags \"$(LDFLAGS)\" \
+			go build -buildvcs=false -trimpath -ldflags \"$(LDFLAGS)\" \
 			-o $$OUTPUT ./src" || exit 1; \
 	done
 	@if [ -d "src/client" ]; then \
 		echo "Building CLI..."; \
 		$(GO_DOCKER) sh -c "GOOS=\$$(go env GOOS) GOARCH=\$$(go env GOARCH) \
-			go build -ldflags \"$(CLI_LDFLAGS)\" -o $(BINDIR)/$(BINARY)-cli ./src/client"; \
+			go build -buildvcs=false -trimpath -ldflags \"$(CLI_LDFLAGS)\" -o $(BINDIR)/$(BINARY)-cli ./src/client"; \
 		for platform in $(PLATFORMS); do \
 			OS=$${platform%/*}; \
 			ARCH=$${platform#*/}; \
@@ -143,7 +144,7 @@ build:
 			[ "$$OS" = "windows" ] && OUTPUT=$$OUTPUT.exe; \
 			echo "Building CLI $$OS/$$ARCH..."; \
 			$(GO_DOCKER) sh -c "GOOS=$$OS GOARCH=$$ARCH \
-				go build -ldflags \"$(CLI_LDFLAGS)\" \
+				go build -buildvcs=false -trimpath -ldflags \"$(CLI_LDFLAGS)\" \
 				-o $$OUTPUT ./src/client" || exit 1; \
 		done; \
 	fi
@@ -227,6 +228,7 @@ test:
 # LINT - Static analysis (go vet + staticcheck) via Docker
 # =============================================================================
 lint:
+	@mkdir -p $(GO_CACHE) $(GO_BUILD)
 	@echo "Running go vet..."
 	@$(GO_DOCKER) sh -c 'go mod download && go vet ./...'
 	@echo "Running staticcheck..."
@@ -237,15 +239,15 @@ lint:
 # BUILD-ARM64 - Compile server + CLI for linux/arm64
 # =============================================================================
 build-arm64:
-	@mkdir -p $(BINDIR)
+	@mkdir -p $(BINDIR) $(GO_CACHE) $(GO_BUILD)
 	@echo "Building server linux/arm64..."
 	@$(GO_DOCKER) sh -c "GOOS=linux GOARCH=arm64 \
-		go build -ldflags \"$(LDFLAGS)\" \
+		go build -buildvcs=false -trimpath -ldflags \"$(LDFLAGS)\" \
 		-o $(BINDIR)/$(BINARY)-linux-arm64 ./src"
 	@if [ -d "src/client" ]; then \
 		echo "Building CLI linux/arm64..."; \
 		$(GO_DOCKER) sh -c "GOOS=linux GOARCH=arm64 \
-			go build -ldflags \"$(CLI_LDFLAGS)\" \
+			go build -buildvcs=false -trimpath -ldflags \"$(CLI_LDFLAGS)\" \
 			-o $(BINDIR)/$(BINARY)-cli-linux-arm64 ./src/client"; \
 	fi
 	@echo "ARM64 build complete"
