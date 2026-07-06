@@ -96,7 +96,6 @@ func (c *Config) GetPath() string {
 
 // Reload reloads the configuration from the original file
 // Note: Some settings (port, address) may require restart to take effect
-// Per AI.md PART 5: Unknown config keys are ERRORS, not ignored
 func (c *Config) Reload() error {
 	c.mu.RLock()
 	path := c.configPath
@@ -112,11 +111,21 @@ func (c *Config) Reload() error {
 	}
 	defer file.Close()
 
+	// Warn on unknown fields but never crash — AI.md PART 12: never crash on config
+	var strictCheck Config
+	strictDecoder := yaml.NewDecoder(file)
+	strictDecoder.KnownFields(true)
+	if err := strictDecoder.Decode(&strictCheck); err != nil {
+		slog.Warn("server.yml contains unrecognized fields (ignored)", "detail", err)
+	}
+
+	// Seek back and decode leniently so unknown fields never prevent startup
+	if _, err := file.Seek(0, 0); err != nil {
+		return fmt.Errorf("failed to re-read config file: %w", err)
+	}
+
 	var newCfg Config
 	decoder := yaml.NewDecoder(file)
-	// Per AI.md PART 5: Unknown keys cause errors
-	decoder.KnownFields(true)
-
 	if err := decoder.Decode(&newCfg); err != nil {
 		return fmt.Errorf("failed to parse config file: %w", err)
 	}
@@ -1792,7 +1801,6 @@ func DefaultConfig() *Config {
 }
 
 // Load loads configuration from file
-// Per AI.md PART 5: Unknown config keys are ERRORS, not ignored
 func Load(path string) (*Config, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -1800,11 +1808,21 @@ func Load(path string) (*Config, error) {
 	}
 	defer file.Close()
 
+	// Warn on unknown fields but never crash — AI.md PART 12: never crash on config
+	var strictCheck Config
+	strictDecoder := yaml.NewDecoder(file)
+	strictDecoder.KnownFields(true)
+	if err := strictDecoder.Decode(&strictCheck); err != nil {
+		slog.Warn("server.yml contains unrecognized fields (ignored)", "detail", err)
+	}
+
+	// Seek back and decode leniently so unknown fields never prevent startup
+	if _, err := file.Seek(0, 0); err != nil {
+		return nil, fmt.Errorf("failed to re-read config file: %w", err)
+	}
+
 	var cfg Config
 	decoder := yaml.NewDecoder(file)
-	// Per AI.md PART 5: Unknown keys cause errors
-	decoder.KnownFields(true)
-
 	if err := decoder.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
