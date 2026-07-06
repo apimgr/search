@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -310,7 +311,7 @@ func (m *Manager) Restore(backupPath string) error {
 	currentBackup := filepath.Join(m.backupDir, fmt.Sprintf("pre-restore-%s.tar.gz", time.Now().Format("20060102-150405")))
 	if _, err := m.Create(filepath.Base(currentBackup)); err != nil {
 		// Non-fatal, just warn
-		fmt.Printf("Warning: could not create pre-restore backup: %v\n", err)
+		slog.Warn("could not create pre-restore backup", "err", err)
 	}
 
 	// Extract files
@@ -508,7 +509,7 @@ func (m *Manager) ScheduledBackup(keepCount int) error {
 		for i := keepCount; i < len(backups); i++ {
 			if err := m.Delete(backups[i].Filename); err != nil {
 				// Log but don't fail
-				fmt.Printf("Warning: failed to delete old backup %s: %v\n", backups[i].Filename, err)
+				slog.Warn("failed to delete old backup", "file", backups[i].Filename, "err", err)
 			}
 		}
 	}
@@ -610,7 +611,7 @@ func (m *Manager) ApplyRetention(policy RetentionPolicy) error {
 	// Delete old backups
 	for _, filename := range toDelete {
 		if err := m.Delete(filename); err != nil {
-			fmt.Printf("Warning: failed to delete old backup %s: %v\n", filename, err)
+			slog.Warn("failed to delete old backup", "file", filename, "err", err)
 		}
 	}
 
@@ -916,7 +917,7 @@ func (m *Manager) ScheduledBackupWithVerification(keepCount int) error {
 				continue
 			}
 			if err := m.Delete(backups[i].Filename); err != nil {
-				fmt.Printf("Warning: failed to delete old backup %s: %v\n", backups[i].Filename, err)
+				slog.Warn("failed to delete old backup", "file", backups[i].Filename, "err", err)
 			}
 		}
 	}
