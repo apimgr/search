@@ -2137,12 +2137,15 @@
         // Load widget preferences
         function loadWidgetPreferences() {
             try {
-                var widgets = JSON.parse(localStorage.getItem(WIDGETS_KEY) || '[]');
+                var saved = localStorage.getItem(WIDGETS_KEY);
+                // null means the key was never set (fresh user) — leave HTML defaults as-is
+                if (saved === null) {
+                    return;
+                }
+                var widgets = JSON.parse(saved);
                 document.querySelectorAll('.widget-toggle input[type="checkbox"]').forEach(function(checkbox) {
                     var widgetType = checkbox.dataset.widget;
-                    if (widgets.length > 0) {
-                        checkbox.checked = widgets.includes(widgetType);
-                    }
+                    checkbox.checked = widgets.includes(widgetType);
                 });
             } catch (e) {
                 console.error('Failed to load widget preferences:', e);
@@ -3685,7 +3688,9 @@
             var grid = document.getElementById('widget-grid');
             if (!grid) return;
 
-            var enabledWidgets = getEnabledWidgets() || this.defaultWidgets;
+            var saved = getEnabledWidgets();
+            // null means no saved preferences (fresh user) — fall back to server defaults
+            var enabledWidgets = saved !== null ? saved : this.defaultWidgets;
             this.renderWidgetGrid(enabledWidgets);
             this.initEventDelegation();
         },
@@ -3958,7 +3963,8 @@
         },
 
         toggleWidget: function(widgetType) {
-            var enabled = getEnabledWidgets() || this.defaultWidgets;
+            var savedToggle = getEnabledWidgets();
+            var enabled = savedToggle !== null ? savedToggle : this.defaultWidgets.slice();
             var idx = enabled.indexOf(widgetType);
             if (idx >= 0) {
                 enabled.splice(idx, 1);
@@ -3970,7 +3976,8 @@
         },
 
         removeWidget: function(widgetType) {
-            var enabled = getEnabledWidgets() || this.defaultWidgets;
+            var savedRemove = getEnabledWidgets();
+            var enabled = savedRemove !== null ? savedRemove : this.defaultWidgets.slice();
             var idx = enabled.indexOf(widgetType);
             if (idx >= 0) {
                 enabled.splice(idx, 1);
@@ -4434,7 +4441,9 @@
         },
 
         getEnabledWidgets: function() {
-            return getEnabledWidgets() || this.defaultWidgets;
+            var saved = getEnabledWidgets();
+            // null means no saved preferences (fresh user) — fall back to server defaults
+            return saved !== null ? saved : this.defaultWidgets;
         }
     };
 
