@@ -85,28 +85,28 @@
                 <li class="component-item {{if eq .Health.Checks.Database "ok"}}component-ok{{else}}component-error{{end}}">
                     <span class="component-icon">{{if eq .Health.Checks.Database "ok"}}✓{{else}}✕{{end}}</span>
                     <span class="component-name">{{t "health.components.database"}}</span>
-                    <span class="component-status">{{if eq .Health.Checks.Database "ok"}}{{t "health.component_operational"}}{{else}}{{t "health.component_error"}}</span>
+                    <span class="component-status">{{if eq .Health.Checks.Database "ok"}}{{t "health.component_operational"}}{{else}}{{t "health.component_error"}}{{end}}</span>
                 </li>
                 <li class="component-item {{if eq .Health.Checks.Cache "ok"}}component-ok{{else}}component-error{{end}}">
                     <span class="component-icon">{{if eq .Health.Checks.Cache "ok"}}✓{{else}}✕{{end}}</span>
                     <span class="component-name">{{t "health.components.cache"}}</span>
-                    <span class="component-status">{{if eq .Health.Checks.Cache "ok"}}{{t "health.component_operational"}}{{else}}{{t "health.component_error"}}</span>
+                    <span class="component-status">{{if eq .Health.Checks.Cache "ok"}}{{t "health.component_operational"}}{{else}}{{t "health.component_error"}}{{end}}</span>
                 </li>
                 <li class="component-item {{if eq .Health.Checks.Disk "ok"}}component-ok{{else}}component-error{{end}}">
                     <span class="component-icon">{{if eq .Health.Checks.Disk "ok"}}✓{{else}}✕{{end}}</span>
                     <span class="component-name">{{t "health.components.disk_space"}}</span>
-                    <span class="component-status">{{if eq .Health.Checks.Disk "ok"}}{{t "health.component_operational"}}{{else}}{{t "health.component_error"}}</span>
+                    <span class="component-status">{{if eq .Health.Checks.Disk "ok"}}{{t "health.component_operational"}}{{else}}{{t "health.component_error"}}{{end}}</span>
                 </li>
                 <li class="component-item {{if eq .Health.Checks.Scheduler "ok"}}component-ok{{else}}component-error{{end}}">
                     <span class="component-icon">{{if eq .Health.Checks.Scheduler "ok"}}✓{{else}}✕{{end}}</span>
                     <span class="component-name">{{t "health.components.scheduler"}}</span>
-                    <span class="component-status">{{if eq .Health.Checks.Scheduler "ok"}}{{t "health.component_operational"}}{{else}}{{t "health.component_error"}}</span>
+                    <span class="component-status">{{if eq .Health.Checks.Scheduler "ok"}}{{t "health.component_operational"}}{{else}}{{t "health.component_error"}}{{end}}</span>
                 </li>
                 {{if .Health.Checks.Tor}}
                 <li class="component-item {{if eq .Health.Checks.Tor "ok"}}component-ok{{else}}component-error{{end}}">
                     <span class="component-icon">{{if eq .Health.Checks.Tor "ok"}}✓{{else}}✕{{end}}</span>
                     <span class="component-name">{{t "health.components.tor"}}</span>
-                    <span class="component-status">{{if eq .Health.Checks.Tor "ok"}}{{t "health.component_operational"}}{{else}}{{t "health.component_error"}}</span>
+                    <span class="component-status">{{if eq .Health.Checks.Tor "ok"}}{{t "health.component_operational"}}{{else}}{{t "health.component_error"}}{{end}}</span>
                 </li>
                 {{end}}
             </ul>

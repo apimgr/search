@@ -2546,15 +2546,24 @@ func TestHandleHealthz_PlainText(t *testing.T) {
 	}
 }
 
-// TestHandleHealthz_HTML returns non-error for HTML accept.
+// TestHandleHealthz_HTML verifies HTML rendering succeeds (not 500).
+// Regression guard: missing {{end}} in healthz.tmpl caused template parse failure,
+// making the template unregistered and every HTML request return 500.
 func TestHandleHealthz_HTML(t *testing.T) {
 	s := newTestServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/server/healthz", nil)
-	req.Header.Set("Accept", "text/html")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 	rec := httptest.NewRecorder()
 	s.handleHealthz(rec, req)
+	if rec.Code == http.StatusInternalServerError {
+		t.Errorf("handleHealthz HTML: got 500 (template likely failed to parse): body=%q", rec.Body.String())
+	}
 	if rec.Code == http.StatusBadRequest {
 		t.Errorf("handleHealthz HTML: got 400")
+	}
+	ct := rec.Header().Get("Content-Type")
+	if !strings.Contains(ct, "text/html") {
+		t.Errorf("handleHealthz HTML: Content-Type = %q, want text/html", ct)
 	}
 }
 

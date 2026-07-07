@@ -801,9 +801,16 @@ func (s *Scheduler) initDatabase() {
 		slog.Error("Failed to create tasks table", "err", err)
 	}
 
-	// Add retry columns to existing tables (idempotent migration)
+	// Idempotent migrations — add columns missing from older schema versions
+	// SQLite silently errors if the column already exists; errors are intentionally ignored
+	s.db.ExecContext(initCtx, "ALTER TABLE scheduler_tasks ADD COLUMN task_name TEXT")
+	s.db.ExecContext(initCtx, "ALTER TABLE scheduler_tasks ADD COLUMN schedule TEXT")
+	s.db.ExecContext(initCtx, "ALTER TABLE scheduler_tasks ADD COLUMN last_status TEXT")
+	s.db.ExecContext(initCtx, "ALTER TABLE scheduler_tasks ADD COLUMN fail_count INTEGER DEFAULT 0")
 	s.db.ExecContext(initCtx, "ALTER TABLE scheduler_tasks ADD COLUMN retry_count INTEGER DEFAULT 0")
 	s.db.ExecContext(initCtx, "ALTER TABLE scheduler_tasks ADD COLUMN next_retry DATETIME")
+	s.db.ExecContext(initCtx, "ALTER TABLE scheduler_tasks ADD COLUMN locked_by TEXT")
+	s.db.ExecContext(initCtx, "ALTER TABLE scheduler_tasks ADD COLUMN locked_at DATETIME")
 }
 
 // loadTaskState loads persisted state for a task

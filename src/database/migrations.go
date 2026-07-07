@@ -39,15 +39,22 @@ func initServerSchema(ctx context.Context, db *DB) error {
 	}
 
 	statements := []string{
-		// Scheduler task definitions
+		// Scheduler task definitions — must match scheduler.go schema exactly
 		`CREATE TABLE IF NOT EXISTS {prefix}scheduler_tasks (
 			task_id TEXT PRIMARY KEY,
+			task_name TEXT,
+			schedule TEXT,
 			last_run DATETIME,
-			next_run DATETIME,
-			last_result TEXT,
+			last_status TEXT,
 			last_error TEXT,
+			next_run DATETIME,
 			run_count INTEGER DEFAULT 0,
-			enabled INTEGER DEFAULT 1
+			fail_count INTEGER DEFAULT 0,
+			enabled INTEGER DEFAULT 1,
+			retry_count INTEGER DEFAULT 0,
+			next_retry DATETIME,
+			locked_by TEXT,
+			locked_at DATETIME
 		)`,
 		// Scheduler execution history
 		`CREATE TABLE IF NOT EXISTS {prefix}scheduler_history (
