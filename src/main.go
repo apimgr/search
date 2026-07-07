@@ -1469,9 +1469,24 @@ func runUpdate(subCmd string) {
 			fmt.Println("Valid branches: stable, beta, daily")
 		}
 
+	case "help", "--help":
+		fmt.Println("Update Management Commands:")
+		fmt.Println()
+		fmt.Println("  check              Check for available updates")
+		fmt.Println("  yes                Download and install update")
+		fmt.Println("  rollback           Rollback to previous version")
+		fmt.Println("  list               List available versions")
+		fmt.Println("  branch <name>      Set update branch (stable|beta|daily)")
+		fmt.Println("  help               Show this help")
+		fmt.Println()
+		fmt.Println("Examples:")
+		fmt.Println("  search --update check")
+		fmt.Println("  search --update yes")
+		fmt.Println("  search --update branch beta")
+
 	default:
 		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown subcommand: %s\n", subCmd)
-		fmt.Println("Valid subcommands: check, yes, rollback, list, branch <name>")
+		fmt.Println("Valid subcommands: check, yes, rollback, list, branch <name>, help")
 	}
 }
 
