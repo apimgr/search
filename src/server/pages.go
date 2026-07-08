@@ -31,6 +31,20 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	data := s.newPageData(w, r, "", "home")
 	data.CSRFToken = s.getCSRFToken(r)
 
+	// Text browsers receive a JavaScript-free home page (just a search form).
+	// Per AI.md PART 14: text browsers are INTERACTIVE, no JS.
+	if httputil.IsTextBrowser(r) {
+		s.renderNoJSHome(w, r, data)
+		return
+	}
+
+	// HTTP tools fetching the home page receive plain text via HTML2TextConverter.
+	// Per AI.md PART 14: HTTP tools are NON-INTERACTIVE, just dump output.
+	if httputil.IsHttpTool(r) {
+		s.renderHTMLToText(w, "index", data)
+		return
+	}
+
 	// Widgets are always available - users control via localStorage
 	// Per user preference: no server-side gating, all widgets user-controlled
 	data.WidgetsEnabled = true

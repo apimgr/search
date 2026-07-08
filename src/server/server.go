@@ -1063,13 +1063,48 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 
 	results, err := s.aggregator.Search(ctx, query)
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-
 	if err != nil && !errors.Is(err, model.ErrNoResults) {
+		// For HTTP tools, render the error as plain text
+		if httputil.IsHttpTool(r) {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			fmt.Fprintf(w, "Search error: %v\n", err)
+			return
+		}
+		// For our CLI, encode the error as JSON
+		if httputil.IsOurCliClient(r) {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			fmt.Fprintf(w, `{"ok":false,"error":"SEARCH_ERROR","message":%q}`+"\n", err.Error())
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		s.renderSearchError(w, r, queryStr, err)
 		return
 	}
 
+	// 1. Our CLI client — INTERACTIVE, receives JSON, renders its own TUI/GUI
+	if httputil.IsOurCliClient(r) {
+		s.renderJSONSearchResults(w, results)
+		return
+	}
+
+	// 2. Text browsers (lynx, w3m, links, elinks) — INTERACTIVE, NO JavaScript
+	//    Serve completely different HTML: server-rendered, forms via GET, nav via <a href>
+	if httputil.IsTextBrowser(r) {
+		data := s.buildSearchPageData(w, r, queryStr, results, category, instantAnswer)
+		s.renderNoJSSearch(w, r, data)
+		return
+	}
+
+	// 3. HTTP tools (curl, wget, httpie) — NON-INTERACTIVE, just dump output
+	//    Render full HTML first, then convert to terminal-friendly plain text
+	if httputil.IsHttpTool(r) {
+		data := s.buildSearchPageData(w, r, queryStr, results, category, instantAnswer)
+		s.renderHTMLToText(w, "search", data)
+		return
+	}
+
+	// 4. Regular browsers — full HTML with JavaScript
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	s.renderSearchResultsWithInstant(w, r, queryStr, results, category, instantAnswer)
 }
 
@@ -1292,11 +1327,11 @@ func (s *Server) renderSearchError(w http.ResponseWriter, r *http.Request, query
 	}
 }
 
-// renderSearchResultsWithInstant renders search results with optional instant answer
-func (s *Server) renderSearchResultsWithInstant(w http.ResponseWriter, r *http.Request, query string, results *model.SearchResults, category string, instantAnswer *instant.Answer) {
+// buildSearchPageData constructs a SearchPageData struct without writing any response.
+// Used by renderSearchResultsWithInstant, renderNoJSSearch, and renderHTMLToText.
+func (s *Server) buildSearchPageData(w http.ResponseWriter, r *http.Request, query string, results *model.SearchResults, category string, instantAnswer *instant.Answer) *SearchPageData {
 	safeSearch, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("safe_search")))
 
-	// Use newPageData for TorAddress support per AI.md PART 32
 	baseData := s.newPageData(w, r, query, "search")
 	baseData.Description = fmt.Sprintf("Search results for: %s", query)
 	baseData.Query = query
@@ -1329,6 +1364,13 @@ func (s *Server) renderSearchResultsWithInstant(w http.ResponseWriter, r *http.R
 		NextPage:    results.Page + 1,
 		Pages:       pageLinks,
 	}
+
+	return data
+}
+
+// renderSearchResultsWithInstant renders search results with optional instant answer
+func (s *Server) renderSearchResultsWithInstant(w http.ResponseWriter, r *http.Request, query string, results *model.SearchResults, category string, instantAnswer *instant.Answer) {
+	data := s.buildSearchPageData(w, r, query, results, category, instantAnswer)
 
 	if err := s.renderer.Render(w, "search", data); err != nil {
 		// Fallback to inline rendering
