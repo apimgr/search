@@ -7,6 +7,7 @@ import (
 	"html"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/apimgr/search/src/common/httputil"
@@ -107,7 +108,7 @@ func (s *Server) renderNoJSSearch(w http.ResponseWriter, r *http.Request, data *
 		b.WriteString("<ol class=\"results\">\n")
 		for _, result := range results {
 			b.WriteString("<li>\n<article>\n")
-			b.WriteString(`<h2><a href="` + html.EscapeString(result.URL) + `" rel="noopener noreferrer">` + html.EscapeString(result.Title) + `</a></h2>` + "\n")
+			b.WriteString(`<h2><a href="` + safeHref(result.URL) + `" rel="noopener noreferrer">` + html.EscapeString(result.Title) + `</a></h2>` + "\n")
 			if result.Domain != "" {
 				b.WriteString(`<p class="result-url">` + html.EscapeString(result.Domain) + `</p>` + "\n")
 			}
@@ -239,6 +240,22 @@ h2{margin:.25rem 0;font-size:1em}
 [aria-current=page]{font-weight:bold;text-decoration:none}
 </style>
 `
+}
+
+// safeHref validates that a URL uses a safe scheme before use in an href attribute.
+// html.EscapeString alone cannot prevent javascript: URI injection; this blocks it.
+// Only http, https, ftp, ftps, and mailto are permitted; anything else becomes "#".
+func safeHref(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return "#"
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http", "https", "ftp", "ftps", "mailto":
+		return html.EscapeString(u.String())
+	default:
+		return "#"
+	}
 }
 
 // htmlQueryEscape percent-encodes a string for use in an HTML attribute
