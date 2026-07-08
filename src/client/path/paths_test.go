@@ -1,6 +1,7 @@
 package path
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -1162,5 +1163,195 @@ func TestDirectoryHierarchy(t *testing.T) {
 		if !strings.HasPrefix(logDir, expectedPrefix) {
 			t.Errorf("LogDir() = %q, should start with %q", logDir, expectedPrefix)
 		}
+	}
+}
+
+// Windows path simulation — covers the osGetter=="windows" branches in all four Dir functions.
+// osGetter is a package-level var so we can swap it for the duration of each test.
+
+func TestConfigDirWindows(t *testing.T) {
+	orig := osGetter
+	osGetter = func() string { return "windows" }
+	defer func() { osGetter = orig }()
+
+	origAppData := os.Getenv("APPDATA")
+	os.Setenv("APPDATA", "/fake/appdata")
+	defer os.Setenv("APPDATA", origAppData)
+
+	dir, err := ConfigDir()
+	if err != nil {
+		t.Fatalf("ConfigDir() error = %v", err)
+	}
+	if !strings.HasPrefix(dir, "/fake/appdata") {
+		t.Errorf("ConfigDir() on Windows = %q, should start with APPDATA", dir)
+	}
+	if !strings.Contains(dir, projectOrg) || !strings.Contains(dir, projectName) {
+		t.Errorf("ConfigDir() on Windows = %q, should contain org and name", dir)
+	}
+}
+
+func TestDataDirWindows(t *testing.T) {
+	orig := osGetter
+	osGetter = func() string { return "windows" }
+	defer func() { osGetter = orig }()
+
+	origLocalAppData := os.Getenv("LOCALAPPDATA")
+	os.Setenv("LOCALAPPDATA", "/fake/localappdata")
+	defer os.Setenv("LOCALAPPDATA", origLocalAppData)
+
+	dir, err := DataDir()
+	if err != nil {
+		t.Fatalf("DataDir() error = %v", err)
+	}
+	if !strings.HasPrefix(dir, "/fake/localappdata") {
+		t.Errorf("DataDir() on Windows = %q, should start with LOCALAPPDATA", dir)
+	}
+	if !strings.HasSuffix(dir, "data") {
+		t.Errorf("DataDir() on Windows = %q, should end with 'data'", dir)
+	}
+}
+
+func TestCacheDirWindows(t *testing.T) {
+	orig := osGetter
+	osGetter = func() string { return "windows" }
+	defer func() { osGetter = orig }()
+
+	origLocalAppData := os.Getenv("LOCALAPPDATA")
+	os.Setenv("LOCALAPPDATA", "/fake/localappdata")
+	defer os.Setenv("LOCALAPPDATA", origLocalAppData)
+
+	dir, err := CacheDir()
+	if err != nil {
+		t.Fatalf("CacheDir() error = %v", err)
+	}
+	if !strings.HasPrefix(dir, "/fake/localappdata") {
+		t.Errorf("CacheDir() on Windows = %q, should start with LOCALAPPDATA", dir)
+	}
+	if !strings.HasSuffix(dir, "cache") {
+		t.Errorf("CacheDir() on Windows = %q, should end with 'cache'", dir)
+	}
+}
+
+func TestLogDirWindows(t *testing.T) {
+	orig := osGetter
+	osGetter = func() string { return "windows" }
+	defer func() { osGetter = orig }()
+
+	origLocalAppData := os.Getenv("LOCALAPPDATA")
+	os.Setenv("LOCALAPPDATA", "/fake/localappdata")
+	defer os.Setenv("LOCALAPPDATA", origLocalAppData)
+
+	dir, err := LogDir()
+	if err != nil {
+		t.Fatalf("LogDir() error = %v", err)
+	}
+	if !strings.HasPrefix(dir, "/fake/localappdata") {
+		t.Errorf("LogDir() on Windows = %q, should start with LOCALAPPDATA", dir)
+	}
+	if !strings.HasSuffix(dir, "log") {
+		t.Errorf("LogDir() on Windows = %q, should end with 'log'", dir)
+	}
+}
+
+// Table-driven Windows path tests in one pass for all Dir functions.
+
+func TestAllDirFunctionsWindows(t *testing.T) {
+	orig := osGetter
+	osGetter = func() string { return "windows" }
+	defer func() { osGetter = orig }()
+
+	os.Setenv("APPDATA", "/fake/appdata")
+	os.Setenv("LOCALAPPDATA", "/fake/localappdata")
+	defer func() {
+		os.Unsetenv("APPDATA")
+		os.Unsetenv("LOCALAPPDATA")
+	}()
+
+	tests := []struct {
+		name        string
+		fn          func() (string, error)
+		wantPrefix  string
+		wantSuffix  string
+	}{
+		{"ConfigDir", ConfigDir, "/fake/appdata", ""},
+		{"DataDir", DataDir, "/fake/localappdata", "data"},
+		{"CacheDir", CacheDir, "/fake/localappdata", "cache"},
+		{"LogDir", LogDir, "/fake/localappdata", "log"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir, err := tt.fn()
+			if err != nil {
+				t.Fatalf("%s() error = %v", tt.name, err)
+			}
+			if !strings.HasPrefix(dir, tt.wantPrefix) {
+				t.Errorf("%s() = %q, should start with %q", tt.name, dir, tt.wantPrefix)
+			}
+			if tt.wantSuffix != "" && !strings.HasSuffix(dir, tt.wantSuffix) {
+				t.Errorf("%s() = %q, should end with %q", tt.name, dir, tt.wantSuffix)
+			}
+		})
+	}
+}
+
+// getHomeDir: cover the os.UserHomeDir() fallback when HOME is unset.
+// In environments where UserHomeDir() also fails (e.g. minimal Docker containers
+// with no /etc/passwd entry), the test skips rather than failing spuriously.
+
+func TestGetHomeDirFallbackToUserHomeDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("HOME env var semantics differ on Windows")
+	}
+
+	origHome := os.Getenv("HOME")
+	os.Unsetenv("HOME")
+	defer func() {
+		if origHome != "" {
+			os.Setenv("HOME", origHome)
+		}
+	}()
+
+	// Check whether os.UserHomeDir() works at all without HOME in this environment.
+	// Minimal containers (no /etc/passwd, no user entry) will fail here, which
+	// means getHomeDir() correctly falls through to its error return instead.
+	if _, err := os.UserHomeDir(); err != nil {
+		t.Skipf("os.UserHomeDir() unavailable without HOME in this environment: %v", err)
+	}
+
+	dir, err := getHomeDir()
+	if err != nil {
+		t.Fatalf("getHomeDir() error = %v", err)
+	}
+	if dir == "" {
+		t.Error("getHomeDir() returned empty string when falling back to UserHomeDir")
+	}
+}
+
+// EnsureDirs: cover the chmodFunc failure path.
+// chmodFunc is a package-level var injected for testing.
+
+func TestEnsureDirsChmodFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod mock not applicable on Windows")
+	}
+
+	tempDir := t.TempDir()
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tempDir)
+	defer os.Setenv("HOME", origHome)
+
+	origChmod := chmodFunc
+	chmodFunc = func(name string, mode os.FileMode) error {
+		return fmt.Errorf("chmod denied for %s", name)
+	}
+	defer func() { chmodFunc = origChmod }()
+
+	err := EnsureDirs()
+	if err == nil {
+		t.Error("EnsureDirs() should return error when chmodFunc fails")
+	}
+	if !strings.Contains(err.Error(), "chmod dir") {
+		t.Errorf("EnsureDirs() error = %v, want it to contain 'chmod dir'", err)
 	}
 }

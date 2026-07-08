@@ -509,3 +509,416 @@ func TestBuildFullURL(t *testing.T) {
 		})
 	}
 }
+
+// isTrustedProxy: covers IP-without-port, invalid IP, untrusted public IP,
+// and the additional-proxies path (via SetAdditionalTrustedProxies).
+
+func TestIsTrustedProxy(t *testing.T) {
+	SetAdditionalTrustedProxies(nil)
+	defer SetAdditionalTrustedProxies(nil)
+
+	tests := []struct {
+		name       string
+		remoteAddr string
+		want       bool
+	}{
+		{"loopback with port", "127.0.0.1:1234", true},
+		{"loopback without port", "127.0.0.1", true},
+		{"RFC1918 10.x with port", "10.0.0.1:80", true},
+		{"RFC1918 172.16.x with port", "172.16.5.1:443", true},
+		{"RFC1918 192.168.x with port", "192.168.100.1:8080", true},
+		{"IPv6 loopback bracketed", "[::1]:1234", true},
+		{"public IP is untrusted", "8.8.8.8:1234", false},
+		{"another public IP", "1.1.1.1:53", false},
+		{"unparseable IP segment", "not-an-ip:9999", false},
+		{"completely unparseable", "garbage", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isTrustedProxy(tt.remoteAddr)
+			if got != tt.want {
+				t.Errorf("isTrustedProxy(%q) = %v, want %v", tt.remoteAddr, got, tt.want)
+			}
+		})
+	}
+}
+
+// SetAdditionalTrustedProxies: covers CIDR, plain IPv4, plain IPv6,
+// empty-string skipping, invalid-entry skipping, and nil clearing.
+
+func TestSetAdditionalTrustedProxies(t *testing.T) {
+	defer SetAdditionalTrustedProxies(nil)
+
+	tests := []struct {
+		name       string
+		additional []string
+		checkAddr  string
+		want       bool
+	}{
+		{
+			name:       "plain IPv4 /32 expansion trusted",
+			additional: []string{"198.51.100.1"},
+			checkAddr:  "198.51.100.1:1234",
+			want:       true,
+		},
+		{
+			name:       "plain IPv4 not matching another IP",
+			additional: []string{"198.51.100.1"},
+			checkAddr:  "198.51.100.2:1234",
+			want:       false,
+		},
+		{
+			name:       "CIDR range trusted",
+			additional: []string{"203.0.113.0/24"},
+			checkAddr:  "203.0.113.42:1234",
+			want:       true,
+		},
+		{
+			name:       "CIDR range does not trust outside IP",
+			additional: []string{"203.0.113.0/24"},
+			checkAddr:  "203.0.114.1:1234",
+			want:       false,
+		},
+		{
+			name:       "plain IPv6 /128 expansion trusted",
+			additional: []string{"2001:db8::1"},
+			checkAddr:  "[2001:db8::1]:1234",
+			want:       true,
+		},
+		{
+			name:       "empty string in list skipped, valid entry still works",
+			additional: []string{"", "203.0.113.0/24"},
+			checkAddr:  "203.0.113.1:1234",
+			want:       true,
+		},
+		{
+			name:       "invalid entry ignored, valid entry still works",
+			additional: []string{"not-valid-!!!", "203.0.113.0/24"},
+			checkAddr:  "203.0.113.1:1234",
+			want:       true,
+		},
+		{
+			name:       "nil clears additional list",
+			additional: nil,
+			checkAddr:  "203.0.113.1:1234",
+			want:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			SetAdditionalTrustedProxies(tt.additional)
+			got := isTrustedProxy(tt.checkAddr)
+			if got != tt.want {
+				t.Errorf("isTrustedProxy(%q) with additional=%v = %v, want %v",
+					tt.checkAddr, tt.additional, got, tt.want)
+			}
+		})
+	}
+}
+
+// GetClientIP: covers all header-priority branches and the untrusted-proxy path.
+
+func TestGetClientIP(t *testing.T) {
+	SetAdditionalTrustedProxies(nil)
+	defer SetAdditionalTrustedProxies(nil)
+
+	tests := []struct {
+		name            string
+		remoteAddr      string
+		cfConnectingIP  string
+		trueClientIP    string
+		xClientIP       string
+		xRealIP         string
+		xForwardedFor   string
+		want            string
+	}{
+		{
+			name:       "untrusted proxy — RemoteAddr used directly",
+			remoteAddr: "8.8.8.8:1234",
+			xRealIP:    "1.2.3.4",
+			want:       "8.8.8.8",
+		},
+		{
+			name:           "trusted proxy — CF-Connecting-IP highest priority",
+			remoteAddr:     "127.0.0.1:1234",
+			cfConnectingIP: " 1.2.3.4 ",
+			trueClientIP:   "5.6.7.8",
+			xRealIP:        "9.10.11.12",
+			want:           "1.2.3.4",
+		},
+		{
+			name:         "trusted proxy — True-Client-IP second priority",
+			remoteAddr:   "127.0.0.1:1234",
+			trueClientIP: "1.2.3.4",
+			xRealIP:      "5.6.7.8",
+			want:         "1.2.3.4",
+		},
+		{
+			name:       "trusted proxy — X-Client-IP third priority",
+			remoteAddr: "127.0.0.1:1234",
+			xClientIP:  "1.2.3.4",
+			xRealIP:    "5.6.7.8",
+			want:       "1.2.3.4",
+		},
+		{
+			name:       "trusted proxy — X-Real-IP fourth priority",
+			remoteAddr: "127.0.0.1:1234",
+			xRealIP:    "1.2.3.4",
+			want:       "1.2.3.4",
+		},
+		{
+			name:          "trusted proxy — X-Forwarded-For single IP",
+			remoteAddr:    "127.0.0.1:1234",
+			xForwardedFor: "1.2.3.4",
+			want:          "1.2.3.4",
+		},
+		{
+			name:          "trusted proxy — X-Forwarded-For multi-IP takes leftmost",
+			remoteAddr:    "127.0.0.1:1234",
+			xForwardedFor: " 1.2.3.4 , 5.6.7.8, 9.10.11.12",
+			want:          "1.2.3.4",
+		},
+		{
+			name:       "trusted proxy — no forwarding headers falls back to RemoteAddr IP",
+			remoteAddr: "127.0.0.1:1234",
+			want:       "127.0.0.1",
+		},
+		{
+			name:       "RemoteAddr without port (no SplitHostPort)",
+			remoteAddr: "8.8.8.8",
+			want:       "8.8.8.8",
+		},
+		{
+			name:       "RFC1918 trusted proxy — X-Real-IP honored",
+			remoteAddr: "10.0.0.1:1234",
+			xRealIP:    "203.0.113.5",
+			want:       "203.0.113.5",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/", nil)
+			req.RemoteAddr = tt.remoteAddr
+			if tt.cfConnectingIP != "" {
+				req.Header.Set("CF-Connecting-IP", tt.cfConnectingIP)
+			}
+			if tt.trueClientIP != "" {
+				req.Header.Set("True-Client-IP", tt.trueClientIP)
+			}
+			if tt.xClientIP != "" {
+				req.Header.Set("X-Client-IP", tt.xClientIP)
+			}
+			if tt.xRealIP != "" {
+				req.Header.Set("X-Real-IP", tt.xRealIP)
+			}
+			if tt.xForwardedFor != "" {
+				req.Header.Set("X-Forwarded-For", tt.xForwardedFor)
+			}
+			got := GetClientIP(req)
+			if got != tt.want {
+				t.Errorf("GetClientIP() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// parseForwardedProto: covers RFC 7239 Forwarded header parsing.
+
+func TestParseForwardedProto(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"https value", "for=10.0.0.1; proto=https", "https"},
+		{"http value", "for=10.0.0.1; proto=http", "http"},
+		{"quoted value", `for=10.0.0.1; proto="https"`, "https"},
+		{"proto appears first", "proto=https; for=10.0.0.1", "https"},
+		{"uppercase PROTO key", "for=10.0.0.1; PROTO=https", "https"},
+		{"mixed-case Proto key", "for=10.0.0.1; Proto=https", "https"},
+		{"no proto field", "for=10.0.0.1; host=example.com", ""},
+		{"empty string", "", ""},
+		{"for only no proto", "for=10.0.0.1", ""},
+		{"whitespace around equals", "for=1.2.3.4; proto=https", "https"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseForwardedProto(tt.input)
+			if got != tt.want {
+				t.Errorf("parseForwardedProto(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+// GetProtoFromRequest: covers X-Forwarded-Protocol, X-Url-Scheme, X-Scheme,
+// and the RFC 7239 Forwarded header path (all from trusted proxy).
+// Also covers the untrusted-proxy fallback (headers must be ignored).
+
+func TestGetProtoFromRequestAlternateHeaders(t *testing.T) {
+	tests := []struct {
+		name               string
+		xForwardedProtocol string
+		xUrlScheme         string
+		xScheme            string
+		forwarded          string
+		want               string
+	}{
+		{"X-Forwarded-Protocol https", "https", "", "", "", "https"},
+		{"X-Forwarded-Protocol http", "http", "", "", "", "http"},
+		{"X-Forwarded-Protocol uppercase HTTPS", "HTTPS", "", "", "", "https"},
+		{"X-Url-Scheme https", "", "https", "", "", "https"},
+		{"X-Scheme https", "", "", "https", "", "https"},
+		{"Forwarded header proto=https", "", "", "", "for=10.0.0.1; proto=https", "https"},
+		{"Forwarded header proto=http", "", "", "", "proto=http; for=10.0.0.1", "http"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/", nil)
+			// Loopback: trusted proxy, so headers are honored
+			req.RemoteAddr = "127.0.0.1:1234"
+			if tt.xForwardedProtocol != "" {
+				req.Header.Set("X-Forwarded-Protocol", tt.xForwardedProtocol)
+			}
+			if tt.xUrlScheme != "" {
+				req.Header.Set("X-Url-Scheme", tt.xUrlScheme)
+			}
+			if tt.xScheme != "" {
+				req.Header.Set("X-Scheme", tt.xScheme)
+			}
+			if tt.forwarded != "" {
+				req.Header.Set("Forwarded", tt.forwarded)
+			}
+			got := GetProtoFromRequest(req)
+			if got != tt.want {
+				t.Errorf("GetProtoFromRequest() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetProtoFromRequestUntrustedProxyIgnored(t *testing.T) {
+	req := httptest.NewRequest("GET", "/", nil)
+	// Public IP: untrusted — X-Forwarded-Proto must be ignored
+	req.RemoteAddr = "8.8.8.8:1234"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("X-Forwarded-Protocol", "https")
+	req.Header.Set("X-Forwarded-Ssl", "on")
+	got := GetProtoFromRequest(req)
+	if got != "http" {
+		t.Errorf("GetProtoFromRequest() from untrusted proxy = %q, want 'http'", got)
+	}
+}
+
+// GetHostFromRequest: covers X-Real-Host and X-Original-Host branches,
+// plus untrusted-proxy suppression.
+
+func TestGetHostFromRequestAdditionalHeaders(t *testing.T) {
+	tests := []struct {
+		name          string
+		remoteAddr    string
+		xRealHost     string
+		xOriginalHost string
+		requestHost   string
+		want          string
+	}{
+		{
+			name:        "trusted proxy — X-Real-Host used when no X-Forwarded-Host",
+			remoteAddr:  "127.0.0.1:1234",
+			xRealHost:   "realhost.example.com",
+			want:        "realhost.example.com",
+		},
+		{
+			name:          "trusted proxy — X-Original-Host used as last-resort forwarded",
+			remoteAddr:    "127.0.0.1:1234",
+			xOriginalHost: "originalhost.example.com",
+			want:          "originalhost.example.com",
+		},
+		{
+			name:          "trusted proxy — X-Real-Host takes priority over X-Original-Host",
+			remoteAddr:    "127.0.0.1:1234",
+			xRealHost:     "realhost.example.com",
+			xOriginalHost: "original.example.com",
+			want:          "realhost.example.com",
+		},
+		{
+			name:        "untrusted proxy — X-Real-Host ignored, falls back to r.Host",
+			remoteAddr:  "8.8.8.8:1234",
+			xRealHost:   "injected.evil.com",
+			requestHost: "legitimate.example.com",
+			want:        "legitimate.example.com",
+		},
+		{
+			name:          "untrusted proxy — X-Original-Host ignored",
+			remoteAddr:    "8.8.8.8:1234",
+			xOriginalHost: "injected.evil.com",
+			requestHost:   "real.example.com",
+			want:          "real.example.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/", nil)
+			req.RemoteAddr = tt.remoteAddr
+			if tt.xRealHost != "" {
+				req.Header.Set("X-Real-Host", tt.xRealHost)
+			}
+			if tt.xOriginalHost != "" {
+				req.Header.Set("X-Original-Host", tt.xOriginalHost)
+			}
+			req.Host = tt.requestHost
+			got := GetHostFromRequest(req)
+			if got != tt.want {
+				t.Errorf("GetHostFromRequest() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// IsTextBrowser: covers the remaining browser tokens (carbonyl, netsurf).
+
+func TestIsTextBrowserAdditionalAgents(t *testing.T) {
+	tests := []struct {
+		name      string
+		userAgent string
+		want      bool
+	}{
+		{"Carbonyl", "carbonyl/0.1.0", true},
+		{"NetSurf", "NetSurf/3.10 (Linux; x86_64)", true},
+		{"Links slash format", "Links/2.21 (Linux 5.4.0)", true},
+		{"paw http tool is not text browser", "paw/3.4.0", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/", nil)
+			req.Header.Set("User-Agent", tt.userAgent)
+			got := IsTextBrowser(req)
+			if got != tt.want {
+				t.Errorf("IsTextBrowser(%q) = %v, want %v", tt.userAgent, got, tt.want)
+			}
+		})
+	}
+}
+
+// GetClientIP: verify additional-proxy CIDR honors X-Forwarded-For.
+
+func TestGetClientIPWithAdditionalTrustedProxy(t *testing.T) {
+	SetAdditionalTrustedProxies([]string{"203.0.113.0/24"})
+	defer SetAdditionalTrustedProxies(nil)
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.RemoteAddr = "203.0.113.5:1234"
+	req.Header.Set("X-Real-IP", "1.2.3.4")
+
+	got := GetClientIP(req)
+	if got != "1.2.3.4" {
+		t.Errorf("GetClientIP() from configured additional proxy = %q, want '1.2.3.4'", got)
+	}
+}
