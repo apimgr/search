@@ -391,15 +391,36 @@ func TestStartHTTPSRedirectHandlerLogic(t *testing.T) {
 			uri:       "/search?q=hello",
 			wantLoc:   "https://host.example.com:8443/search?q=hello",
 		},
+		{
+			name:      "host with port stripped before non-standard https port appended",
+			httpsPort: 8443,
+			host:      "127.0.0.1:38425",
+			uri:       "/test?q=1",
+			wantLoc:   "https://127.0.0.1:8443/test?q=1",
+		},
+		{
+			name:      "host with port stripped before standard https port 443",
+			httpsPort: 443,
+			host:      "example.com:8080",
+			uri:       "/",
+			wantLoc:   "https://example.com/",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Mirror the handler closure from StartHTTPSRedirect exactly.
+			// Mirror the handler closure from StartHTTPSRedirect — strip any
+			// existing port from r.Host before appending the target httpsPort.
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				target := "https://" + r.Host
-				if tt.httpsPort != 443 {
-					target = fmt.Sprintf("https://%s:%d", r.Host, tt.httpsPort)
+				host := r.Host
+				if h, _, err := net.SplitHostPort(host); err == nil {
+					host = h
+				}
+				var target string
+				if tt.httpsPort == 443 {
+					target = "https://" + host
+				} else {
+					target = fmt.Sprintf("https://%s:%d", host, tt.httpsPort)
 				}
 				target += r.URL.RequestURI()
 				http.Redirect(w, r, target, http.StatusMovedPermanently)

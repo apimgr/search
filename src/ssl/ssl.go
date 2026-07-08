@@ -10,6 +10,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -460,10 +461,18 @@ func StartHTTPSRedirect(addr string, httpsPort int) *http.Server {
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 5 * time.Second,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Build HTTPS URL
-			target := "https://" + r.Host
-			if httpsPort != 443 {
-				target = fmt.Sprintf("https://%s:%d", r.Host, httpsPort)
+			// Strip any existing port from the Host header before building the
+			// redirect URL — r.Host may include the HTTP port (e.g. ":80"),
+			// and appending httpsPort directly would produce "host:80:443".
+			host := r.Host
+			if h, _, err := net.SplitHostPort(host); err == nil {
+				host = h
+			}
+			var target string
+			if httpsPort == 443 {
+				target = "https://" + host
+			} else {
+				target = fmt.Sprintf("https://%s:%d", host, httpsPort)
 			}
 			target += r.URL.RequestURI()
 			http.Redirect(w, r, target, http.StatusMovedPermanently)

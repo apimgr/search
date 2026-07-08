@@ -50,6 +50,7 @@ jobs:
             -w /workspace \
             -e CGO_ENABLED=0 \
             -e GOFLAGS=-buildvcs=false \
+            -e GOTOOLCHAIN=auto \
             casjaysdev/go:latest \
             sh -c 'go mod download && govulncheck ./...'
 
