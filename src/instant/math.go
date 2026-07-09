@@ -15,7 +15,7 @@ import (
 // MathHandler handles mathematical expressions
 type MathHandler struct {
 	patterns    []*regexp.Regexp
-	mathExpr    *regexp.Regexp
+	numericExpr *regexp.Regexp
 	percentOf   *regexp.Regexp
 	funcPattern *regexp.Regexp
 	funcNames   map[string]func(float64) float64
@@ -31,8 +31,9 @@ func NewMathHandler() *MathHandler {
 			regexp.MustCompile(`(?i)^eval(?:uate)?[:\s]+(.+)$`),
 			regexp.MustCompile(`(?i)^compute[:\s]+(.+)$`),
 		},
-		// Pattern to detect math expressions (numbers, operators, function names, constants)
-		mathExpr:    regexp.MustCompile(`^[\d\s\+\-\*\/\(\)\.\^\%a-zA-Z_]+$`),
+		// numericExpr matches pure digit arithmetic: digits, spaces, and + - * / ( ) .
+		// No letters — so hyphenated words and named functions never match here.
+		numericExpr: regexp.MustCompile(`^[\d\s\+\-\*\/\(\)\.]+$`),
 		percentOf:   regexp.MustCompile(`(?i)(\d+(?:\.\d+)?)\s*%\s*of\s*(\d+(?:\.\d+)?)`),
 		funcPattern: regexp.MustCompile(`(?i)^(sqrt|abs|ceil|floor|round|sin|cos|tan|asin|acos|atan|log|log2|ln|exp|cbrt)\s*\((.+)\)\s*$`),
 		funcNames: map[string]func(float64) float64{
@@ -71,26 +72,25 @@ func (h *MathHandler) Patterns() []*regexp.Regexp {
 }
 
 func (h *MathHandler) CanHandle(query string) bool {
-	// Check explicit patterns (calc:, math:, eval:, compute:)
+	// Explicit prefixes: calc:, math:, eval:, compute: — handles complex
+	// expressions (sqrt, pi, ^, function calls, named constants).
 	for _, p := range h.patterns {
 		if p.MatchString(query) {
 			return true
 		}
 	}
 
-	// Check percentage patterns: "15% of 200"
+	// "15% of 200" style — unambiguous even without a prefix.
 	if h.percentOf.MatchString(query) {
 		return true
 	}
 
-	// Check if it looks like a math expression.
-	// Require at least one digit so that words containing a hyphen
-	// (e.g. "apt dist-upgrade") are not misidentified as subtraction.
+	// Pure numeric arithmetic without a prefix: digits, spaces, and basic
+	// operators only. No letters allowed, so "apt dist-upgrade" and any other
+	// word containing a hyphen are never misidentified as subtraction.
 	cleaned := strings.TrimSpace(query)
-	hasDigit := strings.ContainsAny(cleaned, "0123456789")
-	if hasDigit && h.mathExpr.MatchString(cleaned) && len(cleaned) > 2 {
-		// Must contain at least one operator or function call
-		for _, op := range []string{"+", "-", "*", "/", "^", "%", "("} {
+	if h.numericExpr.MatchString(cleaned) && len(cleaned) > 2 {
+		for _, op := range []string{"+", "-", "*", "/"} {
 			if strings.Contains(cleaned, op) {
 				return true
 			}

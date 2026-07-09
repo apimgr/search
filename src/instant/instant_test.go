@@ -194,19 +194,28 @@ func TestMathHandlerCanHandle(t *testing.T) {
 		query string
 		want  bool
 	}{
-		{"2 + 2", true},
-		{"10 * 5", true},
-		{"100 / 4", true},
-		{"5 - 3", true},
-		{"2^3", true},
+		// Explicit prefixes — handle anything including complex expressions
 		{"calc 2+2", true},
 		{"calculate: 10*5", true},
 		{"math: 5+5", true},
 		{"eval 100/2", true},
 		{"compute 2*3", true},
+		{"calc: sqrt(16)", true},
+		{"calc: 2^3", true},
+		{"calc: pi*2", true},
+		// Pure digit arithmetic works without prefix
+		{"2 + 2", true},
+		{"10 * 5", true},
+		{"100 / 4", true},
+		{"5 - 3", true},
+		{"3+5*10 / 2 - 20", true},
+		{"(3+5)*2", true},
+		// Percentage pattern works without prefix
+		{"15% of 200", true},
+		// Expressions with letters or ^ require prefix
+		{"2^3", false},
 		{"hello world", false},
 		{"random text", false},
-		// Hyphenated package/command names must NOT be treated as subtraction
 		{"apt dist-upgrade", false},
 		{"systemctl restart-all", false},
 		{"git commit-msg", false},
