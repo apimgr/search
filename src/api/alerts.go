@@ -50,11 +50,32 @@ func (h *Handler) handleAlerts(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, "NOT_AVAILABLE", "Alert storage is unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	if r.Method != http.MethodPost {
+	switch r.Method {
+	case http.MethodGet:
+		// Operator-only: list all alerts per AI.md PART 14.
+		h.requireOperator(h.handleListAlerts)(w, r)
+	case http.MethodPost:
+		h.handleCreateAlert(w, r)
+	default:
 		h.writeError(w, "METHOD_NOT_ALLOWED", "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleListAlerts handles GET /api/v1/alerts (operator token required).
+func (h *Handler) handleListAlerts(w http.ResponseWriter, r *http.Request) {
+	alerts, err := h.alertManager.ListAll(r.Context())
+	if err != nil {
+		h.writeError(w, "INTERNAL_ERROR", "Failed to list alerts", http.StatusInternalServerError)
 		return
 	}
+	h.writeJSON(w, http.StatusOK, APIResponse{
+		OK:   true,
+		Data: map[string]interface{}{"alerts": alerts},
+	})
+}
 
+// handleCreateAlert handles POST /api/v1/alerts (anonymous — rate limited by middleware).
+func (h *Handler) handleCreateAlert(w http.ResponseWriter, r *http.Request) {
 	var req alertCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.writeError(w, "BAD_REQUEST", "Invalid JSON body", http.StatusBadRequest)

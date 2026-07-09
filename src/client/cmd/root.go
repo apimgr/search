@@ -35,7 +35,7 @@ var (
 	CommitID    = "unknown"
 	BuildDate   = "unknown"
 	// Default server URL
-	OfficialSite = "https://scour.li"
+	OfficialSite = "https://search.apimgr.us"
 
 	cfgFile string
 	server  string

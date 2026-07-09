@@ -1,20 +1,23 @@
-{{/* Announcements partial - displays active announcements from config */}}
-{{/* Per AI.md PART 17: No inline JS handlers - use event delegation */}}
+{{/* Site banner announcements partial - server-rendered per AI.md PART 16 */}}
+{{/* Each active announcement whose id is absent from dismissed_announcements cookie renders here */}}
+{{/* Forms POST to /announcements/dismiss — works with zero JS; app.js intercepts to skip the reload */}}
 {{ define "announcements" }}
-{{ if .Announcements }}
-<div class="announcements-container" id="announcements">
-    {{ range .Announcements }}
-    <div class="announcement announcement-{{ .Type }}" data-announcement-id="{{ .ID }}" {{ if .Dismissible }}data-dismissible="true"{{ end }}>
-        <div class="announcement-content">
-            {{ if .Title }}<strong class="announcement-title">{{ .Title }}</strong>{{ end }}
-            <span class="announcement-message">{{ .Message }}</span>
-        </div>
-        {{ if .Dismissible }}
-        <button class="announcement-dismiss" data-announcement-id="{{ .ID }}" aria-label="{{t "common.dismiss"}}">&times;</button>
-        {{ end }}
-    </div>
-    {{ end }}
+{{ range .Announcements }}
+<div class="site-banner site-banner-{{ .Type }}"
+  {{ if or (eq .Type "warning") (eq .Type "error") }}role="alert"{{ else }}role="status"{{ end }}
+  data-announcement-id="{{ .ID }}">
+  <span class="site-banner-icon" aria-hidden="true">
+    {{ if eq .Type "warning" }}⚠{{ else if eq .Type "error" }}✖{{ else if eq .Type "success" }}✓{{ else }}ℹ{{ end }}
+  </span>
+  <span class="site-banner-text">
+    {{ if .Title }}<strong>{{ .Title }}</strong> {{ end }}{{ .Message }}
+  </span>
+  {{ if .Dismissible }}
+  <form method="post" action="/announcements/dismiss" class="site-banner-dismiss">
+    <input type="hidden" name="id" value="{{ .ID }}">
+    <button type="submit" class="site-banner-close" aria-label="{{t "common.dismiss"}}">&times;</button>
+  </form>
+  {{ end }}
 </div>
-{{/* Per AI.md PART 16: NO inline JS - initialization in app.js */}}
 {{ end }}
 {{ end }}

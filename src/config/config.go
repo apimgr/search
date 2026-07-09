@@ -1430,7 +1430,7 @@ func DefaultConfig() *Config {
 					OriginAgentCluster    bool   `yaml:"origin_agent_cluster"`
 					CrossDomainPolicies   string `yaml:"cross_domain_policies"`
 				}{
-					XFrameOptions:         "DENY",
+					XFrameOptions:         "SAMEORIGIN",
 					XContentTypeOptions:   "nosniff",
 					XXSSProtection:        "1; mode=block",
 					ReferrerPolicy:        "strict-origin-when-cross-origin",

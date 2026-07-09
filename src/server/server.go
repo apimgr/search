@@ -722,6 +722,25 @@ func (s *Server) newPageData(w http.ResponseWriter, r *http.Request, title, page
 			data.TorStatus = "starting..."
 		}
 	}
+	// Set HasConsentCookie: skip banner when a valid cookieConsent cookie exists
+	if c, err := r.Cookie("cookieConsent"); err == nil && c.Value != "" {
+		data.HasConsentCookie = true
+	}
+	// Filter out already-dismissed announcements from the dismissed_announcements cookie
+	if dc, err := r.Cookie("dismissed_announcements"); err == nil && dc.Value != "" {
+		dismissed := strings.Split(dc.Value, ",")
+		dmSet := make(map[string]bool, len(dismissed))
+		for _, id := range dismissed {
+			dmSet[strings.TrimSpace(id)] = true
+		}
+		filtered := data.Announcements[:0]
+		for _, a := range data.Announcements {
+			if !dmSet[a.ID] {
+				filtered = append(filtered, a)
+			}
+		}
+		data.Announcements = filtered
+	}
 	return data
 }
 
@@ -850,6 +869,14 @@ func (s *Server) setupRoutes() http.Handler {
 	r.HandleFunc("/preferences", s.handlePreferences)
 	r.HandleFunc("/server/preferences", s.handlePreferences)
 	r.Post("/preferences/widgets", s.handleWidgetPreferencesSave)
+
+	// Cookie consent and CCPA per AI.md PART 16/PART 12
+	// POST /consent: sets cookieConsent JSON cookie (accept/decline/save), redirects back
+	r.Post("/consent", s.handleConsent)
+	// POST /consent/ccpa: sets/clears ccpa_opt_out cookie, redirects back
+	r.Post("/consent/ccpa", s.handleConsentCCPA)
+	// POST /announcements/dismiss: appends id to dismissed_announcements cookie, redirects back
+	r.Post("/announcements/dismiss", s.handleAnnouncementDismiss)
 
 	// Static files (served from embedded filesystem)
 	r.Handle("/static/*", http.StripPrefix("/static/", StaticFileServer()))

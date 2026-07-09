@@ -417,6 +417,9 @@ type PageData struct {
 	WidgetsEnabled bool
 	EnabledWidgets []string
 	CookieConsent      *CookieConsentData
+	// HasConsentCookie is true when the request carries a valid cookieConsent cookie
+	// — when true the server skips rendering the cookie banner in the template.
+	HasConsentCookie bool
 	Extra              map[string]interface{}
 	ServerURL          string
 	PrefsQuery         string
@@ -568,6 +571,8 @@ type CookieConsentData struct {
 	Enabled   bool
 	Message   string
 	PolicyURL string
+	// DataSold reflects server.privacy.data.sold — true if user data may be sold
+	DataSold bool
 }
 
 // NewPageData creates a new PageData with defaults

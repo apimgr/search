@@ -10,14 +10,16 @@
         {{/* Skip link for keyboard navigation - WCAG 2.1 AA */}}
         <a href="#main-content" class="skip-link">{{t "accessibility.skip_to_main_content"}}</a>
 
+        {{/* Site banners: first element in body, before <main>, per AI.md PART 16 */}}
+        {{/* Order: cookie consent → announcements → PWA update */}}
+        {{template "cookie_consent" .}}
+        {{template "announcements" .}}
+
     {{template "public/header" .}}
     {{template "public/subheader" .}}
     {{template "public/nav" .}}
 
     <main id="main-content" class="main-content" role="main">
-        {{/* Announcements banners */}}
-        {{template "announcements" .}}
-
         {{/* Flash messages */}}
         {{if .Flash}}
         <div class="flash flash-{{.Flash.Type}}" role="alert">
@@ -32,8 +34,6 @@
     {{template "public/footer" .}}
     {{template "scripts" .}}
     {{block "extra_scripts" .}}{{end}}
-    {{/* Cookie consent popup */}}
-    {{template "cookie_consent" .}}
 </body>
 </html>
 {{end}}

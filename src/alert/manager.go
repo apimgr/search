@@ -719,6 +719,33 @@ func (m *Manager) loadAlertsByFrequency(ctx context.Context, frequency Frequency
 	return alerts, nil
 }
 
+// ListAll returns every alert in the database, ordered by creation time descending.
+// Intended for operator use only — callers must enforce auth before invoking.
+func (m *Manager) ListAll(ctx context.Context) ([]*Alert, error) {
+	rows, err := m.db.QueryContext(ctx, `
+		SELECT id, email, query, category, language, region, engines_json, safe_search, frequency,
+		       deliver_email, deliver_rss, deliver_webhook, webhook_url,
+		       email_verified, status, base_url, last_checked_at, last_sent_at,
+		       last_error, created_from_ip, created_at, verified_at, paused_at
+		FROM search_alerts
+		ORDER BY created_at DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list all alerts: %w", err)
+	}
+	defer rows.Close()
+
+	var alerts []*Alert
+	for rows.Next() {
+		a, err := scanAlert(rows)
+		if err != nil {
+			return nil, err
+		}
+		alerts = append(alerts, a)
+	}
+	return alerts, rows.Err()
+}
+
 func (m *Manager) getAlertByTokenHash(ctx context.Context, column, tokenHash string) (*Alert, error) {
 	query := fmt.Sprintf(`
 		SELECT id, email, query, category, language, region, engines_json, safe_search, frequency,

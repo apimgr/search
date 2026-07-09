@@ -105,75 +105,75 @@ dialog.modal .modal-footer {
  * Per AI.md PART 16: NO inline CSS - all styles in external main.css
  * ============================================================================== */
 
-.announcements-container {
-    position: relative;
-    z-index: 100;
-}
+/* ==============================================================================
+ * SITE BANNER STYLES (announcements)
+ * Per AI.md PART 16: site-banner is the canonical class name
+ * ============================================================================== */
 
-.announcement {
+.site-banner {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 0.75rem 1rem;
-    font-size: 0.9rem;
-}
-
-.announcement-info {
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
     background: rgba(139, 233, 253, 0.1);
     border-bottom: 1px solid rgba(139, 233, 253, 0.2);
     color: var(--accent-info);
 }
 
-.announcement-warning {
+.site-banner-warning {
     background: rgba(255, 184, 108, 0.1);
     border-bottom: 1px solid rgba(255, 184, 108, 0.2);
     color: var(--accent-warning);
 }
 
-.announcement-error {
+.site-banner-error {
     background: rgba(255, 85, 85, 0.1);
     border-bottom: 1px solid rgba(255, 85, 85, 0.2);
     color: var(--accent-error);
 }
 
-.announcement-success {
+.site-banner-success {
     background: rgba(80, 250, 123, 0.1);
     border-bottom: 1px solid rgba(80, 250, 123, 0.2);
     color: var(--accent-success);
 }
 
-.announcement-content {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
+.site-banner-text {
+    flex: 1;
+    text-align: center;
 }
 
-.announcement-title {
-    font-weight: 600;
+.site-banner-icon {
+    flex-shrink: 0;
 }
 
-.announcement-dismiss {
+.site-banner-dismiss {
+    margin: 0;
+    padding: 0;
+}
+
+.site-banner-close {
     background: none;
     border: none;
-    font-size: 1.25rem;
     cursor: pointer;
-    padding: 0.25rem;
-    line-height: 1;
     color: inherit;
+    font-size: 1.25rem;
+    line-height: 1;
+    padding: 0.25rem;
     opacity: 0.7;
 }
 
-.announcement-dismiss:hover {
+.site-banner-close:hover {
     opacity: 1;
 }
 
 /* ==============================================================================
- * COOKIE CONSENT STYLES
- * Per AI.md PART 16: NO inline CSS - all styles in external main.css
+ * COOKIE CONSENT BANNER STYLES
+ * Per AI.md PART 16: cookie-banner is the canonical class name
  * ============================================================================== */
 
-.cookie-consent {
+.cookie-banner {
     position: fixed;
     bottom: 0;
     left: 0;
@@ -182,14 +182,9 @@ dialog.modal .modal-footer {
     border-top: 1px solid var(--border-color);
     padding: 1rem;
     z-index: 1000;
-    display: none;
 }
 
-.cookie-consent.visible {
-    display: flex;
-}
-
-.cookie-consent-content {
+.cookie-banner-content {
     max-width: 1200px;
     margin: 0 auto;
     display: flex;
@@ -198,9 +193,9 @@ dialog.modal .modal-footer {
     gap: 1rem;
 }
 
-/* Tablet+ cookie consent content enhancement */
+/* Tablet+ cookie banner content enhancement */
 @media (min-width: 769px) {
-    .cookie-consent-content {
+    .cookie-banner-content {
         flex-direction: row;
         align-items: center;
         justify-content: space-between;
@@ -209,35 +204,41 @@ dialog.modal .modal-footer {
     }
 }
 
-.cookie-consent-message {
+.cookie-message {
     margin: 0;
     flex: 1;
     font-size: 0.9rem;
     color: var(--text-secondary);
 }
 
-.cookie-consent-link {
+.policy-link {
     color: var(--accent-primary);
     text-decoration: underline;
 }
 
-.cookie-consent-actions {
+.cookie-buttons {
     display: flex;
     gap: 0.5rem;
     width: 100%;
     justify-content: center;
+    flex-wrap: wrap;
 }
 
-/* Tablet+ cookie consent actions enhancement */
+/* Tablet+ cookie buttons enhancement */
 @media (min-width: 769px) {
-    .cookie-consent-actions {
+    .cookie-buttons {
         width: auto;
         justify-content: flex-end;
     }
 }
 
-.cookie-consent-accept,
-.cookie-consent-decline {
+.cookie-buttons form {
+    margin: 0;
+    padding: 0;
+}
+
+.btn-accept,
+.btn-decline {
     padding: 0.5rem 1rem;
     border-radius: 4px;
     font-size: 0.875rem;
@@ -245,20 +246,18 @@ dialog.modal .modal-footer {
     border: none;
 }
 
-.cookie-consent-accept {
+.btn-accept {
     background: var(--accent-primary);
     color: var(--bg-primary);
 }
 
-.cookie-consent-decline {
+.btn-decline {
     background: var(--bg-tertiary);
     color: var(--text-primary);
     border: 1px solid var(--border-color);
 }
 
-.cookie-consent-accept:hover,
-.cookie-consent-decline:hover {
+.btn-accept:hover,
+.btn-decline:hover {
     opacity: 0.9;
 }
-
-/* Cookie consent responsive - mobile-first, see individual element media queries above */

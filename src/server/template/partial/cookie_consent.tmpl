@@ -1,27 +1,33 @@
-{{/* Cookie consent popup partial */}}
-{{/* Per AI.md PART 17: No inline JS handlers - use event delegation */}}
+{{/* Cookie consent banner partial - server-rendered per AI.md PART 16 */}}
+{{/* Banner renders only when no valid cookieConsent cookie exists (HasConsentCookie = false) */}}
+{{/* Forms POST to /consent — works with zero JS; app.js intercepts to skip the reload */}}
 {{ define "cookie_consent" }}
-{{ if .CookieConsent }}
-{{ if .CookieConsent.Enabled }}
-<div class="cookie-consent" id="cookie-consent">
-    <div class="cookie-consent-content">
-        <p class="cookie-consent-message">
-            {{ if .CookieConsent.Message }}
-                {{ .CookieConsent.Message }}
-            {{ else }}
-                {{t "cookie_consent.default_message"}}
-            {{ end }}
-            {{ if .CookieConsent.PolicyURL }}
-            <a href="{{ .CookieConsent.PolicyURL }}" class="cookie-consent-link">{{t "cookie_consent.learn_more"}}</a>
-            {{ end }}
-        </p>
-        <div class="cookie-consent-actions">
-            <button class="cookie-consent-accept">{{t "common.accept"}}</button>
-            <button class="cookie-consent-decline">{{t "common.decline"}}</button>
-        </div>
+{{ if and .CookieConsent .CookieConsent.Enabled }}
+{{ if not .HasConsentCookie }}
+<div id="cookie-consent" class="cookie-banner" data-sold="{{ if .CookieConsent.DataSold }}true{{ else }}false{{ end }}">
+  <div class="cookie-banner-content">
+    <span class="cookie-message">
+      {{ if .CookieConsent.Message }}
+        {{ .CookieConsent.Message }}
+      {{ else }}
+        {{t "cookie_consent.default_message"}}
+      {{ end }}
+      {{ if .CookieConsent.PolicyURL }}
+      — <a href="{{ .CookieConsent.PolicyURL }}" class="policy-link">{{t "cookie_consent.learn_more"}}</a>
+      {{ end }}
+    </span>
+    <div class="cookie-buttons">
+      <form method="post" action="/consent">
+        <input type="hidden" name="choice" value="decline">
+        <button type="submit" class="btn-decline">{{t "common.decline"}}</button>
+      </form>
+      <form method="post" action="/consent">
+        <input type="hidden" name="choice" value="accept">
+        <button type="submit" class="btn-accept">{{t "common.accept"}}</button>
+      </form>
     </div>
+  </div>
 </div>
-{{/* Per AI.md PART 16: NO inline JS - initialization in app.js */}}
 {{ end }}
 {{ end }}
 {{ end }}

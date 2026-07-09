@@ -215,9 +215,9 @@ func (s *Server) buildHealthInfo() *HealthResponse {
 		status = "maintenance"
 	}
 
-	// Per AI.md PART 13: checks (database, cache, disk, scheduler, tor)
+	// Per AI.md PART 13: checks use "ok" or "error" only (no "disabled")
 	checks := ChecksInfo{
-		Cache:     "disabled",
+		Cache:     "ok",
 		Disk:      "ok",
 		Scheduler: "ok",
 	}
@@ -245,9 +245,9 @@ func (s *Server) buildHealthInfo() *HealthResponse {
 		}
 	}
 
-	// Scheduler check
+	// Scheduler check — "ok" when disabled (no error), "error" when failed
 	if s.scheduler == nil {
-		checks.Scheduler = "disabled"
+		checks.Scheduler = "ok"
 	}
 
 	// Tor check (only when Tor is configured)
@@ -255,7 +255,7 @@ func (s *Server) buildHealthInfo() *HealthResponse {
 		if s.torService != nil && s.torService.IsRunning() {
 			checks.Tor = "ok"
 		} else {
-			checks.Tor = "unavailable"
+			checks.Tor = "error"
 		}
 	}
 
@@ -551,4 +551,156 @@ func (s *Server) handleAutocomplete(w http.ResponseWriter, r *http.Request) {
 		"ok":   true,
 		"data": []string{},
 	})
+}
+
+// handleConsent handles POST /consent — sets the cookieConsent JSON cookie and redirects back.
+// Accepts choice=accept (all categories) or choice=decline (essential only).
+// Cookie format: {"essential":true,"preferences":true,"analytics":false,"timestamp":unix}
+// Works with zero JS; the cookie banner form POSTs here directly.
+func (s *Server) handleConsent(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	choice := r.FormValue("choice")
+	prefs := r.FormValue("preferences") // optional granular field from prefs form
+	analytics := r.FormValue("analytics")
+
+	essential := true
+	prefEnabled := true
+	analyticsEnabled := true
+
+	switch choice {
+	case "decline":
+		prefEnabled = false
+		analyticsEnabled = false
+	case "accept":
+		// accept all — defaults above
+	case "save":
+		// granular save from preferences form
+		prefEnabled, _ = config.ParseBool(prefs, false)
+		analyticsEnabled, _ = config.ParseBool(analytics, false)
+	default:
+		// unknown choice — treat as decline
+		prefEnabled = false
+		analyticsEnabled = false
+	}
+
+	// Build JSON cookie value per spec
+	cookieVal := fmt.Sprintf(
+		`{"essential":%t,"preferences":%t,"analytics":%t,"timestamp":%d}`,
+		essential, prefEnabled, analyticsEnabled, time.Now().Unix(),
+	)
+	http.SetCookie(w, &http.Cookie{
+		Name:     "cookieConsent",
+		Value:    cookieVal,
+		Path:     "/",
+		MaxAge:   365 * 24 * 60 * 60,
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	ref := r.Referer()
+	if ref == "" {
+		ref = "/"
+	}
+	http.Redirect(w, r, ref, http.StatusSeeOther)
+}
+
+// handleAnnouncementDismiss handles POST /announcements/dismiss.
+// Appends the announcement id to the dismissed_announcements cookie and redirects back.
+// Works with zero JS; the dismiss form POSTs here directly.
+func (s *Server) handleAnnouncementDismiss(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	id := strings.TrimSpace(r.FormValue("id"))
+	if id == "" {
+		ref := r.Referer()
+		if ref == "" {
+			ref = "/"
+		}
+		http.Redirect(w, r, ref, http.StatusSeeOther)
+		return
+	}
+
+	// Read existing dismissed ids from cookie
+	var ids []string
+	if dc, err := r.Cookie("dismissed_announcements"); err == nil && dc.Value != "" {
+		ids = strings.Split(dc.Value, ",")
+	}
+
+	// Append id if not already present
+	found := false
+	for _, existing := range ids {
+		if strings.TrimSpace(existing) == id {
+			found = true
+			break
+		}
+	}
+	if !found {
+		ids = append(ids, id)
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "dismissed_announcements",
+		Value:    strings.Join(ids, ","),
+		Path:     "/",
+		MaxAge:   365 * 24 * 60 * 60,
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	ref := r.Referer()
+	if ref == "" {
+		ref = "/"
+	}
+	http.Redirect(w, r, ref, http.StatusSeeOther)
+}
+
+// handleConsentCCPA handles POST /consent/ccpa.
+// Sets or clears the ccpa_opt_out cookie and redirects back.
+// form field "action": "opt-out" sets cookie; "opt-in" clears it.
+// Works with zero JS; the CCPA form POSTs here directly.
+func (s *Server) handleConsentCCPA(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	action := r.FormValue("action")
+	if action == "opt-out" {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "ccpa_opt_out",
+			Value:    "true",
+			Path:     "/",
+			MaxAge:   365 * 24 * 60 * 60,
+			SameSite: http.SameSiteLaxMode,
+		})
+	} else {
+		// opt-in: clear the cookie
+		http.SetCookie(w, &http.Cookie{
+			Name:     "ccpa_opt_out",
+			Value:    "",
+			Path:     "/",
+			MaxAge:   -1,
+			SameSite: http.SameSiteLaxMode,
+		})
+	}
+
+	ref := r.Referer()
+	if ref == "" {
+		ref = "/"
+	}
+	http.Redirect(w, r, ref, http.StatusSeeOther)
 }

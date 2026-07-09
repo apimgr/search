@@ -1114,10 +1114,16 @@ func TestIPHandlerCanHandle(t *testing.T) {
 		want  bool
 	}{
 		{"my ip", true},
+		{"my ip address", true},
 		{"what is my ip?", true},
 		{"ip address", true},
 		{"ip info", true},
+		{"ip 8.8.8.8", true},
+		{"ip 1.2.3.4", true},
+		{"8.8.8.8", true},
+		{"1.1.1.1", true},
 		{"hello world", false},
+		{"192.168 incomplete", false},
 	}
 
 	for _, tt := range tests {
@@ -2641,9 +2647,12 @@ func TestIPHandlerAllPatterns(t *testing.T) {
 		want  bool
 	}{
 		{"my ip", true},
+		{"my ip address", true},
 		{"what is my ip?", true},
 		{"ip address", true},
 		{"ip info", true},
+		{"ip 8.8.8.8", true},
+		{"8.8.8.8", true},
 	}
 
 	for _, tt := range tests {
@@ -2651,6 +2660,39 @@ func TestIPHandlerAllPatterns(t *testing.T) {
 			got := h.CanHandle(tt.query)
 			if got != tt.want {
 				t.Errorf("CanHandle(%q) = %v, want %v", tt.query, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestIPHandlerSpecificIP verifies lookup of a specific IP address query.
+func TestIPHandlerSpecificIP(t *testing.T) {
+	h := NewIPHandler()
+	ctx := context.Background()
+
+	tests := []struct {
+		query    string
+		wantType AnswerType
+	}{
+		{"ip 8.8.8.8", AnswerTypeIP},
+		{"8.8.8.8", AnswerTypeIP},
+		{"ip 192.168.1.1", AnswerTypeIP},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			answer, err := h.HandleInstantQuery(ctx, tt.query)
+			if err != nil {
+				t.Fatalf("HandleInstantQuery(%q) error = %v", tt.query, err)
+			}
+			if answer == nil {
+				t.Fatalf("HandleInstantQuery(%q) returned nil", tt.query)
+			}
+			if answer.Type != tt.wantType {
+				t.Errorf("Type = %v, want %v", answer.Type, tt.wantType)
+			}
+			if answer.Data["ip"] == nil {
+				t.Error("Data should contain ip field for specific IP lookup")
 			}
 		})
 	}

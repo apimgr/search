@@ -3242,13 +3242,29 @@ func TestHandleAlertsMethodNotAllowed(t *testing.T) {
 	handler, _, db := newAlertAPIHandler(t)
 	defer db.Close()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/alerts", nil)
+	// DELETE is not a supported method on /api/v1/alerts (only GET and POST are)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/alerts", nil)
 	w := httptest.NewRecorder()
 
 	handler.handleAlerts(w, req)
 
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
+
+func TestHandleAlertsGetRequiresOperator(t *testing.T) {
+	handler, _, db := newAlertAPIHandler(t)
+	defer db.Close()
+
+	// GET /api/v1/alerts is operator-only; no token → 401
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/alerts", nil)
+	w := httptest.NewRecorder()
+
+	handler.handleAlerts(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", http.StatusUnauthorized, w.Code)
 	}
 }
 
