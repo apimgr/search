@@ -3833,37 +3833,42 @@ func TestQwantResponseParsing(t *testing.T) {
 	}
 }
 
-// Test Wikipedia response parsing
+// Test Wikipedia response parsing (generator+extracts API)
 func TestWikipediaResponseParsing(t *testing.T) {
 	jsonData := `{
 		"query": {
-			"search": [
-				{
+			"pages": {
+				"12345": {
 					"title": "Test Article",
 					"pageid": 12345,
-					"snippet": "This is a test snippet",
-					"timestamp": "2024-01-01T00:00:00Z"
+					"extract": "This is the article introduction text."
 				}
-			]
+			}
 		}
 	}`
 
-	var resp wikipediaResponse
+	var resp wikipediaExtractsResponse
 	err := json.Unmarshal([]byte(jsonData), &resp)
 	if err != nil {
 		t.Fatalf("Failed to unmarshal: %v", err)
 	}
 
-	if len(resp.Query.Search) != 1 {
-		t.Errorf("Expected 1 item, got %d", len(resp.Query.Search))
+	if len(resp.Query.Pages) != 1 {
+		t.Errorf("Expected 1 page, got %d", len(resp.Query.Pages))
 	}
 
-	item := resp.Query.Search[0]
-	if item.Title != "Test Article" {
-		t.Errorf("Title = %q, want 'Test Article'", item.Title)
+	page, ok := resp.Query.Pages["12345"]
+	if !ok {
+		t.Fatal("Expected page with key '12345'")
 	}
-	if item.PageID != 12345 {
-		t.Errorf("PageID = %d, want 12345", item.PageID)
+	if page.Title != "Test Article" {
+		t.Errorf("Title = %q, want 'Test Article'", page.Title)
+	}
+	if page.PageID != 12345 {
+		t.Errorf("PageID = %d, want 12345", page.PageID)
+	}
+	if page.Extract != "This is the article introduction text." {
+		t.Errorf("Extract = %q, want article intro text", page.Extract)
 	}
 }
 

@@ -57,7 +57,6 @@ func (e *StackOverflow) Search(ctx context.Context, query *model.Query) ([]model
 
 	req.Header.Set("User-Agent", UserAgent)
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Accept-Encoding", "gzip, deflate")
 
 	resp, err := e.client.Do(req)
 	if err != nil {

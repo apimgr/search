@@ -37,8 +37,8 @@ func NewReddit() *Reddit {
 
 // Search performs a Reddit search
 func (e *Reddit) Search(ctx context.Context, query *model.Query) ([]model.Result, error) {
-	// Reddit JSON API
-	searchURL := "https://www.reddit.com/search.json"
+	// old.reddit.com JSON API (avoids OAuth requirement on www.reddit.com)
+	searchURL := "https://old.reddit.com/search.json"
 
 	params := url.Values{}
 	params.Set("q", query.Text)
@@ -97,8 +97,8 @@ func (e *Reddit) Search(ctx context.Context, query *model.Query) ([]model.Result
 
 		item := child.Data
 
-		// Build the full URL
-		postURL := fmt.Sprintf("https://www.reddit.com%s", item.Permalink)
+		// Build the full URL using old.reddit.com for consistency
+		postURL := fmt.Sprintf("https://old.reddit.com%s", item.Permalink)
 
 		// Build content
 		content := fmt.Sprintf("r/%s | ⬆ %d | 💬 %d",

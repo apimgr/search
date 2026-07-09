@@ -572,8 +572,8 @@ func TestRedditSearchSuccess(t *testing.T) {
 	if results[0].Title != "Why Go is awesome" {
 		t.Errorf("result title = %q, want %q", results[0].Title, "Why Go is awesome")
 	}
-	if !strings.HasPrefix(results[0].URL, "https://www.reddit.com") {
-		t.Errorf("result URL does not start with reddit.com: %q", results[0].URL)
+	if !strings.HasPrefix(results[0].URL, "https://old.reddit.com") {
+		t.Errorf("result URL does not start with old.reddit.com: %q", results[0].URL)
 	}
 	if !strings.Contains(results[0].Content, "golang") {
 		t.Errorf("content should contain subreddit name: %q", results[0].Content)
@@ -870,22 +870,21 @@ func TestSOSearchTagsCapped(t *testing.T) {
 
 // --- Wikipedia ---
 
-// TestWikipediaSearchSuccess exercises the Wikipedia JSON API path with a mock server.
+// TestWikipediaSearchSuccess exercises the Wikipedia generator+extracts API path with a mock server.
 func TestWikipediaSearchSuccess(t *testing.T) {
+	// generator+extracts API returns pages keyed by pageid string
 	wikiResp := map[string]interface{}{
 		"query": map[string]interface{}{
-			"search": []map[string]interface{}{
-				{
-					"title":     "Go (programming language)",
-					"pageid":    25460924,
-					"snippet":   "Go is a statically typed, compiled language",
-					"timestamp": "2024-01-10T12:00:00Z",
+			"pages": map[string]interface{}{
+				"25460924": map[string]interface{}{
+					"title":   "Go (programming language)",
+					"pageid":  25460924,
+					"extract": "Go is a statically typed, compiled language.",
 				},
-				{
-					"title":     "Golang",
-					"pageid":    67890,
-					"snippet":   "Informal name for the Go language",
-					"timestamp": "2024-01-05T08:00:00Z",
+				"67890": map[string]interface{}{
+					"title":   "Golang",
+					"pageid":  67890,
+					"extract": "Informal name for the Go language.",
 				},
 			},
 		},
@@ -913,14 +912,22 @@ func TestWikipediaSearchSuccess(t *testing.T) {
 	if len(results) != 2 {
 		t.Fatalf("Search() len = %d, want 2", len(results))
 	}
-	if results[0].Title != "Go (programming language)" {
-		t.Errorf("result[0] title = %q, want %q", results[0].Title, "Go (programming language)")
+
+	// Map iteration is non-deterministic; find each result by title
+	byTitle := make(map[string]model.Result)
+	for _, r := range results {
+		byTitle[r.Title] = r
 	}
-	if !strings.Contains(results[0].URL, "curid=25460924") {
-		t.Errorf("result URL should include page ID: %q", results[0].URL)
+
+	goResult, ok := byTitle["Go (programming language)"]
+	if !ok {
+		t.Fatalf("expected result with title 'Go (programming language)'")
 	}
-	if results[0].Content != "Go is a statically typed, compiled language" {
-		t.Errorf("result content = %q", results[0].Content)
+	if !strings.Contains(goResult.URL, "curid=25460924") {
+		t.Errorf("result URL should include page ID: %q", goResult.URL)
+	}
+	if goResult.Content != "Go is a statically typed, compiled language." {
+		t.Errorf("result content = %q", goResult.Content)
 	}
 }
 

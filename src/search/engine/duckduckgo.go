@@ -52,29 +52,30 @@ func (e *DuckDuckGo) Search(ctx context.Context, query *model.Query) ([]model.Re
 	}
 }
 
-// searchGeneral performs a general web search using DuckDuckGo HTML endpoint.
-// The Instant Answer API (api.duckduckgo.com) only returns category/disambiguation
-// pages, not real web results, so we scrape the HTML search page instead.
+// searchGeneral performs a general web search using DuckDuckGo's HTML endpoint.
+// Uses POST (mimicking a browser form submit) — GET triggers bot-detection CAPTCHAs.
 func (e *DuckDuckGo) searchGeneral(ctx context.Context, query *model.Query) ([]model.Result, error) {
-	params := url.Values{}
-	params.Set("q", query.Text)
-	params.Set("kl", "us-en")
+	form := url.Values{}
+	form.Set("q", query.Text)
+	form.Set("b", "")
+	form.Set("kl", "us-en")
+	form.Set("df", "")
 
 	switch query.SafeSearch {
 	case 0:
 		// Off
-		params.Set("kp", "-2")
+		form.Set("kp", "-2")
 	case 2:
 		// Strict
-		params.Set("kp", "1")
+		form.Set("kp", "1")
 	default:
 		// Moderate
-		params.Set("kp", "-1")
+		form.Set("kp", "-1")
 	}
 
-	reqURL := "https://html.duckduckgo.com/html/?" + params.Encode()
+	body := strings.NewReader(form.Encode())
 
-	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "POST", "https://html.duckduckgo.com/html/", body)
 	if err != nil {
 		return nil, err
 	}
@@ -82,6 +83,12 @@ func (e *DuckDuckGo) searchGeneral(ctx context.Context, query *model.Query) ([]m
 	req.Header.Set("User-Agent", UserAgent)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", "https://html.duckduckgo.com")
+	req.Header.Set("Referer", "https://html.duckduckgo.com/")
+	req.Header.Set("DNT", "1")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
 
 	resp, err := e.client.Do(req)
 	if err != nil {
@@ -93,12 +100,12 @@ func (e *DuckDuckGo) searchGeneral(ctx context.Context, query *model.Query) ([]m
 		return nil, fmt.Errorf("duckduckgo returned status %d", resp.StatusCode)
 	}
 
-	body, err := ReadBody(resp)
+	respBody, err := ReadBody(resp)
 	if err != nil {
 		return nil, err
 	}
 
-	return e.parseWebResults(string(body), query)
+	return e.parseWebResults(string(respBody), query)
 }
 
 var (
