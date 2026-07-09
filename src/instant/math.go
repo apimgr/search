@@ -83,9 +83,12 @@ func (h *MathHandler) CanHandle(query string) bool {
 		return true
 	}
 
-	// Check if it looks like a math expression
+	// Check if it looks like a math expression.
+	// Require at least one digit so that words containing a hyphen
+	// (e.g. "apt dist-upgrade") are not misidentified as subtraction.
 	cleaned := strings.TrimSpace(query)
-	if h.mathExpr.MatchString(cleaned) && len(cleaned) > 2 {
+	hasDigit := strings.ContainsAny(cleaned, "0123456789")
+	if hasDigit && h.mathExpr.MatchString(cleaned) && len(cleaned) > 2 {
 		// Must contain at least one operator or function call
 		for _, op := range []string{"+", "-", "*", "/", "^", "%", "("} {
 			if strings.Contains(cleaned, op) {

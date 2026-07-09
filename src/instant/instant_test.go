@@ -206,6 +206,10 @@ func TestMathHandlerCanHandle(t *testing.T) {
 		{"compute 2*3", true},
 		{"hello world", false},
 		{"random text", false},
+		// Hyphenated package/command names must NOT be treated as subtraction
+		{"apt dist-upgrade", false},
+		{"systemctl restart-all", false},
+		{"git commit-msg", false},
 	}
 
 	for _, tt := range tests {
