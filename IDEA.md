@@ -8,6 +8,7 @@ Target users include privacy-conscious individuals who want web search without b
 
 project_name:     search
 project_org:      apimgr
+internal_org:     apimgr
 internal_name:    search
 app_name:         Search
 maintainer_name:  casjay
