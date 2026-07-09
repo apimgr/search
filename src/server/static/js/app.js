@@ -8,10 +8,7 @@
     // ========================================================================
     // THEME MANAGEMENT
     // ========================================================================
-    const THEME_KEY = 'search-theme';
     const SEARCH_PREFERENCES_KEY = 'search_preferences';
-    const COOKIE_CONSENT_KEY = 'cookieConsent';
-    const LEGACY_COOKIE_CONSENT_KEY = 'cookie_consent';
     const THEMES = ['dark', 'light', 'auto'];
     let clientTranslations = null;
 
@@ -56,32 +53,16 @@
         });
     }
 
-    function getCookieConsentChoice() {
-        try {
-            var consent = localStorage.getItem(COOKIE_CONSENT_KEY);
-            if (consent === null) {
-                consent = localStorage.getItem(LEGACY_COOKIE_CONSENT_KEY);
-                if (consent !== null) {
-                    localStorage.setItem(COOKIE_CONSENT_KEY, consent);
-                    localStorage.removeItem(LEGACY_COOKIE_CONSENT_KEY);
-                }
-            }
-            if (consent === 'accepted' || consent === 'declined') {
-                return consent;
-            }
-        } catch (e) {
-            console.error('Failed to read cookie consent preference:', e);
-        }
-        return null;
+    function readConsentCookie() {
+        var match = document.cookie.match(/(?:^|;\s*)cookieConsent=([^;]+)/);
+        if (!match) return null;
+        try { return JSON.parse(decodeURIComponent(match[1])); }
+        catch (e) { return null; }
     }
 
-    function setCookieConsentChoice(choice) {
-        try {
-            localStorage.setItem(COOKIE_CONSENT_KEY, choice);
-            localStorage.removeItem(LEGACY_COOKIE_CONSENT_KEY);
-        } catch (e) {
-            console.error('Failed to persist cookie consent preference:', e);
-        }
+    function writeConsentCookie(consent) {
+        document.cookie = 'cookieConsent=' + encodeURIComponent(JSON.stringify(consent)) +
+            '; path=/; max-age=31536000; SameSite=Lax';
     }
 
     function clearCookie(name) {
@@ -92,35 +73,20 @@
         document.cookie = name + '=' + encodeURIComponent(value) + '; path=/; max-age=' + maxAgeSeconds + '; SameSite=Lax';
     }
 
-    function hideCookieConsentBanner() {
-        var banner = document.getElementById('cookie-consent');
-        if (banner) {
-            banner.classList.remove('visible');
-        }
-    }
-
+    // Remove the legacy cookie_consent cookie and ensure the theme cookie is set.
+    // Theme is a strictly necessary cookie (server reads it to render pages) and is
+    // always persisted regardless of the user's analytics consent choice.
     function syncThemeCookiePreference(theme) {
         clearCookie('cookie_consent');
-
-        if (getCookieConsentChoice() !== 'accepted') {
-            clearCookie('theme');
-            clearCookie('lang');
-            return;
-        }
-
         var selectedTheme = normalizeThemePreference(theme || '');
         if (!selectedTheme) {
-            try {
-                selectedTheme = normalizeThemePreference(localStorage.getItem(THEME_KEY) || '');
-            } catch (e) {
-                console.error('Failed to read stored theme preference:', e);
-            }
+            selectedTheme = getPreferredTheme();
         }
         if (!selectedTheme) {
             selectedTheme = normalizeThemePreference(document.documentElement.getAttribute('data-theme-mode') || '');
         }
         if (selectedTheme) {
-            setCookie('theme', selectedTheme, 30 * 24 * 60 * 60);
+            setCookie('theme', selectedTheme, 31536000);
         }
     }
 
@@ -274,11 +240,13 @@
     }
 
     function getPreferredTheme() {
-        const saved = localStorage.getItem(THEME_KEY);
-        if (saved && THEMES.includes(saved)) {
-            return saved;
+        var match = document.cookie.match(/(?:^|;\s*)theme=([^;]*)/);
+        if (match) {
+            var saved = decodeURIComponent(match[1]);
+            if (THEMES.includes(saved)) {
+                return saved;
+            }
         }
-        // Default: follow system preference
         return 'auto';
     }
 
@@ -292,16 +260,14 @@
 
     function applyTheme(theme) {
         var resolved = resolveTheme(theme);
-        // Per AI.md PART 16: Apply CSS class and data-theme-mode attribute to <html>
-        document.documentElement.classList.remove('theme-dark', 'theme-light');
-        document.documentElement.classList.add('theme-' + resolved);
+        // Per AI.md PART 16: replace className entirely; also set data-theme-mode for transitions
+        document.documentElement.className = 'theme-' + resolved;
         document.documentElement.setAttribute('data-theme-mode', theme);
     }
 
     function setTheme(theme) {
         applyTheme(theme);
-        localStorage.setItem(THEME_KEY, theme);
-        syncThemeCookiePreference(theme);
+        document.cookie = 'theme=' + encodeURIComponent(theme) + '; path=/; max-age=31536000; SameSite=Lax';
     }
 
     // No-op: icon display is now fully CSS-driven via [data-theme-mode] attribute
@@ -317,7 +283,7 @@
     // Listen for system preference changes when in auto mode
     var systemThemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
     function onSystemThemeChange() {
-        if ((localStorage.getItem(THEME_KEY) || 'auto') === 'auto') {
+        if (getPreferredTheme() === 'auto') {
             applyTheme('auto');
         }
     }
@@ -512,32 +478,69 @@
     // ========================================================================
     // COOKIE CONSENT
     // ========================================================================
-    function acceptCookies() {
-        setCookieConsentChoice('accepted');
-        syncThemeCookiePreference();
-        hideCookieConsentBanner();
+    function saveAndApplyConsent(consent) {
+        writeConsentCookie(consent);
+        var banner = document.getElementById('cookie-consent');
+        if (banner) banner.remove();
+        applyConsent(consent);
     }
 
-    function declineCookies() {
-        setCookieConsentChoice('declined');
-        clearCookie('theme');
-        clearCookie('cookie_consent');
-        hideCookieConsentBanner();
+    function applyConsent(consent) {
+        if (consent.preferences) {
+            document.cookie = 'preferencesEnabled=true; path=/; max-age=31536000';
+        }
+        if (consent.analytics) {
+            loadTracking();
+        }
+    }
+
+    function loadTracking() {
+        // Opt-in analytics only — placeholder for when server.tracking is configured
+    }
+
+    function initCCPA() {
+        var banner = document.getElementById('cookie-consent');
+        var dataSold = banner && banner.dataset.sold === 'true';
+        if (dataSold) {
+            var doNotSell = /(?:^|;\s*)ccpa_opt_out=true/.test(document.cookie);
+            if (doNotSell) {
+                applyCCPAOptOut();
+            }
+        }
+        document.querySelectorAll('form[action="/consent/ccpa"]').forEach(function(form) {
+            form.addEventListener('submit', function(event) {
+                if (form.elements.optout && form.elements.optout.value === 'true') {
+                    event.preventDefault();
+                    ccpaDoNotSell();
+                }
+            });
+        });
+    }
+
+    function ccpaDoNotSell() {
+        applyCCPAOptOut();
+        var consent = {
+            essential: true,
+            preferences: false,
+            analytics: false,
+            timestamp: Date.now(),
+            ccpaOptOut: true
+        };
+        saveAndApplyConsent(consent);
+    }
+
+    function applyCCPAOptOut() {
+        document.cookie = 'ccpa_opt_out=true; path=/; max-age=31536000';
     }
 
     // ========================================================================
     // ANNOUNCEMENTS
     // ========================================================================
-    function dismissAnnouncement(id) {
-        const dismissed = JSON.parse(localStorage.getItem('dismissed_announcements') || '[]');
-        if (!dismissed.includes(id)) {
-            dismissed.push(id);
-            localStorage.setItem('dismissed_announcements', JSON.stringify(dismissed));
-        }
-        const announcement = document.querySelector('[data-announcement-id="' + id + '"]');
-        if (announcement) {
-            announcement.remove();
-        }
+
+    // Read dismissed announcement ids from the cookie (comma-separated list)
+    function getDismissedAnnouncements() {
+        var match = document.cookie.match(/(?:^|;\s*)dismissed_announcements=([^;]*)/);
+        return match ? decodeURIComponent(match[1]).split(',').filter(Boolean) : [];
     }
 
     // ========================================================================
@@ -1760,28 +1763,6 @@
             // Nav toggle and overlay - CSS-only per AI.md PART 16
             // The checkbox hack handles state via label clicks, no JS needed
 
-            // Cookie consent accept
-            if (target.matches('.cookie-consent-accept')) {
-                acceptCookies();
-                return;
-            }
-
-            // Cookie consent decline
-            if (target.matches('.cookie-consent-decline')) {
-                declineCookies();
-                return;
-            }
-
-            // Announcement dismiss
-            if (target.matches('.announcement-dismiss') || target.closest('.announcement-dismiss')) {
-                const btn = target.closest('.announcement-dismiss') || target;
-                const id = btn.dataset.announcementId;
-                if (id) {
-                    dismissAnnouncement(id);
-                }
-                return;
-            }
-
             // Copy button (legacy .btn-copy)
             if (target.matches('.btn-copy') || target.closest('.btn-copy')) {
                 const btn = target.closest('.btn-copy') || target;
@@ -2064,10 +2045,9 @@
         var prefsPage = document.querySelector('.preferences-page');
         if (!prefsPage) return;
 
-        // Storage keys
+        // Storage keys (widgets are server-side cookie — no WIDGETS_KEY here)
         var PREFS_KEY = SEARCH_PREFERENCES_KEY;
         var BANGS_KEY = 'search_custom_bangs';
-        var WIDGETS_KEY = 'search_widgets';
 
         // Load preferences from localStorage
         function loadPreferences() {
@@ -2081,7 +2061,8 @@
                 var infiniteScrollCheckbox = document.getElementById('infinite-scroll');
                 var keyboardShortcutsCheckbox = document.getElementById('keyboard-shortcuts');
 
-                if (prefs.theme && themeSelect) themeSelect.value = normalizeThemePreference(prefs.theme);
+                // Theme is stored in the 'theme' cookie (not localStorage)
+                if (themeSelect) themeSelect.value = getPreferredTheme();
                 if (prefs.default_category && defaultCategorySelect) defaultCategorySelect.value = prefs.default_category;
                 if (prefs.safe_search !== undefined && safeSearchSelect) safeSearchSelect.value = prefs.safe_search;
                 if (prefs.results_per_page && resultsPerPageSelect) resultsPerPageSelect.value = prefs.results_per_page;
@@ -2114,8 +2095,7 @@
             };
 
             localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
-            localStorage.setItem(THEME_KEY, prefs.theme);
-            syncThemeCookiePreference(prefs.theme);
+            document.cookie = 'theme=' + encodeURIComponent(prefs.theme) + '; path=/; max-age=31536000; SameSite=Lax';
 
             applyTheme(prefs.theme);
 
@@ -2261,12 +2241,11 @@
                 return;
             }
 
-            // Export preferences
+            // Export preferences (widgets are server-side cookie — not included in export)
             if (e.target.id === 'export-prefs') {
                 var data = {
                     preferences: JSON.parse(localStorage.getItem(PREFS_KEY) || '{}'),
                     custom_bangs: JSON.parse(localStorage.getItem(BANGS_KEY) || '[]'),
-                    widgets: JSON.parse(localStorage.getItem(WIDGETS_KEY) || '[]'),
                     exported_at: new Date().toISOString()
                 };
                 var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -2316,8 +2295,7 @@
                     if (!confirmed) return;
                     localStorage.removeItem(PREFS_KEY);
                     localStorage.removeItem(BANGS_KEY);
-                    localStorage.removeItem(WIDGETS_KEY);
-                    // Clear widget settings
+                    // Clear per-widget settings
                     for (var i = localStorage.length - 1; i >= 0; i--) {
                         var key = localStorage.key(i);
                         if (key && key.startsWith('search_widget_')) {
@@ -2380,7 +2358,7 @@
                         var data = JSON.parse(ev.target.result);
                         if (data.preferences) localStorage.setItem(PREFS_KEY, JSON.stringify(data.preferences));
                         if (data.custom_bangs) localStorage.setItem(BANGS_KEY, JSON.stringify(data.custom_bangs));
-                        if (data.widgets) localStorage.setItem(WIDGETS_KEY, JSON.stringify(data.widgets));
+                        // widgets are server-side (enabled_widgets cookie) — not imported from file
                         loadPreferences();
                         loadCustomBangs();
                         loadWidgetPreferences();
@@ -2546,62 +2524,78 @@
 
     // ========================================================================
     // ANNOUNCEMENTS - Per AI.md PART 16: NO inline JS
+    // Intercept the dismiss form to skip the reload; the cookie stays
+    // server-readable so dismissed announcements are never rendered again.
     // ========================================================================
     function initAnnouncements() {
-        var dismissed = [];
-        try {
-            dismissed = JSON.parse(localStorage.getItem('dismissed_announcements') || '[]');
-        } catch (e) {
-            dismissed = [];
-        }
-
-        // Hide already dismissed announcements
+        // Remove already-dismissed banners immediately
+        var dismissed = getDismissedAnnouncements();
         dismissed.forEach(function(id) {
             var el = document.querySelector('[data-announcement-id="' + id + '"]');
-            if (el && el.dataset.dismissible === 'true') {
-                el.style.display = 'none';
-            }
+            if (el) el.remove();
         });
-    }
 
-    // Dismiss announcement (exported)
-    function dismissAnnouncement(id) {
-        var el = document.querySelector('[data-announcement-id="' + id + '"]');
-        if (el) {
-            el.style.display = 'none';
-            var dismissed = [];
-            try {
-                dismissed = JSON.parse(localStorage.getItem('dismissed_announcements') || '[]');
-            } catch (e) {
-                dismissed = [];
-            }
-            if (!dismissed.includes(id)) {
-                dismissed.push(id);
-                localStorage.setItem('dismissed_announcements', JSON.stringify(dismissed));
-            }
-        }
+        // Intercept dismiss form submits — persist id in cookie and remove banner
+        document.querySelectorAll('.site-banner .site-banner-dismiss').forEach(function(form) {
+            form.addEventListener('submit', function(event) {
+                event.preventDefault();
+                var banner = form.closest('.site-banner');
+                if (!banner) return;
+                var announcementId = banner.dataset.announcementId;
+                if (!announcementId) return;
+                var ids = getDismissedAnnouncements();
+                if (!ids.includes(announcementId)) {
+                    ids.push(announcementId);
+                }
+                document.cookie = 'dismissed_announcements=' + encodeURIComponent(ids.join(',')) +
+                    '; path=/; max-age=31536000; SameSite=Lax';
+                banner.remove();
+            });
+        });
     }
 
     // ========================================================================
     // COOKIE CONSENT - Per AI.md PART 16: NO inline JS
+    // Enhancement only — the banner forms POST to /consent and work without JS.
+    // This intercepts the submits to skip the reload.
     // ========================================================================
     function initCookieConsent() {
         var consentBanner = document.getElementById('cookie-consent');
         if (!consentBanner) return;
 
-        var consent = getCookieConsentChoice();
+        var consent = readConsentCookie();
         if (consent === null) {
             consentBanner.classList.add('visible');
+        } else {
+            consentBanner.remove();
+            // Clean up the legacy cookie_consent cookie if present
             clearCookie('cookie_consent');
             return;
         }
-        consentBanner.classList.remove('visible');
-        if (consent === 'accepted') {
-            syncThemeCookiePreference();
-            return;
-        }
-        clearCookie('theme');
-        clearCookie('cookie_consent');
+
+        // Intercept the banner forms to skip the page reload
+        consentBanner.querySelectorAll('form').forEach(function(form) {
+            form.addEventListener('submit', function(event) {
+                event.preventDefault();
+                var choiceEl = form.elements.choice;
+                var accepted = choiceEl && choiceEl.value === 'accept';
+                var newConsent = {
+                    essential: true,
+                    preferences: accepted,
+                    analytics: accepted,
+                    timestamp: Date.now()
+                };
+                saveAndApplyConsent(newConsent);
+            });
+        });
+
+        // Intercept the granular preferences button
+        consentBanner.querySelectorAll('[data-action="cookie-preferences"]').forEach(function(el) {
+            el.addEventListener('click', function() {
+                var modal = document.getElementById('cookie-preferences-modal');
+                if (modal) modal.showModal();
+            });
+        });
     }
 
     // ========================================================================
@@ -2621,6 +2615,10 @@
         document.addEventListener('error', function(e) {
             if (e.target && e.target.matches('.result-favicon img[data-favicon-fallback]')) {
                 showPlaceholder(e.target);
+            }
+            // Quicklink favicons: hide on error (no sibling placeholder)
+            if (e.target && e.target.matches('img[data-quicklink-favicon]')) {
+                e.target.style.display = 'none';
             }
         }, true);
 
@@ -2664,6 +2662,7 @@
         initUserPages();
         initAnnouncements();
         initCookieConsent();
+        initCCPA();
         initFaviconErrorHandling();
     }
 
@@ -3098,7 +3097,7 @@
             var hostname = '';
             try { hostname = new URL(link.url).hostname; } catch(e) {}
             html += '<a href="' + escapeHtml(link.url) + '" class="quicklink-item" title="' + escapeHtml(link.name) + '">' +
-                '<img src="https://www.google.com/s2/favicons?domain=' + encodeURIComponent(hostname) + '&sz=32" alt="" class="quicklink-favicon" onerror="this.style.display=\'none\'">' +
+                '<img src="https://www.google.com/s2/favicons?domain=' + encodeURIComponent(hostname) + '&sz=32" alt="" class="quicklink-favicon" data-quicklink-favicon>' +
                 '<span class="quicklink-name">' + escapeHtml(link.name) + '</span>' +
             '</a>';
         });
@@ -3138,8 +3137,16 @@
         var firstDay = new Date(year, month, 1).getDay();
         var daysInMonth = new Date(year, month + 1, 0).getDate();
 
-        var monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
-                         'July', 'August', 'September', 'October', 'November', 'December'];
+        // Use Intl.DateTimeFormat so month and day names follow the user's locale
+        var lang = document.documentElement.lang || navigator.language || 'en';
+        var monthName = new Intl.DateTimeFormat(lang, { month: 'long', year: 'numeric' }).format(now);
+        var dayFmt = new Intl.DateTimeFormat(lang, { weekday: 'short' });
+        // Build Sun-Sat day abbreviations using a reference week starting on 2000-01-02 (Sunday)
+        var dayHeaders = '';
+        for (var di = 0; di < 7; di++) {
+            var refDay = new Date(2000, 0, 2 + di);
+            dayHeaders += '<span>' + escapeHtml(dayFmt.format(refDay).slice(0, 2)) + '</span>';
+        }
 
         var days = '';
         for (var i = 0; i < firstDay; i++) {
@@ -3152,8 +3159,8 @@
 
         container.innerHTML =
             '<div class="calendar-widget">' +
-                '<div class="calendar-header">' + monthNames[month] + ' ' + year + '</div>' +
-                '<div class="calendar-weekdays"><span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span></div>' +
+                '<div class="calendar-header">' + escapeHtml(monthName) + '</div>' +
+                '<div class="calendar-weekdays">' + dayHeaders + '</div>' +
                 '<div class="calendar-days">' + days + '</div>' +
             '</div>';
     }
@@ -5299,7 +5306,7 @@
     function renderRelatedSearches(suggestions) {
         if (!relatedContainer || suggestions.length === 0) return;
 
-        var html = '<h3 id="related-title" class="related-title">Related searches</h3>' +
+        var html = '<h3 id="related-title" class="related-title">' + escapeHtml(t('search.related_title', 'Related searches')) + '</h3>' +
             '<div class="related-list">';
 
         suggestions.forEach(function(suggestion) {
@@ -5318,7 +5325,7 @@
 
         // Announce for screen readers
         if (window.srAnnounce) {
-            window.srAnnounce(suggestions.length + ' related searches available');
+            window.srAnnounce(t('search.related_available', suggestions.length + ' related searches available'));
         }
     }
 
@@ -5336,7 +5343,7 @@
         container.id = 'people-also-ask';
         container.className = 'people-also-ask';
 
-        var html = '<h3 class="paa-title">People also ask</h3>' +
+        var html = '<h3 class="paa-title">' + escapeHtml(t('search.people_also_ask', 'People also ask')) + '</h3>' +
             '<div class="paa-list">';
 
         questions.forEach(function(q, index) {
@@ -5348,8 +5355,8 @@
                     '</svg>' +
                 '</summary>' +
                 '<div class="paa-answer">' +
-                    (q.answer ? '<p>' + escapeHtml(q.answer) + '</p>' : '<p class="paa-loading">Loading...</p>') +
-                    '<a href="/search?q=' + encodeURIComponent(q.question) + '" class="paa-link">Search for this</a>' +
+                    (q.answer ? '<p>' + escapeHtml(q.answer) + '</p>' : '<p class="paa-loading">' + escapeHtml(t('common.loading', 'Loading...')) + '</p>') +
+                    '<a href="/search?q=' + encodeURIComponent(q.question) + '" class="paa-link">' + escapeHtml(t('search.search_for_this', 'Search for this')) + '</a>' +
                 '</div>' +
             '</details>';
         });

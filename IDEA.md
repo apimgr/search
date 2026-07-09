@@ -13,6 +13,7 @@ internal_name:    search
 app_name:         Search
 maintainer_name:  casjay
 maintainer_email: casjay@yahoo.com
+official_site:    search.apimgr.us
 
 ---
 
