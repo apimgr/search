@@ -257,7 +257,8 @@
     "generate_link": "Genera link",
     "copy_url": "Copia URL",
     "qr_code": "Codice QR",
-    "save_return": "Salva e torna"
+    "save_return": "Salva e torna",
+    "save_widgets": "Salva preferenze widget"
   },
   "nav": {
     "home": "Home",
@@ -1003,7 +1004,9 @@
     "quicklinks_invalid_url": "URL non valido. Includi https://",
     "widget_name_sports": "Sport",
     "widget_name_quicklinks": "Link rapidi",
-    "widget_name_notes": "Note"
+    "widget_name_notes": "Note",
+    "collapse": "Comprimi widget",
+    "loading": "Caricamento..."
   },
   "accessibility": {
     "search_suggestions": "Suggerimenti di ricerca",

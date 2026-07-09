@@ -45,17 +45,18 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Widgets are always available - users control via localStorage
-	// Per user preference: no server-side gating, all widgets user-controlled
+	// Read enabled widgets from the server-side cookie; fall back to defaults.
+	enabled := parseWidgetCookie(r)
+	if len(enabled) == 0 {
+		enabled = []string{"clock", "calculator", "quicklinks", "notes"}
+		if s.widgetManager != nil {
+			if d := s.widgetManager.GetDefaultWidgets(); len(d) > 0 {
+				enabled = d
+			}
+		}
+	}
 	data.WidgetsEnabled = true
-	// Default widgets for new users (stored in localStorage after first visit)
-	defaults := []string{"clock", "calculator", "quicklinks", "notes"}
-	if s.widgetManager != nil {
-		defaults = s.widgetManager.GetDefaultWidgets()
-	}
-	if len(defaults) > 0 {
-		data.DefaultWidgets = fmt.Sprintf(`["%s"]`, strings.Join(defaults, `","`))
-	}
+	data.EnabledWidgets = enabled
 
 	if err := s.renderer.Render(w, "index", data); err != nil {
 		s.handleInternalError(w, r, "template render", err)

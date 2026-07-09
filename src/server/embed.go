@@ -144,6 +144,27 @@ func (tr *TemplateRenderer) newFuncMap(i18nFuncs template.FuncMap) template.Func
 		"formatViewCount":     formatViewCount,
 		// Use a numeric date format so search results do not hardcode English month names.
 		"formatSearchDate": formatSearchDate,
+		// inSlice reports whether item is in the string slice.
+		"inSlice": func(slice []string, item string) bool {
+			for _, s := range slice {
+				if s == item {
+					return true
+				}
+			}
+			return false
+		},
+		// widgetIcon returns the emoji icon for a widget type.
+		"widgetIcon": widgetIconForType,
+		// widgetName returns the translated display name for a widget type.
+		"widgetName": func(widgetType string) string {
+			key := widgetI18nKey(widgetType)
+			if i18nFuncs != nil {
+				if tFunc, ok := i18nFuncs["t"].(func(string, ...interface{}) string); ok {
+					return tFunc(key)
+				}
+			}
+			return key
+		},
 	}
 }
 
@@ -393,8 +414,8 @@ type PageData struct {
 	TorEnabled         bool
 	TorStatus          string
 	TorAddress         string
-	WidgetsEnabled     bool
-	DefaultWidgets     string
+	WidgetsEnabled bool
+	EnabledWidgets []string
 	CookieConsent      *CookieConsentData
 	Extra              map[string]interface{}
 	ServerURL          string
@@ -640,4 +661,105 @@ func formatSearchDate(t time.Time) string {
 		return ""
 	}
 	return t.Format("2006-01-02")
+}
+
+// knownWidgetTypes is the set of valid widget type identifiers.
+var knownWidgetTypes = map[string]bool{
+	"clock": true, "weather": true, "quicklinks": true, "calculator": true,
+	"notes": true, "calendar": true, "converter": true, "news": true,
+	"stocks": true, "crypto": true, "sports": true, "rss": true,
+	"currency": true, "timezone": true, "translate": true, "wikipedia": true,
+	"tracking": true, "nutrition": true, "qrcode": true, "timer": true,
+	"lorem": true, "dictionary": true, "ipaddress": true, "colorpicker": true,
+}
+
+// widgetCookieName is the HTTP cookie that stores the user's enabled widget list.
+const widgetCookieName = "search_widgets"
+
+// widgetCookieMaxAge is the cookie lifetime in seconds (1 year).
+const widgetCookieMaxAge = 31536000
+
+// widgetI18nKey returns the i18n translation key for a widget type.
+func widgetI18nKey(widgetType string) string {
+	keys := map[string]string{
+		"clock":       "widgets.clock",
+		"calculator":  "widgets.calculator",
+		"calendar":    "widgets.calendar",
+		"converter":   "widgets.unit_converter",
+		"weather":     "widgets.weather",
+		"news":        "search.categories.news",
+		"stocks":      "widgets_ui.widget_name_stocks",
+		"crypto":      "widgets_ui.widget_name_crypto",
+		"sports":      "widgets_ui.widget_name_sports",
+		"rss":         "widgets_ui.widget_name_rss",
+		"quicklinks":  "widgets_ui.widget_name_quicklinks",
+		"notes":       "widgets_ui.widget_name_notes",
+		"colorpicker": "widgets.color_picker",
+		"currency":    "widgets.currency",
+		"timer":       "widgets.timer",
+		"dictionary":  "widgets.dictionary",
+		"ipaddress":   "widgets.ip_address",
+		"timezone":    "widgets_ui.widget_name_timezone",
+		"translate":   "widgets_ui.widget_name_translate",
+		"wikipedia":   "widgets_ui.widget_name_wikipedia",
+		"tracking":    "widgets_ui.widget_name_tracking",
+		"nutrition":   "widgets_ui.widget_name_nutrition",
+		"qrcode":      "widgets_ui.widget_name_qrcode",
+		"lorem":       "widgets_ui.widget_name_lorem",
+	}
+	if key, ok := keys[widgetType]; ok {
+		return key
+	}
+	return "widgets." + widgetType
+}
+
+// widgetIconForType returns the emoji icon for a widget type.
+func widgetIconForType(widgetType string) string {
+	icons := map[string]string{
+		"clock":       "🕐",
+		"calculator":  "🔢",
+		"calendar":    "📅",
+		"converter":   "🔄",
+		"weather":     "🌤️",
+		"news":        "📰",
+		"stocks":      "📈",
+		"crypto":      "💰",
+		"sports":      "⚽",
+		"rss":         "📡",
+		"quicklinks":  "🔗",
+		"notes":       "📝",
+		"colorpicker": "🎨",
+		"currency":    "💱",
+		"timezone":    "🕰️",
+		"translate":   "🌐",
+		"wikipedia":   "📚",
+		"tracking":    "📦",
+		"nutrition":   "🥗",
+		"qrcode":      "🔲",
+		"timer":       "⏱️",
+		"lorem":       "📄",
+		"dictionary":  "📖",
+		"ipaddress":   "🌐",
+	}
+	if icon, ok := icons[widgetType]; ok {
+		return icon
+	}
+	return "🔧"
+}
+
+// parseWidgetCookie reads the search_widgets cookie and returns validated widget types.
+// Returns nil if the cookie is absent or empty (caller should fall back to defaults).
+func parseWidgetCookie(r *http.Request) []string {
+	c, err := r.Cookie(widgetCookieName)
+	if err != nil || c.Value == "" {
+		return nil
+	}
+	var result []string
+	for _, wt := range strings.Split(c.Value, ",") {
+		wt = strings.TrimSpace(wt)
+		if wt != "" && knownWidgetTypes[wt] {
+			result = append(result, wt)
+		}
+	}
+	return result
 }

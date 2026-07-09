@@ -257,7 +257,8 @@
     "generate_link": "Generar enlace",
     "copy_url": "Copiar URL",
     "qr_code": "Codigo QR",
-    "save_return": "Guardar y volver"
+    "save_return": "Guardar y volver",
+    "save_widgets": "Guardar preferencias de widgets"
   },
   "nav": {
     "home": "Inicio",
@@ -1003,7 +1004,9 @@
     "quicklinks_invalid_url": "URL no valida. Incluya https://",
     "widget_name_sports": "Deportes",
     "widget_name_quicklinks": "Enlaces rapidos",
-    "widget_name_notes": "Notas"
+    "widget_name_notes": "Notas",
+    "collapse": "Contraer widget",
+    "loading": "Cargando..."
   },
   "accessibility": {
     "search_suggestions": "Sugerencias de busqueda",

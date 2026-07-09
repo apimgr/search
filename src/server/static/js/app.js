@@ -2134,32 +2134,13 @@
             }, 500);
         }
 
-        // Load widget preferences
-        function loadWidgetPreferences() {
-            try {
-                var saved = localStorage.getItem(WIDGETS_KEY);
-                // null means the key was never set (fresh user) — leave HTML defaults as-is
-                if (saved === null) {
-                    return;
-                }
-                var widgets = JSON.parse(saved);
-                document.querySelectorAll('.widget-toggle input[type="checkbox"]').forEach(function(checkbox) {
-                    var widgetType = checkbox.dataset.widget;
-                    checkbox.checked = widgets.includes(widgetType);
-                });
-            } catch (e) {
-                console.error('Failed to load widget preferences:', e);
-            }
-        }
+        // loadWidgetPreferences is a no-op — the server renders the correct
+        // checked state on each preference page load via the server-side cookie.
+        function loadWidgetPreferences() {}
 
-        // Save widget preferences
-        function saveWidgetPreferences() {
-            var enabledWidgets = [];
-            document.querySelectorAll('.widget-toggle input[type="checkbox"]:checked').forEach(function(checkbox) {
-                enabledWidgets.push(checkbox.dataset.widget);
-            });
-            localStorage.setItem(WIDGETS_KEY, JSON.stringify(enabledWidgets));
-        }
+        // saveWidgetPreferences is a no-op — the widget form POSTs to
+        // /preferences/widgets, which sets the server-side cookie directly.
+        function saveWidgetPreferences() {}
 
         // Load custom bangs
         function loadCustomBangs() {
@@ -2349,12 +2330,7 @@
             }
         });
 
-        // Widget toggle change
-        prefsPage.addEventListener('change', function(e) {
-            if (e.target.matches('.widget-toggle input[type="checkbox"]')) {
-                saveWidgetPreferences();
-            }
-        });
+        // Widget toggle state is persisted via the form POST to /preferences/widgets.
 
         // Add custom bang form
         var addBangForm = document.getElementById('add-custom-bang');
@@ -2942,20 +2918,41 @@
         }
     };
 
+    // Read enabled widget types from the server-rendered DOM.
+    // Returns an array of widget type strings in DOM order.
     function getEnabledWidgets() {
-        try {
-            const saved = localStorage.getItem(WIDGETS_KEY);
-            if (saved) {
-                return JSON.parse(saved);
-            }
-        } catch (e) {
-            console.error('Failed to load widget preferences:', e);
-        }
-        return null;
+        var grid = document.getElementById('widget-grid');
+        if (!grid) return [];
+        var types = [];
+        grid.querySelectorAll('[data-widget]').forEach(function(el) {
+            if (el.dataset.widget) types.push(el.dataset.widget);
+        });
+        return types;
     }
 
+    // Persist the widget list to the server-side cookie via POST.
     function saveEnabledWidgets(widgets) {
-        localStorage.setItem(WIDGETS_KEY, JSON.stringify(widgets));
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/preferences/widgets';
+        form.style.display = 'none';
+        var csrf = document.querySelector('meta[name="csrf-token"]');
+        if (csrf) {
+            var csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrf_token';
+            csrfInput.value = csrf.getAttribute('content');
+            form.appendChild(csrfInput);
+        }
+        widgets.forEach(function(wt) {
+            var input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'widget';
+            input.value = wt;
+            form.appendChild(input);
+        });
+        document.body.appendChild(form);
+        form.submit();
     }
 
     function getWidgetSettings(widgetType) {
@@ -3680,18 +3677,18 @@
         intervals: {},
         defaultWidgets: ['clock', 'weather', 'quicklinks', 'calculator'],
 
-        init: function(defaultWidgets) {
-            if (defaultWidgets && defaultWidgets.length > 0) {
-                this.defaultWidgets = defaultWidgets;
-            }
-
+        init: function() {
             var grid = document.getElementById('widget-grid');
             if (!grid) return;
 
-            var saved = getEnabledWidgets();
-            // null means no saved preferences (fresh user) — fall back to server defaults
-            var enabledWidgets = saved !== null ? saved : this.defaultWidgets;
-            this.renderWidgetGrid(enabledWidgets);
+            // Server renders widget shells; activate each one in DOM order.
+            var self = this;
+            grid.querySelectorAll('[data-widget]').forEach(function(el) {
+                var widgetType = el.dataset.widget;
+                if (widgetType && WIDGETS[widgetType]) {
+                    self.initWidget(widgetType);
+                }
+            });
             this.initEventDelegation();
         },
 
@@ -3880,18 +3877,15 @@
             }, { offset: Number.NEGATIVE_INFINITY }).element;
         },
 
-        // Save the current widget order based on DOM position
+        // Save the current widget order based on DOM position.
+        // POSTs new order to server so it persists across page loads.
         saveWidgetOrder: function() {
             var grid = document.getElementById('widget-grid');
             if (!grid) return;
 
-            var widgets = grid.querySelectorAll('.widget');
             var order = [];
-
-            widgets.forEach(function(widget) {
-                if (widget.dataset.widget) {
-                    order.push(widget.dataset.widget);
-                }
+            grid.querySelectorAll('[data-widget]').forEach(function(el) {
+                if (el.dataset.widget) order.push(el.dataset.widget);
             });
 
             if (order.length > 0) {
@@ -3936,7 +3930,9 @@
         initWidget: async function(widgetType) {
             var self = this;
             var widget = WIDGETS[widgetType];
-            var container = document.getElementById('widget-content-' + widgetType);
+            // Support both server-rendered (widget-body-*) and legacy (widget-content-*) IDs.
+            var container = document.getElementById('widget-body-' + widgetType) ||
+                            document.getElementById('widget-content-' + widgetType);
             if (!container || !widget) return;
 
             var settings = getWidgetSettings(widgetType);
@@ -3963,26 +3959,24 @@
         },
 
         toggleWidget: function(widgetType) {
-            var savedToggle = getEnabledWidgets();
-            var enabled = savedToggle !== null ? savedToggle : this.defaultWidgets.slice();
+            var enabled = getEnabledWidgets();
             var idx = enabled.indexOf(widgetType);
             if (idx >= 0) {
                 enabled.splice(idx, 1);
             } else {
                 enabled.push(widgetType);
             }
+            // POST updated list to server; page reloads with new cookie-driven state.
             saveEnabledWidgets(enabled);
-            this.renderWidgetGrid(enabled);
         },
 
         removeWidget: function(widgetType) {
-            var savedRemove = getEnabledWidgets();
-            var enabled = savedRemove !== null ? savedRemove : this.defaultWidgets.slice();
+            var enabled = getEnabledWidgets();
             var idx = enabled.indexOf(widgetType);
             if (idx >= 0) {
                 enabled.splice(idx, 1);
+                // POST updated list to server; page reloads with new cookie-driven state.
                 saveEnabledWidgets(enabled);
-                this.renderWidgetGrid(enabled);
             }
         },
 
@@ -4441,18 +4435,15 @@
         },
 
         getEnabledWidgets: function() {
-            var saved = getEnabledWidgets();
-            // null means no saved preferences (fresh user) — fall back to server defaults
-            return saved !== null ? saved : this.defaultWidgets;
+            // Return widget types in current DOM order.
+            return getEnabledWidgets();
         }
     };
 
-    // Initialize widgets on DOM ready
+    // Initialize widgets on DOM ready — widget shells are server-rendered.
     document.addEventListener('DOMContentLoaded', function() {
         if (document.getElementById('widget-grid')) {
-            var grid = document.getElementById('widget-grid');
-            var defaultWidgets = grid.dataset.defaults ? JSON.parse(grid.dataset.defaults) : null;
-            WidgetManager.init(defaultWidgets);
+            WidgetManager.init();
         }
     });
 

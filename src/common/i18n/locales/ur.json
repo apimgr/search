@@ -257,7 +257,8 @@
     "generate_link": "لنک بنائيں",
     "copy_url": "URL نقل کريں",
     "qr_code": "QR کوڈ",
-    "save_return": "محفوظ کريں اور واپس جائيں"
+    "save_return": "محفوظ کريں اور واپس جائيں",
+    "save_widgets": "ویجٹ کی ترجیحات محفوظ کریں"
   },
   "nav": {
     "home": "ہوم",
@@ -1003,7 +1004,9 @@
     "quicklinks_invalid_url": "URL غلط ہے۔ براہ کرم https:// شامل کريں",
     "widget_name_sports": "کھیل",
     "widget_name_quicklinks": "فوری لنکس",
-    "widget_name_notes": "نوٹس"
+    "widget_name_notes": "نوٹس",
+    "collapse": "ویجٹ کو چھوٹا کریں",
+    "loading": "لوڈ ہو رہا ہے..."
   },
   "accessibility": {
     "search_suggestions": "تلاش کی تجاويز",

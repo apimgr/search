@@ -257,7 +257,8 @@
     "generate_link": "צור קישור",
     "copy_url": "העתק URL",
     "qr_code": "קוד QR",
-    "save_return": "שמור וחזור"
+    "save_return": "שמור וחזור",
+    "save_widgets": "שמור העדפות ווידג'טים"
   },
   "nav": {
     "home": "דף הבית",
@@ -1003,7 +1004,9 @@
     "quicklinks_invalid_url": "כתובת URL לא תקינה. יש לכלול https://",
     "widget_name_sports": "ספורט",
     "widget_name_quicklinks": "קישורים מהירים",
-    "widget_name_notes": "הערות"
+    "widget_name_notes": "הערות",
+    "collapse": "כווץ ווידג'ט",
+    "loading": "טוען..."
   },
   "accessibility": {
     "search_suggestions": "הצעות חיפוש",

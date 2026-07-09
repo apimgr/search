@@ -227,6 +227,7 @@
     "widget_category_data": "Data Widgets",
     "widget_category_user": "User Widgets",
     "homepage_widgets_tip": "Tip: You can also configure individual widget settings by clicking the gear icon on each widget on the homepage.",
+    "save_widgets": "Save Widget Preferences",
     "custom_bangs_heading": "Custom Bangs",
     "custom_bangs_help": "Create your own bang shortcuts. These are saved in your browser.",
     "add_custom_bang": "Add Custom Bang",
@@ -1003,7 +1004,9 @@
     "quicklinks_invalid_url": "Invalid URL. Please include https://",
     "widget_name_sports": "Sports",
     "widget_name_quicklinks": "Quick Links",
-    "widget_name_notes": "Notes"
+    "widget_name_notes": "Notes",
+    "collapse": "Collapse widget",
+    "loading": "Loading..."
   },
   "accessibility": {
     "search_suggestions": "Search suggestions",

@@ -849,6 +849,7 @@ func (s *Server) setupRoutes() http.Handler {
 	// Preferences
 	r.HandleFunc("/preferences", s.handlePreferences)
 	r.HandleFunc("/server/preferences", s.handlePreferences)
+	r.Post("/preferences/widgets", s.handleWidgetPreferencesSave)
 
 	// Static files (served from embedded filesystem)
 	r.Handle("/static/*", http.StripPrefix("/static/", StaticFileServer()))

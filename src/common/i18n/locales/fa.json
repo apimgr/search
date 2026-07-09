@@ -257,7 +257,8 @@
     "generate_link": "ايجاد پيوند",
     "copy_url": "کپي URL",
     "qr_code": "کد QR",
-    "save_return": "ذخيره و بازگشت"
+    "save_return": "ذخيره و بازگشت",
+    "save_widgets": "ذخیره تنظیمات ابزارک‌ها"
   },
   "nav": {
     "home": "خانه",
@@ -1003,7 +1004,9 @@
     "quicklinks_invalid_url": "نشاني URL نامعتبر است. لطفا https:// را وارد کنيد",
     "widget_name_sports": "ورزش",
     "widget_name_quicklinks": "پيوندهاي سريع",
-    "widget_name_notes": "يادداشت ها"
+    "widget_name_notes": "يادداشت ها",
+    "collapse": "جمع کردن ابزارک",
+    "loading": "در حال بارگذاری..."
   },
   "accessibility": {
     "search_suggestions": "پيشنهادهاي جستجو",

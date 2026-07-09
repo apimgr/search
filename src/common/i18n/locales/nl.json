@@ -257,7 +257,8 @@
     "generate_link": "Link genereren",
     "copy_url": "URL kopieren",
     "qr_code": "QR-code",
-    "save_return": "Opslaan en terugkeren"
+    "save_return": "Opslaan en terugkeren",
+    "save_widgets": "Widgetvoorkeuren opslaan"
   },
   "nav": {
     "home": "Home",
@@ -1003,7 +1004,9 @@
     "quicklinks_invalid_url": "Ongeldige URL. Voeg https:// toe",
     "widget_name_sports": "Sport",
     "widget_name_quicklinks": "Snelle links",
-    "widget_name_notes": "Notities"
+    "widget_name_notes": "Notities",
+    "collapse": "Widget inklappen",
+    "loading": "Laden..."
   },
   "accessibility": {
     "search_suggestions": "Zoeksuggesties",

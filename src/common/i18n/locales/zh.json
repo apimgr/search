@@ -257,7 +257,8 @@
     "generate_link": "生成链接",
     "copy_url": "复制 URL",
     "qr_code": "二维码",
-    "save_return": "保存并返回"
+    "save_return": "保存并返回",
+    "save_widgets": "保存小部件偏好设置"
   },
   "nav": {
     "home": "首页",
@@ -1003,7 +1004,9 @@
     "quicklinks_invalid_url": "URL 无效。请包含 https://",
     "widget_name_sports": "体育",
     "widget_name_quicklinks": "快速链接",
-    "widget_name_notes": "笔记"
+    "widget_name_notes": "笔记",
+    "collapse": "折叠小部件",
+    "loading": "加载中..."
   },
   "accessibility": {
     "search_suggestions": "搜索建议",

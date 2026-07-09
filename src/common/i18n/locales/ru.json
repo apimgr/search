@@ -257,7 +257,8 @@
     "generate_link": "Создать ссылку",
     "copy_url": "Скопировать URL",
     "qr_code": "QR-код",
-    "save_return": "Сохранить и вернуться"
+    "save_return": "Сохранить и вернуться",
+    "save_widgets": "Сохранить настройки виджетов"
   },
   "nav": {
     "home": "Главная",
@@ -1003,7 +1004,9 @@
     "quicklinks_invalid_url": "Некорректный URL. Укажите https://",
     "widget_name_sports": "Спорт",
     "widget_name_quicklinks": "Быстрые ссылки",
-    "widget_name_notes": "Заметки"
+    "widget_name_notes": "Заметки",
+    "collapse": "Свернуть виджет",
+    "loading": "Загрузка..."
   },
   "accessibility": {
     "search_suggestions": "Подсказки поиска",

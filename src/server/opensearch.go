@@ -227,6 +227,18 @@ func (s *Server) handlePreferences(w http.ResponseWriter, r *http.Request) {
 	data := s.newPageData(w, r, "Preferences", "preferences")
 	data.CSRFToken = s.getCSRFToken(r)
 
+	// Populate enabled widgets from the server-side cookie.
+	enabled := parseWidgetCookie(r)
+	if len(enabled) == 0 {
+		enabled = []string{"clock", "calculator", "quicklinks", "notes"}
+		if s.widgetManager != nil {
+			if d := s.widgetManager.GetDefaultWidgets(); len(d) > 0 {
+				enabled = d
+			}
+		}
+	}
+	data.EnabledWidgets = enabled
+
 	// Get all available bangs for display
 	data.Data = map[string]interface{}{
 		"bangs":      s.bangManager.GetAll(),
@@ -239,14 +251,48 @@ func (s *Server) handlePreferences(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handlePreferencesSave handles saving user preferences
+// handlePreferencesSave handles saving non-widget user preferences (acknowledged client-side).
 func (s *Server) handlePreferencesSave(w http.ResponseWriter, r *http.Request) {
-	// Preferences are saved client-side in localStorage
-	// This endpoint just acknowledges the save
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"ok":   true,
 		"data": map[string]string{},
 	})
+}
+
+// handleWidgetPreferencesSave handles the widget selection form POST from the
+// preferences page. It validates submitted widget types and persists the
+// selection in a server-side cookie, then redirects back to /preferences.
+func (s *Server) handleWidgetPreferencesSave(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	// Collect and validate submitted widget types.
+	submitted := r.Form["widget"]
+	var valid []string
+	seen := make(map[string]bool)
+	for _, wt := range submitted {
+		wt = strings.TrimSpace(wt)
+		if wt != "" && knownWidgetTypes[wt] && !seen[wt] {
+			valid = append(valid, wt)
+			seen[wt] = true
+		}
+	}
+
+	// Build cookie value; empty string disables all widgets.
+	cookieVal := strings.Join(valid, ",")
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     widgetCookieName,
+		Value:    cookieVal,
+		Path:     "/",
+		MaxAge:   widgetCookieMaxAge,
+		SameSite: http.SameSiteLaxMode,
+		HttpOnly: false,
+	})
+
+	http.Redirect(w, r, "/preferences", http.StatusSeeOther)
 }
 
 // getBaseURL returns the base URL for the server.

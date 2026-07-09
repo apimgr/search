@@ -257,7 +257,8 @@
     "generate_link": "انشاء رابط",
     "copy_url": "نسخ الرابط",
     "qr_code": "رمز QR",
-    "save_return": "حفظ والعودة"
+    "save_return": "حفظ والعودة",
+    "save_widgets": "حفظ تفضيلات الأدوات"
   },
   "nav": {
     "home": "الرئيسية",
@@ -1003,7 +1004,9 @@
     "quicklinks_invalid_url": "عنوان URL غير صالح. يرجى تضمين https://",
     "widget_name_sports": "الرياضة",
     "widget_name_quicklinks": "روابط سريعة",
-    "widget_name_notes": "ملاحظات"
+    "widget_name_notes": "ملاحظات",
+    "collapse": "طي الأداة",
+    "loading": "جار التحميل..."
   },
   "accessibility": {
     "search_suggestions": "اقتراحات البحث",

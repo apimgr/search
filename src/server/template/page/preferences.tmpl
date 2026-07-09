@@ -112,85 +112,95 @@
         <h2>{{t "preferences.homepage_widgets_heading"}}</h2>
         <p class="help-text">{{t "preferences.homepage_widgets_help"}}</p>
 
-        <div class="widget-toggles" id="widget-toggles">
-            <div class="widget-category">
-                <h3>{{t "preferences.widget_category_tools"}}</h3>
-                <div class="widget-toggle-group">
-                    <label class="widget-toggle">
-                        <input type="checkbox" data-widget="clock" checked>
-                        <span class="widget-icon">🕐</span>
-                        <span class="widget-name">{{t "widgets.clock"}}</span>
-                    </label>
-                    <label class="widget-toggle">
-                        <input type="checkbox" data-widget="calculator">
-                        <span class="widget-icon">🔢</span>
-                        <span class="widget-name">{{t "widgets.calculator"}}</span>
-                    </label>
-                    <label class="widget-toggle">
-                        <input type="checkbox" data-widget="calendar">
-                        <span class="widget-icon">📅</span>
-                        <span class="widget-name">{{t "widgets.calendar"}}</span>
-                    </label>
-                    <label class="widget-toggle">
-                        <input type="checkbox" data-widget="converter">
-                        <span class="widget-icon">🔄</span>
-                        <span class="widget-name">{{t "widgets.unit_converter"}}</span>
-                    </label>
+        <form action="/preferences/widgets" method="POST" id="widget-prefs-form">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+            <div class="widget-toggles" id="widget-toggles">
+                <div class="widget-category">
+                    <h3>{{t "preferences.widget_category_tools"}}</h3>
+                    <div class="widget-toggle-group">
+                        <label class="widget-toggle">
+                            <input type="checkbox" name="widget" value="clock" {{if inSlice .EnabledWidgets "clock"}}checked{{end}}>
+                            <span class="widget-icon">🕐</span>
+                            <span class="widget-name">{{t "widgets.clock"}}</span>
+                        </label>
+                        <label class="widget-toggle">
+                            <input type="checkbox" name="widget" value="calculator" {{if inSlice .EnabledWidgets "calculator"}}checked{{end}}>
+                            <span class="widget-icon">🔢</span>
+                            <span class="widget-name">{{t "widgets.calculator"}}</span>
+                        </label>
+                        <label class="widget-toggle">
+                            <input type="checkbox" name="widget" value="calendar" {{if inSlice .EnabledWidgets "calendar"}}checked{{end}}>
+                            <span class="widget-icon">📅</span>
+                            <span class="widget-name">{{t "widgets.calendar"}}</span>
+                        </label>
+                        <label class="widget-toggle">
+                            <input type="checkbox" name="widget" value="converter" {{if inSlice .EnabledWidgets "converter"}}checked{{end}}>
+                            <span class="widget-icon">🔄</span>
+                            <span class="widget-name">{{t "widgets.unit_converter"}}</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="widget-category">
+                    <h3>{{t "preferences.widget_category_data"}}</h3>
+                    <div class="widget-toggle-group">
+                        <label class="widget-toggle">
+                            <input type="checkbox" name="widget" value="weather" {{if inSlice .EnabledWidgets "weather"}}checked{{end}}>
+                            <span class="widget-icon">🌤️</span>
+                            <span class="widget-name">{{t "widgets.weather"}}</span>
+                        </label>
+                        <label class="widget-toggle">
+                            <input type="checkbox" name="widget" value="news" {{if inSlice .EnabledWidgets "news"}}checked{{end}}>
+                            <span class="widget-icon">📰</span>
+                            <span class="widget-name">{{t "search.categories.news"}}</span>
+                        </label>
+                        <label class="widget-toggle">
+                            <input type="checkbox" name="widget" value="stocks" {{if inSlice .EnabledWidgets "stocks"}}checked{{end}}>
+                            <span class="widget-icon">📈</span>
+                            <span class="widget-name">{{t "widgets_ui.widget_name_stocks"}}</span>
+                        </label>
+                        <label class="widget-toggle">
+                            <input type="checkbox" name="widget" value="crypto" {{if inSlice .EnabledWidgets "crypto"}}checked{{end}}>
+                            <span class="widget-icon">💰</span>
+                            <span class="widget-name">{{t "widgets_ui.widget_name_crypto"}}</span>
+                        </label>
+                        <label class="widget-toggle">
+                            <input type="checkbox" name="widget" value="sports" {{if inSlice .EnabledWidgets "sports"}}checked{{end}}>
+                            <span class="widget-icon">⚽</span>
+                            <span class="widget-name">{{t "widgets_ui.widget_name_sports"}}</span>
+                        </label>
+                        <label class="widget-toggle">
+                            <input type="checkbox" name="widget" value="rss" {{if inSlice .EnabledWidgets "rss"}}checked{{end}}>
+                            <span class="widget-icon">📡</span>
+                            <span class="widget-name">{{t "widgets_ui.widget_name_rss"}}</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="widget-category">
+                    <h3>{{t "preferences.widget_category_user"}}</h3>
+                    <div class="widget-toggle-group">
+                        <label class="widget-toggle">
+                            <input type="checkbox" name="widget" value="quicklinks" {{if inSlice .EnabledWidgets "quicklinks"}}checked{{end}}>
+                            <span class="widget-icon">🔗</span>
+                            <span class="widget-name">{{t "widgets_ui.widget_name_quicklinks"}}</span>
+                        </label>
+                        <label class="widget-toggle">
+                            <input type="checkbox" name="widget" value="notes" {{if inSlice .EnabledWidgets "notes"}}checked{{end}}>
+                            <span class="widget-icon">📝</span>
+                            <span class="widget-name">{{t "widgets_ui.widget_name_notes"}}</span>
+                        </label>
+                    </div>
                 </div>
             </div>
 
-            <div class="widget-category">
-                <h3>{{t "preferences.widget_category_data"}}</h3>
-                <div class="widget-toggle-group">
-                    <label class="widget-toggle">
-                        <input type="checkbox" data-widget="weather">
-                        <span class="widget-icon">🌤️</span>
-                        <span class="widget-name">{{t "widgets.weather"}}</span>
-                    </label>
-                    <label class="widget-toggle">
-                        <input type="checkbox" data-widget="news">
-                        <span class="widget-icon">📰</span>
-                        <span class="widget-name">{{t "search.categories.news"}}</span>
-                    </label>
-                    <label class="widget-toggle">
-                        <input type="checkbox" data-widget="stocks">
-                        <span class="widget-icon">📈</span>
-                        <span class="widget-name">{{t "widgets_ui.widget_name_stocks"}}</span>
-                    </label>
-                    <label class="widget-toggle">
-                        <input type="checkbox" data-widget="crypto">
-                        <span class="widget-icon">💰</span>
-                        <span class="widget-name">{{t "widgets_ui.widget_name_crypto"}}</span>
-                    </label>
-                    <label class="widget-toggle">
-                        <input type="checkbox" data-widget="sports">
-                        <span class="widget-icon">⚽</span>
-                        <span class="widget-name">{{t "widgets_ui.widget_name_sports"}}</span>
-                    </label>
-                    <label class="widget-toggle">
-                        <input type="checkbox" data-widget="rss">
-                        <span class="widget-icon">📡</span>
-                        <span class="widget-name">{{t "widgets_ui.widget_name_rss"}}</span>
-                    </label>
-                </div>
+            <div class="form-actions mt-1">
+                <button type="submit" class="btn btn-primary">
+                    {{t "preferences.save_widgets"}}
+                </button>
             </div>
-
-            <div class="widget-category">
-                <h3>{{t "preferences.widget_category_user"}}</h3>
-                <div class="widget-toggle-group">
-                    <label class="widget-toggle">
-                        <input type="checkbox" data-widget="quicklinks">
-                        <span class="widget-icon">🔗</span>
-                        <span class="widget-name">{{t "widgets_ui.widget_name_quicklinks"}}</span>
-                    </label>
-                    <label class="widget-toggle">
-                        <input type="checkbox" data-widget="notes">
-                        <span class="widget-icon">📝</span>
-                        <span class="widget-name">{{t "widgets_ui.widget_name_notes"}}</span>
-                    </label>
-                </div>
-            </div>
-        </div>
+        </form>
 
         <p class="help-text mt-1">
             {{t "preferences.homepage_widgets_tip"}}

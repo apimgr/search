@@ -1,8 +1,19 @@
 {{define "widgets"}}
-{{if .WidgetsEnabled}}
+{{if and .WidgetsEnabled (gt (len .EnabledWidgets) 0)}}
 <section class="widgets-section">
-    <div class="widget-grid" id="widget-grid" data-defaults='{{.DefaultWidgets}}'>
-        <!-- Widgets are rendered client-side by app.js WidgetManager -->
+    <div class="widget-grid" id="widget-grid">
+        {{range .EnabledWidgets}}
+        <div class="widget widget-{{.}}" data-widget="{{.}}" data-loaded="false" draggable="true">
+            <div class="widget-header">
+                <span class="widget-icon" aria-hidden="true">{{widgetIcon .}}</span>
+                <span class="widget-title">{{widgetName .}}</span>
+                <button class="widget-collapse" aria-label="{{t "widgets_ui.collapse"}}">&#8722;</button>
+            </div>
+            <div class="widget-body" id="widget-body-{{.}}">
+                <div class="widget-loading" aria-live="polite">{{t "widgets_ui.loading"}}</div>
+            </div>
+        </div>
+        {{end}}
     </div>
 </section>
 {{end}}
