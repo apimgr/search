@@ -177,27 +177,31 @@ func splitIntoWords(s string) []string {
 	// Handle camelCase and PascalCase
 	var words []string
 	var currentWord strings.Builder
+	// Track the previous rune directly; range index is a byte offset and cannot
+	// be used to index []rune(s) without panicking on multi-byte input.
+	var prevRune rune
 
-	for i, r := range s {
+	for _, r := range s {
 		if r == ' ' {
 			if currentWord.Len() > 0 {
 				words = append(words, currentWord.String())
 				currentWord.Reset()
 			}
+			prevRune = r
 			continue
 		}
 
 		// Check for uppercase letters that indicate word boundaries
 		if unicode.IsUpper(r) && currentWord.Len() > 0 {
 			// Check if the previous character was lowercase (camelCase boundary)
-			prev := []rune(s)[i-1]
-			if unicode.IsLower(prev) {
+			if unicode.IsLower(prevRune) {
 				words = append(words, currentWord.String())
 				currentWord.Reset()
 			}
 		}
 
 		currentWord.WriteRune(r)
+		prevRune = r
 	}
 
 	if currentWord.Len() > 0 {

@@ -344,8 +344,8 @@ func TestNewMathHandler(t *testing.T) {
 	if h.patterns == nil {
 		t.Error("patterns should not be nil")
 	}
-	if h.mathExpr == nil {
-		t.Error("mathExpr should not be nil")
+	if h.numericExpr == nil {
+		t.Error("numericExpr should not be nil")
 	}
 }
 

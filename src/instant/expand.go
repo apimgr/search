@@ -81,11 +81,15 @@ func (h *ExpandHandler) HandleInstantQuery(ctx context.Context, query string) (*
 	// Validate URL
 	parsedURL, err := url.Parse(urlStr)
 	if err != nil || parsedURL.Host == "" {
+		errMsg := "no host in URL"
+		if err != nil {
+			errMsg = err.Error()
+		}
 		return &Answer{
 			Type:    AnswerTypeExpand,
 			Query:   query,
 			Title:   "URL Expander",
-			Content: fmt.Sprintf("<strong>Error:</strong> Invalid URL<br><br>%s", escapeHTML(err.Error())),
+			Content: fmt.Sprintf("<strong>Error:</strong> Invalid URL<br><br>%s", escapeHTML(errMsg)),
 		}, nil
 	}
 

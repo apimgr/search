@@ -426,20 +426,11 @@ func formatResolveData(hostname string, data map[string]interface{}) string {
 }
 
 // CertHandler handles cert:{domain} queries
-type CertHandler struct {
-	client *http.Client
-}
+type CertHandler struct{}
 
 // NewCertHandler creates a new certificate handler
 func NewCertHandler() *CertHandler {
-	return &CertHandler{
-		client: &http.Client{
-			Timeout: 15 * time.Second,
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			},
-		},
-	}
+	return &CertHandler{}
 }
 
 func (h *CertHandler) Type() AnswerType {

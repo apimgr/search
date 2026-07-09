@@ -84,12 +84,15 @@ func (h *CertHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 	dialCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	// Dial with TLS
-	dialer := &net.Dialer{}
-	conn, err := tls.DialWithDialer(dialer, "tcp", host, &tls.Config{
-		// We want to see the cert even if invalid
-		InsecureSkipVerify: true,
-	})
+	// Dial with TLS, honoring the timeout context for both TCP connect and handshake
+	tlsDialer := &tls.Dialer{
+		NetDialer: &net.Dialer{},
+		Config: &tls.Config{
+			// We want to see the cert even if invalid
+			InsecureSkipVerify: true,
+		},
+	}
+	netConn, err := tlsDialer.DialContext(dialCtx, "tcp", host)
 	if err != nil {
 		return &Answer{
 			Type:    AnswerTypeCert,
@@ -102,19 +105,8 @@ func (h *CertHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 			},
 		}, nil
 	}
+	conn := netConn.(*tls.Conn)
 	defer conn.Close()
-
-	// Check context cancellation
-	select {
-	case <-dialCtx.Done():
-		return &Answer{
-			Type:    AnswerTypeCert,
-			Query:   query,
-			Title:   fmt.Sprintf("SSL Certificate: %s", domain),
-			Content: fmt.Sprintf("<strong>Error:</strong> Connection timeout for %s", domain),
-		}, nil
-	default:
-	}
 
 	// Get certificate chain
 	certs := conn.ConnectionState().PeerCertificates

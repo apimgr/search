@@ -66,22 +66,11 @@ type dnsRecords struct {
 	MX    []mxRecord
 	NS    []string
 	TXT   []string
-	SOA   *soaRecord
 }
 
 type mxRecord struct {
 	Host     string
 	Priority uint16
-}
-
-type soaRecord struct {
-	NS      string
-	Mbox    string
-	Serial  uint32
-	Refresh uint32
-	Retry   uint32
-	Expire  uint32
-	Minimum uint32
 }
 
 func (h *DNSHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {

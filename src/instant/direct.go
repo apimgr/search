@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"net"
 	"net/http"
@@ -127,11 +128,13 @@ func (h *TLDRHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 		}
 
 		if resp.StatusCode == http.StatusOK {
-			body := make([]byte, 8192)
-			n, _ := resp.Body.Read(body)
-			content = string(body[:n])
-			found = true
+			body, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 			resp.Body.Close()
+			if readErr != nil {
+				continue
+			}
+			content = string(body)
+			found = true
 			break
 		}
 		resp.Body.Close()

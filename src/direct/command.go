@@ -51,7 +51,6 @@ func (h *TLDRHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		if err != nil {
 			continue
 		}
-		defer resp.Body.Close()
 
 		if resp.StatusCode == http.StatusOK {
 			var content strings.Builder
@@ -65,6 +64,7 @@ func (h *TLDRHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 					break
 				}
 			}
+			resp.Body.Close()
 
 			// Parse tldr markdown format
 			markdown := content.String()
@@ -85,6 +85,9 @@ func (h *TLDRHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 				},
 			}, nil
 		}
+
+		// Close body before trying the next platform to avoid leaking connections
+		resp.Body.Close()
 	}
 
 	return &Answer{
@@ -340,6 +343,21 @@ func (h *CheatHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	// Treat a missing topic as not_found and any other non-200 as an error
+	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusNotFound {
+			return &Answer{
+				Type:        AnswerTypeCheat,
+				Term:        term,
+				Title:       fmt.Sprintf("cheat: %s", term),
+				Description: "Command not found",
+				Content:     fmt.Sprintf("<p>No cheat sheet found for <code>%s</code>.</p>", escapeHTML(term)),
+				Error:       "not_found",
+			}, nil
+		}
+		return nil, fmt.Errorf("cheat.sh returned status %d", resp.StatusCode)
+	}
 
 	var content strings.Builder
 	buf := make([]byte, 4096)

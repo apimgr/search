@@ -641,7 +641,6 @@ func (h *CountryHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 		Timezones   []string          `json:"timezones"`
 		Flag        string            `json:"flag"`
 		TLD         []string          `json:"tld"`
-		CallingCode []string          `json:"callingCodes"`
 		IDD         struct {
 			Root     string   `json:"root"`
 			Suffixes []string `json:"suffixes"`

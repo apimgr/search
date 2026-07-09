@@ -65,6 +65,10 @@ func (h *RandomHandler) HandleInstantQuery(ctx context.Context, query string) (*
 		if matches := dicePattern.FindStringSubmatch(query); len(matches) > 1 {
 			sides, _ = strconv.Atoi(matches[1])
 		}
+		// Guard against d0 / dNegative which would panic in mrand.Intn
+		if sides < 1 {
+			sides = 6
+		}
 		result := mrand.Intn(sides) + 1
 		return &Answer{
 			Type:    AnswerTypeRandom,
@@ -81,6 +85,11 @@ func (h *RandomHandler) HandleInstantQuery(ctx context.Context, query string) (*
 	if matches := rangePattern.FindStringSubmatch(query); len(matches) == 3 {
 		min, _ = strconv.Atoi(matches[1])
 		max, _ = strconv.Atoi(matches[2])
+	}
+
+	// Guard against reversed range (min > max) which would panic in mrand.Intn
+	if min > max {
+		min, max = max, min
 	}
 
 	result := mrand.Intn(max-min+1) + min

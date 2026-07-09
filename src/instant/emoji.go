@@ -125,7 +125,7 @@ func (h *EmojiHandler) searchEmojis(searchTerm string) []EmojiInfo {
 	var results []EmojiInfo
 	scores := make(map[string]int)
 
-	for key, emoji := range h.emojis {
+	for _, emoji := range h.emojis {
 		score := 0
 
 		// Exact name match
@@ -153,7 +153,8 @@ func (h *EmojiHandler) searchEmojis(searchTerm string) []EmojiInfo {
 
 		if score > 0 {
 			results = append(results, emoji)
-			scores[key] = score
+			// Key by glyph to match the sort comparator below (scores[results[i].Emoji])
+			scores[emoji.Emoji] = score
 		}
 	}
 

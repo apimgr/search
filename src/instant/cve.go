@@ -174,9 +174,6 @@ func (h *CVEHandler) extractCVEID(query string) string {
 			if len(matches) >= 4 {
 				return fmt.Sprintf("%s-%s", matches[2], matches[3])
 			}
-			if len(matches) >= 3 {
-				return fmt.Sprintf("%s-%s", matches[2], matches[3])
-			}
 		}
 	}
 	return ""

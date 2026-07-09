@@ -458,7 +458,12 @@ func beautifyHTML(code, indent string) (string, error) {
 
 		// Determine tag type
 		isClosingTag = strings.HasPrefix(tag, "/")
-		isSelfClosing := strings.HasSuffix(tag, "/") || selfClosing[strings.ToLower(strings.Fields(strings.TrimPrefix(tag, "/"))[0])]
+		// Guard against empty or whitespace-only tags (e.g. input "<>") where Fields returns no elements
+		tagFields := strings.Fields(strings.TrimPrefix(tag, "/"))
+		isSelfClosing := strings.HasSuffix(tag, "/")
+		if len(tagFields) > 0 {
+			isSelfClosing = isSelfClosing || selfClosing[strings.ToLower(tagFields[0])]
+		}
 
 		if isClosingTag {
 			indentLevel--
@@ -478,7 +483,10 @@ func beautifyHTML(code, indent string) (string, error) {
 
 		// Increment indent for opening tags (not self-closing)
 		if !isClosingTag && !isSelfClosing {
-			tagName = strings.ToLower(strings.Fields(tag)[0])
+			// Guard against empty/whitespace tags where Fields returns no elements
+			if fields := strings.Fields(tag); len(fields) > 0 {
+				tagName = strings.ToLower(fields[0])
+			}
 			inTag = true
 			indentLevel++
 		}

@@ -78,6 +78,15 @@ func (h *SynonymHandler) HandleInstantQuery(ctx context.Context, query string) (
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		return &Answer{
+			Type:    AnswerTypeSynonym,
+			Query:   query,
+			Title:   fmt.Sprintf("Synonyms for: %s", word),
+			Content: fmt.Sprintf("No synonyms found for '%s'", word),
+		}, nil
+	}
+
 	var data []struct {
 		Word  string `json:"word"`
 		Score int    `json:"score"`
@@ -184,6 +193,15 @@ func (h *AntonymHandler) HandleInstantQuery(ctx context.Context, query string) (
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return &Answer{
+			Type:    AnswerTypeAntonym,
+			Query:   query,
+			Title:   fmt.Sprintf("Antonyms for: %s", word),
+			Content: fmt.Sprintf("No antonyms found for '%s'", word),
+		}, nil
+	}
 
 	var data []struct {
 		Word  string `json:"word"`
