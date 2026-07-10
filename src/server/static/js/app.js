@@ -2721,6 +2721,8 @@
     window.closeNav = closeNav;
     window.copyToClipboard = copyToClipboard;
     window.dismissAnnouncement = dismissAnnouncement;
+    // Export i18n lookup so the widget IIFE and other IIFEs can call t() globally
+    window.t = t;
 
 })();
 
@@ -2929,29 +2931,25 @@
         return types;
     }
 
-    // Persist the widget list to the server-side cookie via POST.
+    // Persist the widget list to the server-side cookie via AJAX POST.
+    // Uses fetch so drag-and-drop reorder does not navigate away from the page.
     function saveEnabledWidgets(widgets) {
-        var form = document.createElement('form');
-        form.method = 'POST';
-        form.action = '/preferences/widgets';
-        form.style.display = 'none';
+        var params = new URLSearchParams();
         var csrf = document.querySelector('meta[name="csrf-token"]');
         if (csrf) {
-            var csrfInput = document.createElement('input');
-            csrfInput.type = 'hidden';
-            csrfInput.name = 'csrf_token';
-            csrfInput.value = csrf.getAttribute('content');
-            form.appendChild(csrfInput);
+            params.append('csrf_token', csrf.getAttribute('content'));
         }
         widgets.forEach(function(wt) {
-            var input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = 'widget';
-            input.value = wt;
-            form.appendChild(input);
+            params.append('widget', wt);
         });
-        document.body.appendChild(form);
-        form.submit();
+        fetch('/preferences/widgets', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: params.toString(),
+            redirect: 'follow'
+        }).catch(function(e) {
+            console.error('Widget preference save failed:', e);
+        });
     }
 
     function getWidgetSettings(widgetType) {
