@@ -22,6 +22,8 @@ func NewBase64Handler() *Base64Handler {
 			regexp.MustCompile(`(?i)^b64\s+decode[:\s]+(.+)$`),
 			regexp.MustCompile(`(?i)^encode\s+base64[:\s]+(.+)$`),
 			regexp.MustCompile(`(?i)^decode\s+base64[:\s]+(.+)$`),
+			// "base64: text" and "base64 text" shorthand (defaults to encode)
+			regexp.MustCompile(`(?i)^base64[:\s]+(.+)$`),
 		},
 	}
 }

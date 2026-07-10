@@ -51,14 +51,32 @@ func (h *HashHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 			text = matches[1]
 			if strings.HasPrefix(lowerQuery, "md5") {
 				hashType = "md5"
-			} else if strings.HasPrefix(lowerQuery, "sha1") {
-				hashType = "sha1"
-			} else if strings.HasPrefix(lowerQuery, "sha256") {
-				hashType = "sha256"
 			} else if strings.HasPrefix(lowerQuery, "sha512") {
 				hashType = "sha512"
+			} else if strings.HasPrefix(lowerQuery, "sha256") {
+				hashType = "sha256"
+			} else if strings.HasPrefix(lowerQuery, "sha1") {
+				hashType = "sha1"
 			} else {
+				// "hash: ..." prefix — check if captured text names a hash algorithm
 				hashType = "all"
+				lowerText := strings.ToLower(text)
+				for _, algo := range []struct{ prefix, name, trim string }{
+					{"md5 ", "md5", "md5 "},
+					{"md5: ", "md5", "md5: "},
+					{"sha512 ", "sha512", "sha512 "},
+					{"sha512: ", "sha512", "sha512: "},
+					{"sha256 ", "sha256", "sha256 "},
+					{"sha256: ", "sha256", "sha256: "},
+					{"sha1 ", "sha1", "sha1 "},
+					{"sha1: ", "sha1", "sha1: "},
+				} {
+					if strings.HasPrefix(lowerText, algo.prefix) {
+						hashType = algo.name
+						text = text[len(algo.trim):]
+						break
+					}
+				}
 			}
 			break
 		}

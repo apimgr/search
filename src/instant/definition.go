@@ -81,12 +81,8 @@ func (h *DefinitionHandler) HandleInstantQuery(ctx context.Context, query string
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return &Answer{
-			Type:    AnswerTypeDefinition,
-			Query:   query,
-			Title:   fmt.Sprintf("Definition: %s", word),
-			Content: fmt.Sprintf("No definition found for '%s'", word),
-		}, nil
+		// Not found — return nil so the caller treats this as no instant answer
+		return nil, nil
 	}
 
 	var data []struct {
@@ -113,12 +109,8 @@ func (h *DefinitionHandler) HandleInstantQuery(ctx context.Context, query string
 	}
 
 	if len(data) == 0 {
-		return &Answer{
-			Type:    AnswerTypeDefinition,
-			Query:   query,
-			Title:   fmt.Sprintf("Definition: %s", word),
-			Content: fmt.Sprintf("No definition found for '%s'", word),
-		}, nil
+		// No definition — return nil so the caller treats this as no instant answer
+		return nil, nil
 	}
 
 	entry := data[0]

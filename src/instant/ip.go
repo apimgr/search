@@ -26,9 +26,11 @@ func NewIPHandler() *IPHandler {
 			regexp.MustCompile(`(?i)^what\s+is\s+my\s+ip\s*\??$`),
 			regexp.MustCompile(`(?i)^ip\s+address\s*$`),
 			regexp.MustCompile(`(?i)^ip\s+info\s*$`),
+			// bare "ip" or "ip:" with no address — shows local interfaces
+			regexp.MustCompile(`(?i)^ip[:\s]*$`),
 		},
-		// matches "ip 1.2.3.4" — looks up a specific address
-		specificIPPattern: regexp.MustCompile(`(?i)^ip\s+([\d]{1,3}\.[\d]{1,3}\.[\d]{1,3}\.[\d]{1,3})\s*$`),
+		// matches "ip 1.2.3.4" or "ip: 1.2.3.4" — looks up a specific address
+		specificIPPattern: regexp.MustCompile(`(?i)^ip[:\s]+([\d]{1,3}\.[\d]{1,3}\.[\d]{1,3}\.[\d]{1,3})\s*$`),
 		// matches a bare IPv4 address, e.g. "8.8.8.8"
 		bareIPPattern: regexp.MustCompile(`^([\d]{1,3}\.[\d]{1,3}\.[\d]{1,3}\.[\d]{1,3})\s*$`),
 	}

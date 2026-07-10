@@ -4107,11 +4107,9 @@ func TestDefinitionHandlerHandleNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
-	if answer == nil {
-		t.Fatal("HandleInstantQuery() returned nil")
-	}
-	if !contains(answer.Content, "No definition found") {
-		t.Error("Content should indicate no definition found")
+	// 404 from the API means no instant answer (nil, nil) — not a "no definition found" message
+	if answer != nil {
+		t.Fatalf("HandleInstantQuery() should return nil for 404, got %+v", answer)
 	}
 }
 
@@ -4133,11 +4131,9 @@ func TestDefinitionHandlerHandleEmptyData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
-	if answer == nil {
-		t.Fatal("HandleInstantQuery() returned nil")
-	}
-	if !contains(answer.Content, "No definition found") {
-		t.Error("Content should indicate no definition found for empty data")
+	// Empty data from the API means no instant answer (nil, nil) — not a "no definition found" message
+	if answer != nil {
+		t.Fatalf("HandleInstantQuery() should return nil for empty data, got %+v", answer)
 	}
 }
 

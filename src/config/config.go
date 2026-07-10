@@ -25,8 +25,8 @@ var (
 	Version   = "dev"
 	CommitID  = "unknown"
 	BuildDate = "unknown"
-	// Default, can be overridden via -ldflags
-	OfficialSite = "https://search.apimgr.us"
+	// Empty default — real value injected at build time via -ldflags from site.txt
+	OfficialSite = ""
 )
 
 // debugOverride is set by the --debug CLI flag before config is loaded.

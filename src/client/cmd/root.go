@@ -34,8 +34,8 @@ var (
 	Version     = "dev"
 	CommitID    = "unknown"
 	BuildDate   = "unknown"
-	// Default server URL
-	OfficialSite = "https://search.apimgr.us"
+	// Empty default — real value injected at build time via -ldflags from site.txt
+	OfficialSite = ""
 
 	cfgFile string
 	server  string
