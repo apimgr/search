@@ -2702,21 +2702,52 @@ func TestIPHandlerSpecificIP(t *testing.T) {
 
 func TestIPHandlerHandleContent(t *testing.T) {
 	h := NewIPHandler()
-	ctx := context.Background()
 
-	answer, err := h.HandleInstantQuery(ctx, "my ip")
-	if err != nil {
-		t.Fatalf("HandleInstantQuery() error = %v", err)
+	tests := []struct {
+		name      string
+		clientIP  string
+		wantInIP  bool
+	}{
+		{
+			name:     "no client ip in context",
+			clientIP: "",
+			wantInIP: false,
+		},
+		{
+			name:     "valid client ip injected",
+			clientIP: "1.2.3.4",
+			wantInIP: true,
+		},
 	}
-	if answer == nil {
-		t.Fatal("HandleInstantQuery() returned nil")
-	}
-	// Should contain IP info
-	if !strings.Contains(answer.Content, "IP") {
-		t.Error("Content should mention IP")
-	}
-	if answer.Data["local_ips"] == nil {
-		t.Error("Data should contain local_ips")
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			if tt.clientIP != "" {
+				ctx = WithClientIP(ctx, tt.clientIP)
+			}
+
+			answer, err := h.HandleInstantQuery(ctx, "my ip")
+			if err != nil {
+				t.Fatalf("HandleInstantQuery() error = %v", err)
+			}
+			if answer == nil {
+				t.Fatal("HandleInstantQuery() returned nil")
+			}
+			// Content must always mention IP context
+			if !strings.Contains(answer.Content, "IP") {
+				t.Error("Content should mention IP")
+			}
+			// Data must always contain the "ip" key
+			if _, ok := answer.Data["ip"]; !ok {
+				t.Error("Data should contain key \"ip\"")
+			}
+			if tt.wantInIP {
+				if answer.Data["ip"] != tt.clientIP {
+					t.Errorf("Data[\"ip\"] = %v, want %v", answer.Data["ip"], tt.clientIP)
+				}
+			}
+		})
 	}
 }
 

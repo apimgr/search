@@ -1073,6 +1073,10 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 
+	// Inject client IP so instant handlers (e.g. "what is my ip") can return
+	// the requester's address rather than the server's own addresses.
+	ctx = instant.WithClientIP(ctx, getClientIPSimple(r))
+
 	// Check for instant answers first (only for general category)
 	var instantAnswer *instant.Answer
 	if category == "general" && s.instantManager != nil {

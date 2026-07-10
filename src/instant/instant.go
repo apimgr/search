@@ -6,6 +6,26 @@ import (
 	"strings"
 )
 
+// clientIPKeyType is an unexported type for context keys to prevent collisions.
+type clientIPKeyType struct{}
+
+// ClientIPKey is the context key used to pass the client's IP address to instant handlers.
+var ClientIPKey = clientIPKeyType{}
+
+// WithClientIP returns a new context with the client IP stored under ClientIPKey.
+func WithClientIP(ctx context.Context, ip string) context.Context {
+	return context.WithValue(ctx, ClientIPKey, ip)
+}
+
+// ClientIPFromContext retrieves the client IP stored by WithClientIP.
+// Returns empty string if not set.
+func ClientIPFromContext(ctx context.Context) string {
+	if ip, ok := ctx.Value(ClientIPKey).(string); ok {
+		return ip
+	}
+	return ""
+}
+
 // AnswerType represents the type of instant answer
 type AnswerType string
 
@@ -96,7 +116,10 @@ func NewManager() *Manager {
 		handlers: make([]Handler, 0),
 	}
 
-	// Register all handlers
+	// Register all handlers — order matters: more specific handlers before broad ones.
+	// IPHandler must precede DefinitionHandler because "what is my ip?" matches both;
+	// IPHandler handles it correctly while DefinitionHandler would waste an HTTP round-trip.
+	m.Register(NewIPHandler())
 	m.Register(NewDefinitionHandler())
 	m.Register(NewDictionaryHandler())
 	m.Register(NewSynonymHandler())
@@ -114,7 +137,6 @@ func NewManager() *Manager {
 	m.Register(NewUUIDHandler())
 	m.Register(NewRandomHandler())
 	m.Register(NewPasswordHandler())
-	m.Register(NewIPHandler())
 	m.Register(NewQRHandler())
 	m.Register(NewASCIIHandler())
 	m.Register(NewCaseHandler())
@@ -171,13 +193,20 @@ func (m *Manager) Register(h Handler) {
 	m.handlers = append(m.handlers, h)
 }
 
-// Process checks if query matches any instant answer and returns the result
+// Process checks if query matches any instant answer and returns the result.
+// If a handler claims it can handle the query but returns (nil, nil), the next
+// matching handler is tried — this lets specific handlers (e.g. IPHandler) take
+// priority over broad ones (e.g. DefinitionHandler's "what is …" pattern).
 func (m *Manager) Process(ctx context.Context, query string) (*Answer, error) {
 	query = strings.TrimSpace(query)
 
 	for _, handler := range m.handlers {
 		if handler.CanHandle(query) {
-			return handler.HandleInstantQuery(ctx, query)
+			answer, err := handler.HandleInstantQuery(ctx, query)
+			if err != nil || answer != nil {
+				return answer, err
+			}
+			// handler matched but produced no answer — try next handler
 		}
 	}
 

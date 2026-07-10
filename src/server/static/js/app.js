@@ -4446,11 +4446,19 @@
     };
 
     // Initialize widgets on DOM ready — widget shells are server-rendered.
-    document.addEventListener('DOMContentLoaded', function() {
+    // Script loads at bottom of <body>, so DOMContentLoaded may have already fired;
+    // fall through to immediate init when readyState is not 'loading'.
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            if (document.getElementById('widget-grid')) {
+                WidgetManager.init();
+            }
+        });
+    } else {
         if (document.getElementById('widget-grid')) {
             WidgetManager.init();
         }
-    });
+    }
 
     window.WidgetManager = WidgetManager;
 })();
@@ -4616,10 +4624,15 @@
         });
     }
 
-    document.addEventListener('DOMContentLoaded', function() {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            applyPreferences();
+            initBangSuggestions();
+        });
+    } else {
         applyPreferences();
         initBangSuggestions();
-    });
+    }
 
     window.SearchBangs = {
         getCustomBangs: getCustomBangs,
@@ -4839,8 +4852,13 @@
         touchStartX = 0;
     }
 
-    // Initialize on DOM ready
-    document.addEventListener('DOMContentLoaded', initVideoPreview);
+    // Initialize on DOM ready — script loads at bottom of <body> so DOMContentLoaded
+    // may have already fired; fall through to immediate init when readyState is not 'loading'.
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initVideoPreview);
+    } else {
+        initVideoPreview();
+    }
 
     // Expose for external use
     window.VideoPreview = {
@@ -5178,7 +5196,11 @@
         });
     }
 
-    document.addEventListener('DOMContentLoaded', init);
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
 
     // Expose for external use
     window.AdvancedSearch = {
@@ -5371,7 +5393,11 @@
         }
     }
 
-    document.addEventListener('DOMContentLoaded', init);
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
 
     // Expose for external use
     window.RelatedSearches = {

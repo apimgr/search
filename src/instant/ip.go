@@ -62,42 +62,40 @@ func (h *IPHandler) HandleInstantQuery(ctx context.Context, query string) (*Answ
 	if m := h.bareIPPattern.FindStringSubmatch(query); len(m) == 2 {
 		return h.lookupSpecificIP(query, m[1])
 	}
-	return h.handleMyIP(query)
+	return h.handleMyIP(ctx, query)
 }
 
-// handleMyIP returns the server's local network interfaces.
-func (h *IPHandler) handleMyIP(query string) (*Answer, error) {
-	var ips []string
-	addrs, err := net.InterfaceAddrs()
-	if err == nil {
-		for _, addr := range addrs {
-			if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-				if ipnet.IP.To4() != nil {
-					ips = append(ips, ipnet.IP.String())
-				}
-			}
-		}
-	}
+// handleMyIP returns the client's public IP address as seen by the server.
+// The client IP is extracted from the HTTP request context via WithClientIP.
+func (h *IPHandler) handleMyIP(ctx context.Context, query string) (*Answer, error) {
+	rawClientIP := ClientIPFromContext(ctx)
 
 	var content strings.Builder
-	content.WriteString("<strong>Local IP Addresses:</strong><br>")
-	if len(ips) > 0 {
-		for _, ip := range ips {
-			content.WriteString(fmt.Sprintf("• %s<br>", ip))
+	var safeIP string
+
+	// Parse through net.ParseIP so only a well-formed IP literal reaches HTML output.
+	// This also strips any header-injection attempts before they reach the template.
+	if rawClientIP != "" {
+		if parsed := net.ParseIP(rawClientIP); parsed != nil {
+			// .String() always returns a canonical IP literal — safe to interpolate.
+			safeIP = parsed.String()
+			content.WriteString(fmt.Sprintf("<strong>Your IP Address:</strong> %s<br>", safeIP))
+			content.WriteString(fmt.Sprintf("<strong>Type:</strong> %s<br>", ipClassification(parsed)))
+		} else {
+			content.WriteString("<em>Unable to determine your IP address</em><br>")
 		}
 	} else {
-		content.WriteString("Unable to determine local IP<br>")
+		content.WriteString("<em>Unable to determine your IP address</em><br>")
 	}
-	content.WriteString("<br><em>Note: Your public IP is visible to websites you visit</em>")
+
+	data := map[string]interface{}{"ip": safeIP}
 
 	return &Answer{
 		Type:    AnswerTypeIP,
 		Query:   query,
-		Title:   "IP Address Information",
+		Title:   "Your IP Address",
 		Content: content.String(),
-		Data: map[string]interface{}{
-			"local_ips": ips,
-		},
+		Data:    data,
 	}, nil
 }
 

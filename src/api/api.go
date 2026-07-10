@@ -1195,6 +1195,9 @@ func (h *Handler) handleInstantAnswer(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
+	// Inject client IP so IP-related instant handlers return the requester's address.
+	ctx = instant.WithClientIP(ctx, getClientIP(r))
+
 	answer, err := h.instantManager.Process(ctx, query)
 	if err != nil {
 		h.errorResponse(w, http.StatusInternalServerError, "Failed to process instant answer", err.Error())
