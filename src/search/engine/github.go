@@ -89,7 +89,12 @@ func (e *GitHub) Search(ctx context.Context, query *model.Query) ([]model.Result
 			break
 		}
 
-		content := item.Description
+		// Truncate long repository descriptions before adding metadata suffixes.
+		desc := item.Description
+		if len(desc) > 200 {
+			desc = desc[:197] + "..."
+		}
+		content := desc
 		if item.Language != "" {
 			content = fmt.Sprintf("[%s] %s", item.Language, content)
 		}

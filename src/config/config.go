@@ -1657,7 +1657,7 @@ func DefaultConfig() *Config {
 			DefaultCategories: []string{"general"},
 			ResultsPerPage:    10,
 			Timeout:           10,
-			MaxConcurrent:     5,
+			MaxConcurrent:     7,
 			Bangs: BangsConfig{
 				Enabled:       true,
 				ProxyRequests: true,

@@ -21,6 +21,7 @@ import (
 	"github.com/apimgr/search/src/alert"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/direct"
+	"github.com/apimgr/search/src/geoip"
 	"github.com/apimgr/search/src/instant"
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
@@ -55,6 +56,7 @@ type Handler struct {
 	relatedSearches *search.RelatedSearches
 	// Per AI.md PART 32: Tor service for health status
 	torService   *service.TorService
+	geoipLookup  *geoip.Lookup
 	startTime    time.Time
 	alertManager *alert.Manager
 	// validate is the input validator per AI.md PART 3 requirement
@@ -100,6 +102,12 @@ func (h *Handler) SetTorService(ts *service.TorService) {
 
 func (h *Handler) SetAlertManager(am *alert.Manager) {
 	h.alertManager = am
+}
+
+// SetGeoIPLookup sets the GeoIP lookup service for the API handler.
+// Instant answer handlers use it to enrich IP responses with geo data.
+func (h *Handler) SetGeoIPLookup(g *geoip.Lookup) {
+	h.geoipLookup = g
 }
 
 // RegisterRoutes registers API routes
@@ -1197,6 +1205,9 @@ func (h *Handler) handleInstantAnswer(w http.ResponseWriter, r *http.Request) {
 
 	// Inject client IP so IP-related instant handlers return the requester's address.
 	ctx = instant.WithClientIP(ctx, getClientIP(r))
+
+	// Inject GeoIP lookup so instant handlers can enrich IP answers with geo data.
+	ctx = instant.WithGeoIPLookup(ctx, h.geoipLookup)
 
 	answer, err := h.instantManager.Process(ctx, query)
 	if err != nil {

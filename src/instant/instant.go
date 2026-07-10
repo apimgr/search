@@ -4,10 +4,15 @@ import (
 	"context"
 	"regexp"
 	"strings"
+
+	"github.com/apimgr/search/src/geoip"
 )
 
 // clientIPKeyType is an unexported type for context keys to prevent collisions.
 type clientIPKeyType struct{}
+
+// geoIPLookupKeyType is an unexported type for the GeoIP context key.
+type geoIPLookupKeyType struct{}
 
 // ClientIPKey is the context key used to pass the client's IP address to instant handlers.
 var ClientIPKey = clientIPKeyType{}
@@ -24,6 +29,24 @@ func ClientIPFromContext(ctx context.Context) string {
 		return ip
 	}
 	return ""
+}
+
+// geoIPLookupKey is the context key used to pass a *geoip.Lookup to instant handlers.
+var geoIPLookupKey = geoIPLookupKeyType{}
+
+// WithGeoIPLookup returns a new context carrying the GeoIP lookup service.
+// Pass nil to clear a previously set lookup.
+func WithGeoIPLookup(ctx context.Context, lookup *geoip.Lookup) context.Context {
+	return context.WithValue(ctx, geoIPLookupKey, lookup)
+}
+
+// GeoIPLookupFromContext retrieves the *geoip.Lookup stored by WithGeoIPLookup.
+// Returns nil when no lookup is present or GeoIP is not loaded.
+func GeoIPLookupFromContext(ctx context.Context) *geoip.Lookup {
+	if l, ok := ctx.Value(geoIPLookupKey).(*geoip.Lookup); ok && l != nil && l.IsLoaded() {
+		return l
+	}
+	return nil
 }
 
 // AnswerType represents the type of instant answer

@@ -180,7 +180,8 @@ func (a *Aggregator) Search(ctx context.Context, query *model.Query) (*model.Sea
 		a.recordEngineSuccess(result.engine, result.latency)
 		if len(result.results) > 0 {
 			searchResults.AddResults(result.results)
-			usedEngines = append(usedEngines, result.engine.Name())
+			// Use the human-readable display name (e.g. "Hacker News" not "hackernews").
+			usedEngines = append(usedEngines, result.engine.DisplayName())
 		}
 	}
 

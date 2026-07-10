@@ -96,6 +96,9 @@ func (e *DuckDuckGo) searchGeneral(ctx context.Context, query *model.Query) ([]m
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusForbidden {
+		return nil, fmt.Errorf("duckduckgo rate-limited: status %d", resp.StatusCode)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("duckduckgo returned status %d", resp.StatusCode)
 	}
@@ -105,7 +108,15 @@ func (e *DuckDuckGo) searchGeneral(ctx context.Context, query *model.Query) ([]m
 		return nil, err
 	}
 
-	return e.parseWebResults(string(respBody), query)
+	bodyStr := string(respBody)
+	// Detect CAPTCHA / bot-challenge pages — DDG returns these from VPS IPs.
+	// Treating them as errors lets the circuit-breaker pause DDG and surface
+	// other engines (Brave, Startpage, Mojeek) instead of silently returning 0 results.
+	if isDDGBotChallenge(bodyStr) {
+		return nil, fmt.Errorf("duckduckgo bot challenge detected")
+	}
+
+	return e.parseWebResults(bodyStr, query)
 }
 
 var (
@@ -189,6 +200,28 @@ func ddgStripHTML(s string) string {
 	s = strings.ReplaceAll(s, "&#x2F;", "/")
 	s = strings.ReplaceAll(s, "&nbsp;", " ")
 	return strings.TrimSpace(s)
+}
+
+// isDDGBotChallenge returns true when DDG returned a CAPTCHA or bot-detection
+// page instead of real search results. We treat this as a transient failure so
+// the circuit-breaker can pause DDG and let other engines take over.
+func isDDGBotChallenge(body string) bool {
+	lower := strings.ToLower(body)
+	markers := []string{
+		"captcha",
+		"are you a human",
+		"i'm not a robot",
+		"please verify",
+		"access denied",
+		"robot check",
+		"automated access",
+	}
+	for _, m := range markers {
+		if strings.Contains(lower, m) {
+			return true
+		}
+	}
+	return false
 }
 
 // searchImages performs an image search using DuckDuckGo images

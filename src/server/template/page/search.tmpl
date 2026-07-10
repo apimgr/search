@@ -64,7 +64,7 @@
         <span class="search-engines">{{if eq (len .Engines) 1}}{{t "search.engines_used_one" (len .Engines) (join .Engines ", ")}}{{else}}{{t "search.engines_used_other" (len .Engines) (join .Engines ", ")}}{{end}}</span>
         <span class="search-info-sep">·</span>
         {{end}}
-        <span class="search-time">{{t "search.search_time_compact" (printf "%.2f" .SearchTime)}}</span>
+        <span class="search-time">{{humanDuration .SearchTime}}</span>
     </div>
 
     {{if eq .Category "images"}}

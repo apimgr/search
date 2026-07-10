@@ -140,6 +140,17 @@ func (tr *TemplateRenderer) newFuncMap(i18nFuncs template.FuncMap) template.Func
 		"urlquery": func(s string) string {
 			return url.QueryEscape(s)
 		},
+		// humanDuration formats a float64 seconds value as a human-readable duration.
+		// Shows milliseconds for sub-second values, seconds for longer durations.
+		"humanDuration": func(secs float64) string {
+			if secs < 0.001 {
+				return "< 1ms"
+			}
+			if secs < 1.0 {
+				return fmt.Sprintf("%dms", int(secs*1000))
+			}
+			return fmt.Sprintf("%.1fs", secs)
+		},
 		"formatVideoDuration": formatVideoDuration,
 		"formatViewCount":     formatViewCount,
 		// Use a numeric date format so search results do not hardcode English month names.

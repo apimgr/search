@@ -455,6 +455,7 @@ func NewServer(cfg *config.Config) *Server {
 	relatedSearches := search.NewRelatedSearches()
 	s.apiHandler.SetRelatedSearches(relatedSearches)
 	s.apiHandler.SetAlertManager(alertMgr)
+	s.apiHandler.SetGeoIPLookup(s.geoipLookup)
 
 	// Initialize scheduler - ALWAYS RUNNING per AI.md PART 19
 	// Use server.db for persistent task state if available
@@ -1076,6 +1077,10 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	// Inject client IP so instant handlers (e.g. "what is my ip") can return
 	// the requester's address rather than the server's own addresses.
 	ctx = instant.WithClientIP(ctx, getClientIPSimple(r))
+
+	// Inject GeoIP lookup so instant handlers can enrich IP answers with
+	// country, city, ASN, and timezone data when the MMDB is loaded.
+	ctx = instant.WithGeoIPLookup(ctx, s.geoipLookup)
 
 	// Check for instant answers first (only for general category)
 	var instantAnswer *instant.Answer
