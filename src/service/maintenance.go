@@ -162,11 +162,17 @@ func (m *MaintenanceService) initializeHealthStatus() {
 	}
 }
 
-// healthMonitor continuously monitors system health
+// healthMonitor continuously monitors system health using the default 30-second interval.
 func (m *MaintenanceService) healthMonitor() {
+	m.healthMonitorWithInterval(30 * time.Second)
+}
+
+// healthMonitorWithInterval monitors system health at a configurable interval.
+// Extracted from healthMonitor to allow fast-tick testing without waiting 30 seconds.
+func (m *MaintenanceService) healthMonitorWithInterval(interval time.Duration) {
 	defer close(m.done)
 
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	// Initial check — but only if context isn't already cancelled

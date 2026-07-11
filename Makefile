@@ -221,7 +221,7 @@ test:
 		-e CGO_ENABLED=0 \
 		-e GOFLAGS=-buildvcs=false \
 		casjaysdev/go:latest \
-		ash -c 'set -e; PKGS=$$(go list ./... | grep -v "/src/service"); go mod download; go test -v -cover -coverprofile=/tmp/covout/coverage.out $$PKGS; COVERAGE=$$(go tool cover -func=/tmp/covout/coverage.out | grep total | awk "{print \$$3}" | sed "s/%//"); echo "Coverage: $$COVERAGE%"; if [ $$(echo "$$COVERAGE < 80" | bc -l) -eq 1 ]; then echo "ERROR: Coverage is $$COVERAGE%, must be >= 80%"; exit 1; fi'
+		ash -c 'set -e; apk add --no-cache tor >/dev/null 2>&1 || true; go mod download; go test -v -cover -coverprofile=/tmp/covout/coverage.out ./...; COVERAGE=$$(go tool cover -func=/tmp/covout/coverage.out | grep total | awk "{print \$$3}" | sed "s/%//"); echo "Coverage: $$COVERAGE%"; if [ $$(echo "$$COVERAGE < 80" | bc -l) -eq 1 ]; then echo "ERROR: Coverage is $$COVERAGE%, must be >= 80%"; exit 1; fi'
 	@echo "Tests complete"
 
 # =============================================================================

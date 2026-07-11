@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"strconv"
 	"syscall"
 )
 
@@ -90,6 +91,54 @@ func execElevated() error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// detectPrivilegeEscalationMethod detects available privilege escalation tool.
+// Per AI.md PART 24: Support sudo, doas, pkexec in that order.
+func detectPrivilegeEscalationMethod() string {
+	if os.Geteuid() == 0 {
+		return "none"
+	}
+	if _, err := exec.LookPath("sudo"); err == nil {
+		return "sudo"
+	}
+	if _, err := exec.LookPath("doas"); err == nil {
+		return "doas"
+	}
+	if _, err := exec.LookPath("pkexec"); err == nil {
+		return "pkexec"
+	}
+	return "none"
+}
+
+// DropPrivileges drops from root to the specified user.
+// Per AI.md PART 8: Step 8g - DROP PRIVILEGES to search user.
+func DropPrivileges(userName string) error {
+	if os.Geteuid() != 0 {
+		return nil
+	}
+	u, err := user.Lookup(userName)
+	if err != nil {
+		return fmt.Errorf("failed to lookup user %s: %w", userName, err)
+	}
+	uid, err := strconv.Atoi(u.Uid)
+	if err != nil {
+		return fmt.Errorf("invalid UID for user %s: %w", userName, err)
+	}
+	gid, err := strconv.Atoi(u.Gid)
+	if err != nil {
+		return fmt.Errorf("invalid GID for user %s: %w", userName, err)
+	}
+	return dropPrivilegesUnix(uid, gid)
+}
+
+// VerifyPrivilegesDropped verifies that privileges have been dropped.
+// Per AI.md PART 8: Step 8h - Verify privilege drop succeeded.
+func VerifyPrivilegesDropped() error {
+	if os.Geteuid() == 0 {
+		return fmt.Errorf("privilege drop failed: still running as root (euid=0)")
+	}
+	return nil
 }
 
 // CanEscalate checks if the current user can escalate privileges.

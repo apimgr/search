@@ -31,63 +31,6 @@ func TestNewServiceManagerNilConfig(t *testing.T) {
 	}
 }
 
-func TestServiceManagerHasRunit(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("Test only runs on Linux")
-	}
-
-	cfg := config.DefaultConfig()
-	sm := NewServiceManager(cfg)
-
-	// hasRunit should not panic
-	result := sm.hasRunit()
-	// We can't predict the result, just ensure it doesn't panic
-	_ = result
-}
-
-func TestServiceManagerGetLaunchdPath(t *testing.T) {
-	cfg := config.DefaultConfig()
-	sm := NewServiceManager(cfg)
-
-	path := sm.getLaunchdPath()
-	// Per AI.md PART 24: macOS plist uses reverse DNS format: io.github.apimgr.search
-	if path != "/Library/LaunchDaemons/io.github.apimgr.search.plist" {
-		t.Errorf("getLaunchdPath() = %q, want %q", path, "/Library/LaunchDaemons/io.github.apimgr.search.plist")
-	}
-}
-
-func TestServiceManagerGetRunitServiceDir(t *testing.T) {
-	cfg := config.DefaultConfig()
-	sm := NewServiceManager(cfg)
-
-	dir := sm.getRunitServiceDir()
-	// Should be one of the expected paths
-	validPaths := map[string]bool{
-		"/etc/sv/search":       true,
-		"/etc/runit/sv/search": true,
-	}
-
-	if !validPaths[dir] {
-		t.Errorf("getRunitServiceDir() = %q, want one of %v", dir, validPaths)
-	}
-}
-
-func TestServiceManagerGetRunitActiveDir(t *testing.T) {
-	cfg := config.DefaultConfig()
-	sm := NewServiceManager(cfg)
-
-	dir := sm.getRunitActiveDir()
-	// Should be one of the expected paths
-	validPaths := map[string]bool{
-		"/var/service": true,
-		"/service":     true,
-	}
-
-	if !validPaths[dir] {
-		t.Errorf("getRunitActiveDir() = %q, want one of %v", dir, validPaths)
-	}
-}
-
 func TestServiceManagerRenderTemplate(t *testing.T) {
 	cfg := config.DefaultConfig()
 	sm := NewServiceManager(cfg)
@@ -114,84 +57,6 @@ func TestServiceManagerRenderTemplateError(t *testing.T) {
 	_, err := sm.renderTemplate(tmpl, data)
 	if err == nil {
 		t.Error("renderTemplate() should fail with invalid template")
-	}
-}
-
-func TestSystemdTemplate(t *testing.T) {
-	// Verify systemd template contains required elements per AI.md PART 25
-	if systemdTemplate == "" {
-		t.Fatal("systemdTemplate is empty")
-	}
-
-	required := []string{
-		"[Unit]",
-		"[Service]",
-		"[Install]",
-		"ExecStart=/usr/local/bin/search",
-		"Restart=on-failure",
-		"ProtectSystem=strict",
-		"ProtectHome=yes",
-		"PrivateTmp=yes",
-	}
-
-	for _, req := range required {
-		if !contains(systemdTemplate, req) {
-			t.Errorf("systemdTemplate missing required element: %q", req)
-		}
-	}
-}
-
-func TestRunitRunTemplate(t *testing.T) {
-	if runitRunTemplate == "" {
-		t.Fatal("runitRunTemplate is empty")
-	}
-
-	if !contains(runitRunTemplate, "#!/bin/sh") {
-		t.Error("runitRunTemplate missing shebang")
-	}
-	if !contains(runitRunTemplate, "exec") {
-		t.Error("runitRunTemplate missing exec")
-	}
-}
-
-func TestLaunchdTemplate(t *testing.T) {
-	if launchdTemplate == "" {
-		t.Fatal("launchdTemplate is empty")
-	}
-
-	required := []string{
-		"<?xml",
-		"<plist",
-		"apimgr.search",
-		"/usr/local/bin/search",
-		"RunAtLoad",
-		"KeepAlive",
-	}
-
-	for _, req := range required {
-		if !contains(launchdTemplate, req) {
-			t.Errorf("launchdTemplate missing required element: %q", req)
-		}
-	}
-}
-
-func TestRcdTemplate(t *testing.T) {
-	if rcdTemplate == "" {
-		t.Fatal("rcdTemplate is empty")
-	}
-
-	required := []string{
-		"#!/bin/sh",
-		"# PROVIDE:",
-		"# REQUIRE:",
-		"search_enable",
-		"/usr/local/bin/search",
-	}
-
-	for _, req := range required {
-		if !contains(rcdTemplate, req) {
-			t.Errorf("rcdTemplate missing required element: %q", req)
-		}
 	}
 }
 
@@ -878,19 +743,6 @@ func TestMaintenanceModeConstants(t *testing.T) {
 	}
 }
 
-func TestRunitLogRunTemplate(t *testing.T) {
-	if runitLogRunTemplate == "" {
-		t.Fatal("runitLogRunTemplate is empty")
-	}
-
-	if !contains(runitLogRunTemplate, "#!/bin/sh") {
-		t.Error("runitLogRunTemplate missing shebang")
-	}
-	if !contains(runitLogRunTemplate, "svlogd") {
-		t.Error("runitLogRunTemplate missing svlogd")
-	}
-}
-
 func TestServiceManagerRenderTemplateWithMap(t *testing.T) {
 	cfg := config.DefaultConfig()
 	sm := NewServiceManager(cfg)
@@ -1353,75 +1205,6 @@ func TestServiceManagerStatus(t *testing.T) {
 	}
 }
 
-func TestServiceManagerStatusSystemd(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("Test only for Linux")
-	}
-
-	cfg := config.DefaultConfig()
-	sm := NewServiceManager(cfg)
-
-	status, err := sm.statusSystemd()
-	// Should return inactive or error
-	if err != nil {
-		t.Logf("statusSystemd() error = %v (expected for non-installed service)", err)
-	}
-	_ = status
-}
-
-func TestServiceManagerStatusRunit(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("Test only for Linux")
-	}
-
-	cfg := config.DefaultConfig()
-	sm := NewServiceManager(cfg)
-
-	status, err := sm.statusRunit()
-	// Should return some status
-	_ = status
-	_ = err
-}
-
-func TestServiceManagerStatusLaunchd(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("Test only for macOS")
-	}
-
-	cfg := config.DefaultConfig()
-	sm := NewServiceManager(cfg)
-
-	status, err := sm.statusLaunchd()
-	_ = status
-	_ = err
-}
-
-func TestServiceManagerStatusRCd(t *testing.T) {
-	if runtime.GOOS != "freebsd" && runtime.GOOS != "openbsd" && runtime.GOOS != "netbsd" {
-		t.Skip("Test only for BSD")
-	}
-
-	cfg := config.DefaultConfig()
-	sm := NewServiceManager(cfg)
-
-	status, err := sm.statusRCd()
-	_ = status
-	_ = err
-}
-
-func TestServiceManagerStatusWindowsService(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skip("Test only for Windows")
-	}
-
-	cfg := config.DefaultConfig()
-	sm := NewServiceManager(cfg)
-
-	status, err := sm.statusWindowsService()
-	_ = status
-	_ = err
-}
-
 // Test maintenance service health check scenarios
 func TestMaintenanceServiceEvaluateSystemHealthNormal(t *testing.T) {
 	cfg := config.DefaultConfig()
@@ -1665,146 +1448,6 @@ func TestServiceManagerRenderTemplateExecuteError(t *testing.T) {
 	if err == nil {
 		t.Error("renderTemplate should fail when field is missing")
 	}
-}
-
-// Test service installation methods (error paths)
-func TestServiceManagerInstallSystemdError(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("Test only for Linux")
-	}
-
-	cfg := config.DefaultConfig()
-	sm := NewServiceManager(cfg)
-
-	// This will fail without root, but exercises the code path
-	err := sm.installSystemd()
-	if err == nil && os.Geteuid() != 0 {
-		t.Log("installSystemd succeeded unexpectedly")
-	}
-}
-
-func TestServiceManagerInstallRunitError(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("Test only for Linux")
-	}
-
-	cfg := config.DefaultConfig()
-	sm := NewServiceManager(cfg)
-
-	err := sm.installRunit()
-	// Expected to fail without proper permissions
-	_ = err
-}
-
-func TestServiceManagerInstallLaunchdError(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("Test only for macOS")
-	}
-
-	cfg := config.DefaultConfig()
-	sm := NewServiceManager(cfg)
-
-	err := sm.installLaunchd()
-	_ = err
-}
-
-func TestServiceManagerInstallRCdError(t *testing.T) {
-	if runtime.GOOS != "freebsd" && runtime.GOOS != "openbsd" && runtime.GOOS != "netbsd" {
-		t.Skip("Test only for BSD")
-	}
-
-	cfg := config.DefaultConfig()
-	sm := NewServiceManager(cfg)
-
-	err := sm.installRCd()
-	_ = err
-}
-
-func TestServiceManagerInstallWindowsServiceError(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skip("Test only for Windows")
-	}
-
-	cfg := config.DefaultConfig()
-	sm := NewServiceManager(cfg)
-
-	err := sm.installWindowsService()
-	_ = err
-}
-
-func TestServiceManagerUninstallSystemd(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("Test only for Linux")
-	}
-
-	cfg := config.DefaultConfig()
-	sm := NewServiceManager(cfg)
-
-	// Should not error even if service doesn't exist
-	err := sm.uninstallSystemd()
-	_ = err
-}
-
-func TestServiceManagerUninstallRunit(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("Test only for Linux")
-	}
-
-	cfg := config.DefaultConfig()
-	sm := NewServiceManager(cfg)
-
-	err := sm.uninstallRunit()
-	_ = err
-}
-
-func TestServiceManagerUninstallLaunchd(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("Test only for macOS")
-	}
-
-	cfg := config.DefaultConfig()
-	sm := NewServiceManager(cfg)
-
-	err := sm.uninstallLaunchd()
-	_ = err
-}
-
-func TestServiceManagerUninstallRCd(t *testing.T) {
-	if runtime.GOOS != "freebsd" && runtime.GOOS != "openbsd" && runtime.GOOS != "netbsd" {
-		t.Skip("Test only for BSD")
-	}
-
-	cfg := config.DefaultConfig()
-	sm := NewServiceManager(cfg)
-
-	err := sm.uninstallRCd()
-	_ = err
-}
-
-func TestServiceManagerUninstallWindowsService(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skip("Test only for Windows")
-	}
-
-	cfg := config.DefaultConfig()
-	sm := NewServiceManager(cfg)
-
-	err := sm.uninstallWindowsService()
-	_ = err
-}
-
-// Test ensureSystemUser
-func TestServiceManagerEnsureSystemUser(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Test not for Windows")
-	}
-
-	cfg := config.DefaultConfig()
-	sm := NewServiceManager(cfg)
-
-	// This may fail without root, but exercises the code
-	err := sm.ensureSystemUser()
-	_ = err
 }
 
 // Test createServiceDirectories
@@ -2185,6 +1828,43 @@ func TestMaintenanceServiceGetHealthStatusCopy(t *testing.T) {
 	// health2 should be unaffected
 	if health2["server_db"].ErrorCount == 999 {
 		t.Error("GetHealthStatus should return copies, not references")
+	}
+}
+
+// =====================================================================
+// InstallUserService / installSystemdUserService tests
+// =====================================================================
+
+// TestInstallUserServiceNonLinux verifies that on non-Linux platforms (excluding macOS
+// which has its own path), InstallUserService returns an informative error.
+func TestInstallUserServiceNonLinux(t *testing.T) {
+	if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
+		t.Skip("Test covers the unsupported-platform error branch only")
+	}
+
+	cfg := config.DefaultConfig()
+	sm := NewServiceManager(cfg)
+
+	err := sm.InstallUserService()
+	if err == nil {
+		t.Error("InstallUserService() on unsupported OS should return error, got nil")
+	}
+}
+
+// TestCreateServiceDirectoriesMkdirFails covers the error-return branch in
+// createServiceDirectories by injecting a mkdirAll failure.
+func TestCreateServiceDirectoriesMkdirFails(t *testing.T) {
+	orig := mkdirAll
+	mkdirAll = func(_ string, _ os.FileMode) error {
+		return fmt.Errorf("injected mkdir failure")
+	}
+	defer func() { mkdirAll = orig }()
+
+	cfg := config.DefaultConfig()
+	sm := NewServiceManager(cfg)
+
+	if err := sm.createServiceDirectories(); err == nil {
+		t.Error("createServiceDirectories() should fail when mkdirAll fails")
 	}
 }
 

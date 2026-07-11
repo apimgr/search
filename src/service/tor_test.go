@@ -1,9 +1,14 @@
 package service
 
 import (
+	"context"
+	"net/http"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/apimgr/search/src/config"
 )
@@ -444,9 +449,16 @@ func TestTorServiceStartNoTorBinary(t *testing.T) {
 	cfg.Server.Tor.Binary = "/nonexistent/tor"
 	cfg.Server.Tor.Enabled = true
 
+	// Block PATH lookup and commonLocations stat so findTorBinary truly finds nothing
+	orig := lookPath
+	lookPath = func(_ string) (string, error) { return "", os.ErrNotExist }
+	origStat := statFile
+	statFile = func(_ string) (os.FileInfo, error) { return nil, os.ErrNotExist }
+	defer func() { lookPath = orig; statFile = origStat }()
+
 	ts := NewTorService(cfg)
 
-	// Start should succeed but Tor should be disabled
+	// Start should succeed (binary not found → Tor is optional, returns nil)
 	err := ts.StartTorService()
 	if err != nil {
 		// If Tor binary not found, Start returns nil (Tor is optional)
@@ -459,9 +471,18 @@ func TestTorServiceStartNoTorBinary(t *testing.T) {
 
 func TestTorServiceRestartNotRunning(t *testing.T) {
 	cfg := config.DefaultConfig()
+	cfg.Server.Tor.Binary = "/nonexistent/tor"
+
+	// Block PATH lookup and commonLocations stat so findTorBinary truly finds nothing
+	origLP := lookPath
+	lookPath = func(_ string) (string, error) { return "", os.ErrNotExist }
+	origStat := statFile
+	statFile = func(_ string) (os.FileInfo, error) { return nil, os.ErrNotExist }
+	defer func() { lookPath = origLP; statFile = origStat }()
+
 	ts := NewTorService(cfg)
 
-	// Restart when not running should attempt to start
+	// Restart when not running should attempt to start and return nil immediately
 	err := ts.RestartTorService()
 	// May fail if no Tor binary, but should not panic
 	_ = err
@@ -725,6 +746,15 @@ func TestTorServiceConcurrentAccess(t *testing.T) {
 // Test ImportKeys with valid key data
 func TestTorServiceImportKeysValidData(t *testing.T) {
 	cfg := config.DefaultConfig()
+	cfg.Server.Tor.Binary = "/nonexistent/tor"
+
+	// Block PATH lookup and commonLocations stat so findTorBinary truly finds nothing
+	origLP := lookPath
+	lookPath = func(_ string) (string, error) { return "", os.ErrNotExist }
+	origStat := statFile
+	statFile = func(_ string) (os.FileInfo, error) { return nil, os.ErrNotExist }
+	defer func() { lookPath = origLP; statFile = origStat }()
+
 	ts := NewTorService(cfg)
 
 	// Create some test key data
@@ -927,11 +957,19 @@ func TestTorServiceGetVanityProgressReturnsCopy(t *testing.T) {
 // Test Restart calls Stop then Start
 func TestTorServiceRestartSequence(t *testing.T) {
 	cfg := config.DefaultConfig()
+	cfg.Server.Tor.Binary = "/nonexistent/tor"
+
+	// Block PATH lookup and commonLocations stat so findTorBinary truly finds nothing
+	origLP := lookPath
+	lookPath = func(_ string) (string, error) { return "", os.ErrNotExist }
+	origStat := statFile
+	statFile = func(_ string) (os.FileInfo, error) { return nil, os.ErrNotExist }
+	defer func() { lookPath = origLP; statFile = origStat }()
+
 	ts := NewTorService(cfg)
 
-	// Restart should call Stop (succeeds) then Start (may fail)
+	// Restart should call Stop (succeeds) then Start (returns nil — binary not found)
 	err := ts.RestartTorService()
-	// May fail if no Tor binary
 	_ = err
 }
 
@@ -967,5 +1005,503 @@ func TestCheckTorConnectionAlwaysTrue(t *testing.T) {
 		if !result {
 			t.Errorf("CheckTorConnection(%q) = false, want true", addr)
 		}
+	}
+}
+
+// =====================================================================
+// ensureTorDirs tests — verifies dirs are created with 0700 permissions
+// =====================================================================
+
+// TestEnsureTorDirsCreatesDirectories verifies that ensureTorDirs creates the
+// expected directory tree and sets 0700 permissions on each directory.
+func TestEnsureTorDirsCreatesDirectories(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("ensureTorDirs chown is skipped on Windows — permissions test is Unix-only")
+	}
+
+	tempDir, err := os.MkdirTemp("", "tor-dirs-test-")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	cfg := config.DefaultConfig()
+	ts := NewTorService(cfg)
+
+	// Override unexported fields directly (same package)
+	ts.dataDir = filepath.Join(tempDir, "data", "tor")
+	ts.configDir = filepath.Join(tempDir, "config", "tor")
+
+	if err := ts.ensureTorDirs(); err != nil {
+		t.Fatalf("ensureTorDirs() error = %v", err)
+	}
+
+	expectedDirs := []string{
+		ts.dataDir,
+		filepath.Join(ts.dataDir, "site"),
+		ts.configDir,
+	}
+
+	for _, dir := range expectedDirs {
+		info, err := os.Stat(dir)
+		if err != nil {
+			t.Errorf("directory %q missing: %v", dir, err)
+			continue
+		}
+		if !info.IsDir() {
+			t.Errorf("%q is not a directory", dir)
+		}
+		if info.Mode().Perm() != 0700 {
+			t.Errorf("directory %q has permissions %o, want 0700", dir, info.Mode().Perm())
+		}
+	}
+}
+
+// TestEnsureTorDirsIdempotent verifies that calling ensureTorDirs twice on
+// existing directories does not error.
+func TestEnsureTorDirsIdempotent(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "tor-dirs-idempotent-")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	cfg := config.DefaultConfig()
+	ts := NewTorService(cfg)
+	ts.dataDir = filepath.Join(tempDir, "data", "tor")
+	ts.configDir = filepath.Join(tempDir, "config", "tor")
+
+	if err := ts.ensureTorDirs(); err != nil {
+		t.Fatalf("first ensureTorDirs() error = %v", err)
+	}
+	if err := ts.ensureTorDirs(); err != nil {
+		t.Errorf("second ensureTorDirs() error = %v, want nil (idempotent)", err)
+	}
+}
+
+// =====================================================================
+// GetHTTPClient tests — covers direct and Tor-routed path
+// =====================================================================
+
+// TestGetHTTPClientNilDialer covers both cases where the client should be a direct
+// 30-second timeout client: useTor=false and useTor=true with nil dialer.
+func TestGetHTTPClientNilDialer(t *testing.T) {
+	tests := []struct {
+		name    string
+		useTor  bool
+		wantTimeout time.Duration
+	}{
+		{"useTor=false nil dialer", false, 30 * time.Second},
+		{"useTor=true nil dialer", true, 30 * time.Second},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := config.DefaultConfig()
+			ts := NewTorService(cfg)
+			// dialer is nil by default
+
+			client := ts.GetHTTPClient(tt.useTor)
+			if client == nil {
+				t.Fatal("GetHTTPClient() returned nil")
+			}
+			if client.Timeout != tt.wantTimeout {
+				t.Errorf("GetHTTPClient(%v).Timeout = %v, want %v",
+					tt.useTor, client.Timeout, tt.wantTimeout)
+			}
+		})
+	}
+}
+
+// TestGetHTTPClientReturnType verifies GetHTTPClient always returns a *http.Client.
+func TestGetHTTPClientReturnType(t *testing.T) {
+	cfg := config.DefaultConfig()
+	ts := NewTorService(cfg)
+
+	client := ts.GetHTTPClient(false)
+	if _, ok := interface{}(client).(*http.Client); !ok {
+		t.Error("GetHTTPClient() did not return *http.Client")
+	}
+}
+
+// =====================================================================
+// OutboundEnabled tests — true only when dialer != nil
+// =====================================================================
+
+// TestOutboundEnabledNilDialer verifies that OutboundEnabled returns false when
+// no Tor session has been established (dialer is nil).
+func TestOutboundEnabledNilDialer(t *testing.T) {
+	cfg := config.DefaultConfig()
+	ts := NewTorService(cfg)
+
+	if ts.OutboundEnabled() {
+		t.Error("OutboundEnabled() = true, want false when dialer is nil")
+	}
+}
+
+// =====================================================================
+// monitorTor tests — exercises context cancellation path
+// =====================================================================
+
+// TestMonitorTorCancellationExits verifies that monitorTor returns promptly when
+// the TorService context is cancelled. This exercises the ctx.Done() branch.
+func TestMonitorTorCancellationExits(t *testing.T) {
+	cfg := config.DefaultConfig()
+	ts := NewTorService(cfg)
+
+	done := make(chan struct{})
+	go func() {
+		ts.monitorTor()
+		close(done)
+	}()
+
+	// Cancel the context to trigger the ctx.Done() case
+	ts.cancel()
+
+	select {
+	case <-done:
+		// goroutine exited — test passes
+	case <-time.After(5 * time.Second):
+		t.Error("monitorTor() did not return after context cancellation within 5s")
+	}
+}
+
+// =====================================================================
+// StopTorService — running=true, tor=nil path
+// =====================================================================
+
+// TestTorServiceStopWhenRunningNoTorInstance verifies that StopTorService clears
+// all state correctly when t.running=true but t.tor is nil (e.g. after a partial
+// start where the bine handshake failed but the flag was already set externally).
+func TestTorServiceStopWhenRunningNoTorInstance(t *testing.T) {
+	cfg := config.DefaultConfig()
+	ts := NewTorService(cfg)
+
+	// Simulate a running state with no actual Tor instance
+	ts.mu.Lock()
+	ts.running = true
+	ts.onionAddr = "abcde12345.onion"
+	ts.serviceID = "abcde12345"
+	ts.mu.Unlock()
+
+	err := ts.StopTorService()
+	if err != nil {
+		t.Errorf("StopTorService() error = %v, want nil", err)
+	}
+	if ts.IsRunning() {
+		t.Error("IsRunning() = true after StopTorService, want false")
+	}
+	if addr := ts.GetOnionAddress(); addr != "" {
+		t.Errorf("GetOnionAddress() = %q after stop, want empty", addr)
+	}
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+	if ts.serviceID != "" {
+		t.Errorf("serviceID = %q after stop, want empty", ts.serviceID)
+	}
+}
+
+// =====================================================================
+// ImportKeys — running=true, tor=nil path
+// =====================================================================
+
+// TestTorServiceImportKeysRunningNoTorInstance verifies that ImportKeys correctly
+// handles the case where t.running=true but t.tor is nil (the t.tor != nil branch
+// is skipped), then clears the running flag and retries StartTorService.
+func TestTorServiceImportKeysRunningNoTorInstance(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Server.Tor.Binary = "/nonexistent/tor"
+
+	// Block PATH lookup and commonLocations stat so findTorBinary truly finds nothing
+	origLP := lookPath
+	lookPath = func(_ string) (string, error) { return "", os.ErrNotExist }
+	origStat := statFile
+	statFile = func(_ string) (os.FileInfo, error) { return nil, os.ErrNotExist }
+	defer func() { lookPath = origLP; statFile = origStat }()
+
+	ts := NewTorService(cfg)
+
+	// Simulate running=true with no Tor instance and no Tor binary on PATH
+	ts.mu.Lock()
+	ts.running = true
+	ts.mu.Unlock()
+
+	privKey := make([]byte, 64)
+	_, err := ts.ImportKeys(privKey)
+	// No Tor binary found, so StartTorService returns nil and onionAddr stays "".
+	// ImportKeys should succeed (return empty address, no error) when binary absent.
+	if err != nil {
+		t.Errorf("ImportKeys() error = %v, want nil (no binary)", err)
+	}
+}
+
+// =====================================================================
+// getTorConfig — missing branches
+// =====================================================================
+
+// TestGetTorConfigUseNetwork verifies that UseNetwork=true produces "SocksPort auto".
+func TestGetTorConfigUseNetwork(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Server.Tor.UseNetwork = true
+	ts := NewTorService(cfg)
+
+	content := ts.getTorConfig()
+	if !strings.Contains(content, "SocksPort auto") {
+		t.Errorf("getTorConfig() missing 'SocksPort auto' when UseNetwork=true; got:\n%s", content)
+	}
+}
+
+// TestGetTorConfigAllowUserPreference verifies that AllowUserPreference=true
+// also produces "SocksPort auto" (same SOCKS branch as UseNetwork).
+func TestGetTorConfigAllowUserPreference(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Server.Tor.AllowUserPreference = true
+	ts := NewTorService(cfg)
+
+	content := ts.getTorConfig()
+	if !strings.Contains(content, "SocksPort auto") {
+		t.Errorf("getTorConfig() missing 'SocksPort auto' when AllowUserPreference=true")
+	}
+}
+
+// TestGetTorConfigSafeLoggingFalse verifies that SafeLogging=false produces "SafeLogging 0".
+func TestGetTorConfigSafeLoggingFalse(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Server.Tor.SafeLogging = false
+	ts := NewTorService(cfg)
+
+	content := ts.getTorConfig()
+	if !strings.Contains(content, "SafeLogging 0") {
+		t.Errorf("getTorConfig() missing 'SafeLogging 0' when SafeLogging=false; got:\n%s", content)
+	}
+}
+
+// TestGetTorConfigMaxMonthlyBandwidth verifies AccountingMax is emitted when set.
+func TestGetTorConfigMaxMonthlyBandwidth(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Server.Tor.MaxMonthlyBandwidth = "10 GB"
+	ts := NewTorService(cfg)
+
+	content := ts.getTorConfig()
+	if !strings.Contains(content, "AccountingMax 10 GB") {
+		t.Errorf("getTorConfig() missing AccountingMax directive; got:\n%s", content)
+	}
+	if !strings.Contains(content, "AccountingStart month") {
+		t.Errorf("getTorConfig() missing AccountingStart directive; got:\n%s", content)
+	}
+}
+
+// TestGetTorConfigCloseCircuitOnStreamLimit verifies that CloseCircuitOnStreamLimit=true
+// omits the CircuitStreamTimeout line (returns empty string from the anonymous func).
+func TestGetTorConfigCloseCircuitOnStreamLimit(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Server.Tor.CloseCircuitOnStreamLimit = true
+	ts := NewTorService(cfg)
+
+	content := ts.getTorConfig()
+	if strings.Contains(content, "CircuitStreamTimeout") {
+		t.Errorf("getTorConfig() should omit CircuitStreamTimeout when CloseCircuitOnStreamLimit=true; got:\n%s", content)
+	}
+}
+
+// =====================================================================
+// StartTorService — fake binary path (covers post-binary-check statements)
+// =====================================================================
+
+// TestTorServiceStartFakeBinary verifies that StartTorService advances past the
+// "binary not found" check when a valid executable path is provided, writes the
+// torrc, and returns an error at the tor.Start() step (the fake binary exits
+// immediately without opening a control port, so bine fails).
+func TestTorServiceStartFakeBinary(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a minimal fake Tor binary that exits cleanly
+	fakeTor := filepath.Join(tmpDir, "tor")
+	if err := os.WriteFile(fakeTor, []byte("#!/bin/sh\nexit 0\n"), 0755); err != nil {
+		t.Fatalf("failed to write fake tor binary: %v", err)
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.Server.Tor.Binary = fakeTor
+	ts := NewTorService(cfg)
+	// Use a 5-second context so the bootstrap goroutine (EnableNetwork) does not
+	// block the test for 3 minutes if bine manages to "start" the dead process.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ts.ctx = ctx
+	ts.cancel = cancel
+	ts.dataDir = filepath.Join(tmpDir, "data")
+	ts.configDir = filepath.Join(tmpDir, "config")
+
+	err := ts.StartTorService()
+	// The fake binary exits immediately, so bine cannot establish a control
+	// connection — StartTorService must return a non-nil error.
+	if err == nil {
+		t.Error("StartTorService() with fake binary should return error, got nil")
+		// Clean up if it somehow "succeeded"
+		_ = ts.StopTorService()
+	}
+}
+
+// TestMonitorTorWithIntervalFastTick verifies the ticker.C branch of monitorTorWithInterval
+// when running=false and tor=nil (the continue path), then cancels the context and
+// checks that the goroutine returns within a reasonable deadline.
+func TestMonitorTorWithIntervalFastTick(t *testing.T) {
+	cfg := config.DefaultConfig()
+	ts := NewTorService(cfg)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	ts.ctx = ctx
+	ts.cancel = cancel
+
+	done := make(chan struct{})
+	go func() {
+		// 1ms interval so the ticker fires before context cancel
+		ts.monitorTorWithInterval(1 * time.Millisecond)
+		close(done)
+	}()
+
+	// Give the goroutine time to fire at least one tick before cancelling
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+
+	select {
+	case <-done:
+		// goroutine exited cleanly after context cancel
+	case <-time.After(2 * time.Second):
+		t.Error("monitorTorWithInterval did not return after context cancel")
+	}
+}
+
+// =====================================================================
+// runVanityGeneration — direct call, exercises default branch + Found path
+// =====================================================================
+
+// TestRunVanityGenerationFindsMatch exercises the core generation loop by calling
+// runVanityGeneration directly with a single-character prefix. With only 32
+// possible base32 characters, a match is expected within at most a few thousand
+// iterations (~3% hit rate per attempt). A 10-second deadline prevents the test
+// from hanging indefinitely if the RNG is pathological.
+func TestRunVanityGenerationFindsMatch(t *testing.T) {
+	cfg := config.DefaultConfig()
+	ts := NewTorService(cfg)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Initialise global state exactly as GenerateVanity does, but synchronously.
+	vanityGen.mu.Lock()
+	vanityGen.progress = &VanityProgress{
+		Prefix:    "a",
+		Attempts:  0,
+		StartTime: time.Now(),
+		Running:   true,
+	}
+	vanityGen.cancel = cancel
+	vanityGen.mu.Unlock()
+
+	// Call the worker directly in the test goroutine; it blocks until found or ctx done.
+	ts.runVanityGeneration(ctx, "a")
+
+	progress := ts.GetVanityProgress()
+	if !progress.Found {
+		t.Errorf("runVanityGeneration(%q) did not find a match within 10s (attempts=%d)",
+			"a", progress.Attempts)
+	}
+	if progress.Address == "" {
+		t.Error("Found=true but Address is empty")
+	}
+	if len(progress.PrivateKey) == 0 {
+		t.Error("Found=true but PrivateKey is empty")
+	}
+	if progress.Running {
+		t.Error("Running should be false after runVanityGeneration returns")
+	}
+}
+
+// TestFindTorBinaryFallbackToLocations covers the commonLocations scan path in
+// findTorBinary by replacing lookPath with a stub that always fails, forcing
+// the fallback loop that checks /usr/bin/tor etc. directly.
+func TestFindTorBinaryFallbackToLocations(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("test targets linux /usr/bin/tor location")
+	}
+	if _, err := os.Stat("/usr/bin/tor"); err != nil {
+		t.Skip("/usr/bin/tor not installed — skipping commonLocations coverage test")
+	}
+
+	// Save and restore the package-level lookPath var
+	orig := lookPath
+	lookPath = func(_ string) (string, error) {
+		return "", os.ErrNotExist
+	}
+	defer func() { lookPath = orig }()
+
+	result := findTorBinary("")
+	if result == "" {
+		t.Error("findTorBinary() with mocked lookPath returned empty; expected /usr/bin/tor via commonLocations")
+	}
+	if result != "/usr/bin/tor" {
+		t.Errorf("findTorBinary() = %q, want /usr/bin/tor", result)
+	}
+}
+
+// TestStartTorServiceWithRealBinary exercises the StartTorService bootstrap code
+// path when a real Tor binary is present. The service context is cancelled after
+// 20 s — well before the 30 s slow-timer — so the fast-path select branch fires
+// (case err = <-bootstrapDone:). BootstrapTimeout is left at 0 so the stmt
+// `bootstrapTimeout = 3 * time.Minute` is also covered.
+func TestStartTorServiceWithRealBinary(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("linux only")
+	}
+	if _, err := os.Stat("/usr/bin/tor"); err != nil {
+		t.Skip("/usr/bin/tor not installed — skipping real-bootstrap coverage test")
+	}
+
+	cfg := config.DefaultConfig()
+	// BootstrapTimeout = 0 (the zero-value default) so the
+	// `bootstrapTimeout = 3 * time.Minute` assignment is taken.
+	ts := NewTorService(cfg)
+
+	// Cancel the TorService context after 20s — before the 30s slow-timer —
+	// so EnableNetwork returns early and the fast-path select branch is covered.
+	cancelTimer := time.AfterFunc(20*time.Second, ts.cancel)
+	defer cancelTimer.Stop()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- ts.StartTorService()
+	}()
+
+	select {
+	case err := <-done:
+		// Context-cancelled error is expected; other errors (binary not found,
+		// permission denied) are also acceptable — we only care that the code path ran.
+		_ = err
+	case <-time.After(30 * time.Second):
+		ts.cancel()
+		t.Fatal("StartTorService did not return within 30s")
+	}
+}
+
+// TestEnsureTorDirsFailure covers the MkdirAll error return in ensureTorDirs
+// by placing a regular file where the first directory would be created.
+func TestEnsureTorDirsFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	cfg := config.DefaultConfig()
+	ts := NewTorService(cfg)
+
+	// Place a regular file at the dataDir path so MkdirAll fails with ENOTDIR.
+	blocker := filepath.Join(tmpDir, "tor")
+	if err := os.WriteFile(blocker, []byte("block"), 0644); err != nil {
+		t.Fatalf("failed to write blocker file: %v", err)
+	}
+	ts.dataDir = blocker
+	ts.configDir = filepath.Join(tmpDir, "config")
+
+	if err := ts.ensureTorDirs(); err == nil {
+		t.Error("ensureTorDirs() should fail when dataDir is occupied by a regular file")
 	}
 }

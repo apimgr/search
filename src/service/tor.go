@@ -56,7 +56,7 @@ func findTorBinary(configPath string) string {
 	}
 
 	for _, loc := range commonLocations {
-		if _, err := os.Stat(loc); err == nil {
+		if _, err := statFile(loc); err == nil {
 			return loc
 		}
 	}
@@ -70,6 +70,10 @@ func findTorBinary(configPath string) string {
 var lookPath = func(file string) (string, error) {
 	return exec.LookPath(file)
 }
+
+// statFile checks file existence in common binary locations
+// Wrapper for os.Stat to enable testing
+var statFile = os.Stat
 
 // TorService manages Tor hidden service using github.com/cretz/bine
 // per AI.md PART 32: TOR HIDDEN SERVICE (NON-NEGOTIABLE)
@@ -591,7 +595,12 @@ func (t *TorService) RegenerateAddress() (string, error) {
 
 // monitorTor monitors the Tor process and restarts if it crashes
 func (t *TorService) monitorTor() {
-	ticker := time.NewTicker(30 * time.Second)
+	t.monitorTorWithInterval(30 * time.Second)
+}
+
+// monitorTorWithInterval is the testable form of monitorTor — accepts a configurable ticker interval.
+func (t *TorService) monitorTorWithInterval(interval time.Duration) {
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
