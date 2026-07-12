@@ -863,7 +863,7 @@ type GeoIPConfig struct {
 	// Countries to block (ISO 3166-1 alpha-2)
 	DenyCountries []string `yaml:"deny_countries"`
 	// If set, only these countries allowed
-	AllowedCountries []string `yaml:"allowed_countries"`
+	AllowedCountries []string `yaml:"allow_countries"`
 	// Database toggles per AI.md PART 20
 	// Enable ASN lookups
 	ASN bool `yaml:"asn"`
@@ -1545,13 +1545,15 @@ func DefaultConfig() *Config {
 				Prefix:   "apimgr:",
 				TTL:      3600,
 			},
+			// Per AI.md PART 19: GeoIP enabled by default; dir resolved at runtime; all databases on.
 			GeoIP: GeoIPConfig{
-				Enabled: false,
-				Dir:     "/data/geoip",
+				Enabled: true,
+				Dir:     "",
 				Update:  "weekly",
 				ASN:     true,
 				Country: true,
-				City:    false,
+				City:    true,
+				WHOIS:   true,
 			},
 			Metrics: MetricsConfig{
 				Enabled:       false,

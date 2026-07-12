@@ -9,8 +9,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"net"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -219,11 +219,12 @@ func NewServer(cfg *config.Config) *Server {
 	}
 
 	// Create GeoIP lookup if enabled (uses MMDB from sapics/ip-location-db)
+	// Per AI.md PART 19: dir defaults to {data_dir}/security/geoip via config.GetGeoIPDir()
 	var geoLookup *geoip.Lookup
 	if cfg.Server.GeoIP.Enabled {
 		geoDir := cfg.Server.GeoIP.Dir
 		if geoDir == "" {
-			geoDir = filepath.Join(config.GetDataDir(), "geoip")
+			geoDir = config.GetGeoIPDir()
 		}
 		geoCfg := &geoip.Config{
 			Enabled:          true,
@@ -234,6 +235,7 @@ func NewServer(cfg *config.Config) *Server {
 			ASN:              cfg.Server.GeoIP.ASN,
 			Country:          cfg.Server.GeoIP.Country,
 			City:             cfg.Server.GeoIP.City,
+			WHOIS:            cfg.Server.GeoIP.WHOIS,
 		}
 		geoLookup = geoip.NewLookup(geoCfg)
 		if err := geoLookup.LoadDatabases(); err != nil {
@@ -468,16 +470,31 @@ func NewServer(cfg *config.Config) *Server {
 	return s
 }
 
-// Start starts the HTTP server
-func (s *Server) StartHTTPServer() error {
+// TorAddress returns the active .onion address, or empty string if Tor is not running.
+// Per AI.md PART 31: available after StartHTTPServer signals readyCh.
+func (s *Server) TorAddress() string {
+	if s.torService == nil || !s.torService.IsRunning() {
+		return ""
+	}
+	return s.torService.GetOnionAddress()
+}
+
+// StartHTTPServer starts the server and signals readyCh once the TCP socket is bound.
+// Per AI.md PART 8 step 17-18: Tor starts first (inside here), then HTTP binds, then readyCh is closed.
+// readyCh must be a buffered channel (capacity ≥ 1) or nil to skip the signal.
+// The call blocks until shutdown — run it in a goroutine.
+func (s *Server) StartHTTPServer(readyCh chan<- struct{}) error {
 	// PID file is already written by main.go per AI.md PART 8 step 12
 	// Do not create a duplicate PID file here
 
-	// Start Tor service if enabled
+	// Step 17: Start Tor (before HTTP binds — per AI.md PART 8 startup sequence)
 	if s.torService != nil {
 		if err := s.torService.StartTorService(); err != nil {
 			slog.Warn("Tor service start failed", "err", err)
 		}
+	}
+	if s.torService != nil && s.torService.IsRunning() {
+		slog.Info("Tor hidden service active", "onion_address", s.torService.GetOnionAddress())
 	}
 
 	// Scheduler is already started by initScheduler() per AI.md PART 19
@@ -495,33 +512,37 @@ func (s *Server) StartHTTPServer() error {
 
 	s.startTime = time.Now()
 
-	// Get Tor address if available
-	var torAddr string
-	if s.torService != nil && s.torService.IsRunning() {
-		torAddr = s.torService.GetOnionAddress()
-		slog.Info("Tor hidden service active", "onion_address", torAddr)
-	}
-
-	// Banner is printed by main.go per AI.md PART 7/14
-	// Server only logs startup info
-	// Used for Tor logging above
-	_ = torAddr
-
 	// Check for dual port mode
 	if s.config.Server.IsDualPortMode() && s.tlsManager != nil && s.tlsManager.IsEnabled() {
-		return s.startDualPortMode(mux, httpPort)
+		return s.startDualPortMode(mux, httpPort, readyCh)
 	}
 
 	// Single port mode
-	return s.startSinglePortMode(mux, httpPort)
+	return s.startSinglePortMode(mux, httpPort, readyCh)
 }
 
-// startDualPortMode starts both HTTP and HTTPS servers on separate ports
-func (s *Server) startDualPortMode(mux http.Handler, httpPort int) error {
+// startDualPortMode starts both HTTP and HTTPS servers on separate ports.
+// Binds both sockets before signaling readyCh so the banner is shown only once both are live.
+func (s *Server) startDualPortMode(mux http.Handler, httpPort int, readyCh chan<- struct{}) error {
 	httpsPort := s.config.Server.GetHTTPSPort()
 
-	// Create HTTP server
 	httpAddr := fmt.Sprintf("%s:%d", s.config.Server.Address, httpPort)
+	httpsAddr := fmt.Sprintf("%s:%d", s.config.Server.Address, httpsPort)
+
+	// Bind HTTP socket
+	httpLn, err := net.Listen("tcp", httpAddr)
+	if err != nil {
+		return fmt.Errorf("HTTP listen error: %w", err)
+	}
+
+	// Bind HTTPS socket
+	httpsLn, err := net.Listen("tcp", httpsAddr)
+	if err != nil {
+		httpLn.Close()
+		return fmt.Errorf("HTTPS listen error: %w", err)
+	}
+
+	// Create HTTP server
 	s.httpServer = &http.Server{
 		Addr:         httpAddr,
 		Handler:      mux,
@@ -531,34 +552,40 @@ func (s *Server) startDualPortMode(mux http.Handler, httpPort int) error {
 	}
 
 	// Create HTTPS server
-	httpsAddr := fmt.Sprintf("%s:%d", s.config.Server.Address, httpsPort)
 	httpsHandler := mux
-	if s.config.Server.SSL.LetsEncrypt.Enabled {
+	if s.tlsManager != nil && s.config.Server.SSL.LetsEncrypt.Enabled {
 		httpsHandler = s.tlsManager.GetHTTPSHandler(mux)
 	}
 	s.httpsServer = &http.Server{
 		Addr:         httpsAddr,
 		Handler:      httpsHandler,
-		TLSConfig:    s.tlsManager.GetTLSConfig(),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
+	}
+	if s.tlsManager != nil {
+		s.httpsServer.TLSConfig = s.tlsManager.GetTLSConfig()
 	}
 
 	slog.Info("Dual port mode enabled")
 	slog.Info("HTTP server listening", "addr", "http://"+httpAddr)
 	slog.Info("HTTPS server listening", "addr", "https://"+httpsAddr)
 
+	// Both sockets bound — signal readiness before blocking
+	if readyCh != nil {
+		close(readyCh)
+	}
+
 	// Start HTTP server in goroutine
 	errChan := make(chan error, 2)
 	go func() {
-		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := s.httpServer.Serve(httpLn); err != nil && err != http.ErrServerClosed {
 			errChan <- fmt.Errorf("HTTP server error: %w", err)
 		}
 	}()
 
-	// Start HTTPS server (blocking)
-	if err := s.httpsServer.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+	// Start HTTPS server (blocking via ServeTLS with pre-bound listener)
+	if err := s.httpsServer.ServeTLS(httpsLn, "", ""); err != nil && err != http.ErrServerClosed {
 		s.removePIDFile()
 		return fmt.Errorf("HTTPS server error: %w", err)
 	}
@@ -573,9 +600,12 @@ func (s *Server) startDualPortMode(mux http.Handler, httpPort int) error {
 	}
 }
 
-// startSinglePortMode starts server on a single port (HTTP or HTTPS)
-func (s *Server) startSinglePortMode(mux http.Handler, port int) error {
+// startSinglePortMode starts server on a single port (HTTP or HTTPS).
+// Binds the socket via net.Listen first, then signals readyCh so the banner
+// is shown only after the port is actually accepting connections.
+func (s *Server) startSinglePortMode(mux http.Handler, port int, readyCh chan<- struct{}) error {
 	addr := fmt.Sprintf("%s:%d", s.config.Server.Address, port)
+
 	s.httpServer = &http.Server{
 		Addr:         addr,
 		Handler:      mux,
@@ -584,14 +614,16 @@ func (s *Server) startSinglePortMode(mux http.Handler, port int) error {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Start server based on TLS configuration
 	if s.tlsManager != nil && s.tlsManager.IsEnabled() {
-		// Configure TLS
 		s.httpServer.TLSConfig = s.tlsManager.GetTLSConfig()
-
-		// If using Let's Encrypt, wrap handler for ACME challenges
 		if s.config.Server.SSL.LetsEncrypt.Enabled {
 			s.httpServer.Handler = s.tlsManager.GetHTTPSHandler(mux)
+		}
+
+		// Bind the TLS socket before signaling readiness
+		ln, err := net.Listen("tcp", addr)
+		if err != nil {
+			return fmt.Errorf("server listen error: %w", err)
 		}
 
 		slog.Info("Server listening", "addr", "https://"+addr)
@@ -602,16 +634,29 @@ func (s *Server) startSinglePortMode(mux http.Handler, port int) error {
 			s.redirectServer = ssl.StartHTTPSRedirect(redirectAddr, s.config.Server.Port)
 		}
 
-		// Start HTTPS server
-		if err := s.httpServer.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+		// Socket is bound — signal readiness
+		if readyCh != nil {
+			close(readyCh)
+		}
+
+		if err := s.httpServer.ServeTLS(ln, "", ""); err != nil && err != http.ErrServerClosed {
 			s.removePIDFile()
 			return fmt.Errorf("server error: %w", err)
 		}
 	} else {
+		ln, err := net.Listen("tcp", addr)
+		if err != nil {
+			return fmt.Errorf("server listen error: %w", err)
+		}
+
 		slog.Info("Server listening", "addr", "http://"+addr)
 
-		// Start HTTP server (blocking)
-		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		// Socket is bound — signal readiness
+		if readyCh != nil {
+			close(readyCh)
+		}
+
+		if err := s.httpServer.Serve(ln); err != nil && err != http.ErrServerClosed {
 			s.removePIDFile()
 			return fmt.Errorf("server error: %w", err)
 		}

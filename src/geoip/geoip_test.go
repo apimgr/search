@@ -64,14 +64,22 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg == nil {
 		t.Fatal("DefaultConfig returned nil")
 	}
-	if cfg.Enabled {
-		t.Error("default config should be disabled")
+	// Per AI.md PART 19: GeoIP is enabled by default
+	if !cfg.Enabled {
+		t.Error("default config should be enabled per AI.md PART 19")
 	}
 	if !cfg.Country {
 		t.Error("default config should enable country DB")
 	}
 	if !cfg.ASN {
 		t.Error("default config should enable ASN DB")
+	}
+	// Per AI.md PART 19: all four databases enabled by default
+	if !cfg.City {
+		t.Error("default config should enable city DB per AI.md PART 19")
+	}
+	if !cfg.WHOIS {
+		t.Error("default config should enable WHOIS DB per AI.md PART 19")
 	}
 }
 
@@ -1321,13 +1329,14 @@ func TestDefaultConfigValues(t *testing.T) {
 		got  interface{}
 		want interface{}
 	}{
-		{"Enabled", cfg.Enabled, false},
-		{"Dir", cfg.Dir, "/config/security/geoip"},
+		// Per AI.md PART 19: GeoIP enabled by default; all four databases on; dir resolved at runtime.
+		{"Enabled", cfg.Enabled, true},
+		{"Dir", cfg.Dir, ""},
 		{"Update", cfg.Update, "weekly"},
 		{"ASN", cfg.ASN, true},
 		{"Country", cfg.Country, true},
-		{"City", cfg.City, false},
-		{"WHOIS", cfg.WHOIS, false},
+		{"City", cfg.City, true},
+		{"WHOIS", cfg.WHOIS, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

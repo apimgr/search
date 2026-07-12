@@ -70,7 +70,7 @@ type Config struct {
 	// never, daily, weekly, monthly
 	Update           string   `yaml:"update"`
 	DenyCountries    []string `yaml:"deny_countries"`
-	AllowedCountries []string `yaml:"allowed_countries"`
+	AllowedCountries []string `yaml:"allow_countries"`
 	// Database toggles
 	ASN     bool `yaml:"asn"`
 	Country bool `yaml:"country"`
@@ -79,21 +79,20 @@ type Config struct {
 	WHOIS bool `yaml:"whois"`
 }
 
-// DefaultConfig returns default GeoIP configuration
-// Per AI.md PART 20: GeoIP dir is {config_dir}/security/geoip
+// DefaultConfig returns default GeoIP configuration.
+// Per AI.md PART 19: GeoIP enabled by default; dir resolved at runtime from {data_dir}/security/geoip.
+// All four databases enabled by default (asn, country, city, whois).
 func DefaultConfig() *Config {
 	return &Config{
-		Enabled:          false,
-		Dir:              "/config/security/geoip",
+		Enabled:          true,
+		Dir:              "",
 		Update:           "weekly",
 		DenyCountries:    []string{},
 		AllowedCountries: []string{},
 		ASN:              true,
 		Country:          true,
-		// Larger download, disabled by default
-		City: false,
-		// WHOIS registrant data, disabled by default
-		WHOIS: false,
+		City:             true,
+		WHOIS:            true,
 	}
 }
 

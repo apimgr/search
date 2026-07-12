@@ -409,9 +409,6 @@ func runServer() {
 		os.Exit(1)
 	}
 
-	// Build listen URLs for banner
-	urls := buildListenURLs(cfg)
-
 	// On first run, display the auto-generated operator token (server.token)
 	// so the operator can save it. The token lives in server.yml and is the
 	// only credential the application has — there is no admin web UI.
@@ -421,7 +418,61 @@ func runServer() {
 		setupToken = cfg.Server.Token
 	}
 
-	// Print responsive startup banner per AI.md PART 7 and PART 14
+	// Create server (initialises DB, scheduler, etc. — steps 13-16 per AI.md PART 8)
+	srv := server.NewServer(cfg)
+
+	// Step 19: Setup signal handling per AI.md PART 7.
+	// Registered before the server goroutine so signals arriving during Tor startup
+	// (step 17, up to 3 min) are handled correctly.
+	shutdownDone := sigsvc.Setup(sigsvc.ShutdownConfig{
+		ShutdownFunc: srv.Shutdown,
+		PIDFile:      config.GetPIDFile(),
+	})
+
+	// Steps 17-18: Start Tor then bind HTTP socket in a goroutine.
+	// readyCh is closed once the TCP socket is accepting connections.
+	// Per AI.md PART 8: banner (step 20) must be printed after binding (step 18).
+	readyCh := make(chan struct{})
+	serverErrCh := make(chan error, 1)
+	go func() {
+		if err := srv.StartHTTPServer(readyCh); err != nil {
+			serverErrCh <- err
+		}
+		close(serverErrCh)
+	}()
+
+	// Wait for server to signal readiness (timeout after 5 min to allow Tor bootstrap)
+	select {
+	case <-readyCh:
+		// Socket is bound and accepting connections
+	case err := <-serverErrCh:
+		if err != nil {
+			slog.Error("Server failed to start", "err", err)
+		}
+		os.Exit(1)
+	case <-time.After(5 * time.Minute):
+		slog.Error("Server failed to start within 5-minute timeout")
+		os.Exit(1)
+	}
+
+	// Step 20: Print responsive startup banner per AI.md PART 7 and PART 8.
+	// Now the server is listening; Tor address (if any) is available from srv.TorAddress().
+	urls := buildListenURLs(cfg)
+	if torAddr := srv.TorAddress(); torAddr != "" {
+		// Add live Tor address — buildListenURLs reads cfg.Server.Tor.OnionAddress which
+		// may be empty on first run before the address is persisted.
+		alreadyHasOnion := false
+		for _, u := range urls {
+			if strings.Contains(u, ".onion") {
+				alreadyHasOnion = true
+				break
+			}
+		}
+		if !alreadyHasOnion {
+			urls = append(urls, "http://"+torAddr)
+		}
+	}
+
 	banner.Print(banner.Config{
 		AppName:    "Search",
 		Version:    config.Version,
@@ -432,25 +483,10 @@ func runServer() {
 		SetupToken: setupToken,
 	})
 
-	// Create server
-	srv := server.NewServer(cfg)
-
-	// Setup signal handling per AI.md PART 7
-	// Uses platform-dependent signal handling via src/signal package
-	shutdownDone := sigsvc.Setup(sigsvc.ShutdownConfig{
-		ShutdownFunc: srv.Shutdown,
-		PIDFile:      config.GetPIDFile(),
-	})
-
-	// Start server
-	if err := srv.StartHTTPServer(); err != nil {
-		slog.Error("Server failed", "err", err)
-		os.Exit(1)
-	}
-
-	// Wait for graceful shutdown to complete before exiting.
+	// Step 21: Block until graceful shutdown completes.
 	// Per AI.md PART 7: os.Exit() belongs only in main().
 	<-shutdownDone
+	<-serverErrCh
 	exitFunc(0)
 }
 

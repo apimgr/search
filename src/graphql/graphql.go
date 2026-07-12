@@ -66,31 +66,72 @@ func handleGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(result)
 }
 
-// serveGraphiQL serves the GraphiQL interface
+// serveGraphiQL serves a server-rendered GraphQL explorer UI.
+// Per frontend rules: vanilla JS only, no CDN frameworks, CSS custom properties for theming.
 func serveGraphiQL(w http.ResponseWriter, r *http.Request) {
-	// Get theme from cookie or default to dark
 	theme := getTheme(r)
 	lang, dir := i18n.DetectRequestLocale(r)
+	themeCSS := getGraphiQLThemeCSS(theme)
 
 	html := `<!DOCTYPE html>
 <html lang="` + lang + `" dir="` + dir + `">
 <head>
 	<meta charset="UTF-8">
-	<title>Search API - GraphiQL</title>
-	<link rel="stylesheet" href="https://unpkg.com/graphiql@3/graphiql.min.css">
-	<style>` + getGraphiQLThemeCSS(theme) + `</style>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Search API Explorer</title>
+	<style>
+` + themeCSS + `
+		*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+		body { font-family: monospace; background: var(--color-bg); color: var(--color-text); min-height: 100vh; display: flex; flex-direction: column; }
+		header { padding: 0.75rem 1rem; background: var(--color-surface); border-bottom: 1px solid var(--color-border); display: flex; align-items: center; gap: 1rem; }
+		h1 { font-size: 1rem; font-weight: 600; color: var(--color-primary); }
+		main { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr; gap: 0; flex: 1; }
+		.panel { display: flex; flex-direction: column; border-right: 1px solid var(--color-border); }
+		.panel:last-child { border-right: none; }
+		.panel-header { padding: 0.5rem 1rem; background: var(--color-surface); border-bottom: 1px solid var(--color-border); font-size: 0.75rem; color: var(--color-text-muted); display: flex; justify-content: space-between; align-items: center; }
+		textarea { flex: 1; width: 100%; padding: 1rem; background: var(--color-bg); color: var(--color-text); border: none; resize: none; font-family: monospace; font-size: 0.875rem; outline: none; min-height: 300px; }
+		pre { flex: 1; padding: 1rem; overflow: auto; font-size: 0.875rem; white-space: pre-wrap; word-break: break-all; background: var(--color-bg); min-height: 300px; }
+		button { padding: 0.375rem 0.875rem; background: var(--color-primary); color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 0.8rem; font-family: monospace; }
+		button:hover { opacity: 0.85; }
+		.error { color: #e74c3c; }
+		@media (max-width: 700px) { main { grid-template-columns: 1fr; } .panel { border-right: none; border-bottom: 1px solid var(--color-border); } }
+	</style>
 </head>
 <body>
-	<div id="graphiql"></div>
-	<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-	<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-	<script src="https://unpkg.com/graphiql@3/graphiql.min.js"></script>
+	<header>
+		<h1>Search API Explorer</h1>
+	</header>
+	<main>
+		<div class="panel">
+			<div class="panel-header">
+				<span>Query</span>
+				<button id="run-btn" onclick="runQuery()">Run ▶</button>
+			</div>
+			<textarea id="query" spellcheck="false" placeholder="{ health { status version } }">{ health { status version mode uptime } }</textarea>
+		</div>
+		<div class="panel">
+			<div class="panel-header"><span>Response</span></div>
+			<pre id="response">Run a query to see results.</pre>
+		</div>
+	</main>
 	<script>
-		const fetcher = GraphiQL.createFetcher({ url: '/api/graphql' });
-		ReactDOM.render(
-			React.createElement(GraphiQL, { fetcher: fetcher }),
-			document.getElementById('graphiql')
-		);
+		function runQuery() {
+			var q = document.getElementById('query').value.trim();
+			var out = document.getElementById('response');
+			out.textContent = 'Running…';
+			out.className = '';
+			fetch('/api/graphql', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ query: q })
+			})
+			.then(function(r) { return r.json(); })
+			.then(function(d) { out.textContent = JSON.stringify(d, null, 2); })
+			.catch(function(e) { out.textContent = 'Error: ' + e.message; out.className = 'error'; });
+		}
+		document.getElementById('query').addEventListener('keydown', function(e) {
+			if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); runQuery(); }
+		});
 	</script>
 </body>
 </html>`
