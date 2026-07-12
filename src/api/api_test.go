@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/apimgr/search/src/common/httputil"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
@@ -1043,88 +1044,108 @@ func TestAPIConstants(t *testing.T) {
 	}
 }
 
-// Tests for getClientIP function
+// Tests for client IP resolution via httputil.GetClientIP.
+// Per AI.md PART 12: headers honored only from trusted proxies (private ranges + configured list).
+// Priority (from trusted proxy): CF-Connecting-IP → True-Client-IP → X-Real-IP → X-Forwarded-For → X-Client-IP → RemoteAddr
 
-func TestGetClientIPXForwardedFor(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("X-Forwarded-For", "203.0.113.1, 198.51.100.1, 192.0.2.1")
-
-	ip := getClientIP(req)
-	if ip != "203.0.113.1" {
-		t.Errorf("getClientIP() = %q, want %q", ip, "203.0.113.1")
+func TestGetClientIP(t *testing.T) {
+	tests := []struct {
+		name       string
+		remoteAddr string
+		headers    map[string]string
+		want       string
+	}{
+		// Untrusted peer: all forwarded headers must be ignored.
+		{
+			name:       "untrusted peer ignores X-Forwarded-For",
+			remoteAddr: "203.0.113.99:1234",
+			headers:    map[string]string{"X-Forwarded-For": "1.2.3.4"},
+			want:       "203.0.113.99",
+		},
+		{
+			name:       "untrusted peer ignores X-Real-IP",
+			remoteAddr: "203.0.113.99:1234",
+			headers:    map[string]string{"X-Real-IP": "1.2.3.4"},
+			want:       "203.0.113.99",
+		},
+		// Trusted peer (RFC1918): headers honored in correct priority order.
+		{
+			name:       "trusted peer uses CF-Connecting-IP first",
+			remoteAddr: "10.0.0.1:1234",
+			headers: map[string]string{
+				"CF-Connecting-IP": "203.0.113.1",
+				"True-Client-IP":   "203.0.113.2",
+				"X-Real-IP":        "203.0.113.3",
+				"X-Forwarded-For":  "203.0.113.4",
+			},
+			want: "203.0.113.1",
+		},
+		{
+			name:       "trusted peer uses True-Client-IP when no CF header",
+			remoteAddr: "10.0.0.1:1234",
+			headers: map[string]string{
+				"True-Client-IP":  "203.0.113.2",
+				"X-Real-IP":       "203.0.113.3",
+				"X-Forwarded-For": "203.0.113.4",
+			},
+			want: "203.0.113.2",
+		},
+		{
+			name:       "trusted peer X-Real-IP beats X-Forwarded-For",
+			remoteAddr: "10.0.0.1:1234",
+			headers: map[string]string{
+				"X-Real-IP":       "203.0.113.3",
+				"X-Forwarded-For": "203.0.113.4, 198.51.100.1",
+			},
+			want: "203.0.113.3",
+		},
+		{
+			name:       "trusted peer X-Forwarded-For leftmost IP",
+			remoteAddr: "10.0.0.1:1234",
+			headers:    map[string]string{"X-Forwarded-For": "203.0.113.4, 198.51.100.1"},
+			want:       "203.0.113.4",
+		},
+		{
+			name:       "trusted peer X-Forwarded-For with spaces",
+			remoteAddr: "172.16.0.1:1234",
+			headers:    map[string]string{"X-Forwarded-For": "  203.0.113.5  , 198.51.100.1"},
+			want:       "203.0.113.5",
+		},
+		{
+			name:       "trusted peer X-Client-IP when no other headers",
+			remoteAddr: "192.168.1.1:1234",
+			headers:    map[string]string{"X-Client-IP": "203.0.113.6"},
+			want:       "203.0.113.6",
+		},
+		{
+			name:       "trusted peer falls back to RemoteAddr with no headers",
+			remoteAddr: "10.0.0.1:8080",
+			want:       "10.0.0.1",
+		},
+		{
+			name:       "loopback IPv6 falls back to RemoteAddr",
+			remoteAddr: "[::1]:12345",
+			want:       "::1",
+		},
+		{
+			name:       "public RemoteAddr no headers",
+			remoteAddr: "192.0.2.1:1234",
+			want:       "192.0.2.1",
+		},
 	}
-}
 
-func TestGetClientIPXForwardedForSingle(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("X-Forwarded-For", "203.0.113.5")
-
-	ip := getClientIP(req)
-	if ip != "203.0.113.5" {
-		t.Errorf("getClientIP() = %q, want %q", ip, "203.0.113.5")
-	}
-}
-
-func TestGetClientIPXForwardedForWithSpaces(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("X-Forwarded-For", "  203.0.113.2  , 198.51.100.1")
-
-	ip := getClientIP(req)
-	if ip != "203.0.113.2" {
-		t.Errorf("getClientIP() = %q, want %q", ip, "203.0.113.2")
-	}
-}
-
-func TestGetClientIPXRealIP(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("X-Real-IP", "203.0.113.3")
-
-	ip := getClientIP(req)
-	if ip != "203.0.113.3" {
-		t.Errorf("getClientIP() = %q, want %q", ip, "203.0.113.3")
-	}
-}
-
-func TestGetClientIPXForwardedForPriority(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("X-Forwarded-For", "203.0.113.1")
-	req.Header.Set("X-Real-IP", "203.0.113.2")
-
-	// X-Forwarded-For should take priority
-	ip := getClientIP(req)
-	if ip != "203.0.113.1" {
-		t.Errorf("getClientIP() = %q, want %q (X-Forwarded-For should take priority)", ip, "203.0.113.1")
-	}
-}
-
-func TestGetClientIPRemoteAddr(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.RemoteAddr = "192.168.1.1:12345"
-
-	ip := getClientIP(req)
-	if ip != "192.168.1.1" {
-		t.Errorf("getClientIP() = %q, want %q", ip, "192.168.1.1")
-	}
-}
-
-func TestGetClientIPRemoteAddrIPv6(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.RemoteAddr = "[::1]:12345"
-
-	ip := getClientIP(req)
-	// LastIndex of ":" will find the port separator
-	if ip != "[::1]" {
-		t.Errorf("getClientIP() = %q, want %q", ip, "[::1]")
-	}
-}
-
-func TestGetClientIPNoHeaders(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.RemoteAddr = "10.0.0.1:8080"
-
-	ip := getClientIP(req)
-	if ip != "10.0.0.1" {
-		t.Errorf("getClientIP() = %q, want %q", ip, "10.0.0.1")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req.RemoteAddr = tt.remoteAddr
+			for k, v := range tt.headers {
+				req.Header.Set(k, v)
+			}
+			got := httputil.GetClientIP(req)
+			if got != tt.want {
+				t.Errorf("GetClientIP() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 
