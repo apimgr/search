@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/apimgr/search/src/alert"
+	"github.com/apimgr/search/src/common/httputil"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/direct"
 	"github.com/apimgr/search/src/geoip"
@@ -1204,7 +1205,7 @@ func (h *Handler) handleInstantAnswer(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	// Inject client IP so IP-related instant handlers return the requester's address.
-	ctx = instant.WithClientIP(ctx, getClientIP(r))
+	ctx = instant.WithClientIP(ctx, httputil.GetClientIP(r))
 
 	// Inject GeoIP lookup so instant handlers can enrich IP answers with geo data.
 	ctx = instant.WithGeoIPLookup(ctx, h.geoipLookup)
@@ -1895,24 +1896,6 @@ func (h *Handler) serveFaviconFallback(w http.ResponseWriter) {
 	w.Write(data)
 }
 
-// getClientIP extracts the real client IP from a request, preferring
-// X-Forwarded-For then X-Real-IP before falling back to RemoteAddr.
-func getClientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		ips := strings.Split(xff, ",")
-		if len(ips) > 0 {
-			return strings.TrimSpace(ips[0])
-		}
-	}
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		return xri
-	}
-	ip := r.RemoteAddr
-	if colonIdx := strings.LastIndex(ip, ":"); colonIdx != -1 {
-		ip = ip[:colonIdx]
-	}
-	return ip
-}
 
 // requireOperator wraps a handler and rejects requests without a valid operator
 // bearer token. Per AI.md PART 14: operator-gated endpoints use Bearer auth.

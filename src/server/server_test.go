@@ -906,11 +906,11 @@ func TestGetClientIPSimple(t *testing.T) {
 			want:       "198.51.100.178",
 		},
 		{
-			name:          "X-Forwarded-For priority",
+			name:          "X-Real-IP beats X-Forwarded-For per PART 12 priority",
 			remoteAddr:    "10.0.0.1:12345",
 			xForwardedFor: "203.0.113.50",
 			xRealIP:       "198.51.100.178",
-			want:          "203.0.113.50",
+			want:          "198.51.100.178",
 		},
 	}
 

@@ -419,7 +419,7 @@ func (m *Middleware) RateLimit(limiter *RateLimiter) func(http.Handler) http.Han
 
 // getClientIP extracts the real client IP from request.
 // Per AI.md PART 12: X-Forwarded-* headers only honored from trusted proxies.
-// Header priority (from trusted proxy only): CF-Connecting-IP → True-Client-IP → X-Client-IP → X-Real-IP → X-Forwarded-For → RemoteAddr
+// Header priority (from trusted proxy only): CF-Connecting-IP → True-Client-IP → X-Real-IP → X-Forwarded-For → X-Client-IP → RemoteAddr
 func getClientIP(r *http.Request, additionalTrustedProxies []string) string {
 	remoteIP, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -434,11 +434,7 @@ func getClientIP(r *http.Request, additionalTrustedProxies []string) string {
 		if ip := r.Header.Get("True-Client-IP"); ip != "" {
 			return strings.TrimSpace(ip)
 		}
-		// X-Client-IP (HAProxy and others)
-		if ip := r.Header.Get("X-Client-IP"); ip != "" {
-			return strings.TrimSpace(ip)
-		}
-		// X-Real-IP (nginx standard)
+		// X-Real-IP (nginx standard — single IP, more authoritative than X-Forwarded-For chain)
 		if xri := r.Header.Get("X-Real-IP"); xri != "" {
 			return strings.TrimSpace(xri)
 		}
@@ -448,6 +444,10 @@ func getClientIP(r *http.Request, additionalTrustedProxies []string) string {
 			if len(ips) > 0 {
 				return strings.TrimSpace(ips[0])
 			}
+		}
+		// X-Client-IP (HAProxy and others — alternative header)
+		if ip := r.Header.Get("X-Client-IP"); ip != "" {
+			return strings.TrimSpace(ip)
 		}
 	}
 	return remoteIP

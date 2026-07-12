@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/apimgr/search/src/common/httputil"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/logging"
 )
@@ -125,22 +126,8 @@ func (s *Server) RequireOperator(next http.HandlerFunc) http.HandlerFunc {
 }
 
 // getClientIPSimple extracts the client IP address from a request.
-// Used by src/server/alerts.go and others.
+// Delegates to httputil.GetClientIP which applies the trusted-proxy gate per AI.md PART 12.
+// Priority (from trusted proxy only): CF-Connecting-IP → True-Client-IP → X-Real-IP → X-Forwarded-For → X-Client-IP → RemoteAddr
 func getClientIPSimple(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		ips := strings.Split(xff, ",")
-		if len(ips) > 0 {
-			return strings.TrimSpace(ips[0])
-		}
-	}
-
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		return xri
-	}
-
-	ip := r.RemoteAddr
-	if colonIdx := strings.LastIndex(ip, ":"); colonIdx != -1 {
-		ip = ip[:colonIdx]
-	}
-	return ip
+	return httputil.GetClientIP(r)
 }
