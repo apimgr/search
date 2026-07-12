@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"os/user"
@@ -236,15 +237,16 @@ func handleEscalation() error {
 		return nil
 	}
 	if !canEscalate() {
-		fmt.Println("No admin access available, falling back to user service installation.")
+		slog.Info("No admin access available, falling back to user service installation")
 		return nil
 	}
+	// Interactive prompt for privilege escalation — intentional stdout I/O.
 	fmt.Print("Install system service? Requires elevated privileges. [Y/n]: ")
 	var answer string
 	fmt.Scanln(&answer)
 	answer = strings.TrimSpace(answer)
 	if strings.EqualFold(answer, "n") || strings.EqualFold(answer, "no") {
-		fmt.Println("Installing as user service...")
+		slog.Info("Installing as user service (operator declined system install)")
 		return nil
 	}
 	return execElevated()

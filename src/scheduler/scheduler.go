@@ -8,11 +8,10 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/go-co-op/gocron/v2"
 )
 
 // defaultTimezone is the default timezone for the scheduler (allows testing)
@@ -649,7 +648,8 @@ func (s *Scheduler) runTask(task *Task) {
 
 // calculateNextRun calculates the next run time from a cron expression or
 // @descriptor (handles @every Xm, @hourly, @daily, @weekly, @monthly, and
-// standard 5-field cron) using github.com/go-co-op/gocron/v2 per AI.md PART 3.
+// standard 5-field cron) using only Go's standard library.
+// Per AI.md PART 18: "Use Go's time/ticker — No external cron libraries required."
 // On a parse error the scheduler falls back to a 1-hour interval so a bad
 // schedule entry never wedges the loop.
 //
@@ -670,13 +670,67 @@ func (s *Scheduler) calculateNextRunLocked(schedule string) time.Time {
 	return calculateNextRunWithLoc(schedule, s.timezone)
 }
 
+// parseCronField parses a single cron field and returns a boolean bitmap indexed
+// from fieldMin. Supports: * (any), n (single), a-b (range), */n (step), and
+// comma-separated combinations of the above.
+func parseCronField(field string, fieldMin, fieldMax int) ([]bool, error) {
+	size := fieldMax - fieldMin + 1
+	result := make([]bool, size)
+
+	for _, part := range strings.Split(field, ",") {
+		if part == "*" {
+			for i := range result {
+				result[i] = true
+			}
+			return result, nil
+		}
+		// */step
+		if strings.HasPrefix(part, "*/") {
+			step, err := strconv.Atoi(part[2:])
+			if err != nil || step <= 0 {
+				return nil, fmt.Errorf("invalid step %q", part)
+			}
+			for v := fieldMin; v <= fieldMax; v += step {
+				result[v-fieldMin] = true
+			}
+			continue
+		}
+		// range: a-b
+		if dashIdx := strings.IndexByte(part, '-'); dashIdx >= 0 {
+			a, err1 := strconv.Atoi(part[:dashIdx])
+			b, err2 := strconv.Atoi(part[dashIdx+1:])
+			if err1 != nil || err2 != nil || a > b {
+				return nil, fmt.Errorf("invalid range %q", part)
+			}
+			for v := a; v <= b; v++ {
+				if v >= fieldMin && v <= fieldMax {
+					result[v-fieldMin] = true
+				}
+			}
+			continue
+		}
+		// single integer
+		v, err := strconv.Atoi(part)
+		if err != nil || v < fieldMin || v > fieldMax {
+			return nil, fmt.Errorf("invalid value %q (range %d-%d)", part, fieldMin, fieldMax)
+		}
+		result[v-fieldMin] = true
+	}
+	return result, nil
+}
+
+// calculateNextRunWithLoc computes the next execution time for a cron schedule
+// using only Go's standard library — no external cron library.
+// Per AI.md PART 18: "Use Go's time/ticker — No external cron libraries required."
+// Supports @every <duration>, @hourly, @daily, @weekly, @monthly, and standard
+// 5-field cron expressions (minute hour day-of-month month day-of-week).
 func calculateNextRunWithLoc(schedule string, loc *time.Location) time.Time {
 	if loc == nil {
 		loc = time.Local
 	}
 	now := time.Now().In(loc)
 
-	// Handle @every <duration> directly — no external parser needed.
+	// Handle @every <duration> directly.
 	if strings.HasPrefix(schedule, "@every ") {
 		d, err := time.ParseDuration(strings.TrimPrefix(schedule, "@every "))
 		if err != nil {
@@ -698,33 +752,53 @@ func calculateNextRunWithLoc(schedule string, loc *time.Location) time.Time {
 		schedule = "0 0 1 * *"
 	}
 
-	// Use gocron/v2 (AI.md PART 3) for all cron expression parsing.
-	// NewScheduler + Start populates nextScheduled synchronously before Start returns.
-	gs, err := gocron.NewScheduler(gocron.WithLocation(loc))
-	if err != nil {
-		slog.Warn("Failed to create gocron scheduler", "err", err)
+	// Parse 5-field cron: minute hour day-of-month month day-of-week
+	fields := strings.Fields(schedule)
+	if len(fields) != 5 {
+		slog.Warn("Invalid cron expression (expected 5 fields)", "schedule", schedule)
 		return now.Add(time.Hour)
 	}
-	job, err := gs.NewJob(
-		gocron.CronJob(schedule, false),
-		gocron.NewTask(func() {}),
-	)
-	if err != nil {
-		slog.Warn("Invalid schedule", "schedule", schedule, "err", err)
-		_ = gs.Shutdown()
-		return now.Add(time.Hour)
+
+	// minute 0-59, hour 0-23, dom 1-31, month 1-12, dow 0-6 (0=Sunday)
+	minBits, err0 := parseCronField(fields[0], 0, 59)
+	hrBits, err1 := parseCronField(fields[1], 0, 23)
+	domBits, err2 := parseCronField(fields[2], 1, 31)
+	monBits, err3 := parseCronField(fields[3], 1, 12)
+	dowBits, err4 := parseCronField(fields[4], 0, 6)
+
+	for _, err := range []error{err0, err1, err2, err3, err4} {
+		if err != nil {
+			slog.Warn("Invalid cron field", "schedule", schedule, "err", err)
+			return now.Add(time.Hour)
+		}
 	}
-	// Start synchronously computes nextScheduled for all registered jobs.
-	gs.Start()
-	next, nextErr := job.NextRun()
-	shutCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	_ = gs.ShutdownWithContext(shutCtx)
-	if nextErr != nil || next.IsZero() {
-		slog.Warn("Could not determine next run", "schedule", schedule)
-		return now.Add(time.Hour)
+
+	// Walk forward minute by minute from now+1 (max ~1 year = 525600 minutes).
+	t := now.Truncate(time.Minute).Add(time.Minute)
+	for range 525600 {
+		mo := int(t.Month()) // 1-12
+		d := t.Day()         // 1-31
+		dw := int(t.Weekday()) // 0=Sunday
+		h := t.Hour()          // 0-23
+		mi := t.Minute()       // 0-59
+
+		// Skip invalid days-of-month (e.g., Feb 30) — jump to next month.
+		if d > 28 {
+			lastDay := time.Date(t.Year(), t.Month()+1, 0, 0, 0, 0, 0, loc).Day()
+			if d > lastDay {
+				t = time.Date(t.Year(), t.Month()+1, 1, 0, 0, 0, 0, loc)
+				continue
+			}
+		}
+
+		if monBits[mo-1] && domBits[d-1] && dowBits[dw] && hrBits[h] && minBits[mi] {
+			return t
+		}
+		t = t.Add(time.Minute)
 	}
-	return next
+
+	slog.Warn("Could not determine next run within 1 year", "schedule", schedule)
+	return now.Add(time.Hour)
 }
 
 // catchUpMissedTasks runs tasks that were missed during downtime

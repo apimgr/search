@@ -32,7 +32,7 @@ LDFLAGS := -s -w \
 	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/config.BuildDate=$(BUILD_DATE)' \
 	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/config.OfficialSite=$(OFFICIALSITE)' \
 	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/version.Version=$(VERSION)' \
-	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/version.Commit=$(COMMIT_ID)' \
+	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/version.CommitID=$(COMMIT_ID)' \
 	-X 'github.com/$(PROJECTORG)/$(PROJECTNAME)/src/version.BuildDate=$(BUILD_DATE)'
 
 # CLI linker flags (per AI.md PART 25)

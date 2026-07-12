@@ -75,8 +75,8 @@ func TestGetShort(t *testing.T) {
 
 func TestGetCommitShort(t *testing.T) {
 	// Save original
-	orig := Commit
-	defer func() { Commit = orig }()
+	orig := CommitID
+	defer func() { CommitID = orig }()
 
 	tests := []struct {
 		name   string
@@ -112,7 +112,7 @@ func TestGetCommitShort(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			Commit = tt.commit
+			CommitID = tt.commit
 			got := GetCommitShort()
 			if got != tt.want {
 				t.Errorf("GetCommitShort() with commit %q = %q, want %q", tt.commit, got, tt.want)

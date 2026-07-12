@@ -37,8 +37,8 @@ var (
 	// Version is the semantic version (e.g., "1.0.0")
 	Version = "dev"
 
-	// Commit is the git commit hash
-	Commit = "unknown"
+	// CommitID is the git commit hash
+	CommitID = "unknown"
 
 	// BuildDate is the build timestamp
 	BuildDate = "unknown"
@@ -66,7 +66,7 @@ type Info struct {
 func Get() Info {
 	return Info{
 		Version:   Version,
-		Commit:    Commit,
+		Commit:    CommitID,
 		BuildDate: BuildDate,
 		Branch:    Branch,
 		GoVersion: GoVersion,
@@ -111,10 +111,10 @@ func GetShort() string {
 
 // GetCommitShort returns the first 7 characters of the commit hash
 func GetCommitShort() string {
-	if len(Commit) >= 7 {
-		return Commit[:7]
+	if len(CommitID) >= 7 {
+		return CommitID[:7]
 	}
-	return Commit
+	return CommitID
 }
 
 // IsDev returns true if this is a development build

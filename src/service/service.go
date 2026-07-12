@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"text/template"
 
@@ -23,11 +24,18 @@ func NewServiceManager(cfg *config.Config) *ServiceManager {
 // mkdirAll is a wrapper for os.MkdirAll enabling test injection
 var mkdirAll = os.MkdirAll
 
+// runCmd is a wrapper for runCommand enabling test injection
+var runCmd = runCommand
+
 // createServiceDirectories creates directories needed by the service.
-// Per AI.md: config, data, cache, log directories
+// Per AI.md PART 23: config, data, cache, log at 0755; security/, ssl/, tor/
+// inside the config dir at 0700 (sensitive key material).
 func (sm *ServiceManager) createServiceDirectories() error {
+	configDir := config.GetConfigDir()
+
+	// Standard directories at 0755
 	dirs := []string{
-		config.GetConfigDir(),
+		configDir,
 		config.GetDataDir(),
 		config.GetCacheDir(),
 		config.GetLogDir(),
@@ -38,7 +46,23 @@ func (sm *ServiceManager) createServiceDirectories() error {
 			return fmt.Errorf("failed to create %s: %w", dir, err)
 		}
 		// Set ownership to service user (non-fatal: may fail when not root)
-		if err := runCommand("chown", "-R", "search:search", dir); err != nil {
+		if err := runCmd("chown", "-R", "search:search", dir); err != nil {
+			_ = err
+		}
+	}
+
+	// Security-sensitive subdirectories at 0700 per AI.md PART 23
+	secureDirs := []string{
+		filepath.Join(configDir, "security"),
+		filepath.Join(configDir, "ssl"),
+		filepath.Join(configDir, "tor"),
+	}
+
+	for _, dir := range secureDirs {
+		if err := mkdirAll(dir, 0700); err != nil {
+			return fmt.Errorf("failed to create %s: %w", dir, err)
+		}
+		if err := runCmd("chown", "-R", "search:search", dir); err != nil {
 			_ = err
 		}
 	}

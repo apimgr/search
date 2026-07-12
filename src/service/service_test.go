@@ -1868,6 +1868,78 @@ func TestCreateServiceDirectoriesMkdirFails(t *testing.T) {
 	}
 }
 
+// TestCreateServiceDirectoriesSecureDirFails covers the error-return branch
+// in the secure-subdirectory loop inside createServiceDirectories.
+func TestCreateServiceDirectoriesSecureDirFails(t *testing.T) {
+	orig := mkdirAll
+	callCount := 0
+	mkdirAll = func(_ string, _ os.FileMode) error {
+		callCount++
+		// Let the first 4 standard-dir calls succeed; fail on the 5th (first security subdir).
+		if callCount >= 5 {
+			return fmt.Errorf("injected secure-dir failure")
+		}
+		return nil
+	}
+	defer func() { mkdirAll = orig }()
+
+	cfg := config.DefaultConfig()
+	sm := NewServiceManager(cfg)
+
+	if err := sm.createServiceDirectories(); err == nil {
+		t.Error("createServiceDirectories() should fail when secure mkdirAll fails")
+	}
+}
+
+// TestCreateServiceDirectoriesSecureDirMode verifies that security-sensitive
+// subdirectories are created with permission 0700 per AI.md PART 23.
+func TestCreateServiceDirectoriesSecureDirMode(t *testing.T) {
+	orig := mkdirAll
+	recorded := map[string]os.FileMode{}
+	mkdirAll = func(path string, perm os.FileMode) error {
+		recorded[filepath.Base(path)] = perm
+		return nil
+	}
+	defer func() { mkdirAll = orig }()
+
+	cfg := config.DefaultConfig()
+	sm := NewServiceManager(cfg)
+	_ = sm.createServiceDirectories()
+
+	for _, secureDir := range []string{"security", "ssl", "tor"} {
+		perm, ok := recorded[secureDir]
+		if !ok {
+			t.Errorf("mkdirAll not called for %q", secureDir)
+			continue
+		}
+		if perm != 0700 {
+			t.Errorf("secure dir %q mode = %04o, want 0700", secureDir, perm)
+		}
+	}
+}
+
+// TestCreateServiceDirectoriesChownFails covers the non-fatal error bodies when
+// chown fails for both standard and secure directories.
+func TestCreateServiceDirectoriesChownFails(t *testing.T) {
+	origMkdir := mkdirAll
+	origRunCmd := runCmd
+	mkdirAll = func(_ string, _ os.FileMode) error { return nil }
+	runCmd = func(_ string, _ ...string) error {
+		return fmt.Errorf("injected chown failure")
+	}
+	defer func() {
+		mkdirAll = origMkdir
+		runCmd = origRunCmd
+	}()
+
+	cfg := config.DefaultConfig()
+	sm := NewServiceManager(cfg)
+	// Chown errors are non-fatal and silently ignored; no error expected.
+	if err := sm.createServiceDirectories(); err != nil {
+		t.Errorf("createServiceDirectories() returned unexpected error: %v", err)
+	}
+}
+
 // Test RegisterCallback with nil (should handle gracefully)
 func TestMaintenanceServiceRegisterNilCallback(t *testing.T) {
 	cfg := config.DefaultConfig()

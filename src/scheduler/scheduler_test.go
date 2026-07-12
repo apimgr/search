@@ -701,11 +701,9 @@ func TestCalculateNextRunCronInvalid(t *testing.T) {
 	}
 }
 
-// Tests of the internal cron parser were removed when the hand-rolled parser
-// was replaced with github.com/go-co-op/gocron/v2 per AI.md PART 18. The library
-// owns its own parser tests; behaviour from the scheduler's perspective is
-// still exercised via TestCalculateNextRunCron and
-// TestCalculateNextRunCronInvalid above.
+// The hand-rolled pure-Go cron parser (parseCronField + calculateNextRunWithLoc)
+// is exercised via TestCalculateNextRunCron and TestCalculateNextRunCronInvalid
+// above — no external library is used per AI.md PART 18.
 
 func TestTaskHandlersStruct(t *testing.T) {
 	handlers := &TaskHandlers{

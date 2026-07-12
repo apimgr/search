@@ -70,7 +70,7 @@ jobs:
             -X 'github.com/apimgr/search/src/config.BuildDate=${BUILD_DATE}' \
             -X 'github.com/apimgr/search/src/config.OfficialSite=${OFFICIALSITE}' \
             -X 'github.com/apimgr/search/src/version.Version=${VERSION}' \
-            -X 'github.com/apimgr/search/src/version.Commit=${COMMIT_ID}' \
+            -X 'github.com/apimgr/search/src/version.CommitID=${COMMIT_ID}' \
             -X 'github.com/apimgr/search/src/version.BuildDate=${BUILD_DATE}'"
           docker run --rm \
             -v "$PWD:/workspace" \
