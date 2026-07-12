@@ -331,7 +331,7 @@ func runServer() {
 	if flagDaemon && os.Getenv("_DAEMON_CHILD") != "1" {
 		if err := daemonize(); err != nil {
 			slog.Error("Failed to daemonize", "err", err)
-			os.Exit(1)
+			exitFunc(1)
 		}
 		// Parent exits in daemonize(), only child continues
 	}
@@ -345,14 +345,14 @@ func runServer() {
 		svcUser, err := service.CreateSystemUser("search")
 		if err != nil {
 			slog.Error("Failed to create system user", "err", err)
-			os.Exit(1)
+			exitFunc(1)
 		}
 		slog.Info("System user ready", "user", svcUser.Name, "uid", svcUser.UID, "gid", svcUser.GID)
 
 		// Step 8b-d: Create directories and set ownership (while still root)
 		if err := config.EnsureSystemDirectories("search"); err != nil {
 			slog.Error("Failed to create system directories", "err", err)
-			os.Exit(1)
+			exitFunc(1)
 		}
 		slog.Info("System directories created")
 
@@ -372,13 +372,13 @@ func runServer() {
 		slog.Info("Dropping privileges", "user", svcUser.Name)
 		if err := service.DropPrivileges(svcUser.Name); err != nil {
 			slog.Error("Failed to drop privileges", "err", err)
-			os.Exit(1)
+			exitFunc(1)
 		}
 
 		// Step 8h: Verify privilege drop succeeded
 		if err := service.VerifyPrivilegesDropped(); err != nil {
 			slog.Error("Privilege verification failed", "err", err)
-			os.Exit(1)
+			exitFunc(1)
 		}
 		slog.Info("Privileges dropped successfully")
 	}
@@ -388,17 +388,17 @@ func runServer() {
 	pidFile := config.GetPIDFile()
 	if running, existingPID, err := server.CheckPIDFile(pidFile); err != nil {
 		slog.Error("PID file check failed", "err", err)
-		os.Exit(1)
+		exitFunc(1)
 	} else if running {
 		slog.Error("Server already running", "pid", existingPID)
-		os.Exit(1)
+		exitFunc(1)
 	}
 
 	// Step 12: Write PID file
 	// Per AI.md PART 8: Startup sequence step 12 — write after stale check passes
 	if err := server.WritePIDFile(pidFile); err != nil {
 		slog.Error("Failed to write PID file", "err", err)
-		os.Exit(1)
+		exitFunc(1)
 	}
 	defer server.RemovePIDFile(pidFile)
 
@@ -406,7 +406,7 @@ func runServer() {
 	cfg, err := config.Initialize()
 	if err != nil {
 		slog.Error("Configuration failed", "err", err)
-		os.Exit(1)
+		exitFunc(1)
 	}
 
 	// On first run, display the auto-generated operator token (server.token)
@@ -449,10 +449,10 @@ func runServer() {
 		if err != nil {
 			slog.Error("Server failed to start", "err", err)
 		}
-		os.Exit(1)
+		exitFunc(1)
 	case <-time.After(5 * time.Minute):
 		slog.Error("Server failed to start within 5-minute timeout")
-		os.Exit(1)
+		exitFunc(1)
 	}
 
 	// Step 20: Print responsive startup banner per AI.md PART 7 and PART 8.
@@ -1570,7 +1570,7 @@ func runTest() {
 			return
 		}
 		slog.Error("Search failed", "err", err)
-		os.Exit(1)
+		exitFunc(1)
 	}
 
 	// Display results
