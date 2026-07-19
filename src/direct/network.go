@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/version"
 )
 
@@ -42,6 +43,8 @@ func (h *DNSHandler) HandleDirectQuery(ctx context.Context, term string) (*Answe
 	if term == "" {
 		return nil, fmt.Errorf("domain name required")
 	}
+
+	lang := LangFromContext(ctx)
 
 	// Parse for specific record type: dns:example.com/mx
 	domain := term
@@ -125,7 +128,7 @@ func (h *DNSHandler) HandleDirectQuery(ctx context.Context, term string) (*Answe
 			Type:        AnswerTypeDNS,
 			Term:        term,
 			Title:       fmt.Sprintf("DNS: %s", domain),
-			Description: "No DNS records found",
+			Description: i18n.T(lang, "direct.no_dns_records_found"),
 			Content:     fmt.Sprintf("<p>No DNS records found for <code>%s</code>.</p>", escapeHTML(domain)),
 			Error:       "not_found",
 		}, nil
@@ -273,11 +276,12 @@ func (h *WhoisHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 }
 
 func (h *WhoisHandler) fallbackWhois(ctx context.Context, domain string) (*Answer, error) {
+	lang := LangFromContext(ctx)
 	return &Answer{
 		Type:        AnswerTypeWhois,
 		Term:        domain,
 		Title:       fmt.Sprintf("WHOIS: %s", domain),
-		Description: "WHOIS lookup failed",
+		Description: i18n.T(lang, "direct.whois_lookup_failed"),
 		Content:     fmt.Sprintf("<p>Unable to fetch WHOIS data for <code>%s</code>. Try again later.</p>", escapeHTML(domain)),
 		Error:       "lookup_failed",
 	}, nil
@@ -339,6 +343,8 @@ func (h *ResolveHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 		return nil, fmt.Errorf("hostname required")
 	}
 
+	lang := LangFromContext(ctx)
+
 	data := make(map[string]interface{})
 	data["hostname"] = term
 
@@ -375,7 +381,7 @@ func (h *ResolveHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 			Type:        AnswerTypeResolve,
 			Term:        term,
 			Title:       fmt.Sprintf("Resolve: %s", term),
-			Description: "Hostname not found",
+			Description: i18n.T(lang, "direct.hostname_not_found"),
 			Content:     fmt.Sprintf("<p>Unable to resolve <code>%s</code>.</p>", escapeHTML(term)),
 			Error:       "not_found",
 		}, nil
@@ -443,6 +449,8 @@ func (h *CertHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		return nil, fmt.Errorf("domain name required")
 	}
 
+	lang := LangFromContext(ctx)
+
 	// Add port if not specified
 	host := term
 	if !strings.Contains(term, ":") {
@@ -459,7 +467,7 @@ func (h *CertHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 			Type:        AnswerTypeCert,
 			Term:        term,
 			Title:       fmt.Sprintf("Certificate: %s", term),
-			Description: "Failed to connect",
+			Description: i18n.T(lang, "direct.failed_to_connect"),
 			Content:     fmt.Sprintf("<p>Unable to connect to <code>%s</code>: %s</p>", escapeHTML(term), escapeHTML(err.Error())),
 			Error:       "connection_failed",
 		}, nil
@@ -472,7 +480,7 @@ func (h *CertHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 			Type:        AnswerTypeCert,
 			Term:        term,
 			Title:       fmt.Sprintf("Certificate: %s", term),
-			Description: "No certificate found",
+			Description: i18n.T(lang, "direct.no_certificate_found"),
 			Content:     "<p>No SSL/TLS certificate found.</p>",
 			Error:       "no_cert",
 		}, nil
@@ -579,6 +587,8 @@ func (h *HeadersHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 		return nil, fmt.Errorf("URL required")
 	}
 
+	lang := LangFromContext(ctx)
+
 	// Add https:// if no scheme
 	targetURL := term
 	if !strings.HasPrefix(term, "http://") && !strings.HasPrefix(term, "https://") {
@@ -597,7 +607,7 @@ func (h *HeadersHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 			Type:        AnswerTypeHeaders,
 			Term:        term,
 			Title:       fmt.Sprintf("Headers: %s", term),
-			Description: "Request failed",
+			Description: i18n.T(lang, "direct.request_failed"),
 			Content:     fmt.Sprintf("<p>Unable to fetch headers from <code>%s</code>: %s</p>", escapeHTML(targetURL), escapeHTML(err.Error())),
 			Error:       "request_failed",
 		}, nil
@@ -737,6 +747,8 @@ func (h *ASNHandler) HandleDirectQuery(ctx context.Context, term string) (*Answe
 		return nil, fmt.Errorf("ASN number required")
 	}
 
+	lang := LangFromContext(ctx)
+
 	// Remove AS prefix if present
 	asn := strings.TrimPrefix(term, "AS")
 
@@ -782,7 +794,7 @@ func (h *ASNHandler) HandleDirectQuery(ctx context.Context, term string) (*Answe
 			Type:        AnswerTypeASN,
 			Term:        term,
 			Title:       fmt.Sprintf("ASN: %s", term),
-			Description: "ASN not found",
+			Description: i18n.T(lang, "direct.asn_not_found"),
 			Content:     fmt.Sprintf("<p>No information found for ASN <code>%s</code>.</p>", escapeHTML(term)),
 			Error:       "not_found",
 		}, nil
@@ -851,6 +863,8 @@ func (h *SubnetHandler) HandleDirectQuery(ctx context.Context, term string) (*An
 		return nil, fmt.Errorf("CIDR notation required (e.g., 192.168.1.0/24)")
 	}
 
+	lang := LangFromContext(ctx)
+
 	// Parse CIDR
 	_, ipNet, err := net.ParseCIDR(term)
 	if err != nil {
@@ -864,7 +878,7 @@ func (h *SubnetHandler) HandleDirectQuery(ctx context.Context, term string) (*An
 				Type:        AnswerTypeSubnet,
 				Term:        term,
 				Title:       fmt.Sprintf("Subnet: %s", term),
-				Description: "Invalid CIDR notation",
+				Description: i18n.T(lang, "direct.invalid_cidr_notation"),
 				Content:     fmt.Sprintf("<p>Invalid CIDR notation: <code>%s</code>. Use format like <code>192.168.1.0/24</code>.</p>", escapeHTML(term)),
 				Error:       "invalid_cidr",
 			}, nil

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/version"
 	"golang.org/x/net/html"
 )
@@ -72,25 +73,27 @@ func (h *ManHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 	}
 	req.Header.Set("User-Agent", version.BrowserUserAgent)
 
+	lang := LangFromContext(ctx)
+
 	resp, err := h.client.Do(req)
 	if err != nil {
-		return h.errorAnswer(query, command, "Failed to connect to man.cx"), nil
+		return h.errorAnswer(query, command, i18n.T(lang, "instant.man_connect_failed")), nil
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return h.errorAnswer(query, command, fmt.Sprintf("Man page for '%s' not found", command)), nil
+		return h.errorAnswer(query, command, i18n.T(lang, "instant.man_not_found", command)), nil
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return h.errorAnswer(query, command, fmt.Sprintf("man.cx returned status %d", resp.StatusCode)), nil
+		return h.errorAnswer(query, command, i18n.T(lang, "instant.man_bad_status", resp.StatusCode)), nil
 	}
 
 	// Read content (limit to prevent huge pages)
 	limitedReader := io.LimitReader(resp.Body, 64*1024)
 	contentBytes, err := io.ReadAll(limitedReader)
 	if err != nil {
-		return h.errorAnswer(query, command, "Failed to read man page"), nil
+		return h.errorAnswer(query, command, i18n.T(lang, "instant.man_read_failed")), nil
 	}
 
 	rawContent := string(contentBytes)
@@ -103,7 +106,7 @@ func (h *ManHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 	// man.cx returns HTTP 200 with a "Search results for ..." page (no NAME/DESCRIPTION
 	// sections) when the command has no man page, so absence of both is the not-found signal.
 	if manInfo.Name == "" && manInfo.Description == "" {
-		return h.errorAnswer(query, command, fmt.Sprintf("Man page for '%s' not found", command)), nil
+		return h.errorAnswer(query, command, i18n.T(lang, "instant.man_not_found", command)), nil
 	}
 
 	// Build HTML content

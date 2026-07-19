@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/apimgr/search/src/common/i18n"
 )
 
 // ASCIIHandler handles ASCII art text generation
@@ -69,7 +71,7 @@ func (h *ASCIIHandler) HandleInstantQuery(ctx context.Context, query string) (*A
 	return &Answer{
 		Type:    AnswerTypeASCII,
 		Query:   query,
-		Title:   "ASCII Art Generator",
+		Title:   i18n.T(LangFromContext(ctx), "instant.ascii_art_generator_title"),
 		Content: content,
 		Data: map[string]interface{}{
 			"input": text,

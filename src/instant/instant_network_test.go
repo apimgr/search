@@ -601,7 +601,7 @@ Updates: 777, 778
 
 func TestRFCHandlerErrorAnswer(t *testing.T) {
 	h := NewRFCHandler()
-	ans := h.errorAnswer("rfc 791", "791", "connection refused")
+	ans := h.errorAnswer("rfc 791", "791", "en", "connection refused")
 	if ans == nil {
 		t.Fatal("expected non-nil answer")
 	}
@@ -1442,7 +1442,7 @@ func TestTimezoneHandlerHandleConversion(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			query := tt.timeStr + " " + tt.fromTZ + " to " + tt.toTZ
-			ans, err := h.handleConversion(query, tt.timeStr, tt.fromTZ, tt.toTZ)
+			ans, err := h.handleConversion(query, tt.timeStr, tt.fromTZ, tt.toTZ, "en")
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

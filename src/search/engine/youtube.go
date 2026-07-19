@@ -75,7 +75,7 @@ func (e *YouTube) Search(ctx context.Context, query *model.Query) ([]model.Resul
 }
 
 func (e *YouTube) parseResults(html string, query *model.Query) ([]model.Result, error) {
-	maxResults := 10
+	maxResults := e.GetConfig().GetMaxResults()
 
 	// YouTube embeds search results in a JSON object within the page
 	// Look for ytInitialData
@@ -89,7 +89,15 @@ func (e *YouTube) parseResults(html string, query *model.Query) ([]model.Result,
 	}
 
 	if len(jsonMatch) >= 2 {
-		return e.parseJSON(jsonMatch[1], query, maxResults)
+		// The JSON structure YouTube ships is undocumented and changes without
+		// notice. If decoding fails (e.g. the non-greedy regex above truncated
+		// the object early) or the expected renderer path yields nothing (schema
+		// drift), fall back to scanning the raw HTML for /watch?v= links instead
+		// of surfacing zero results.
+		results, err := e.parseJSON(jsonMatch[1], query, maxResults)
+		if err == nil && len(results) > 0 {
+			return results, nil
+		}
 	}
 
 	// Fallback to HTML parsing
@@ -161,7 +169,7 @@ func (e *YouTube) parseJSON(jsonStr string, query *model.Query, maxResults int) 
 				continue
 			}
 
-			result := e.parseVideoRenderer(videoRenderer, query)
+			result := e.parseVideoRenderer(videoRenderer, query, len(results))
 			if result != nil {
 				results = append(results, *result)
 			}
@@ -171,7 +179,7 @@ func (e *YouTube) parseJSON(jsonStr string, query *model.Query, maxResults int) 
 	return results, nil
 }
 
-func (e *YouTube) parseVideoRenderer(video map[string]interface{}, query *model.Query) *model.Result {
+func (e *YouTube) parseVideoRenderer(video map[string]interface{}, query *model.Query, position int) *model.Result {
 	// Extract video ID
 	videoID, ok := video["videoId"].(string)
 	if !ok || videoID == "" {
@@ -261,9 +269,9 @@ func (e *YouTube) parseVideoRenderer(video map[string]interface{}, query *model.
 		URL:       videoURL,
 		Content:   description,
 		Thumbnail: thumbnail,
-		Engine:    "YouTube",
+		Engine:    e.Name(),
 		Category:  query.Category,
-		Score:     65,
+		Score:     calculateScore(e.GetPriority(), position, 1),
 	}
 }
 
@@ -298,9 +306,9 @@ func (e *YouTube) parseHTML(html string, query *model.Query, maxResults int) ([]
 			Title:     fmt.Sprintf("YouTube Video %s", videoID),
 			URL:       videoURL,
 			Thumbnail: thumbnail,
-			Engine:    "YouTube",
+			Engine:    e.Name(),
 			Category:  query.Category,
-			Score:     float64(65) / float64(len(results)+1),
+			Score:     calculateScore(e.GetPriority(), len(results), 1),
 		})
 	}
 

@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/apimgr/search/src/common/i18n"
 )
 
 // AnswerType represents the type of direct answer
@@ -184,6 +186,27 @@ type Answer struct {
 	Timestamp   time.Time              `json:"timestamp"`
 }
 
+// langKeyType is an unexported type for the language context key.
+type langKeyType struct{}
+
+// langKey is the context key used to pass the resolved request language to direct handlers.
+var langKey = langKeyType{}
+
+// WithLang returns a new context carrying the resolved i18n language code so
+// direct handlers can return translated Title/Content text.
+func WithLang(ctx context.Context, lang string) context.Context {
+	return context.WithValue(ctx, langKey, lang)
+}
+
+// LangFromContext retrieves the language stored by WithLang.
+// Returns "en" (the i18n default language) when not set.
+func LangFromContext(ctx context.Context) string {
+	if lang, ok := ctx.Value(langKey).(string); ok && lang != "" {
+		return lang
+	}
+	return "en"
+}
+
 // Handler interface for direct answer handlers
 type Handler interface {
 	// Type returns the answer type this handler provides
@@ -327,13 +350,15 @@ func (m *Manager) Process(ctx context.Context, query string) (*Answer, error) {
 
 // ProcessType handles a specific direct answer type
 func (m *Manager) ProcessType(ctx context.Context, answerType AnswerType, term string) (*Answer, error) {
+	lang := LangFromContext(ctx)
+
 	handler, ok := m.handlers[answerType]
 	if !ok {
 		return &Answer{
 			Type:      answerType,
 			Term:      term,
-			Title:     "Unknown Type",
-			Content:   "No handler found for this direct answer type.",
+			Title:     i18n.T(lang, "direct.unknown_type_title"),
+			Content:   i18n.T(lang, "direct.unknown_type_message"),
 			Error:     "unknown_type",
 			Timestamp: time.Now(),
 		}, nil
@@ -344,7 +369,7 @@ func (m *Manager) ProcessType(ctx context.Context, answerType AnswerType, term s
 		return &Answer{
 			Type:      answerType,
 			Term:      term,
-			Title:     "Error",
+			Title:     i18n.T(lang, "direct.error_title"),
 			Content:   err.Error(),
 			Error:     "handler_error",
 			Timestamp: time.Now(),

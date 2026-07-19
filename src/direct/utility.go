@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/apimgr/search/src/common/i18n"
 )
 
 // HTTPHandler handles http:{code} queries
@@ -103,6 +105,7 @@ var httpStatusCodes = map[int]struct {
 }
 
 func (h *HTTPHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
+	lang := LangFromContext(ctx)
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("HTTP status code required")
@@ -113,8 +116,8 @@ func (h *HTTPHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		return &Answer{
 			Type:        AnswerTypeHTTP,
 			Term:        term,
-			Title:       "HTTP Status Code",
-			Description: "Invalid status code",
+			Title:       i18n.T(lang, "direct.http_status_code_title"),
+			Description: i18n.T(lang, "direct.invalid_status_code"),
 			Content:     fmt.Sprintf("<p>Invalid HTTP status code: <code>%s</code></p>", escapeHTML(term)),
 			Error:       "invalid_code",
 		}, nil
@@ -126,7 +129,7 @@ func (h *HTTPHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 			Type:        AnswerTypeHTTP,
 			Term:        term,
 			Title:       fmt.Sprintf("HTTP %d", code),
-			Description: "Unknown status code",
+			Description: i18n.T(lang, "direct.unknown_status_code"),
 			Content:     fmt.Sprintf("<p>HTTP status code <code>%d</code> is not a standard code.</p>", code),
 			Error:       "unknown_code",
 		}, nil
@@ -244,6 +247,7 @@ var portDB = map[int]struct {
 }
 
 func (h *PortHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
+	lang := LangFromContext(ctx)
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("port number required")
@@ -254,8 +258,8 @@ func (h *PortHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		return &Answer{
 			Type:        AnswerTypePort,
 			Term:        term,
-			Title:       "Port Lookup",
-			Description: "Invalid port number",
+			Title:       i18n.T(lang, "direct.port_lookup_title"),
+			Description: i18n.T(lang, "direct.invalid_port_number"),
 			Content:     fmt.Sprintf("<p>Invalid port number: <code>%s</code>. Ports must be between 0 and 65535.</p>", escapeHTML(term)),
 			Error:       "invalid_port",
 		}, nil
@@ -267,11 +271,11 @@ func (h *PortHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		category := ""
 		switch {
 		case port < 1024:
-			category = "Well-known port (system)"
+			category = i18n.T(lang, "direct.port_category_well_known")
 		case port < 49152:
-			category = "Registered port"
+			category = i18n.T(lang, "direct.port_category_registered")
 		default:
-			category = "Dynamic/Private port"
+			category = i18n.T(lang, "direct.port_category_dynamic")
 		}
 
 		return &Answer{
@@ -353,6 +357,7 @@ func (h *CronHandler) Type() AnswerType {
 }
 
 func (h *CronHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
+	lang := LangFromContext(ctx)
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("cron expression required")
@@ -363,8 +368,8 @@ func (h *CronHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		return &Answer{
 			Type:        AnswerTypeCron,
 			Term:        term,
-			Title:       "Cron Expression",
-			Description: "Invalid cron expression",
+			Title:       i18n.T(lang, "direct.cron_expression_title"),
+			Description: i18n.T(lang, "direct.invalid_cron_expression"),
 			Content:     fmt.Sprintf("<p>Invalid cron expression: <code>%s</code>. Expected 5-7 fields.</p>", escapeHTML(term)),
 			Error:       "invalid_cron",
 		}, nil
@@ -407,7 +412,7 @@ func (h *CronHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 	return &Answer{
 		Type:        AnswerTypeCron,
 		Term:        term,
-		Title:       "Cron Expression",
+		Title:       i18n.T(lang, "direct.cron_expression_title"),
 		Description: description,
 		Content:     formatCronContent(term, fields, description, nextRuns),
 		Source:      "Cron Parser",
@@ -549,6 +554,7 @@ func (h *ChmodHandler) Type() AnswerType {
 }
 
 func (h *ChmodHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
+	lang := LangFromContext(ctx)
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("permissions required")
@@ -584,8 +590,8 @@ func (h *ChmodHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 		return &Answer{
 			Type:        AnswerTypeChmod,
 			Term:        term,
-			Title:       "chmod Calculator",
-			Description: "Invalid permissions",
+			Title:       i18n.T(lang, "direct.chmod_calculator_title"),
+			Description: i18n.T(lang, "direct.invalid_permissions"),
 			Content:     fmt.Sprintf("<p>Invalid permissions: <code>%s</code>. Use octal (755) or symbolic (rwxr-xr-x).</p>", escapeHTML(term)),
 			Error:       "invalid_permissions",
 		}, nil
@@ -717,6 +723,7 @@ func (h *RegexHandler) Type() AnswerType {
 }
 
 func (h *RegexHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
+	lang := LangFromContext(ctx)
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("regex pattern required")
@@ -728,8 +735,8 @@ func (h *RegexHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 		return &Answer{
 			Type:        AnswerTypeRegex,
 			Term:        term,
-			Title:       "Regex Error",
-			Description: "Invalid regex pattern",
+			Title:       i18n.T(lang, "direct.regex_error_title"),
+			Description: i18n.T(lang, "direct.invalid_regex_pattern"),
 			Content:     fmt.Sprintf("<p class=\"error\">Invalid regex: %s</p><pre><code>%s</code></pre>", escapeHTML(err.Error()), escapeHTML(term)),
 			Error:       "invalid_regex",
 		}, nil
@@ -748,8 +755,8 @@ func (h *RegexHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 	return &Answer{
 		Type:        AnswerTypeRegex,
 		Term:        term,
-		Title:       "Regex Analyzer",
-		Description: "Valid regular expression",
+		Title:       i18n.T(lang, "direct.regex_analyzer_title"),
+		Description: i18n.T(lang, "direct.valid_regular_expression"),
 		Content:     formatRegexContent(term, analysis, re.NumSubexp()),
 		Source:      "Regex Analyzer",
 		Data:        data,
@@ -852,6 +859,7 @@ func (h *JWTHandler) Type() AnswerType {
 }
 
 func (h *JWTHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
+	lang := LangFromContext(ctx)
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("JWT token required")
@@ -862,8 +870,8 @@ func (h *JWTHandler) HandleDirectQuery(ctx context.Context, term string) (*Answe
 		return &Answer{
 			Type:        AnswerTypeJWT,
 			Term:        truncateString(term, 50),
-			Title:       "JWT Decoder",
-			Description: "Invalid JWT format",
+			Title:       i18n.T(lang, "direct.jwt_decoder_title"),
+			Description: i18n.T(lang, "direct.invalid_jwt_format"),
 			Content:     "<p class=\"error\">Invalid JWT: Token must have 3 parts separated by dots.</p>",
 			Error:       "invalid_jwt",
 		}, nil
@@ -875,8 +883,8 @@ func (h *JWTHandler) HandleDirectQuery(ctx context.Context, term string) (*Answe
 		return &Answer{
 			Type:        AnswerTypeJWT,
 			Term:        truncateString(term, 50),
-			Title:       "JWT Decoder",
-			Description: "Invalid header",
+			Title:       i18n.T(lang, "direct.jwt_decoder_title"),
+			Description: i18n.T(lang, "direct.invalid_header"),
 			Content:     fmt.Sprintf("<p class=\"error\">Invalid JWT header: %s</p>", escapeHTML(err.Error())),
 			Error:       "invalid_header",
 		}, nil
@@ -888,8 +896,8 @@ func (h *JWTHandler) HandleDirectQuery(ctx context.Context, term string) (*Answe
 		return &Answer{
 			Type:        AnswerTypeJWT,
 			Term:        truncateString(term, 50),
-			Title:       "JWT Decoder",
-			Description: "Invalid payload",
+			Title:       i18n.T(lang, "direct.jwt_decoder_title"),
+			Description: i18n.T(lang, "direct.invalid_payload"),
 			Content:     fmt.Sprintf("<p class=\"error\">Invalid JWT payload: %s</p>", escapeHTML(err.Error())),
 			Error:       "invalid_payload",
 		}, nil
@@ -930,8 +938,8 @@ func (h *JWTHandler) HandleDirectQuery(ctx context.Context, term string) (*Answe
 	return &Answer{
 		Type:        AnswerTypeJWT,
 		Term:        truncateString(term, 50),
-		Title:       "JWT Decoder",
-		Description: "JSON Web Token decoded",
+		Title:       i18n.T(lang, "direct.jwt_decoder_title"),
+		Description: i18n.T(lang, "direct.json_web_token_decoded"),
 		Content:     formatJWTContent(string(headerPretty), string(payloadPretty), expired, expiresIn, payload),
 		Source:      "JWT Decoder",
 		Data:        data,
@@ -1017,6 +1025,7 @@ func (h *TimestampHandler) Type() AnswerType {
 }
 
 func (h *TimestampHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
+	lang := LangFromContext(ctx)
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("timestamp or date required")
@@ -1061,8 +1070,8 @@ func (h *TimestampHandler) HandleDirectQuery(ctx context.Context, term string) (
 		return &Answer{
 			Type:        AnswerTypeTimestamp,
 			Term:        term,
-			Title:       "Timestamp Converter",
-			Description: "Invalid timestamp or date",
+			Title:       i18n.T(lang, "direct.timestamp_converter_title"),
+			Description: i18n.T(lang, "direct.invalid_timestamp_or_date"),
 			Content:     fmt.Sprintf("<p class=\"error\">Could not parse: <code>%s</code></p>", escapeHTML(term)),
 			Error:       "invalid_timestamp",
 		}, nil
@@ -1091,7 +1100,7 @@ func (h *TimestampHandler) HandleDirectQuery(ctx context.Context, term string) (
 	return &Answer{
 		Type:        AnswerTypeTimestamp,
 		Term:        term,
-		Title:       "Timestamp Converter",
+		Title:       i18n.T(lang, "direct.timestamp_converter_title"),
 		Description: t.Format(time.RFC1123),
 		Content:     formatTimestampContent(t, relative),
 		Source:      "Timestamp Converter",

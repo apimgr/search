@@ -87,6 +87,7 @@ func (e *WikipediaEngine) Search(ctx context.Context, query *model.Query) ([]mod
 	}
 
 	results := make([]model.Result, 0, len(wikiResp.Query.Pages))
+	position := 0
 	for _, page := range wikiResp.Query.Pages {
 		extract := page.Extract
 		if len(extract) > 500 {
@@ -99,7 +100,13 @@ func (e *WikipediaEngine) Search(ctx context.Context, query *model.Query) ([]mod
 			Engine:      e.Name(),
 			Category:    query.Category,
 			PublishedAt: time.Now(),
+			Score:       calculateScore(e.GetPriority(), position, 1),
+			Position:    position,
 		})
+		position++
+		if position >= e.GetConfig().GetMaxResults() {
+			break
+		}
 	}
 
 	return results, nil

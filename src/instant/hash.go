@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/apimgr/search/src/common/i18n"
 )
 
 // HashHandler handles hash generation
@@ -110,7 +112,7 @@ func (h *HashHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 	return &Answer{
 		Type:    AnswerTypeHash,
 		Query:   query,
-		Title:   "Hash Generator",
+		Title:   i18n.T(LangFromContext(ctx), "instant.hash_generator_title"),
 		Content: content.String(),
 	}, nil
 }

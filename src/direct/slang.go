@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/version"
 )
 
@@ -49,6 +50,7 @@ type urbanDictionaryEntry struct {
 }
 
 func (h *SlangHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
+	lang := LangFromContext(ctx)
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("slang term required")
@@ -75,7 +77,7 @@ func (h *SlangHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 			Type:        AnswerTypeSlang,
 			Term:        term,
 			Title:       fmt.Sprintf("slang: %s", term),
-			Description: "Failed to fetch definition",
+			Description: i18n.T(lang, "direct.failed_to_fetch_definition"),
 			Content:     fmt.Sprintf("<p>Failed to fetch definition for <code>%s</code>. Status: %d</p>", escapeHTML(term), resp.StatusCode),
 			Error:       "fetch_error",
 		}, nil
@@ -91,7 +93,7 @@ func (h *SlangHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 			Type:        AnswerTypeSlang,
 			Term:        term,
 			Title:       fmt.Sprintf("slang: %s", term),
-			Description: "No definition found",
+			Description: i18n.T(lang, "direct.no_definition_found"),
 			Content:     fmt.Sprintf("<p>No slang definition found for <code>%s</code>.</p><p>Try a different spelling or check if it's a newer term.</p>", escapeHTML(term)),
 			Error:       "not_found",
 		}, nil

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/version"
 )
 
@@ -100,6 +101,8 @@ func (h *WikiHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 }
 
 func (h *WikiHandler) searchWikipedia(ctx context.Context, term string) (*Answer, error) {
+	lang := LangFromContext(ctx)
+
 	searchURL := fmt.Sprintf("https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=%s&format=json&utf8=1", url.QueryEscape(term))
 
 	req, err := http.NewRequestWithContext(ctx, "GET", searchURL, nil)
@@ -132,7 +135,7 @@ func (h *WikiHandler) searchWikipedia(ctx context.Context, term string) (*Answer
 			Type:        AnswerTypeWiki,
 			Term:        term,
 			Title:       fmt.Sprintf("Wiki: %s", term),
-			Description: "No results found",
+			Description: i18n.T(lang, "direct.no_results_found"),
 			Content:     fmt.Sprintf("<p>No Wikipedia article found for <code>%s</code>.</p>", escapeHTML(term)),
 			Error:       "not_found",
 		}, nil
@@ -141,7 +144,7 @@ func (h *WikiHandler) searchWikipedia(ctx context.Context, term string) (*Answer
 	// Return search results
 	var html strings.Builder
 	html.WriteString("<div class=\"wiki-search-results\">")
-	html.WriteString(fmt.Sprintf("<h2>Search results for: %s</h2>", escapeHTML(term)))
+	html.WriteString(fmt.Sprintf("<h2>%s %s</h2>", i18n.T(lang, "direct.search_results_for"), escapeHTML(term)))
 	html.WriteString("<ul>")
 	for _, result := range result.Query.Search {
 		wikiURL := fmt.Sprintf("https://en.wikipedia.org/wiki/%s", url.PathEscape(result.Title))
@@ -154,7 +157,7 @@ func (h *WikiHandler) searchWikipedia(ctx context.Context, term string) (*Answer
 		Type:        AnswerTypeWiki,
 		Term:        term,
 		Title:       fmt.Sprintf("Wiki: %s", term),
-		Description: "Search results",
+		Description: i18n.T(lang, "direct.search_results"),
 		Content:     html.String(),
 		Source:      "Wikipedia",
 		SourceURL:   fmt.Sprintf("https://en.wikipedia.org/wiki/Special:Search?search=%s", url.QueryEscape(term)),
@@ -202,6 +205,8 @@ func (h *DictHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		return nil, fmt.Errorf("word required")
 	}
 
+	lang := LangFromContext(ctx)
+
 	// Use Free Dictionary API
 	apiURL := fmt.Sprintf("https://api.dictionaryapi.dev/api/v2/entries/en/%s", url.PathEscape(term))
 
@@ -222,7 +227,7 @@ func (h *DictHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 			Type:        AnswerTypeDict,
 			Term:        term,
 			Title:       fmt.Sprintf("Dictionary: %s", term),
-			Description: "Word not found",
+			Description: i18n.T(lang, "direct.word_not_found"),
 			Content:     fmt.Sprintf("<p>No definition found for <code>%s</code>.</p>", escapeHTML(term)),
 			Error:       "not_found",
 		}, nil
@@ -259,7 +264,7 @@ func (h *DictHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 			Type:        AnswerTypeDict,
 			Term:        term,
 			Title:       fmt.Sprintf("Dictionary: %s", term),
-			Description: "Word not found",
+			Description: i18n.T(lang, "direct.word_not_found"),
 			Content:     fmt.Sprintf("<p>No definition found for <code>%s</code>.</p>", escapeHTML(term)),
 			Error:       "not_found",
 		}, nil
@@ -389,6 +394,8 @@ func (h *ThesaurusHandler) HandleDirectQuery(ctx context.Context, term string) (
 		return nil, fmt.Errorf("word required")
 	}
 
+	lang := LangFromContext(ctx)
+
 	// Use Datamuse API for synonyms and antonyms
 	synURL := fmt.Sprintf("https://api.datamuse.com/words?rel_syn=%s&max=20", url.QueryEscape(term))
 	antURL := fmt.Sprintf("https://api.datamuse.com/words?rel_ant=%s&max=20", url.QueryEscape(term))
@@ -401,7 +408,7 @@ func (h *ThesaurusHandler) HandleDirectQuery(ctx context.Context, term string) (
 			Type:        AnswerTypeThesaurus,
 			Term:        term,
 			Title:       fmt.Sprintf("Thesaurus: %s", term),
-			Description: "No results found",
+			Description: i18n.T(lang, "direct.no_results_found"),
 			Content:     fmt.Sprintf("<p>No synonyms or antonyms found for <code>%s</code>.</p>", escapeHTML(term)),
 			Error:       "not_found",
 		}, nil
@@ -540,6 +547,8 @@ func (h *PkgHandler) HandleDirectQuery(ctx context.Context, term string) (*Answe
 }
 
 func (h *PkgHandler) fetchNPM(ctx context.Context, name string) (*Answer, error) {
+	lang := LangFromContext(ctx)
+
 	apiURL := fmt.Sprintf("https://registry.npmjs.org/%s", url.PathEscape(name))
 
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
@@ -559,7 +568,7 @@ func (h *PkgHandler) fetchNPM(ctx context.Context, name string) (*Answer, error)
 			Type:        AnswerTypePkg,
 			Term:        name,
 			Title:       fmt.Sprintf("Package: %s", name),
-			Description: "Package not found",
+			Description: i18n.T(lang, "direct.package_not_found"),
 			Content:     fmt.Sprintf("<p>Package <code>%s</code> not found on npm.</p>", escapeHTML(name)),
 			Error:       "not_found",
 		}, nil
@@ -603,6 +612,8 @@ func (h *PkgHandler) fetchNPM(ctx context.Context, name string) (*Answer, error)
 }
 
 func (h *PkgHandler) fetchPyPI(ctx context.Context, name string) (*Answer, error) {
+	lang := LangFromContext(ctx)
+
 	apiURL := fmt.Sprintf("https://pypi.org/pypi/%s/json", url.PathEscape(name))
 
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
@@ -622,7 +633,7 @@ func (h *PkgHandler) fetchPyPI(ctx context.Context, name string) (*Answer, error
 			Type:        AnswerTypePkg,
 			Term:        name,
 			Title:       fmt.Sprintf("Package: %s", name),
-			Description: "Package not found",
+			Description: i18n.T(lang, "direct.package_not_found"),
 			Content:     fmt.Sprintf("<p>Package <code>%s</code> not found on PyPI.</p>", escapeHTML(name)),
 			Error:       "not_found",
 		}, nil
@@ -731,6 +742,8 @@ func (h *CVEHandler) HandleDirectQuery(ctx context.Context, term string) (*Answe
 		return nil, fmt.Errorf("CVE ID required")
 	}
 
+	lang := LangFromContext(ctx)
+
 	// Normalize CVE ID
 	if !strings.HasPrefix(term, "CVE-") {
 		term = "CVE-" + term
@@ -786,7 +799,7 @@ func (h *CVEHandler) HandleDirectQuery(ctx context.Context, term string) (*Answe
 			Type:        AnswerTypeCVE,
 			Term:        term,
 			Title:       term,
-			Description: "CVE not found",
+			Description: i18n.T(lang, "direct.cve_not_found"),
 			Content:     fmt.Sprintf("<p>CVE <code>%s</code> not found in NVD database.</p>", escapeHTML(term)),
 			Error:       "not_found",
 		}, nil
@@ -905,6 +918,8 @@ func (h *RFCHandler) HandleDirectQuery(ctx context.Context, term string) (*Answe
 		return nil, fmt.Errorf("RFC number required")
 	}
 
+	lang := LangFromContext(ctx)
+
 	// Remove "RFC" prefix if present
 	term = strings.TrimPrefix(strings.ToUpper(term), "RFC")
 	term = strings.TrimSpace(term)
@@ -921,12 +936,12 @@ func (h *RFCHandler) HandleDirectQuery(ctx context.Context, term string) (*Answe
 	resp, err := h.client.Do(req)
 	if err != nil {
 		// Fallback to basic info
-		return h.basicRFCInfo(term)
+		return h.basicRFCInfo(term, lang)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return h.basicRFCInfo(term)
+		return h.basicRFCInfo(term, lang)
 	}
 
 	var doc struct {
@@ -940,7 +955,7 @@ func (h *RFCHandler) HandleDirectQuery(ctx context.Context, term string) (*Answe
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil {
-		return h.basicRFCInfo(term)
+		return h.basicRFCInfo(term, lang)
 	}
 
 	authors := make([]string, len(doc.Authors))
@@ -968,12 +983,12 @@ func (h *RFCHandler) HandleDirectQuery(ctx context.Context, term string) (*Answe
 	}, nil
 }
 
-func (h *RFCHandler) basicRFCInfo(number string) (*Answer, error) {
+func (h *RFCHandler) basicRFCInfo(number, lang string) (*Answer, error) {
 	return &Answer{
 		Type:        AnswerTypeRFC,
 		Term:        number,
 		Title:       fmt.Sprintf("RFC %s", number),
-		Description: "RFC document",
+		Description: i18n.T(lang, "direct.rfc_document"),
 		Content:     formatBasicRFCContent(number),
 		Source:      "IETF",
 		SourceURL:   fmt.Sprintf("https://www.rfc-editor.org/rfc/rfc%s", number),
@@ -1050,6 +1065,8 @@ func (h *DirectoryHandler) HandleDirectQuery(ctx context.Context, term string) (
 		return nil, fmt.Errorf("search term required")
 	}
 
+	lang := LangFromContext(ctx)
+
 	// Build open directory search query
 	// This constructs a query to find open directory listings
 	searchQuery := fmt.Sprintf(`intitle:"index of" OR intitle:"directory of" "%s" -html -htm -php -asp`, term)
@@ -1081,7 +1098,7 @@ func (h *DirectoryHandler) HandleDirectQuery(ctx context.Context, term string) (
 		Type:        AnswerTypeDirectory,
 		Term:        term,
 		Title:       fmt.Sprintf("Directory Search: %s", term),
-		Description: "Search for open directory listings",
+		Description: i18n.T(lang, "direct.directory_search_description"),
 		Content:     formatDirectoryContent(term, searchQuery),
 		Source:      "Directory Search",
 		Data:        data,

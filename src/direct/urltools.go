@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/version"
 )
 
@@ -31,6 +32,7 @@ func (h *RobotsHandler) Type() AnswerType {
 }
 
 func (h *RobotsHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
+	lang := LangFromContext(ctx)
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("domain required")
@@ -57,7 +59,7 @@ func (h *RobotsHandler) HandleDirectQuery(ctx context.Context, term string) (*An
 			Type:        AnswerTypeRobots,
 			Term:        term,
 			Title:       fmt.Sprintf("robots.txt: %s", term),
-			Description: "Failed to fetch",
+			Description: i18n.T(lang, "direct.failed_to_fetch"),
 			Content:     fmt.Sprintf("<p class=\"error\">Failed to fetch robots.txt: %s</p>", escapeHTML(err.Error())),
 			Error:       "fetch_failed",
 		}, nil
@@ -69,7 +71,7 @@ func (h *RobotsHandler) HandleDirectQuery(ctx context.Context, term string) (*An
 			Type:        AnswerTypeRobots,
 			Term:        term,
 			Title:       fmt.Sprintf("robots.txt: %s", term),
-			Description: "Not found",
+			Description: i18n.T(lang, "direct.not_found"),
 			Content:     "<p>No robots.txt file found. This means all user-agents are allowed to crawl all paths.</p>",
 			Error:       "not_found",
 		}, nil
@@ -94,7 +96,7 @@ func (h *RobotsHandler) HandleDirectQuery(ctx context.Context, term string) (*An
 		Type:        AnswerTypeRobots,
 		Term:        term,
 		Title:       fmt.Sprintf("robots.txt: %s", term),
-		Description: "Robots exclusion protocol file",
+		Description: i18n.T(lang, "direct.robots_exclusion_protocol_file"),
 		Content:     formatRobotsContent(term, content, analysis),
 		Source:      "Direct Fetch",
 		SourceURL:   robotsURL,
@@ -210,6 +212,7 @@ func (h *SitemapHandler) Type() AnswerType {
 }
 
 func (h *SitemapHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
+	lang := LangFromContext(ctx)
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("domain required")
@@ -236,7 +239,7 @@ func (h *SitemapHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 			Type:        AnswerTypeSitemap,
 			Term:        term,
 			Title:       fmt.Sprintf("Sitemap: %s", term),
-			Description: "Failed to fetch",
+			Description: i18n.T(lang, "direct.failed_to_fetch"),
 			Content:     fmt.Sprintf("<p class=\"error\">Failed to fetch sitemap: %s</p>", escapeHTML(err.Error())),
 			Error:       "fetch_failed",
 		}, nil
@@ -248,7 +251,7 @@ func (h *SitemapHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 			Type:        AnswerTypeSitemap,
 			Term:        term,
 			Title:       fmt.Sprintf("Sitemap: %s", term),
-			Description: "Not found",
+			Description: i18n.T(lang, "direct.not_found"),
 			Content:     "<p>No sitemap.xml found at the standard location.</p>",
 			Error:       "not_found",
 		}, nil
@@ -375,6 +378,7 @@ func (h *TechHandler) Type() AnswerType {
 }
 
 func (h *TechHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
+	lang := LangFromContext(ctx)
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("domain required")
@@ -397,7 +401,7 @@ func (h *TechHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 			Type:        AnswerTypeTech,
 			Term:        term,
 			Title:       fmt.Sprintf("Tech Stack: %s", term),
-			Description: "Failed to analyze",
+			Description: i18n.T(lang, "direct.failed_to_analyze"),
 			Content:     fmt.Sprintf("<p class=\"error\">Failed to fetch: %s</p>", escapeHTML(err.Error())),
 			Error:       "fetch_failed",
 		}, nil
@@ -419,7 +423,7 @@ func (h *TechHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		Type:        AnswerTypeTech,
 		Term:        term,
 		Title:       fmt.Sprintf("Tech Stack: %s", term),
-		Description: "Technology detection",
+		Description: i18n.T(lang, "direct.technology_detection"),
 		Content:     formatTechContent(term, tech),
 		Source:      "Technology Detector",
 		Data:        data,
@@ -549,6 +553,7 @@ func (h *FeedHandler) Type() AnswerType {
 }
 
 func (h *FeedHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
+	lang := LangFromContext(ctx)
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("domain required")
@@ -571,7 +576,7 @@ func (h *FeedHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 			Type:        AnswerTypeFeed,
 			Term:        term,
 			Title:       fmt.Sprintf("Feeds: %s", term),
-			Description: "Failed to fetch",
+			Description: i18n.T(lang, "direct.failed_to_fetch"),
 			Content:     fmt.Sprintf("<p class=\"error\">Failed to fetch: %s</p>", escapeHTML(err.Error())),
 			Error:       "fetch_failed",
 		}, nil
@@ -743,6 +748,7 @@ func (h *ExpandHandler) Type() AnswerType {
 }
 
 func (h *ExpandHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
+	lang := LangFromContext(ctx)
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("URL required")
@@ -778,8 +784,8 @@ func (h *ExpandHandler) HandleDirectQuery(ctx context.Context, term string) (*An
 		return &Answer{
 			Type:        AnswerTypeExpand,
 			Term:        term,
-			Title:       "URL Expander",
-			Description: "Failed to expand",
+			Title:       i18n.T(lang, "direct.url_expander_title"),
+			Description: i18n.T(lang, "direct.failed_to_expand"),
 			Content:     fmt.Sprintf("<p class=\"error\">Failed to expand URL: %s</p>", escapeHTML(err.Error())),
 			Error:       "expand_failed",
 		}, nil
@@ -811,7 +817,7 @@ func (h *ExpandHandler) HandleDirectQuery(ctx context.Context, term string) (*An
 	return &Answer{
 		Type:        AnswerTypeExpand,
 		Term:        term,
-		Title:       "URL Expander",
+		Title:       i18n.T(lang, "direct.url_expander_title"),
 		Description: fmt.Sprintf("Expanded to: %s", finalURL),
 		Content:     formatExpandContent(targetURL, finalURL, uniqueRedirects),
 		Source:      "URL Expander",
@@ -866,6 +872,7 @@ func (h *SafeHandler) Type() AnswerType {
 }
 
 func (h *SafeHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
+	lang := LangFromContext(ctx)
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("URL or domain required")
@@ -881,8 +888,8 @@ func (h *SafeHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		return &Answer{
 			Type:        AnswerTypeSafe,
 			Term:        term,
-			Title:       "URL Safety Check",
-			Description: "Invalid URL",
+			Title:       i18n.T(lang, "direct.url_safety_check_title"),
+			Description: i18n.T(lang, "direct.invalid_url"),
 			Content:     fmt.Sprintf("<p class=\"error\">Invalid URL: %s</p>", escapeHTML(term)),
 			Error:       "invalid_url",
 		}, nil
@@ -904,9 +911,9 @@ func (h *SafeHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 
 	var rating string
 	if safe {
-		rating = "Safe"
+		rating = i18n.T(lang, "direct.safe_rating")
 	} else {
-		rating = "Suspicious"
+		rating = i18n.T(lang, "direct.suspicious_rating")
 	}
 
 	data := map[string]interface{}{
@@ -1035,6 +1042,7 @@ func (h *CacheHandler) Type() AnswerType {
 }
 
 func (h *CacheHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
+	lang := LangFromContext(ctx)
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("URL required")
@@ -1065,7 +1073,7 @@ func (h *CacheHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 		Type:        AnswerTypeCache,
 		Term:        term,
 		Title:       fmt.Sprintf("Cached: %s", term),
-		Description: "Web archive and cache links",
+		Description: i18n.T(lang, "direct.web_archive_and_cache_links"),
 		Content:     formatCacheContent(targetURL, archives),
 		Source:      "Web Archives",
 		Data:        data,

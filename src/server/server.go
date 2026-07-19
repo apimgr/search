@@ -1127,6 +1127,10 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	// country, city, ASN, and timezone data when the MMDB is loaded.
 	ctx = instant.WithGeoIPLookup(ctx, s.geoipLookup)
 
+	// Inject the resolved request language so instant handlers can return
+	// translated Title/Content text.
+	ctx = instant.WithLang(ctx, s.getI18nManager().DetectLanguage(r))
+
 	// Check for instant answers first (only for general category)
 	var instantAnswer *instant.Answer
 	if category == "general" && s.instantManager != nil {
@@ -1222,6 +1226,10 @@ func (s *Server) handleDirect(w http.ResponseWriter, r *http.Request) {
 	// Create context with timeout
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
+
+	// Inject the resolved request language so direct handlers can return
+	// translated Title/Content text.
+	ctx = direct.WithLang(ctx, s.getI18nManager().DetectLanguage(r))
 
 	// Process the direct answer
 	answer, err := s.directManager.ProcessType(ctx, answerType, term)

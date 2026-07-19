@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/apimgr/search/src/common/i18n"
 )
 
 // Base64Handler handles base64 encoding/decoding
@@ -56,33 +58,37 @@ func (h *Base64Handler) HandleInstantQuery(ctx context.Context, query string) (*
 		return nil, nil
 	}
 
-	var result, operation string
+	lang := LangFromContext(ctx)
+
+	var result, opCode, opLabel string
 	if isDecode {
 		decoded, err := base64.StdEncoding.DecodeString(text)
 		if err != nil {
 			return &Answer{
 				Type:    AnswerTypeBase64,
 				Query:   query,
-				Title:   "Base64 Decoder",
-				Content: "Error: Invalid base64 string",
+				Title:   i18n.T(lang, "instant.base64_decoder_title"),
+				Content: i18n.T(lang, "instant.base64_invalid"),
 			}, nil
 		}
 		result = string(decoded)
-		operation = "Decoded"
+		opCode = "decode"
+		opLabel = i18n.T(lang, "instant.base64_operation_decoded")
 	} else {
 		result = base64.StdEncoding.EncodeToString([]byte(text))
-		operation = "Encoded"
+		opCode = "encode"
+		opLabel = i18n.T(lang, "instant.base64_operation_encoded")
 	}
 
 	return &Answer{
 		Type:    AnswerTypeBase64,
 		Query:   query,
-		Title:   fmt.Sprintf("Base64 %s", operation),
-		Content: fmt.Sprintf("<strong>Input:</strong> %s<br><br><strong>%s:</strong> <code>%s</code>", escapeHTML(text), operation, escapeHTML(result)),
+		Title:   fmt.Sprintf("Base64 %s", opLabel),
+		Content: fmt.Sprintf("<strong>Input:</strong> %s<br><br><strong>%s:</strong> <code>%s</code>", escapeHTML(text), opLabel, escapeHTML(result)),
 		Data: map[string]interface{}{
 			"input":     text,
 			"output":    result,
-			"operation": strings.ToLower(operation),
+			"operation": opCode,
 		},
 	}, nil
 }

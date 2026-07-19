@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/skip2/go-qrcode"
 )
 
@@ -58,14 +59,16 @@ func (h *QRHandler) HandleInstantQuery(ctx context.Context, query string) (*Answ
 		return nil, nil
 	}
 
+	lang := LangFromContext(ctx)
+
 	// Generate QR code as PNG
 	png, err := qrcode.Encode(text, qrcode.Medium, 256)
 	if err != nil {
 		return &Answer{
 			Type:    AnswerTypeQR,
 			Query:   query,
-			Title:   "QR Code Generator",
-			Content: fmt.Sprintf("Error generating QR code: %v", err),
+			Title:   i18n.T(lang, "instant.qr_generator_title"),
+			Content: i18n.T(lang, "instant.qr_generate_error", err),
 		}, nil
 	}
 
@@ -77,17 +80,17 @@ func (h *QRHandler) HandleInstantQuery(ctx context.Context, query string) (*Answ
 
 	content := fmt.Sprintf(`<div class="qr-result">
 <strong>Text:</strong> %s<br><br>
-<img src="data:image/png;base64,%s" alt="QR Code" style="image-rendering: pixelated;"><br><br>
+<img src="data:image/png;base64,%s" alt="%s" style="image-rendering: pixelated;"><br><br>
 <details>
-<summary>ASCII Version</summary>
+<summary>%s</summary>
 <pre style="font-family: monospace; line-height: 1; font-size: 8px;">%s</pre>
 </details>
-</div>`, escapeHTML(text), b64, ascii)
+</div>`, escapeHTML(text), b64, i18n.T(lang, "instant.qr_generator_title"), i18n.T(lang, "instant.qr_ascii_version"), ascii)
 
 	return &Answer{
 		Type:    AnswerTypeQR,
 		Query:   query,
-		Title:   "QR Code Generator",
+		Title:   i18n.T(lang, "instant.qr_generator_title"),
 		Content: content,
 		Data: map[string]interface{}{
 			"text":       text,

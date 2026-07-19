@@ -12,6 +12,8 @@ import (
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+
+	"github.com/apimgr/search/src/common/i18n"
 )
 
 // CaseHandler handles case:{text} queries
@@ -27,6 +29,7 @@ func (h *CaseHandler) Type() AnswerType {
 }
 
 func (h *CaseHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
+	uiLang := LangFromContext(ctx)
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("text required")
@@ -68,8 +71,8 @@ func (h *CaseHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 	return &Answer{
 		Type:        AnswerTypeCase,
 		Term:        term,
-		Title:       "Case Converter",
-		Description: "Text case conversions",
+		Title:       i18n.T(uiLang, "direct.case_converter_title"),
+		Description: i18n.T(uiLang, "direct.text_case_conversions"),
 		Content:     formatCaseContent(text, conversions, targetCase),
 		Source:      "Case Converter",
 		Data:        data,
@@ -217,6 +220,7 @@ func (h *SlugHandler) Type() AnswerType {
 }
 
 func (h *SlugHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
+	uiLang := LangFromContext(ctx)
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("text required")
@@ -237,8 +241,8 @@ func (h *SlugHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 	return &Answer{
 		Type:        AnswerTypeSlug,
 		Term:        term,
-		Title:       "URL Slug Generator",
-		Description: "Generated URL-safe slug",
+		Title:       i18n.T(uiLang, "direct.url_slug_generator_title"),
+		Description: i18n.T(uiLang, "direct.generated_url_safe_slug"),
 		Content:     formatSlugContent(term, slugs),
 		Source:      "Slug Generator",
 		Data:        data,
@@ -326,6 +330,7 @@ var loremWords = []string{
 }
 
 func (h *LoremHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
+	uiLang := LangFromContext(ctx)
 	term = strings.TrimSpace(term)
 	if term == "" {
 		// Default to 3 paragraphs
@@ -383,7 +388,7 @@ func (h *LoremHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 	return &Answer{
 		Type:        AnswerTypeLorem,
 		Term:        term,
-		Title:       "Lorem Ipsum Generator",
+		Title:       i18n.T(uiLang, "direct.lorem_ipsum_generator_title"),
 		Description: fmt.Sprintf("%d %s", count, unit),
 		Content:     formatLoremContent(text, wordCount, charCount),
 		Source:      "Lorem Ipsum Generator",
@@ -461,6 +466,7 @@ func (h *WordHandler) Type() AnswerType {
 }
 
 func (h *WordHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
+	uiLang := LangFromContext(ctx)
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("text required")
@@ -541,7 +547,7 @@ func (h *WordHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 	return &Answer{
 		Type:        AnswerTypeWord,
 		Term:        truncateString(term, 50),
-		Title:       "Text Statistics",
+		Title:       i18n.T(uiLang, "direct.text_statistics_title"),
 		Description: fmt.Sprintf("%d words, %d characters", wordCount, charCount),
 		Content:     formatWordContent(term, data, wordFreq),
 		Source:      "Text Analyzer",
@@ -618,6 +624,7 @@ func (h *BeautifyHandler) Type() AnswerType {
 }
 
 func (h *BeautifyHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
+	uiLang := LangFromContext(ctx)
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("code required")
@@ -654,7 +661,7 @@ func (h *BeautifyHandler) HandleDirectQuery(ctx context.Context, term string) (*
 		Type:        AnswerTypeBeautify,
 		Term:        truncateString(term, 50),
 		Title:       fmt.Sprintf("Code Beautifier (%s)", lang),
-		Description: "Formatted code",
+		Description: i18n.T(uiLang, "direct.formatted_code"),
 		Content:     formatBeautifyContent(code, beautified, lang),
 		Source:      "Code Beautifier",
 		Data:        data,
@@ -843,6 +850,7 @@ func (h *DiffHandler) Type() AnswerType {
 }
 
 func (h *DiffHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
+	uiLang := LangFromContext(ctx)
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("two texts required (separated by |||)")
@@ -854,8 +862,8 @@ func (h *DiffHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		return &Answer{
 			Type:        AnswerTypeDiff,
 			Term:        truncateString(term, 50),
-			Title:       "Text Diff",
-			Description: "Invalid format",
+			Title:       i18n.T(uiLang, "direct.text_diff_title"),
+			Description: i18n.T(uiLang, "direct.invalid_format"),
 			Content:     "<p class=\"error\">Please provide two texts separated by <code>|||</code></p><p>Example: <code>diff:hello world|||hello there</code></p>",
 			Error:       "invalid_format",
 		}, nil
@@ -876,8 +884,8 @@ func (h *DiffHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 	return &Answer{
 		Type:        AnswerTypeDiff,
 		Term:        truncateString(term, 50),
-		Title:       "Text Diff",
-		Description: "Comparison of two texts",
+		Title:       i18n.T(uiLang, "direct.text_diff_title"),
+		Description: i18n.T(uiLang, "direct.comparison_of_two_texts"),
 		Content:     formatDiffContent(text1, text2, diff),
 		Source:      "Diff Tool",
 		Data:        data,

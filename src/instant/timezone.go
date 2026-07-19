@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/i18n"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -192,10 +193,12 @@ func (h *TimezoneHandler) CanHandle(query string) bool {
 }
 
 func (h *TimezoneHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
+	lang := LangFromContext(ctx)
+
 	// Handle "time in {city}" patterns
 	timeInPattern := regexp.MustCompile(`(?i)^(?:time\s+in|what\s+time\s+(?:is\s+it\s+)?in|current\s+time\s+in)\s+(.+?)\??$`)
 	if matches := timeInPattern.FindStringSubmatch(query); len(matches) > 1 {
-		return h.handleTimeIn(query, matches[1])
+		return h.handleTimeIn(query, matches[1], lang)
 	}
 
 	// Handle "{city} time" pattern
@@ -204,20 +207,20 @@ func (h *TimezoneHandler) HandleInstantQuery(ctx context.Context, query string) 
 		city := strings.ToLower(matches[1])
 		// Make sure it's not a generic "time" query
 		if city != "current" && city != "local" && city != "what" {
-			return h.handleTimeIn(query, matches[1])
+			return h.handleTimeIn(query, matches[1], lang)
 		}
 	}
 
 	// Handle "{time} {tz1} to {tz2}" conversions
 	convertPattern := regexp.MustCompile(`(?i)^(?:convert\s+)?(\d{1,2}(?::\d{2})?(?:\s*[ap]m)?)\s+([a-zA-Z_/]+)\s+(?:to|in)\s+([a-zA-Z_/]+)$`)
 	if matches := convertPattern.FindStringSubmatch(query); len(matches) > 3 {
-		return h.handleConversion(query, matches[1], matches[2], matches[3])
+		return h.handleConversion(query, matches[1], matches[2], matches[3], lang)
 	}
 
 	return nil, nil
 }
 
-func (h *TimezoneHandler) handleTimeIn(query, location string) (*Answer, error) {
+func (h *TimezoneHandler) handleTimeIn(query, location, lang string) (*Answer, error) {
 	location = strings.TrimSpace(location)
 	tzName := h.resolveTZ(location)
 
@@ -225,8 +228,8 @@ func (h *TimezoneHandler) handleTimeIn(query, location string) (*Answer, error) 
 		return &Answer{
 			Type:    AnswerTypeTime,
 			Query:   query,
-			Title:   "Time Zone",
-			Content: fmt.Sprintf("Unknown location or timezone: %s", escapeHTML(location)),
+			Title:   i18n.T(lang, "instant.timezone_title"),
+			Content: i18n.T(lang, "instant.timezone_unknown_location", escapeHTML(location)),
 		}, nil
 	}
 
@@ -235,8 +238,8 @@ func (h *TimezoneHandler) handleTimeIn(query, location string) (*Answer, error) 
 		return &Answer{
 			Type:    AnswerTypeTime,
 			Query:   query,
-			Title:   "Time Zone",
-			Content: fmt.Sprintf("Could not load timezone: %s", tzName),
+			Title:   i18n.T(lang, "instant.timezone_title"),
+			Content: i18n.T(lang, "instant.timezone_load_failed", tzName),
 		}, nil
 	}
 
@@ -250,11 +253,11 @@ func (h *TimezoneHandler) handleTimeIn(query, location string) (*Answer, error) 
 
 	var offsetStr string
 	if diffHours == 0 {
-		offsetStr = "same time as you"
+		offsetStr = i18n.T(lang, "instant.timezone_same_time")
 	} else if diffHours > 0 {
-		offsetStr = fmt.Sprintf("%.1f hours ahead", diffHours)
+		offsetStr = i18n.T(lang, "instant.timezone_hours_ahead", fmt.Sprintf("%.1f", diffHours))
 	} else {
-		offsetStr = fmt.Sprintf("%.1f hours behind", -diffHours)
+		offsetStr = i18n.T(lang, "instant.timezone_hours_behind", fmt.Sprintf("%.1f", -diffHours))
 	}
 
 	// Get the timezone abbreviation
@@ -263,7 +266,7 @@ func (h *TimezoneHandler) handleTimeIn(query, location string) (*Answer, error) 
 	return &Answer{
 		Type:  AnswerTypeTime,
 		Query: query,
-		Title: fmt.Sprintf("Time in %s", cases.Title(language.Und, cases.NoLower).String(location)),
+		Title: i18n.T(lang, "instant.timezone_time_in", cases.Title(language.Und, cases.NoLower).String(location)),
 		Content: fmt.Sprintf(`<div class="timezone-result">
 <div class="time-display"><strong>%s</strong></div>
 <div class="date-display">%s</div>
@@ -284,7 +287,7 @@ func (h *TimezoneHandler) handleTimeIn(query, location string) (*Answer, error) 
 	}, nil
 }
 
-func (h *TimezoneHandler) handleConversion(query, timeStr, fromTZ, toTZ string) (*Answer, error) {
+func (h *TimezoneHandler) handleConversion(query, timeStr, fromTZ, toTZ, lang string) (*Answer, error) {
 	// Resolve timezone names
 	fromTZName := h.resolveTZ(fromTZ)
 	toTZName := h.resolveTZ(toTZ)
@@ -293,8 +296,8 @@ func (h *TimezoneHandler) handleConversion(query, timeStr, fromTZ, toTZ string) 
 		return &Answer{
 			Type:    AnswerTypeTime,
 			Query:   query,
-			Title:   "Time Zone Conversion",
-			Content: fmt.Sprintf("Unknown source timezone: %s", fromTZ),
+			Title:   i18n.T(lang, "instant.timezone_conversion_title"),
+			Content: i18n.T(lang, "instant.timezone_unknown_source", fromTZ),
 		}, nil
 	}
 
@@ -302,8 +305,8 @@ func (h *TimezoneHandler) handleConversion(query, timeStr, fromTZ, toTZ string) 
 		return &Answer{
 			Type:    AnswerTypeTime,
 			Query:   query,
-			Title:   "Time Zone Conversion",
-			Content: fmt.Sprintf("Unknown target timezone: %s", toTZ),
+			Title:   i18n.T(lang, "instant.timezone_conversion_title"),
+			Content: i18n.T(lang, "instant.timezone_unknown_target", toTZ),
 		}, nil
 	}
 
@@ -312,8 +315,8 @@ func (h *TimezoneHandler) handleConversion(query, timeStr, fromTZ, toTZ string) 
 		return &Answer{
 			Type:    AnswerTypeTime,
 			Query:   query,
-			Title:   "Time Zone Conversion",
-			Content: fmt.Sprintf("Could not load source timezone: %s", fromTZName),
+			Title:   i18n.T(lang, "instant.timezone_conversion_title"),
+			Content: i18n.T(lang, "instant.timezone_load_source_failed", fromTZName),
 		}, nil
 	}
 
@@ -322,8 +325,8 @@ func (h *TimezoneHandler) handleConversion(query, timeStr, fromTZ, toTZ string) 
 		return &Answer{
 			Type:    AnswerTypeTime,
 			Query:   query,
-			Title:   "Time Zone Conversion",
-			Content: fmt.Sprintf("Could not load target timezone: %s", toTZName),
+			Title:   i18n.T(lang, "instant.timezone_conversion_title"),
+			Content: i18n.T(lang, "instant.timezone_load_target_failed", toTZName),
 		}, nil
 	}
 
@@ -333,8 +336,8 @@ func (h *TimezoneHandler) handleConversion(query, timeStr, fromTZ, toTZ string) 
 		return &Answer{
 			Type:    AnswerTypeTime,
 			Query:   query,
-			Title:   "Time Zone Conversion",
-			Content: fmt.Sprintf("Could not parse time: %s", timeStr),
+			Title:   i18n.T(lang, "instant.timezone_conversion_title"),
+			Content: i18n.T(lang, "instant.timezone_parse_failed", timeStr),
 		}, nil
 	}
 
@@ -361,7 +364,7 @@ func (h *TimezoneHandler) handleConversion(query, timeStr, fromTZ, toTZ string) 
 	return &Answer{
 		Type:  AnswerTypeTime,
 		Query: query,
-		Title: "Time Zone Conversion",
+		Title: i18n.T(lang, "instant.timezone_conversion_title"),
 		Content: fmt.Sprintf(`<div class="timezone-conversion">
 <div class="from-time"><strong>%s</strong> %s (%s)</div>
 <div class="arrow">=</div>

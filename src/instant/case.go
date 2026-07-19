@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+
+	"github.com/apimgr/search/src/common/i18n"
 )
 
 // CaseHandler handles text case conversions
@@ -90,7 +92,7 @@ func (h *CaseHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 	return &Answer{
 		Type:    AnswerTypeCase,
 		Query:   query,
-		Title:   "Text Case Converter",
+		Title:   i18n.T(LangFromContext(ctx), "instant.case_converter_title"),
 		Content: content,
 		Data: map[string]interface{}{
 			"input":    text,
@@ -110,8 +112,9 @@ func (h *CaseHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 func toTitleCase(s string) string {
 	words := splitIntoWords(s)
 	for i, word := range words {
-		if len(word) > 0 {
-			words[i] = strings.ToUpper(string(word[0])) + strings.ToLower(word[1:])
+		if word != "" {
+			runes := []rune(word)
+			words[i] = strings.ToUpper(string(runes[0])) + strings.ToLower(string(runes[1:]))
 		}
 	}
 	return strings.Join(words, " ")
@@ -123,8 +126,9 @@ func toCamelCase(s string) string {
 	for i, word := range words {
 		if i == 0 {
 			words[i] = strings.ToLower(word)
-		} else if len(word) > 0 {
-			words[i] = strings.ToUpper(string(word[0])) + strings.ToLower(word[1:])
+		} else if word != "" {
+			runes := []rune(word)
+			words[i] = strings.ToUpper(string(runes[0])) + strings.ToLower(string(runes[1:]))
 		}
 	}
 	return strings.Join(words, "")
@@ -134,8 +138,9 @@ func toCamelCase(s string) string {
 func toPascalCase(s string) string {
 	words := splitIntoWords(s)
 	for i, word := range words {
-		if len(word) > 0 {
-			words[i] = strings.ToUpper(string(word[0])) + strings.ToLower(word[1:])
+		if word != "" {
+			runes := []rune(word)
+			words[i] = strings.ToUpper(string(runes[0])) + strings.ToLower(string(runes[1:]))
 		}
 	}
 	return strings.Join(words, "")

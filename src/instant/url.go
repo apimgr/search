@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+
+	"github.com/apimgr/search/src/common/i18n"
 )
 
 // URLHandler handles URL encoding/decoding and parsing
@@ -54,14 +56,16 @@ func (h *URLHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 		return nil, nil
 	}
 
+	lang := LangFromContext(ctx)
+
 	if isParse {
 		parsed, err := url.Parse(text)
 		if err != nil {
 			return &Answer{
 				Type:    AnswerTypeURL,
 				Query:   query,
-				Title:   "URL Parser",
-				Content: "Error: Invalid URL",
+				Title:   i18n.T(lang, "instant.url_parser_title"),
+				Content: i18n.T(lang, "instant.url_invalid"),
 			}, nil
 		}
 
@@ -80,7 +84,7 @@ func (h *URLHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 		return &Answer{
 			Type:    AnswerTypeURL,
 			Query:   query,
-			Title:   "URL Parser",
+			Title:   i18n.T(lang, "instant.url_parser_title"),
 			Content: content.String(),
 		}, nil
 	}
@@ -93,16 +97,16 @@ func (h *URLHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 		} else {
 			result = decoded
 		}
-		operation = "Decoded"
+		operation = i18n.T(lang, "instant.url_operation_decoded")
 	} else {
 		result = url.QueryEscape(text)
-		operation = "Encoded"
+		operation = i18n.T(lang, "instant.url_operation_encoded")
 	}
 
 	return &Answer{
 		Type:    AnswerTypeURL,
 		Query:   query,
-		Title:   fmt.Sprintf("URL %s", operation),
+		Title:   i18n.T(lang, "instant.url_operation_title", operation),
 		Content: fmt.Sprintf("<strong>Input:</strong> %s<br><br><strong>%s:</strong> <code>%s</code>", escapeHTML(text), operation, escapeHTML(result)),
 	}, nil
 }

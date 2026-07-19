@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/apimgr/search/src/common/i18n"
 )
 
 // StopwatchHandler handles timer and stopwatch queries
@@ -66,24 +68,26 @@ func (h *StopwatchHandler) CanHandle(query string) bool {
 func (h *StopwatchHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
 	lowerQuery := strings.ToLower(query)
 
+	lang := LangFromContext(ctx)
+
 	// Handle stopwatch (no duration)
 	if strings.Contains(lowerQuery, "stopwatch") && !strings.Contains(lowerQuery, "timer") {
-		return h.handleStopwatch(query)
+		return h.handleStopwatch(query, lang)
 	}
 
 	// Handle pomodoro
 	if strings.Contains(lowerQuery, "pomodoro") {
-		return h.handlePomodoro(query)
+		return h.handlePomodoro(query, lang)
 	}
 
 	// Handle work timer
 	if lowerQuery == "work timer" {
-		return h.handleWorkTimer(query)
+		return h.handleWorkTimer(query, lang)
 	}
 
 	// Handle break timer
 	if lowerQuery == "break timer" {
-		return h.handleBreakTimer(query)
+		return h.handleBreakTimer(query, lang)
 	}
 
 	// Handle timer with duration
@@ -96,17 +100,17 @@ func (h *StopwatchHandler) HandleInstantQuery(ctx context.Context, query string)
 	}
 
 	if durationStr != "" {
-		return h.handleTimer(query, durationStr)
+		return h.handleTimer(query, durationStr, lang)
 	}
 
 	return nil, nil
 }
 
-func (h *StopwatchHandler) handleStopwatch(query string) (*Answer, error) {
+func (h *StopwatchHandler) handleStopwatch(query, lang string) (*Answer, error) {
 	return &Answer{
 		Type:  AnswerTypeTime,
 		Query: query,
-		Title: "Stopwatch",
+		Title: i18n.T(lang, "instant.stopwatch_title"),
 		Content: `<div class="stopwatch-widget" data-type="stopwatch">
 <div class="stopwatch-display">00:00:00</div>
 <div class="stopwatch-controls">
@@ -124,7 +128,7 @@ func (h *StopwatchHandler) handleStopwatch(query string) (*Answer, error) {
 	}, nil
 }
 
-func (h *StopwatchHandler) handlePomodoro(query string) (*Answer, error) {
+func (h *StopwatchHandler) handlePomodoro(query, lang string) (*Answer, error) {
 	workDuration := 25 * time.Minute
 	breakDuration := 5 * time.Minute
 	longBreakDuration := 15 * time.Minute
@@ -132,7 +136,7 @@ func (h *StopwatchHandler) handlePomodoro(query string) (*Answer, error) {
 	return &Answer{
 		Type:  AnswerTypeTime,
 		Query: query,
-		Title: "Pomodoro Timer",
+		Title: i18n.T(lang, "instant.pomodoro_timer_title"),
 		Content: `<div class="timer-widget pomodoro-widget" data-type="pomodoro">
 <div class="pomodoro-phase">Work Session</div>
 <div class="timer-display">25:00</div>
@@ -162,28 +166,28 @@ func (h *StopwatchHandler) handlePomodoro(query string) (*Answer, error) {
 	}, nil
 }
 
-func (h *StopwatchHandler) handleWorkTimer(query string) (*Answer, error) {
+func (h *StopwatchHandler) handleWorkTimer(query, lang string) (*Answer, error) {
 	duration := 25 * time.Minute
-	return h.createTimerAnswer(query, duration, "Work Timer", "Focus time! Get to work.")
+	return h.createTimerAnswer(query, duration, i18n.T(lang, "instant.work_timer_title"), i18n.T(lang, "instant.work_timer_message"))
 }
 
-func (h *StopwatchHandler) handleBreakTimer(query string) (*Answer, error) {
+func (h *StopwatchHandler) handleBreakTimer(query, lang string) (*Answer, error) {
 	duration := 5 * time.Minute
-	return h.createTimerAnswer(query, duration, "Break Timer", "Time for a short break!")
+	return h.createTimerAnswer(query, duration, i18n.T(lang, "instant.break_timer_title"), i18n.T(lang, "instant.break_timer_message"))
 }
 
-func (h *StopwatchHandler) handleTimer(query, durationStr string) (*Answer, error) {
+func (h *StopwatchHandler) handleTimer(query, durationStr, lang string) (*Answer, error) {
 	duration, err := h.parseDuration(durationStr)
 	if err != nil {
 		return &Answer{
 			Type:    AnswerTypeTime,
 			Query:   query,
-			Title:   "Timer",
-			Content: fmt.Sprintf("Could not parse duration: %s<br><br>Try formats like: 5m, 1h30m, 30s, 1 hour 30 minutes", escapeHTML(durationStr)),
+			Title:   i18n.T(lang, "instant.timer_title"),
+			Content: i18n.T(lang, "instant.timer_parse_error", escapeHTML(durationStr)),
 		}, nil
 	}
 
-	return h.createTimerAnswer(query, duration, "Timer", fmt.Sprintf("Timer set for %s", h.formatDuration(duration)))
+	return h.createTimerAnswer(query, duration, i18n.T(lang, "instant.timer_title"), i18n.T(lang, "instant.timer_set_message", h.formatDuration(duration)))
 }
 
 func (h *StopwatchHandler) createTimerAnswer(query string, duration time.Duration, title, message string) (*Answer, error) {

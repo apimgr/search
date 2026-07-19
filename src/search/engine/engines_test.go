@@ -1526,7 +1526,7 @@ func TestYouTubeParseVideoRenderer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := engine.parseVideoRenderer(tt.video, query)
+			result := engine.parseVideoRenderer(tt.video, query, 0)
 			if tt.wantNil {
 				if result != nil {
 					t.Error("parseVideoRenderer() should return nil")
@@ -2159,7 +2159,7 @@ func TestYouTubeResultURLFormat(t *testing.T) {
 		},
 	}
 
-	result := engine.parseVideoRenderer(video, query)
+	result := engine.parseVideoRenderer(video, query, 0)
 	if result == nil {
 		t.Fatal("parseVideoRenderer() returned nil")
 	}
@@ -2917,7 +2917,7 @@ func TestYouTubeParseVideoRendererComprehensive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := engine.parseVideoRenderer(tt.video, query)
+			result := engine.parseVideoRenderer(tt.video, query, 0)
 			if tt.wantNil && result != nil {
 				t.Error("Expected nil result")
 			}

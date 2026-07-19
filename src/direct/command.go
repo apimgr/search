@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/version"
 )
 
@@ -33,6 +34,8 @@ func (h *TLDRHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 	if term == "" {
 		return nil, fmt.Errorf("command name required")
 	}
+
+	lang := LangFromContext(ctx)
 
 	// Fetch from tldr.sh API
 	// Try multiple platforms: common, linux, osx, windows
@@ -94,7 +97,7 @@ func (h *TLDRHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		Type:        AnswerTypeTLDR,
 		Term:        term,
 		Title:       fmt.Sprintf("tldr: %s", term),
-		Description: "Command not found",
+		Description: i18n.T(lang, "direct.command_not_found"),
 		Content:     fmt.Sprintf("<p>No tldr page found for <code>%s</code>.</p><p>Try searching for it using <code>man:%s</code> or <code>cheat:%s</code>.</p>", term, term, term),
 		Error:       "not_found",
 	}, nil
@@ -224,6 +227,8 @@ func (h *ManHandler) HandleDirectQuery(ctx context.Context, term string) (*Answe
 }
 
 func (h *ManHandler) fetchManHTML(ctx context.Context, page, section string) (*Answer, error) {
+	lang := LangFromContext(ctx)
+
 	// Fallback: fetch HTML from man.cx
 	var manURL string
 	if section != "" {
@@ -253,7 +258,7 @@ func (h *ManHandler) fetchManHTML(ctx context.Context, page, section string) (*A
 			Type:        AnswerTypeMan,
 			Term:        term,
 			Title:       fmt.Sprintf("man %s", page),
-			Description: "Manual page not found",
+			Description: i18n.T(lang, "direct.manual_page_not_found"),
 			Content:     fmt.Sprintf("<p>No manual entry for <code>%s</code>.</p>", escapeHTML(page)),
 			Error:       "not_found",
 		}, nil
@@ -329,6 +334,8 @@ func (h *CheatHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 		return nil, fmt.Errorf("command name required")
 	}
 
+	lang := LangFromContext(ctx)
+
 	// Fetch from cheat.sh
 	apiURL := fmt.Sprintf("https://cheat.sh/%s?T", url.PathEscape(term))
 
@@ -352,7 +359,7 @@ func (h *CheatHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 				Type:        AnswerTypeCheat,
 				Term:        term,
 				Title:       fmt.Sprintf("cheat: %s", term),
-				Description: "Command not found",
+				Description: i18n.T(lang, "direct.command_not_found"),
 				Content:     fmt.Sprintf("<p>No cheat sheet found for <code>%s</code>.</p>", escapeHTML(term)),
 				Error:       "not_found",
 			}, nil

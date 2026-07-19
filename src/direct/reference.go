@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/version"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -36,6 +37,7 @@ func (h *UserAgentHandler) HandleDirectQuery(ctx context.Context, term string) (
 
 	// Parse the user agent
 	parsed := parseUserAgent(term)
+	lang := LangFromContext(ctx)
 
 	data := map[string]interface{}{
 		"raw":    term,
@@ -45,7 +47,7 @@ func (h *UserAgentHandler) HandleDirectQuery(ctx context.Context, term string) (
 	return &Answer{
 		Type:        AnswerTypeUserAgent,
 		Term:        truncateString(term, 50),
-		Title:       "User Agent Parser",
+		Title:       i18n.T(lang, "direct.user_agent_parser_title"),
 		Description: fmt.Sprintf("%s on %s", parsed["browser"], parsed["os"]),
 		Content:     formatUserAgentContent(term, parsed),
 		Source:      "User Agent Parser",
@@ -292,6 +294,7 @@ func init() {
 }
 
 func (h *MIMEHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
+	lang := LangFromContext(ctx)
 	term = strings.TrimSpace(strings.ToLower(term))
 	if term == "" {
 		return nil, fmt.Errorf("MIME type or extension required")
@@ -315,7 +318,7 @@ func (h *MIMEHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 			Type:        AnswerTypeMIME,
 			Term:        term,
 			Title:       fmt.Sprintf("MIME: %s", term),
-			Description: "Unknown MIME type",
+			Description: i18n.T(lang, "direct.unknown_mime_type"),
 			Content:     fmt.Sprintf("<p>Unknown MIME type: <code>%s</code></p>", escapeHTML(term)),
 			Error:       "not_found",
 		}, nil
@@ -453,6 +456,7 @@ var licenseDB = map[string]struct {
 }
 
 func (h *LicenseHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
+	lang := LangFromContext(ctx)
 	term = strings.TrimSpace(strings.ToLower(term))
 	if term == "" {
 		return nil, fmt.Errorf("license name required")
@@ -478,8 +482,8 @@ func (h *LicenseHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 		return &Answer{
 			Type:        AnswerTypeLicense,
 			Term:        term,
-			Title:       "License Lookup",
-			Description: "License not found",
+			Title:       i18n.T(lang, "direct.license_lookup_title"),
+			Description: i18n.T(lang, "direct.license_not_found"),
 			Content:     fmt.Sprintf("<p>Unknown license: <code>%s</code></p><p>Try: MIT, Apache-2.0, GPL-3.0, BSD-3-Clause, ISC</p>", escapeHTML(term)),
 			Error:       "not_found",
 		}, nil
@@ -591,6 +595,7 @@ func (h *CountryHandler) Type() AnswerType {
 const countryDataset = "https://raw.githubusercontent.com/mledoze/countries/master/dist/countries.json"
 
 func (h *CountryHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
+	lang := LangFromContext(ctx)
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("country code or name required")
@@ -612,8 +617,8 @@ func (h *CountryHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 		return &Answer{
 			Type:        AnswerTypeCountry,
 			Term:        term,
-			Title:       "Country Lookup",
-			Description: "Country data source unavailable",
+			Title:       i18n.T(lang, "direct.country_lookup_title"),
+			Description: i18n.T(lang, "direct.country_data_source_unavailable"),
 			Content:     "<p>Country data source is temporarily unavailable.</p>",
 			Error:       "upstream_error",
 		}, nil
@@ -652,8 +657,8 @@ func (h *CountryHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 		return &Answer{
 			Type:        AnswerTypeCountry,
 			Term:        term,
-			Title:       "Country Lookup",
-			Description: "Country not found",
+			Title:       i18n.T(lang, "direct.country_lookup_title"),
+			Description: i18n.T(lang, "direct.country_not_found"),
 			Content:     fmt.Sprintf("<p>Country not found: <code>%s</code></p>", escapeHTML(term)),
 			Error:       "not_found",
 		}, nil
@@ -689,8 +694,8 @@ func (h *CountryHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 		return &Answer{
 			Type:        AnswerTypeCountry,
 			Term:        term,
-			Title:       "Country Lookup",
-			Description: "Country not found",
+			Title:       i18n.T(lang, "direct.country_lookup_title"),
+			Description: i18n.T(lang, "direct.country_not_found"),
 			Content:     fmt.Sprintf("<p>Country not found: <code>%s</code></p>", escapeHTML(term)),
 			Error:       "not_found",
 		}, nil
@@ -879,6 +884,7 @@ var asciiFontBasic = map[rune][]string{
 }
 
 func (h *ASCIIHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
+	lang := LangFromContext(ctx)
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("text required")
@@ -899,7 +905,7 @@ func (h *ASCIIHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 	return &Answer{
 		Type:        AnswerTypeASCII,
 		Term:        term,
-		Title:       "ASCII Art",
+		Title:       i18n.T(lang, "direct.ascii_art_title"),
 		Description: fmt.Sprintf("ASCII art for: %s", term),
 		Content:     formatASCIIContent(term, art),
 		Source:      "ASCII Art Generator",
@@ -959,6 +965,7 @@ func (h *QRHandler) Type() AnswerType {
 }
 
 func (h *QRHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
+	lang := LangFromContext(ctx)
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("text or URL required")
@@ -977,8 +984,8 @@ func (h *QRHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer
 	return &Answer{
 		Type:        AnswerTypeQR,
 		Term:        truncateString(term, 50),
-		Title:       "QR Code Generator",
-		Description: "QR code for your text/URL",
+		Title:       i18n.T(lang, "direct.qr_code_generator_title"),
+		Description: i18n.T(lang, "direct.qr_code_description"),
 		Content:     formatQRContent(term, qrURL),
 		Source:      "QR Code Generator",
 		Data:        data,

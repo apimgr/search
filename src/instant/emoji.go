@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/apimgr/search/src/common/i18n"
 )
 
 // EmojiHandler handles emoji lookups by name/keyword
@@ -65,6 +67,8 @@ func (h *EmojiHandler) HandleInstantQuery(ctx context.Context, query string) (*A
 		return nil, nil
 	}
 
+	lang := LangFromContext(ctx)
+
 	// Search for matching emojis
 	matches := h.searchEmojis(searchTerm)
 
@@ -72,15 +76,15 @@ func (h *EmojiHandler) HandleInstantQuery(ctx context.Context, query string) (*A
 		return &Answer{
 			Type:    AnswerTypeEmoji,
 			Query:   query,
-			Title:   fmt.Sprintf("Emoji Search: %s", searchTerm),
-			Content: fmt.Sprintf("No emojis found for '%s'", escapeHTML(searchTerm)),
+			Title:   fmt.Sprintf("%s: %s", i18n.T(lang, "instant.emoji_search_title"), searchTerm),
+			Content: i18n.T(lang, "instant.emoji_none_found", escapeHTML(searchTerm)),
 		}, nil
 	}
 
 	// Build content
 	var content strings.Builder
 	content.WriteString("<div class=\"emoji-result\">\n")
-	content.WriteString(fmt.Sprintf("<p>Found <strong>%d</strong> emojis matching \"%s\":</p>\n", len(matches), escapeHTML(searchTerm)))
+	content.WriteString(fmt.Sprintf("<p>%s</p>\n", i18n.T(lang, "instant.emoji_found_matching", len(matches), escapeHTML(searchTerm))))
 	content.WriteString("<div class=\"emoji-grid\" style=\"display: flex; flex-wrap: wrap; gap: 10px;\">\n")
 
 	for _, emoji := range matches {
@@ -109,7 +113,7 @@ func (h *EmojiHandler) HandleInstantQuery(ctx context.Context, query string) (*A
 	return &Answer{
 		Type:    AnswerTypeEmoji,
 		Query:   query,
-		Title:   fmt.Sprintf("Emoji Search: %s", searchTerm),
+		Title:   fmt.Sprintf("%s: %s", i18n.T(lang, "instant.emoji_search_title"), searchTerm),
 		Content: content.String(),
 		Data: map[string]interface{}{
 			"searchTerm": searchTerm,

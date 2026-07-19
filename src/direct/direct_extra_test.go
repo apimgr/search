@@ -127,7 +127,7 @@ func TestFormatDirectoryContent(t *testing.T) {
 func TestRFCHandlerBasicInfo(t *testing.T) {
 	h := NewRFCHandler()
 
-	ans, err := h.basicRFCInfo("7230")
+	ans, err := h.basicRFCInfo("7230", "en")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

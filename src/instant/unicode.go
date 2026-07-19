@@ -7,6 +7,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/apimgr/search/src/common/i18n"
 )
 
 // UnicodeHandler handles unicode character lookups
@@ -56,6 +58,8 @@ func (h *UnicodeHandler) HandleInstantQuery(ctx context.Context, query string) (
 		return nil, nil
 	}
 
+	lang := LangFromContext(ctx)
+
 	// Check if it's a U+XXXX code point
 	var r rune
 	codePointPattern := regexp.MustCompile(`(?i)^U?\+?([0-9a-fA-F]{4,6})$`)
@@ -70,8 +74,8 @@ func (h *UnicodeHandler) HandleInstantQuery(ctx context.Context, query string) (
 			return &Answer{
 				Type:    AnswerTypeUnicode,
 				Query:   query,
-				Title:   "Unicode Character Info",
-				Content: "Invalid character or encoding",
+				Title:   i18n.T(lang, "instant.unicode_info_title"),
+				Content: i18n.T(lang, "instant.unicode_invalid_character"),
 			}, nil
 		}
 	}

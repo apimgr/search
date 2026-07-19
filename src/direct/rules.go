@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/apimgr/search/src/common/i18n"
 )
 
 // RulesHandler handles rules:{query} and rule:{query} queries.
@@ -132,23 +134,24 @@ var rulesOfTheInternet = []Rule{
 }
 
 func (h *RulesHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
+	lang := LangFromContext(ctx)
 	term = strings.TrimSpace(term)
 
 	// Empty or "all" - show all rules
 	if term == "" || strings.EqualFold(term, "all") {
-		return h.allRules()
+		return h.allRules(lang)
 	}
 
 	// Try to parse as number
 	if num, err := strconv.Atoi(term); err == nil {
-		return h.ruleByNumber(num)
+		return h.ruleByNumber(num, lang)
 	}
 
 	// Search by term
-	return h.searchRules(term)
+	return h.searchRules(term, lang)
 }
 
-func (h *RulesHandler) allRules() (*Answer, error) {
+func (h *RulesHandler) allRules(lang string) (*Answer, error) {
 	var html strings.Builder
 	html.WriteString("<div class=\"rules-content\">")
 	html.WriteString("<h1>Rules of the Internet</h1>")
@@ -167,8 +170,8 @@ func (h *RulesHandler) allRules() (*Answer, error) {
 	return &Answer{
 		Type:        AnswerTypeRules,
 		Term:        "all",
-		Title:       "Rules of the Internet",
-		Description: "The complete list of Rules of the Internet",
+		Title:       i18n.T(lang, "direct.rules_of_the_internet_title"),
+		Description: i18n.T(lang, "direct.rules_of_the_internet_description"),
 		Content:     html.String(),
 		Source:      "Internet folklore",
 		Data: map[string]interface{}{
@@ -178,7 +181,7 @@ func (h *RulesHandler) allRules() (*Answer, error) {
 	}, nil
 }
 
-func (h *RulesHandler) ruleByNumber(num int) (*Answer, error) {
+func (h *RulesHandler) ruleByNumber(num int, lang string) (*Answer, error) {
 	// Find rule by number
 	for _, rule := range rulesOfTheInternet {
 		if rule.Number == num {
@@ -220,10 +223,10 @@ func (h *RulesHandler) ruleByNumber(num int) (*Answer, error) {
 	}
 
 	// Rule not found - show all rules
-	return h.allRules()
+	return h.allRules(lang)
 }
 
-func (h *RulesHandler) searchRules(term string) (*Answer, error) {
+func (h *RulesHandler) searchRules(term, lang string) (*Answer, error) {
 	termLower := strings.ToLower(term)
 	var matches []Rule
 
@@ -245,7 +248,7 @@ func (h *RulesHandler) searchRules(term string) (*Answer, error) {
 			Type:        AnswerTypeRules,
 			Term:        term,
 			Title:       fmt.Sprintf("Rules Search: %s", term),
-			Description: "No matching rules found",
+			Description: i18n.T(lang, "direct.no_matching_rules_found"),
 			Content:     html.String(),
 			Source:      "Internet folklore",
 			Data: map[string]interface{}{

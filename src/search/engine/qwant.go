@@ -85,6 +85,7 @@ func (e *QwantEngine) Search(ctx context.Context, query *model.Query) ([]model.R
 	}
 
 	var results []model.Result
+	position := 0
 	for _, item := range qwantResp.Data.Result.Items {
 		result := model.Result{
 			Title:       item.Title,
@@ -93,6 +94,8 @@ func (e *QwantEngine) Search(ctx context.Context, query *model.Query) ([]model.R
 			Engine:      e.Name(),
 			Category:    query.Category,
 			PublishedAt: time.Now(),
+			Score:       calculateScore(e.GetPriority(), position, 1),
+			Position:    position,
 		}
 
 		if item.Thumb != "" {
@@ -106,6 +109,10 @@ func (e *QwantEngine) Search(ctx context.Context, query *model.Query) ([]model.R
 		}
 
 		results = append(results, result)
+		position++
+		if position >= e.GetConfig().GetMaxResults() {
+			break
+		}
 	}
 
 	return results, nil

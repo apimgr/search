@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/version"
 )
 
@@ -60,10 +61,12 @@ func (h *RFCHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 		return nil, nil
 	}
 
+	lang := LangFromContext(ctx)
+
 	// Pad RFC number if needed (RFC 1 -> RFC 0001)
 	rfcNumInt, err := strconv.Atoi(rfcNum)
 	if err != nil {
-		return h.errorAnswer(query, rfcNum, "Invalid RFC number"), nil
+		return h.errorAnswer(query, rfcNum, lang, i18n.T(lang, "instant.rfc_invalid_number")), nil
 	}
 
 	// Fetch RFC document from IETF
@@ -78,23 +81,23 @@ func (h *RFCHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 
 	resp, err := h.client.Do(req)
 	if err != nil {
-		return h.errorAnswer(query, rfcNum, "Failed to connect to RFC Editor"), nil
+		return h.errorAnswer(query, rfcNum, lang, i18n.T(lang, "instant.rfc_connect_failed")), nil
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return h.errorAnswer(query, rfcNum, fmt.Sprintf("RFC %s not found", rfcNum)), nil
+		return h.errorAnswer(query, rfcNum, lang, i18n.T(lang, "instant.rfc_not_found", rfcNum)), nil
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return h.errorAnswer(query, rfcNum, fmt.Sprintf("RFC Editor returned status %d", resp.StatusCode)), nil
+		return h.errorAnswer(query, rfcNum, lang, i18n.T(lang, "instant.rfc_bad_status", resp.StatusCode)), nil
 	}
 
 	// Read and parse the RFC text (first few KB for metadata)
 	limitedReader := io.LimitReader(resp.Body, 32*1024)
 	content, err := io.ReadAll(limitedReader)
 	if err != nil {
-		return h.errorAnswer(query, rfcNum, "Failed to read RFC content"), nil
+		return h.errorAnswer(query, rfcNum, lang, i18n.T(lang, "instant.rfc_read_failed")), nil
 	}
 
 	// Parse RFC metadata from header
@@ -289,11 +292,11 @@ func (h *RFCHandler) parseRFCHeader(content string) RFCInfo {
 	return info
 }
 
-func (h *RFCHandler) errorAnswer(query, rfcNum, message string) *Answer {
+func (h *RFCHandler) errorAnswer(query, rfcNum, lang, message string) *Answer {
 	return &Answer{
 		Type:      AnswerTypeRFC,
 		Query:     query,
-		Title:     fmt.Sprintf("RFC Lookup: %s", rfcNum),
+		Title:     fmt.Sprintf("%s: %s", i18n.T(lang, "instant.rfc_lookup_label"), rfcNum),
 		Content:   fmt.Sprintf("<span class=\"error\">%s</span>", message),
 		Source:    "IETF RFC Editor",
 		SourceURL: "https://www.rfc-editor.org/",

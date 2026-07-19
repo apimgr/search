@@ -3023,8 +3023,8 @@ func TestBase64HandlerOperations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
-	if encoded.Data["operation"] != "encoded" {
-		t.Errorf("operation = %v, want encoded", encoded.Data["operation"])
+	if encoded.Data["operation"] != "encode" {
+		t.Errorf("operation = %v, want encode", encoded.Data["operation"])
 	}
 
 	// Test decode
@@ -3032,8 +3032,8 @@ func TestBase64HandlerOperations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HandleInstantQuery() error = %v", err)
 	}
-	if decoded.Data["operation"] != "decoded" {
-		t.Errorf("operation = %v, want decoded", decoded.Data["operation"])
+	if decoded.Data["operation"] != "decode" {
+		t.Errorf("operation = %v, want decode", decoded.Data["operation"])
 	}
 	if decoded.Data["output"] != "test string" {
 		t.Errorf("output = %v, want 'test string'", decoded.Data["output"])
@@ -3866,7 +3866,7 @@ func TestEmojiHandlerHandleNoResults(t *testing.T) {
 	if answer.Type != AnswerTypeEmoji {
 		t.Errorf("Type = %v, want %v", answer.Type, AnswerTypeEmoji)
 	}
-	if !contains(answer.Content, "No emojis found") {
+	if !contains(answer.Content, "No emoji found") {
 		t.Error("Content should indicate no emojis found")
 	}
 }

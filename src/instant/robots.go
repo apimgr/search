@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/version"
 )
 
@@ -91,6 +92,8 @@ func (h *RobotsHandler) HandleInstantQuery(ctx context.Context, query string) (*
 		domain = domain[:idx]
 	}
 
+	lang := LangFromContext(ctx)
+
 	// Build robots.txt URL
 	robotsURL := fmt.Sprintf("https://%s/robots.txt", domain)
 
@@ -101,7 +104,7 @@ func (h *RobotsHandler) HandleInstantQuery(ctx context.Context, query string) (*
 			Type:    AnswerTypeRobots,
 			Query:   query,
 			Title:   fmt.Sprintf("robots.txt: %s", domain),
-			Content: fmt.Sprintf("<strong>Error:</strong> Invalid domain<br><br>%s", escapeHTML(err.Error())),
+			Content: fmt.Sprintf("<strong>%s:</strong> %s<br><br>%s", i18n.T(lang, "instant.robots_error_label"), i18n.T(lang, "instant.robots_invalid_domain"), escapeHTML(err.Error())),
 		}, nil
 	}
 
@@ -119,7 +122,7 @@ func (h *RobotsHandler) HandleInstantQuery(ctx context.Context, query string) (*
 				Type:    AnswerTypeRobots,
 				Query:   query,
 				Title:   fmt.Sprintf("robots.txt: %s", domain),
-				Content: fmt.Sprintf("<strong>Error:</strong> Could not fetch robots.txt<br><br>%s", escapeHTML(err.Error())),
+				Content: fmt.Sprintf("<strong>%s:</strong> %s<br><br>%s", i18n.T(lang, "instant.robots_error_label"), i18n.T(lang, "instant.robots_fetch_failed"), escapeHTML(err.Error())),
 				Data: map[string]interface{}{
 					"domain": domain,
 					"error":  err.Error(),
@@ -134,7 +137,7 @@ func (h *RobotsHandler) HandleInstantQuery(ctx context.Context, query string) (*
 			Type:    AnswerTypeRobots,
 			Query:   query,
 			Title:   fmt.Sprintf("robots.txt: %s", domain),
-			Content: fmt.Sprintf("<strong>No robots.txt found</strong><br><br>The site %s does not have a robots.txt file (HTTP 404).", escapeHTML(domain)),
+			Content: fmt.Sprintf("<strong>%s</strong><br><br>%s", i18n.T(lang, "instant.robots_not_found_label"), i18n.T(lang, "instant.robots_not_found_detail", escapeHTML(domain))),
 			Data: map[string]interface{}{
 				"domain":      domain,
 				"status_code": resp.StatusCode,
@@ -148,7 +151,7 @@ func (h *RobotsHandler) HandleInstantQuery(ctx context.Context, query string) (*
 			Type:    AnswerTypeRobots,
 			Query:   query,
 			Title:   fmt.Sprintf("robots.txt: %s", domain),
-			Content: fmt.Sprintf("<strong>Error:</strong> HTTP %d when fetching robots.txt", resp.StatusCode),
+			Content: fmt.Sprintf("<strong>%s:</strong> %s", i18n.T(lang, "instant.robots_error_label"), i18n.T(lang, "instant.robots_bad_status", resp.StatusCode)),
 			Data: map[string]interface{}{
 				"domain":      domain,
 				"status_code": resp.StatusCode,
@@ -164,7 +167,7 @@ func (h *RobotsHandler) HandleInstantQuery(ctx context.Context, query string) (*
 			Type:    AnswerTypeRobots,
 			Query:   query,
 			Title:   fmt.Sprintf("robots.txt: %s", domain),
-			Content: fmt.Sprintf("<strong>Error:</strong> Could not read robots.txt<br><br>%s", escapeHTML(err.Error())),
+			Content: fmt.Sprintf("<strong>%s:</strong> %s<br><br>%s", i18n.T(lang, "instant.robots_error_label"), i18n.T(lang, "instant.robots_read_failed"), escapeHTML(err.Error())),
 		}, nil
 	}
 

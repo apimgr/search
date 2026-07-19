@@ -14,6 +14,8 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	"gopkg.in/yaml.v3"
+
+	"github.com/apimgr/search/src/common/i18n"
 )
 
 // HTMLHandler handles html:{text} queries
@@ -180,6 +182,8 @@ func (h *UnicodeHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 		return nil, fmt.Errorf("character or code point required")
 	}
 
+	lang := LangFromContext(ctx)
+
 	var r rune
 	var codePoint string
 
@@ -204,15 +208,15 @@ func (h *UnicodeHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 		codePoint = fmt.Sprintf("U+%04X", r)
 	} else {
 		// Search by name
-		return h.searchUnicodeName(term)
+		return h.searchUnicodeName(term, lang)
 	}
 
 	if r == 0 {
 		return &Answer{
 			Type:        AnswerTypeUnicode,
 			Term:        term,
-			Title:       "Unicode Lookup",
-			Description: "Invalid input",
+			Title:       i18n.T(lang, "direct.unicode_lookup_title"),
+			Description: i18n.T(lang, "direct.invalid_input"),
 			Content:     "<p>Could not parse Unicode character or code point.</p>",
 			Error:       "invalid_input",
 		}, nil
@@ -266,12 +270,12 @@ func (h *UnicodeHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 	}, nil
 }
 
-func (h *UnicodeHandler) searchUnicodeName(name string) (*Answer, error) {
+func (h *UnicodeHandler) searchUnicodeName(name, lang string) (*Answer, error) {
 	return &Answer{
 		Type:        AnswerTypeUnicode,
 		Term:        name,
-		Title:       "Unicode Search",
-		Description: "Unicode name search not supported",
+		Title:       i18n.T(lang, "direct.unicode_search_title"),
+		Description: i18n.T(lang, "direct.unicode_name_search_unsupported"),
 		Content:     "<p>Searching by Unicode name is not supported. Try entering a character directly or use <code>U+XXXX</code> format.</p>",
 		Error:       "not_supported",
 	}, nil
@@ -377,6 +381,8 @@ func (h *EmojiHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 		return nil, fmt.Errorf("emoji name or keyword required")
 	}
 
+	lang := LangFromContext(ctx)
+
 	// Search emoji database
 	var matches []string
 	for keyword, emojis := range emojiDB {
@@ -400,7 +406,7 @@ func (h *EmojiHandler) HandleDirectQuery(ctx context.Context, term string) (*Ans
 			Type:        AnswerTypeEmoji,
 			Term:        term,
 			Title:       fmt.Sprintf("Emoji: %s", term),
-			Description: "No emojis found",
+			Description: i18n.T(lang, "direct.no_emojis_found"),
 			Content:     fmt.Sprintf("<p>No emojis found for <code>%s</code>.</p>", escapeHTML(term)),
 			Error:       "not_found",
 		}, nil
@@ -465,6 +471,8 @@ func (h *EscapeHandler) HandleDirectQuery(ctx context.Context, term string) (*An
 		return nil, fmt.Errorf("text required")
 	}
 
+	lang := LangFromContext(ctx)
+
 	// Parse format if specified
 	format := ""
 	text := term
@@ -499,8 +507,8 @@ func (h *EscapeHandler) HandleDirectQuery(ctx context.Context, term string) (*An
 	return &Answer{
 		Type:        AnswerTypeEscape,
 		Term:        term,
-		Title:       "String Escape",
-		Description: "Escaped strings for various formats",
+		Title:       i18n.T(lang, "direct.string_escape_title"),
+		Description: i18n.T(lang, "direct.escaped_strings_description"),
 		Content:     formatEscapeContent(text, escapes, format),
 		Source:      "Local Escaper",
 		Data:        data,
@@ -574,6 +582,8 @@ func (h *JSONHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		return nil, fmt.Errorf("JSON data required")
 	}
 
+	lang := LangFromContext(ctx)
+
 	// Check for mode prefix
 	// default
 	mode := "format"
@@ -598,8 +608,8 @@ func (h *JSONHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		return &Answer{
 			Type:        AnswerTypeJSON,
 			Term:        term,
-			Title:       "JSON Error",
-			Description: "Invalid JSON",
+			Title:       i18n.T(lang, "direct.json_error_title"),
+			Description: i18n.T(lang, "direct.invalid_json"),
 			Content:     fmt.Sprintf("<p class=\"error\">Invalid JSON: %s</p><pre><code>%s</code></pre>", escapeHTML(err.Error()), escapeHTML(jsonStr)),
 			Error:       "invalid_json",
 		}, nil
@@ -635,7 +645,7 @@ func (h *JSONHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		Type:        AnswerTypeJSON,
 		Term:        term,
 		Title:       fmt.Sprintf("JSON %s", cases.Title(language.Und, cases.NoLower).String(mode)),
-		Description: "Valid JSON",
+		Description: i18n.T(lang, "direct.valid_json"),
 		Content:     formatJSONContent(mode, jsonStr, output, keys, depth),
 		Source:      "JSON Parser",
 		Data:        data,
@@ -717,6 +727,8 @@ func (h *YAMLHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		return nil, fmt.Errorf("YAML data required")
 	}
 
+	lang := LangFromContext(ctx)
+
 	// Check for mode prefix
 	// default
 	mode := "format"
@@ -746,8 +758,8 @@ func (h *YAMLHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 			return &Answer{
 				Type:        AnswerTypeYAML,
 				Term:        term,
-				Title:       "YAML Error",
-				Description: "Invalid JSON input",
+				Title:       i18n.T(lang, "direct.yaml_error_title"),
+				Description: i18n.T(lang, "direct.invalid_json_input"),
 				Content:     fmt.Sprintf("<p class=\"error\">Invalid JSON: %s</p>", escapeHTML(err.Error())),
 				Error:       "invalid_json",
 			}, nil
@@ -761,8 +773,8 @@ func (h *YAMLHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 			return &Answer{
 				Type:        AnswerTypeYAML,
 				Term:        term,
-				Title:       "YAML Error",
-				Description: "Invalid YAML input",
+				Title:       i18n.T(lang, "direct.yaml_error_title"),
+				Description: i18n.T(lang, "direct.invalid_yaml_input"),
 				Content:     fmt.Sprintf("<p class=\"error\">Invalid YAML: %s</p>", escapeHTML(err.Error())),
 				Error:       "invalid_yaml",
 			}, nil
@@ -776,8 +788,8 @@ func (h *YAMLHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 			return &Answer{
 				Type:        AnswerTypeYAML,
 				Term:        term,
-				Title:       "YAML Error",
-				Description: "Invalid YAML",
+				Title:       i18n.T(lang, "direct.yaml_error_title"),
+				Description: i18n.T(lang, "direct.invalid_yaml"),
 				Content:     fmt.Sprintf("<p class=\"error\">Invalid YAML: %s</p>", escapeHTML(err.Error())),
 				Error:       "invalid_yaml",
 			}, nil
@@ -797,7 +809,7 @@ func (h *YAMLHandler) HandleDirectQuery(ctx context.Context, term string) (*Answ
 		Type:        AnswerTypeYAML,
 		Term:        term,
 		Title:       fmt.Sprintf("YAML %s", formatYAMLMode(mode)),
-		Description: "Valid YAML",
+		Description: i18n.T(lang, "direct.valid_yaml"),
 		Content:     formatYAMLContent(mode, yamlStr, output),
 		Source:      "YAML Parser",
 		Data:        data,

@@ -14,8 +14,29 @@ type clientIPKeyType struct{}
 // geoIPLookupKeyType is an unexported type for the GeoIP context key.
 type geoIPLookupKeyType struct{}
 
+// langKeyType is an unexported type for the language context key.
+type langKeyType struct{}
+
 // ClientIPKey is the context key used to pass the client's IP address to instant handlers.
 var ClientIPKey = clientIPKeyType{}
+
+// langKey is the context key used to pass the resolved request language to instant handlers.
+var langKey = langKeyType{}
+
+// WithLang returns a new context carrying the resolved i18n language code so
+// instant handlers can return translated Title/Content text.
+func WithLang(ctx context.Context, lang string) context.Context {
+	return context.WithValue(ctx, langKey, lang)
+}
+
+// LangFromContext retrieves the language stored by WithLang.
+// Returns "en" (the i18n default language) when not set.
+func LangFromContext(ctx context.Context) string {
+	if lang, ok := ctx.Value(langKey).(string); ok && lang != "" {
+		return lang
+	}
+	return "en"
+}
 
 // WithClientIP returns a new context with the client IP stored under ClientIPKey.
 func WithClientIP(ctx context.Context, ip string) context.Context {

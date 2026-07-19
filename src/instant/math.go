@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/apimgr/search/src/common/i18n"
 )
 
 // MathHandler handles mathematical expressions
@@ -110,14 +112,16 @@ func (h *MathHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 		}
 	}
 
+	lang := LangFromContext(ctx)
+
 	// Evaluate expression
 	result, err := h.evaluate(expr)
 	if err != nil {
 		return &Answer{
 			Type:    AnswerTypeMath,
 			Query:   query,
-			Title:   "Calculator",
-			Content: fmt.Sprintf("Error: %s", escapeHTML(err.Error())),
+			Title:   i18n.T(lang, "instant.calculator_title"),
+			Content: i18n.T(lang, "instant.calculator_error", escapeHTML(err.Error())),
 		}, nil
 	}
 
@@ -127,7 +131,7 @@ func (h *MathHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 	return &Answer{
 		Type:    AnswerTypeMath,
 		Query:   query,
-		Title:   "Calculator",
+		Title:   i18n.T(lang, "instant.calculator_title"),
 		Content: fmt.Sprintf("<div class=\"math-result\"><span class=\"expression\">%s</span> = <span class=\"result\">%s</span></div>", escapeHTML(expr), resultStr),
 		Data: map[string]interface{}{
 			"expression": expr,

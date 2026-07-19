@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/apimgr/search/src/common/i18n"
 	"golang.org/x/text/runes"
 	"golang.org/x/text/transform"
 	"golang.org/x/text/unicode/norm"
@@ -82,7 +83,7 @@ func (h *SlugHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 	return &Answer{
 		Type:    AnswerTypeSlug,
 		Query:   query,
-		Title:   "URL Slug Generator",
+		Title:   i18n.T(LangFromContext(ctx), "instant.slug_generator_title"),
 		Content: content,
 		Data: map[string]interface{}{
 			"input":      text,
