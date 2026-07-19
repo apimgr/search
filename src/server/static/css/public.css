@@ -3725,12 +3725,12 @@ html:not([data-theme-mode]) .theme-label-auto { display: none; }
 }
 
 .bang-suggestion-item:hover {
-    background: var(--bg-tertiary, #313244);
+    background: var(--bg-tertiary);
 }
 
 .bang-shortcut {
     font-family: monospace;
-    color: var(--accent-color, #bd93f9);
+    color: var(--accent-primary);
     font-weight: bold;
 }
 

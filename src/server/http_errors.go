@@ -8,7 +8,8 @@ import (
 )
 
 // localizedHTTPError writes a canonical JSON error response with the given HTTP status code.
-// Body format: {ok: false, error: <i18n key>, message: <localized string>, details: {}}
+// Per AI.md PART 9: error field is a machine-readable code; message is the localized string.
+// Body format: {ok: false, error: <ERROR_CODE>, message: <localized string>, details: {}}
 func localizedHTTPError(w http.ResponseWriter, r *http.Request, status int, key string, args ...interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -19,7 +20,7 @@ func localizedHTTPError(w http.ResponseWriter, r *http.Request, status int, key 
 		Details map[string]string `json:"details"`
 	}{
 		OK:      false,
-		Error:   key,
+		Error:   mapHTTPStatusToCode(status),
 		Message: i18n.RequestString(r, key, args...),
 		Details: map[string]string{},
 	}
