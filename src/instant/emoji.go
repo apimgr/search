@@ -73,14 +73,14 @@ func (h *EmojiHandler) HandleInstantQuery(ctx context.Context, query string) (*A
 			Type:    AnswerTypeEmoji,
 			Query:   query,
 			Title:   fmt.Sprintf("Emoji Search: %s", searchTerm),
-			Content: fmt.Sprintf("No emojis found for '%s'", searchTerm),
+			Content: fmt.Sprintf("No emojis found for '%s'", escapeHTML(searchTerm)),
 		}, nil
 	}
 
 	// Build content
 	var content strings.Builder
 	content.WriteString("<div class=\"emoji-result\">\n")
-	content.WriteString(fmt.Sprintf("<p>Found <strong>%d</strong> emojis matching \"%s\":</p>\n", len(matches), searchTerm))
+	content.WriteString(fmt.Sprintf("<p>Found <strong>%d</strong> emojis matching \"%s\":</p>\n", len(matches), escapeHTML(searchTerm)))
 	content.WriteString("<div class=\"emoji-grid\" style=\"display: flex; flex-wrap: wrap; gap: 10px;\">\n")
 
 	for _, emoji := range matches {

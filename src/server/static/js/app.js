@@ -3729,6 +3729,15 @@
                     return;
                 }
 
+                // Widget collapse/expand button
+                if (target.matches('.widget-collapse')) {
+                    var widgetEl = target.closest('.widget');
+                    if (widgetEl) {
+                        widgetEl.classList.toggle('widget-collapsed');
+                    }
+                    return;
+                }
+
                 // Add quicklink
                 if (target.matches('[data-widget-action="add-quicklink"]')) {
                     self.addQuickLink();

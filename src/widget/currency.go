@@ -50,8 +50,13 @@ func (f *CurrencyFetcher) Fetch(ctx context.Context, params map[string]string) (
 		fmt.Sscanf(amtStr, "%f", &amount)
 	}
 
-	// Use exchangerate.host free API (no key required)
+	// Use exchangerate.host API. The access_key query param is required by
+	// exchangerate.host for the /convert endpoint; requests without it are
+	// rejected with success=false, so the configured apiKey must be sent.
 	url := fmt.Sprintf("https://api.exchangerate.host/convert?from=%s&to=%s&amount=%.2f", from, to, amount)
+	if f.apiKey != "" {
+		url += "&access_key=" + f.apiKey
+	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -64,9 +69,21 @@ func (f *CurrencyFetcher) Fetch(ctx context.Context, params map[string]string) (
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		return &WidgetData{
+			Type:      WidgetCurrency,
+			Error:     fmt.Sprintf("exchangerate.host API returned status %d", resp.StatusCode),
+			UpdatedAt: time.Now(),
+		}, nil
+	}
+
 	var result struct {
 		Success bool `json:"success"`
-		Query   struct {
+		Error   struct {
+			Code int    `json:"code"`
+			Info string `json:"info"`
+		} `json:"error"`
+		Query struct {
 			From   string  `json:"from"`
 			To     string  `json:"to"`
 			Amount float64 `json:"amount"`
@@ -80,6 +97,18 @@ func (f *CurrencyFetcher) Fetch(ctx context.Context, params map[string]string) (
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, err
+	}
+
+	if !result.Success {
+		errMsg := result.Error.Info
+		if errMsg == "" {
+			errMsg = "exchangerate.host API returned an unsuccessful response"
+		}
+		return &WidgetData{
+			Type:      WidgetCurrency,
+			Error:     errMsg,
+			UpdatedAt: time.Now(),
+		}, nil
 	}
 
 	data := &CurrencyData{

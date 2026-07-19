@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/apimgr/search/src/version"
+	"golang.org/x/net/html"
 )
 
 // AnswerTypeMan is the answer type for man page lookups
@@ -54,7 +55,10 @@ func (h *ManHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 		return nil, nil
 	}
 
-	// Build man.cx URL
+	// Build man.cx URL.
+	// man.cx no longer serves a plain-text response via "?f=t" (it now returns the
+	// same HTML page regardless of that query parameter), so the page HTML is
+	// fetched directly and parsed with an HTML tokenizer instead.
 	var manURL string
 	if section != "" {
 		manURL = fmt.Sprintf("https://man.cx/%s(%s)", url.PathEscape(command), section)
@@ -62,15 +66,7 @@ func (h *ManHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 		manURL = fmt.Sprintf("https://man.cx/%s", url.PathEscape(command))
 	}
 
-	// Fetch man page content (plain text version)
-	var rawURL string
-	if section != "" {
-		rawURL = fmt.Sprintf("https://man.cx/%s(%s)?f=t", url.PathEscape(command), section)
-	} else {
-		rawURL = fmt.Sprintf("https://man.cx/%s?f=t", url.PathEscape(command))
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "GET", rawURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", manURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -99,15 +95,16 @@ func (h *ManHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 
 	rawContent := string(contentBytes)
 
-	// Check if we got an error page
-	if strings.Contains(rawContent, "No manual entry for") || strings.Contains(rawContent, "not found") {
-		return h.errorAnswer(query, command, fmt.Sprintf("Man page for '%s' not found", command)), nil
-	}
-
 	// Parse the man page content
-	manInfo := h.parseManPage(rawContent)
+	manInfo := h.parseManPageHTML(rawContent)
 	manInfo.Command = command
 	manInfo.Section = section
+
+	// man.cx returns HTTP 200 with a "Search results for ..." page (no NAME/DESCRIPTION
+	// sections) when the command has no man page, so absence of both is the not-found signal.
+	if manInfo.Name == "" && manInfo.Description == "" {
+		return h.errorAnswer(query, command, fmt.Sprintf("Man page for '%s' not found", command)), nil
+	}
 
 	// Build HTML content
 	var content strings.Builder
@@ -209,35 +206,92 @@ type ManOption struct {
 	Description string
 }
 
-func (h *ManHandler) parseManPage(content string) ManPageInfo {
+// parseManPageHTML extracts man page sections from man.cx's HTML page.
+// man.cx renders each section as an <h2> heading followed by block-level
+// content (<p>, <table>, <dl>, ...) inside the page's <main> element; the
+// same markup also appears (duplicated) in an <aside> navigation list, so
+// only the <main> subtree is walked to avoid picking up nav-list text.
+func (h *ManHandler) parseManPageHTML(rawHTML string) ManPageInfo {
 	info := ManPageInfo{}
-	lines := strings.Split(content, "\n")
+
+	doc, err := html.Parse(strings.NewReader(rawHTML))
+	if err != nil {
+		return info
+	}
+
+	root := findFirstElement(doc, "main")
+	if root == nil {
+		root = doc
+	}
 
 	currentSection := ""
 	var sectionContent []string
 
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-
-		// Check for section headers (all caps, at start of line)
-		if isManSectionHeader(trimmed) {
-			// Save previous section
-			h.saveSectionContent(&info, currentSection, sectionContent)
-			currentSection = strings.ToUpper(trimmed)
-			sectionContent = nil
-			continue
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode {
+			switch n.Data {
+			case "h2":
+				h.saveSectionContent(&info, currentSection, sectionContent)
+				currentSection = strings.ToUpper(strings.TrimSpace(manTextContent(n)))
+				sectionContent = nil
+				return
+			case "script", "style", "form", "nav":
+				return
+			case "p", "table", "dl", "ul", "ol", "pre":
+				if currentSection != "" {
+					text := strings.TrimSpace(manTextContent(n))
+					if text != "" {
+						sectionContent = append(sectionContent, text)
+					}
+				}
+				return
+			}
 		}
-
-		// Accumulate section content
-		if currentSection != "" && trimmed != "" {
-			sectionContent = append(sectionContent, trimmed)
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
 		}
 	}
+	walk(root)
 
 	// Save last section
 	h.saveSectionContent(&info, currentSection, sectionContent)
 
 	return info
+}
+
+// findFirstElement returns the first descendant element node with the given tag name.
+func findFirstElement(n *html.Node, tag string) *html.Node {
+	if n.Type == html.ElementNode && n.Data == tag {
+		return n
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if found := findFirstElement(c, tag); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
+// manTextContent returns the whitespace-normalized text content of a node and its descendants.
+func manTextContent(n *html.Node) string {
+	var sb strings.Builder
+	var walk func(*html.Node)
+	walk = func(node *html.Node) {
+		if node.Type == html.TextNode {
+			sb.WriteString(node.Data)
+			sb.WriteString(" ")
+			return
+		}
+		if node.Type == html.ElementNode && (node.Data == "script" || node.Data == "style") {
+			return
+		}
+		for c := node.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(n)
+	return strings.Join(strings.Fields(sb.String()), " ")
 }
 
 func (h *ManHandler) saveSectionContent(info *ManPageInfo, section string, content []string) {
@@ -311,42 +365,6 @@ func (h *ManHandler) errorAnswer(query, command, message string) *Answer {
 		Content: fmt.Sprintf("<span class=\"error\">%s</span>", message),
 		Source:  "man.cx",
 	}
-}
-
-func isManSectionHeader(line string) bool {
-	// Man section headers are typically all caps
-	if len(line) < 2 || len(line) > 30 {
-		return false
-	}
-
-	// Check if all letters are uppercase
-	hasLetter := false
-	for _, c := range line {
-		if c >= 'a' && c <= 'z' {
-			return false
-		}
-		if c >= 'A' && c <= 'Z' {
-			hasLetter = true
-		}
-	}
-
-	if !hasLetter {
-		return false
-	}
-
-	// Known section headers
-	headers := []string{"NAME", "SYNOPSIS", "DESCRIPTION", "OPTIONS", "ARGUMENTS",
-		"EXIT STATUS", "RETURN VALUE", "ERRORS", "ENVIRONMENT", "FILES",
-		"VERSIONS", "NOTES", "BUGS", "EXAMPLE", "EXAMPLES", "SEE ALSO",
-		"AUTHOR", "AUTHORS", "HISTORY", "STANDARDS", "SECURITY", "CAVEATS"}
-
-	for _, h := range headers {
-		if line == h {
-			return true
-		}
-	}
-
-	return false
 }
 
 func parseSeealso(s string) []string {

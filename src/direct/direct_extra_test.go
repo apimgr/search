@@ -1760,16 +1760,16 @@ func TestExtractManContent(t *testing.T) {
 		desc  string
 	}{
 		{
-			"with pre tag",
-			"<html><pre>SYNOPSIS\n  cmd</pre></html>",
+			"with main tag",
+			"<html><main>SYNOPSIS\n  cmd</main></html>",
 			func(s string) bool { return strings.Contains(s, "man-content") },
 			"should wrap found content",
 		},
 		{
-			"without pre tag",
-			"<html><body>no pre here</body></html>",
+			"without main tag",
+			"<html><body>no main here</body></html>",
 			func(s string) bool { return strings.Contains(s, "Failed to parse") },
-			"should return failure message when no pre tag",
+			"should return failure message when no main tag",
 		},
 	}
 	for _, tt := range tests {

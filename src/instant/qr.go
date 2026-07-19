@@ -82,7 +82,7 @@ func (h *QRHandler) HandleInstantQuery(ctx context.Context, query string) (*Answ
 <summary>ASCII Version</summary>
 <pre style="font-family: monospace; line-height: 1; font-size: 8px;">%s</pre>
 </details>
-</div>`, text, b64, ascii)
+</div>`, escapeHTML(text), b64, ascii)
 
 	return &Answer{
 		Type:    AnswerTypeQR,

@@ -226,7 +226,7 @@ func (h *TimezoneHandler) handleTimeIn(query, location string) (*Answer, error) 
 			Type:    AnswerTypeTime,
 			Query:   query,
 			Title:   "Time Zone",
-			Content: fmt.Sprintf("Unknown location or timezone: %s", location),
+			Content: fmt.Sprintf("Unknown location or timezone: %s", escapeHTML(location)),
 		}, nil
 	}
 

@@ -763,12 +763,22 @@ func widgetIconForType(widgetType string) string {
 	return "🔧"
 }
 
+// widgetCookieDisabledValue is the sentinel cookie value that means the user
+// explicitly saved an empty widget selection (disable all widgets on the
+// homepage). This is distinct from the cookie being absent entirely, which
+// means the user has never configured widgets and defaults should apply.
+const widgetCookieDisabledValue = "none"
+
 // parseWidgetCookie reads the search_widgets cookie and returns validated widget types.
-// Returns nil if the cookie is absent or empty (caller should fall back to defaults).
+// Returns nil if the cookie is absent (caller should fall back to defaults).
+// Returns a non-nil empty slice if the user explicitly disabled all widgets.
 func parseWidgetCookie(r *http.Request) []string {
 	c, err := r.Cookie(widgetCookieName)
 	if err != nil || c.Value == "" {
 		return nil
+	}
+	if c.Value == widgetCookieDisabledValue {
+		return []string{}
 	}
 	var result []string
 	for _, wt := range strings.Split(c.Value, ",") {
@@ -776,6 +786,9 @@ func parseWidgetCookie(r *http.Request) []string {
 		if wt != "" && knownWidgetTypes[wt] {
 			result = append(result, wt)
 		}
+	}
+	if result == nil {
+		return nil
 	}
 	return result
 }

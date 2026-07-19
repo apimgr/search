@@ -296,12 +296,13 @@ func formatManPage(content string) string {
 
 // extractManContent extracts man page content from HTML
 func extractManContent(html string) string {
-	// Simple extraction - look for the main content div
-	// In production, use proper HTML parsing
-	start := strings.Index(html, "<pre>")
-	end := strings.LastIndex(html, "</pre>")
+	// man.cx renders the manual page body inside a <main> element (it no
+	// longer wraps content in <pre> as it did historically); extract that
+	// subtree rather than searching for the obsolete <pre> wrapper.
+	start := strings.Index(html, "<main>")
+	end := strings.LastIndex(html, "</main>")
 	if start >= 0 && end > start {
-		return fmt.Sprintf("<div class=\"man-content\">%s</div>", html[start:end+6])
+		return fmt.Sprintf("<div class=\"man-content\">%s</div>", html[start+len("<main>"):end])
 	}
 	return "<p>Failed to parse man page content.</p>"
 }

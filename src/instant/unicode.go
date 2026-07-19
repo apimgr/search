@@ -107,8 +107,8 @@ func (h *UnicodeHandler) HandleInstantQuery(ctx context.Context, query string) (
 <tr><td><strong>Category:</strong></td><td>%s</td></tr>
 </table>
 </div>`,
-		charStr,
-		charStr,
+		escapeHTML(charStr),
+		escapeHTML(charStr),
 		codePoint, r,
 		strings.Join(utf8Hex, " "), len(utf8Bytes),
 		getUTF16Encoding(r),

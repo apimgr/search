@@ -66,15 +66,15 @@ func (h *URLHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 		}
 
 		var content strings.Builder
-		content.WriteString(fmt.Sprintf("<strong>URL:</strong> %s<br><br>", text))
-		content.WriteString(fmt.Sprintf("<strong>Scheme:</strong> %s<br>", parsed.Scheme))
-		content.WriteString(fmt.Sprintf("<strong>Host:</strong> %s<br>", parsed.Host))
-		content.WriteString(fmt.Sprintf("<strong>Path:</strong> %s<br>", parsed.Path))
+		content.WriteString(fmt.Sprintf("<strong>URL:</strong> %s<br><br>", escapeHTML(text)))
+		content.WriteString(fmt.Sprintf("<strong>Scheme:</strong> %s<br>", escapeHTML(parsed.Scheme)))
+		content.WriteString(fmt.Sprintf("<strong>Host:</strong> %s<br>", escapeHTML(parsed.Host)))
+		content.WriteString(fmt.Sprintf("<strong>Path:</strong> %s<br>", escapeHTML(parsed.Path)))
 		if parsed.RawQuery != "" {
-			content.WriteString(fmt.Sprintf("<strong>Query:</strong> %s<br>", parsed.RawQuery))
+			content.WriteString(fmt.Sprintf("<strong>Query:</strong> %s<br>", escapeHTML(parsed.RawQuery)))
 		}
 		if parsed.Fragment != "" {
-			content.WriteString(fmt.Sprintf("<strong>Fragment:</strong> %s<br>", parsed.Fragment))
+			content.WriteString(fmt.Sprintf("<strong>Fragment:</strong> %s<br>", escapeHTML(parsed.Fragment)))
 		}
 
 		return &Answer{
@@ -103,6 +103,6 @@ func (h *URLHandler) HandleInstantQuery(ctx context.Context, query string) (*Ans
 		Type:    AnswerTypeURL,
 		Query:   query,
 		Title:   fmt.Sprintf("URL %s", operation),
-		Content: fmt.Sprintf("<strong>Input:</strong> %s<br><br><strong>%s:</strong> <code>%s</code>", text, operation, result),
+		Content: fmt.Sprintf("<strong>Input:</strong> %s<br><br><strong>%s:</strong> <code>%s</code>", escapeHTML(text), operation, escapeHTML(result)),
 	}, nil
 }

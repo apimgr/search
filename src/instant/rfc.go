@@ -344,12 +344,29 @@ func isRFCSectionHeader(line string) bool {
 
 func isLikelyTitle(line string, allLines []string, index int) bool {
 	// Title is usually a substantial line that's centered or prominent
-	// and followed by author names or dates
 	if len(line) < 10 {
 		return false
 	}
 
-	// Check if subsequent lines look like author names or dates
+	// In the standard RFC front-matter layout, the author/organization block
+	// comes BEFORE the title and ends with a "Month YYYY" date line, while the
+	// title itself is followed by a blank line and then a section header such
+	// as "Status of this Memo" (never an author line or another date). So the
+	// date line that precedes the title is checked first; skip blank lines but
+	// stop at the first non-blank line so unrelated earlier text isn't matched.
+	for j := index - 1; j >= 0 && j >= index-3; j-- {
+		prevLine := strings.TrimSpace(allLines[j])
+		if prevLine == "" {
+			continue
+		}
+		if containsMonth(prevLine) {
+			return true
+		}
+		break
+	}
+
+	// Fall back to checking subsequent lines for author-like patterns or dates,
+	// for RFCs whose title precedes rather than follows the author/date block.
 	if index+1 < len(allLines) {
 		nextLine := strings.TrimSpace(allLines[index+1])
 		// Empty line after title is common

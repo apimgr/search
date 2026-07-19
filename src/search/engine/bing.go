@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
@@ -87,9 +88,16 @@ func (e *BingEngine) parseResults(html string, query *model.Query) ([]model.Resu
 	results := make([]model.Result, 0)
 
 	// Regex patterns for Bing results
-	// Bing uses <li class="b_algo"> for organic results
-	resultPattern := regexp.MustCompile(`(?s)<li class="b_algo[^"]*">(.*?)</li>`)
-	titlePattern := regexp.MustCompile(`<h2><a[^>]*href="([^"]*)"[^>]*>([^<]*)</a></h2>`)
+	// Bing uses <li class="b_algo"> for organic results, followed by extra
+	// attributes (e.g. `data-id iid=SERP.5331`) before the tag actually
+	// closes, so the closing ">" cannot be assumed to immediately follow the
+	// class attribute's closing quote.
+	resultPattern := regexp.MustCompile(`(?s)<li class="b_algo[^"]*"[^>]*>(.*?)</li>`)
+	// The <h2> always carries a class attribute (e.g. <h2 class="">), and the
+	// title text frequently wraps matched query terms in <strong> tags, so the
+	// tag and the capture group must both tolerate that instead of requiring
+	// an exact "<h2><a" prefix and tag-free text.
+	titlePattern := regexp.MustCompile(`(?s)<h2[^>]*><a[^>]*href="([^"]*)"[^>]*>(.*?)</a></h2>`)
 	contentPattern := regexp.MustCompile(`<p[^>]*>(.*?)</p>`)
 
 	matches := resultPattern.FindAllStringSubmatch(html, -1)
@@ -114,6 +122,17 @@ func (e *BingEngine) parseResults(html string, query *model.Query) ([]model.Resu
 		// Skip Bing internal URLs
 		if strings.Contains(resultURL, "bing.com") && !strings.Contains(resultURL, "http") {
 			continue
+		}
+
+		// Bing wraps organic results behind a bing.com/ck/a tracking redirect
+		// whose real target is base64-encoded in the "u" query parameter, so
+		// resolve it to the actual destination URL before returning it. The
+		// href attribute HTML-escapes "&" as "&amp;", which must be undone
+		// first so the query-parameter boundary regex can find "u=".
+		if strings.Contains(resultURL, "bing.com/ck/a") {
+			if realURL := extractBingRedirectURL(unescapeHTML(resultURL)); realURL != "" {
+				resultURL = realURL
+			}
 		}
 
 		// Extract content/snippet
@@ -143,4 +162,40 @@ func (e *BingEngine) parseResults(html string, query *model.Query) ([]model.Resu
 	}
 
 	return results, nil
+}
+
+// bingRedirectURe extracts the "u" query parameter from a Bing
+// bing.com/ck/a tracking-redirect URL, which holds the real destination
+// URL base64-encoded with a leading two-character version marker
+// (e.g. "u=a1aHR0cHM6Ly9nby5kZXYv" decodes to "https://go.dev/").
+var bingRedirectURe = regexp.MustCompile(`[?&]u=([^&]+)`)
+
+// extractBingRedirectURL extracts the real URL from a Bing ck/a redirect URL
+func extractBingRedirectURL(redirectURL string) string {
+	match := bingRedirectURe.FindStringSubmatch(redirectURL)
+	if len(match) < 2 {
+		return ""
+	}
+
+	encoded := match[1]
+	// Strip the leading version marker (e.g. "a1") before the base64 payload.
+	if len(encoded) < 3 {
+		return ""
+	}
+	encoded = encoded[2:]
+
+	// Restore standard base64 padding stripped from the URL-safe payload.
+	if pad := len(encoded) % 4; pad != 0 {
+		encoded += strings.Repeat("=", 4-pad)
+	}
+
+	decoded, err := base64.URLEncoding.DecodeString(encoded)
+	if err != nil {
+		decoded, err = base64.StdEncoding.DecodeString(encoded)
+		if err != nil {
+			return ""
+		}
+	}
+
+	return string(decoded)
 }

@@ -85,7 +85,7 @@ func (h *CaseHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 <tr><td><strong>kebab-case:</strong></td><td><code>%s</code></td></tr>
 <tr><td><strong>CONSTANT_CASE:</strong></td><td><code>%s</code></td></tr>
 </table>
-</div>`, text, upper, lower, title, camel, pascal, snake, kebab, constant)
+</div>`, escapeHTML(text), escapeHTML(upper), escapeHTML(lower), escapeHTML(title), escapeHTML(camel), escapeHTML(pascal), escapeHTML(snake), escapeHTML(kebab), escapeHTML(constant))
 
 	return &Answer{
 		Type:    AnswerTypeCase,

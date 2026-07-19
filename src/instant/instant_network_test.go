@@ -1870,34 +1870,6 @@ Domain Name: TEST.COM
 
 // ---- man.go pure helpers ----
 
-func TestIsManSectionHeader(t *testing.T) {
-	tests := []struct {
-		line string
-		want bool
-	}{
-		{"NAME", true},
-		{"SYNOPSIS", true},
-		{"DESCRIPTION", true},
-		{"OPTIONS", true},
-		{"SEE ALSO", true},
-		{"AUTHOR", true},
-		{"lowercase", false},
-		{"MixedCase", false},
-		{"", false},
-		{"A", false},
-		{"TOOLONGHEADERNAMEFORTHISFUNCTION!!!!!!", false},
-		{"12345", false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.line, func(t *testing.T) {
-			got := isManSectionHeader(tt.line)
-			if got != tt.want {
-				t.Errorf("isManSectionHeader(%q) = %v, want %v", tt.line, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestParseSeealso(t *testing.T) {
 	tests := []struct {
 		input string
@@ -1945,26 +1917,19 @@ func TestManHandlerParseQuery(t *testing.T) {
 	}
 }
 
-func TestManHandlerParseManPage(t *testing.T) {
+func TestManHandlerParseManPageHTML(t *testing.T) {
 	h := NewManHandler()
-	content := `
-NAME
-       ls - list directory contents
-
-SYNOPSIS
-       ls [OPTION]... [FILE]...
-
-DESCRIPTION
-       List information about the FILEs (the current directory by default).
-
-OPTIONS
-       -a, --all
-              do not ignore entries starting with .
-
-SEE ALSO
-       dir(1), vdir(1)
-`
-	info := h.parseManPage(content)
+	rawHTML := `<html><body><main>
+<h2>NAME</h2>
+<p>ls - list directory contents</p>
+<h2>SYNOPSIS</h2>
+<p>ls [OPTION]... [FILE]...</p>
+<h2>DESCRIPTION</h2>
+<p>List information about the FILEs (the current directory by default).</p>
+<h2>SEE ALSO</h2>
+<p>dir(1), vdir(1)</p>
+</main></body></html>`
+	info := h.parseManPageHTML(rawHTML)
 	if info.Name == "" {
 		t.Error("expected Name to be parsed")
 	}
@@ -1973,6 +1938,31 @@ SEE ALSO
 	}
 	if info.Description == "" {
 		t.Error("expected Description to be parsed")
+	}
+	if len(info.SeeAlso) != 2 {
+		t.Errorf("expected 2 SeeAlso entries, got %d: %v", len(info.SeeAlso), info.SeeAlso)
+	}
+}
+
+// TestManHandlerParseManPageHTMLIgnoresAsideNav verifies that duplicated
+// section text inside the <aside> navigation list (which man.cx renders
+// alongside the same headings as the <main> content) is not walked, since
+// parseManPageHTML only descends into the <main> subtree.
+func TestManHandlerParseManPageHTMLIgnoresAsideNav(t *testing.T) {
+	h := NewManHandler()
+	rawHTML := `<html><body>
+<aside><h2>NAME</h2><p>should not appear</p></aside>
+<main>
+<h2>NAME</h2>
+<p>ls - list directory contents</p>
+</main>
+</body></html>`
+	info := h.parseManPageHTML(rawHTML)
+	if strings.Contains(info.Name, "should not appear") {
+		t.Errorf("parseManPageHTML leaked aside-nav content into Name: %q", info.Name)
+	}
+	if info.Name == "" {
+		t.Error("expected Name to be parsed from main content")
 	}
 }
 

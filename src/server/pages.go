@@ -45,9 +45,11 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Read enabled widgets from the server-side cookie; fall back to defaults.
+	// Read enabled widgets from the server-side cookie. nil means the cookie
+	// was never set, so fall back to defaults; a non-nil empty slice means
+	// the user explicitly disabled all widgets and must be respected as-is.
 	enabled := parseWidgetCookie(r)
-	if len(enabled) == 0 {
+	if enabled == nil {
 		enabled = []string{"clock", "calculator", "quicklinks", "notes"}
 		if s.widgetManager != nil {
 			if d := s.widgetManager.GetDefaultWidgets(); len(d) > 0 {

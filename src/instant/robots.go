@@ -259,7 +259,21 @@ func parseRobotsTxt(content string) ParsedRobots {
 	}
 
 	scanner := bufio.NewScanner(strings.NewReader(content))
-	var currentUA *RobotUserAgent
+
+	// group holds the User-agent names accumulated since the last directive
+	// block. Per RFC 9309, consecutive "User-agent:" lines with no
+	// intervening directive lines form a single group, and the directive
+	// block that follows applies to every agent in that group.
+	var group []*RobotUserAgent
+	groupHasDirectives := false
+
+	flushGroup := func() {
+		for _, ua := range group {
+			result.UserAgents = append(result.UserAgents, *ua)
+		}
+		group = nil
+		groupHasDirectives = false
+	}
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -280,31 +294,36 @@ func parseRobotsTxt(content string) ParsedRobots {
 
 		switch directive {
 		case "user-agent":
-			// Save current user agent if exists
-			if currentUA != nil {
-				result.UserAgents = append(result.UserAgents, *currentUA)
+			// A User-agent line seen after directives were already recorded
+			// for the current group starts a new group; a User-agent line
+			// with no intervening directives joins the current group.
+			if groupHasDirectives {
+				flushGroup()
 			}
-			currentUA = &RobotUserAgent{
+			group = append(group, &RobotUserAgent{
 				Agent:      value,
 				Directives: make([]RobotDirective, 0),
-			}
+			})
 		case "disallow":
-			if currentUA != nil {
-				currentUA.Directives = append(currentUA.Directives, RobotDirective{
+			groupHasDirectives = true
+			for _, ua := range group {
+				ua.Directives = append(ua.Directives, RobotDirective{
 					Type:  "disallow",
 					Value: value,
 				})
 			}
 		case "allow":
-			if currentUA != nil {
-				currentUA.Directives = append(currentUA.Directives, RobotDirective{
+			groupHasDirectives = true
+			for _, ua := range group {
+				ua.Directives = append(ua.Directives, RobotDirective{
 					Type:  "allow",
 					Value: value,
 				})
 			}
 		case "crawl-delay":
-			if currentUA != nil {
-				currentUA.Directives = append(currentUA.Directives, RobotDirective{
+			groupHasDirectives = true
+			for _, ua := range group {
+				ua.Directives = append(ua.Directives, RobotDirective{
 					Type:  "crawl-delay",
 					Value: value,
 				})
@@ -314,10 +333,8 @@ func parseRobotsTxt(content string) ParsedRobots {
 		}
 	}
 
-	// Don't forget the last user agent
-	if currentUA != nil {
-		result.UserAgents = append(result.UserAgents, *currentUA)
-	}
+	// Don't forget the last group
+	flushGroup()
 
 	return result
 }

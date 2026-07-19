@@ -280,8 +280,14 @@ func (s *Server) handleWidgetPreferencesSave(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	// Build cookie value; empty string disables all widgets.
+	// Build cookie value. An explicit empty selection is stored as the
+	// "none" sentinel so parseWidgetCookie can distinguish "user disabled
+	// all widgets" from "cookie never set, use defaults" (both would
+	// otherwise decode as an empty string).
 	cookieVal := strings.Join(valid, ",")
+	if cookieVal == "" {
+		cookieVal = widgetCookieDisabledValue
+	}
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     widgetCookieName,

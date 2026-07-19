@@ -77,7 +77,7 @@ func (h *SlugHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 </table>
 <br>
 <small>Slugs are URL-friendly versions of text with special characters removed.</small>
-</div>`, text, basic, underscored, camelSlug, maxLen)
+</div>`, escapeHTML(text), basic, underscored, camelSlug, maxLen)
 
 	return &Answer{
 		Type:    AnswerTypeSlug,

@@ -581,23 +581,22 @@ func (h *CountryHandler) Type() AnswerType {
 	return AnswerTypeCountry
 }
 
+// countryDataset is the URL for the mledoze/countries static dataset.
+// restcountries.com's free v3.1 API was deprecated (returns HTTP 200 with
+// a {success:false} error body instead of the documented array) and its
+// v5 API now requires a paid authorization key, so it can no longer be
+// used without credentials. mledoze/countries is the same community
+// dataset restcountries.com itself is built from, published as a static
+// JSON file with no authentication required.
+const countryDataset = "https://raw.githubusercontent.com/mledoze/countries/master/dist/countries.json"
+
 func (h *CountryHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer, error) {
 	term = strings.TrimSpace(term)
 	if term == "" {
 		return nil, fmt.Errorf("country code or name required")
 	}
 
-	// Use REST Countries API
-	var apiURL string
-	if len(term) == 2 {
-		apiURL = fmt.Sprintf("https://restcountries.com/v3.1/alpha/%s", url.PathEscape(strings.ToUpper(term)))
-	} else if len(term) == 3 {
-		apiURL = fmt.Sprintf("https://restcountries.com/v3.1/alpha/%s", url.PathEscape(strings.ToUpper(term)))
-	} else {
-		apiURL = fmt.Sprintf("https://restcountries.com/v3.1/name/%s", url.PathEscape(term))
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", countryDataset, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -609,14 +608,14 @@ func (h *CountryHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusNotFound {
+	if resp.StatusCode != http.StatusOK {
 		return &Answer{
 			Type:        AnswerTypeCountry,
 			Term:        term,
 			Title:       "Country Lookup",
-			Description: "Country not found",
-			Content:     fmt.Sprintf("<p>Country not found: <code>%s</code></p>", escapeHTML(term)),
-			Error:       "not_found",
+			Description: "Country data source unavailable",
+			Content:     "<p>Country data source is temporarily unavailable.</p>",
+			Error:       "upstream_error",
 		}, nil
 	}
 
@@ -631,27 +630,18 @@ func (h *CountryHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 		Capital    []string `json:"capital"`
 		Region     string   `json:"region"`
 		Subregion  string   `json:"subregion"`
-		Population int      `json:"population"`
 		Area       float64  `json:"area"`
 		Currencies map[string]struct {
 			Name   string `json:"name"`
 			Symbol string `json:"symbol"`
 		} `json:"currencies"`
-		Languages   map[string]string `json:"languages"`
-		Timezones   []string          `json:"timezones"`
-		Flag        string            `json:"flag"`
-		TLD         []string          `json:"tld"`
-		IDD         struct {
+		Languages map[string]string `json:"languages"`
+		Flag      string            `json:"flag"`
+		TLD       []string          `json:"tld"`
+		IDD       struct {
 			Root     string   `json:"root"`
 			Suffixes []string `json:"suffixes"`
 		} `json:"idd"`
-		Car struct {
-			Side string `json:"side"`
-		} `json:"car"`
-		Flags struct {
-			PNG string `json:"png"`
-			SVG string `json:"svg"`
-		} `json:"flags"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&countries); err != nil {
@@ -669,7 +659,44 @@ func (h *CountryHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 		}, nil
 	}
 
-	country := countries[0]
+	upperTerm := strings.ToUpper(term)
+	lowerTerm := strings.ToLower(term)
+	matchIndex := -1
+	for i, c := range countries {
+		switch {
+		case len(term) == 2 && c.CCA2 == upperTerm:
+			matchIndex = i
+		case len(term) == 3 && c.CCA3 == upperTerm:
+			matchIndex = i
+		case strings.ToLower(c.Name.Common) == lowerTerm:
+			matchIndex = i
+		case strings.ToLower(c.Name.Official) == lowerTerm:
+			matchIndex = i
+		}
+		if matchIndex != -1 {
+			break
+		}
+	}
+	if matchIndex == -1 {
+		for i, c := range countries {
+			if strings.Contains(strings.ToLower(c.Name.Common), lowerTerm) {
+				matchIndex = i
+				break
+			}
+		}
+	}
+	if matchIndex == -1 {
+		return &Answer{
+			Type:        AnswerTypeCountry,
+			Term:        term,
+			Title:       "Country Lookup",
+			Description: "Country not found",
+			Content:     fmt.Sprintf("<p>Country not found: <code>%s</code></p>", escapeHTML(term)),
+			Error:       "not_found",
+		}, nil
+	}
+
+	country := countries[matchIndex]
 
 	// Get currency info
 	var currencies []string
@@ -697,14 +724,11 @@ func (h *CountryHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 		"capital":     country.Capital,
 		"region":      country.Region,
 		"subregion":   country.Subregion,
-		"population":  country.Population,
 		"area":        country.Area,
 		"currencies":  currencies,
 		"languages":   languages,
-		"timezones":   country.Timezones,
 		"tld":         country.TLD,
 		"callingCode": callingCode,
-		"drivingSide": country.Car.Side,
 		"flag":        country.Flag,
 	}
 
@@ -713,9 +737,9 @@ func (h *CountryHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 		Term:        term,
 		Title:       fmt.Sprintf("%s %s", country.Flag, country.Name.Common),
 		Description: country.Name.Official,
-		Content:     formatCountryContent(country.Flag, country.Flags.PNG, country.Name.Common, country.Name.Official, data),
-		Source:      "REST Countries",
-		SourceURL:   "https://restcountries.com/",
+		Content:     formatCountryContent(country.Flag, country.Flag, country.Name.Common, country.Name.Official, data),
+		Source:      "mledoze/countries",
+		SourceURL:   "https://github.com/mledoze/countries",
 		Data:        data,
 	}, nil
 }
@@ -940,8 +964,10 @@ func (h *QRHandler) HandleDirectQuery(ctx context.Context, term string) (*Answer
 		return nil, fmt.Errorf("text or URL required")
 	}
 
-	// Generate QR code URL using Google Charts API (simple, no dependency)
-	qrURL := fmt.Sprintf("https://chart.googleapis.com/chart?cht=qr&chs=300x300&chl=%s&choe=UTF-8", url.QueryEscape(term))
+	// Generate QR code URL using the QR Server API. Google's Chart Image
+	// API (chart.googleapis.com) was shut down and now returns HTTP 404
+	// for every request, so it can no longer be used.
+	qrURL := fmt.Sprintf("https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=%s", url.QueryEscape(term))
 
 	data := map[string]interface{}{
 		"text":  term,
@@ -978,7 +1004,7 @@ func formatQRContent(text, qrURL string) string {
 	html.WriteString("<h2>Other Sizes</h2>")
 	html.WriteString("<ul>")
 	for _, size := range []int{150, 200, 300, 400, 500} {
-		sizeURL := fmt.Sprintf("https://chart.googleapis.com/chart?cht=qr&chs=%dx%d&chl=%s&choe=UTF-8", size, size, url.QueryEscape(text))
+		sizeURL := fmt.Sprintf("https://api.qrserver.com/v1/create-qr-code/?size=%dx%d&data=%s", size, size, url.QueryEscape(text))
 		html.WriteString(fmt.Sprintf("<li><a href=\"%s\" target=\"_blank\">%dx%d</a></li>", sizeURL, size, size))
 	}
 	html.WriteString("</ul>")

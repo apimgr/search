@@ -179,7 +179,7 @@ func (h *StopwatchHandler) handleTimer(query, durationStr string) (*Answer, erro
 			Type:    AnswerTypeTime,
 			Query:   query,
 			Title:   "Timer",
-			Content: fmt.Sprintf("Could not parse duration: %s<br><br>Try formats like: 5m, 1h30m, 30s, 1 hour 30 minutes", durationStr),
+			Content: fmt.Sprintf("Could not parse duration: %s<br><br>Try formats like: 5m, 1h30m, 30s, 1 hour 30 minutes", escapeHTML(durationStr)),
 		}, nil
 	}
 

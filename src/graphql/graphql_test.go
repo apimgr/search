@@ -1253,19 +1253,18 @@ func TestGraphiQLHTMLStructure(t *testing.T) {
 
 	body := rec.Body.String()
 
-	// Check essential HTML elements
+	// Check essential HTML elements. Per frontend rules, GraphiQL is a
+	// self-contained server-rendered vanilla-JS explorer — no CDN frameworks.
 	requiredElements := []string{
 		"<!DOCTYPE html>",
 		"<html",
 		"<head>",
-		"<title>Search API - GraphiQL</title>",
-		"graphiql.min.css",
+		"<title>Search API Explorer</title>",
 		"<body>",
-		`<div id="graphiql">`,
-		"react.production.min.js",
-		"react-dom.production.min.js",
-		"graphiql.min.js",
-		"GraphiQL.createFetcher",
+		`<textarea id="query"`,
+		`<pre id="response">`,
+		"function runQuery()",
+		"/api/graphql",
 		"</html>",
 	}
 

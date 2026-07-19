@@ -2561,9 +2561,34 @@ html:not([data-theme-mode]) .theme-label-auto { display: none; }
     color: var(--text-primary);
 }
 
+.widget-collapse {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    font-size: 1rem;
+    line-height: 1;
+    border-radius: 4px;
+    transition: background-color 0.2s, transform 0.2s;
+}
+
+.widget-collapse:hover {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
 .widget-content {
     padding: 1rem;
     min-height: 120px;
+}
+
+.widget-collapsed .widget-content {
+    display: none;
+}
+
+.widget-collapsed .widget-collapse {
+    transform: rotate(-90deg);
 }
 
 .widget-loading {

@@ -117,7 +117,7 @@ func (h *MathHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 			Type:    AnswerTypeMath,
 			Query:   query,
 			Title:   "Calculator",
-			Content: fmt.Sprintf("Error: %s", err.Error()),
+			Content: fmt.Sprintf("Error: %s", escapeHTML(err.Error())),
 		}, nil
 	}
 
@@ -128,7 +128,7 @@ func (h *MathHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 		Type:    AnswerTypeMath,
 		Query:   query,
 		Title:   "Calculator",
-		Content: fmt.Sprintf("<div class=\"math-result\"><span class=\"expression\">%s</span> = <span class=\"result\">%s</span></div>", expr, resultStr),
+		Content: fmt.Sprintf("<div class=\"math-result\"><span class=\"expression\">%s</span> = <span class=\"result\">%s</span></div>", escapeHTML(expr), resultStr),
 		Data: map[string]interface{}{
 			"expression": expr,
 			"result":     result,

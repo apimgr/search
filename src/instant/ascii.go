@@ -64,7 +64,7 @@ func (h *ASCIIHandler) HandleInstantQuery(ctx context.Context, query string) (*A
 	content := fmt.Sprintf(`<div class="ascii-result">
 <strong>Input:</strong> %s<br><br>
 <pre style="font-family: monospace; line-height: 1.2;">%s</pre>
-</div>`, text, art)
+</div>`, escapeHTML(text), art)
 
 	return &Answer{
 		Type:    AnswerTypeASCII,

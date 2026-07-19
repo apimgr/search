@@ -174,12 +174,16 @@ func NewManager() *Manager {
 	m.Register(NewHeadersHandler())
 	m.Register(NewRobotsHandler())
 	m.Register(NewExpandHandler())
+	// DNSHandler must be registered before ResolveHandler: both match
+	// "dns:"/"nslookup:"/"dig:" prefixes, but ResolveHandler's catch-all
+	// (.+) capture would otherwise shadow DNSHandler's stricter,
+	// record-type-filtering patterns for every query.
+	m.Register(NewDNSHandler())
 	m.Register(NewResolveHandler())
 
 	// Direct answer handlers (type:query pattern)
 	m.Register(NewTLDRHandler())
 	m.Register(NewWHOISHandler())
-	m.Register(NewDNSHandler())
 	m.Register(NewASNHandler())
 	m.Register(NewHTTPCodeHandler())
 	m.Register(NewPortHandler())

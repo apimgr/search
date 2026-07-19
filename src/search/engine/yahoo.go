@@ -80,18 +80,30 @@ func (e *Yahoo) Search(ctx context.Context, query *model.Query) ([]model.Result,
 	return e.parseResults(string(body), query.Category)
 }
 
+// yahooTagRe strips nested HTML tags (e.g. <span>) from captured title/desc text.
+var yahooTagRe = regexp.MustCompile(`<[^>]+>`)
+
 // parseResults parses HTML results from Yahoo
 func (e *Yahoo) parseResults(html string, category model.Category) ([]model.Result, error) {
 	results := make([]model.Result, 0)
 
 	// Pattern for Yahoo search results
 	// Yahoo results are in <li> elements with specific classes
-	resultPattern := regexp.MustCompile(`<div[^>]*class="[^"]*algo[^"]*"[^>]*>.*?</div>`)
-	linkPattern := regexp.MustCompile(`<a[^>]*class="[^"]*ac-algo[^"]*"[^>]*href="([^"]*)"[^>]*>([^<]*)</a>`)
-	descPattern := regexp.MustCompile(`<p[^>]*class="[^"]*s-desc[^"]*"[^>]*>([^<]*)</p>`)
+	resultPattern := regexp.MustCompile(`(?s)<div[^>]*class="[^"]*algo[^"]*"[^>]*>.*?</div>`)
+	// The title anchor's own class attribute is a volatile utility-class list
+	// (no stable "ac-algo" marker in current markup), so match on the
+	// href+h3 structure instead, bounding the gap to avoid runaway matches.
+	linkPattern := regexp.MustCompile(`<a[^>]*href="([^"]*)"[^>]*>[\s\S]{0,1000}?<h3[^>]*>([\s\S]{0,300}?)</h3>`)
+	descPattern := regexp.MustCompile(`<p[^>]*>([\s\S]{0,500}?)</p>`)
 
-	// Alternative simpler pattern
-	simpleLinkPattern := regexp.MustCompile(`<a[^>]*href="(https?://[^"]*)"[^>]*><h3[^>]*>([^<]*)</h3></a>`)
+	// Alternative simpler pattern: the anchor wraps an <h3> whose title text
+	// is itself wrapped in a nested <span>, so the gap between the h3 open
+	// tag and the title text must tolerate nested tags (bounded, not [^<]*).
+	simpleLinkPattern := regexp.MustCompile(`<a[^>]*href="(https?://[^"]*)"[^>]*>[\s\S]{0,1000}?<h3[^>]*>([\s\S]{0,300}?)</h3>`)
+
+	// Flat-anchor fallback pattern: some Yahoo markup has no <h3> at all —
+	// the title text sits directly inside the "ac-algo" anchor.
+	flatLinkPattern := regexp.MustCompile(`<a[^>]*class="[^"]*ac-algo[^"]*"[^>]*href="([^"]*)"[^>]*>([\s\S]{0,300}?)</a>`)
 
 	position := 0
 
@@ -103,7 +115,7 @@ func (e *Yahoo) parseResults(html string, category model.Category) ([]model.Resu
 		}
 
 		resultURL := match[1]
-		title := strings.TrimSpace(match[2])
+		title := strings.TrimSpace(yahooTagRe.ReplaceAllString(match[2], ""))
 
 		// Skip Yahoo internal links
 		if strings.Contains(resultURL, "yahoo.com") && !strings.Contains(resultURL, "r.search.yahoo.com") {
@@ -146,16 +158,21 @@ func (e *Yahoo) parseResults(html string, category model.Category) ([]model.Resu
 		for _, match := range resultMatches {
 			linkMatch := linkPattern.FindStringSubmatch(match)
 			if len(linkMatch) < 3 {
+				// No <h3> title wrapper present — fall back to the flat
+				// "ac-algo" anchor whose text is the title directly.
+				linkMatch = flatLinkPattern.FindStringSubmatch(match)
+			}
+			if len(linkMatch) < 3 {
 				continue
 			}
 
 			resultURL := linkMatch[1]
-			title := strings.TrimSpace(linkMatch[2])
+			title := strings.TrimSpace(yahooTagRe.ReplaceAllString(linkMatch[2], ""))
 
 			content := ""
 			descMatch := descPattern.FindStringSubmatch(match)
 			if len(descMatch) >= 2 {
-				content = strings.TrimSpace(descMatch[1])
+				content = strings.TrimSpace(yahooTagRe.ReplaceAllString(descMatch[1], ""))
 			}
 
 			// Extract real URL from Yahoo redirect
@@ -192,21 +209,32 @@ func (e *Yahoo) parseResults(html string, category model.Category) ([]model.Resu
 	return results, nil
 }
 
+// yahooRedirectPathRURe extracts a path-segment-style RU= (Real URL) from a
+// Yahoo redirect URL (".../RU=https%3a%2f%2fexample.com%2f/RK=..."). The
+// query-string style ("...?RU=...") is handled separately via url.Parse so
+// that unencoded "/" characters inside the captured value are preserved.
+var yahooRedirectPathRURe = regexp.MustCompile(`[/;]RU=([^/;]+)`)
+
 // extractYahooRedirectURL extracts the real URL from Yahoo's redirect URL
 func extractYahooRedirectURL(redirectURL string) string {
-	// Yahoo redirect URLs contain the real URL as a parameter
 	parsed, err := url.Parse(redirectURL)
-	if err != nil {
-		return ""
-	}
-
-	// Try to get RU parameter (Real URL)
-	if ru := parsed.Query().Get("RU"); ru != "" {
-		decoded, err := url.QueryUnescape(ru)
-		if err == nil {
-			return decoded
+	if err == nil {
+		if ru := parsed.Query().Get("RU"); ru != "" {
+			if decoded, decErr := url.QueryUnescape(ru); decErr == nil {
+				return decoded
+			}
 		}
 	}
 
-	return ""
+	match := yahooRedirectPathRURe.FindStringSubmatch(redirectURL)
+	if len(match) < 2 {
+		return ""
+	}
+
+	decoded, decErr := url.QueryUnescape(match[1])
+	if decErr != nil {
+		return ""
+	}
+
+	return decoded
 }

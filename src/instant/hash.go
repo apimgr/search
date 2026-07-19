@@ -88,7 +88,7 @@ func (h *HashHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 
 	data := []byte(text)
 	var content strings.Builder
-	content.WriteString(fmt.Sprintf("<strong>Input:</strong> %s<br><br>", text))
+	content.WriteString(fmt.Sprintf("<strong>Input:</strong> %s<br><br>", escapeHTML(text)))
 
 	if hashType == "md5" || hashType == "all" {
 		hash := md5.Sum(data)
