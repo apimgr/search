@@ -2613,17 +2613,24 @@
         }
 
         document.addEventListener('error', function(e) {
-            if (e.target && e.target.matches('.result-favicon img[data-favicon-fallback]')) {
+            // The page's own 'error' event (e.g. resource load failures during
+            // capture phase) can target non-Element nodes such as document,
+            // which have no matches() method.
+            if (!(e.target instanceof Element)) return;
+            if (e.target.matches('.result-favicon img[data-favicon-fallback]')) {
                 showPlaceholder(e.target);
             }
             // Quicklink favicons: hide on error (no sibling placeholder)
-            if (e.target && e.target.matches('img[data-quicklink-favicon]')) {
+            if (e.target.matches('img[data-quicklink-favicon]')) {
                 e.target.style.display = 'none';
             }
         }, true);
 
         document.addEventListener('load', function(e) {
-            if (e.target && e.target.matches('.result-favicon img[data-favicon-fallback]')) {
+            // The page's own 'load' event targets document, which has no
+            // matches() method — only real Element nodes support it.
+            if (!(e.target instanceof Element)) return;
+            if (e.target.matches('.result-favicon img[data-favicon-fallback]')) {
                 if (e.target.naturalWidth <= 1 && e.target.naturalHeight <= 1) {
                     showPlaceholder(e.target);
                 }
@@ -2720,7 +2727,8 @@
     window.toggleNav = toggleNav;
     window.closeNav = closeNav;
     window.copyToClipboard = copyToClipboard;
-    window.dismissAnnouncement = dismissAnnouncement;
+    window.getActiveSearchPreferences = getActiveSearchPreferences;
+    window.applyTheme = applyTheme;
     // Export i18n lookup so the widget IIFE and other IIFEs can call t() globally
     window.t = t;
 
@@ -4499,10 +4507,10 @@
     }
 
     function applyPreferences() {
-        var prefs = getActiveSearchPreferences();
+        var prefs = window.getActiveSearchPreferences();
 
         // Per AI.md PART 16: Apply theme class to <html> element: theme-light, theme-dark
-        applyTheme(prefs.theme);
+        window.applyTheme(prefs.theme);
 
         if (prefs.new_tab) {
             document.querySelectorAll('.result a, .result-item a, .video-result a, .image-result a').forEach(function(link) {
