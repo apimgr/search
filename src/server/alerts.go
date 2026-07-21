@@ -236,6 +236,10 @@ func (s *Server) handleAlertUpdate(w http.ResponseWriter, r *http.Request, token
 		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 		return
 	}
+	if s.alertManager == nil {
+		s.renderAlertError(w, r, http.StatusServiceUnavailable, "alerts.error_unavailable_title", "alerts.error_storage_unavailable")
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		alertRedirectWithMessage(w, r, "/alerts/manage/"+token, "error", "alerts.invalid_form_data")
 		return
@@ -265,6 +269,10 @@ func (s *Server) handleAlertPause(w http.ResponseWriter, r *http.Request, token 
 		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
 		return
 	}
+	if s.alertManager == nil {
+		s.renderAlertError(w, r, http.StatusServiceUnavailable, "alerts.error_unavailable_title", "alerts.error_storage_unavailable")
+		return
+	}
 	pause, err := config.ParseBool(r.FormValue("paused"), true)
 	if err != nil {
 		http.Redirect(w, r, "/alerts/manage/"+token+"?error="+urlQueryEscape(localizeAlertUserError(r, err)), http.StatusSeeOther)
@@ -284,6 +292,10 @@ func (s *Server) handleAlertPause(w http.ResponseWriter, r *http.Request, token 
 func (s *Server) handleAlertDelete(w http.ResponseWriter, r *http.Request, token string) {
 	if r.Method != http.MethodPost {
 		localizedHTTPError(w, r, http.StatusMethodNotAllowed, "errors.method_not_allowed")
+		return
+	}
+	if s.alertManager == nil {
+		s.renderAlertError(w, r, http.StatusServiceUnavailable, "alerts.error_unavailable_title", "alerts.error_storage_unavailable")
 		return
 	}
 	if err := s.alertManager.Delete(r.Context(), token); err != nil {

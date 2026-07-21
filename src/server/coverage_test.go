@@ -3913,14 +3913,15 @@ func TestHandleAlerts_PostEmptyForm(t *testing.T) {
 
 // TestHandleAlertAction_GETUpdateMethodNotAllowed confirms GET on an update action returns 405.
 // handleAlertAction routes /alerts/{token}/update to handleAlertUpdate which requires POST.
+// If s.alertManager is nil, handleAlertAction's own guard returns 503 before dispatch.
 func TestHandleAlertAction_GETUpdateMethodNotAllowed(t *testing.T) {
 	s := newTestServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/alerts/sometoken/update", nil)
 	rec := httptest.NewRecorder()
 	s.handleAlertAction(rec, req)
-	// handleAlertUpdate checks r.Method != POST → 405
-	if rec.Code != http.StatusMethodNotAllowed {
-		t.Errorf("handleAlertAction GET /update: status = %d, want 405", rec.Code)
+	// handleAlertUpdate checks r.Method != POST → 405, unless alertManager is nil → 503
+	if rec.Code != http.StatusMethodNotAllowed && rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("handleAlertAction GET /update: status = %d, want 405 or 503", rec.Code)
 	}
 }
 

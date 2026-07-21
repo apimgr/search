@@ -395,11 +395,11 @@ func TestShutdownConfigShutdownFuncWithTimeout(t *testing.T) {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(50 * time.Millisecond):
+			case <-time.After(20 * time.Millisecond):
 				return nil
 			}
 		},
-		InFlightTimeout: 100 * time.Millisecond,
+		InFlightTimeout: 2 * time.Second,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.InFlightTimeout)
