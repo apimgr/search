@@ -232,6 +232,40 @@ func initServerSchema(ctx context.Context, db *DB) error {
 			UNIQUE(alert_id, fingerprint)
 		)`,
 		`CREATE INDEX IF NOT EXISTS {prefix}idx_search_alert_results_alert ON {prefix}search_alert_results(alert_id, first_seen_at)`,
+		// Security reports — coordinated disclosure pipeline per AI.md PART 11.
+		// Plaintext report content is never persisted: sensitive fields (steps to
+		// reproduce, impact, researcher contact, etc.) live only inside encrypted_body.
+		`CREATE TABLE IF NOT EXISTS {prefix}security_reports (
+			tracking_id TEXT PRIMARY KEY,
+			security_id_used TEXT,
+			affected_component TEXT,
+			affected_endpoint TEXT,
+			severity TEXT,
+			summary TEXT,
+			encrypted_body BLOB,
+			encryption_method TEXT,
+			credit_preference TEXT,
+			credit_name TEXT,
+			disclosure_days INTEGER,
+			cve_requested INTEGER NOT NULL DEFAULT 0,
+			status TEXT NOT NULL DEFAULT 'received',
+			report_token_hash TEXT,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			closed_at DATETIME
+		)`,
+		`CREATE INDEX IF NOT EXISTS {prefix}idx_security_reports_status ON {prefix}security_reports(status)`,
+		`CREATE INDEX IF NOT EXISTS {prefix}idx_security_reports_token ON {prefix}security_reports(report_token_hash)`,
+		// PGP keypair metadata — the keys themselves live on disk, never in the DB.
+		`CREATE TABLE IF NOT EXISTS {prefix}pgp_keypair (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			fingerprint TEXT NOT NULL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			expires_at DATETIME,
+			last_rotated_at DATETIME,
+			keyservers_published TEXT,
+			revoked INTEGER NOT NULL DEFAULT 0
+		)`,
 	}
 
 	for _, stmt := range statements {

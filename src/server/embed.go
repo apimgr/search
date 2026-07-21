@@ -552,7 +552,10 @@ type Pagination struct {
 	Pages       []int
 }
 
-// ContactPageData extends PageData with contact form fields
+// ContactPageData extends PageData with contact form fields.
+// SecurityMode and the fields below it support the coordinated-disclosure
+// pipeline's "/server/contact?security_id={id}" mode switch per AI.md
+// PART 11 — populated only when a valid rotating security_id was supplied.
 type ContactPageData struct {
 	PageData
 	ContactSent  bool
@@ -560,6 +563,38 @@ type ContactPageData struct {
 	CaptchaA     int
 	CaptchaB     int
 	CaptchaID    string
+
+	// SecurityMode is true when a valid security_id switched the form into
+	// coordinated-disclosure (vulnerability report) mode.
+	SecurityMode bool
+	// SecurityID is the validated rotating token, echoed back as a hidden
+	// field so the POST can re-validate it server-side.
+	SecurityID string
+	// TrackingID is shown on the post-submit confirmation in security mode.
+	TrackingID string
+
+	// Repopulation fields for the security-mode form, per AI.md PART 11
+	// "Security-mode form fields" table.
+	ResearcherGPG       string
+	AffectedComponent   string
+	AffectedEndpoint    string
+	Severity            string
+	Summary             string
+	StepsToReproduce    string
+	Impact              string
+	SuggestedFix        string
+	CVERequested        bool
+	DisclosureDays      int
+	CreditPreference    string
+	CreditName          string
+	AgreedToDisclosure  bool
+
+	// Hidden auto-filled fields, per AI.md PART 11 "Security-mode form
+	// fields" table.
+	AppVersion       string
+	CommitHash       string
+	Timestamp        string
+	RequestUserAgent string
 }
 
 // FlashMessage represents a flash message

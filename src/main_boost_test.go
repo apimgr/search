@@ -283,6 +283,7 @@ func TestRunMaintenancePGPExportPublic(t *testing.T) {
 }
 
 func TestRunMaintenancePGPExportPrivate(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--maintenance", "pgp", "export", "private"})
 	out := captureStdout(t, func() { runMaintenance("pgp") })
 	if strings.TrimSpace(out) == "" {
@@ -291,6 +292,7 @@ func TestRunMaintenancePGPExportPrivate(t *testing.T) {
 }
 
 func TestRunMaintenancePGPExportNoKeyType(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--maintenance", "pgp", "export"})
 	out := captureStdout(t, func() { runMaintenance("pgp") })
 	if strings.TrimSpace(out) == "" {
@@ -299,6 +301,7 @@ func TestRunMaintenancePGPExportNoKeyType(t *testing.T) {
 }
 
 func TestRunMaintenancePGPImport(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--maintenance", "pgp", "import"})
 	out := captureStdout(t, func() { runMaintenance("pgp") })
 	if strings.TrimSpace(out) == "" {
@@ -307,6 +310,7 @@ func TestRunMaintenancePGPImport(t *testing.T) {
 }
 
 func TestRunMaintenancePGPDelete(t *testing.T) {
+	withExitFunc(t)
 	withArgs(t, []string{"search", "--maintenance", "pgp", "delete"})
 	out := captureStdout(t, func() { runMaintenance("pgp") })
 	if strings.TrimSpace(out) == "" {

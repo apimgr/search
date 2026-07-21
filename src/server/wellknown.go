@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/apimgr/search/src/common/i18n"
+	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/security"
 )
 
 // handleWellKnownChangePassword handles /.well-known/change-password per RFC 8615.
@@ -67,48 +69,67 @@ func (s *Server) handleRobotsTxt(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Sitemap: %s/sitemap.xml\n", baseURL)
 }
 
-// handleSecurityTxtEnhanced serves security.txt per RFC 9116 and AI.md spec
+// handleSecurityTxtEnhanced serves security.txt per RFC 9116 and AI.md PART 11.
 // Required fields: Contact, Expires
-// Optional fields: Preferred-Languages, Canonical
+// Optional fields: Encryption, Preferred-Languages, Canonical
+// Per AI.md PART 11 "Security Reports — Coordinated Disclosure Pipeline", three
+// Contact: lines are emitted in RFC 9116 preference order: the project's
+// primary vulnerability-reporting channel (report_url), the rotating
+// {security_id} contact-form URL, then the mailto: fallback.
 func (s *Server) handleSecurityTxtEnhanced(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	// Cache for 1 day per AI.md spec
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 
-	security := s.config.Server.Web.Security
+	webSecurity := s.config.Server.Web.Security
 	baseURL := s.getBaseURL(r)
 
-	// Contact (REQUIRED per RFC 9116)
-	// Must be a URI (mailto:, https://, or tel:)
+	// Contact 1 (REQUIRED per RFC 9116): primary vulnerability-reporting channel
+	if webSecurity.ReportURL != "" {
+		fmt.Fprintf(w, "Contact: %s\n", webSecurity.ReportURL)
+	}
+
+	// Contact 2: rotating {security_id} contact-form URL per AI.md PART 11
+	securityID := security.GenerateSecurityID(s.config.Server.Security.InstallationSecret, time.Now().Unix())
+	fmt.Fprintf(w, "Contact: %s/server/contact?security_id=%s\n", baseURL, securityID)
+
+	// Contact 3: mailto: fallback
 	// Uses security.contact then general.contact per AI.md PART 12 fallback chain
-	contact := security.Contact
+	contact := webSecurity.Contact
 	if contact == "" && s.config.Server.Contact.Security.Email != "" {
 		contact = s.config.Server.Contact.Security.Email
 	}
 	if contact == "" && s.config.Server.Contact.General.Email != "" {
 		contact = s.config.Server.Contact.General.Email
 	}
-	if contact != "" {
-		// Ensure mailto: prefix for email addresses
-		if strings.Contains(contact, "@") && !strings.HasPrefix(contact, "mailto:") && !strings.HasPrefix(contact, "https://") && !strings.HasPrefix(contact, "tel:") {
-			contact = "mailto:" + contact
-		}
-		fmt.Fprintf(w, "Contact: %s\n", contact)
-	} else {
+	if contact == "" {
 		// Fallback to fqdn-based security email
 		fqdn := extractHostFromURL(baseURL)
-		fmt.Fprintf(w, "Contact: mailto:security@%s\n", fqdn)
+		contact = "security@" + fqdn
 	}
+	// Ensure mailto: prefix for email addresses
+	if strings.Contains(contact, "@") && !strings.HasPrefix(contact, "mailto:") && !strings.HasPrefix(contact, "https://") && !strings.HasPrefix(contact, "tel:") {
+		contact = "mailto:" + contact
+	}
+	fmt.Fprintf(w, "Contact: %s\n", contact)
 
 	// Expires (REQUIRED per RFC 9116)
 	// Must be in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)
-	expires := security.Expires
+	expires := webSecurity.Expires
 	if expires == "" {
 		// Default: 1 year from now (auto-renewed yearly per AI.md)
 		expiryTime := time.Now().AddDate(1, 0, 0)
 		expires = expiryTime.UTC().Format(time.RFC3339)
 	}
 	fmt.Fprintf(w, "Expires: %s\n", expires)
+
+	// Encryption (OPTIONAL per RFC 9116): only when a keypair exists and
+	// publishing is enabled, per AI.md PART 11 GPG Keypair Management.
+	if webSecurity.PublishPGPKey {
+		if _, err := security.LoadPublicKey(config.GetConfigDir()); err == nil {
+			fmt.Fprintf(w, "Encryption: %s/.well-known/pgp-key.asc\n", baseURL)
+		}
+	}
 
 	// Preferred-Languages (OPTIONAL per RFC 9116)
 	// Auto-generated from i18n config per AI.md
@@ -120,6 +141,26 @@ func (s *Server) handleSecurityTxtEnhanced(w http.ResponseWriter, r *http.Reques
 	// Canonical (OPTIONAL per RFC 9116)
 	// Canonical URL of the security.txt file
 	fmt.Fprintf(w, "Canonical: %s/.well-known/security.txt\n", baseURL)
+}
+
+// handlePGPKeyAsc serves the project's PGP public key per AI.md PART 11
+// Public Pages table: "/.well-known/pgp-key.asc" — 404 if no keypair has been
+// generated yet, or if publishing is disabled via web.security.publish_pgp_key.
+func (s *Server) handlePGPKeyAsc(w http.ResponseWriter, r *http.Request) {
+	if !s.config.Server.Web.Security.PublishPGPKey {
+		http.NotFound(w, r)
+		return
+	}
+
+	pubArmor, err := security.LoadPublicKey(config.GetConfigDir())
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/pgp-keys")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	fmt.Fprint(w, pubArmor)
 }
 
 // getPreferredLanguages returns the list of supported languages for security.txt

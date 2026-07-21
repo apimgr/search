@@ -880,10 +880,18 @@ func (s *Server) setupRoutes() http.Handler {
 	r.HandleFunc("/server/help", s.handleHelp)
 	r.HandleFunc("/server/terms", s.handleTerms)
 
+	// Coordinated-disclosure security pages per AI.md PART 11 "Public Pages"
+	r.HandleFunc("/server/security", s.handleSecurityOverview)
+	r.HandleFunc("/server/security/policy", s.handleSecurityPolicy)
+	r.HandleFunc("/server/security/thanks", s.handleSecurityThanks)
+	r.Get("/server/security/report/{tracking_id}", s.handleSecurityReportStatus)
+
 	// robots.txt, sitemap.xml, and security.txt (/.well-known/ only per RFC 9116)
 	r.HandleFunc("/robots.txt", s.handleRobotsTxt)
 	r.HandleFunc("/sitemap.xml", s.handleSitemap)
 	r.HandleFunc("/.well-known/security.txt", s.handleSecurityTxtEnhanced)
+	// Project's PGP public key per AI.md PART 11 "Public Pages" table
+	r.HandleFunc("/.well-known/pgp-key.asc", s.handlePGPKeyAsc)
 
 	// llms.txt - AI agent discovery file per AI.md PART 14
 	// Served at both /.well-known/llms.txt and /llms.txt (alias)

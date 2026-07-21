@@ -7,16 +7,30 @@
     {{if .ContactSent}}
     <div class="contact-success">
         <h2>{{t "contact.success_title"}}</h2>
+        {{if .SecurityMode}}
+        <p>{{t "contact.security_success_message"}}</p>
+        <p class="security-tracking-id">{{t "contact.security_tracking_id_label"}} <strong>{{.TrackingID}}</strong></p>
+        {{else}}
         <p>{{if .Config.Server.Pages.Contact.SuccessMessage}}{{.Config.Server.Pages.Contact.SuccessMessage}}{{else}}{{t "contact.success_default"}}{{end}}</p>
+        {{end}}
         <a href="/" class="btn btn-primary">{{t "contact.return_home"}}</a>
     </div>
     {{else}}
     <div class="page-content">
-        <p>{{t "contact.description"}}</p>
+        <p>{{if .SecurityMode}}{{t "contact.security_description"}}{{else}}{{t "contact.description"}}{{end}}</p>
 
         <form action="/server/contact" method="POST" class="contact-form">
             {{/* CSRF Token */}}
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+            {{if .SecurityMode}}
+            {{/* Coordinated-disclosure mode: security_id plus hidden auto-filled fields, per AI.md PART 11 */}}
+            <input type="hidden" name="security_id" value="{{.SecurityID}}">
+            <input type="hidden" name="app_version" value="{{.AppVersion}}">
+            <input type="hidden" name="commit_hash" value="{{.CommitHash}}">
+            <input type="hidden" name="timestamp" value="{{.Timestamp}}">
+            <input type="hidden" name="request_user_agent" value="{{.RequestUserAgent}}">
+            {{end}}
 
             <div class="form-group">
                 <label for="name">{{t "contact.name_label"}} <span class="required">*</span></label>
@@ -24,10 +38,91 @@
             </div>
 
             <div class="form-group">
-                <label for="email">{{t "contact.email_label"}} <span class="required">*</span></label>
-                <input type="email" id="email" name="email" required placeholder="{{t "contact.email_placeholder"}}" autocomplete="email">
+                <label for="email">{{t "contact.email_label"}} {{if not .SecurityMode}}<span class="required">*</span>{{end}}</label>
+                <input type="email" id="email" name="email" {{if not .SecurityMode}}required{{end}} placeholder="{{t "contact.email_placeholder"}}" autocomplete="email">
             </div>
 
+            {{if .SecurityMode}}
+            <div class="form-group">
+                <label for="researcher_gpg">{{t "contact.security_researcher_gpg_label"}}</label>
+                <input type="text" id="researcher_gpg" name="researcher_gpg" value="{{.ResearcherGPG}}" placeholder="{{t "contact.security_researcher_gpg_placeholder"}}">
+            </div>
+
+            <div class="form-group">
+                <label for="affected_component">{{t "contact.security_affected_component_label"}} <span class="required">*</span></label>
+                <input type="text" id="affected_component" name="affected_component" required value="{{.AffectedComponent}}" placeholder="{{t "contact.security_affected_component_placeholder"}}">
+            </div>
+
+            <div class="form-group">
+                <label for="affected_endpoint">{{t "contact.security_affected_endpoint_label"}}</label>
+                <input type="text" id="affected_endpoint" name="affected_endpoint" value="{{.AffectedEndpoint}}" placeholder="{{t "contact.security_affected_endpoint_placeholder"}}">
+            </div>
+
+            <div class="form-group">
+                <label for="severity">{{t "contact.security_severity_label"}} <span class="required">*</span></label>
+                <select id="severity" name="severity" required>
+                    <option value="critical" {{if eq .Severity "critical"}}selected{{end}}>{{t "contact.security_severity_critical"}}</option>
+                    <option value="high" {{if eq .Severity "high"}}selected{{end}}>{{t "contact.security_severity_high"}}</option>
+                    <option value="medium" {{if eq .Severity "medium"}}selected{{end}}>{{t "contact.security_severity_medium"}}</option>
+                    <option value="low" {{if eq .Severity "low"}}selected{{end}}>{{t "contact.security_severity_low"}}</option>
+                    <option value="informational" {{if eq .Severity "informational"}}selected{{end}}>{{t "contact.security_severity_informational"}}</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="summary">{{t "contact.security_summary_label"}} <span class="required">*</span></label>
+                <input type="text" id="summary" name="summary" required value="{{.Summary}}" placeholder="{{t "contact.security_summary_placeholder"}}">
+            </div>
+
+            <div class="form-group">
+                <label for="steps_to_reproduce">{{t "contact.security_steps_label"}} <span class="required">*</span></label>
+                <textarea id="steps_to_reproduce" name="steps_to_reproduce" rows="6" required placeholder="{{t "contact.security_steps_placeholder"}}">{{.StepsToReproduce}}</textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="impact">{{t "contact.security_impact_label"}} <span class="required">*</span></label>
+                <textarea id="impact" name="impact" rows="4" required placeholder="{{t "contact.security_impact_placeholder"}}">{{.Impact}}</textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="suggested_fix">{{t "contact.security_suggested_fix_label"}}</label>
+                <textarea id="suggested_fix" name="suggested_fix" rows="4" placeholder="{{t "contact.security_suggested_fix_placeholder"}}">{{.SuggestedFix}}</textarea>
+            </div>
+
+            <div class="form-group form-checkbox">
+                <label for="cve_requested">
+                    <input type="checkbox" id="cve_requested" name="cve_requested" value="yes" {{if .CVERequested}}checked{{end}}>
+                    {{t "contact.security_cve_requested_label"}}
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label for="disclosure_days">{{t "contact.security_disclosure_days_label"}}</label>
+                <input type="number" id="disclosure_days" name="disclosure_days" min="1" value="{{if .DisclosureDays}}{{.DisclosureDays}}{{else}}90{{end}}">
+            </div>
+
+            <div class="form-group">
+                <label for="credit_preference">{{t "contact.security_credit_preference_label"}} <span class="required">*</span></label>
+                <select id="credit_preference" name="credit_preference" required>
+                    <option value="real_name" {{if eq .CreditPreference "real_name"}}selected{{end}}>{{t "contact.security_credit_real_name"}}</option>
+                    <option value="handle" {{if eq .CreditPreference "handle"}}selected{{end}}>{{t "contact.security_credit_handle"}}</option>
+                    <option value="no" {{if eq .CreditPreference "no"}}selected{{end}}>{{t "contact.security_credit_no"}}</option>
+                    <option value="anonymous" {{if eq .CreditPreference "anonymous"}}selected{{end}}>{{t "contact.security_credit_anonymous"}}</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="credit_name">{{t "contact.security_credit_name_label"}}</label>
+                <input type="text" id="credit_name" name="credit_name" value="{{.CreditName}}" placeholder="{{t "contact.security_credit_name_placeholder"}}">
+            </div>
+
+            <div class="form-group form-checkbox">
+                <label for="agreed_to_disclosure">
+                    <input type="checkbox" id="agreed_to_disclosure" name="agreed_to_disclosure" value="yes" required {{if .AgreedToDisclosure}}checked{{end}}>
+                    {{t "contact.security_agreement_label"}} <span class="required">*</span>
+                </label>
+            </div>
+            {{else}}
             <div class="form-group">
                 <label for="subject">{{t "contact.subject_label"}} <span class="required">*</span></label>
                 <input type="text" id="subject" name="subject" required placeholder="{{t "contact.subject_placeholder"}}">
@@ -37,6 +132,7 @@
                 <label for="message">{{t "contact.message_label"}} <span class="required">*</span></label>
                 <textarea id="message" name="message" rows="6" required placeholder="{{t "contact.message_placeholder"}}"></textarea>
             </div>
+            {{end}}
 
             {{/* Simple captcha */}}
             <div class="form-group captcha-group">

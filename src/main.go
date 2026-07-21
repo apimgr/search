@@ -1294,49 +1294,42 @@ func runMaintenance(action string) {
 
 		switch pgpAction {
 		case "generate":
-			fmt.Println(display.Emoji("🔐", "[PGP]") + " Generate PGP Keypair")
-			fmt.Println()
-			fmt.Println("This feature is not yet implemented.")
-			fmt.Println("See AI.md PART 30 (SECURITY.txt) for the full specification.")
+			runPGPGenerate()
 
 		case "rotate":
-			fmt.Println(display.Emoji("🔐", "[PGP]") + " Rotate PGP Keypair")
-			fmt.Println()
-			fmt.Println("This feature is not yet implemented.")
+			runPGPRotate()
 
 		case "publish":
-			fmt.Println(display.Emoji("🔐", "[PGP]") + " Publish PGP Key to Keyservers")
-			fmt.Println()
-			fmt.Println("This feature is not yet implemented.")
+			runPGPPublish()
 
 		case "export":
 			keyType := ""
 			if len(os.Args) > 4 {
 				keyType = os.Args[4]
 			}
+			exportPath := ""
+			if len(os.Args) > 5 {
+				exportPath = os.Args[5]
+			}
 			switch keyType {
 			case "public":
-				fmt.Println(display.Emoji("🔐", "[PGP]") + " Export Public Key")
-				fmt.Println()
-				fmt.Println("This feature is not yet implemented.")
+				runPGPExportPublic(exportPath)
 			case "private":
-				fmt.Println(display.Emoji("🔐", "[PGP]") + " Export Private Key")
-				fmt.Println()
-				fmt.Println("This feature is not yet implemented.")
+				runPGPExportPrivate(exportPath)
 			default:
 				fmt.Println(display.Emoji("❌", "[ERROR]") + " Please specify key type: public or private")
 				fmt.Println("Usage: search --maintenance pgp export <public|private> [path]")
 			}
 
 		case "import":
-			fmt.Println(display.Emoji("🔐", "[PGP]") + " Import PGP Key")
-			fmt.Println()
-			fmt.Println("This feature is not yet implemented.")
+			importFile := ""
+			if len(os.Args) > 4 {
+				importFile = os.Args[4]
+			}
+			runPGPImport(importFile)
 
 		case "delete":
-			fmt.Println(display.Emoji("🔐", "[PGP]") + " Delete PGP Keypair")
-			fmt.Println()
-			fmt.Println("This feature is not yet implemented.")
+			runPGPDelete()
 
 		case "help", "--help", "":
 			fmt.Println("PGP Keypair Management:")

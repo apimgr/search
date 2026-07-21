@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -575,6 +576,17 @@ type EmailFromConfig struct {
 
 // SecurityConfig represents security configuration
 type SecurityConfig struct {
+	// InstallationSecret is a per-install random secret (32 bytes, base64-encoded),
+	// generated once on first run. Per AI.md PART 11 it is the HMAC key used to derive
+	// the rotating {security_id} token and the KDF input for the PGP private-key
+	// encryption at rest. Never logged, never returned in any API response.
+	InstallationSecret string `yaml:"installation_secret"`
+	// EncryptionKey is a per-install random AES-256-GCM key (32 bytes, base64-encoded),
+	// generated once on first run. Per AI.md PART 11 ("Other Project-Level Secrets") it is
+	// the canonical at-rest encryption key for ALL sensitive server data: API token hashes,
+	// security report bodies (AES fallback when no PGP keypair exists), and any future
+	// at-rest encrypted data. Never logged, never returned in any API response.
+	EncryptionKey string `yaml:"encryption_key"`
 	// CSRF
 	CSRF struct {
 		Enabled    bool   `yaml:"enabled"`
@@ -692,10 +704,21 @@ type WebConfig struct {
 		Deny  []string `yaml:"deny"`
 	} `yaml:"robots"`
 	Security struct {
+		// ReportURL is the primary vulnerability-reporting channel per AI.md
+		// PART 11 "security.txt" — GitHub private vulnerability reporting by
+		// default, first Contact: line in security.txt (RFC 9116 preference order).
+		ReportURL string `yaml:"report_url"`
 		// Security contact email (mailto: prefix added automatically)
 		Contact string `yaml:"contact"`
 		// Expiration date (auto-calculated 1 year from now if not set)
 		Expires string `yaml:"expires"`
+		// Keyservers is the list of OpenPGP keyservers the PGP public key is
+		// published to on generate/rotate (e.g. https://keys.openpgp.org). Per
+		// AI.md PART 11 "GPG Keypair Management" Publish action.
+		Keyservers []string `yaml:"keyservers"`
+		// PublishPGPKey gates whether security.txt advertises an Encryption:
+		// line. Set to false by the "pgp delete" maintenance action.
+		PublishPGPKey bool `yaml:"publish_pgp_key"`
 	} `yaml:"security"`
 	Announcements AnnouncementsConfig `yaml:"announcements"`
 	CookieConsent CookieConsentConfig `yaml:"cookie_consent"`
@@ -1406,6 +1429,7 @@ func DefaultConfig() *Config {
 				// From defaults applied at runtime based on config
 			},
 			Security: SecurityConfig{
+				InstallationSecret: generateBase64Secret(),
 				CSRF: struct {
 					Enabled    bool   `yaml:"enabled"`
 					CookieName string `yaml:"cookie_name"`
@@ -1430,11 +1454,14 @@ func DefaultConfig() *Config {
 					OriginAgentCluster    bool   `yaml:"origin_agent_cluster"`
 					CrossDomainPolicies   string `yaml:"cross_domain_policies"`
 				}{
-					XFrameOptions:         "SAMEORIGIN",
-					XContentTypeOptions:   "nosniff",
-					XXSSProtection:        "1; mode=block",
-					ReferrerPolicy:        "strict-origin-when-cross-origin",
-					ContentSecurityPolicy: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; media-src *",
+					XFrameOptions:       "SAMEORIGIN",
+					XContentTypeOptions: "nosniff",
+					XXSSProtection:      "1; mode=block",
+					ReferrerPolicy:      "strict-origin-when-cross-origin",
+					// Per AI.md PART 11: full per-directive default policy.
+					// script-src has no 'unsafe-inline' — all JS lives in static/js/app.js.
+					// img-src/media-src/font-src are scoped to self+data/blob/https, never "*".
+					ContentSecurityPolicy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' https:; connect-src 'self'; media-src 'self' blob:; worker-src 'self' blob:; manifest-src 'self'; frame-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests; report-to default; report-uri /api/v1/server/reports/csp",
 					// Per AI.md PART 11: full Permissions-Policy — locked tracking proposals,
 					// spec-required features scoped to self, all sensors locked by default.
 					// geolocation is scoped to self (not disabled) because the weather widget's
@@ -1507,11 +1534,17 @@ func DefaultConfig() *Config {
 					Deny:  []string{},
 				},
 				Security: struct {
-					Contact string `yaml:"contact"`
-					Expires string `yaml:"expires"`
+					ReportURL     string   `yaml:"report_url"`
+					Contact       string   `yaml:"contact"`
+					Expires       string   `yaml:"expires"`
+					Keyservers    []string `yaml:"keyservers"`
+					PublishPGPKey bool     `yaml:"publish_pgp_key"`
 				}{
-					Contact: "",
-					Expires: time.Now().AddDate(1, 0, 0).Format("2006-01-02T15:04:05Z"),
+					ReportURL:     "https://github.com/apimgr/search/security/advisories/new",
+					Contact:       "",
+					Expires:       time.Now().AddDate(1, 0, 0).Format("2006-01-02T15:04:05Z"),
+					Keyservers:    []string{"https://keys.openpgp.org"},
+					PublishPGPKey: true,
 				},
 				Announcements: AnnouncementsConfig{
 					Enabled:  true,
@@ -1935,6 +1968,12 @@ func addConfigComments(node *yaml.Node) {
 		"maintenance":      "Maintenance mode self-healing configuration",
 	}
 
+	// Subsection comments under security
+	securitySubComments := map[string]string{
+		"installation_secret": "Per-install random secret (auto-generated). HMAC key for {security_id} and KDF input for PGP key encryption. Never logged.",
+		"encryption_key":      "Per-install random AES-256-GCM key (auto-generated). Canonical at-rest encryption key for sensitive server data. Never logged.",
+	}
+
 	// Add comments to top-level sections
 	for i := 0; i < len(root.Content)-1; i += 2 {
 		key := root.Content[i]
@@ -1950,6 +1989,19 @@ func addConfigComments(node *yaml.Node) {
 					subKey := value.Content[j]
 					if comment, ok := serverSubComments[subKey.Value]; ok {
 						subKey.HeadComment = comment
+					}
+
+					// Add subsection comments for the nested security section
+					if subKey.Value == "security" {
+						secValue := value.Content[j+1]
+						if secValue.Kind == yaml.MappingNode {
+							for k := 0; k < len(secValue.Content)-1; k += 2 {
+								secSubKey := secValue.Content[k]
+								if comment, ok := securitySubComments[secSubKey.Value]; ok {
+									secSubKey.HeadComment = comment
+								}
+							}
+						}
 					}
 				}
 			}
@@ -2121,6 +2173,15 @@ func generateSecret() string {
 	return hex.EncodeToString(b)
 }
 
+// generateBase64Secret generates 32 random bytes, base64-encoded.
+// Used for secrets consumed by cryptographic primitives (HMAC keys, KDF input)
+// that are conventionally represented as base64 rather than hex.
+func generateBase64Secret() string {
+	b := make([]byte, 32)
+	rand.Read(b)
+	return base64.StdEncoding.EncodeToString(b)
+}
+
 // GetRandomPort returns a random port in the 64xxx range (64000-64999)
 // Per spec, port 0 means random port in 64xxx range to avoid conflicts
 func GetRandomPort() int {
@@ -2253,12 +2314,14 @@ func (c *Config) Sanitized() map[string]any {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return map[string]any{
-		"mode":       c.Server.Mode,
-		"port":       c.Server.Port,
-		"address":    c.Server.Address,
-		"title":      c.Server.Title,
-		"token":      "xxxxx",
-		"secret_key": "xxxxx",
+		"mode":                c.Server.Mode,
+		"port":                c.Server.Port,
+		"address":             c.Server.Address,
+		"title":               c.Server.Title,
+		"token":               "xxxxx",
+		"secret_key":          "xxxxx",
+		"installation_secret": "xxxxx",
+		"encryption_key":      "xxxxx",
 		"ssl": map[string]any{
 			"enabled": c.Server.SSL.Enabled,
 		},
@@ -2372,6 +2435,28 @@ func (c *Config) ValidateAndApplyDefaults() []ValidationWarning {
 			Default: "<generated>",
 		})
 		c.Server.SecretKey = generateSecret()
+	}
+
+	// Installation secret (per AI.md PART 11): HMAC key for {security_id} and
+	// KDF input for the PGP private-key encryption at rest.
+	if c.Server.Security.InstallationSecret == "" {
+		warnings = append(warnings, ValidationWarning{
+			Field:   "server.security.installation_secret",
+			Message: "Installation secret is empty, generating random secret",
+			Default: "<generated>",
+		})
+		c.Server.Security.InstallationSecret = generateBase64Secret()
+	}
+
+	// Encryption key (per AI.md PART 11): canonical at-rest AES-256-GCM key for
+	// ALL sensitive server data (API token hashes, security report bodies fallback, etc.).
+	if c.Server.Security.EncryptionKey == "" {
+		warnings = append(warnings, ValidationWarning{
+			Field:   "server.security.encryption_key",
+			Message: "Encryption key is empty, generating random key",
+			Default: "<generated>",
+		})
+		c.Server.Security.EncryptionKey = generateBase64Secret()
 	}
 
 	// Rate limit validation — warn and apply defaults; never crash per AI.md PART 12

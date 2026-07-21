@@ -841,6 +841,15 @@ const (
 	SecurityEventBruteForce    SecurityEvent = "BRUTE_FORCE"
 	SecurityEventInvalidToken  SecurityEvent = "INVALID_TOKEN"
 	SecurityEventCSRFViolation SecurityEvent = "CSRF_VIOLATION"
+	// SecurityEventSecurityIDInvalid is logged when a `/server/contact?security_id=`
+	// value fails validation, per AI.md PART 11 "Security Reports" — useful for
+	// catching scrape attempts against the rotating token.
+	SecurityEventSecurityIDInvalid SecurityEvent = "security.security_id_invalid"
+	// SecurityEventReportReceived is logged once a coordinated-disclosure security
+	// report is accepted, per AI.md PART 11 "Submission Flow" step 7. Details must
+	// only ever contain tracking_id/severity/sanitized component — never PII or
+	// vulnerability content.
+	SecurityEventReportReceived SecurityEvent = "security.report_received"
 )
 
 // SecurityLogger logs security events (fail2ban compatible)
@@ -1000,6 +1009,33 @@ func (l *SecurityLogger) LogCSRFViolation(ip, path string) {
 	})
 }
 
+// LogSecurityIDInvalid logs a failed/expired {security_id} validation attempt
+// against /server/contact. Per AI.md PART 11: IP, user-agent, and the supplied
+// id are the only fields — the id itself is never a secret worth masking here,
+// since it is already rejected and rotates every 48h.
+func (l *SecurityLogger) LogSecurityIDInvalid(ip, userAgent, suppliedID string) {
+	l.Log(SecurityEntry{
+		Timestamp: time.Now(),
+		Event:     SecurityEventSecurityIDInvalid,
+		IP:        ip,
+		Path:      "/server/contact",
+		Details:   fmt.Sprintf("user_agent=%q security_id=%q", userAgent, suppliedID),
+	})
+}
+
+// LogReportReceived logs acceptance of a coordinated-disclosure security report.
+// Per AI.md PART 11 step 7: tracking_id, severity, and sanitized affected-component
+// only — no researcher PII, no vulnerability content.
+func (l *SecurityLogger) LogReportReceived(ip, trackingID, severity, component string) {
+	l.Log(SecurityEntry{
+		Timestamp: time.Now(),
+		Event:     SecurityEventReportReceived,
+		IP:        ip,
+		Path:      "/server/contact",
+		Details:   fmt.Sprintf("tracking_id=%s severity=%s component=%s", trackingID, severity, component),
+	})
+}
+
 // Rotate rotates the security log file
 func (l *SecurityLogger) Rotate() error {
 	l.mu.Lock()
@@ -1078,6 +1114,14 @@ const (
 	AuditActionServerUpdated      AuditAction = "server.updated"
 	AuditActionSchedulerTaskFail  AuditAction = "scheduler.task_failed"
 	AuditActionSchedulerTaskRun   AuditAction = "scheduler.task_manual_run"
+
+	// PGP keypair events (AI.md PART 11 "GPG Keypair Management")
+	AuditActionPGPKeyGenerated     AuditAction = "security.pgp_key_generated"
+	AuditActionPGPKeyRotated       AuditAction = "security.pgp_key_rotated"
+	AuditActionPGPKeyPublished     AuditAction = "security.pgp_key_published"
+	AuditActionPGPPrivateKeyExport AuditAction = "security.private_key_exported"
+	AuditActionPGPPrivateKeyImport AuditAction = "security.private_key_imported"
+	AuditActionPGPKeyDeleted       AuditAction = "security.pgp_key_deleted"
 )
 
 // AuditCategory represents audit event categories per AI.md PART 11
@@ -1736,6 +1780,91 @@ func (l *AuditLogger) LogBackupFailed(actor, ip, reason string) {
 		Actor:    AuditActor{Username: actor, IP: ip},
 		Result:   "failure",
 		Reason:   reason,
+	})
+}
+
+// LogPGPKeyGenerated logs a PGP keypair generation event per AI.md PART 11
+// "GPG Keypair Management".
+func (l *AuditLogger) LogPGPKeyGenerated(actor, ip, fingerprint string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionPGPKeyGenerated,
+		Category: AuditCategorySecurity,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Username: actor, IP: ip},
+		Target:   &AuditTarget{Type: "pgp_keypair", Name: fingerprint},
+		Result:   "success",
+	})
+}
+
+// LogPGPKeyRotated logs a PGP keypair rotation event per AI.md PART 11
+// "GPG Keypair Management".
+func (l *AuditLogger) LogPGPKeyRotated(actor, ip, oldFingerprint, newFingerprint string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionPGPKeyRotated,
+		Category: AuditCategorySecurity,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Username: actor, IP: ip},
+		Target:   &AuditTarget{Type: "pgp_keypair", Name: newFingerprint},
+		Details:  map[string]interface{}{"previous_fingerprint": oldFingerprint},
+		Result:   "success",
+	})
+}
+
+// LogPGPKeyPublished logs a keyserver publish attempt per AI.md PART 11
+// "GPG Keypair Management".
+func (l *AuditLogger) LogPGPKeyPublished(actor, ip, fingerprint string, keyservers []string, success bool) {
+	l.Log(AuditEntry{
+		Event:    AuditActionPGPKeyPublished,
+		Category: AuditCategorySecurity,
+		Severity: AuditSeverityInfo,
+		Actor:    AuditActor{Username: actor, IP: ip},
+		Target:   &AuditTarget{Type: "pgp_keypair", Name: fingerprint},
+		Details:  map[string]interface{}{"keyservers": keyservers},
+		Result:   resultFromBool(success),
+	})
+}
+
+// LogPGPPrivateKeyExport logs a private key export per AI.md PART 11
+// "GPG Keypair Management" — a sensitive operation. The audit entry includes
+// the operator IP and the reason text the operator was required to type.
+func (l *AuditLogger) LogPGPPrivateKeyExport(actor, operatorIP, reasonText string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionPGPPrivateKeyExport,
+		Category: AuditCategorySecurity,
+		Severity: AuditSeverityCritical,
+		Actor:    AuditActor{Username: actor, IP: operatorIP},
+		Target:   &AuditTarget{Type: "pgp_keypair", Name: "private_key"},
+		Result:   "success",
+		Reason:   reasonText,
+	})
+}
+
+// LogPGPPrivateKeyImport logs a private key import per AI.md PART 11
+// "GPG Keypair Management" — a sensitive operation.
+func (l *AuditLogger) LogPGPPrivateKeyImport(actor, operatorIP, reasonText string, identityMismatch bool) {
+	l.Log(AuditEntry{
+		Event:    AuditActionPGPPrivateKeyImport,
+		Category: AuditCategorySecurity,
+		Severity: AuditSeverityCritical,
+		Actor:    AuditActor{Username: actor, IP: operatorIP},
+		Target:   &AuditTarget{Type: "pgp_keypair", Name: "private_key"},
+		Details:  map[string]interface{}{"identity_mismatch": identityMismatch},
+		Result:   "success",
+		Reason:   reasonText,
+	})
+}
+
+// LogPGPPrivateKeyDelete logs a PGP keypair deletion per AI.md PART 11
+// "GPG Keypair Management" — a sensitive operation.
+func (l *AuditLogger) LogPGPPrivateKeyDelete(actor, operatorIP, fingerprint, reasonText string) {
+	l.Log(AuditEntry{
+		Event:    AuditActionPGPKeyDeleted,
+		Category: AuditCategorySecurity,
+		Severity: AuditSeverityCritical,
+		Actor:    AuditActor{Username: actor, IP: operatorIP},
+		Target:   &AuditTarget{Type: "pgp_keypair", Name: fingerprint},
+		Result:   "success",
+		Reason:   reasonText,
 	})
 }
 
