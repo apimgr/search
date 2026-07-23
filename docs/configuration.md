@@ -141,14 +141,31 @@ server:
 
 ## Environment Variables
 
-All configuration can be set via environment variables with the `SEARCH_` prefix:
+Most server settings can be set via `SEARCH_`-prefixed environment variables.
+Run `search --help` for the authoritative, complete list.
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SEARCH_PORT` | Listen port | `64580` |
-| `SEARCH_ADDRESS` | Listen address | `` |
-| `SEARCH_MODE` | Application mode | `production` |
-| `SEARCH_SSL_ENABLED` | Enable SSL | `false` |
+| `SEARCH_PORT` (or `PORT`) | Listen port | random `64000-64999` |
+| `SEARCH_ADDRESS` | Listen address | all interfaces |
+| `SEARCH_MODE` (or `MODE`) | Application mode (`production`/`development`) | `production` |
+| `SEARCH_DEBUG` (or `DEBUG`) | Enable debug mode (`0`/`1`, `true`/`false`) | `false` |
+| `SEARCH_BASE_URL` | Public base URL override | derived |
+| `SEARCH_COLOR` | Color output mode (`always`/`never`/`auto`) | `auto` |
+| `SEARCH_LANG` | Default language | `en` |
+| `SEARCH_PID_FILE` | Path to PID file | platform default |
+| `DOMAIN` | FQDN override | detected |
+| `DATABASE_DRIVER` | `sqlite` or `libsql` | `sqlite` |
+| `DATABASE_URL` | Database connection string | local file |
+| `BACKUP_PASSWORD` | Password for backup encryption (AES-256-GCM) | unset (plaintext backups) |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_TLS`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME` | Email delivery configuration | unset |
+
+Client-side (`search` CLI talking to a remote server):
+
+| Variable | Description |
+|----------|-------------|
+| `SEARCH_SERVER` | Remote server base URL |
+| `SEARCH_TOKEN` | Operator token for privileged CLI actions |
 
 ## CLI Flags
 
@@ -161,13 +178,20 @@ Options:
   --help                 Show help
   --version              Show version
   --mode MODE            Application mode (production|development)
+  --debug                Enable debug mode
   --config DIR           Config directory
   --data DIR             Data directory
   --log DIR              Log directory
   --address ADDR         Listen address
   --port PORT            Listen port
+  --base-url URL         Public base URL override
+  --lang CODE            Default language
+  --color MODE           Color output (always|never|auto)
+  --pid FILE             Write PID to file
   --status               Show server status
   --service CMD          Service management
   --maintenance CMD      Maintenance commands
   --update CMD           Update management
 ```
+
+`search --help` is the authoritative and complete flag reference.

@@ -2166,10 +2166,14 @@ func (c *Config) ApplyRuntimeEnv(env *EnvConfig) {
 	}
 }
 
-// generateSecret generates a random secret key
+// generateSecret generates a random secret key.
+// A failure of the OS CSPRNG is unrecoverable — panicking is safer than
+// returning a zero/partial secret that would silently weaken every derived key.
 func generateSecret() string {
 	b := make([]byte, 32)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic("config: crypto/rand failed generating secret: " + err.Error())
+	}
 	return hex.EncodeToString(b)
 }
 
@@ -2178,7 +2182,9 @@ func generateSecret() string {
 // that are conventionally represented as base64 rather than hex.
 func generateBase64Secret() string {
 	b := make([]byte, 32)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic("config: crypto/rand failed generating base64 secret: " + err.Error())
+	}
 	return base64.StdEncoding.EncodeToString(b)
 }
 
@@ -2186,7 +2192,11 @@ func generateBase64Secret() string {
 // Per spec, port 0 means random port in 64xxx range to avoid conflicts
 func GetRandomPort() int {
 	var b [2]byte
-	rand.Read(b[:])
+	if _, err := rand.Read(b[:]); err != nil {
+		// Port choice is not security-sensitive; fall back to a nanosecond-derived
+		// offset rather than ignoring the error and always returning 64000.
+		return 64000 + int(time.Now().UnixNano()%1000)
+	}
 	// Generate random number 0-999 and add to 64000
 	return 64000 + int(binary.LittleEndian.Uint16(b[:]))%1000
 }

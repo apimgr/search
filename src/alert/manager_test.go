@@ -1111,6 +1111,9 @@ func TestPtrTime(t *testing.T) {
 // --- Webhook delivery (via httptest server) ---
 
 func TestSendWebhookSucceeds(t *testing.T) {
+	allowLoopbackWebhooks = true
+	defer func() { allowLoopbackWebhooks = false }()
+
 	received := make(chan struct{}, 1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		received <- struct{}{}
@@ -1160,6 +1163,9 @@ func TestSendWebhookSucceeds(t *testing.T) {
 }
 
 func TestSendWebhookFailsAndReturnsError(t *testing.T) {
+	allowLoopbackWebhooks = true
+	defer func() { allowLoopbackWebhooks = false }()
+
 	// Server that always returns 500
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)

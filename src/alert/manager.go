@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -143,6 +142,11 @@ func NewManager(db *sql.DB, serverConfig *config.Config, aggregator *search.Aggr
 		templates:    email.NewEmailTemplate(),
 		client: &http.Client{
 			Timeout: 15 * time.Second,
+			// SSRF guard: reject connections to internal addresses at dial time,
+			// closing the DNS-rebinding gap left by up-front URL validation.
+			Transport: &http.Transport{
+				DialContext: newWebhookDialContext(),
+			},
 		},
 	}
 }
@@ -197,8 +201,8 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (*CreateRespons
 		if req.WebhookURL == "" {
 			return nil, fmt.Errorf("%w: webhook URL is required", ErrInvalidInput)
 		}
-		if _, err := url.ParseRequestURI(req.WebhookURL); err != nil {
-			return nil, fmt.Errorf("%w: webhook URL is invalid", ErrInvalidInput)
+		if err := validateWebhookURL(req.WebhookURL); err != nil {
+			return nil, err
 		}
 	}
 	if err := m.enforceCreateRateLimit(ctx, req.CreatedFromIP); err != nil {
@@ -350,8 +354,8 @@ func (m *Manager) Update(ctx context.Context, manageToken string, req UpdateRequ
 		if req.WebhookURL == "" {
 			req.WebhookURL = alert.WebhookURL
 		}
-		if _, err := url.ParseRequestURI(req.WebhookURL); err != nil {
-			return nil, fmt.Errorf("%w: webhook URL is invalid", ErrInvalidInput)
+		if err := validateWebhookURL(req.WebhookURL); err != nil {
+			return nil, err
 		}
 	}
 

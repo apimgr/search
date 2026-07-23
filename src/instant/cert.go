@@ -105,7 +105,16 @@ func (h *CertHandler) HandleInstantQuery(ctx context.Context, query string) (*An
 			},
 		}, nil
 	}
-	conn := netConn.(*tls.Conn)
+	conn, ok := netConn.(*tls.Conn)
+	if !ok {
+		netConn.Close()
+		return &Answer{
+			Type:    AnswerTypeCert,
+			Query:   query,
+			Title:   fmt.Sprintf("SSL Certificate: %s", domain),
+			Content: fmt.Sprintf("<strong>Error:</strong> Unexpected connection type for %s", domain),
+		}, nil
+	}
 	defer conn.Close()
 
 	// Get certificate chain

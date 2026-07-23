@@ -1,9 +1,11 @@
 package widget
 
 import (
+	"bytes"
 	"context"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"net/http"
 	"sort"
 	"strings"
@@ -171,24 +173,22 @@ func (f *NewsFetcher) fetchFeed(ctx context.Context, feedURL string) ([]NewsItem
 		return nil, fmt.Errorf("feed returned status %d", resp.StatusCode)
 	}
 
-	// Try parsing as RSS first
-	var rssFeed RSSFeed
-	decoder := xml.NewDecoder(resp.Body)
-	if err := decoder.Decode(&rssFeed); err == nil && len(rssFeed.Channel.Items) > 0 {
-		return f.parseRSSItems(rssFeed.Channel), nil
-	}
-
-	// Try Atom format
-	resp.Body.Close()
-	resp, err = f.client.Do(req)
+	// Read the body once and try both formats against the buffered bytes,
+	// avoiding a redundant second fetch and the double Close that caused.
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
 
+	// Try parsing as RSS first
+	var rssFeed RSSFeed
+	if err := xml.NewDecoder(bytes.NewReader(body)).Decode(&rssFeed); err == nil && len(rssFeed.Channel.Items) > 0 {
+		return f.parseRSSItems(rssFeed.Channel), nil
+	}
+
+	// Fall back to Atom format
 	var atomFeed AtomFeed
-	decoder = xml.NewDecoder(resp.Body)
-	if err := decoder.Decode(&atomFeed); err == nil && len(atomFeed.Entries) > 0 {
+	if err := xml.NewDecoder(bytes.NewReader(body)).Decode(&atomFeed); err == nil && len(atomFeed.Entries) > 0 {
 		return f.parseAtomEntries(atomFeed), nil
 	}
 

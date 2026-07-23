@@ -2,6 +2,7 @@ package server
 
 import (
 	"bufio"
+	"crypto/sha256"
 	"crypto/subtle"
 	"net/http"
 	"os"
@@ -496,7 +497,10 @@ func (m *Metrics) AuthenticatedHandler() http.HandlerFunc {
 				localizedHTTPError(w, r, http.StatusUnauthorized, "errors.unauthorized")
 				return
 			}
-			if subtle.ConstantTimeCompare([]byte(auth[7:]), []byte(token)) != 1 {
+			// Compare over fixed-length SHA-256 digests so timing does not leak the token length.
+			presentedSum := sha256.Sum256([]byte(auth[7:]))
+			expectedSum := sha256.Sum256([]byte(token))
+			if subtle.ConstantTimeCompare(presentedSum[:], expectedSum[:]) != 1 {
 				localizedHTTPError(w, r, http.StatusUnauthorized, "errors.invalid_token")
 				return
 			}

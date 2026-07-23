@@ -697,13 +697,16 @@ func formatHeadersData(url string, data map[string]interface{}) string {
 	html.WriteString("<div class=\"headers-data\">")
 	html.WriteString("<h2>HTTP Headers</h2>")
 	html.WriteString(fmt.Sprintf("<p><code>%s</code></p>", escapeHTML(url)))
-	html.WriteString(fmt.Sprintf("<p>Status: <strong>%s</strong></p>", escapeHTML(data["statusText"].(string))))
+	statusText, _ := data["statusText"].(string)
+	html.WriteString(fmt.Sprintf("<p>Status: <strong>%s</strong></p>", escapeHTML(statusText)))
 
 	// Security grade
 	if sec, ok := data["security"].(map[string]interface{}); ok {
-		grade := sec["grade"].(string)
+		grade, _ := sec["grade"].(string)
+		present, _ := sec["present"].(int)
+		total, _ := sec["total"].(int)
 		html.WriteString(fmt.Sprintf("<p>Security Grade: <span class=\"grade grade-%s\">%s</span> (%d/%d headers present)</p>",
-			strings.ToLower(grade), grade, sec["present"].(int), sec["total"].(int)))
+			strings.ToLower(grade), grade, present, total))
 	}
 
 	// All headers
