@@ -26,7 +26,7 @@ func (s *Server) handleWellKnownCatchAll(w http.ResponseWriter, r *http.Request)
 	// Only GET and HEAD are valid for /.well-known/**
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		http.Error(w, i18n.RequestString(r, "errors.method_not_allowed"), http.StatusMethodNotAllowed)
 		return
 	}
 	// Unknown well-known path — return 404

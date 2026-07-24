@@ -97,17 +97,19 @@ Miniflux, etc.) and support the Atom 1.0 and RSS 2.0 formats.
 
 ## Prometheus Metrics
 
-Search exposes Prometheus-compatible metrics at `/metrics`. This endpoint is
-intended for internal monitoring only — do not expose it to the public internet.
+Search exposes Prometheus-compatible metrics at `/server/metrics` (configurable
+via `server.metrics.endpoint`). Metrics are disabled by default; enable them with
+`server.metrics.enabled: true`. This endpoint is intended for internal monitoring
+only — do not expose it to the public internet.
 
 ```yaml
 # prometheus.yml scrape config
 scrape_configs:
   - job_name: search
     static_configs:
-      - targets: ['localhost:64080']
-    metrics_path: /metrics
-    # Optional bearer token if configured:
+      - targets: ['localhost:64580']
+    metrics_path: /server/metrics
+    # Optional bearer token if server.metrics.token is set:
     # bearer_token: <server.metrics.token>
 ```
 
@@ -115,11 +117,13 @@ See [Configuration](configuration.md) for `server.metrics` settings.
 
 ## GraphQL
 
-Search exposes a GraphQL API at `/graphql` (POST for queries, GET for GraphiQL UI).
+Search exposes a GraphQL API. The interactive GraphiQL explorer is served at
+`GET /server/docs/graphql`, and queries are accepted at `POST /api/graphql`
+(unversioned alias) or `POST /api/v1/server/graphql` (versioned canonical).
 The schema mirrors the REST API and is documented in the embedded GraphiQL explorer.
 
 ```bash
-curl -X POST https://your-instance/graphql \
+curl -X POST https://your-instance/api/graphql \
   -H "Content-Type: application/json" \
   -d '{"query": "{ search(q: \"golang\") { results { title url } } }"}'
 ```

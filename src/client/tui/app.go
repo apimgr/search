@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -10,46 +11,45 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/apimgr/search/src/client/api"
+	"github.com/apimgr/search/src/common/terminal"
 )
 
-// Dracula colors per AI.md PART 33
-var (
-	background = lipgloss.Color("#282a36")
-	foreground = lipgloss.Color("#f8f8f2")
-	selection  = lipgloss.Color("#44475a")
-	comment    = lipgloss.Color("#6272a4")
-	cyan       = lipgloss.Color("#8be9fd")
-	green      = lipgloss.Color("#50fa7b")
-	orange     = lipgloss.Color("#ffb86c")
-	pink       = lipgloss.Color("#ff79c6")
-	purple     = lipgloss.Color("#bd93f9")
-	red        = lipgloss.Color("#ff5555")
-	yellow     = lipgloss.Color("#f1fa8c")
-)
-
+// styles are derived from CurrentTUITheme (see theme.go) rather than
+// hardcoded colors, so switching themes restyles the whole TUI.
 var (
 	titleStyle = lipgloss.NewStyle().
-			Foreground(purple).
+			Foreground(CurrentTUITheme.Primary).
 			Bold(true).
 			Padding(0, 1)
 
 	inputStyle = lipgloss.NewStyle().
 			BorderStyle(lipgloss.RoundedBorder()).
-			BorderForeground(comment).
+			BorderForeground(CurrentTUITheme.Secondary).
 			Padding(0, 1)
 
 	resultStyle = lipgloss.NewStyle().
-			Foreground(foreground)
+			Foreground(CurrentTUITheme.Foreground)
 
 	urlStyle = lipgloss.NewStyle().
-			Foreground(cyan)
+			Foreground(CurrentTUITheme.Accent)
 
 	helpStyle = lipgloss.NewStyle().
-			Foreground(comment)
+			Foreground(CurrentTUITheme.Secondary)
 
 	errorStyle = lipgloss.NewStyle().
-			Foreground(red)
+			Foreground(CurrentTUITheme.Error)
 )
+
+// refreshStyles rebuilds theme-derived styles from CurrentTUITheme.
+// Called after SetTUITheme changes the active theme.
+func refreshStyles() {
+	titleStyle = titleStyle.Foreground(CurrentTUITheme.Primary)
+	inputStyle = inputStyle.BorderForeground(CurrentTUITheme.Secondary)
+	resultStyle = resultStyle.Foreground(CurrentTUITheme.Foreground)
+	urlStyle = urlStyle.Foreground(CurrentTUITheme.Accent)
+	helpStyle = helpStyle.Foreground(CurrentTUITheme.Secondary)
+	errorStyle = errorStyle.Foreground(CurrentTUITheme.Error)
+}
 
 type model struct {
 	client    *api.Client
@@ -60,6 +60,11 @@ type model struct {
 	searching bool
 	width     int
 	height    int
+	// sizeMode is the responsive breakpoint tier per AI.md PART 32.
+	sizeMode terminal.SizeMode
+	// debug enables verbose diagnostics (window resize, etc) to stderr.
+	// Per AI.md PART 32 window resize example.
+	debug bool
 }
 
 type searchResultMsg struct {
@@ -67,7 +72,7 @@ type searchResultMsg struct {
 	err     error
 }
 
-func initialModel(client *api.Client) model {
+func initialModel(client *api.Client, debug bool) model {
 	ti := textinput.New()
 	ti.Placeholder = "Enter search query..."
 	ti.Focus()
@@ -76,6 +81,7 @@ func initialModel(client *api.Client) model {
 	return model{
 		client: client,
 		input:  ti,
+		debug:  debug,
 	}
 }
 
@@ -106,6 +112,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.viewport = viewport.New(msg.Width, msg.Height-6)
+		// Per AI.md PART 32: responsive breakpoint tier for the current size.
+		m.sizeMode = terminal.GetSize().Mode
+		// Per AI.md PART 32 window resize example: debug-mode diagnostics.
+		if m.debug {
+			log.Printf("Window resize: %dx%d, mode: %s", msg.Width, msg.Height, m.sizeMode)
+		}
 
 	case searchResultMsg:
 		m.searching = false
@@ -177,9 +189,14 @@ func (m model) View() string {
 	return sb.String()
 }
 
-// RunTUIApp starts the TUI application
-func RunTUIApp(client *api.Client) error {
-	p := tea.NewProgram(initialModel(client), tea.WithAltScreen())
+// RunTUIApp starts the TUI application.
+// themeName selects the active TUITheme (dark, light, or system - see SetTUITheme).
+// debug enables verbose window-resize/diagnostic logging per AI.md PART 32.
+func RunTUIApp(client *api.Client, themeName string, debug bool) error {
+	SetTUITheme(themeName)
+	refreshStyles()
+
+	p := tea.NewProgram(initialModel(client, debug), tea.WithAltScreen())
 	_, err := p.Run()
 	return err
 }

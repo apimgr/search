@@ -12,6 +12,7 @@ import (
 	"github.com/apimgr/search/src/backup"
 	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/scheduler"
+	"github.com/apimgr/search/src/update"
 )
 
 // initScheduler initializes and starts the scheduler per AI.md PART 19
@@ -96,6 +97,65 @@ func (s *Server) createTaskHandlers() *scheduler.TaskHandlers {
 				return err
 			}
 			slog.Info("CVE update complete", "entries", s.cveManager.Count())
+			return nil
+		},
+
+		// Update Check - notify-only check for a newer release
+		// Per AI.md PART 18/22: check the release channel for a newer version
+		// and notify admins. This task NEVER installs, even when auto_install
+		// is set - actual updates always require explicit operator confirmation
+		// via --maintenance update (auto-update without confirmation is forbidden).
+		UpdateCheck: func(ctx context.Context) error {
+			updateCfg := s.config.Server.Update
+			// beta and daily channels both include pre-releases; stable does not
+			includePrerelease := updateCfg.Branch == "beta" || updateCfg.Branch == "daily"
+
+			mgr := update.NewManager()
+			info, err := mgr.CheckForUpdates(includePrerelease)
+			if err != nil {
+				slog.Error("update check failed", "err", err)
+				return err
+			}
+			if info == nil || !info.Available {
+				slog.Info("update check complete", "current_version", info.CurrentVersion, "update_available", false)
+				return nil
+			}
+
+			// Per AI.md PART 22: defer_days gates the scheduled task only - a
+			// release is eligible once it has been public for defer_days days.
+			// Manual `--update check`/`yes` bypass this window entirely.
+			if updateCfg.DeferDays > 0 {
+				eligibleAt := info.PublishedAt.Add(time.Duration(updateCfg.DeferDays) * 24 * time.Hour)
+				if time.Now().UTC().Before(eligibleAt) {
+					slog.Info("update check complete", "current_version", info.CurrentVersion,
+						"update_available", false, "reason", "deferred", "latest_version", info.LatestVersion,
+						"eligible_at", eligibleAt.Format("2006-01-02"))
+					return nil
+				}
+			}
+
+			slog.Warn("update available",
+				"current_version", info.CurrentVersion,
+				"latest_version", info.LatestVersion)
+			// Per AI.md PART 22/features-rules.md: auto_install is read for
+			// operator visibility only - the scheduled task never installs.
+			if updateCfg.AutoInstall {
+				slog.Debug("auto_install is set but update_check remains notify-only; run --maintenance update to install")
+			}
+			if s.mailer != nil && s.mailer.IsEnabled() {
+				updateURL := s.config.Server.BaseURL + "/update"
+				if err := s.mailer.SendUpdateAvailable(
+					info.CurrentVersion,
+					info.LatestVersion,
+					info.PublishedAt.Format("2006-01-02"),
+					info.ReleaseNotes,
+					updateURL,
+				); err != nil {
+					slog.Error("failed to send update-available notification", "err", err)
+				} else {
+					slog.Info("update-available notification email sent", "latest_version", info.LatestVersion)
+				}
+			}
 			return nil
 		},
 
@@ -195,6 +255,9 @@ func (s *Server) applyTaskConfig(sched *scheduler.Scheduler) {
 	}
 	if !tasks.CVEUpdate.Enabled {
 		sched.Disable(scheduler.TaskCVEUpdate)
+	}
+	if !tasks.UpdateCheck.Enabled {
+		sched.Disable(scheduler.TaskUpdateCheck)
 	}
 }
 

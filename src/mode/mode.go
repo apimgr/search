@@ -32,11 +32,15 @@ func (m AppMode) String() string {
 }
 
 // SetAppMode sets the application mode
-// Per AI.md PART 6: Mode shortcuts (dev/development, prod/production)
+// Per AI.md PART 6: Mode shortcuts (dev/devel/development, prod/production)
+// The "debug" alias expands to development + debug on
 func SetAppMode(m string) {
 	switch strings.ToLower(m) {
-	case "dev", "development":
+	case "dev", "devel", "development":
 		currentMode = Development
+	case "debug":
+		currentMode = Development
+		debugEnabled = true
 	default:
 		currentMode = Production
 	}
@@ -101,7 +105,9 @@ func FromEnv() {
 	if m := os.Getenv("MODE"); m != "" {
 		SetAppMode(m)
 	}
-	if config.IsTruthy(os.Getenv("DEBUG")) {
-		SetDebugEnabled(true)
+	// An explicit DEBUG env var wins over the MODE=debug alias
+	// Per AI.md PART 6: MODE=debug DEBUG=false runs development with debug off
+	if v, ok := os.LookupEnv("DEBUG"); ok && v != "" {
+		SetDebugEnabled(config.IsTruthy(v))
 	}
 }

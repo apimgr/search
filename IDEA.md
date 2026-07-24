@@ -9,11 +9,12 @@ Target users include privacy-conscious individuals who want web search without b
 project_name:     search
 project_org:      apimgr
 internal_org:     apimgr
+# FROZEN — equals project_name on first install, never changes
 internal_name:    search
 app_name:         Search
 maintainer_name:  casjay
 maintainer_email: casjay@yahoo.com
-official_site:    scour.li
+official_site:    https://scour.li
 
 ---
 

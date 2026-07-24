@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/apimgr/search/src/common/httputil"
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/email"
 	"github.com/apimgr/search/src/security"
@@ -840,11 +841,11 @@ func (s *Server) handleAutocomplete(w http.ResponseWriter, r *http.Request) {
 // Works with zero JS; the cookie banner form POSTs here directly.
 func (s *Server) handleConsent(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		http.Error(w, i18n.RequestString(r, "errors.method_not_allowed"), http.StatusMethodNotAllowed)
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, i18n.RequestString(r, "errors.bad_request"), http.StatusBadRequest)
 		return
 	}
 	choice := r.FormValue("choice")
@@ -896,11 +897,11 @@ func (s *Server) handleConsent(w http.ResponseWriter, r *http.Request) {
 // Works with zero JS; the dismiss form POSTs here directly.
 func (s *Server) handleAnnouncementDismiss(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		http.Error(w, i18n.RequestString(r, "errors.method_not_allowed"), http.StatusMethodNotAllowed)
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, i18n.RequestString(r, "errors.bad_request"), http.StatusBadRequest)
 		return
 	}
 	id := strings.TrimSpace(r.FormValue("id"))
@@ -952,11 +953,11 @@ func (s *Server) handleAnnouncementDismiss(w http.ResponseWriter, r *http.Reques
 // Works with zero JS; the CCPA form POSTs here directly.
 func (s *Server) handleConsentCCPA(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		http.Error(w, i18n.RequestString(r, "errors.method_not_allowed"), http.StatusMethodNotAllowed)
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, i18n.RequestString(r, "errors.bad_request"), http.StatusBadRequest)
 		return
 	}
 	action := r.FormValue("action")

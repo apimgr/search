@@ -93,19 +93,44 @@ Restrict the metrics endpoint — it must never be proxied to the public interne
 
 ```bash
 # Block external access to the metrics endpoint
-iptables -A INPUT -p tcp --dport 64580 -m string --string "/metrics" --algo bm -j DROP
+iptables -A INPUT -p tcp --dport 64580 -m string --string "/server/metrics" --algo bm -j DROP
 ```
+
+## Public Security Endpoints
+
+The following endpoints are public (no authentication) and support responsible
+disclosure and health monitoring:
+
+| Endpoint | Purpose |
+|----------|---------|
+| `/.well-known/security.txt` | RFC 9116 security contact and policy |
+| `/.well-known/pgp-key.asc` | PGP public key (returns `404` until a keypair exists) |
+| `/.well-known/llms.txt` | Machine-readable summary for LLM agents |
+| `/.well-known/change-password` | Password-change discovery redirect |
+| `/server/security` | Human-readable security overview and how to report |
+| `/server/security/policy` | Full security/disclosure policy |
+| `/server/contact` | Contact form (supports `security_id` deep links) |
+| `/server/healthz` | Public health check |
+| `/api/v1/server/healthz` | Public health check (JSON) |
+
+## Well-Known Namespace
+
+Search serves a fixed set of `/.well-known/*` entries (listed above). Any
+unrecognized `/.well-known/*` path returns `404`. Feature-gated entries such as
+WebFinger, OpenID Provider Metadata, App Links, or Apple app-site-association are
+**not** enabled for this project and are not served.
 
 ## Security Reporting
 
 If you discover a security vulnerability, please report it responsibly:
 
 1. **Do not** disclose publicly until fixed
-2. Email security details to the maintainers
-3. Include steps to reproduce
-4. Allow time for a fix before disclosure
+2. Retrieve the security contact from `/.well-known/security.txt`
+3. Use `/server/security` for a human-readable overview and reporting steps
+4. Deep-link a specific report via `/server/contact?security_id=<id>`
+5. Include steps to reproduce and allow time for a fix before disclosure
 
-Search serves a security contact file at `/.well-known/security.txt`.
+The full disclosure policy is published at `/server/security/policy`.
 
 ## Security Logs
 

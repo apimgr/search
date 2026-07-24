@@ -371,6 +371,9 @@ type ServerConfig struct {
 
 	// Maintenance mode self-healing configuration
 	Maintenance MaintenanceSelfHealConfig `yaml:"maintenance"`
+
+	// Update configuration per AI.md PART 22
+	Update UpdateConfig `yaml:"update"`
 }
 
 // SSLConfig represents SSL/TLS configuration
@@ -836,6 +839,8 @@ type SchedulerTasksConfig struct {
 	BlocklistUpdate TaskConfig `yaml:"blocklist_update"`
 	// CVE database update (skippable)
 	CVEUpdate TaskConfig `yaml:"cve_update"`
+	// Update check (skippable) - notify-only newer-version check at 06:00
+	UpdateCheck TaskConfig `yaml:"update_check"`
 }
 
 // TaskConfig represents configuration for a scheduled task
@@ -952,6 +957,21 @@ type BackupRetentionConfig struct {
 type ComplianceConfig struct {
 	// HIPAA, SOC2, etc. compliance mode
 	Enabled bool `yaml:"enabled"`
+}
+
+// UpdateConfig represents the self-update release channel and rollout policy
+// Per AI.md PART 22: Update Configuration
+type UpdateConfig struct {
+	// Release channel: stable | beta | daily (also settable via --update branch)
+	// Default: stable
+	Branch string `yaml:"branch"`
+	// Auto-install updates found by the update_check task
+	// Default OFF: the task only notifies; installing is always an explicit operator decision
+	AutoInstall bool `yaml:"auto_install"`
+	// Defer window in days (0-365): a release is only eligible once it is this many days old
+	// 30 = adopt releases only after they have been public for 30 days; 0 = immediately
+	// Gates the scheduled update_check task only - manual --update check/yes always sees the true latest
+	DeferDays int `yaml:"defer_days"`
 }
 
 // HealthzConfig controls the /healthz root-level alias per AI.md PART 13.
@@ -1567,6 +1587,7 @@ func DefaultConfig() *Config {
 					GeoIPUpdate:     TaskConfig{Schedule: "0 3 * * 0", Enabled: true},
 					BlocklistUpdate: TaskConfig{Schedule: "0 4 * * *", Enabled: true},
 					CVEUpdate:       TaskConfig{Schedule: "0 5 * * *", Enabled: true},
+					UpdateCheck:     TaskConfig{Schedule: "0 6 * * *", Enabled: true},
 				},
 			},
 			Cache: CacheConfig{
@@ -1685,6 +1706,11 @@ func DefaultConfig() *Config {
 					OnEnter: true,
 					OnExit:  true,
 				},
+			},
+			Update: UpdateConfig{
+				Branch:      "stable",
+				AutoInstall: false,
+				DeferDays:   0,
 			},
 		},
 		Search: SearchConfig{

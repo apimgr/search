@@ -136,7 +136,7 @@ func TestResolveServerAddressEmpty(t *testing.T) {
 	clicfg.Reset()
 	server = ""
 	// Clear env and compiled default so the empty-case test remains meaningful
-	t.Setenv("SEARCH_SERVER", "")
+	t.Setenv("SEARCH_SERVER_PRIMARY", "")
 	savedSite := OfficialSite
 	OfficialSite = ""
 	defer func() { OfficialSite = savedSite }()
@@ -345,7 +345,7 @@ func TestInitClientNoServer(t *testing.T) {
 	server = ""
 	apiClient = nil
 	// Clear env and compiled default so that no server is found
-	t.Setenv("SEARCH_SERVER", "")
+	t.Setenv("SEARCH_SERVER_PRIMARY", "")
 	savedSite := OfficialSite
 	OfficialSite = ""
 	defer func() { OfficialSite = savedSite }()

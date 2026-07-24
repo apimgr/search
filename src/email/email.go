@@ -350,6 +350,23 @@ func (ml *Mailer) SendSecurityAlert(event, ip, details string) error {
 	return ml.SendToAdmins(subject, body)
 }
 
+// SendUpdateAvailable notifies admins that a newer release is available.
+// Per AI.md PART 22: the update_check task is notify-only; this email is the
+// notification. Email bodies are rendered from {variable} templates.
+func (ml *Mailer) SendUpdateAvailable(currentVersion, newVersion, releaseDate, releaseNotes, updateURL string) error {
+	vars := ml.baseVars()
+	vars["current_version"] = currentVersion
+	vars["new_version"] = newVersion
+	vars["release_date"] = releaseDate
+	vars["release_notes"] = releaseNotes
+	vars["update_url"] = updateURL
+	subject, body, err := NewEmailTemplate().Render(TemplateUpdateAvailable, vars)
+	if err != nil {
+		return err
+	}
+	return ml.SendToAdmins(subject, body)
+}
+
 // TestConnection tests the SMTP connection
 // Per AI.md PART 18: Connection test on startup
 func (ml *Mailer) TestConnection() error {

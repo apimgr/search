@@ -12,24 +12,22 @@ import (
 	"github.com/apimgr/search/src/client/api"
 )
 
-// Tests for color definitions
+// Tests for theme color definitions
 
-func TestDraculaColors(t *testing.T) {
+func TestTUIThemeColors(t *testing.T) {
 	colors := []struct {
 		name  string
 		color lipgloss.Color
 	}{
-		{"background", background},
-		{"foreground", foreground},
-		{"selection", selection},
-		{"comment", comment},
-		{"cyan", cyan},
-		{"green", green},
-		{"orange", orange},
-		{"pink", pink},
-		{"purple", purple},
-		{"red", red},
-		{"yellow", yellow},
+		{"background", CurrentTUITheme.Background},
+		{"foreground", CurrentTUITheme.Foreground},
+		{"primary", CurrentTUITheme.Primary},
+		{"secondary", CurrentTUITheme.Secondary},
+		{"accent", CurrentTUITheme.Accent},
+		{"error", CurrentTUITheme.Error},
+		{"success", CurrentTUITheme.Success},
+		{"warning", CurrentTUITheme.Warning},
+		{"muted", CurrentTUITheme.Muted},
 	}
 
 	for _, c := range colors {
@@ -146,7 +144,7 @@ func TestInitialModel(t *testing.T) {
 		BaseURL: "https://api.example.com",
 	}
 
-	m := initialModel(client)
+	m := initialModel(client, false)
 
 	if m.client != client {
 		t.Error("initialModel() should set client")
@@ -163,10 +161,10 @@ func TestInitialModel(t *testing.T) {
 }
 
 func TestInitialModelWithNilClient(t *testing.T) {
-	m := initialModel(nil)
+	m := initialModel(nil, false)
 
 	if m.client != nil {
-		t.Error("initialModel(nil) should have nil client")
+		t.Error("initialModel(nil, false) should have nil client")
 	}
 }
 
@@ -174,7 +172,7 @@ func TestInitialModelWithNilClient(t *testing.T) {
 
 func TestModelInit(t *testing.T) {
 	client := &api.Client{}
-	m := initialModel(client)
+	m := initialModel(client, false)
 
 	cmd := m.Init()
 
@@ -187,7 +185,7 @@ func TestModelInit(t *testing.T) {
 
 func TestModelUpdateQuit(t *testing.T) {
 	client := &api.Client{}
-	m := initialModel(client)
+	m := initialModel(client, false)
 
 	keys := []string{"ctrl+c", "q"}
 
@@ -220,7 +218,7 @@ func TestModelUpdateEnterWithQuery(t *testing.T) {
 	defer testServer.Close()
 
 	client := api.NewClient(testServer.URL, "", 30)
-	m := initialModel(client)
+	m := initialModel(client, false)
 	m.input.SetValue("test query")
 
 	msg := tea.KeyMsg{Type: tea.KeyEnter}
@@ -237,7 +235,7 @@ func TestModelUpdateEnterWithQuery(t *testing.T) {
 
 func TestModelUpdateEnterWithoutQuery(t *testing.T) {
 	client := &api.Client{}
-	m := initialModel(client)
+	m := initialModel(client, false)
 	m.input.SetValue("")
 
 	msg := tea.KeyMsg{Type: tea.KeyEnter}
@@ -251,7 +249,7 @@ func TestModelUpdateEnterWithoutQuery(t *testing.T) {
 
 func TestModelUpdateEsc(t *testing.T) {
 	client := &api.Client{}
-	m := initialModel(client)
+	m := initialModel(client, false)
 	m.input.SetValue("test")
 	m.results = []api.SearchResult{{Title: "Test"}}
 	m.err = &testError{msg: "test error"}
@@ -273,7 +271,7 @@ func TestModelUpdateEsc(t *testing.T) {
 
 func TestModelUpdateWindowSize(t *testing.T) {
 	client := &api.Client{}
-	m := initialModel(client)
+	m := initialModel(client, false)
 
 	msg := tea.WindowSizeMsg{Width: 100, Height: 50}
 	newModel, _ := m.Update(msg)
@@ -289,7 +287,7 @@ func TestModelUpdateWindowSize(t *testing.T) {
 
 func TestModelUpdateSearchResult(t *testing.T) {
 	client := &api.Client{}
-	m := initialModel(client)
+	m := initialModel(client, false)
 	m.searching = true
 	m.width = 80
 	m.height = 24
@@ -312,7 +310,7 @@ func TestModelUpdateSearchResult(t *testing.T) {
 
 func TestModelUpdateSearchResultWithError(t *testing.T) {
 	client := &api.Client{}
-	m := initialModel(client)
+	m := initialModel(client, false)
 	m.searching = true
 	m.width = 80
 	m.height = 24
@@ -352,7 +350,7 @@ func TestModelDoSearchSuccess(t *testing.T) {
 	defer testServer.Close()
 
 	client := api.NewClient(testServer.URL, "", 30)
-	m := initialModel(client)
+	m := initialModel(client, false)
 	m.input.SetValue("test query")
 
 	result := m.doSearch()
@@ -377,7 +375,7 @@ func TestModelDoSearchError(t *testing.T) {
 	defer testServer.Close()
 
 	client := api.NewClient(testServer.URL, "", 30)
-	m := initialModel(client)
+	m := initialModel(client, false)
 	m.input.SetValue("test query")
 
 	result := m.doSearch()
@@ -396,7 +394,7 @@ func TestModelDoSearchError(t *testing.T) {
 
 func TestModelRenderResultsWithError(t *testing.T) {
 	client := &api.Client{}
-	m := initialModel(client)
+	m := initialModel(client, false)
 	m.err = &testError{msg: "test error"}
 
 	result := m.renderResults()
@@ -408,7 +406,7 @@ func TestModelRenderResultsWithError(t *testing.T) {
 
 func TestModelRenderResultsEmpty(t *testing.T) {
 	client := &api.Client{}
-	m := initialModel(client)
+	m := initialModel(client, false)
 	m.results = []api.SearchResult{}
 
 	result := m.renderResults()
@@ -420,7 +418,7 @@ func TestModelRenderResultsEmpty(t *testing.T) {
 
 func TestModelRenderResultsWithData(t *testing.T) {
 	client := &api.Client{}
-	m := initialModel(client)
+	m := initialModel(client, false)
 	m.results = []api.SearchResult{
 		{Title: "Test Result 1", URL: "https://example1.com", Description: "First result snippet"},
 		{Title: "Test Result 2", URL: "https://example2.com", Description: ""},
@@ -435,7 +433,7 @@ func TestModelRenderResultsWithData(t *testing.T) {
 
 func TestModelRenderResultsNoSnippet(t *testing.T) {
 	client := &api.Client{}
-	m := initialModel(client)
+	m := initialModel(client, false)
 	m.results = []api.SearchResult{
 		{Title: "No Snippet", URL: "https://example.com", Description: ""},
 	}
@@ -451,7 +449,7 @@ func TestModelRenderResultsNoSnippet(t *testing.T) {
 
 func TestModelView(t *testing.T) {
 	client := &api.Client{}
-	m := initialModel(client)
+	m := initialModel(client, false)
 	m.width = 80
 	m.height = 24
 
@@ -464,7 +462,7 @@ func TestModelView(t *testing.T) {
 
 func TestModelViewSearching(t *testing.T) {
 	client := &api.Client{}
-	m := initialModel(client)
+	m := initialModel(client, false)
 	m.width = 80
 	m.height = 24
 	m.searching = true
@@ -478,7 +476,7 @@ func TestModelViewSearching(t *testing.T) {
 
 func TestModelViewWithResults(t *testing.T) {
 	client := &api.Client{}
-	m := initialModel(client)
+	m := initialModel(client, false)
 	m.width = 80
 	m.height = 24
 	m.results = []api.SearchResult{
@@ -494,7 +492,7 @@ func TestModelViewWithResults(t *testing.T) {
 
 func TestModelViewWithError(t *testing.T) {
 	client := &api.Client{}
-	m := initialModel(client)
+	m := initialModel(client, false)
 	m.width = 80
 	m.height = 24
 	m.err = &testError{msg: "test error"}
@@ -510,7 +508,7 @@ func TestModelViewWithError(t *testing.T) {
 
 func TestRunFunctionExists(t *testing.T) {
 	// Just verify the RunTUIApp function exists and has correct signature
-	var runFunc func(*api.Client) error = RunTUIApp
+	var runFunc func(*api.Client, string, bool) error = RunTUIApp
 	// A function value assigned from a known function is never nil;
 	// verify via reflect that the assignment compiled successfully
 	_ = runFunc
@@ -520,7 +518,7 @@ func TestRunFunctionExists(t *testing.T) {
 
 func TestModelRenderResultsMultiple(t *testing.T) {
 	client := &api.Client{}
-	m := initialModel(client)
+	m := initialModel(client, false)
 	m.results = []api.SearchResult{
 		{Title: "Result One", URL: "https://one.example.com", Description: "First snippet"},
 		{Title: "Result Two", URL: "https://two.example.com", Description: "Second snippet"},
@@ -540,7 +538,7 @@ func TestModelRenderResultsMultiple(t *testing.T) {
 
 func TestModelViewportInitialized(t *testing.T) {
 	client := &api.Client{}
-	m := initialModel(client)
+	m := initialModel(client, false)
 
 	// Initially viewport is not set
 	msg := tea.WindowSizeMsg{Width: 80, Height: 24}
@@ -556,7 +554,7 @@ func TestModelViewportInitialized(t *testing.T) {
 
 func TestModelInputValue(t *testing.T) {
 	client := &api.Client{}
-	m := initialModel(client)
+	m := initialModel(client, false)
 
 	// Set input value
 	m.input.SetValue("test search")
@@ -568,7 +566,7 @@ func TestModelInputValue(t *testing.T) {
 
 func TestModelInputClearOnEsc(t *testing.T) {
 	client := &api.Client{}
-	m := initialModel(client)
+	m := initialModel(client, false)
 	m.input.SetValue("test")
 
 	msg := tea.KeyMsg{Type: tea.KeyEsc}
@@ -591,7 +589,7 @@ func TestModelStateTransitions(t *testing.T) {
 	defer testServer.Close()
 
 	client := api.NewClient(testServer.URL, "", 30)
-	m := initialModel(client)
+	m := initialModel(client, false)
 	m.width = 80
 	m.height = 24
 

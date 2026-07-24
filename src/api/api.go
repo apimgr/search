@@ -185,6 +185,8 @@ type APIResponse struct {
 	Error string `json:"error,omitempty"`
 	// Human-readable error message
 	Message string `json:"message,omitempty"`
+	// Optional structured error context (e.g., {"field":"email","rule":"format"}); omitted when empty per AI.md PART 14
+	Details map[string]interface{} `json:"details,omitempty"`
 	// Optional metadata (request_id, process_time_ms)
 	Meta *APIMeta `json:"meta,omitempty"`
 }
@@ -1895,7 +1897,6 @@ func (h *Handler) serveFaviconFallback(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusOK)
 	w.Write(data)
 }
-
 
 // requireOperator wraps a handler and rejects requests without a valid operator
 // bearer token. Per AI.md PART 14: operator-gated endpoints use Bearer auth.

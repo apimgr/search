@@ -26,6 +26,7 @@ const (
 	TaskGeoIPUpdate     TaskID = "geoip_update"
 	TaskBlocklistUpdate TaskID = "blocklist_update"
 	TaskCVEUpdate       TaskID = "cve_update"
+	TaskUpdateCheck     TaskID = "update_check"
 	TaskTokenCleanup    TaskID = "token_cleanup"
 	TaskLogRotation     TaskID = "log_rotation"
 	TaskBackupDaily     TaskID = "backup_daily"
@@ -307,6 +308,22 @@ func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
 		})
 	}
 
+	// Update Check - Daily at 06:00, skippable
+	// Per AI.md PART 18/22: notify-only check for a newer release; honors
+	// update.defer_days and stays notify-only unless update.auto_install is set.
+	if handlers.UpdateCheck != nil {
+		s.Register(&Task{
+			ID:          TaskUpdateCheck,
+			Name:        "Update Check",
+			Description: "Check release channel for a newer version (notify-only by default)",
+			Schedule:    "0 6 * * *",
+			TaskType:    TaskTypeGlobal,
+			Run:         handlers.UpdateCheck,
+			Skippable:   true,
+			Enabled:     true,
+		})
+	}
+
 	// Token Cleanup - Every 15 minutes, NOT skippable
 	if handlers.TokenCleanup != nil {
 		s.Register(&Task{
@@ -459,6 +476,7 @@ type TaskHandlers struct {
 	GeoIPUpdate     func(ctx context.Context) error
 	BlocklistUpdate func(ctx context.Context) error
 	CVEUpdate       func(ctx context.Context) error
+	UpdateCheck     func(ctx context.Context) error
 	TokenCleanup    func(ctx context.Context) error
 	LogRotation     func(ctx context.Context) error
 	BackupDaily     func(ctx context.Context) error

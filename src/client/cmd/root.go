@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/apimgr/search/src/client/clicfg"
 	"github.com/apimgr/search/src/client/path"
 	"github.com/apimgr/search/src/client/tui"
+	"github.com/apimgr/search/src/config"
 )
 
 // fatalVersionCh carries a non-nil error when the server mandates a newer CLI version.
@@ -179,7 +181,7 @@ func runTUI() error {
 	if err := initClient(); err != nil {
 		return fmt.Errorf("failed to initialize client: %w", err)
 	}
-	return tui.RunTUIApp(apiClient)
+	return tui.RunTUIApp(apiClient, clicfg.GetString("tui.theme"), debugMode)
 }
 
 // runSearch performs a search with the given query
@@ -229,13 +231,20 @@ func initClient() error {
 	// 3. Error with setup instructions
 	serverAddr, shouldSave := resolveServerAddress()
 	if serverAddr == "" {
-		return fmt.Errorf("no server configured; run %s to complete setup", getBinaryName())
+		return fmt.Errorf("%w: no server configured; run %s to complete setup", ErrConfiguration, getBinaryName())
 	}
 
 	// Per AI.md PART 32 line 41436-41469: Token sources (priority order)
 	tokenVal := getToken()
 
+	// Timeout resolution (highest to lowest): --timeout flag → SEARCH_SERVER_TIMEOUT env → server.timeout config → default.
+	// Per AI.md PART 32: env var mapping {PROJECT_NAME}_SERVER_TIMEOUT.
 	timeoutVal := clicfg.GetInt("server.timeout")
+	if envTimeout := os.Getenv("SEARCH_SERVER_TIMEOUT"); envTimeout != "" {
+		if n, err := strconv.Atoi(strings.TrimSpace(envTimeout)); err == nil && n > 0 {
+			timeoutVal = n
+		}
+	}
 	if timeout > 0 {
 		timeoutVal = timeout
 	}
@@ -246,6 +255,9 @@ func initClient() error {
 	api.ProjectName = ProjectName
 	api.Version = Version
 	apiClient = api.NewClient(serverAddr, tokenVal, timeoutVal)
+
+	// Per AI.md PART 32: debug mode enables verbose request/response tracing.
+	apiClient.SetDebug(debugMode)
 
 	// Set user context if provided
 	if userCtx != "" {
@@ -264,7 +276,7 @@ func initClient() error {
 }
 
 // resolveServerAddress resolves server address with priority order.
-// Per AI.md PART 32: priority is --server flag → SEARCH_SERVER env var → cli.yml → compiled default.
+// Per AI.md PART 32: priority is --server flag → SEARCH_SERVER_PRIMARY env var → cli.yml → compiled default.
 // Returns server address and whether to save it to config.
 func resolveServerAddress() (string, bool) {
 	// 1. --server flag (explicit override)
@@ -277,8 +289,8 @@ func resolveServerAddress() (string, bool) {
 		return server, currentPrimary == ""
 	}
 
-	// 2. SEARCH_SERVER environment variable
-	if envServer := os.Getenv("SEARCH_SERVER"); envServer != "" {
+	// 2. SEARCH_SERVER_PRIMARY environment variable
+	if envServer := os.Getenv("SEARCH_SERVER_PRIMARY"); envServer != "" {
 		return envServer, false
 	}
 
@@ -433,7 +445,7 @@ func executeArgs(args []string) error {
 	}
 
 	if err := rootCmd.flags.Parse(args); err != nil {
-		return err
+		return fmt.Errorf("%w: %v", ErrUsage, err)
 	}
 
 	// Initialize configuration (defaults, file, color, lang).
@@ -540,15 +552,25 @@ func initConfig() {
 	clicfg.SetDefault("debug", false)
 
 	clicfg.ReadInConfig()
+
+	// Per AI.md PART 32: apply --debug/SEARCH_DEBUG priority chain.
+	// Debug mode enables verbose request/response tracing and TUI resize logging.
+	applyDebugMode()
 }
 
 func getBinaryName() string {
 	return filepath.Base(os.Args[0])
 }
 
+// getOutputFormat resolves the output format (highest to lowest priority):
+// --output flag → SEARCH_OUTPUT_FORMAT env → output.format config.
+// Per AI.md PART 32: env var mapping {PROJECT_NAME}_OUTPUT_FORMAT.
 func getOutputFormat() string {
 	if output != "" {
 		return output
+	}
+	if envFormat := os.Getenv("SEARCH_OUTPUT_FORMAT"); envFormat != "" {
+		return strings.TrimSpace(envFormat)
 	}
 	return clicfg.GetString("output.format")
 }
@@ -585,4 +607,35 @@ func applyColorMode() {
 	}
 
 	os.Setenv("SEARCH_COLOR", resolved)
+}
+
+// applyDebugMode applies the --debug/SEARCH_DEBUG priority chain per AI.md PART 32.
+// Priority: --debug flag → SEARCH_DEBUG env var → config debug key → default false.
+// Sets SEARCH_DEBUG env so downstream packages (api client, TUI) pick it up.
+func applyDebugMode() bool {
+	resolved := debugMode
+
+	// 2. SEARCH_DEBUG env var (only when --debug flag not explicitly set).
+	if !resolved {
+		if envDebug := os.Getenv("SEARCH_DEBUG"); envDebug != "" {
+			parsed, err := config.ParseBool(envDebug, false)
+			if err == nil {
+				resolved = parsed
+			}
+		}
+	}
+
+	// 3. Config file: debug key.
+	if !resolved {
+		resolved = clicfg.GetBool("debug")
+	}
+
+	if resolved {
+		os.Setenv("SEARCH_DEBUG", "1")
+	} else {
+		os.Setenv("SEARCH_DEBUG", "0")
+	}
+
+	debugMode = resolved
+	return resolved
 }

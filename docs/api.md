@@ -4,14 +4,39 @@ Search provides both REST and GraphQL APIs for programmatic access.
 
 ## Endpoints
 
-| Endpoint | Description |
-|----------|-------------|
-| `/healthz` | Health check page |
-| `/openapi` | Swagger UI |
-| `/openapi.json` | OpenAPI specification (JSON) |
-| `/graphql` | GraphQL endpoint (GET=GraphiQL, POST=queries) |
-| `/metrics` | Prometheus metrics |
-| `/api/v1/` | REST API |
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/` | — | Versioned REST API root |
+| `/healthz` | GET | Public health check |
+| `/openapi` | GET | Swagger UI |
+| `/openapi.json` | GET | OpenAPI specification (JSON) |
+| `/server/docs/graphql` | GET | GraphiQL interactive explorer |
+| `/api/graphql` | POST | GraphQL queries (unversioned alias) |
+| `/api/v1/server/graphql` | POST | GraphQL queries (versioned canonical) |
+| `/server/metrics` | GET | Prometheus metrics (operator token when configured) |
+
+### Public docs routes
+
+Interactive API documentation is served under the `/server/docs/*` and OpenAPI
+namespaces:
+
+| Route | Method | Description |
+|-------|--------|-------------|
+| `/openapi` | GET | Swagger UI |
+| `/openapi.json` | GET | OpenAPI 3 specification |
+| `/server/docs/graphql` | GET | GraphiQL explorer (POSTs to `/api/graphql`) |
+
+### Unversioned aliases
+
+Convenience aliases that map to the canonical versioned handlers:
+
+| Alias | Canonical | Description |
+|-------|-----------|-------------|
+| `/api/healthz` | `/api/v1/server/healthz` | Health check |
+| `/api/v1/healthz` | `/api/v1/server/healthz` | Health check |
+| `/api/v1/healthz.txt` | `/api/v1/server/healthz` | Health check (plain text) |
+| `/api/graphql` | `/api/v1/server/graphql` | GraphQL query endpoint |
+| `/api/autodiscover` | — | Machine-readable server metadata (see [Integrations](integrations.md)) |
 
 ## REST API
 
@@ -88,6 +113,32 @@ curl "https://search.example.com/api/v1/autocomplete?q=priv"
   ]
 }
 ```
+
+### Other Public Endpoints
+
+The following read-only endpoints are available under `/api/v1/` without
+authentication. Each returns the canonical `{"ok": true, "data": {...}}`
+envelope (with `.txt` variants returning plain text where noted).
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/info` (`/api/v1/info.txt`) | GET | Server info and capabilities |
+| `/api/v1/search/related` | GET | Related searches for a query (`q`) |
+| `/api/v1/instant` | GET | Instant answer for a query (`q`) |
+| `/api/v1/direct/*` | GET | Full-page direct answers (calculator, conversions, etc.) |
+| `/api/v1/categories` | GET | Available search categories |
+| `/api/v1/engines` | GET | Search engine list and health |
+| `/api/v1/engines/{id}` | GET | Details for a single engine |
+| `/api/v1/bangs` | GET | Bang shortcut definitions (filter with `category`) |
+| `/api/v1/widgets` | GET | Available instant-answer widgets (filter with `category`) |
+| `/api/v1/widgets/{id}` | GET | Data for a single widget (e.g. `clock`, `weather`) |
+| `/api/v1/preferences` | GET | Default user preferences |
+| `/api/v1/favicon` | GET | Privacy-preserving favicon proxy (`url` param) |
+| `/api/v1/server/about` | GET | Server about page (JSON) |
+| `/api/v1/server/privacy` | GET | Privacy policy (JSON) |
+| `/api/v1/server/terms` | GET | Terms of service (JSON) |
+| `/api/v1/server/help` | GET | Help content (JSON) |
+| `/api/v1/server/contact` | GET | Contact information (JSON) |
 
 ### Search Alerts
 
@@ -220,12 +271,23 @@ List available backups.
 
 Create a new backup.
 
+### Status & Config
+
+#### `GET /api/v1/server/status`
+
+Return detailed server status (operator token required).
+
+#### `GET /api/v1/server/config`
+
+Return the effective configuration with secrets masked (operator token required).
+
 ## GraphQL API
 
-Access the GraphQL endpoint at `/graphql`:
+GraphQL uses separate endpoints for the interactive UI and for queries:
 
-- **GET**: Opens GraphiQL (interactive IDE)
-- **POST**: Execute GraphQL queries
+- **GraphiQL UI** — `GET /server/docs/graphql` (interactive explorer)
+- **Queries** — `POST /api/graphql` (unversioned alias) or
+  `POST /api/v1/server/graphql` (versioned canonical)
 
 Search alert management is currently exposed through the REST API only.
 

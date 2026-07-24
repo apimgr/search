@@ -25,6 +25,7 @@ func main() {
 	}
 
 	if err := cmd.ExecuteClientCLI(); err != nil {
-		os.Exit(1)
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(cmd.ExitCodeForError(err))
 	}
 }

@@ -129,6 +129,25 @@ search:
 
 These settings control accountless search alert creation limits, webhook retry and backoff behavior, how long previously seen alert results are retained for deduplication, and which delivery options are enabled by default in the alert UI.
 
+### Metrics
+
+```yaml
+server:
+  metrics:
+    # Disabled by default
+    enabled: false
+    # Endpoint path (operator-only; keep off the public internet)
+    endpoint: /server/metrics
+    # Include CPU/memory/disk metrics
+    include_system: true
+    # Include Go runtime metrics
+    include_runtime: true
+    # Bearer token for scrape auth (empty = no auth)
+    token: ""
+```
+
+See [Integrations](integrations.md) for a Prometheus scrape example.
+
 ### Image Proxy
 
 ```yaml

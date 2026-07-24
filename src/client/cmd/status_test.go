@@ -248,7 +248,7 @@ func TestRunStatusInitClientError(t *testing.T) {
 	server = ""
 	apiClient = nil
 	// Clear env and compiled default so that no server is found
-	t.Setenv("SEARCH_SERVER", "")
+	t.Setenv("SEARCH_SERVER_PRIMARY", "")
 	savedSite := OfficialSite
 	OfficialSite = ""
 	defer func() { OfficialSite = savedSite }()

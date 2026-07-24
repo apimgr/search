@@ -12,6 +12,7 @@ import (
 
 	"github.com/apimgr/search/src/api"
 	"github.com/apimgr/search/src/common/httputil"
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/version"
 )
 
@@ -264,7 +265,7 @@ func (s *Server) handlePreferencesSave(w http.ResponseWriter, r *http.Request) {
 // selection in a server-side cookie, then redirects back to /preferences.
 func (s *Server) handleWidgetPreferencesSave(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		http.Error(w, i18n.RequestString(r, "errors.bad_request"), http.StatusBadRequest)
 		return
 	}
 

@@ -2,8 +2,10 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"runtime"
@@ -11,6 +13,17 @@ import (
 	"time"
 
 	searchapi "github.com/apimgr/search/src/api"
+)
+
+// Sentinel errors used by callers (see cmd.ExitCodeForError) to select the
+// CLI process exit code. Per AI.md PART 32 Exit Codes table.
+var (
+	// ErrConnection indicates the client could not reach the server (exit 3).
+	ErrConnection = errors.New("cannot connect to server")
+	// ErrAuthentication indicates the server rejected the credentials (exit 4).
+	ErrAuthentication = errors.New("authentication failed")
+	// ErrNotFound indicates the requested resource does not exist (exit 5).
+	ErrNotFound = errors.New("resource not found")
 )
 
 // ProjectName is set at build time - used for User-Agent
@@ -27,6 +40,9 @@ type Client struct {
 	// Per AI.md PART 32: --user flag for user/org context
 	UserContext string
 	HTTPClient  *http.Client
+	// Debug enables verbose request/response tracing to stderr.
+	// Per AI.md PART 32 debug-mode example: log.Printf-style diagnostics.
+	Debug bool
 }
 
 // NewClient creates a new API client
@@ -538,7 +554,7 @@ func (c *Client) GetInstantAnswer(query string) (*InstantAnswer, error) {
 
 // GetDirectAnswer fetches a direct answer for a slug from GET /api/v1/direct/{slug}
 func (c *Client) GetDirectAnswer(slug string) (*DirectAnswer, error) {
-	resp, err := c.get(searchapi.APIPrefix + "/direct/" + slug)
+	resp, err := c.get(searchapi.APIPrefix + "/direct/" + url.PathEscape(slug))
 	if err != nil {
 		return nil, err
 	}
@@ -720,6 +736,12 @@ func (c *Client) SetUserContext(ctx string) {
 	c.UserContext = ctx
 }
 
+// SetDebug enables or disables verbose request/response tracing to stderr.
+// Per AI.md PART 32: debug mode mirrors the TUI's log.Printf diagnostic pattern.
+func (c *Client) SetDebug(debug bool) {
+	c.Debug = debug
+}
+
 // CLIBinaryInfo holds the version and SHA-256 checksum for a CLI binary platform.
 // Per AI.md PART 32: cli_versions in autodiscover response, keyed by "{os}-{arch}".
 type CLIBinaryInfo struct {
@@ -805,15 +827,37 @@ func (c *Client) doRequest(method, path string, body interface{}) (*http.Respons
 		req.Header.Set("Authorization", "Bearer "+c.Token)
 	}
 
+	if c.Debug {
+		log.Printf("debug: request %s %s", method, req.URL.String())
+	}
+
+	start := time.Now()
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		if c.Debug {
+			log.Printf("debug: request %s %s failed after %s: %v", method, req.URL.String(), time.Since(start), err)
+		}
+		return nil, fmt.Errorf("%w: %v", ErrConnection, err)
+	}
+
+	if c.Debug {
+		log.Printf("debug: response %s %s -> %d in %s", method, req.URL.String(), resp.StatusCode, time.Since(start))
 	}
 
 	if resp.StatusCode >= 400 {
 		bodyData, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		return nil, fmt.Errorf("server error %d: %s", resp.StatusCode, string(bodyData))
+
+		// Map specific HTTP statuses to sentinel errors so callers can
+		// derive the correct process exit code per AI.md PART 32.
+		switch resp.StatusCode {
+		case http.StatusUnauthorized, http.StatusForbidden:
+			return nil, fmt.Errorf("%w: server returned %d: %s", ErrAuthentication, resp.StatusCode, string(bodyData))
+		case http.StatusNotFound:
+			return nil, fmt.Errorf("%w: server returned %d: %s", ErrNotFound, resp.StatusCode, string(bodyData))
+		default:
+			return nil, fmt.Errorf("server error %d: %s", resp.StatusCode, string(bodyData))
+		}
 	}
 
 	return resp, nil

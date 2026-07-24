@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -601,8 +602,8 @@ func TestDoRequestConnectionRefused(t *testing.T) {
 	if err == nil {
 		t.Error("doRequest() should return error for connection refused")
 	}
-	if !strings.Contains(err.Error(), "request failed") {
-		t.Errorf("error = %q, want to contain 'request failed'", err.Error())
+	if !errors.Is(err, ErrConnection) {
+		t.Errorf("error = %q, want errors.Is(err, ErrConnection)", err.Error())
 	}
 }
 

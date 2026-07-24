@@ -13,7 +13,7 @@
         <input type="hidden" name="category" id="categoryInput" value="{{default "general" .Category}}">
         {{if .PrefsQuery}}<input type="hidden" name="prefs" value="{{.PrefsQuery}}">{{end}}
         <div class="search-box">
-            <input type="text" name="q" id="searchQuery" placeholder="{{t "home.search_placeholder"}}" autofocus required autocomplete="off" class="search-input">
+            <input type="text" name="q" id="searchQuery" placeholder="{{t "home.search_placeholder"}}" aria-label="{{t "common.search"}}" autofocus required autocomplete="off" class="search-input">
             <button type="button" class="advanced-search-trigger" aria-label="{{t "search.advanced"}}" id="advancedSearchBtn">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="11" cy="8" r="2"></circle>
