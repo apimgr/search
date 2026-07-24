@@ -305,7 +305,6 @@ func (t *TorService) StartTorService() error {
 	keyPath := filepath.Join(t.dataDir, "site", "hs_ed25519_secret_key")
 
 	// Per AI.md PART 32: torrc is PERSISTENT — only create if it doesn't exist.
-	// Admin panel config saves use updateTorrc() to overwrite.
 	if _, err := os.Stat(torrcPath); os.IsNotExist(err) {
 		torrcContent := t.getTorConfig()
 		if err := os.WriteFile(torrcPath, []byte(torrcContent), 0600); err != nil {
