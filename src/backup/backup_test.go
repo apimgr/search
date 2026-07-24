@@ -3788,3 +3788,187 @@ func TestManagerListWithMetadataContents(t *testing.T) {
 		t.Error("FileCount should be populated from metadata")
 	}
 }
+
+// Tests for VerifyBackup content extraction and database integrity checks
+// Per AI.md PART 21: Content extraction and Database integrity are Fatal checks.
+
+// sqliteHeader is the canonical SQLite file-format magic header (16 bytes).
+const sqliteHeader = "SQLite format 3\x00"
+
+// createTarGzWithFiles builds an in-memory tar.gz archive from name->content
+// pairs, always including a valid manifest.json so manifest verification
+// passes independently of the content/database checks under test.
+func createTarGzWithFiles(t *testing.T, files map[string][]byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	gzWriter := gzip.NewWriter(&buf)
+	tarWriter := tar.NewWriter(gzWriter)
+
+	manifest := []byte(`{"version":"1.0.0"}`)
+	if err := tarWriter.WriteHeader(&tar.Header{Name: "manifest.json", Size: int64(len(manifest)), Mode: 0644}); err != nil {
+		t.Fatalf("WriteHeader(manifest.json) error = %v", err)
+	}
+	if _, err := tarWriter.Write(manifest); err != nil {
+		t.Fatalf("Write(manifest.json) error = %v", err)
+	}
+
+	for name, content := range files {
+		if err := tarWriter.WriteHeader(&tar.Header{Name: name, Size: int64(len(content)), Mode: 0644}); err != nil {
+			t.Fatalf("WriteHeader(%s) error = %v", name, err)
+		}
+		if _, err := tarWriter.Write(content); err != nil {
+			t.Fatalf("Write(%s) error = %v", name, err)
+		}
+	}
+
+	if err := tarWriter.Close(); err != nil {
+		t.Fatalf("tarWriter.Close() error = %v", err)
+	}
+	if err := gzWriter.Close(); err != nil {
+		t.Fatalf("gzWriter.Close() error = %v", err)
+	}
+	return buf.Bytes()
+}
+
+func TestManagerVerifyBackupContentAndDatabaseChecks(t *testing.T) {
+	tests := []struct {
+		name              string
+		files             map[string][]byte
+		corruptGzip       bool
+		wantContentValid  bool
+		wantDatabaseValid bool
+		wantErrSubstring  string
+	}{
+		{
+			name: "valid server.db passes both checks",
+			files: map[string][]byte{
+				"data/server.db": []byte(sqliteHeader + "rest of valid sqlite content"),
+			},
+			wantContentValid:  true,
+			wantDatabaseValid: true,
+		},
+		{
+			name:              "no server.db present is not fatal",
+			files:             map[string][]byte{"config/server.yml": []byte("title: test")},
+			wantContentValid:  true,
+			wantDatabaseValid: true,
+		},
+		{
+			name: "invalid server.db fails database integrity check",
+			files: map[string][]byte{
+				"data/server.db": []byte("not a sqlite file at all"),
+			},
+			wantContentValid:  true,
+			wantDatabaseValid: false,
+			wantErrSubstring:  "database integrity check failed: server.db is not a valid SQLite file",
+		},
+		{
+			name: "truncated server.db header fails database integrity check",
+			files: map[string][]byte{
+				"data/server.db": []byte("short"),
+			},
+			wantContentValid:  true,
+			wantDatabaseValid: false,
+			wantErrSubstring:  "database integrity check failed: server.db is not a valid SQLite file",
+		},
+		{
+			name:              "unsafe path in archive fails content extraction",
+			files:             map[string][]byte{"../evil.txt": []byte("escape attempt")},
+			wantContentValid:  false,
+			wantDatabaseValid: true,
+			wantErrSubstring:  "unsafe path in archive",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			backupPath := filepath.Join(tempDir, "backup.tar.gz")
+			os.WriteFile(backupPath, createTarGzWithFiles(t, tt.files), 0644)
+
+			m := NewManager()
+			result, err := m.VerifyBackup(backupPath)
+			if err != nil {
+				t.Fatalf("VerifyBackup() error = %v", err)
+			}
+
+			if result.ContentValid != tt.wantContentValid {
+				t.Errorf("ContentValid = %v, want %v (errors: %v)", result.ContentValid, tt.wantContentValid, result.Errors)
+			}
+			if result.DatabaseValid != tt.wantDatabaseValid {
+				t.Errorf("DatabaseValid = %v, want %v (errors: %v)", result.DatabaseValid, tt.wantDatabaseValid, result.Errors)
+			}
+			if tt.wantErrSubstring != "" {
+				found := false
+				for _, e := range result.Errors {
+					if strings.Contains(e, tt.wantErrSubstring) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("Errors = %v, want an entry containing %q", result.Errors, tt.wantErrSubstring)
+				}
+			}
+		})
+	}
+}
+
+func TestManagerVerifyBackupCorruptedTarStreamFailsContentCheck(t *testing.T) {
+	tempDir := t.TempDir()
+	backupPath := filepath.Join(tempDir, "backup.tar.gz")
+
+	// Valid gzip stream wrapping a truncated/corrupted tar stream.
+	var buf bytes.Buffer
+	gzWriter := gzip.NewWriter(&buf)
+	if _, err := gzWriter.Write([]byte("not a valid tar stream")); err != nil {
+		t.Fatalf("gzWriter.Write() error = %v", err)
+	}
+	if err := gzWriter.Close(); err != nil {
+		t.Fatalf("gzWriter.Close() error = %v", err)
+	}
+	os.WriteFile(backupPath, buf.Bytes(), 0644)
+
+	m := NewManager()
+	result, err := m.VerifyBackup(backupPath)
+	if err != nil {
+		t.Fatalf("VerifyBackup() error = %v", err)
+	}
+
+	if result.ContentValid {
+		t.Error("ContentValid should be false for a corrupted tar stream")
+	}
+	if result.AllPassed {
+		t.Error("AllPassed should be false when content extraction fails")
+	}
+}
+
+func TestIsValidSQLiteFile(t *testing.T) {
+	tests := []struct {
+		name    string
+		content []byte
+		want    bool
+	}{
+		{"valid sqlite header", []byte(sqliteHeader + "trailing bytes"), true},
+		{"exact 16-byte header only", []byte(sqliteHeader), true},
+		{"wrong magic bytes", []byte("not a sqlite header at all!!!!!"), false},
+		{"too short to contain header", []byte("short"), false},
+		{"empty file", []byte{}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			path := filepath.Join(tempDir, "server.db")
+			os.WriteFile(path, tt.content, 0644)
+
+			if got := isValidSQLiteFile(path); got != tt.want {
+				t.Errorf("isValidSQLiteFile() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+
+	if isValidSQLiteFile(filepath.Join(t.TempDir(), "does-not-exist.db")) {
+		t.Error("isValidSQLiteFile() should be false for a nonexistent file")
+	}
+}

@@ -88,7 +88,7 @@ func (m *Manager) Create(filename string) (string, error) {
 	}
 
 	// Generate filename if not specified
-	// Per AI.md PART 22: Format is search_backup_YYYY-MM-DD_HHMMSS.tar.gz
+	// Per AI.md PART 21: Format is search_backup_YYYY-MM-DD_HHMMSS.tar.gz
 	if filename == "" {
 		filename = fmt.Sprintf("search_backup_%s.tar.gz", time.Now().Format("2006-01-02_150405"))
 	}
@@ -517,8 +517,8 @@ func (m *Manager) ScheduledBackup(keepCount int) error {
 	return nil
 }
 
-// RetentionPolicy defines backup retention rules per AI.md PART 22
-// Per AI.md PART 22: Retention policies (count, day, week, month, year)
+// RetentionPolicy defines backup retention rules per AI.md PART 21
+// Per AI.md PART 21: Retention policies (count, day, week, month, year)
 type RetentionPolicy struct {
 	// Number of backups to keep
 	Count int `json:"count" yaml:"count"`
@@ -533,7 +533,7 @@ type RetentionPolicy struct {
 }
 
 // DefaultRetentionPolicy returns the default retention policy
-// Per AI.md PART 22: Reasonable defaults
+// Per AI.md PART 21: Reasonable defaults
 func DefaultRetentionPolicy() RetentionPolicy {
 	return RetentionPolicy{
 		// Keep at least 10 backups
@@ -550,7 +550,7 @@ func DefaultRetentionPolicy() RetentionPolicy {
 }
 
 // ApplyRetention applies retention policy to backups
-// Per AI.md PART 22: Smart retention with daily/weekly/monthly/yearly buckets
+// Per AI.md PART 21: Smart retention with daily/weekly/monthly/yearly buckets
 func (m *Manager) ApplyRetention(policy RetentionPolicy) error {
 	backups, err := m.List()
 	if err != nil {
@@ -619,7 +619,7 @@ func (m *Manager) ApplyRetention(policy RetentionPolicy) error {
 }
 
 // CreateEncrypted creates an encrypted backup with .enc extension
-// Per AI.md PART 22: .enc extension for encrypted backups
+// Per AI.md PART 21: .enc extension for encrypted backups
 func (m *Manager) CreateEncrypted(filename string) (string, error) {
 	if m.password == "" {
 		return "", fmt.Errorf("encryption password not set - use SetPassword() or BACKUP_PASSWORD env var")
@@ -645,7 +645,7 @@ func (m *Manager) CreateEncrypted(filename string) (string, error) {
 		return "", fmt.Errorf("failed to encrypt backup: %w", err)
 	}
 
-	// Create encrypted file with .enc extension per AI.md PART 22
+	// Create encrypted file with .enc extension per AI.md PART 21
 	encryptedPath := backupPath + ".enc"
 	if err := os.WriteFile(encryptedPath, encrypted, 0600); err != nil {
 		os.Remove(backupPath)
@@ -659,7 +659,7 @@ func (m *Manager) CreateEncrypted(filename string) (string, error) {
 }
 
 // RestoreEncrypted restores from an encrypted backup (.enc extension)
-// Per AI.md PART 22: .enc extension for encrypted backups
+// Per AI.md PART 21: .enc extension for encrypted backups
 func (m *Manager) RestoreEncrypted(backupPath string) error {
 	if m.password == "" {
 		return fmt.Errorf("decryption password not set - use SetPassword() or BACKUP_PASSWORD env var")
@@ -700,18 +700,20 @@ func (m *Manager) RestoreEncrypted(backupPath string) error {
 }
 
 // IsEncrypted checks if a backup file is encrypted (has .enc extension)
-// Per AI.md PART 22: .enc extension for encrypted backups
+// Per AI.md PART 21: .enc extension for encrypted backups
 func IsEncrypted(backupPath string) bool {
 	return strings.HasSuffix(backupPath, ".enc")
 }
 
 // VerificationResult contains the results of backup verification
-// Per AI.md PART 22: Backup verification is NON-NEGOTIABLE
+// Per AI.md PART 21: Backup verification is NON-NEGOTIABLE
 type VerificationResult struct {
 	FileExists    bool `json:"file_exists"`
 	SizeValid     bool `json:"size_valid"`
 	ChecksumValid bool `json:"checksum_valid"`
 	ManifestValid bool `json:"manifest_valid"`
+	ContentValid  bool `json:"content_valid"`
+	DatabaseValid bool `json:"database_valid"`
 	// Only for encrypted backups
 	DecryptValid bool     `json:"decrypt_valid"`
 	AllPassed    bool     `json:"all_passed"`
@@ -719,11 +721,13 @@ type VerificationResult struct {
 }
 
 // VerifyBackup verifies backup integrity immediately after creation
-// Per AI.md PART 22 (NON-NEGOTIABLE):
+// Per AI.md PART 21 (NON-NEGOTIABLE):
 // - File exists
 // - Size > 0
 // - Checksum valid
 // - Manifest readable
+// - Content extraction (test extract all files to temp dir)
+// - Database integrity (verify SQLite is valid, if present)
 // - Decrypt test (if encrypted)
 func (m *Manager) VerifyBackup(backupPath string) (*VerificationResult, error) {
 	result := &VerificationResult{
@@ -802,10 +806,116 @@ func (m *Manager) VerifyBackup(backupPath string) (*VerificationResult, error) {
 		}
 	}
 
+	// Check 5 & 6: Content extraction and database integrity
+	contentValid, databaseValid, contentErrs := m.verifyContentAndDatabase(dataToVerify)
+	result.ContentValid = contentValid
+	result.DatabaseValid = databaseValid
+	result.Errors = append(result.Errors, contentErrs...)
+
 	// Determine overall result
-	result.AllPassed = result.FileExists && result.SizeValid && result.ChecksumValid && result.ManifestValid && result.DecryptValid
+	result.AllPassed = result.FileExists && result.SizeValid && result.ChecksumValid && result.ManifestValid &&
+		result.ContentValid && result.DatabaseValid && result.DecryptValid
 
 	return result, nil
+}
+
+// verifyContentAndDatabase test-extracts every file in the backup archive to a
+// temp dir and validates any embedded server.db as a well-formed SQLite file.
+// Per AI.md PART 21: Content extraction and Database integrity are Fatal checks.
+// Absence of a database file in the archive is not fatal (first-run/empty DB).
+func (m *Manager) verifyContentAndDatabase(data []byte) (contentValid bool, databaseValid bool, errs []string) {
+	contentValid = true
+	databaseValid = true
+
+	base := filepath.Join(os.TempDir(), "apimgr")
+	if err := os.MkdirAll(base, 0755); err != nil {
+		return false, true, []string{fmt.Sprintf("content extraction failed: %v", err)}
+	}
+	extractDir, err := os.MkdirTemp(base, "search-verify-")
+	if err != nil {
+		return false, true, []string{fmt.Sprintf("content extraction failed: %v", err)}
+	}
+	defer os.RemoveAll(extractDir)
+
+	reader := bytes.NewReader(data)
+	gzReader, err := gzip.NewReader(reader)
+	if err != nil {
+		return false, true, []string{fmt.Sprintf("content extraction failed: invalid gzip format: %v", err)}
+	}
+	defer gzReader.Close()
+
+	tarReader := tar.NewReader(gzReader)
+
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			contentValid = false
+			errs = append(errs, fmt.Sprintf("content extraction failed: error reading tar: %v", err))
+			break
+		}
+
+		cleanName := filepath.Clean(header.Name)
+		if cleanName == ".." || strings.HasPrefix(cleanName, "../") || strings.HasPrefix(cleanName, string(os.PathSeparator)) {
+			contentValid = false
+			errs = append(errs, fmt.Sprintf("content extraction failed: unsafe path in archive: %s", header.Name))
+			continue
+		}
+		targetPath := filepath.Join(extractDir, cleanName)
+
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(targetPath, 0755); err != nil {
+				contentValid = false
+				errs = append(errs, fmt.Sprintf("content extraction failed: %v", err))
+			}
+		case tar.TypeReg:
+			if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+				contentValid = false
+				errs = append(errs, fmt.Sprintf("content extraction failed: %v", err))
+				continue
+			}
+			out, err := os.OpenFile(targetPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+			if err != nil {
+				contentValid = false
+				errs = append(errs, fmt.Sprintf("content extraction failed: %v", err))
+				continue
+			}
+			if _, err := io.Copy(out, tarReader); err != nil {
+				contentValid = false
+				errs = append(errs, fmt.Sprintf("content extraction failed: %v", err))
+			}
+			out.Close()
+
+			if filepath.Base(cleanName) == "server.db" {
+				if !isValidSQLiteFile(targetPath) {
+					databaseValid = false
+					errs = append(errs, "database integrity check failed: server.db is not a valid SQLite file")
+				}
+			}
+		}
+	}
+
+	return contentValid, databaseValid, errs
+}
+
+// isValidSQLiteFile checks whether the file at path begins with the SQLite
+// format magic header.
+func isValidSQLiteFile(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+
+	header := make([]byte, 16)
+	n, err := f.Read(header)
+	if err != nil || n < 16 {
+		return false
+	}
+	return string(header) == "SQLite format 3\x00"
 }
 
 // verifyManifestFromData extracts and parses manifest from backup data
@@ -839,7 +949,7 @@ func (m *Manager) verifyManifestFromData(data []byte) (*BackupMetadata, error) {
 }
 
 // CreateAndVerify creates a backup and verifies it immediately
-// Per AI.md PART 22: Only delete old backups if new backup passes ALL verification checks
+// Per AI.md PART 21: Only delete old backups if new backup passes ALL verification checks
 func (m *Manager) CreateAndVerify(filename string) (string, *VerificationResult, error) {
 	// Create the backup
 	backupPath, err := m.Create(filename)
@@ -856,7 +966,7 @@ func (m *Manager) CreateAndVerify(filename string) (string, *VerificationResult,
 	}
 
 	if !result.AllPassed {
-		// Verification failed - delete the failed backup per AI.md PART 22
+		// Verification failed - delete the failed backup per AI.md PART 21
 		os.Remove(backupPath)
 		return "", result, fmt.Errorf("backup verification failed: %v", result.Errors)
 	}
@@ -865,7 +975,7 @@ func (m *Manager) CreateAndVerify(filename string) (string, *VerificationResult,
 }
 
 // CreateEncryptedAndVerify creates an encrypted backup and verifies it
-// Per AI.md PART 22: All encrypted backups must pass decrypt test
+// Per AI.md PART 21: All encrypted backups must pass decrypt test
 func (m *Manager) CreateEncryptedAndVerify(filename string) (string, *VerificationResult, error) {
 	// Create encrypted backup
 	backupPath, err := m.CreateEncrypted(filename)
@@ -889,7 +999,7 @@ func (m *Manager) CreateEncryptedAndVerify(filename string) (string, *Verificati
 }
 
 // ScheduledBackupWithVerification performs a scheduled backup with verification
-// Per AI.md PART 22: Only delete old backups if new backup passes ALL verification checks
+// Per AI.md PART 21: Only delete old backups if new backup passes ALL verification checks
 func (m *Manager) ScheduledBackupWithVerification(keepCount int) error {
 	// Create and verify new backup
 	backupPath, result, err := m.CreateAndVerify("")
