@@ -3,13 +3,17 @@ package main
 import (
 	"context"
 	cryptoRand "crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -1055,6 +1059,31 @@ func runService(action string) {
 	}
 }
 
+// authorizeRestore implements the AI.md PART 21 restore authorization tiers:
+// first-run (empty database) and root are always allowed; the service user
+// must present a valid operator token; every other caller is denied. It is a
+// pure function so the tiering can be unit tested without real root/user state.
+func authorizeRestore(isFirstRun, isRoot, isServiceUser bool, expectedToken, presentedToken string) error {
+	switch {
+	case isFirstRun:
+		return nil
+	case isRoot:
+		return nil
+	case isServiceUser:
+		if expectedToken == "" {
+			return errors.New("no operator token is configured")
+		}
+		expectedSum := sha256.Sum256([]byte(expectedToken))
+		presentedSum := sha256.Sum256([]byte(presentedToken))
+		if presentedToken == "" || subtle.ConstantTimeCompare(expectedSum[:], presentedSum[:]) != 1 {
+			return errors.New("invalid operator token")
+		}
+		return nil
+	default:
+		return errors.New("this operation requires root or the operator token")
+	}
+}
+
 // readBackupPassword resolves the backup encryption password for CLI use.
 // Per AI.md PART 21: the CLI has no password flag (a flag would leak the
 // password via shell history and process lists) — BACKUP_PASSWORD remains
@@ -1168,6 +1197,36 @@ func runMaintenance(action string) {
 			return
 		}
 		filename := os.Args[3]
+
+		// Per AI.md PART 21 Restore Authorization: restore is destructive and requires
+		// authorization — database empty (first-run) or root is allowed; the service
+		// user needs the operator token (server.token); any other user is denied.
+		authCfg, err := config.Initialize()
+		if err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to load config: %v\n", err)
+			exitFunc(1)
+			return
+		}
+		isFirstRun := authCfg.IsFirstRun()
+		isRoot := config.IsPrivileged()
+		isServiceUser := false
+		if currentUser, userErr := user.Current(); userErr == nil {
+			isServiceUser = currentUser.Username == "search"
+		}
+
+		// Only the service-user tier requires an interactive prompt; the other
+		// tiers are decided without any further input.
+		var presentedToken string
+		if isServiceUser && !isFirstRun && !isRoot {
+			presentedToken = readBackupPassword("Enter operator token: ")
+		}
+
+		if authErr := authorizeRestore(isFirstRun, isRoot, isServiceUser, authCfg.Server.Token, presentedToken); authErr != nil {
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " Restore denied: " + authErr.Error())
+			exitFunc(1)
+			return
+		}
+
 		fmt.Printf("Restoring from: %s\n", filename)
 
 		// Per AI.md PART 21: the CLI prompts "Enter backup password:" when the

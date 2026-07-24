@@ -308,6 +308,96 @@ func TestMainShellDispatch(t *testing.T) {
 }
 
 // ============================================================
+// authorizeRestore — restore authorization tiers (AI.md PART 21)
+// ============================================================
+
+// TestAuthorizeRestore covers every restore authorization tier: first-run,
+// root, service-user with a valid/invalid/missing token, and any other user.
+func TestAuthorizeRestore(t *testing.T) {
+	const expectedToken = "correct-operator-token"
+
+	tests := []struct {
+		name            string
+		isFirstRun      bool
+		isRoot          bool
+		isServiceUser   bool
+		expectedToken   string
+		presentedToken  string
+		wantErr         bool
+		wantErrContains string
+	}{
+		{
+			name:       "first run is always allowed",
+			isFirstRun: true,
+		},
+		{
+			name:   "root is always allowed",
+			isRoot: true,
+		},
+		{
+			name:           "service user with matching token is allowed",
+			isServiceUser:  true,
+			expectedToken:  expectedToken,
+			presentedToken: expectedToken,
+		},
+		{
+			name:            "service user with wrong token is denied",
+			isServiceUser:   true,
+			expectedToken:   expectedToken,
+			presentedToken:  "wrong-token",
+			wantErr:         true,
+			wantErrContains: "invalid operator token",
+		},
+		{
+			name:            "service user with empty presented token is denied",
+			isServiceUser:   true,
+			expectedToken:   expectedToken,
+			presentedToken:  "",
+			wantErr:         true,
+			wantErrContains: "invalid operator token",
+		},
+		{
+			name:            "service user with no token configured is denied",
+			isServiceUser:   true,
+			expectedToken:   "",
+			presentedToken:  "anything",
+			wantErr:         true,
+			wantErrContains: "no operator token is configured",
+		},
+		{
+			name:            "random user is denied",
+			isFirstRun:      false,
+			isRoot:          false,
+			isServiceUser:   false,
+			wantErr:         true,
+			wantErrContains: "this operation requires root or the operator token",
+		},
+		{
+			name:          "first run wins even if also service user",
+			isFirstRun:    true,
+			isServiceUser: true,
+			expectedToken: expectedToken,
+		},
+		{
+			name:   "root wins even without a configured token",
+			isRoot: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := authorizeRestore(tt.isFirstRun, tt.isRoot, tt.isServiceUser, tt.expectedToken, tt.presentedToken)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("authorizeRestore() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr && !strings.Contains(err.Error(), tt.wantErrContains) {
+				t.Errorf("authorizeRestore() error = %q, want substring %q", err.Error(), tt.wantErrContains)
+			}
+		})
+	}
+}
+
+// ============================================================
 // runMaintenance — restore with file provided
 // ============================================================
 
@@ -337,8 +427,11 @@ func TestRunMaintenanceRestoreFileCancelNoPassword(t *testing.T) {
 	}
 }
 
-// TestRunMaintenanceRestoreFileWithPasswordCancel covers the 2 additional stmts
-// when BACKUP_PASSWORD is set: the encrypted-notice println and bm.SetPassword call.
+// TestRunMaintenanceRestoreFileWithPasswordCancel covers the "no" cancellation
+// path for an unencrypted backup. BACKUP_PASSWORD is set in the environment but
+// the backup created for this test is unencrypted, so the encrypted-notice
+// println and bm.SetPassword call are NOT exercised here — BACKUP_PASSWORD is
+// only consulted when backup.IsEncrypted(filename) is true.
 func TestRunMaintenanceRestoreFileWithPasswordCancel(t *testing.T) {
 	withExitFunc(t)
 	restore := saveEnvKeys("BACKUP_PASSWORD")
