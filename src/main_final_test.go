@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/apimgr/search/src/backup"
 	"github.com/apimgr/search/src/config"
 )
 
@@ -320,7 +321,15 @@ func TestRunMaintenanceRestoreFileCancelNoPassword(t *testing.T) {
 	t.Cleanup(restore)
 	os.Unsetenv("BACKUP_PASSWORD")
 
-	withArgs(t, []string{"search", "--maintenance", "restore", "/tmp/fake-test-backup.tar.gz"})
+	// Restore now verifies the backup (per AI.md PART 21) before prompting to
+	// confirm, so the cancel prompt is only reached for a backup that passes
+	// the full verification checklist.
+	backupPath, err := backup.NewManager().Create("")
+	if err != nil {
+		t.Fatalf("failed to create real backup for test: %v", err)
+	}
+
+	withArgs(t, []string{"search", "--maintenance", "restore", backupPath})
 	pipeStdin(t, "no\n")
 	out := captureStdout(t, func() { runMaintenance("restore") })
 	if !strings.Contains(out, "cancelled") && !strings.Contains(out, "Restore cancelled") {
@@ -336,7 +345,16 @@ func TestRunMaintenanceRestoreFileWithPasswordCancel(t *testing.T) {
 	t.Cleanup(restore)
 	os.Setenv("BACKUP_PASSWORD", "testpassword-xyz-123")
 
-	withArgs(t, []string{"search", "--maintenance", "restore", "/tmp/fake-test-backup.tar.gz"})
+	// Restore now verifies the backup (per AI.md PART 21) before prompting to
+	// confirm, so the cancel prompt is only reached for a backup that passes
+	// the full verification checklist. The backup itself is created
+	// unencrypted; BACKUP_PASSWORD is only consulted for encrypted files.
+	backupPath, err := backup.NewManager().Create("")
+	if err != nil {
+		t.Fatalf("failed to create real backup for test: %v", err)
+	}
+
+	withArgs(t, []string{"search", "--maintenance", "restore", backupPath})
 	pipeStdin(t, "no\n")
 	out := captureStdout(t, func() { runMaintenance("restore") })
 	if !strings.Contains(out, "cancelled") && !strings.Contains(out, "Restore cancelled") {

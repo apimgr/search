@@ -16,6 +16,8 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/term"
+
 	"github.com/apimgr/search/src/backup"
 	"github.com/apimgr/search/src/common/banner"
 	"github.com/apimgr/search/src/common/display"
@@ -1053,6 +1055,27 @@ func runService(action string) {
 	}
 }
 
+// readBackupPassword resolves the backup encryption password for CLI use.
+// Per AI.md PART 21: the CLI has no password flag (a flag would leak the
+// password via shell history and process lists) — BACKUP_PASSWORD remains
+// honored for scripted/non-interactive use, and the CLI otherwise falls back
+// to the documented interactive masked prompt ("Enter backup password:").
+func readBackupPassword(prompt string) string {
+	if password := os.Getenv("BACKUP_PASSWORD"); password != "" {
+		return password
+	}
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		return ""
+	}
+	fmt.Print(prompt)
+	passwordBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Println()
+	if err != nil {
+		return ""
+	}
+	return string(passwordBytes)
+}
+
 func runMaintenance(action string) {
 	fmt.Printf(display.Emoji("🔧", "[*]")+" Maintenance: %s\n\n", action)
 
@@ -1065,9 +1088,25 @@ func runMaintenance(action string) {
 			filename = os.Args[3]
 		}
 
-		// Check for backup encryption password
-		// Per AI.md PART 24: Password from env var or prompt
-		password := os.Getenv("BACKUP_PASSWORD")
+		// Per AI.md PART 21: encryption is required under compliance mode and
+		// otherwise applies only if a backup password was configured during
+		// setup (server.backup.encryption.enabled) — the password itself is
+		// never stored and is resolved via BACKUP_PASSWORD or an interactive
+		// prompt.
+		cfg, cfgErr := config.Initialize()
+		complianceEnabled := cfgErr == nil && cfg.Server.Compliance.Enabled
+		encryptionEnabled := (cfgErr == nil && cfg.Server.Backup.Encryption.Enabled) || complianceEnabled
+
+		var password string
+		if encryptionEnabled {
+			password = readBackupPassword("Enter backup password: ")
+			if password == "" && complianceEnabled {
+				fmt.Println(display.Emoji("❌", "[ERROR]") + " Compliance mode requires backup encryption")
+				fmt.Println("   Set BACKUP_PASSWORD or enter a password when prompted, and try again.")
+				exitFunc(1)
+				return
+			}
+		}
 		if password != "" {
 			fmt.Println(display.Emoji("🔐", "[ENCRYPTED]") + " Backup encryption: ENABLED")
 			bm.SetPassword(password)
@@ -1076,23 +1115,40 @@ func runMaintenance(action string) {
 		}
 
 		fmt.Println("Creating backup...")
-		backupPath, err := bm.Create(filename)
+		// Per AI.md PART 21: every backup must pass the full verification
+		// checklist immediately after creation — a failed backup is deleted
+		// and any existing backups are preserved.
+		var backupPath string
+		var verifyResult *backup.VerificationResult
+		var err error
+		if password != "" {
+			backupPath, verifyResult, err = bm.CreateEncryptedAndVerify(filename)
+		} else {
+			backupPath, verifyResult, err = bm.CreateAndVerify(filename)
+		}
 		if err != nil {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Backup failed: %v\n", err)
 			exitFunc(1)
+			return
 		}
-		fmt.Printf(display.Emoji("✅", "[OK]")+" Backup created: %s\n", backupPath)
+		fmt.Printf(display.Emoji("✅", "[OK]")+" Backup created and verified: %s\n", backupPath)
+		if verifyResult != nil {
+			fmt.Printf("   Verified: file=%v size=%v checksum=%v manifest=%v decrypt=%v\n",
+				verifyResult.FileExists, verifyResult.SizeValid, verifyResult.ChecksumValid,
+				verifyResult.ManifestValid, verifyResult.DecryptValid)
+		}
 
-		// Show backup info
-		metadata, err := bm.GetMetadata(backupPath)
-		if err == nil {
-			fmt.Printf("   Version: %s\n", metadata.Version)
-			fmt.Printf("   Files:   %d\n", len(metadata.Contents))
-			if metadata.Encrypted {
-				fmt.Printf("   Encrypted: YES (%s)\n", metadata.EncryptionMethod)
-			} else {
+		// Show backup info. GetMetadata reads the manifest via a plain gzip
+		// reader, so it cannot be used on an encrypted (.enc) archive.
+		if !backup.IsEncrypted(backupPath) {
+			metadata, err := bm.GetMetadata(backupPath)
+			if err == nil {
+				fmt.Printf("   Version: %s\n", metadata.Version)
+				fmt.Printf("   Files:   %d\n", len(metadata.Contents))
 				fmt.Println("   Encrypted: NO")
 			}
+		} else {
+			fmt.Println("   Encrypted: YES (AES-256-GCM)")
 		}
 
 	case "restore":
@@ -1114,13 +1170,39 @@ func runMaintenance(action string) {
 		filename := os.Args[3]
 		fmt.Printf("Restoring from: %s\n", filename)
 
-		// Check if backup is encrypted
-		// Per AI.md PART 24: Prompt for password if encrypted
-		password := os.Getenv("BACKUP_PASSWORD")
-		if password != "" {
-			fmt.Println(display.Emoji("🔐", "[ENCRYPTED]") + " Using encryption password from BACKUP_PASSWORD env var")
+		// Per AI.md PART 21: the CLI prompts "Enter backup password:" when the
+		// backup is encrypted and no password was provided via BACKUP_PASSWORD.
+		isEncryptedFile := backup.IsEncrypted(filename)
+		var password string
+		if isEncryptedFile {
+			password = readBackupPassword("Enter backup password: ")
+			if password == "" {
+				fmt.Println(display.Emoji("❌", "[ERROR]") + " This backup is encrypted — a password is required")
+				fmt.Println("   Set BACKUP_PASSWORD or enter a password when prompted, and try again.")
+				exitFunc(1)
+				return
+			}
 			bm.SetPassword(password)
 		}
+
+		// Per AI.md PART 21: every check in the restore verification checklist
+		// must pass before the restore proceeds.
+		fmt.Println("Verifying backup integrity...")
+		verifyResult, err := bm.VerifyBackup(filename)
+		if err != nil || verifyResult == nil || !verifyResult.AllPassed {
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " Backup verification failed")
+			if err != nil {
+				fmt.Printf("   %v\n", err)
+			}
+			if verifyResult != nil {
+				for _, verifyErr := range verifyResult.Errors {
+					fmt.Printf("   - %s\n", verifyErr)
+				}
+			}
+			exitFunc(1)
+			return
+		}
+		fmt.Println(display.Emoji("✅", "[OK]") + " Verifying backup integrity... OK")
 
 		// Confirm restore
 		fmt.Print("This will overwrite current configuration. Continue? (yes/no): ")
@@ -1131,15 +1213,16 @@ func runMaintenance(action string) {
 			return
 		}
 
-		if err := bm.Restore(filename); err != nil {
-			if strings.Contains(err.Error(), "decryption failed") {
-				fmt.Printf(display.Emoji("❌", "[ERROR]")+" Restore failed: %v\n", err)
-				fmt.Println("   This backup appears to be encrypted.")
-				fmt.Println("   Set BACKUP_PASSWORD environment variable and try again.")
-			} else {
-				fmt.Printf(display.Emoji("❌", "[ERROR]")+" Restore failed: %v\n", err)
-			}
+		fmt.Println("Restoring...")
+		if isEncryptedFile {
+			err = bm.RestoreEncrypted(filename)
+		} else {
+			err = bm.Restore(filename)
+		}
+		if err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Restore failed: %v\n", err)
 			exitFunc(1)
+			return
 		}
 		fmt.Println(display.Emoji("✅", "[OK]") + " Restore completed successfully")
 		fmt.Println("   Please restart the server to apply changes.")
