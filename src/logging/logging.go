@@ -850,6 +850,12 @@ const (
 	// only ever contain tracking_id/severity/sanitized component — never PII or
 	// vulnerability content.
 	SecurityEventReportReceived SecurityEvent = "security.report_received"
+	// SecurityEventCSPViolation is logged when a browser POSTs a CSP violation,
+	// NEL, or other Reporting-API report to /api/{api_version}/server/reports/*,
+	// per AI.md PART 11 "Reporting API" and "Content Security Policy → Reports
+	// Endpoint". Details carry only the sanitized directive/report type — never
+	// user-controlled report body fields echoed verbatim.
+	SecurityEventCSPViolation SecurityEvent = "security.csp_violation"
 )
 
 // SecurityLogger logs security events (fail2ban compatible)
@@ -1033,6 +1039,23 @@ func (l *SecurityLogger) LogReportReceived(ip, trackingID, severity, component s
 		IP:        ip,
 		Path:      "/server/contact",
 		Details:   fmt.Sprintf("tracking_id=%s severity=%s component=%s", trackingID, severity, component),
+	})
+}
+
+// LogCSPViolation logs a browser-emitted report (CSP violation, NEL, deprecation,
+// intervention, crash, or generic Reporting-API) received at one of the public
+// /api/{api_version}/server/reports/* endpoints, per AI.md PART 11 "Reporting API".
+// reportType is the report group/name (e.g. "csp", "nel", "default"); directive is
+// the sanitized violated directive or disposition. Per the privacy rule (PART 11),
+// the caller passes "-" for ip so no client address is ever persisted, and no
+// user-controlled report body fields are echoed into the log.
+func (l *SecurityLogger) LogCSPViolation(ip, reportType, directive string) {
+	l.Log(SecurityEntry{
+		Timestamp: time.Now(),
+		Event:     SecurityEventCSPViolation,
+		IP:        ip,
+		Path:      "/server/reports/" + reportType,
+		Details:   fmt.Sprintf("type=%s directive=%s", reportType, directive),
 	})
 }
 

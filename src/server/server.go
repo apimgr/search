@@ -889,6 +889,12 @@ func (s *Server) setupRoutes() http.Handler {
 	r.HandleFunc("/server/security/thanks", s.handleSecurityThanks)
 	r.Get("/server/security/report/{tracking_id}", s.handleSecurityReportStatus)
 
+	// Public browser-report endpoints advertised by the CSP report-uri/report-to,
+	// Reporting-Endpoints, Report-To, and NEL headers per AI.md PART 11 "Reporting
+	// API" — CSP violations, NEL, deprecation/intervention/crash, and the generic
+	// default group all POST here and receive 204 No Content.
+	s.registerReportRoutes(api.APIPrefix)
+
 	// robots.txt, sitemap.xml, and security.txt (/.well-known/ only per RFC 9116)
 	r.HandleFunc("/robots.txt", s.handleRobotsTxt)
 	r.HandleFunc("/sitemap.xml", s.handleSitemap)
