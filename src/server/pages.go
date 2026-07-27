@@ -407,7 +407,6 @@ func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
 	data := s.newPageData(w, r, "", "help")
 	data.Title = s.getI18nManager().T(data.Lang, "help.page_title")
 	data.CSRFToken = s.getCSRFToken(r)
-	data.ServerURL = s.getBaseURL(r)
 
 	if err := s.renderer.Render(w, "help", data); err != nil {
 		s.handleInternalError(w, r, "template render", err)

@@ -751,6 +751,9 @@ func (s *Server) newPageData(w http.ResponseWriter, r *http.Request, title, page
 		data.Theme = themeMode
 	}
 	data.PrefsQuery = prefsQuery
+	// Per AI.md URL & FQDN Detection: embedded template URLs must use {proto}://{fqdn}/path,
+	// never a bare /path — set once here so every page template can build full URLs.
+	data.ServerURL = s.getBaseURL(r)
 	if prefs.DefaultCategory != "" {
 		data.Category = prefs.DefaultCategory.String()
 	}
