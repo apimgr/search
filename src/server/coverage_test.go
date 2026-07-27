@@ -1188,8 +1188,8 @@ func TestNormalizeResultsPerPage(t *testing.T) {
 		input int
 		want  int
 	}{
-		{0, 20},
-		{-5, 20},
+		{0, 100},
+		{-5, 100},
 		{1, 1},
 		{20, 20},
 		{100, 100},

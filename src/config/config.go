@@ -1718,7 +1718,7 @@ func DefaultConfig() *Config {
 			Autocomplete:      "",
 			DefaultLang:       "en",
 			DefaultCategories: []string{"general"},
-			ResultsPerPage:    10,
+			ResultsPerPage:    100,
 			Timeout:           10,
 			MaxConcurrent:     7,
 			Bangs: BangsConfig{

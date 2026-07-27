@@ -1089,7 +1089,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		perPage = prefs.ResultsPerPage
 	}
 	if perPage < 1 || perPage > 100 {
-		perPage = 20
+		perPage = 100
 	}
 	if strings.TrimSpace(r.URL.Query().Get("safe_search")) == "" {
 		safeSearch = prefs.SafeSearch

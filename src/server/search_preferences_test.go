@@ -76,11 +76,11 @@ func TestParseSearchPreferencesInvalidValuesUseDefaults(t *testing.T) {
 	if prefs.ResultsPerPage != 100 {
 		t.Fatalf("ResultsPerPage = %d, want 100", prefs.ResultsPerPage)
 	}
-	if prefs.NewTab {
-		t.Fatal("NewTab = true, want false")
+	if !prefs.NewTab {
+		t.Fatal("NewTab = false, want true")
 	}
-	if prefs.InfiniteScroll {
-		t.Fatal("InfiniteScroll = true, want false")
+	if !prefs.InfiniteScroll {
+		t.Fatal("InfiniteScroll = false, want true")
 	}
 	if !prefs.KeyboardShortcuts {
 		t.Fatal("KeyboardShortcuts = false, want true")

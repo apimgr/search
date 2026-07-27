@@ -24,9 +24,9 @@ func parseSearchPreferences(raw string) searchPreferences {
 		Theme:             "",
 		DefaultCategory:   model.CategoryGeneral,
 		SafeSearch:        1,
-		ResultsPerPage:    20,
-		NewTab:            false,
-		InfiniteScroll:    false,
+		ResultsPerPage:    100,
+		NewTab:            true,
+		InfiniteScroll:    true,
 		KeyboardShortcuts: true,
 	}
 
@@ -139,7 +139,7 @@ func normalizeSafeSearch(value int) int {
 
 func normalizeResultsPerPage(value int) int {
 	if value < 1 {
-		return 20
+		return 100
 	}
 	if value > 100 {
 		return 100

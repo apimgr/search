@@ -22,8 +22,8 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Server.Mode != "production" {
 		t.Errorf("Server.Mode = %q, want %q", cfg.Server.Mode, "production")
 	}
-	if cfg.Search.ResultsPerPage != 10 {
-		t.Errorf("Search.ResultsPerPage = %d, want %d", cfg.Search.ResultsPerPage, 10)
+	if cfg.Search.ResultsPerPage != 100 {
+		t.Errorf("Search.ResultsPerPage = %d, want %d", cfg.Search.ResultsPerPage, 100)
 	}
 	if cfg.Search.Timeout != 10 {
 		t.Errorf("Search.Timeout = %d, want %d", cfg.Search.Timeout, 10)
@@ -1103,8 +1103,8 @@ func TestDefaultEngines(t *testing.T) {
 func TestSearchConfigDefaults(t *testing.T) {
 	cfg := DefaultConfig()
 
-	if cfg.Search.ResultsPerPage != 10 {
-		t.Errorf("Search.ResultsPerPage = %d, want 10", cfg.Search.ResultsPerPage)
+	if cfg.Search.ResultsPerPage != 100 {
+		t.Errorf("Search.ResultsPerPage = %d, want 100", cfg.Search.ResultsPerPage)
 	}
 	if cfg.Search.Timeout != 10 {
 		t.Errorf("Search.Timeout = %d, want 10", cfg.Search.Timeout)
