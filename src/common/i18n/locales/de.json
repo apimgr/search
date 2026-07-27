@@ -257,8 +257,7 @@
     "generate_link": "Link erzeugen",
     "copy_url": "URL kopieren",
     "qr_code": "QR-Code",
-    "save_return": "Speichern und zuruck",
-    "save_widgets": "Widget-Einstellungen speichern"
+    "save_return": "Speichern und zuruck"
   },
   "nav": {
     "home": "Startseite",

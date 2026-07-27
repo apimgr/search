@@ -257,8 +257,7 @@
     "generate_link": "リンクを生成",
     "copy_url": "URL をコピー",
     "qr_code": "QR コード",
-    "save_return": "保存して戻る",
-    "save_widgets": "ウィジェット設定を保存"
+    "save_return": "保存して戻る"
   },
   "nav": {
     "home": "ホーム",

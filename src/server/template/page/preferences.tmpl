@@ -46,16 +46,17 @@
                 <label for="results-per-page">{{t "preferences.results_per_page"}}</label>
                 <select id="results-per-page" name="results_per_page">
                     <option value="10">10</option>
-                    <option value="20" selected>20</option>
+                    <option value="20">20</option>
                     <option value="30">30</option>
                     <option value="50">50</option>
+                    <option value="100" selected>100</option>
                 </select>
             </div>
 
             <div class="form-group toggle-group">
                 <label for="new-tab">{{t "preferences.open_results_new_tab"}}</label>
                 <label class="toggle-switch">
-                    <input type="checkbox" id="new-tab" name="new_tab">
+                    <input type="checkbox" id="new-tab" name="new_tab" checked>
                     <span class="slider"></span>
                 </label>
             </div>
@@ -63,7 +64,7 @@
             <div class="form-group toggle-group">
                 <label for="infinite-scroll">{{t "preferences.infinite_scroll"}}</label>
                 <label class="toggle-switch">
-                    <input type="checkbox" id="infinite-scroll" name="infinite_scroll">
+                    <input type="checkbox" id="infinite-scroll" name="infinite_scroll" checked>
                     <span class="slider"></span>
                 </label>
             </div>
@@ -194,12 +195,6 @@
                     </div>
                 </div>
             </div>
-
-            <div class="form-actions mt-1">
-                <button type="submit" class="btn btn-primary">
-                    {{t "preferences.save_widgets"}}
-                </button>
-            </div>
         </form>
 
         <p class="help-text mt-1">
@@ -250,7 +245,7 @@
             </p>
             <p>
                 <strong>{{t "preferences.opensearch_url_label"}}:</strong>
-                <code id="opensearch-url">{{.Config.Server.BaseURL}}/opensearch.xml</code>
+                <code id="opensearch-url">{{.ServerURL}}/opensearch.xml</code>
             </p>
             <div class="form-group">
                 <label for="custom-engine-name">{{t "preferences.custom_engine_name_optional"}}</label>

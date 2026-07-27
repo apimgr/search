@@ -96,9 +96,9 @@
             theme: normalizeThemePreference(prefs.theme || 'auto'),
             default_category: prefs.default_category || 'general',
             safe_search: prefs.safe_search !== undefined ? String(prefs.safe_search) : '1',
-            results_per_page: prefs.results_per_page ? String(prefs.results_per_page) : '20',
-            new_tab: !!prefs.new_tab,
-            infinite_scroll: !!prefs.infinite_scroll,
+            results_per_page: prefs.results_per_page ? String(prefs.results_per_page) : '100',
+            new_tab: prefs.new_tab !== false,
+            infinite_scroll: prefs.infinite_scroll !== false,
             keyboard_shortcuts: prefs.keyboard_shortcuts !== false
         };
     }
@@ -151,7 +151,7 @@
                     prefs.safe_search = value === 'o' ? '0' : value === 'm' ? '1' : value === 's' ? '2' : String(value || '1');
                     break;
                 case 'r':
-                    prefs.results_per_page = value || '20';
+                    prefs.results_per_page = value || '100';
                     break;
                 case 'n':
                     prefs.new_tab = value === '1';
@@ -2066,8 +2066,8 @@
                 if (prefs.default_category && defaultCategorySelect) defaultCategorySelect.value = prefs.default_category;
                 if (prefs.safe_search !== undefined && safeSearchSelect) safeSearchSelect.value = prefs.safe_search;
                 if (prefs.results_per_page && resultsPerPageSelect) resultsPerPageSelect.value = prefs.results_per_page;
-                if (prefs.new_tab && newTabCheckbox) newTabCheckbox.checked = prefs.new_tab;
-                if (infiniteScrollCheckbox) infiniteScrollCheckbox.checked = !!prefs.infinite_scroll;
+                if (newTabCheckbox) newTabCheckbox.checked = prefs.new_tab !== false;
+                if (infiniteScrollCheckbox) infiniteScrollCheckbox.checked = prefs.infinite_scroll !== false;
                 if (keyboardShortcutsCheckbox) keyboardShortcutsCheckbox.checked = prefs.keyboard_shortcuts !== false;
             } catch (e) {
                 console.error('Failed to load preferences:', e);
@@ -2088,9 +2088,9 @@
                 theme: themeSelect ? normalizeThemePreference(themeSelect.value) : 'auto',
                 default_category: defaultCategorySelect ? defaultCategorySelect.value : 'general',
                 safe_search: safeSearchSelect ? safeSearchSelect.value : '1',
-                results_per_page: resultsPerPageSelect ? resultsPerPageSelect.value : '20',
-                new_tab: newTabCheckbox ? newTabCheckbox.checked : false,
-                infinite_scroll: infiniteScrollCheckbox ? infiniteScrollCheckbox.checked : false,
+                results_per_page: resultsPerPageSelect ? resultsPerPageSelect.value : '100',
+                new_tab: newTabCheckbox ? newTabCheckbox.checked : true,
+                infinite_scroll: infiniteScrollCheckbox ? infiniteScrollCheckbox.checked : true,
                 keyboard_shortcuts: keyboardShortcutsCheckbox ? keyboardShortcutsCheckbox.checked : true
             };
 
@@ -2118,9 +2118,30 @@
         // checked state on each preference page load via the server-side cookie.
         function loadWidgetPreferences() {}
 
-        // saveWidgetPreferences is a no-op — the widget form POSTs to
-        // /preferences/widgets, which sets the server-side cookie directly.
-        function saveWidgetPreferences() {}
+        // Persist the checked widget toggles to the server-side cookie via AJAX,
+        // so they save together with the rest of the form under "Save & Return".
+        function saveWidgetPreferences() {
+            var toggles = document.getElementById('widget-toggles');
+            if (!toggles) return;
+
+            var csrfInput = document.querySelector('#widget-prefs-form input[name="csrf_token"]');
+            var params = new URLSearchParams();
+            if (csrfInput) {
+                params.append('csrf_token', csrfInput.value);
+            }
+            toggles.querySelectorAll('input[name="widget"]:checked').forEach(function(input) {
+                params.append('widget', input.value);
+            });
+
+            fetch('/preferences/widgets', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: params.toString(),
+                redirect: 'follow'
+            }).catch(function(e) {
+                console.error('Widget preference save failed:', e);
+            });
+        }
 
         // Load custom bangs
         function loadCustomBangs() {
@@ -2308,7 +2329,14 @@
             }
         });
 
-        // Widget toggle state is persisted via the form POST to /preferences/widgets.
+        // Widget toggle state is persisted by saveWidgetPreferences(), called from
+        // savePreferences() when the user clicks "Save & Return" — see above.
+        var widgetPrefsForm = document.getElementById('widget-prefs-form');
+        if (widgetPrefsForm) {
+            widgetPrefsForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+            });
+        }
 
         // Add custom bang form
         var addBangForm = document.getElementById('add-custom-bang');

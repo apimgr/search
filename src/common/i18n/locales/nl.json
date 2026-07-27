@@ -257,8 +257,7 @@
     "generate_link": "Link genereren",
     "copy_url": "URL kopieren",
     "qr_code": "QR-code",
-    "save_return": "Opslaan en terugkeren",
-    "save_widgets": "Widgetvoorkeuren opslaan"
+    "save_return": "Opslaan en terugkeren"
   },
   "nav": {
     "home": "Home",

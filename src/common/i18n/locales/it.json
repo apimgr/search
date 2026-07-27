@@ -257,8 +257,7 @@
     "generate_link": "Genera link",
     "copy_url": "Copia URL",
     "qr_code": "Codice QR",
-    "save_return": "Salva e torna",
-    "save_widgets": "Salva preferenze widget"
+    "save_return": "Salva e torna"
   },
   "nav": {
     "home": "Home",

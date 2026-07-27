@@ -257,8 +257,7 @@
     "generate_link": "生成链接",
     "copy_url": "复制 URL",
     "qr_code": "二维码",
-    "save_return": "保存并返回",
-    "save_widgets": "保存小部件偏好设置"
+    "save_return": "保存并返回"
   },
   "nav": {
     "home": "首页",
