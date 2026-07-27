@@ -72,7 +72,7 @@ func (sm *ServiceManager) installWindowsService() error {
 }
 
 func (sm *ServiceManager) uninstallWindowsService() error {
-	runCommand("sc", "stop", "search")   //nolint:errcheck
+	runCommand("sc", "stop", "search") //nolint:errcheck
 	return runCommand("sc", "delete", "search")
 }
 

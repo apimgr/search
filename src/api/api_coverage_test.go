@@ -155,4 +155,3 @@ func TestHandleHealthzTorEnabledNilService(t *testing.T) {
 		t.Errorf("tor.enabled = %v, want true", tor["enabled"])
 	}
 }
-

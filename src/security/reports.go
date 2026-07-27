@@ -34,19 +34,19 @@ const (
 // Report holds the fields of a coordinated-disclosure security report,
 // per AI.md PART 11 "Security-mode form fields" table.
 type Report struct {
-	TrackingID         string
-	SecurityIDUsed     string
-	AffectedComponent  string
-	AffectedEndpoint   string
-	Severity           string
-	Summary            string
-	EncryptedBody      []byte
-	EncryptionMethod   string
-	CreditPreference   string
-	CreditName         string
-	DisclosureDays     int
-	CVERequested       bool
-	ReportTokenHash    string
+	TrackingID        string
+	SecurityIDUsed    string
+	AffectedComponent string
+	AffectedEndpoint  string
+	Severity          string
+	Summary           string
+	EncryptedBody     []byte
+	EncryptionMethod  string
+	CreditPreference  string
+	CreditName        string
+	DisclosureDays    int
+	CVERequested      bool
+	ReportTokenHash   string
 }
 
 // GenerateTrackingID allocates a new "sec_" + 16 random hex character

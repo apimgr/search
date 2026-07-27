@@ -794,8 +794,8 @@ func calculateNextRunWithLoc(schedule string, loc *time.Location) time.Time {
 	// Walk forward minute by minute from now+1 (max ~1 year = 525600 minutes).
 	t := now.Truncate(time.Minute).Add(time.Minute)
 	for range 525600 {
-		mo := int(t.Month()) // 1-12
-		d := t.Day()         // 1-31
+		mo := int(t.Month())   // 1-12
+		d := t.Day()           // 1-31
 		dw := int(t.Weekday()) // 0=Sunday
 		h := t.Hour()          // 0-23
 		mi := t.Minute()       // 0-59

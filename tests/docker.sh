@@ -15,13 +15,15 @@ GOCACHE="${HOME}/.local/share/go/build"
 mkdir -p "$GODIR" "$GOCACHE"
 
 # Common docker run for Go builds
+# Per AI.md PART 25/26: always build with casjaysdev/go:latest, never golang:alpine
 GO_DOCKER="docker run --rm \
-  -v $(pwd):/build \
+  -v $PWD:/build \
   -v ${GOCACHE}:/root/.cache/go-build \
   -v ${GODIR}:/go \
   -w /build \
   -e CGO_ENABLED=0 \
-  golang:alpine"
+  -e GOFLAGS=-buildvcs=false \
+  casjaysdev/go:latest"
 
 mkdir -p binaries
 
@@ -108,47 +110,31 @@ docker run --rm \
     curl -f http://localhost:64580/static/css/main.css || echo 'FAILED: CSS'
     curl -f http://localhost:64580/static/js/app.js || echo 'FAILED: JS'
 
-    echo '=== Admin Setup & API Token Creation ==='
-    # Get setup token from server output (captured during startup)
-    # Use sed instead of grep -oP for POSIX/BusyBox compatibility
-    SETUP_TOKEN=\$(cat /tmp/server.log 2>/dev/null | sed -n 's/.*Setup Token[^:]*: *\\([a-f0-9]*\\).*/\\1/p' | head -1 || echo '')
+    echo '=== Operator Token Tests ==='
+    # Per AI.md PART 8/11: two-tier auth only (anonymous + operator bearer
+    # token). There is no admin account, login, or setup-token API — the
+    # operator token (server.token) is printed once on first run and used
+    # directly as a Bearer token against operator-only routes.
+    API_TOKEN=\$(cat /tmp/server.log 2>/dev/null | sed -n 's/.*Operator Token: *\\([a-f0-9]*\\).*/\\1/p' | head -1 || echo '')
 
-    if [ -n \"\$SETUP_TOKEN\" ]; then
-        echo \"Setup token found: \${SETUP_TOKEN:0:8}...\"
+    if [ -n \"\$API_TOKEN\" ]; then
+        echo \"Operator token found: \${API_TOKEN:0:8}...\"
 
-        # Create admin account
-        curl -sf -X POST \\
-            -H \"X-Setup-Token: \$SETUP_TOKEN\" \\
-            -H \"Content-Type: application/json\" \\
-            -d '{\"username\":\"testadmin\",\"password\":\"TestPass123!\"}' \\
-            http://localhost:64580/api/v1/admin/setup || echo 'Admin setup failed (may already exist)'
+        # Operator-only endpoint should succeed with the token
+        curl -sf -H \"Authorization: Bearer \$API_TOKEN\" \\
+            http://localhost:64580/server/status >/dev/null \\
+            && echo '✓ /server/status authorized with operator token' \\
+            || echo 'FAILED: /server/status with operator token'
 
-        # Login and get session
-        # Use jq for JSON parsing (POSIX/BusyBox compatible)
-        SESSION=\$(curl -sf -X POST \\
-            -H \"Content-Type: application/json\" \\
-            -d '{\"username\":\"testadmin\",\"password\":\"TestPass123!\"}' \\
-            http://localhost:64580/api/v1/admin/login | jq -r '.session_token // empty' || echo '')
-
-        if [ -n \"\$SESSION\" ]; then
-            echo '✓ Admin login successful'
-
-            # Generate API token for CLI/Agent testing
-            # Use jq for JSON parsing (POSIX/BusyBox compatible)
-            API_TOKEN=\$(curl -sf -X POST \\
-                -H \"Authorization: Bearer \$SESSION\" \\
-                http://localhost:64580/api/v1/admin/profile/token | jq -r '.token // empty' || echo '')
-
-            if [ -n \"\$API_TOKEN\" ]; then
-                echo \"✓ API token created: \${API_TOKEN:0:12}...\"
-            else
-                echo 'API token creation failed (continuing without token)'
-            fi
+        # Same endpoint without a token must be rejected
+        STATUS_CODE=\$(curl -s -o /dev/null -w '%{http_code}' http://localhost:64580/server/status)
+        if [ \"\$STATUS_CODE\" = \"401\" ]; then
+            echo '✓ /server/status rejects unauthenticated request (401)'
         else
-            echo 'Admin login failed (continuing without session)'
+            echo \"FAILED: /server/status without token returned \$STATUS_CODE, expected 401\"
         fi
     else
-        echo 'No setup token found (server may already be configured)'
+        echo 'No operator token found in startup log (server may already be configured)'
     fi
 
     echo '=== Binary Rename Tests ==='

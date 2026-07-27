@@ -371,11 +371,11 @@ func TestMaintenanceServiceModeTransitions(t *testing.T) {
 	ms := NewMaintenanceService(cfg)
 
 	tests := []struct {
-		mode        MaintenanceMode
-		msg         string
-		isNormal    bool
-		isDegraded  bool
-		isMaintain  bool
+		mode       MaintenanceMode
+		msg        string
+		isNormal   bool
+		isDegraded bool
+		isMaintain bool
 	}{
 		{ModeNormal, "", true, false, false},
 		{ModeDegraded, "degraded test", false, true, false},
@@ -688,10 +688,10 @@ func (d *mockIntegrityDriver) Open(_ string) (driver.Conn, error) {
 func (c *mockIntegrityConn) Prepare(_ string) (driver.Stmt, error) {
 	return &mockIntegrityStmt{}, nil
 }
-func (c *mockIntegrityConn) Close() error                        { return nil }
-func (c *mockIntegrityConn) Begin() (driver.Tx, error)           { return nil, fmt.Errorf("no tx") }
-func (s *mockIntegrityStmt) Close() error                        { return nil }
-func (s *mockIntegrityStmt) NumInput() int                       { return -1 }
+func (c *mockIntegrityConn) Close() error              { return nil }
+func (c *mockIntegrityConn) Begin() (driver.Tx, error) { return nil, fmt.Errorf("no tx") }
+func (s *mockIntegrityStmt) Close() error              { return nil }
+func (s *mockIntegrityStmt) NumInput() int             { return -1 }
 func (s *mockIntegrityStmt) Exec(_ []driver.Value) (driver.Result, error) {
 	return nil, nil
 }

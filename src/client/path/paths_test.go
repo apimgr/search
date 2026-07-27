@@ -1268,10 +1268,10 @@ func TestAllDirFunctionsWindows(t *testing.T) {
 	}()
 
 	tests := []struct {
-		name        string
-		fn          func() (string, error)
-		wantPrefix  string
-		wantSuffix  string
+		name       string
+		fn         func() (string, error)
+		wantPrefix string
+		wantSuffix string
 	}{
 		{"ConfigDir", ConfigDir, "/fake/appdata", ""},
 		{"DataDir", DataDir, "/fake/localappdata", "data"},

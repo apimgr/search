@@ -2704,9 +2704,9 @@ func TestIPHandlerHandleContent(t *testing.T) {
 	h := NewIPHandler()
 
 	tests := []struct {
-		name      string
-		clientIP  string
-		wantInIP  bool
+		name     string
+		clientIP string
+		wantInIP bool
 	}{
 		{
 			name:     "no client ip in context",

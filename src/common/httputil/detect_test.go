@@ -625,14 +625,14 @@ func TestGetClientIP(t *testing.T) {
 	defer SetAdditionalTrustedProxies(nil)
 
 	tests := []struct {
-		name            string
-		remoteAddr      string
-		cfConnectingIP  string
-		trueClientIP    string
-		xClientIP       string
-		xRealIP         string
-		xForwardedFor   string
-		want            string
+		name           string
+		remoteAddr     string
+		cfConnectingIP string
+		trueClientIP   string
+		xClientIP      string
+		xRealIP        string
+		xForwardedFor  string
+		want           string
 	}{
 		{
 			name:       "untrusted proxy — RemoteAddr used directly",
@@ -843,10 +843,10 @@ func TestGetHostFromRequestAdditionalHeaders(t *testing.T) {
 		want          string
 	}{
 		{
-			name:        "trusted proxy — X-Real-Host used when no X-Forwarded-Host",
-			remoteAddr:  "127.0.0.1:1234",
-			xRealHost:   "realhost.example.com",
-			want:        "realhost.example.com",
+			name:       "trusted proxy — X-Real-Host used when no X-Forwarded-Host",
+			remoteAddr: "127.0.0.1:1234",
+			xRealHost:  "realhost.example.com",
+			want:       "realhost.example.com",
 		},
 		{
 			name:          "trusted proxy — X-Original-Host used as last-resort forwarded",

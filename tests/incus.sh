@@ -34,12 +34,13 @@ DOCKER_BUILD_OUT="/build/test-binaries"
 
 echo "=== Building server binary in Docker ==="
 docker run --rm \
-  -v "$(pwd):/build" \
+  -v "$PWD:/build" \
   -v "${GOCACHE}:/root/.cache/go-build" \
   -v "${GODIR}:/go" \
   -w /build \
   -e CGO_ENABLED=0 \
-  golang:alpine sh -c "mkdir -p $DOCKER_BUILD_OUT && go build -o $DOCKER_BUILD_OUT/$PROJECTNAME ./src"
+  -e GOFLAGS=-buildvcs=false \
+  casjaysdev/go:latest sh -c "mkdir -p $DOCKER_BUILD_OUT && go build -o $DOCKER_BUILD_OUT/$PROJECTNAME ./src"
 
 # Copy built binary to BUILD_DIR
 cp "$(pwd)/test-binaries/$PROJECTNAME" "$BUILD_DIR/"
@@ -48,12 +49,13 @@ cp "$(pwd)/test-binaries/$PROJECTNAME" "$BUILD_DIR/"
 if [ -d "src/client" ]; then
     echo "=== Building CLI client in Docker ==="
     docker run --rm \
-      -v "$(pwd):/build" \
+      -v "$PWD:/build" \
       -v "${GOCACHE}:/root/.cache/go-build" \
       -v "${GODIR}:/go" \
       -w /build \
       -e CGO_ENABLED=0 \
-      golang:alpine go build -o "$DOCKER_BUILD_OUT/${PROJECTNAME}-cli" ./src/client
+      -e GOFLAGS=-buildvcs=false \
+      casjaysdev/go:latest go build -o "$DOCKER_BUILD_OUT/${PROJECTNAME}-cli" ./src/client
     cp "$(pwd)/test-binaries/${PROJECTNAME}-cli" "$BUILD_DIR/"
 fi
 
@@ -61,12 +63,13 @@ fi
 if [ -d "src/agent" ]; then
     echo "=== Building agent in Docker ==="
     docker run --rm \
-      -v "$(pwd):/build" \
+      -v "$PWD:/build" \
       -v "${GOCACHE}:/root/.cache/go-build" \
       -v "${GODIR}:/go" \
       -w /build \
       -e CGO_ENABLED=0 \
-      golang:alpine go build -o "$DOCKER_BUILD_OUT/${PROJECTNAME}-agent" ./src/agent
+      -e GOFLAGS=-buildvcs=false \
+      casjaysdev/go:latest go build -o "$DOCKER_BUILD_OUT/${PROJECTNAME}-agent" ./src/agent
     cp "$(pwd)/test-binaries/${PROJECTNAME}-agent" "$BUILD_DIR/"
 fi
 
@@ -205,27 +208,31 @@ incus exec "$CONTAINER_NAME" -- bash -c "
     # JS
     curl -f http://localhost:64580/static/js/app.js || { echo 'FAILED: JS'; exit 1; }
 
-    echo '=== Admin Setup & API Token Creation ==='
-    # Per AI.md PART 29: Get setup token from journal
-    SETUP_TOKEN=\$(journalctl -u $PROJECTNAME --no-pager 2>/dev/null | grep -oP 'Setup Token.*:\\s*\\K[a-f0-9]+' | head -1 || echo '')
+    echo '=== Operator Token Tests ==='
+    # Per AI.md PART 8/11: two-tier auth only (anonymous + operator bearer
+    # token). There is no admin account, login, or setup-token API — the
+    # operator token (server.token) is printed once on first run and used
+    # directly as a Bearer token against operator-only routes.
+    API_TOKEN=\$(journalctl -u $PROJECTNAME --no-pager 2>/dev/null | sed -n 's/.*Operator Token: *\\([a-f0-9]*\\).*/\\1/p' | head -1 || echo '')
 
-    if [ -n \"\$SETUP_TOKEN\" ]; then
-        echo \"Setup token found: \${SETUP_TOKEN:0:8}...\"
+    if [ -n \"\$API_TOKEN\" ]; then
+        echo \"Operator token found: \${API_TOKEN:0:8}...\"
 
-        # Create admin account via API
-        SETUP_RESULT=\$(curl -sf -X POST \\
-            -H \"X-Setup-Token: \$SETUP_TOKEN\" \\
-            -H \"Content-Type: application/json\" \\
-            -d '{\"username\":\"testadmin\",\"password\":\"TestPass123!\",\"email\":\"test@example.com\"}' \\
-            http://localhost:64580/admin/setup 2>/dev/null || echo 'setup_failed')
+        # Operator-only endpoint should succeed with the token
+        curl -sf -H \"Authorization: Bearer \$API_TOKEN\" \\
+            http://localhost:64580/server/status >/dev/null \\
+            && echo '✓ /server/status authorized with operator token' \\
+            || echo 'FAILED: /server/status with operator token'
 
-        if echo \"\$SETUP_RESULT\" | grep -q 'setup_failed'; then
-            echo 'Admin setup failed (may already exist)'
+        # Same endpoint without a token must be rejected
+        STATUS_CODE=\$(curl -s -o /dev/null -w '%{http_code}' http://localhost:64580/server/status)
+        if [ \"\$STATUS_CODE\" = \"401\" ]; then
+            echo '✓ /server/status rejects unauthenticated request (401)'
         else
-            echo '✓ Admin account created'
+            echo \"FAILED: /server/status without token returned \$STATUS_CODE, expected 401\"
         fi
     else
-        echo 'No setup token found (server may already be configured)'
+        echo 'No operator token found in journal (server may already be configured)'
     fi
 
     echo '=== CLI Client Tests (if exists) ==='

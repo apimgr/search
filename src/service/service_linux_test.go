@@ -206,9 +206,9 @@ func TestInstallUserServiceLinuxCreatesUnitFile(t *testing.T) {
 // TestParseOpenRCStatus verifies the output parser for rc-service status output.
 func TestParseOpenRCStatus(t *testing.T) {
 	tests := []struct {
-		name   string
-		input  string
-		want   string
+		name  string
+		input string
+		want  string
 	}{
 		{"started output", " * status: started", "active"},
 		{"STARTED uppercase", "Status: STARTED", "active"},

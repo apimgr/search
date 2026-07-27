@@ -15,13 +15,13 @@ import (
 // SecurityOverviewPageData extends PageData for /server/security.
 type SecurityOverviewPageData struct {
 	PageData
-	ReportURL       string
-	ContactURL      string
-	MailtoContact   string
-	Expires         string
-	HasPGPKey       bool
-	PGPKeyURL       string
-	SecurityTxtURL  string
+	ReportURL      string
+	ContactURL     string
+	MailtoContact  string
+	Expires        string
+	HasPGPKey      bool
+	PGPKeyURL      string
+	SecurityTxtURL string
 }
 
 // handleSecurityOverview renders /server/security — a human-readable

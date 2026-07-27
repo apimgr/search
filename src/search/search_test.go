@@ -2,6 +2,8 @@ package search
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -11,9 +13,11 @@ import (
 // Mock engine for testing
 type mockEngine struct {
 	*BaseEngine
+	mu            sync.RWMutex
 	searchResults []model.Result
 	searchError   error
-	searchCalls   int
+	searchCalls   int64
+	searchDelay   time.Duration
 }
 
 func newMockEngine(name string, category model.Category, enabled bool) *mockEngine {
@@ -30,23 +34,48 @@ func newMockEngine(name string, category model.Category, enabled bool) *mockEngi
 }
 
 func (m *mockEngine) Search(ctx context.Context, query *model.Query) ([]model.Result, error) {
-	m.searchCalls++
-	if m.searchError != nil {
-		return nil, m.searchError
+	atomic.AddInt64(&m.searchCalls, 1)
+
+	m.mu.RLock()
+	delay := m.searchDelay
+	err := m.searchError
+	results := m.searchResults
+	m.mu.RUnlock()
+
+	if delay > 0 {
+		select {
+		case <-time.After(delay):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
-	return m.searchResults, nil
+
+	if err != nil {
+		return nil, err
+	}
+	return results, nil
 }
 
 func (m *mockEngine) SetResults(results []model.Result) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.searchResults = results
 }
 
 func (m *mockEngine) SetError(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.searchError = err
 }
 
+func (m *mockEngine) SetDelay(d time.Duration) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.searchDelay = d
+}
+
 func (m *mockEngine) Calls() int {
-	return m.searchCalls
+	return int(atomic.LoadInt64(&m.searchCalls))
 }
 
 // Tests for BaseEngine

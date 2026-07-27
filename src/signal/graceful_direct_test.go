@@ -328,8 +328,8 @@ func TestGracefulShutdown_AllCallbacksTogether(t *testing.T) {
 	logsFlushed := false
 	done := newDone()
 	cfg := ShutdownConfig{
-		Server:  ts.Config,
-		PIDFile: pidPath,
+		Server:          ts.Config,
+		PIDFile:         pidPath,
 		InFlightTimeout: 200 * time.Millisecond,
 		ChildTimeout:    10 * time.Millisecond,
 		DatabaseTimeout: 100 * time.Millisecond,

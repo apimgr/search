@@ -1087,8 +1087,8 @@ func TestEnsureTorDirsIdempotent(t *testing.T) {
 // 30-second timeout client: useTor=false and useTor=true with nil dialer.
 func TestGetHTTPClientNilDialer(t *testing.T) {
 	tests := []struct {
-		name    string
-		useTor  bool
+		name        string
+		useTor      bool
 		wantTimeout time.Duration
 	}{
 		{"useTor=false nil dialer", false, 30 * time.Second},

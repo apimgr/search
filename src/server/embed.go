@@ -425,15 +425,15 @@ type PageData struct {
 	TorEnabled         bool
 	TorStatus          string
 	TorAddress         string
-	WidgetsEnabled bool
-	EnabledWidgets []string
+	WidgetsEnabled     bool
+	EnabledWidgets     []string
 	CookieConsent      *CookieConsentData
 	// HasConsentCookie is true when the request carries a valid cookieConsent cookie
 	// — when true the server skips rendering the cookie banner in the template.
 	HasConsentCookie bool
-	Extra              map[string]interface{}
-	ServerURL          string
-	PrefsQuery         string
+	Extra            map[string]interface{}
+	ServerURL        string
+	PrefsQuery       string
 }
 
 // ErrorPageData extends PageData with error-specific fields.
@@ -575,19 +575,19 @@ type ContactPageData struct {
 
 	// Repopulation fields for the security-mode form, per AI.md PART 11
 	// "Security-mode form fields" table.
-	ResearcherGPG       string
-	AffectedComponent   string
-	AffectedEndpoint    string
-	Severity            string
-	Summary             string
-	StepsToReproduce    string
-	Impact              string
-	SuggestedFix        string
-	CVERequested        bool
-	DisclosureDays      int
-	CreditPreference    string
-	CreditName          string
-	AgreedToDisclosure  bool
+	ResearcherGPG      string
+	AffectedComponent  string
+	AffectedEndpoint   string
+	Severity           string
+	Summary            string
+	StepsToReproduce   string
+	Impact             string
+	SuggestedFix       string
+	CVERequested       bool
+	DisclosureDays     int
+	CreditPreference   string
+	CreditName         string
+	AgreedToDisclosure bool
 
 	// Hidden auto-filled fields, per AI.md PART 11 "Security-mode form
 	// fields" table.

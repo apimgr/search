@@ -313,7 +313,15 @@ func (a *Aggregator) filterEngines(query *model.Query) []Engine {
 }
 
 // RefreshEngineHealth probes engines that are unhealthy, degraded, or not yet checked.
+// Probes run concurrently so total wall-clock time is bounded by the slowest
+// single probe rather than the sum of all probes — with many engines
+// registered, sequential probing could stall server startup for minutes
+// when the network is slow or unreachable.
 func (a *Aggregator) RefreshEngineHealth(ctx context.Context) error {
+	var wg sync.WaitGroup
+	var validateErr error
+	var validateErrOnce sync.Once
+
 	for _, engine := range a.engines {
 		if !a.shouldProbeEngine(engine) {
 			continue
@@ -327,25 +335,35 @@ func (a *Aggregator) RefreshEngineHealth(ctx context.Context) error {
 			PerPage:  1,
 		}
 		if err := probeQuery.ValidateSearchQuery(); err != nil {
-			return err
+			validateErrOnce.Do(func() { validateErr = err })
+			continue
 		}
 
 		probeTimeout := a.timeout / 2
 		if probeTimeout <= 0 || probeTimeout > 5*time.Second {
 			probeTimeout = 5 * time.Second
 		}
-		probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
-		start := time.Now()
-		_, err := engine.Search(probeCtx, probeQuery)
-		cancel()
-		if err != nil {
-			a.recordEngineFailure(engine, err)
-			continue
-		}
-		a.recordEngineSuccess(engine, time.Since(start))
+
+		wg.Add(1)
+		go func(engine Engine, probeQuery *model.Query, probeTimeout time.Duration) {
+			defer wg.Done()
+
+			probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
+			defer cancel()
+
+			start := time.Now()
+			_, err := engine.Search(probeCtx, probeQuery)
+			if err != nil {
+				a.recordEngineFailure(engine, err)
+				return
+			}
+			a.recordEngineSuccess(engine, time.Since(start))
+		}(engine, probeQuery, probeTimeout)
 	}
 
-	return nil
+	wg.Wait()
+
+	return validateErr
 }
 
 func (a *Aggregator) getStaleFallback(cacheKey string) *model.SearchResults {
