@@ -294,13 +294,16 @@ func ImportPrivateKey(armored, appName, securityContact, installationSecret stri
 // <{securityContact}>" identity, per AI.md PART 11 Import "Validates the
 // key's identity matches the project's expected identity".
 func IdentityMatches(key *crypto.Key, appName, securityContact string) bool {
+	expectedName := fmt.Sprintf("%s Security", appName)
 	expectedEmail := securityContact
 	entity := key.GetEntity()
 	if entity == nil {
 		return false
 	}
 	for _, identity := range entity.Identities {
-		if identity.UserId != nil && identity.UserId.Email == expectedEmail {
+		if identity.UserId != nil &&
+			identity.UserId.Email == expectedEmail &&
+			identity.UserId.Name == expectedName {
 			return true
 		}
 	}

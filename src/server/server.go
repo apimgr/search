@@ -996,7 +996,9 @@ func (s *Server) setupRoutes() http.Handler {
 		s.middleware.SecurityHeaders,
 		// 4b. honor Sec-GPC privacy signal
 		s.middleware.SecGPC,
-		// 4c. CORS (near security headers; handles preflight)
+		// 4c. validate Sec-Fetch-* headers (defense-in-depth CSRF/clickjacking)
+		s.middleware.SecFetch,
+		// 4d. CORS (near security headers; handles preflight)
 		s.middleware.CORS,
 		// 5. set allowlisted flag (bypasses 6/7/8, not auth)
 		s.middleware.Allowlist,

@@ -302,6 +302,12 @@ func (s *Server) handleAlertDelete(w http.ResponseWriter, r *http.Request, token
 		http.Redirect(w, r, "/alerts/manage/"+token+"?error="+urlQueryEscape(localizeAlertUserError(r, err)), http.StatusSeeOther)
 		return
 	}
+	// Deleting an alert revokes its accountless access token. Per AI.md PART 11
+	// emit Clear-Site-Data on token revocation so any cached alert data and stored
+	// state for this origin is wiped from the browser.
+	if s.config.Server.Security.Headers.ClearSiteData.OnTokenRevocation {
+		s.setClearSiteData(w, true)
+	}
 	alertRedirectWithMessage(w, r, "/alerts/new", "success", "alerts.deleted_success")
 }
 

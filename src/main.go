@@ -1562,6 +1562,7 @@ func runUpdate(subCmd string) {
 		if err != nil {
 			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to check for updates: %v\n", err)
 			exitFunc(1)
+			return
 		}
 
 		if !info.Available {

@@ -255,16 +255,18 @@ func TestIdentityMatches(t *testing.T) {
 
 	tests := []struct {
 		name            string
+		appName         string
 		securityContact string
 		want            bool
 	}{
-		{"matching contact", "security@example.com", true},
-		{"mismatched contact", "someone-else@example.com", false},
+		{"matching identity", "TestApp", "security@example.com", true},
+		{"mismatched contact", "TestApp", "someone-else@example.com", false},
+		{"mismatched app name", "OtherApp", "security@example.com", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := IdentityMatches(kp.Key, "TestApp", tt.securityContact); got != tt.want {
+			if got := IdentityMatches(kp.Key, tt.appName, tt.securityContact); got != tt.want {
 				t.Errorf("IdentityMatches() = %v, want %v", got, tt.want)
 			}
 		})

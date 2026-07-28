@@ -834,6 +834,24 @@ func (s *Server) handleAutocomplete(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// setClearSiteData emits the Clear-Site-Data response header per AI.md PART 11
+// Privacy Signal Headers. Default directive set is "cache", "cookies", "storage";
+// "executionContexts" is added only when web.headers.clear_site_data.execution_contexts
+// is true. Callers that set an essential cookie in the SAME response pass
+// includeCookies=false so the header does not clobber the cookie just written.
+func (s *Server) setClearSiteData(w http.ResponseWriter, includeCookies bool) {
+	csd := s.config.Server.Security.Headers.ClearSiteData
+	parts := []string{`"cache"`}
+	if includeCookies {
+		parts = append(parts, `"cookies"`)
+	}
+	parts = append(parts, `"storage"`)
+	if csd.ExecutionContexts {
+		parts = append(parts, `"executionContexts"`)
+	}
+	w.Header().Set("Clear-Site-Data", strings.Join(parts, ", "))
+}
+
 // handleConsent handles POST /consent — sets the cookieConsent JSON cookie and redirects back.
 // Accepts choice=accept (all categories) or choice=decline (essential only).
 // Cookie format: {"essential":true,"preferences":true,"analytics":false,"timestamp":unix}
@@ -883,6 +901,14 @@ func (s *Server) handleConsent(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   365 * 24 * 60 * 60,
 		SameSite: http.SameSiteLaxMode,
 	})
+
+	// Consent withdrawal (decline / unknown-treated-as-decline): clear cached and
+	// stored non-essential data per AI.md PART 11. "cookies" is excluded so the
+	// essential cookieConsent cookie set above is not clobbered in the same response.
+	withdrawal := !prefEnabled && !analyticsEnabled
+	if withdrawal && s.config.Server.Security.Headers.ClearSiteData.OnConsentWithdrawal {
+		s.setClearSiteData(w, false)
+	}
 
 	ref := r.Referer()
 	if ref == "" {
@@ -968,6 +994,12 @@ func (s *Server) handleConsentCCPA(w http.ResponseWriter, r *http.Request) {
 			MaxAge:   365 * 24 * 60 * 60,
 			SameSite: http.SameSiteLaxMode,
 		})
+		// CCPA opt-out is a consent withdrawal (opt-out of sale/sharing) per AI.md
+		// PART 11. Clear cached and stored non-essential data; exclude "cookies" so
+		// the ccpa_opt_out cookie set above survives.
+		if s.config.Server.Security.Headers.ClearSiteData.OnConsentWithdrawal {
+			s.setClearSiteData(w, false)
+		}
 	} else {
 		// opt-in: clear the cookie
 		http.SetCookie(w, &http.Cookie{

@@ -629,6 +629,68 @@ func (c *CSRFMiddleware) Protect(next http.Handler) http.Handler {
 	})
 }
 
+// isCSRFExempt reports whether path is in the CSRF exempt_paths allow-list.
+// Exempt paths bypass both the CSRF token check and the Sec-Fetch-Site
+// cross-site rejection (webhooks, machine-to-machine callbacks) per AI.md PART 11.
+func (m *Middleware) isCSRFExempt(path string) bool {
+	for _, p := range m.config.Server.Security.CSRF.ExemptPaths {
+		if p == "" {
+			continue
+		}
+		if path == p || strings.HasPrefix(path, strings.TrimSuffix(p, "/")+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// SecFetch validates the Sec-Fetch-* request headers as a defense-in-depth CSRF
+// and clickjacking layer per AI.md PART 11 "Sec-Fetch-* Request Validation".
+// Validation is present-and-bad reject only — absence is legacy-browser
+// pass-through and falls through to the CSRF token check. Gated by
+// web.headers.sec_fetch_validation.
+func (m *Middleware) SecFetch(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !m.config.Server.Security.Headers.SecFetchValidation {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		site := r.Header.Get("Sec-Fetch-Site")
+		mode := r.Header.Get("Sec-Fetch-Mode")
+		dest := r.Header.Get("Sec-Fetch-Dest")
+
+		stateChanging := r.Method == http.MethodPost || r.Method == http.MethodPut ||
+			r.Method == http.MethodPatch || r.Method == http.MethodDelete
+
+		// Sec-Fetch-Site: reject cross-site state-changers without a Bearer token
+		// and not listed in CSRF exempt_paths.
+		if stateChanging && site == "cross-site" {
+			hasBearer := strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ")
+			if !hasBearer && !m.isCSRFExempt(r.URL.Path) {
+				localizedHTTPError(w, r, http.StatusForbidden, "errors.sec_fetch_cross_site")
+				return
+			}
+		}
+
+		// Sec-Fetch-Mode: reject navigate on JSON API endpoints for state-changers.
+		// GET/HEAD navigation is allowed (side-effect-free), so only guard state-changers.
+		if stateChanging && mode == "navigate" && strings.HasPrefix(r.URL.Path, "/api/") {
+			localizedHTTPError(w, r, http.StatusForbidden, "errors.sec_fetch_navigate")
+			return
+		}
+
+		// Sec-Fetch-Dest: reject cross-site iframe/frame embedding — the default
+		// frame-ancestors policy is 'self', so cross-origin framing is not allowed.
+		if (dest == "iframe" || dest == "frame") && site == "cross-site" {
+			localizedHTTPError(w, r, http.StatusForbidden, "errors.sec_fetch_frame")
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 // Logger middleware logs all requests
 func (m *Middleware) Logger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

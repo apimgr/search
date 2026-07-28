@@ -577,6 +577,57 @@ type EmailFromConfig struct {
 	Email string `yaml:"email"`
 }
 
+// CSRFConfig represents CSRF protection configuration per AI.md PART 11/16.
+type CSRFConfig struct {
+	Enabled    bool   `yaml:"enabled"`
+	CookieName string `yaml:"cookie_name"`
+	HeaderName string `yaml:"header_name"`
+	FieldName  string `yaml:"field_name"`
+	// ExemptPaths lists request paths that bypass CSRF token validation and the
+	// Sec-Fetch-Site cross-site rejection (webhooks, machine-to-machine callbacks).
+	// Per AI.md PART 11 Sec-Fetch-* Request Validation table.
+	ExemptPaths []string `yaml:"exempt_paths"`
+}
+
+// ClearSiteDataConfig controls emission of the Clear-Site-Data response header
+// per AI.md PART 11 Privacy Signal Headers. Emitted on token-revocation and
+// consent-withdrawal responses.
+type ClearSiteDataConfig struct {
+	// OnTokenRevocation emits Clear-Site-Data on operator token-revocation responses.
+	OnTokenRevocation bool `yaml:"on_token_revocation"`
+	// OnConsentWithdrawal emits Clear-Site-Data when a user withdraws cookie/CCPA consent.
+	OnConsentWithdrawal bool `yaml:"on_consent_withdrawal"`
+	// ExecutionContexts adds "executionContexts" to the header value. Off by default
+	// because it breaks SPA back-navigation (per AI.md PART 11).
+	ExecutionContexts bool `yaml:"execution_contexts"`
+}
+
+// SecurityHeadersConfig represents the security response headers per AI.md PART 11.
+type SecurityHeadersConfig struct {
+	XFrameOptions         string `yaml:"x_frame_options"`
+	XContentTypeOptions   string `yaml:"x_content_type_options"`
+	XXSSProtection        string `yaml:"x_xss_protection"`
+	ReferrerPolicy        string `yaml:"referrer_policy"`
+	ContentSecurityPolicy string `yaml:"content_security_policy"`
+	PermissionsPolicy     string `yaml:"permissions_policy"`
+	// Per AI.md PART 11: cross-origin isolation headers
+	// Cross-Origin-Opener-Policy (default: unsafe-none)
+	COOP string `yaml:"coop"`
+	// Cross-Origin-Embedder-Policy (default: unsafe-none)
+	COEP string `yaml:"coep"`
+	// Cross-Origin-Resource-Policy (default: cross-origin)
+	CORP string `yaml:"corp"`
+	// Emit Origin-Agent-Cluster: ?1 (always on per spec)
+	OriginAgentCluster bool `yaml:"origin_agent_cluster"`
+	// X-Permitted-Cross-Domain-Policies (default: none)
+	CrossDomainPolicies string `yaml:"cross_domain_policies"`
+	// SecFetchValidation rejects cross-site state-changing requests using the
+	// Sec-Fetch-* request headers (present-and-bad reject only) per AI.md PART 11.
+	SecFetchValidation bool `yaml:"sec_fetch_validation"`
+	// ClearSiteData controls the Clear-Site-Data response header.
+	ClearSiteData ClearSiteDataConfig `yaml:"clear_site_data"`
+}
+
 // SecurityConfig represents security configuration
 type SecurityConfig struct {
 	// InstallationSecret is a per-install random secret (32 bytes, base64-encoded),
@@ -590,33 +641,10 @@ type SecurityConfig struct {
 	// security report bodies (AES fallback when no PGP keypair exists), and any future
 	// at-rest encrypted data. Never logged, never returned in any API response.
 	EncryptionKey string `yaml:"encryption_key"`
-	// CSRF
-	CSRF struct {
-		Enabled    bool   `yaml:"enabled"`
-		CookieName string `yaml:"cookie_name"`
-		HeaderName string `yaml:"header_name"`
-		FieldName  string `yaml:"field_name"`
-	} `yaml:"csrf"`
-	// Headers
-	Headers struct {
-		XFrameOptions         string `yaml:"x_frame_options"`
-		XContentTypeOptions   string `yaml:"x_content_type_options"`
-		XXSSProtection        string `yaml:"x_xss_protection"`
-		ReferrerPolicy        string `yaml:"referrer_policy"`
-		ContentSecurityPolicy string `yaml:"content_security_policy"`
-		PermissionsPolicy     string `yaml:"permissions_policy"`
-		// Per AI.md PART 11: cross-origin isolation headers
-		// Cross-Origin-Opener-Policy (default: unsafe-none)
-		COOP string `yaml:"coop"`
-		// Cross-Origin-Embedder-Policy (default: unsafe-none)
-		COEP string `yaml:"coep"`
-		// Cross-Origin-Resource-Policy (default: cross-origin)
-		CORP string `yaml:"corp"`
-		// Emit Origin-Agent-Cluster: ?1 (always on per spec)
-		OriginAgentCluster bool `yaml:"origin_agent_cluster"`
-		// X-Permitted-Cross-Domain-Policies (default: none)
-		CrossDomainPolicies string `yaml:"cross_domain_policies"`
-	} `yaml:"headers"`
+	// CSRF protection configuration.
+	CSRF CSRFConfig `yaml:"csrf"`
+	// Headers holds the security response headers and Sec-Fetch/Clear-Site-Data controls.
+	Headers SecurityHeadersConfig `yaml:"headers"`
 	// HSTS per AI.md PART 11
 	HSTS struct {
 		Enabled           bool `yaml:"enabled"`
@@ -1450,30 +1478,13 @@ func DefaultConfig() *Config {
 			},
 			Security: SecurityConfig{
 				InstallationSecret: generateBase64Secret(),
-				CSRF: struct {
-					Enabled    bool   `yaml:"enabled"`
-					CookieName string `yaml:"cookie_name"`
-					HeaderName string `yaml:"header_name"`
-					FieldName  string `yaml:"field_name"`
-				}{
+				CSRF: CSRFConfig{
 					Enabled:    true,
 					CookieName: "csrf_token",
 					HeaderName: "X-CSRF-Token",
 					FieldName:  "_csrf",
 				},
-				Headers: struct {
-					XFrameOptions         string `yaml:"x_frame_options"`
-					XContentTypeOptions   string `yaml:"x_content_type_options"`
-					XXSSProtection        string `yaml:"x_xss_protection"`
-					ReferrerPolicy        string `yaml:"referrer_policy"`
-					ContentSecurityPolicy string `yaml:"content_security_policy"`
-					PermissionsPolicy     string `yaml:"permissions_policy"`
-					COOP                  string `yaml:"coop"`
-					COEP                  string `yaml:"coep"`
-					CORP                  string `yaml:"corp"`
-					OriginAgentCluster    bool   `yaml:"origin_agent_cluster"`
-					CrossDomainPolicies   string `yaml:"cross_domain_policies"`
-				}{
+				Headers: SecurityHeadersConfig{
 					XFrameOptions:       "SAMEORIGIN",
 					XContentTypeOptions: "nosniff",
 					XXSSProtection:      "1; mode=block",
@@ -1492,6 +1503,12 @@ func DefaultConfig() *Config {
 					CORP:                "cross-origin",
 					OriginAgentCluster:  true,
 					CrossDomainPolicies: "none",
+					SecFetchValidation:  true,
+					ClearSiteData: ClearSiteDataConfig{
+						OnTokenRevocation:   true,
+						OnConsentWithdrawal: true,
+						ExecutionContexts:   false,
+					},
 				},
 				HSTS: struct {
 					Enabled           bool `yaml:"enabled"`
