@@ -27,7 +27,7 @@ SOFTWARE.
 | Library | Version | License | Copyright |
 |---------|---------|---------|-----------|
 | github.com/ProtonMail/gopenpgp/v2 | v2.10.0 | MIT | 2020 Proton AG |
-| github.com/alicebob/miniredis/v2 | v2.38.0 | MIT | 2014 Alicebob |
+| github.com/alicebob/miniredis/v2 | v2.38.0 | MIT | 2014 Harmen |
 | github.com/charmbracelet/bubbles | v1.0.0 | MIT | 2020-present Charm |
 | github.com/charmbracelet/bubbletea | v1.3.10 | MIT | 2020-present Charm |
 | github.com/charmbracelet/lipgloss | v1.1.0 | MIT | 2021-present Charm |
