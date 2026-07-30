@@ -195,10 +195,18 @@ func TestRunBuildUnknownPlatform(t *testing.T) {
 }
 
 func TestRunBuildMacosPlatform(t *testing.T) {
-	withExitFunc(t)
-	withArgs(t, []string{"search", "--build", "macos"})
-	// "macos" is an alias for "darwin" — no panic
-	captureStdout(t, func() { runBuild("macos") })
+	// "macos"/"mac"/"osx" are GOOS aliases and must be rejected — only
+	// "darwin" is accepted per binary-rules.md.
+	for _, platform := range []string{"macos", "mac", "osx"} {
+		t.Run(platform, func(t *testing.T) {
+			withExitFunc(t)
+			withArgs(t, []string{"search", "--build", platform})
+			out := captureStdout(t, func() { runBuild(platform) })
+			if !strings.Contains(out, "Unknown platform") && !strings.Contains(out, "ERROR") {
+				t.Errorf("runBuild(%q) expected rejection output, got: %q", platform, out)
+			}
+		})
+	}
 }
 
 // ============================================================

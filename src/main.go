@@ -1848,7 +1848,7 @@ func runBuild(platform string) {
 		targets = allTargets
 	case "linux":
 		targets = []BuildTarget{{"linux", "amd64"}, {"linux", "arm64"}}
-	case "darwin", "macos":
+	case "darwin":
 		targets = []BuildTarget{{"darwin", "amd64"}, {"darwin", "arm64"}}
 	case "windows":
 		targets = []BuildTarget{{"windows", "amd64"}, {"windows", "arm64"}}
@@ -1856,6 +1856,10 @@ func runBuild(platform string) {
 		targets = []BuildTarget{{"freebsd", "amd64"}, {"freebsd", "arm64"}}
 	case "host":
 		targets = []BuildTarget{{runtime.GOOS, runtime.GOARCH}}
+	case "macos", "mac", "osx":
+		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown platform: %s\n", platform)
+		fmt.Println("   Use \"darwin\" instead — GOOS aliases (macos/mac/osx) are not accepted")
+		exitFunc(1)
 	default:
 		// Check for OS/ARCH format
 		parts := strings.Split(platform, "/")
