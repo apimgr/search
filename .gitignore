@@ -123,12 +123,20 @@ volumes/
 *.swp
 *.swo
 
-# AI config directories (regenerated from AI.md rules, not committed)
-.claude/
-.cursor/
+# AI config directories - team config is committed, personal/runtime files are not
+# .claude/: settings.json, CLAUDE.md, rules/, agents/, hooks/, commands/, plans/ ARE committed
+.claude/settings.local.json
+.claude/*.lock
+.claude/backups/
+.claude/cache/
+.claude/history.jsonl
+# .cursor/: rules/, mcp.json ARE committed; personal settings.json is not
+.cursor/settings.json
+# .windsurf/: rules/ IS committed; personal settings.json is not
+.windsurf/settings.json
+# Fully regenerated, never committed
 .aider/
 .ai/
-.windsurf/
 
 # Claude Code personal files (always gitignored)
 CLAUDE.local.md
