@@ -105,7 +105,7 @@ func init() {
 	flag.IntVar(&flagPort, "port", 0, "Set listen port")
 	flag.StringVar(&flagBaseURL, "baseurl", "", "Set URL path prefix for reverse proxy (default: /)")
 	// Per AI.md PART 8: --color {auto|yes|no}
-	flag.StringVar(&flagColor, "color", "", "Set color output mode (auto|yes|no)")
+	flag.StringVar(&flagColor, "color", "auto", "Set color output mode (auto|yes|no)")
 	// Per AI.md PART 8: --lang sets language for output (default: auto, from LANG env)
 	flag.StringVar(&flagLang, "lang", "", "Set language for output (default: auto)")
 }
