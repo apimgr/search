@@ -206,8 +206,8 @@ docker:
 # Server template projects: 80% minimum coverage threshold
 # Per AI.md PART 28: test artifacts go to /tmp/apimgr/search-XXXXXX/, NEVER project dir
 test:
-	@echo "Running tests with coverage..."
-	@mkdir -p "/tmp/$(PROJECTORG)" $(GO_CACHE) $(GO_BUILD) && \
+	@mkdir -p "/tmp/$(PROJECTORG)" $(GO_CACHE) $(GO_BUILD)
+	@echo "Running tests with coverage..." && \
 	COVDIR=$$(mktemp -d "/tmp/$(PROJECTORG)/$(PROJECTNAME)-XXXXXX") && \
 	docker run --rm \
 		--name $(PROJECTNAME)-test-$$(tr -dc 'a-z0-9' </dev/urandom | head -c8) \
