@@ -3,95 +3,45 @@
 set -e
 
 # Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+BUILD_RED='\033[0;31m'
+BUILD_GREEN='\033[0;32m'
+BUILD_YELLOW='\033[1;33m'
+# No Color
+BUILD_NC='\033[0m'
 
-echo -e "${GREEN}=== Search Build Script ===${NC}"
-
-# Configuration
-VERSION=${VERSION:-$(cat release.txt 2>/dev/null || echo "dev")}
-BUILD_DIR="binaries"
-RELEASE_DIR="releases"
-PLATFORMS=${PLATFORMS:-"linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64"}
-USE_DOCKER=${USE_DOCKER:-true}
+echo -e "${BUILD_GREEN}=== Search Build Script ===${BUILD_NC}"
 
 # Functions
-print_info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
+__print_info() {
+    echo -e "${BUILD_GREEN}[INFO]${BUILD_NC} $1"
 }
 
-print_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
+__print_warn() {
+    echo -e "${BUILD_YELLOW}[WARN]${BUILD_NC} $1"
 }
 
-print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+__print_error() {
+    echo -e "${BUILD_RED}[ERROR]${BUILD_NC} $1"
 }
 
-# Create directories
-mkdir -p "$BUILD_DIR"
-mkdir -p "$RELEASE_DIR"
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+BUILD_PROJECT_DIR=$(cd -- "$SCRIPT_DIR/.." && pwd)
 
-# Build function
-build_binary() {
-    local goos=$1
-    local goarch=$2
-    local output_name="search"
-    
-    if [ "$goos" = "windows" ]; then
-        output_name="search.exe"
-    fi
-    
-    local output_path="$BUILD_DIR/${goos}_${goarch}/$output_name"
-    mkdir -p "$BUILD_DIR/${goos}_${goarch}"
-    
-    print_info "Building for $goos/$goarch..."
-    
-    if [ "$USE_DOCKER" = "true" ]; then
-        docker run --rm \
-            -v "$PWD:/app" \
-            -w /app \
-            -e GOOS="$goos" \
-            -e GOARCH="$goarch" \
-            -e CGO_ENABLED=0 \
-            -e GOFLAGS=-buildvcs=false \
-            casjaysdev/go:latest \
-            go build -ldflags "-X main.Version=$VERSION -s -w" \
-            -o "$output_path" \
-            src/main.go
-    else
-        GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 \
-            go build -ldflags "-X main.Version=$VERSION -s -w" \
-            -o "$output_path" \
-            src/main.go
-    fi
-    
-    if [ $? -eq 0 ]; then
-        print_info "✓ Built: $output_path"
-    else
-        print_error "✗ Failed to build for $goos/$goarch"
-        return 1
-    fi
-}
-
-# Parse command line arguments
-BUILD_ALL=false
-BUILD_CURRENT=false
+# Parse command line arguments (kept for backward-compatible invocation)
+BUILD_ARM64=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --all)
-            BUILD_ALL=true
+        --all|--current)
+            # make build already builds every target platform in one pass
             shift
             ;;
-        --current)
-            BUILD_CURRENT=true
+        --arm64)
+            BUILD_ARM64=true
             shift
             ;;
         --no-docker)
-            USE_DOCKER=false
+            __print_warn "--no-docker is unsupported — make build always runs in Docker per project rules"
             shift
             ;;
         --version)
@@ -100,50 +50,20 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             echo "Unknown option: $1"
-            echo "Usage: $0 [--all] [--current] [--no-docker] [--version VERSION]"
+            echo "Usage: $0 [--all] [--arm64] [--version VERSION]"
             exit 1
             ;;
     esac
 done
 
-# Detect current platform
-CURRENT_OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-CURRENT_ARCH=$(uname -m)
+export VERSION
 
-case $CURRENT_ARCH in
-    x86_64)
-        CURRENT_ARCH="amd64"
-        ;;
-    aarch64|arm64)
-        CURRENT_ARCH="arm64"
-        ;;
-esac
+__print_info "Delegating to 'make build' (single source of truth for the build pipeline)..."
+make -C "$BUILD_PROJECT_DIR" build
 
-if [ "$CURRENT_OS" = "darwin" ]; then
-    CURRENT_OS="darwin"
-elif [ "$CURRENT_OS" = "linux" ]; then
-    CURRENT_OS="linux"
+if [ "$BUILD_ARM64" = "true" ]; then
+    __print_info "Delegating to 'make build-arm64'..."
+    make -C "$BUILD_PROJECT_DIR" build-arm64
 fi
 
-print_info "Version: $VERSION"
-print_info "Build directory: $BUILD_DIR"
-print_info "Using Docker: $USE_DOCKER"
-
-# Build based on flags
-if [ "$BUILD_ALL" = "true" ]; then
-    print_info "Building for all platforms..."
-    for platform in $PLATFORMS; do
-        IFS='/' read -r goos goarch <<< "$platform"
-        build_binary "$goos" "$goarch"
-    done
-elif [ "$BUILD_CURRENT" = "true" ]; then
-    print_info "Building for current platform ($CURRENT_OS/$CURRENT_ARCH)..."
-    build_binary "$CURRENT_OS" "$CURRENT_ARCH"
-else
-    # Default: build for current platform
-    print_info "Building for current platform ($CURRENT_OS/$CURRENT_ARCH)..."
-    print_info "Use --all to build for all platforms, --current for explicit current platform"
-    build_binary "$CURRENT_OS" "$CURRENT_ARCH"
-fi
-
-echo -e "${GREEN}=== Build Complete ===${NC}"
+echo -e "${BUILD_GREEN}=== Build Complete ===${BUILD_NC}"

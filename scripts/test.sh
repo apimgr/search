@@ -3,115 +3,54 @@
 set -e
 
 # Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+TEST_RED='\033[0;31m'
+TEST_GREEN='\033[0;32m'
+TEST_YELLOW='\033[1;33m'
+# No Color
+TEST_NC='\033[0m'
 
-echo -e "${GREEN}=== Search Test Suite ===${NC}"
-
-# Configuration
-USE_DOCKER=${USE_DOCKER:-true}
-COVERAGE=${COVERAGE:-false}
-VERBOSE=${VERBOSE:-false}
+echo -e "${TEST_GREEN}=== Search Test Suite ===${TEST_NC}"
 
 # Functions
-print_info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
+__print_info() {
+    echo -e "${TEST_GREEN}[INFO]${TEST_NC} $1"
 }
 
-print_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
+__print_warn() {
+    echo -e "${TEST_YELLOW}[WARN]${TEST_NC} $1"
 }
 
-print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+__print_error() {
+    echo -e "${TEST_RED}[ERROR]${TEST_NC} $1"
 }
 
-# Parse command line arguments
+TEST_SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+TEST_PROJECT_DIR=$(cd -- "$TEST_SCRIPT_DIR/.." && pwd)
+
+# Parse command line arguments (kept for backward-compatible invocation)
 while [[ $# -gt 0 ]]; do
     case $1 in
         --no-docker)
-            USE_DOCKER=false
+            __print_warn "--no-docker is unsupported — make test always runs in Docker per project rules"
             shift
             ;;
         --coverage)
-            COVERAGE=true
+            # make test always runs with coverage
             shift
             ;;
         --verbose|-v)
-            VERBOSE=true
+            __print_warn "--verbose is unsupported — make test already runs go test -v"
             shift
             ;;
         *)
             echo "Unknown option: $1"
-            echo "Usage: $0 [--no-docker] [--coverage] [--verbose|-v]"
+            echo "Usage: $0 [--coverage] [--verbose|-v]"
             exit 1
             ;;
     esac
 done
 
-print_info "Using Docker: $USE_DOCKER"
-print_info "Coverage: $COVERAGE"
-print_info "Verbose: $VERBOSE"
+__print_info "Delegating to 'make test' (single source of truth for the test pipeline)..."
+make -C "$TEST_PROJECT_DIR" test
 
-# Coverage output always goes to /tmp/apimgr/search-XXXXXX/ — never to the project tree
-PROJECTORG="apimgr"
-PROJECTNAME="search"
-mkdir -p "/tmp/$PROJECTORG"
-COVDIR=$(mktemp -d "/tmp/$PROJECTORG/$PROJECTNAME-XXXXXX")
-
-# Prepare test command
-TEST_CMD="go test ./..."
-TEST_ARGS=""
-
-if [ "$VERBOSE" = "true" ]; then
-    TEST_ARGS="$TEST_ARGS -v"
-fi
-
-if [ "$COVERAGE" = "true" ]; then
-    TEST_ARGS="$TEST_ARGS -coverprofile=/tmp/covout/coverage.out -covermode=atomic"
-fi
-
-# Run tests
-if [ "$USE_DOCKER" = "true" ]; then
-    print_info "Running tests in Docker..."
-    docker run --rm \
-        -v "$PWD:/app" \
-        -v "$COVDIR:/tmp/covout" \
-        -w /app \
-        -e CGO_ENABLED=0 \
-        -e GOFLAGS=-buildvcs=false \
-        casjaysdev/go:latest \
-        sh -c "$TEST_CMD $TEST_ARGS"
-else
-    print_info "Running tests locally..."
-    eval "CGO_ENABLED=0 $TEST_CMD $TEST_ARGS"
-fi
-
-TEST_EXIT_CODE=$?
-
-# Handle coverage report
-if [ "$COVERAGE" = "true" ] && [ $TEST_EXIT_CODE -eq 0 ]; then
-    print_info "Generating coverage report..."
-    if [ "$USE_DOCKER" = "true" ]; then
-        docker run --rm \
-            -v "$COVDIR:/tmp/covout" \
-            -e CGO_ENABLED=0 \
-            casjaysdev/go:latest \
-            go tool cover -func=/tmp/covout/coverage.out
-    else
-        go tool cover -func="$COVDIR/coverage.out"
-    fi
-
-    print_info "Coverage report saved to $COVDIR/coverage.out"
-fi
-
-# Exit with test result
-if [ $TEST_EXIT_CODE -eq 0 ]; then
-    echo -e "${GREEN}=== All Tests Passed ===${NC}"
-    exit 0
-else
-    echo -e "${RED}=== Tests Failed ===${NC}"
-    exit 1
-fi
+echo -e "${TEST_GREEN}=== All Tests Passed ===${TEST_NC}"
