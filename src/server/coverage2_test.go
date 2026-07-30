@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/apimgr/search/src/config"
 )
 
 // coverage2_test.go targets functions that were at 0 % or low coverage after
@@ -475,5 +477,84 @@ func TestValidateNotPrivateProxy_Extra(t *testing.T) {
 				t.Errorf("validateNotPrivateProxy(%q) error = %v, wantErr %v", tt.host, err, tt.wantErr)
 			}
 		})
+	}
+}
+
+// ---------- resolveUnits (global unit-system resolution) ----------
+
+// TestResolveUnitsCookieOverride confirms an explicit "units" cookie wins
+// over the operator's configured default.
+func TestResolveUnitsCookieOverride(t *testing.T) {
+	s := newTestServer(t)
+
+	tests := []struct {
+		name   string
+		cookie string
+		want   string
+	}{
+		{"metric cookie", "metric", "metric"},
+		{"imperial cookie", "imperial", "imperial"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req.AddCookie(&http.Cookie{Name: "units", Value: tt.cookie})
+			got := s.resolveUnits(req)
+			if got != tt.want {
+				t.Errorf("resolveUnits() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestResolveUnitsInvalidCookieFallsBackToConfig confirms a bogus cookie
+// value is ignored in favor of the configured default.
+func TestResolveUnitsInvalidCookieFallsBackToConfig(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Search.Widgets.Weather.Units = "metric"
+	s := &Server{config: cfg}
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: "units", Value: "bogus"})
+	got := s.resolveUnits(req)
+	if got != "metric" {
+		t.Errorf("resolveUnits() = %q, want %q", got, "metric")
+	}
+}
+
+// TestResolveUnitsNoCookieUsesConfigDefault confirms the operator-configured
+// server.yml default is used when no cookie is present.
+func TestResolveUnitsNoCookieUsesConfigDefault(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Search.Widgets.Weather.Units = "metric"
+	s := &Server{config: cfg}
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	got := s.resolveUnits(req)
+	if got != "metric" {
+		t.Errorf("resolveUnits() = %q, want %q", got, "metric")
+	}
+}
+
+// TestResolveUnitsDefaultsToImperial confirms the hardcoded fallback is
+// imperial when config is nil and no cookie is set.
+func TestResolveUnitsDefaultsToImperial(t *testing.T) {
+	s := &Server{}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	got := s.resolveUnits(req)
+	if got != "imperial" {
+		t.Errorf("resolveUnits() with nil config = %q, want %q", got, "imperial")
+	}
+}
+
+// TestResolveUnitsConfigDefaultIsImperial confirms DefaultConfig() itself
+// defaults the weather widget's unit system to imperial.
+func TestResolveUnitsConfigDefaultIsImperial(t *testing.T) {
+	s := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	got := s.resolveUnits(req)
+	if got != "imperial" {
+		t.Errorf("resolveUnits() with default config = %q, want %q", got, "imperial")
 	}
 }

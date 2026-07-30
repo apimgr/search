@@ -1071,6 +1071,22 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleSearch handles search requests
+// resolveUnits resolves the global unit system ("metric" or "imperial") for
+// a request: a client-side "units" cookie (mirroring the visitor's
+// localStorage preference, consistent with other client-side widget
+// preferences) overrides the operator-configured server default.
+func (s *Server) resolveUnits(r *http.Request) string {
+	if c, err := r.Cookie("units"); err == nil {
+		if c.Value == "metric" || c.Value == "imperial" {
+			return c.Value
+		}
+	}
+	if s.config != nil && (s.config.Search.Widgets.Weather.Units == "metric" || s.config.Search.Widgets.Weather.Units == "imperial") {
+		return s.config.Search.Widgets.Weather.Units
+	}
+	return "imperial"
+}
+
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	prefs := parseSearchPreferences(r.URL.Query().Get("prefs"))
 
@@ -1154,6 +1170,13 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	// Inject the resolved request language so instant handlers can return
 	// translated Title/Content text.
 	ctx = instant.WithLang(ctx, s.getI18nManager().DetectLanguage(r))
+
+	// Inject the global unit system ("metric" or "imperial") so instant
+	// handlers such as the unit converter can pick a conversion direction
+	// when a query doesn't specify a target unit. A client-side "units"
+	// cookie (set from the visitor's localStorage preference) overrides the
+	// operator-configured server default.
+	ctx = instant.WithUnits(ctx, s.resolveUnits(r))
 
 	// Check for instant answers first (only for general category)
 	var instantAnswer *instant.Answer

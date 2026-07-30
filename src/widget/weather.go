@@ -140,7 +140,7 @@ func (f *WeatherFetcher) Fetch(ctx context.Context, params map[string]string) (*
 		units = f.config.Units
 	}
 	if units == "" {
-		units = "metric"
+		units = "imperial"
 	}
 
 	var lat, lon float64

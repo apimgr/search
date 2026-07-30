@@ -17,11 +17,34 @@ type geoIPLookupKeyType struct{}
 // langKeyType is an unexported type for the language context key.
 type langKeyType struct{}
 
+// unitsKeyType is an unexported type for the global unit-system context key.
+type unitsKeyType struct{}
+
 // ClientIPKey is the context key used to pass the client's IP address to instant handlers.
 var ClientIPKey = clientIPKeyType{}
 
 // langKey is the context key used to pass the resolved request language to instant handlers.
 var langKey = langKeyType{}
+
+// unitsKey is the context key used to pass the resolved global unit system
+// ("metric" or "imperial") to instant handlers such as the unit converter.
+var unitsKey = unitsKeyType{}
+
+// WithUnits returns a new context carrying the resolved global unit system
+// so instant handlers (e.g. the unit converter) can pick a conversion
+// direction when a query doesn't specify a target unit.
+func WithUnits(ctx context.Context, units string) context.Context {
+	return context.WithValue(ctx, unitsKey, units)
+}
+
+// UnitsFromContext retrieves the global unit system stored by WithUnits.
+// Returns "imperial" (the operator-configurable default) when not set.
+func UnitsFromContext(ctx context.Context) string {
+	if units, ok := ctx.Value(unitsKey).(string); ok && (units == "metric" || units == "imperial") {
+		return units
+	}
+	return "imperial"
+}
 
 // WithLang returns a new context carrying the resolved i18n language code so
 // instant handlers can return translated Title/Content text.

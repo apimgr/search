@@ -10,7 +10,8 @@ import (
 
 // ConvertHandler handles unit conversions
 type ConvertHandler struct {
-	patterns []*regexp.Regexp
+	patterns    []*regexp.Regexp
+	barePattern *regexp.Regexp
 }
 
 // NewConvertHandler creates a new conversion handler
@@ -22,6 +23,10 @@ func NewConvertHandler() *ConvertHandler {
 			// "X unit = ? unit"
 			regexp.MustCompile(`(?i)^(\d+(?:\.\d+)?)\s*([a-zA-Z°]+)\s*=\s*\?\s*([a-zA-Z°]+)$`),
 		},
+		// "convert X unit" or bare "X unit" with no destination given (e.g.
+		// "convert 33 degrees", "22 meters"). The target unit is resolved
+		// from the global unit-system default (see UnitsFromContext).
+		barePattern: regexp.MustCompile(`(?i)^(?:convert\s+)?(\d+(?:\.\d+)?)\s*(degrees?|°|[a-zA-Z]+)$`),
 	}
 }
 
@@ -30,7 +35,7 @@ func (h *ConvertHandler) Name() string {
 }
 
 func (h *ConvertHandler) Patterns() []*regexp.Regexp {
-	return h.patterns
+	return append(append([]*regexp.Regexp{}, h.patterns...), h.barePattern)
 }
 
 func (h *ConvertHandler) CanHandle(query string) bool {
@@ -38,6 +43,10 @@ func (h *ConvertHandler) CanHandle(query string) bool {
 		if p.MatchString(query) {
 			return true
 		}
+	}
+	if matches := h.barePattern.FindStringSubmatch(query); len(matches) == 3 {
+		_, _, ok := unitSystem(normalizeUnit(strings.ToLower(matches[2])))
+		return ok || isAmbiguousTemperatureUnit(matches[2])
 	}
 	return false
 }
@@ -56,7 +65,7 @@ func (h *ConvertHandler) HandleInstantQuery(ctx context.Context, query string) (
 	}
 
 	if fromUnit == "" || toUnit == "" {
-		return nil, nil
+		return h.handleBareUnit(ctx, query)
 	}
 
 	// Normalize unit names
@@ -87,6 +96,149 @@ func (h *ConvertHandler) HandleInstantQuery(ctx context.Context, query string) (
 			"result":   result,
 		},
 	}, nil
+}
+
+// unitSystemPair holds the representative unit for each unit system within
+// a conversion category.
+type unitSystemPair struct {
+	metric   string
+	imperial string
+}
+
+// categorySystems maps each unit-system-aware category to its representative
+// metric and imperial units, used to resolve a target unit when a query
+// doesn't specify one explicitly.
+var categorySystems = map[string]unitSystemPair{
+	"temperature": {metric: "celsius", imperial: "fahrenheit"},
+	"length":      {metric: "meters", imperial: "feet"},
+	"weight":      {metric: "kilograms", imperial: "pounds"},
+	"volume":      {metric: "liters", imperial: "gallons"},
+}
+
+// unitCategoryAndSystem maps every normalized unit that belongs to a
+// metric/imperial pair to its category and system.
+var unitCategoryAndSystem = map[string]struct{ category, system string }{
+	"celsius":     {"temperature", "metric"},
+	"fahrenheit":  {"temperature", "imperial"},
+	"meters":      {"length", "metric"},
+	"kilometers":  {"length", "metric"},
+	"centimeters": {"length", "metric"},
+	"millimeters": {"length", "metric"},
+	"miles":       {"length", "imperial"},
+	"feet":        {"length", "imperial"},
+	"inches":      {"length", "imperial"},
+	"yards":       {"length", "imperial"},
+	"grams":       {"weight", "metric"},
+	"kilograms":   {"weight", "metric"},
+	"milligrams":  {"weight", "metric"},
+	"tonnes":      {"weight", "metric"},
+	"pounds":      {"weight", "imperial"},
+	"ounces":      {"weight", "imperial"},
+	"tons":        {"weight", "imperial"},
+	"liters":      {"volume", "metric"},
+	"milliliters": {"volume", "metric"},
+	"gallons":     {"volume", "imperial"},
+	"quarts":      {"volume", "imperial"},
+	"pints":       {"volume", "imperial"},
+	"cups":        {"volume", "imperial"},
+}
+
+// unitSystem returns the category and unit system ("metric" or "imperial")
+// for a normalized unit, e.g. unitSystem("meters") -> ("length", "metric").
+func unitSystem(normalizedUnit string) (category, system string, ok bool) {
+	if v, found := unitCategoryAndSystem[normalizedUnit]; found {
+		return v.category, v.system, true
+	}
+	return "", "", false
+}
+
+// isAmbiguousTemperatureUnit reports whether the raw unit token is a
+// system-less temperature marker (e.g. "degree", "degrees", "°") that
+// requires the global unit-system default to resolve.
+func isAmbiguousTemperatureUnit(rawUnit string) bool {
+	switch strings.ToLower(rawUnit) {
+	case "degree", "degrees", "°":
+		return true
+	default:
+		return false
+	}
+}
+
+// oppositeSystem returns "metric" for "imperial" and vice versa.
+func oppositeSystem(system string) string {
+	if system == "metric" {
+		return "imperial"
+	}
+	return "metric"
+}
+
+// handleBareUnit handles a query that gives a value and a unit but no
+// explicit target (e.g. "convert 33 degrees", "22 meters"). The source
+// system is resolved from the unit itself; ambiguous temperature markers
+// ("degrees") are assumed to be in the system opposite the global default.
+// The result is always expressed in the global default's system. If the
+// source is already in the global system there is nothing useful to
+// auto-convert, so the query is left for normal search handling.
+func (h *ConvertHandler) handleBareUnit(ctx context.Context, query string) (*Answer, error) {
+	matches := h.barePattern.FindStringSubmatch(query)
+	if len(matches) != 3 {
+		return nil, nil
+	}
+
+	value, err := strconv.ParseFloat(matches[1], 64)
+	if err != nil {
+		return nil, nil
+	}
+	rawUnit := matches[2]
+
+	global := UnitsFromContext(ctx)
+
+	var category, fromUnit string
+	if isAmbiguousTemperatureUnit(rawUnit) {
+		category = "temperature"
+		fromUnit = categorySystemsUnit(categorySystems[category], oppositeSystem(global))
+	} else {
+		normalized := normalizeUnit(strings.ToLower(rawUnit))
+		cat, system, ok := unitSystem(normalized)
+		if !ok {
+			return nil, nil
+		}
+		if system == global {
+			// Already in the global system - nothing to auto-convert to.
+			return nil, nil
+		}
+		category = cat
+		fromUnit = normalized
+	}
+
+	toUnit := categorySystemsUnit(categorySystems[category], global)
+
+	result, err := convert(value, fromUnit, toUnit)
+	if err != nil {
+		return nil, nil
+	}
+
+	return &Answer{
+		Type:  AnswerTypeConvert,
+		Query: query,
+		Title: "Unit Conversion",
+		Content: fmt.Sprintf("<div class=\"conversion-result\">%s %s = <strong>%s %s</strong></div>",
+			formatNumber(value), fromUnit, formatNumber(result), toUnit),
+		Data: map[string]interface{}{
+			"value":    value,
+			"fromUnit": fromUnit,
+			"toUnit":   toUnit,
+			"result":   result,
+			"global":   global,
+		},
+	}, nil
+}
+
+func categorySystemsUnit(pair unitSystemPair, system string) string {
+	if system == "imperial" {
+		return pair.imperial
+	}
+	return pair.metric
 }
 
 // normalizeUnit normalizes unit names to standard form

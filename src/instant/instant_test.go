@@ -5694,3 +5694,185 @@ func TestParseTLDRMarkdownNoDescription(t *testing.T) {
 		t.Error("Result should contain command name")
 	}
 }
+
+// Tests for the global unit-system context helpers.
+
+func TestWithUnitsAndUnitsFromContext(t *testing.T) {
+	tests := []struct {
+		name  string
+		units string
+		want  string
+	}{
+		{"metric", "metric", "metric"},
+		{"imperial", "imperial", "imperial"},
+		{"invalid falls back to imperial", "bogus", "imperial"},
+		{"empty falls back to imperial", "", "imperial"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := WithUnits(context.Background(), tt.units)
+			got := UnitsFromContext(ctx)
+			if got != tt.want {
+				t.Errorf("UnitsFromContext() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestUnitsFromContextUnset(t *testing.T) {
+	got := UnitsFromContext(context.Background())
+	if got != "imperial" {
+		t.Errorf("UnitsFromContext(unset) = %q, want %q", got, "imperial")
+	}
+}
+
+// Tests for the bare-unit auto-conversion path (e.g. "convert 33 degrees",
+// "22 meters") added to ConvertHandler.
+
+func TestConvertHandlerCanHandleBareUnit(t *testing.T) {
+	h := NewConvertHandler()
+
+	tests := []struct {
+		query string
+		want  bool
+	}{
+		{"convert 33 degrees", true},
+		{"22 meters", true},
+		{"21 miles", true},
+		{"2 yards", true},
+		{"convert 5 bogusunit", false},
+		{"just text", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			got := h.CanHandle(tt.query)
+			if got != tt.want {
+				t.Errorf("CanHandle(%q) = %v, want %v", tt.query, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestConvertHandlerHandleBareUnitAmbiguousTemperature(t *testing.T) {
+	h := NewConvertHandler()
+
+	// Global is metric -> ambiguous "degrees" assumed imperial (fahrenheit),
+	// converted to metric (celsius).
+	ctx := WithUnits(context.Background(), "metric")
+	answer, err := h.HandleInstantQuery(ctx, "convert 33 degrees")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("expected an answer for ambiguous temperature bare unit")
+	}
+	if answer.Data["fromUnit"] != "fahrenheit" || answer.Data["toUnit"] != "celsius" {
+		t.Errorf("Data = %+v, want fromUnit=fahrenheit toUnit=celsius", answer.Data)
+	}
+
+	// Global is imperial -> ambiguous "degrees" assumed metric (celsius),
+	// converted to imperial (fahrenheit).
+	ctx = WithUnits(context.Background(), "imperial")
+	answer, err = h.HandleInstantQuery(ctx, "convert 33 degrees")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("expected an answer for ambiguous temperature bare unit")
+	}
+	if answer.Data["fromUnit"] != "celsius" || answer.Data["toUnit"] != "fahrenheit" {
+		t.Errorf("Data = %+v, want fromUnit=celsius toUnit=fahrenheit", answer.Data)
+	}
+}
+
+func TestConvertHandlerHandleBareUnitExplicitSystem(t *testing.T) {
+	h := NewConvertHandler()
+
+	// "22 meters" is explicitly metric; global imperial -> convert to feet.
+	ctx := WithUnits(context.Background(), "imperial")
+	answer, err := h.HandleInstantQuery(ctx, "22 meters")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("expected an answer for bare metric unit under imperial global")
+	}
+	if answer.Data["fromUnit"] != "meters" || answer.Data["toUnit"] != "feet" {
+		t.Errorf("Data = %+v, want fromUnit=meters toUnit=feet", answer.Data)
+	}
+
+	// "21 miles" is explicitly imperial; global metric -> convert to meters.
+	ctx = WithUnits(context.Background(), "metric")
+	answer, err = h.HandleInstantQuery(ctx, "21 miles")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery error = %v", err)
+	}
+	if answer == nil {
+		t.Fatal("expected an answer for bare imperial unit under metric global")
+	}
+	if answer.Data["fromUnit"] != "miles" || answer.Data["toUnit"] != "meters" {
+		t.Errorf("Data = %+v, want fromUnit=miles toUnit=meters", answer.Data)
+	}
+
+	// "2 yards" is explicitly imperial; global imperial -> already in the
+	// global system, no auto-conversion, falls through (nil, nil).
+	ctx = WithUnits(context.Background(), "imperial")
+	answer, err = h.HandleInstantQuery(ctx, "2 yards")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery error = %v", err)
+	}
+	if answer != nil {
+		t.Errorf("expected nil answer for already-global-system bare unit, got %+v", answer)
+	}
+}
+
+func TestConvertHandlerHandleBareUnitUnknown(t *testing.T) {
+	h := NewConvertHandler()
+	ctx := WithUnits(context.Background(), "imperial")
+	answer, err := h.HandleInstantQuery(ctx, "convert 5 bogusunit")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery error = %v", err)
+	}
+	if answer != nil {
+		t.Errorf("expected nil answer for unknown bare unit, got %+v", answer)
+	}
+}
+
+func TestConvertHandlerExplicitDirectionUnaffectedByGlobal(t *testing.T) {
+	h := NewConvertHandler()
+
+	// Explicit "X to Y" queries must honor the literal direction regardless
+	// of the global unit-system default.
+	ctx := WithUnits(context.Background(), "imperial")
+	answer, err := h.HandleInstantQuery(ctx, "21 celsius to fahrenheit")
+	if err != nil {
+		t.Fatalf("HandleInstantQuery error = %v", err)
+	}
+	if answer == nil || answer.Data["fromUnit"] != "celsius" || answer.Data["toUnit"] != "fahrenheit" {
+		t.Errorf("expected explicit celsius->fahrenheit conversion, got %+v", answer)
+	}
+}
+
+func TestUnitSystemHelpers(t *testing.T) {
+	if cat, sys, ok := unitSystem("meters"); !ok || cat != "length" || sys != "metric" {
+		t.Errorf("unitSystem(meters) = (%q, %q, %v), want (length, metric, true)", cat, sys, ok)
+	}
+	if _, _, ok := unitSystem("bogus"); ok {
+		t.Error("unitSystem(bogus) should not be ok")
+	}
+	if !isAmbiguousTemperatureUnit("degrees") || !isAmbiguousTemperatureUnit("degree") || !isAmbiguousTemperatureUnit("°") {
+		t.Error("isAmbiguousTemperatureUnit should recognize degree markers")
+	}
+	if isAmbiguousTemperatureUnit("meters") {
+		t.Error("isAmbiguousTemperatureUnit(meters) should be false")
+	}
+	if oppositeSystem("metric") != "imperial" || oppositeSystem("imperial") != "metric" {
+		t.Error("oppositeSystem should invert metric/imperial")
+	}
+	pair := categorySystems["length"]
+	if categorySystemsUnit(pair, "imperial") != "feet" || categorySystemsUnit(pair, "metric") != "meters" {
+		t.Error("categorySystemsUnit should select the representative unit per system")
+	}
+}

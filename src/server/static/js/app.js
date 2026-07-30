@@ -4119,8 +4119,8 @@
                         '</div>' +
                         '<label>' + cityLabel + ':<input type="text" id="setting-city" value="' + escapeHtml(settings.city || '') + '" placeholder="' + cityPlaceholder + '"' + (useGeolocation ? ' disabled' : '') + '></label>' +
                         '<label>' + unitsLabel + ':<select id="setting-units">' +
-                            '<option value="metric"' + (settings.units !== 'imperial' ? ' selected' : '') + '>' + unitsMetric + '</option>' +
-                            '<option value="imperial"' + (settings.units === 'imperial' ? ' selected' : '') + '>' + unitsImperial + '</option>' +
+                            '<option value="metric"' + (settings.units === 'metric' ? ' selected' : '') + '>' + unitsMetric + '</option>' +
+                            '<option value="imperial"' + (settings.units !== 'metric' ? ' selected' : '') + '>' + unitsImperial + '</option>' +
                         '</select></label>' +
                         '<input type="hidden" id="setting-lat" value="' + (settings.lat || '') + '">' +
                         '<input type="hidden" id="setting-lon" value="' + (settings.lon || '') + '">';
@@ -4264,7 +4264,7 @@
                 case 'weather':
                     settings.useGeolocation = document.getElementById('setting-use-location')?.checked || false;
                     settings.city = document.getElementById('setting-city')?.value || '';
-                    settings.units = document.getElementById('setting-units')?.value || 'metric';
+                    settings.units = document.getElementById('setting-units')?.value || 'imperial';
                     settings.lat = document.getElementById('setting-lat')?.value || '';
                     settings.lon = document.getElementById('setting-lon')?.value || '';
                     break;

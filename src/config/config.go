@@ -1259,7 +1259,9 @@ type WidgetsConfig struct {
 type WeatherWidgetConfig struct {
 	Enabled     bool   `yaml:"enabled"`
 	DefaultCity string `yaml:"default_city"`
-	// "metric" or "imperial"
+	// Global unit system default ("metric" or "imperial"). Also used as the
+	// fallback direction for the generic unit-converter instant answer when
+	// a query doesn't specify a target unit.
 	Units string `yaml:"units"`
 }
 
@@ -1785,7 +1787,7 @@ func DefaultConfig() *Config {
 				Weather: WeatherWidgetConfig{
 					Enabled:     true,
 					DefaultCity: "",
-					Units:       "metric",
+					Units:       "imperial",
 				},
 				News: NewsWidgetConfig{
 					Enabled:  true,
