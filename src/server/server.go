@@ -18,6 +18,7 @@ import (
 
 	"github.com/apimgr/search/src/alert"
 	"github.com/apimgr/search/src/api"
+	"github.com/apimgr/search/src/backup"
 	"github.com/apimgr/search/src/cache"
 	"github.com/apimgr/search/src/common/httputil"
 	"github.com/apimgr/search/src/common/i18n"
@@ -86,6 +87,10 @@ type Server struct {
 
 // NewServer creates a new server instance
 func NewServer(cfg *config.Config) *Server {
+	// Per AI.md PART 21: resolve and cache the backup dir once at startup —
+	// cleanup/retention logic must never re-resolve the path later
+	backup.SetBackupDir(config.GetBackupDir())
+
 	// Create logging manager
 	logDir := config.GetLogDir()
 	logMgr := logging.NewManager(logDir)

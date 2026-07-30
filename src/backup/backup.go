@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -60,6 +61,34 @@ type Manager struct {
 	createdBy string
 }
 
+// cachedBackupDir holds the backup directory resolved once at server
+// startup, per AI.md PART 21: "Never re-resolve the path at cleanup time."
+// backupDirExplicitlySet distinguishes a real SetBackupDir call (server
+// startup) from callers that never made one (one-shot CLI commands), which
+// must keep re-reading config.GetBackupDir() on every call so per-invocation
+// overrides (e.g. --backup-dir, or config.SetBackupDirOverride in tests)
+// still take effect.
+var (
+	cachedBackupDir        string
+	backupDirExplicitlySet bool
+)
+
+// SetBackupDir caches the backup directory resolved at server startup so
+// every subsequent retention sweep and cleanup pass reuses the same path.
+func SetBackupDir(path string) {
+	cachedBackupDir = path
+	backupDirExplicitlySet = true
+}
+
+// resolveBackupDir returns the path cached by an explicit SetBackupDir call,
+// or a fresh config.GetBackupDir() resolution otherwise.
+func resolveBackupDir() string {
+	if backupDirExplicitlySet {
+		return cachedBackupDir
+	}
+	return config.GetBackupDir()
+}
+
 // SetCreatedBy sets the username for backup attribution (per AI.md PART 25)
 func (m *Manager) SetCreatedBy(username string) {
 	m.createdBy = username
@@ -74,7 +103,7 @@ func (m *Manager) SetPassword(password string) {
 // NewManager creates a new backup manager
 func NewManager() *Manager {
 	return &Manager{
-		backupDir: config.GetBackupDir(),
+		backupDir: resolveBackupDir(),
 		configDir: config.GetConfigDir(),
 		dataDir:   config.GetDataDir(),
 	}
@@ -383,7 +412,8 @@ func (m *Manager) List() ([]BackupInfo, error) {
 	}
 
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".tar.gz") {
+		name := entry.Name()
+		if entry.IsDir() || !(strings.HasSuffix(name, ".tar.gz") || strings.HasSuffix(name, ".tar.gz.enc")) {
 			continue
 		}
 
@@ -518,104 +548,285 @@ func (m *Manager) ScheduledBackup(keepCount int) error {
 }
 
 // RetentionPolicy defines backup retention rules per AI.md PART 21
-// Per AI.md PART 21: Retention policies (count, day, week, month, year)
+// Per AI.md PART 21: exclusive priority-ordered buckets (yearly > monthly > weekly > daily)
 type RetentionPolicy struct {
-	// Number of backups to keep
+	// Count is max_backups: how many daily/full backups to keep once not
+	// claimed by a higher-priority bucket (oldest deleted first beyond this)
 	Count int `json:"count" yaml:"count"`
-	// Days to keep daily backups
+	// Day is unused by the bucket algorithm; retained for API/config compatibility
 	Day int `json:"day" yaml:"day"`
-	// Weeks to keep weekly backups
+	// Week is keep_weekly: how many Sunday backups to keep
 	Week int `json:"week" yaml:"week"`
-	// Months to keep monthly backups
+	// Month is keep_monthly: how many first-of-month backups to keep
 	Month int `json:"month" yaml:"month"`
-	// Years to keep yearly backups
+	// Year is keep_yearly: how many Jan-1st backups to keep
 	Year int `json:"year" yaml:"year"`
+	// MaxTotalSize is an absolute (e.g. "50G") or percent-of-volume (e.g. "10%")
+	// cap enforced after bucket pruning, overriding count limits by deleting
+	// oldest files first. Falsey values (empty, "0", "false", "off", ...) disable it.
+	MaxTotalSize string `json:"max_total_size" yaml:"max_total_size"`
 }
 
 // DefaultRetentionPolicy returns the default retention policy
-// Per AI.md PART 21: Reasonable defaults
+// Per AI.md PART 21: default settings keep 2 files total (1 full + 1 incremental)
 func DefaultRetentionPolicy() RetentionPolicy {
 	return RetentionPolicy{
-		// Keep at least 10 backups
-		Count: 10,
-		// Keep 7 days of daily backups
-		Day: 7,
-		// Keep 4 weeks of weekly backups
-		Week: 4,
-		// Keep 12 months of monthly backups
-		Month: 12,
-		// Keep 3 years of yearly backups
-		Year: 3,
+		// Keep 1 full/daily backup by default
+		Count: 1,
+		Day:   0,
+		// No weekly/monthly/yearly retention by default
+		Week:  0,
+		Month: 0,
+		Year:  0,
+		// Default size cap: 10% of the backup volume
+		MaxTotalSize: "10%",
 	}
 }
 
+// isIncrementalBackup reports whether filename is a fixed-name daily/hourly
+// incremental (always exactly one file, replaced every run) rather than a
+// counted full/timestamped backup. Per AI.md PART 21: incrementals are
+// excluded entirely from counted retention.
+func isIncrementalBackup(filename string) bool {
+	base := strings.TrimSuffix(filename, ".enc")
+	base = strings.TrimSuffix(base, ".tar.gz")
+	return strings.HasSuffix(base, "-daily") || strings.HasSuffix(base, "-hourly")
+}
+
+// markKeep marks up to limit of the newest matches (per predicate) in backups
+// as kept in the shared kept set, and returns the remaining unmarked backups
+// (still oldest-first) for further bucket processing. A backup matched here
+// is claimed by this bucket only, never double-counted by a lower-priority one.
+func markKeep(backups []BackupInfo, kept map[string]bool, limit int, matches func(BackupInfo) bool) []BackupInfo {
+	if limit <= 0 {
+		return backups
+	}
+
+	marked := make(map[string]bool)
+	count := 0
+	for i := len(backups) - 1; i >= 0 && count < limit; i-- {
+		if matches(backups[i]) {
+			kept[backups[i].Filename] = true
+			marked[backups[i].Filename] = true
+			count++
+		}
+	}
+
+	var remaining []BackupInfo
+	for _, b := range backups {
+		if !marked[b.Filename] {
+			remaining = append(remaining, b)
+		}
+	}
+	return remaining
+}
+
 // ApplyRetention applies retention policy to backups
-// Per AI.md PART 21: Smart retention with daily/weekly/monthly/yearly buckets
+// Per AI.md PART 21: exclusive priority-ordered buckets — yearly (Jan 1) >
+// monthly (1st) > weekly (Sunday) > daily (max_backups), oldest deleted
+// first, followed by a max_total_size size-cap pass that overrides count
+// limits. Incremental backups are excluded entirely from counted retention.
 func (m *Manager) ApplyRetention(policy RetentionPolicy) error {
 	backups, err := m.List()
 	if err != nil {
 		return err
 	}
 
-	if len(backups) <= policy.Count {
-		// Nothing to delete
+	var countable []BackupInfo
+	for _, b := range backups {
+		if !isIncrementalBackup(b.Filename) {
+			countable = append(countable, b)
+		}
+	}
+
+	sort.Slice(countable, func(i, j int) bool {
+		return countable[i].CreatedAt.Before(countable[j].CreatedAt)
+	})
+
+	kept := make(map[string]bool)
+	remaining := countable
+
+	// Yearly: Jan 1st, highest priority
+	remaining = markKeep(remaining, kept, policy.Year, func(b BackupInfo) bool {
+		return b.CreatedAt.Month() == time.January && b.CreatedAt.Day() == 1
+	})
+
+	// Monthly: 1st of month
+	remaining = markKeep(remaining, kept, policy.Month, func(b BackupInfo) bool {
+		return b.CreatedAt.Day() == 1
+	})
+
+	// Weekly: Sunday
+	remaining = markKeep(remaining, kept, policy.Week, func(b BackupInfo) bool {
+		return b.CreatedAt.Weekday() == time.Sunday
+	})
+
+	// Daily: whatever is left, up to max_backups, oldest deleted first
+	dailyLimit := policy.Count
+	if dailyLimit < 0 {
+		dailyLimit = 0
+	}
+	if dailyLimit > len(remaining) {
+		dailyLimit = len(remaining)
+	}
+	for i := len(remaining) - dailyLimit; i < len(remaining); i++ {
+		if i >= 0 {
+			kept[remaining[i].Filename] = true
+		}
+	}
+
+	// Delete everything not claimed by a bucket, oldest-first
+	var toDelete []BackupInfo
+	for _, b := range countable {
+		if !kept[b.Filename] {
+			toDelete = append(toDelete, b)
+		}
+	}
+	sort.Slice(toDelete, func(i, j int) bool {
+		return toDelete[i].CreatedAt.Before(toDelete[j].CreatedAt)
+	})
+	for _, b := range toDelete {
+		if err := m.Delete(b.Filename); err != nil {
+			slog.Warn("failed to delete old backup", "file", b.Filename, "err", err)
+		}
+	}
+
+	// Size-cap pass runs after bucket pruning and overrides count limits
+	if err := m.enforceMaxTotalSize(policy.MaxTotalSize); err != nil {
+		slog.Warn("failed to enforce max_total_size", "err", err)
+	}
+
+	return nil
+}
+
+// enforceMaxTotalSize prunes oldest backups first until total backup-directory
+// size is under maxTotalSize. Per AI.md PART 21 this overrides count-based
+// retention limits and runs after bucket pruning. Full/timestamped backups are
+// pruned before incrementals, since incrementals are meant to always exist as
+// exactly one replaced file; if the cap still cannot be met, incrementals are
+// pruned as a last resort.
+func (m *Manager) enforceMaxTotalSize(maxTotalSize string) error {
+	limitBytes, enabled, err := parseMaxTotalSize(maxTotalSize, m.backupDir)
+	if err != nil {
+		return err
+	}
+	if !enabled {
 		return nil
 	}
 
-	now := time.Now()
-	var toDelete []string
-
-	// Categorize backups by age
-	for _, b := range backups {
-		age := now.Sub(b.CreatedAt)
-
-		// Determine if backup should be kept based on retention rules
-		keep := false
-
-		// Keep all backups from today
-		if age < 24*time.Hour {
-			keep = true
-		}
-
-		// Keep daily backups for Day days
-		if age < time.Duration(policy.Day)*24*time.Hour {
-			keep = true
-		}
-
-		// Keep weekly backups (one per week) for Week weeks
-		if age < time.Duration(policy.Week)*7*24*time.Hour {
-			if b.CreatedAt.Weekday() == time.Sunday {
-				keep = true
-			}
-		}
-
-		// Keep monthly backups (first of month) for Month months
-		if age < time.Duration(policy.Month)*30*24*time.Hour {
-			if b.CreatedAt.Day() == 1 {
-				keep = true
-			}
-		}
-
-		// Keep yearly backups (first of year) for Year years
-		if age < time.Duration(policy.Year)*365*24*time.Hour {
-			if b.CreatedAt.Month() == time.January && b.CreatedAt.Day() == 1 {
-				keep = true
-			}
-		}
-
-		if !keep {
-			toDelete = append(toDelete, b.Filename)
-		}
+	backups, err := m.List()
+	if err != nil {
+		return err
 	}
 
-	// Delete old backups
-	for _, filename := range toDelete {
-		if err := m.Delete(filename); err != nil {
-			slog.Warn("failed to delete old backup", "file", filename, "err", err)
+	sort.Slice(backups, func(i, j int) bool {
+		return backups[i].CreatedAt.Before(backups[j].CreatedAt)
+	})
+
+	var total int64
+	for _, b := range backups {
+		total += b.Size
+	}
+
+	for _, incrementalsOnly := range []bool{false, true} {
+		for _, b := range backups {
+			if total <= limitBytes {
+				return nil
+			}
+			if isIncrementalBackup(b.Filename) != incrementalsOnly {
+				continue
+			}
+			if err := m.Delete(b.Filename); err != nil {
+				slog.Warn("failed to delete backup over max_total_size", "file", b.Filename, "err", err)
+				continue
+			}
+			total -= b.Size
 		}
 	}
 
 	return nil
+}
+
+// parseMaxTotalSize resolves a max_total_size setting ("10%", "50G", or a
+// falsey value) into an absolute byte limit. Percent values are resolved
+// against the total capacity of the volume containing path.
+func parseMaxTotalSize(value, path string) (limitBytes int64, enabled bool, err error) {
+	v := strings.ToLower(strings.TrimSpace(value))
+	switch v {
+	case "", "0", "false", "no", "none", "disable", "disabled", "off", "never":
+		return 0, false, nil
+	}
+
+	if strings.HasSuffix(v, "%") {
+		pct, err := strconv.ParseFloat(strings.TrimSuffix(v, "%"), 64)
+		if err != nil {
+			return 0, false, fmt.Errorf("invalid max_total_size percent %q: %w", value, err)
+		}
+		_, total, err := DiskUsage(path)
+		if err != nil {
+			return 0, false, fmt.Errorf("failed to resolve disk size for max_total_size: %w", err)
+		}
+		return int64(float64(total) * pct / 100), true, nil
+	}
+
+	multiplier := int64(1)
+	numPart := v
+	switch {
+	case strings.HasSuffix(v, "t"):
+		multiplier = 1024 * 1024 * 1024 * 1024
+		numPart = strings.TrimSuffix(v, "t")
+	case strings.HasSuffix(v, "g"):
+		multiplier = 1024 * 1024 * 1024
+		numPart = strings.TrimSuffix(v, "g")
+	case strings.HasSuffix(v, "m"):
+		multiplier = 1024 * 1024
+		numPart = strings.TrimSuffix(v, "m")
+	case strings.HasSuffix(v, "k"):
+		multiplier = 1024
+		numPart = strings.TrimSuffix(v, "k")
+	case strings.HasSuffix(v, "b"):
+		numPart = strings.TrimSuffix(v, "b")
+	}
+
+	num, err := strconv.ParseFloat(numPart, 64)
+	if err != nil {
+		return 0, false, fmt.Errorf("invalid max_total_size %q: %w", value, err)
+	}
+
+	return int64(num * float64(multiplier)), true, nil
+}
+
+// CheckDiskSpace reports whether it is safe to create a new backup.
+// Per AI.md PART 21: abort when free space is under 2x the most recent
+// backup's size, or when disk usage exceeds thresholdPercent.
+func (m *Manager) CheckDiskSpace(thresholdPercent int) (ok bool, freeBytes uint64, usedPercent float64, err error) {
+	used, total, err := DiskUsage(m.backupDir)
+	if err != nil {
+		return false, 0, 0, err
+	}
+	if total == 0 {
+		return false, 0, 0, fmt.Errorf("unable to determine disk size for %s", m.backupDir)
+	}
+
+	free := total - used
+	usedPercent = float64(used) / float64(total) * 100
+
+	if thresholdPercent > 0 && usedPercent > float64(thresholdPercent) {
+		return false, free, usedPercent, nil
+	}
+
+	backups, listErr := m.List()
+	if listErr == nil && len(backups) > 0 {
+		sort.Slice(backups, func(i, j int) bool {
+			return backups[i].CreatedAt.Before(backups[j].CreatedAt)
+		})
+		mostRecent := backups[len(backups)-1]
+		if mostRecent.Size > 0 && free < uint64(mostRecent.Size)*2 {
+			return false, free, usedPercent, nil
+		}
+	}
+
+	return true, free, usedPercent, nil
 }
 
 // CreateEncrypted creates an encrypted backup with .enc extension

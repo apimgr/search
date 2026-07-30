@@ -757,21 +757,22 @@ func TestRetentionPolicyStruct(t *testing.T) {
 func TestDefaultRetentionPolicy(t *testing.T) {
 	policy := DefaultRetentionPolicy()
 
-	// Per AI.md PART 22: Default retention values
-	if policy.Count != 10 {
-		t.Errorf("Count = %d, want 10", policy.Count)
+	// Per AI.md PART 21/22: max_backups defaults to 1, weekly/monthly/yearly
+	// buckets default to disabled (0), and max_total_size defaults to "10%"
+	if policy.Count != 1 {
+		t.Errorf("Count = %d, want 1", policy.Count)
 	}
-	if policy.Day != 7 {
-		t.Errorf("Day = %d, want 7", policy.Day)
+	if policy.Day != 0 {
+		t.Errorf("Day = %d, want 0", policy.Day)
 	}
-	if policy.Week != 4 {
-		t.Errorf("Week = %d, want 4", policy.Week)
+	if policy.Week != 0 {
+		t.Errorf("Week = %d, want 0", policy.Week)
 	}
-	if policy.Month != 12 {
-		t.Errorf("Month = %d, want 12", policy.Month)
+	if policy.Month != 0 {
+		t.Errorf("Month = %d, want 0", policy.Month)
 	}
-	if policy.Year != 3 {
-		t.Errorf("Year = %d, want 3", policy.Year)
+	if policy.Year != 0 {
+		t.Errorf("Year = %d, want 0", policy.Year)
 	}
 }
 
@@ -3970,5 +3971,335 @@ func TestIsValidSQLiteFile(t *testing.T) {
 
 	if isValidSQLiteFile(filepath.Join(t.TempDir(), "does-not-exist.db")) {
 		t.Error("isValidSQLiteFile() should be false for a nonexistent file")
+	}
+}
+
+// TestSetBackupDir verifies that SetBackupDir caches the path used by
+// resolveBackupDir, per AI.md PART 21: "Never re-resolve the path at
+// cleanup time."
+func TestSetBackupDir(t *testing.T) {
+	// Save and restore the package-level cache so this test never leaks
+	// state into other tests in this package.
+	original := cachedBackupDir
+	originalSet := backupDirExplicitlySet
+	defer func() {
+		cachedBackupDir = original
+		backupDirExplicitlySet = originalSet
+	}()
+
+	tempDir := t.TempDir()
+	SetBackupDir(tempDir)
+
+	if got := resolveBackupDir(); got != tempDir {
+		t.Errorf("resolveBackupDir() = %q, want %q", got, tempDir)
+	}
+}
+
+// TestNewManagerUsesCachedBackupDir verifies NewManager picks up whatever
+// SetBackupDir last cached.
+func TestNewManagerUsesCachedBackupDir(t *testing.T) {
+	original := cachedBackupDir
+	originalSet := backupDirExplicitlySet
+	defer func() {
+		cachedBackupDir = original
+		backupDirExplicitlySet = originalSet
+	}()
+
+	tempDir := t.TempDir()
+	SetBackupDir(tempDir)
+
+	m := NewManager()
+	if m.backupDir != tempDir {
+		t.Errorf("NewManager().backupDir = %q, want %q", m.backupDir, tempDir)
+	}
+}
+
+// TestParseMaxTotalSize covers absolute units, percent-of-volume, and
+// falsey/disabled values per AI.md PART 21.
+func TestParseMaxTotalSize(t *testing.T) {
+	tempDir := t.TempDir()
+
+	tests := []struct {
+		name        string
+		value       string
+		wantEnabled bool
+		wantBytes   int64
+		wantErr     bool
+	}{
+		{"empty disables", "", false, 0, false},
+		{"zero disables", "0", false, 0, false},
+		{"false disables", "false", false, 0, false},
+		{"off disables", "off", false, 0, false},
+		{"disabled keyword disables", "disabled", false, 0, false},
+		{"none disables", "none", false, 0, false},
+		{"bytes suffix", "100b", true, 100, false},
+		{"kilobytes suffix", "1k", true, 1024, false},
+		{"megabytes suffix", "1m", true, 1024 * 1024, false},
+		{"gigabytes suffix", "1g", true, 1024 * 1024 * 1024, false},
+		{"terabytes suffix", "1t", true, 1024 * 1024 * 1024 * 1024, false},
+		{"no suffix treated as bytes", "500", true, 500, false},
+		{"case insensitive suffix", "2G", true, 2 * 1024 * 1024 * 1024, false},
+		{"invalid number errors", "abcG", false, 0, true},
+		{"invalid percent errors", "abc%", false, 0, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotBytes, gotEnabled, err := parseMaxTotalSize(tt.value, tempDir)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("parseMaxTotalSize() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if err != nil {
+				return
+			}
+			if gotEnabled != tt.wantEnabled {
+				t.Errorf("parseMaxTotalSize() enabled = %v, want %v", gotEnabled, tt.wantEnabled)
+			}
+			if gotBytes != tt.wantBytes {
+				t.Errorf("parseMaxTotalSize() bytes = %d, want %d", gotBytes, tt.wantBytes)
+			}
+		})
+	}
+}
+
+// TestParseMaxTotalSizePercent verifies percent values resolve relative to
+// the real volume capacity via DiskUsage.
+func TestParseMaxTotalSizePercent(t *testing.T) {
+	tempDir := t.TempDir()
+
+	_, total, err := DiskUsage(tempDir)
+	if err != nil {
+		t.Fatalf("DiskUsage() error = %v", err)
+	}
+
+	gotBytes, enabled, err := parseMaxTotalSize("10%", tempDir)
+	if err != nil {
+		t.Fatalf("parseMaxTotalSize() error = %v", err)
+	}
+	if !enabled {
+		t.Fatal("parseMaxTotalSize() enabled = false, want true")
+	}
+
+	want := int64(float64(total) * 0.10)
+	if gotBytes != want {
+		t.Errorf("parseMaxTotalSize(10%%) = %d, want %d", gotBytes, want)
+	}
+}
+
+// TestParseMaxTotalSizePercentBadPath verifies a percent value surfaces the
+// DiskUsage error for a path that cannot be statfs'd.
+func TestParseMaxTotalSizePercentBadPath(t *testing.T) {
+	badPath := filepath.Join(t.TempDir(), "does", "not", "exist")
+
+	_, _, err := parseMaxTotalSize("10%", badPath)
+	if err == nil {
+		t.Error("parseMaxTotalSize() error = nil, want error for unresolvable path")
+	}
+}
+
+// TestDiskUsage verifies DiskUsage reports non-zero total capacity and used
+// <= total for a real, existing directory.
+func TestDiskUsage(t *testing.T) {
+	tempDir := t.TempDir()
+
+	used, total, err := DiskUsage(tempDir)
+	if err != nil {
+		t.Fatalf("DiskUsage() error = %v", err)
+	}
+	if total == 0 {
+		t.Error("DiskUsage() total = 0, want > 0")
+	}
+	if used > total {
+		t.Errorf("DiskUsage() used = %d, want <= total %d", used, total)
+	}
+}
+
+// TestDiskUsageMissingPath verifies DiskUsage surfaces an error for a path
+// that does not exist.
+func TestDiskUsageMissingPath(t *testing.T) {
+	badPath := filepath.Join(t.TempDir(), "does", "not", "exist")
+
+	if _, _, err := DiskUsage(badPath); err == nil {
+		t.Error("DiskUsage() error = nil, want error for nonexistent path")
+	}
+}
+
+// TestCheckDiskSpaceOK verifies CheckDiskSpace reports ok=true when the
+// threshold is effectively disabled and no backups exist yet.
+func TestCheckDiskSpaceOK(t *testing.T) {
+	tempDir := t.TempDir()
+	m := &Manager{backupDir: tempDir}
+
+	ok, free, usedPercent, err := m.CheckDiskSpace(0)
+	if err != nil {
+		t.Fatalf("CheckDiskSpace() error = %v", err)
+	}
+	if !ok {
+		t.Errorf("CheckDiskSpace() ok = false, want true (usedPercent=%.2f)", usedPercent)
+	}
+	if free == 0 {
+		t.Error("CheckDiskSpace() free = 0, want > 0")
+	}
+}
+
+// TestCheckDiskSpaceThresholdExceeded verifies CheckDiskSpace reports
+// ok=false once usedPercent exceeds an artificially low thresholdPercent.
+func TestCheckDiskSpaceThresholdExceeded(t *testing.T) {
+	tempDir := t.TempDir()
+	m := &Manager{backupDir: tempDir}
+
+	// A real filesystem is virtually guaranteed to already be using more
+	// than 1% of its capacity, so this threshold always trips.
+	ok, _, usedPercent, err := m.CheckDiskSpace(1)
+	if err != nil {
+		t.Fatalf("CheckDiskSpace() error = %v", err)
+	}
+	if usedPercent <= 1 {
+		t.Skipf("host filesystem usedPercent (%.4f) unexpectedly <= 1, cannot exercise threshold branch", usedPercent)
+	}
+	if ok {
+		t.Error("CheckDiskSpace() ok = true, want false when usedPercent exceeds thresholdPercent")
+	}
+}
+
+// TestCheckDiskSpaceSmallFixtureBackupOK verifies CheckDiskSpace reports
+// ok=true when the most recent backup is tiny relative to free space.
+func TestCheckDiskSpaceSmallFixtureBackupOK(t *testing.T) {
+	tempDir := t.TempDir()
+	m := &Manager{backupDir: tempDir}
+
+	fixture := filepath.Join(tempDir, "search_backup_2099-01-01_000000.tar.gz")
+	if err := os.WriteFile(fixture, []byte("x"), 0644); err != nil {
+		t.Fatalf("failed to write fixture backup: %v", err)
+	}
+
+	backups, err := m.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(backups) != 1 {
+		t.Fatalf("List() returned %d backups, want 1", len(backups))
+	}
+
+	ok, _, _, err := m.CheckDiskSpace(0)
+	if err != nil {
+		t.Fatalf("CheckDiskSpace() error = %v", err)
+	}
+	if !ok {
+		t.Error("CheckDiskSpace() ok = false for a 1-byte fixture backup, want true")
+	}
+}
+
+// TestCheckDiskSpaceBadPath verifies CheckDiskSpace surfaces the DiskUsage
+// error for an unresolvable backup directory.
+func TestCheckDiskSpaceBadPath(t *testing.T) {
+	badPath := filepath.Join(t.TempDir(), "does", "not", "exist")
+	m := &Manager{backupDir: badPath}
+
+	if _, _, _, err := m.CheckDiskSpace(90); err == nil {
+		t.Error("CheckDiskSpace() error = nil, want error for nonexistent backup dir")
+	}
+}
+
+// TestEnforceMaxTotalSizeDisabled verifies enforceMaxTotalSize is a no-op
+// when max_total_size is a falsey value.
+func TestEnforceMaxTotalSizeDisabled(t *testing.T) {
+	tempDir := t.TempDir()
+	m := &Manager{backupDir: tempDir}
+
+	fixture := filepath.Join(tempDir, "search_backup_2020-01-01_000000.tar.gz")
+	if err := os.WriteFile(fixture, make([]byte, 1024), 0644); err != nil {
+		t.Fatalf("failed to write fixture backup: %v", err)
+	}
+
+	if err := m.enforceMaxTotalSize(""); err != nil {
+		t.Fatalf("enforceMaxTotalSize() error = %v", err)
+	}
+	if _, err := os.Stat(fixture); err != nil {
+		t.Error("enforceMaxTotalSize(\"\") should not delete backups when disabled")
+	}
+}
+
+// TestEnforceMaxTotalSizePrunesOldestFirst verifies that when total backup
+// size exceeds the cap, oldest full backups are pruned first, per AI.md
+// PART 21's "overrides count limits" cleanup logic.
+func TestEnforceMaxTotalSizePrunesOldestFirst(t *testing.T) {
+	tempDir := t.TempDir()
+	m := &Manager{backupDir: tempDir}
+
+	// Three 1KB full backups, oldest to newest.
+	names := []string{
+		"search_backup_2020-01-01_000000.tar.gz",
+		"search_backup_2020-01-02_000000.tar.gz",
+		"search_backup_2020-01-03_000000.tar.gz",
+	}
+	times := []time.Time{
+		time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(2020, 1, 2, 0, 0, 0, 0, time.UTC),
+		time.Date(2020, 1, 3, 0, 0, 0, 0, time.UTC),
+	}
+	for i, name := range names {
+		path := filepath.Join(tempDir, name)
+		if err := os.WriteFile(path, make([]byte, 1024), 0644); err != nil {
+			t.Fatalf("failed to write fixture backup: %v", err)
+		}
+		if err := os.Chtimes(path, times[i], times[i]); err != nil {
+			t.Fatalf("failed to set fixture mtime: %v", err)
+		}
+	}
+
+	// Cap at 1.5KB: only the newest 1KB file should survive.
+	if err := m.enforceMaxTotalSize("1536b"); err != nil {
+		t.Fatalf("enforceMaxTotalSize() error = %v", err)
+	}
+
+	remaining, err := m.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(remaining) != 1 {
+		t.Fatalf("enforceMaxTotalSize() left %d backups, want 1", len(remaining))
+	}
+	if remaining[0].Filename != names[2] {
+		t.Errorf("enforceMaxTotalSize() kept %q, want newest %q", remaining[0].Filename, names[2])
+	}
+}
+
+// TestEnforceMaxTotalSizePrunesIncrementalsLastResort verifies that
+// incremental backups are only pruned once all full backups are gone and
+// the cap is still exceeded, per AI.md PART 21.
+func TestEnforceMaxTotalSizePrunesIncrementalsLastResort(t *testing.T) {
+	tempDir := t.TempDir()
+	m := &Manager{backupDir: tempDir}
+
+	full := filepath.Join(tempDir, "search_backup_2020-01-01_000000.tar.gz")
+	incremental := filepath.Join(tempDir, "search_backup_2020-01-02_000000-daily.tar.gz")
+
+	if err := os.WriteFile(full, make([]byte, 1024), 0644); err != nil {
+		t.Fatalf("failed to write fixture full backup: %v", err)
+	}
+	if err := os.WriteFile(incremental, make([]byte, 1024), 0644); err != nil {
+		t.Fatalf("failed to write fixture incremental backup: %v", err)
+	}
+	oldTime := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	newTime := time.Date(2020, 1, 2, 0, 0, 0, 0, time.UTC)
+	if err := os.Chtimes(full, oldTime, oldTime); err != nil {
+		t.Fatalf("failed to set fixture mtime: %v", err)
+	}
+	if err := os.Chtimes(incremental, newTime, newTime); err != nil {
+		t.Fatalf("failed to set fixture mtime: %v", err)
+	}
+
+	// Cap tighter than either single file: both must go, full first.
+	if err := m.enforceMaxTotalSize("1b"); err != nil {
+		t.Fatalf("enforceMaxTotalSize() error = %v", err)
+	}
+
+	remaining, err := m.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(remaining) != 0 {
+		t.Errorf("enforceMaxTotalSize() left %d backups, want 0", len(remaining))
 	}
 }

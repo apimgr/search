@@ -956,6 +956,8 @@ type BackupConfig struct {
 	Encryption BackupEncryptionConfig `yaml:"encryption"`
 	// Retention policy
 	Retention BackupRetentionConfig `yaml:"retention"`
+	// Percent disk usage above which scheduled backups are skipped (default: 90)
+	DiskThreshold int `yaml:"disk_threshold"`
 }
 
 // BackupEncryptionConfig represents backup encryption settings
@@ -978,6 +980,8 @@ type BackupRetentionConfig struct {
 	KeepMonthly int `yaml:"keep_monthly"`
 	// Yearly backups (Jan 1st) to keep (0 = disabled)
 	KeepYearly int `yaml:"keep_yearly"`
+	// Absolute or percent size cap overriding count limits (default: "10%"; 0/false/off disables)
+	MaxTotalSize string `yaml:"max_total_size"`
 }
 
 // ComplianceConfig represents compliance mode configuration
@@ -1728,6 +1732,16 @@ func DefaultConfig() *Config {
 				Branch:      "stable",
 				AutoInstall: false,
 				DeferDays:   0,
+			},
+			Backup: BackupConfig{
+				Retention: BackupRetentionConfig{
+					MaxBackups:   1,
+					KeepWeekly:   0,
+					KeepMonthly:  0,
+					KeepYearly:   0,
+					MaxTotalSize: "10%",
+				},
+				DiskThreshold: 90,
 			},
 		},
 		Search: SearchConfig{

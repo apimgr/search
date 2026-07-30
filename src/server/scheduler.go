@@ -345,6 +345,21 @@ func (s *Server) performScheduledBackup(ctx context.Context, backupType string) 
 	// Per AI.md PART 25: set attribution before storing backup metadata
 	mgr.SetCreatedBy("scheduler")
 
+	// Per AI.md PART 21: disk-space guard — abort before creating anything when
+	// free space is under 2x the most recent backup's size, or usage exceeds
+	// disk_threshold (default 90%)
+	diskThreshold := s.config.Server.Backup.DiskThreshold
+	if diskThreshold <= 0 {
+		diskThreshold = 90
+	}
+	if ok, free, usedPct, err := mgr.CheckDiskSpace(diskThreshold); err != nil {
+		slog.Warn("disk space check failed, proceeding with backup", "err", err)
+	} else if !ok {
+		slog.Warn("skipping scheduled backup, insufficient disk space", "type", backupType, "free_bytes", free, "used_percent", usedPct)
+		s.logAuditEvent("backup.skipped_disk_full", fmt.Sprintf("%s backup skipped: free=%d bytes, used=%.1f%%", backupType, free, usedPct))
+		return fmt.Errorf("insufficient disk space for backup: free=%d bytes, used=%.1f%%", free, usedPct)
+	}
+
 	// Per AI.md PART 22: Check compliance mode
 	// If compliance enabled and no password, skip backup with warning
 	complianceEnabled := s.config.Server.Compliance.Enabled
@@ -378,57 +393,80 @@ func (s *Server) performScheduledBackup(ctx context.Context, backupType string) 
 		maxBackups = 1
 	}
 
+	ext := ".tar.gz"
+	if encryptionEnabled && backupPassword != "" {
+		ext = ".tar.gz.enc"
+	}
+
+	// Per AI.md PART 21: the daily job produces a timestamped full backup
+	// (search_backup_YYYY-MM-DD<ext>, pruned by max_backups); the hourly job
+	// produces only the fixed-name incremental below
 	var backupPath string
 	var verifyResult *backup.VerificationResult
 	var err error
 
-	// Create backup with verification
-	// Per AI.md PART 22: Only delete old backups if new backup passes ALL verification checks
+	if backupType == "daily" {
+		fullFilename := fmt.Sprintf("search_backup_%s%s", time.Now().Format("2006-01-02"), ext)
+
+		// Create the full backup with verification
+		// Per AI.md PART 22: Only delete old backups if new backup passes ALL verification checks
+		if encryptionEnabled && backupPassword != "" {
+			backupPath, verifyResult, err = mgr.CreateEncryptedAndVerify(fullFilename)
+		} else {
+			backupPath, verifyResult, err = mgr.CreateAndVerify(fullFilename)
+		}
+
+		if err != nil {
+			// Per AI.md PART 22: On failure, DO NOT delete any existing backups
+			slog.Error("backup failed", "type", backupType, "err", err)
+			s.logAuditEvent("backup.verification_failed", fmt.Sprintf("%s backup failed: %v", backupType, err))
+			return err
+		}
+
+		if verifyResult != nil && verifyResult.AllPassed {
+			slog.Info("backup created and verified", "type", backupType, "path", backupPath)
+			s.logAuditEvent("backup.created", fmt.Sprintf("%s backup created: %s (verified: file=%v, size=%v, checksum=%v, manifest=%v)",
+				backupType, backupPath, verifyResult.FileExists, verifyResult.SizeValid, verifyResult.ChecksumValid, verifyResult.ManifestValid))
+		}
+	}
+
+	// Per AI.md PART 21: fixed-name incremental (always exactly one file,
+	// replaced each run), excluded entirely from counted retention
+	incrementalFilename := fmt.Sprintf("search-%s%s", backupType, ext)
+	var incrementalPath string
+	var incrementalVerify *backup.VerificationResult
 	if encryptionEnabled && backupPassword != "" {
-		// Create encrypted backup with verification
-		backupPath, verifyResult, err = mgr.CreateEncryptedAndVerify("")
+		incrementalPath, incrementalVerify, err = mgr.CreateEncryptedAndVerify(incrementalFilename)
 	} else {
-		// Create unencrypted backup with verification
-		backupPath, verifyResult, err = mgr.CreateAndVerify("")
+		incrementalPath, incrementalVerify, err = mgr.CreateAndVerify(incrementalFilename)
 	}
 
 	if err != nil {
-		// Per AI.md PART 22: On failure, DO NOT delete any existing backups
-		slog.Error("backup failed", "type", backupType, "err", err)
-		s.logAuditEvent("backup.verification_failed", fmt.Sprintf("%s backup failed: %v", backupType, err))
+		slog.Error("incremental backup failed", "type", backupType, "err", err)
+		s.logAuditEvent("backup.verification_failed", fmt.Sprintf("%s incremental backup failed: %v", backupType, err))
 		return err
 	}
 
-	// Log verification results
-	if verifyResult != nil && verifyResult.AllPassed {
-		slog.Info("backup created and verified", "type", backupType, "path", backupPath)
-		s.logAuditEvent("backup.created", fmt.Sprintf("%s backup created: %s (verified: file=%v, size=%v, checksum=%v, manifest=%v)",
-			backupType, backupPath, verifyResult.FileExists, verifyResult.SizeValid, verifyResult.ChecksumValid, verifyResult.ManifestValid))
+	if incrementalVerify != nil && incrementalVerify.AllPassed {
+		slog.Info("incremental backup created and verified", "type", backupType, "path", incrementalPath)
+		s.logAuditEvent("backup.daily_updated", fmt.Sprintf("%s incremental backup updated: %s", backupType, incrementalPath))
 	}
 
 	// Apply retention policy only after verification passes
-	// Per AI.md PART 22: Only delete old backups if new backup passes ALL verification checks
-	if err := mgr.ScheduledBackupWithVerification(maxBackups); err != nil {
-		// Don't fail the task, just log the retention cleanup error
-		slog.Warn("backup retention cleanup failed", "err", err)
-	}
-
-	// Apply advanced retention policy if configured
-	// Per AI.md PART 22: keep_weekly, keep_monthly, keep_yearly
+	// Per AI.md PART 21: exclusive priority-ordered buckets plus a
+	// max_total_size size-cap pass overriding count limits
 	retention := s.config.Server.Backup.Retention
-	if retention.KeepWeekly > 0 || retention.KeepMonthly > 0 || retention.KeepYearly > 0 {
-		policy := backup.RetentionPolicy{
-			Count: maxBackups,
-			Day:   7,
-			Week:  retention.KeepWeekly,
-			Month: retention.KeepMonthly,
-			Year:  retention.KeepYearly,
-		}
-		if err := mgr.ApplyRetention(policy); err != nil {
-			slog.Warn("advanced retention policy failed", "err", err)
-		} else {
-			s.logAuditEvent("backup.retention_cleanup", "Applied retention policy")
-		}
+	policy := backup.RetentionPolicy{
+		Count:        maxBackups,
+		Week:         retention.KeepWeekly,
+		Month:        retention.KeepMonthly,
+		Year:         retention.KeepYearly,
+		MaxTotalSize: retention.MaxTotalSize,
+	}
+	if err := mgr.ApplyRetention(policy); err != nil {
+		slog.Warn("retention policy failed", "err", err)
+	} else {
+		s.logAuditEvent("backup.retention_cleanup", "Applied retention policy")
 	}
 
 	slog.Info("backup complete", "type", backupType)
