@@ -94,8 +94,7 @@ dev:
 # LOCAL - Build for current OS/ARCH with version suffix (per AI.md PART 25)
 # =============================================================================
 # Outputs to binaries/search-VERSION for production testing
-local:
-	@rm -rf $(BINDIR) $(RELDIR)
+local: clean
 	@mkdir -p $(BINDIR) $(GO_CACHE) $(GO_BUILD)
 	@echo "Building local binaries version $(VERSION)..."
 	@$(GO_DOCKER) go mod tidy
@@ -113,8 +112,7 @@ local:
 # =============================================================================
 # BUILD - Build all platforms + host binary (via Docker with cached modules)
 # =============================================================================
-build:
-	@rm -rf $(BINDIR) $(RELDIR)
+build: clean
 	@mkdir -p $(BINDIR) $(GO_CACHE) $(GO_BUILD)
 	@echo "Building version $(VERSION)..."
 	@echo "Tidying and downloading Go modules..."
