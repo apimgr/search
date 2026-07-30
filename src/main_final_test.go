@@ -551,6 +551,10 @@ func TestRunMaintenanceBackupWithFilename(t *testing.T) {
 	t.Cleanup(restore)
 	os.Unsetenv("BACKUP_PASSWORD")
 
+	tmpDir := t.TempDir()
+	config.SetBackupDirOverride(tmpDir)
+	t.Cleanup(func() { config.SetBackupDirOverride("") })
+
 	withArgs(t, []string{"search", "--maintenance", "backup", "mytest-backup.tar.gz"})
 	captureStdout(t, func() { runMaintenance("backup") })
 }
@@ -596,6 +600,11 @@ func TestShowStatusRunningProcessNoConfig(t *testing.T) {
 // stmts (filename, size, created, and the Version != "" check).
 func TestRunMaintenanceListWithBackup(t *testing.T) {
 	withExitFunc(t)
+
+	tmpDir := t.TempDir()
+	config.SetBackupDirOverride(tmpDir)
+	t.Cleanup(func() { config.SetBackupDirOverride("") })
+
 	withArgs(t, []string{"search", "--maintenance", "backup"})
 	restore := saveEnvKeys("BACKUP_PASSWORD")
 	t.Cleanup(restore)
