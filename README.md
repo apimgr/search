@@ -189,7 +189,7 @@ SEARCH_DATA_DIR="/var/lib/apimgr/search"
 
 ### Operator Access
 
-There is **no admin web UI**. Configuration is file-driven via `server.yml` and reloaded with `SIGHUP`. To rotate the operator token:
+There is **no admin web UI**. Configuration is file-driven via `server.yml` and hot-reloaded automatically via a file watcher (no signal required). To rotate the operator token:
 
 ```bash
 search maintenance rotate-token
@@ -203,20 +203,20 @@ All API endpoints are under `/api/v1/`. Every web page has a corresponding JSON 
 
 ```bash
 # Search
-curl "http://localhost:PORT/api/v1/search?q=golang&category=general"
+curl "https://scour.li/api/v1/search?q=golang&category=general"
 
 # Autocomplete
-curl "http://localhost:PORT/api/v1/autocomplete?q=gol"
+curl "https://scour.li/api/v1/autocomplete?q=gol"
 
 # List engines
-curl "http://localhost:PORT/api/v1/engines"
+curl "https://scour.li/api/v1/engines"
 ```
 
 ### Alerts
 
 ```bash
 # Create an alert (accountless)
-curl -X POST "http://localhost:PORT/api/v1/alerts" \
+curl -X POST "https://scour.li/api/v1/alerts" \
   -H "Content-Type: application/json" \
   -d '{
     "query": "golang release notes",
@@ -227,25 +227,25 @@ curl -X POST "http://localhost:PORT/api/v1/alerts" \
   }'
 
 # Manage alert with returned token
-curl "http://localhost:PORT/api/v1/alerts/MANAGE_TOKEN"
+curl "https://scour.li/api/v1/alerts/MANAGE_TOKEN"
 ```
 
 ### Health and Status
 
 ```bash
 # Public health (no auth)
-curl http://localhost:PORT/server/healthz
+curl https://scour.li/server/healthz
 
 # Engine status (operator token required)
 curl -H "Authorization: Bearer YOUR_TOKEN" \
-  http://localhost:PORT/api/v1/server/engines
+  https://scour.li/api/v1/server/engines
 ```
 
 ### API Documentation
 
-Interactive API docs at: `http://localhost:PORT/server/docs/swagger`
+Interactive API docs at: `https://scour.li/server/docs/swagger`
 
-GraphQL playground at: `http://localhost:PORT/server/docs/graphql`
+GraphQL playground at: `https://scour.li/server/docs/graphql`
 
 ## Other
 
@@ -319,10 +319,10 @@ server:
 
 ```bash
 # Prometheus metrics
-curl http://localhost:PORT/metrics
+curl https://scour.li/metrics
 
 # Health check
-curl http://localhost:PORT/server/healthz
+curl https://scour.li/server/healthz
 ```
 
 ### Security Headers
