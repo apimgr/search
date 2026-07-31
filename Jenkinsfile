@@ -59,7 +59,7 @@ pipeline {
                         -X 'github.com/apimgr/search/src/config.BuildDate=${BUILD_DATE}' \
                         -X 'github.com/apimgr/search/src/config.OfficialSite=${OFFICIALSITE}' \
                         -X 'github.com/apimgr/search/src/version.Version=${VERSION}' \
-                        -X 'github.com/apimgr/search/src/version.Commit=${COMMIT}' \
+                        -X 'github.com/apimgr/search/src/version.CommitID=${COMMIT}' \
                         -X 'github.com/apimgr/search/src/version.BuildDate=${BUILD_DATE}'"
                     GOOS=linux GOARCH=amd64 go build -ldflags="$LDFLAGS" -o binaries/search-linux-amd64 ./src
                     GOOS=linux GOARCH=arm64 go build -ldflags="$LDFLAGS" -o binaries/search-linux-arm64 ./src
