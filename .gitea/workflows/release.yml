@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: release-${{ gitea.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   PROJECTNAME: search
