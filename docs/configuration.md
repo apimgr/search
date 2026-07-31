@@ -160,31 +160,45 @@ server:
 
 ## Environment Variables
 
-Most server settings can be set via `SEARCH_`-prefixed environment variables.
+Server settings can be set via environment variables. Canonical names follow
+AI.md PART 5 (unprefixed); a few also accept a `SEARCH_` prefix as noted.
 Run `search --help` for the authoritative, complete list.
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SEARCH_PORT` (or `PORT`) | Listen port | random `64000-64999` |
-| `SEARCH_ADDRESS` | Listen address | all interfaces |
-| `SEARCH_MODE` (or `MODE`) | Application mode (`production`/`development`) | `production` |
-| `SEARCH_DEBUG` (or `DEBUG`) | Enable debug mode (`0`/`1`, `true`/`false`) | `false` |
-| `SEARCH_BASE_URL` | Public base URL override | derived |
+| `PORT` | Listen port | random `64000-64999` |
+| `LISTEN` | Listen address | all interfaces |
+| `MODE` | Application mode (`production`/`development`) | `production` |
+| `DEBUG` (or `SEARCH_DEBUG`) | Enable debug mode (`0`/`1`, `true`/`false`) | `false` |
+| `SEARCH_BASE_URL` | Public base URL / path prefix override | derived |
 | `SEARCH_COLOR` | Color output mode (`always`/`never`/`auto`) | `auto` |
-| `SEARCH_LANG` | Default language | `en` |
-| `SEARCH_PID_FILE` | Path to PID file | platform default |
+| `PID_FILE` (or `SEARCH_PID_FILE`) | Path to PID file | platform default |
 | `DOMAIN` | FQDN override | detected |
 | `DATABASE_DRIVER` | `sqlite` or `libsql` | `sqlite` |
 | `DATABASE_URL` | Database connection string | local file |
 | `BACKUP_PASSWORD` | Password for backup encryption (AES-256-GCM) | unset (plaintext backups) |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_TLS`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME` | Email delivery configuration | unset |
 
-Client-side (`search` CLI talking to a remote server):
+Directory overrides (each accepts the unprefixed canonical name or a `SEARCH_`
+prefix, except `SEARCH_CACHE_DIR` which is prefixed only):
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `CONFIG_DIR` (or `SEARCH_CONFIG_DIR`) | Configuration directory | platform default |
+| `DATA_DIR` (or `SEARCH_DATA_DIR`) | Data directory | platform default |
+| `LOG_DIR` (or `SEARCH_LOG_DIR`) | Log directory | platform default |
+| `DATABASE_DIR` (or `SEARCH_DATABASE_DIR`) | SQLite database directory | platform default |
+| `BACKUP_DIR` (or `SEARCH_BACKUP_DIR`) | Backup directory | platform default |
+| `SEARCH_CACHE_DIR` | Cache directory | platform default |
+
+Client-side (`search-cli` talking to a remote server):
 
 | Variable | Description |
 |----------|-------------|
-| `SEARCH_SERVER` | Remote server base URL |
+| `SEARCH_SERVER_PRIMARY` | Remote server base URL |
 | `SEARCH_TOKEN` | Operator token for privileged CLI actions |
+| `SEARCH_SERVER_TIMEOUT` | Request timeout in seconds |
+| `SEARCH_OUTPUT_FORMAT` | Default output format (e.g. `table`, `json`) |
 
 ## CLI Flags
 
@@ -203,7 +217,7 @@ Options:
   --log DIR              Log directory
   --address ADDR         Listen address
   --port PORT            Listen port
-  --base-url URL         Public base URL override
+  --baseurl URL          Public base URL override
   --lang CODE            Default language
   --color MODE           Color output (always|never|auto)
   --pid FILE             Write PID to file

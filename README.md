@@ -119,7 +119,7 @@ sudo mv search-cli-darwin-arm64 /usr/local/bin/search-cli
 search-cli config --server https://search.example.com --token YOUR_API_TOKEN
 
 # Or via environment variables
-export SEARCH_SERVER="https://search.example.com"
+export SEARCH_SERVER_PRIMARY="https://search.example.com"
 export SEARCH_TOKEN="your-api-token"
 ```
 
@@ -180,9 +180,9 @@ engines:
 ### Environment Variables
 
 ```bash
-SEARCH_MODE=production
-SEARCH_PORT=64080
-SEARCH_LISTEN="0.0.0.0"
+MODE=production
+PORT=64080
+LISTEN="0.0.0.0"
 SEARCH_CONFIG_DIR="/etc/apimgr/search"
 SEARCH_DATA_DIR="/var/lib/apimgr/search"
 ```
