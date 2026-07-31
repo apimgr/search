@@ -103,3 +103,7 @@ jobs:
           exit-code: '1'
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
+          # gosu is bundled by the casjaysdev/alpine base image, unused by
+          # this project (tini is our entrypoint/init) — we only scan our
+          # own binaries, not upstream base-image tooling
+          skip-files: '/usr/local/bin/gosu'

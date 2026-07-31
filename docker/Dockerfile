@@ -66,10 +66,6 @@ COPY docker/rootfs/ /
 # Copy Dockerfile to image (for reference and backup)
 COPY docker/Dockerfile /root/Dockerfile
 
-# Remove gosu (bundled by casjaysdev/alpine, unused here — tini is our
-# entrypoint/init; gosu's stale Go toolchain trips Trivy's stdlib CVE scan)
-RUN rm -f /usr/local/bin/gosu
-
 # Make all binaries/scripts in /usr/local/bin executable (755)
 RUN chmod 755 /usr/local/bin/*
 
