@@ -43,6 +43,14 @@
             </div>
 
             <div class="form-group">
+                <label for="units">{{t "preferences.units_label"}}</label>
+                <select id="units" name="units">
+                    <option value="metric">{{t "preferences.units_metric"}}</option>
+                    <option value="imperial">{{t "preferences.units_imperial"}}</option>
+                </select>
+            </div>
+
+            <div class="form-group">
                 <label for="results-per-page">{{t "preferences.results_per_page"}}</label>
                 <select id="results-per-page" name="results_per_page">
                     <option value="10">10</option>

@@ -87,6 +87,16 @@ func (h *Handler) handleWidgetData(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Fall back to the global "units" cookie (set from the Preferences page)
+	// when the widget itself has no explicit per-widget override.
+	if params["units"] == "" {
+		if cookie, err := r.Cookie("units"); err == nil {
+			if cookie.Value == "metric" || cookie.Value == "imperial" {
+				params["units"] = cookie.Value
+			}
+		}
+	}
+
 	// Fetch widget data
 	data, err := h.widgetManager.FetchWidgetData(r.Context(), widgetType, params)
 	if err != nil {

@@ -81,6 +81,7 @@ type WeatherData struct {
 	Condition   string  `json:"condition"`
 	WindSpeed   float64 `json:"wind_speed"`
 	Icon        string  `json:"icon"`
+	Units       string  `json:"units"`
 }
 
 // GeocodingResponse represents Open-Meteo geocoding API response
@@ -204,6 +205,7 @@ func (f *WeatherFetcher) Fetch(ctx context.Context, params map[string]string) (*
 	}
 
 	weather.Location = locationName
+	weather.Units = units
 
 	return &WidgetData{
 		Type:      WidgetWeather,

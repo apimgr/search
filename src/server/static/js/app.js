@@ -99,7 +99,8 @@
             results_per_page: prefs.results_per_page ? String(prefs.results_per_page) : '100',
             new_tab: prefs.new_tab !== false,
             infinite_scroll: prefs.infinite_scroll !== false,
-            keyboard_shortcuts: prefs.keyboard_shortcuts !== false
+            keyboard_shortcuts: prefs.keyboard_shortcuts !== false,
+            units: prefs.units === 'metric' ? 'metric' : 'imperial'
         };
     }
 
@@ -248,6 +249,21 @@
             }
         }
         return 'auto';
+    }
+
+    function getPreferredUnits() {
+        var match = document.cookie.match(/(?:^|;\s*)units=([^;]*)/);
+        if (match) {
+            var saved = decodeURIComponent(match[1]);
+            if (saved === 'metric' || saved === 'imperial') {
+                return saved;
+            }
+        }
+        return 'imperial';
+    }
+
+    function setUnitsCookie(units) {
+        setCookie('units', units === 'metric' ? 'metric' : 'imperial', 31536000);
     }
 
     // Resolve "auto" to actual dark/light based on system preference
@@ -2054,6 +2070,7 @@
             try {
                 var prefs = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
                 var themeSelect = document.getElementById('theme');
+                var unitsSelect = document.getElementById('units');
                 var defaultCategorySelect = document.getElementById('default-category');
                 var safeSearchSelect = document.getElementById('safe-search');
                 var resultsPerPageSelect = document.getElementById('results-per-page');
@@ -2061,8 +2078,9 @@
                 var infiniteScrollCheckbox = document.getElementById('infinite-scroll');
                 var keyboardShortcutsCheckbox = document.getElementById('keyboard-shortcuts');
 
-                // Theme is stored in the 'theme' cookie (not localStorage)
+                // Theme and units are stored in cookies (not localStorage)
                 if (themeSelect) themeSelect.value = getPreferredTheme();
+                if (unitsSelect) unitsSelect.value = getPreferredUnits();
                 if (prefs.default_category && defaultCategorySelect) defaultCategorySelect.value = prefs.default_category;
                 if (prefs.safe_search !== undefined && safeSearchSelect) safeSearchSelect.value = prefs.safe_search;
                 if (prefs.results_per_page && resultsPerPageSelect) resultsPerPageSelect.value = prefs.results_per_page;
@@ -2077,6 +2095,7 @@
         // Save preferences to localStorage
         function savePreferences() {
             var themeSelect = document.getElementById('theme');
+            var unitsSelect = document.getElementById('units');
             var defaultCategorySelect = document.getElementById('default-category');
             var safeSearchSelect = document.getElementById('safe-search');
             var resultsPerPageSelect = document.getElementById('results-per-page');
@@ -2086,6 +2105,7 @@
 
             var prefs = {
                 theme: themeSelect ? normalizeThemePreference(themeSelect.value) : 'auto',
+                units: unitsSelect && unitsSelect.value === 'metric' ? 'metric' : 'imperial',
                 default_category: defaultCategorySelect ? defaultCategorySelect.value : 'general',
                 safe_search: safeSearchSelect ? safeSearchSelect.value : '1',
                 results_per_page: resultsPerPageSelect ? resultsPerPageSelect.value : '100',
@@ -2096,6 +2116,7 @@
 
             localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
             document.cookie = 'theme=' + encodeURIComponent(prefs.theme) + '; path=/; max-age=31536000; SameSite=Lax';
+            setUnitsCookie(prefs.units);
 
             applyTheme(prefs.theme);
 
@@ -3097,17 +3118,18 @@
         var icon = iconMap[data.condition] || '&#9925;';
         var temp = Math.round(data.temperature);
         var feelsLike = Math.round(data.feels_like || data.temperature);
+        var unitLetter = data.units === 'metric' ? 'C' : 'F';
 
         container.innerHTML =
             '<div class="weather-widget">' +
                 '<div class="weather-main">' +
                     '<span class="weather-icon">' + icon + '</span>' +
-                    '<span class="weather-temp">' + temp + '&deg;</span>' +
+                    '<span class="weather-temp">' + temp + '&deg;' + unitLetter + '</span>' +
                 '</div>' +
                 '<div class="weather-details">' +
                     '<div class="weather-location">' + escapeHtml(data.location) + '</div>' +
                     '<div class="weather-description">' + escapeHtml(data.description) + '</div>' +
-                    '<div class="weather-extra">' + weatherFeelsLike + ' ' + feelsLike + '&deg; &middot; ' + data.humidity + '% ' + weatherHumidity + '</div>' +
+                    '<div class="weather-extra">' + weatherFeelsLike + ' ' + feelsLike + '&deg;' + unitLetter + ' &middot; ' + data.humidity + '% ' + weatherHumidity + '</div>' +
                 '</div>' +
             '</div>';
     }
@@ -4119,8 +4141,8 @@
                         '</div>' +
                         '<label>' + cityLabel + ':<input type="text" id="setting-city" value="' + escapeHtml(settings.city || '') + '" placeholder="' + cityPlaceholder + '"' + (useGeolocation ? ' disabled' : '') + '></label>' +
                         '<label>' + unitsLabel + ':<select id="setting-units">' +
-                            '<option value="metric"' + (settings.units === 'metric' ? ' selected' : '') + '>' + unitsMetric + '</option>' +
-                            '<option value="imperial"' + (settings.units !== 'metric' ? ' selected' : '') + '>' + unitsImperial + '</option>' +
+                            '<option value="metric"' + ((settings.units || getPreferredUnits()) === 'metric' ? ' selected' : '') + '>' + unitsMetric + '</option>' +
+                            '<option value="imperial"' + ((settings.units || getPreferredUnits()) !== 'metric' ? ' selected' : '') + '>' + unitsImperial + '</option>' +
                         '</select></label>' +
                         '<input type="hidden" id="setting-lat" value="' + (settings.lat || '') + '">' +
                         '<input type="hidden" id="setting-lon" value="' + (settings.lon || '') + '">';
