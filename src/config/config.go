@@ -1753,7 +1753,12 @@ func DefaultConfig() *Config {
 			DefaultCategories: []string{"general"},
 			ResultsPerPage:    100,
 			Timeout:           10,
-			MaxConcurrent:     7,
+			// 0 = query every enabled engine for the category (see
+			// Aggregator.NewAggregator fallback). A previous fixed default of 7
+			// silently capped results far below requested per_page values
+			// (e.g. per_page=100 returning ~35 results) once more than 7
+			// engines were enabled for a category.
+			MaxConcurrent: 0,
 			Bangs: BangsConfig{
 				Enabled: true,
 				// Direct browser redirect by default (per IDEA.md "Quick redirects").
