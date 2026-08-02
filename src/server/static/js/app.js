@@ -4048,6 +4048,18 @@
 
             var settings = getWidgetSettings(widgetType);
 
+            // The weather widget's own units field is only populated once the
+            // user opens its settings panel and saves; until then it's
+            // undefined, and URLSearchParams would stringify that as the
+            // literal "undefined" (not the global units preference), which
+            // src/widget/weather.go treats as anything-but-"imperial" and so
+            // silently renders metric. Fall back to the global units cookie
+            // preference (set via the preferences page / other widgets) when
+            // the weather widget hasn't set its own override yet.
+            if (widgetType === 'weather' && !settings.units) {
+                settings.units = getPreferredUnits();
+            }
+
             if (widget.category === 'data') {
                 var data = await fetchWidgetData(widgetType, settings);
                 var interval = widget.render(container, data, settings);
