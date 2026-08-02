@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"time"
 
 	"github.com/apimgr/search/src/model"
@@ -30,13 +31,16 @@ func NewWikipediaEngine() *WikipediaEngine {
 }
 
 // wikipediaExtractsResponse is the response from the generator+extracts API.
-// Pages are keyed by pageid (as string), returned in discovery order.
+// Pages are keyed by pageid (as string) in an unordered map, so relevance
+// order must be recovered from each page's Index field (the search-relevance
+// rank assigned by generator=search) rather than map iteration order.
 type wikipediaExtractsResponse struct {
 	Query struct {
 		Pages map[string]struct {
 			Title   string `json:"title"`
 			PageID  int    `json:"pageid"`
 			Extract string `json:"extract"`
+			Index   int    `json:"index"`
 		} `json:"pages"`
 	} `json:"query"`
 }
@@ -86,9 +90,24 @@ func (e *WikipediaEngine) Search(ctx context.Context, query *model.Query) ([]mod
 		return nil, err
 	}
 
-	results := make([]model.Result, 0, len(wikiResp.Query.Pages))
-	position := 0
+	// Map iteration order is random; recover the API's true relevance
+	// order by sorting on each page's Index before building results.
+	pages := make([]struct {
+		Title   string `json:"title"`
+		PageID  int    `json:"pageid"`
+		Extract string `json:"extract"`
+		Index   int    `json:"index"`
+	}, 0, len(wikiResp.Query.Pages))
 	for _, page := range wikiResp.Query.Pages {
+		pages = append(pages, page)
+	}
+	sort.Slice(pages, func(i, j int) bool {
+		return pages[i].Index < pages[j].Index
+	})
+
+	results := make([]model.Result, 0, len(pages))
+	position := 0
+	for _, page := range pages {
 		extract := page.Extract
 		if len(extract) > 500 {
 			extract = extract[:500] + "…"
