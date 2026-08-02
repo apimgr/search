@@ -165,31 +165,64 @@ func (m *Manager) lookup(shortcut string) *Bang {
 
 // buildURL builds the target URL with the search query
 func (m *Manager) buildURL(bang *Bang, query string) string {
-	if query == "" {
-		// Just return base URL without query parameter
-		// Extract base URL from template
-		urlStr := bang.URL
-		if idx := strings.Index(urlStr, "?"); idx > 0 {
-			urlStr = urlStr[:idx]
+	hasPlaceholder := strings.Contains(bang.URL, "{query}") || strings.Contains(bang.URL, "%s")
+
+	if !hasPlaceholder {
+		if query == "" {
+			return bang.URL
 		}
+		// Append query parameter
+		if strings.Contains(bang.URL, "?") {
+			return bang.URL + "&q=" + url.QueryEscape(query)
+		}
+		return bang.URL + "?q=" + url.QueryEscape(query)
+	}
+
+	escaped := url.QueryEscape(query)
+	urlStr := bang.URL
+	if strings.Contains(urlStr, "{query}") {
+		urlStr = strings.ReplaceAll(urlStr, "{query}", escaped)
+	} else {
+		// Legacy %s placeholder format
+		urlStr = strings.Replace(urlStr, "%s", escaped, 1)
+	}
+
+	if query != "" {
 		return urlStr
 	}
 
-	// Replace {query} placeholder or append to URL
-	if strings.Contains(bang.URL, "{query}") {
-		return strings.ReplaceAll(bang.URL, "{query}", url.QueryEscape(query))
+	// Bang-only invocation: the placeholder resolved to an empty value, which
+	// can leave a dangling "?q=" / "&text=" query param or an empty trailing
+	// path segment. Clean it up via proper URL parsing rather than truncating
+	// at the first "?", which used to silently drop every OTHER query
+	// parameter for multi-param bang URLs (Google Images' tbm=isch&q=, Google
+	// Translate's sl=auto&tl=en&text=, etc.).
+	return stripEmptyPlaceholderValue(urlStr)
+}
+
+// stripEmptyPlaceholderValue removes empty-valued query parameters left behind
+// by substituting an empty search query into a {query}/%s placeholder, and
+// trims a trailing path separator left by an emptied path-segment placeholder.
+// Other query parameters and path segments are preserved untouched.
+func stripEmptyPlaceholderValue(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return strings.TrimSuffix(rawURL, "?")
 	}
 
-	// If URL has %s placeholder (legacy format)
-	if strings.Contains(bang.URL, "%s") {
-		return strings.Replace(bang.URL, "%s", url.QueryEscape(query), 1)
+	if parsed.RawQuery != "" {
+		values := parsed.Query()
+		for key, vals := range values {
+			if len(vals) == 1 && vals[0] == "" {
+				values.Del(key)
+			}
+		}
+		parsed.RawQuery = values.Encode()
 	}
 
-	// Append query parameter
-	if strings.Contains(bang.URL, "?") {
-		return bang.URL + "&q=" + url.QueryEscape(query)
-	}
-	return bang.URL + "?q=" + url.QueryEscape(query)
+	parsed.Path = strings.TrimSuffix(parsed.Path, "/")
+
+	return strings.TrimSuffix(parsed.String(), "?")
 }
 
 // SetUserBangs sets user-specific bangs (from localStorage)

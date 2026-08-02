@@ -559,9 +559,36 @@ func TestManagerBuildURLEmptyQueryWithQuestionMark(t *testing.T) {
 	bang := &Bang{URL: "https://example.com/search?lang=en&q={query}"}
 
 	url := m.buildURL(bang, "")
-	// Should strip everything after ?
-	if url != "https://example.com/search" {
-		t.Errorf("buildURL() with empty query = %q, want 'https://example.com/search'", url)
+	// Should strip only the emptied {query} parameter, keeping other real
+	// query parameters intact (e.g. multi-param bangs like Google Images'
+	// tbm=isch&q={query} must keep tbm=isch on a bang-only invocation).
+	if url != "https://example.com/search?lang=en" {
+		t.Errorf("buildURL() with empty query = %q, want 'https://example.com/search?lang=en'", url)
+	}
+}
+
+// Test buildURL with empty query on a multi-param bang URL preserves the
+// other real parameters instead of dropping them all.
+func TestManagerBuildURLEmptyQueryPreservesOtherParams(t *testing.T) {
+	m := NewManager()
+	bang := &Bang{URL: "https://www.google.com/search?tbm=isch&q={query}"}
+
+	url := m.buildURL(bang, "")
+	if url != "https://www.google.com/search?tbm=isch" {
+		t.Errorf("buildURL() with empty query = %q, want 'https://www.google.com/search?tbm=isch'", url)
+	}
+}
+
+// Test buildURL with empty query on a path-embedded placeholder trims the
+// trailing empty path segment instead of leaving a literal "{query}" or
+// dangling slash.
+func TestManagerBuildURLEmptyQueryPathPlaceholder(t *testing.T) {
+	m := NewManager()
+	bang := &Bang{URL: "https://www.google.com/maps/search/{query}"}
+
+	url := m.buildURL(bang, "")
+	if url != "https://www.google.com/maps/search" {
+		t.Errorf("buildURL() with empty query = %q, want 'https://www.google.com/maps/search'", url)
 	}
 }
 
@@ -980,10 +1007,16 @@ func TestManagerBuildURLQuestionAtStart(t *testing.T) {
 		t.Errorf("buildURL() = %q, should contain 'test'", url)
 	}
 
-	// Without query - idx == 0 so shouldn't strip
+	// Without query - the placeholder resolves to an empty value, and proper
+	// URL parsing (net/url) strips the now-empty "query=" param entirely
+	// rather than leaving a literal, unsubstituted "{query}" placeholder in
+	// the URL (which the old first-"?"-index truncation logic used to do).
 	urlEmpty := m.buildURL(bang, "")
-	if urlEmpty != "?query={query}" {
-		t.Errorf("buildURL() with empty = %q, expected '?query={query}'", urlEmpty)
+	if strings.Contains(urlEmpty, "{query}") {
+		t.Errorf("buildURL() with empty = %q, should not contain unsubstituted placeholder", urlEmpty)
+	}
+	if urlEmpty != "" {
+		t.Errorf("buildURL() with empty = %q, expected empty string", urlEmpty)
 	}
 }
 

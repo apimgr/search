@@ -1755,8 +1755,14 @@ func DefaultConfig() *Config {
 			Timeout:           10,
 			MaxConcurrent:     7,
 			Bangs: BangsConfig{
-				Enabled:       true,
-				ProxyRequests: true,
+				Enabled: true,
+				// Direct browser redirect by default (per IDEA.md "Quick redirects").
+				// Proxying bang requests server-side makes the app fetch the
+				// target search engine itself, which engines like Google treat
+				// as automated/datacenter traffic and reject with 400s. Operators
+				// who want to hide the client IP/referrer from bang targets can
+				// opt in via server.yml.
+				ProxyRequests: false,
 				Custom:        []BangConfig{},
 			},
 			OpenSearch: OpenSearchConfig{

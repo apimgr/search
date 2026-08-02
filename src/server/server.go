@@ -1134,8 +1134,12 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		if bangResult := s.bangManager.Parse(queryStr); bangResult != nil {
 			// Handle bang search
 			if s.config.Search.Bangs.ProxyRequests {
-				// Proxy mode: redirect to our bang proxy handler
-				http.Redirect(w, r, "/bang?url="+bangResult.TargetURL, http.StatusFound)
+				// Proxy mode: redirect to our bang proxy handler. TargetURL must be
+				// query-escaped as a whole value — bang URLs with multiple params
+				// (e.g. Google Images' tbm=isch&q=...) contain a literal "&" that
+				// would otherwise split into extra top-level query params and get
+				// silently dropped by handleBangProxy's r.URL.Query().Get("url").
+				http.Redirect(w, r, "/bang?url="+url.QueryEscape(bangResult.TargetURL), http.StatusFound)
 			} else {
 				// Direct redirect mode
 				http.Redirect(w, r, bangResult.TargetURL, http.StatusFound)
