@@ -973,6 +973,7 @@
     "timer_preset_10_minutes": "10 min",
     "timer_preset_25_minutes": "25 min",
     "settings_weather_city_placeholder": "Albany, NY or Paris, France",
+    "settings_weather_units_auto": "Use global preference",
     "settings_weather_units_metric": "Celsius",
     "settings_weather_units_imperial": "Fahrenheit",
     "settings_stocks_symbols_placeholder": "e.g., AAPL, GOOGL, MSFT",

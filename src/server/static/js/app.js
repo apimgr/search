@@ -4183,6 +4183,7 @@
                     var cityLabel = escapeHtml(t('widgets_ui.settings_weather_city_label', 'City'));
                     var cityPlaceholder = escapeHtml(t('widgets_ui.settings_weather_city_placeholder', 'Albany, NY or Paris, France'));
                     var unitsLabel = escapeHtml(t('widgets_ui.settings_weather_units_label', 'Units'));
+                    var unitsAuto = escapeHtml(t('widgets_ui.settings_weather_units_auto', 'Use global preference'));
                     var unitsMetric = escapeHtml(t('widgets_ui.settings_weather_units_metric', 'Celsius'));
                     var unitsImperial = escapeHtml(t('widgets_ui.settings_weather_units_imperial', 'Fahrenheit'));
                     content =
@@ -4192,8 +4193,9 @@
                         '</div>' +
                         '<label>' + cityLabel + ':<input type="text" id="setting-city" value="' + escapeHtml(settings.city || '') + '" placeholder="' + cityPlaceholder + '"' + (useGeolocation ? ' disabled' : '') + '></label>' +
                         '<label>' + unitsLabel + ':<select id="setting-units">' +
-                            '<option value="metric"' + ((settings.units || getPreferredUnits()) === 'metric' ? ' selected' : '') + '>' + unitsMetric + '</option>' +
-                            '<option value="imperial"' + ((settings.units || getPreferredUnits()) !== 'metric' ? ' selected' : '') + '>' + unitsImperial + '</option>' +
+                            '<option value=""' + (!settings.units ? ' selected' : '') + '>' + unitsAuto + '</option>' +
+                            '<option value="metric"' + (settings.units === 'metric' ? ' selected' : '') + '>' + unitsMetric + '</option>' +
+                            '<option value="imperial"' + (settings.units === 'imperial' ? ' selected' : '') + '>' + unitsImperial + '</option>' +
                         '</select></label>' +
                         '<input type="hidden" id="setting-lat" value="' + (settings.lat || '') + '">' +
                         '<input type="hidden" id="setting-lon" value="' + (settings.lon || '') + '">';
@@ -4337,7 +4339,7 @@
                 case 'weather':
                     settings.useGeolocation = document.getElementById('setting-use-location')?.checked || false;
                     settings.city = document.getElementById('setting-city')?.value || '';
-                    settings.units = document.getElementById('setting-units')?.value || 'imperial';
+                    settings.units = document.getElementById('setting-units')?.value || '';
                     settings.lat = document.getElementById('setting-lat')?.value || '';
                     settings.lon = document.getElementById('setting-lon')?.value || '';
                     break;
