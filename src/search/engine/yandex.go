@@ -112,7 +112,12 @@ func (e *Yandex) Search(ctx context.Context, query *model.Query) ([]model.Result
 		return nil, err
 	}
 
-	return e.parseResults(string(body), query.Category)
+	bodyStr := string(body)
+	if blockErr := detectBlockPage("yandex", bodyStr); blockErr != nil {
+		return nil, blockErr
+	}
+
+	return e.parseResults(bodyStr, query.Category)
 }
 
 // parseResults parses HTML results from Yandex.

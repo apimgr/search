@@ -139,7 +139,11 @@ func (e *Google) searchGeneral(ctx context.Context, query *model.Query) ([]model
 	if err != nil {
 		return nil, err
 	}
-	return e.parseWebResults(string(body), query), nil
+	bodyStr := string(body)
+	if blockErr := detectBlockPage("google", bodyStr); blockErr != nil {
+		return nil, blockErr
+	}
+	return e.parseWebResults(bodyStr, query), nil
 }
 
 // parseWebResults parses organic results from a Google web search page.
@@ -209,7 +213,11 @@ func (e *Google) searchImages(ctx context.Context, query *model.Query) ([]model.
 	if err != nil {
 		return nil, err
 	}
-	return e.parseImageResults(string(body), query), nil
+	bodyStr := string(body)
+	if blockErr := detectBlockPage("google", bodyStr); blockErr != nil {
+		return nil, blockErr
+	}
+	return e.parseImageResults(bodyStr, query), nil
 }
 
 // parseImageResults parses Google Images results from embedded JSON arrays.
@@ -259,7 +267,11 @@ func (e *Google) searchNews(ctx context.Context, query *model.Query) ([]model.Re
 	if err != nil {
 		return nil, err
 	}
-	return e.parseNewsResults(string(body), query), nil
+	bodyStr := string(body)
+	if blockErr := detectBlockPage("google", bodyStr); blockErr != nil {
+		return nil, blockErr
+	}
+	return e.parseNewsResults(bodyStr, query), nil
 }
 
 // parseNewsResults parses Google News results.
@@ -326,7 +338,11 @@ func (e *Google) searchVideos(ctx context.Context, query *model.Query) ([]model.
 	if err != nil {
 		return nil, err
 	}
-	return e.parseVideoResults(string(body), query), nil
+	bodyStr := string(body)
+	if blockErr := detectBlockPage("google", bodyStr); blockErr != nil {
+		return nil, blockErr
+	}
+	return e.parseVideoResults(bodyStr, query), nil
 }
 
 // parseVideoResults parses Google Videos results using the same structural
