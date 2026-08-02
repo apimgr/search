@@ -18,9 +18,17 @@ Read: `src/search/engine/registry.go` line ~134, `src/search/engine/wolfram.go`
 Read: `src/search/engine/qwant.go` line ~61
 Calls `api.qwant.com/v3/search/...` — Qwant's public search API was shut down years ago; this is likely a dead endpoint masked by fully-mocked tests. Decide: remove the qwant engine, or find/document a working replacement endpoint.
 
-## [ ] Multiple engines scrape HTML from anti-bot-hardened search sites — high break risk
-Read: `src/search/engine/google.go`, `brave.go`, `yandex.go`, `baidu.go`, `startpage.go`, `yahoo.go`, `mojeek.go`
-These engines regex/class-name-scrape HTML from sites (Google, Brave, Yandex, Baidu, Startpage, Yahoo, Mojeek) known to CAPTCHA-wall or JS-challenge non-browser clients regardless of header quality, and/or scrape brittle generic CSS class names likely to drift. No live verification exists (see test-suite item above). Decide a strategy per engine: switch to an official API where one exists, accept scraping with monitoring/alerting for silent breakage, or drop the engine.
+## [ ] Startpage, Mojeek scrape HTML from anti-bot-hardened search sites — high break risk
+Read: `src/search/engine/startpage.go`, `mojeek.go`
+Live comprehensive beta test (2026-08-01/02) confirmed Google/Yandex/Baidu now detect and surface anti-bot block pages as errors instead of failing silently (see `transport.go` `detectBlockPage`), and Brave's markup drift was root-caused and fixed. Startpage and Mojeek remain unverified against live responses and still regex/class-name-scrape brittle markup with no block-page detection. Decide a strategy per engine: switch to an official API where one exists, accept scraping with monitoring/alerting for silent breakage, or drop the engine.
+
+## [ ] Mojeek, Qwant, Reddit, Startpage hard-blocked in live testing — needs a product decision
+Read: `src/search/engine/mojeek.go`, `qwant.go`, `reddit.go`, `startpage.go`
+Live comprehensive beta test (2026-08-01/02) confirmed these engines are hard-blocked in practice: Mojeek and Startpage return CAPTCHA/Cloudflare challenge pages to non-browser clients regardless of header quality; Reddit's public JSON endpoints are aggressively rate-limited/blocked without an authenticated app; Qwant's public API is dead (see separate `qwant.go` item above). None of these are fixable by header/parser changes alone — each needs a decision: pay for/register an official API key, accept degraded reliability with monitoring, or remove the engine. Awaiting a decision from the user before further action.
+
+## [ ] Yahoo blocked at the TLS/JA3 fingerprint level, not just headers
+Read: `src/search/engine/yahoo.go`
+Live comprehensive beta test (2026-08-01/02) found Yahoo's block is distinct from the generic UA-spoofing issue other engines hit — Go's `net/http`/`crypto/tls` client produces a JA3 TLS fingerprint that Yahoo's edge blocks regardless of User-Agent or other headers. Fixing this would require a custom TLS ClientHello (e.g. via `utls`) to mimic a real browser fingerprint, which is a nontrivial dependency/security-surface decision — needs a decision from the user: add a TLS-fingerprint-spoofing dependency, accept the engine as broken, or remove it.
 
 ## [ ] `youtube.go` extracts an undocumented, frequently-changing JSON blob
 Read: `src/search/engine/youtube.go` lines ~82-95
