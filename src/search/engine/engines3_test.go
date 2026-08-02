@@ -248,9 +248,10 @@ func TestBingSearchPagePaginationURL(t *testing.T) {
 func TestBraveParseResultsValidHTMLSingleLine(t *testing.T) {
 	engine := NewBrave()
 
-	// The resultPattern has no (?s) flag so it matches single-line div only.
-	// We craft a single-line snippet block that satisfies both titlePattern and descPattern.
-	html := `<div class="snippet"><a class="result-header" href="https://brave-example.com"><span class="snippet-title">Brave Result</span></a><p class="snippet-description">This is the description.</p></div>`
+	// Live Brave markup: results are isolated by the data-pos/data-type marker
+	// on the snippet wrapper, with title/URL in an <a> whose child carries the
+	// search-snippet-title class and description in a "content" class div.
+	html := `<div class="snippet svelte-jmfu5f" data-pos="1" data-type="web" data-keynav="true"><a href="https://brave-example.com"><div class="title search-snippet-title" title="Brave Result">Brave Result</div></a><div class="content">This is the description.</div></div>`
 
 	results, err := engine.parseResults(html, model.CategoryGeneral)
 	if err != nil {
@@ -278,14 +279,14 @@ func TestBraveParseResultsEmptyURLOrTitleSkipped(t *testing.T) {
 		html string
 	}{
 		{
-			// href is present but title span is missing → titlePattern won't match
-			name: "missing title span",
-			html: `<div class="snippet"><a class="result-header" href="https://example.com"><b>no span</b></a></div>`,
+			// href is present but the search-snippet-title div is missing → titlePattern won't match
+			name: "missing title div",
+			html: `<div class="snippet svelte-jmfu5f" data-pos="1" data-type="web"><a href="https://example.com"><b>no title div</b></a></div>`,
 		},
 		{
 			// title pattern matches but empty href
 			name: "empty href",
-			html: `<div class="snippet"><a class="result-header" href=""><span class="snippet-title">Title</span></a><p class="snippet-description">desc</p></div>`,
+			html: `<div class="snippet svelte-jmfu5f" data-pos="1" data-type="web"><a href=""><div class="title search-snippet-title" title="Title">Title</div></a><div class="content">desc</div></div>`,
 		},
 	}
 
@@ -305,7 +306,7 @@ func TestBraveParseResultsEmptyURLOrTitleSkipped(t *testing.T) {
 func TestBraveParseResultsHTMLEntitiesDecoded(t *testing.T) {
 	engine := NewBrave()
 
-	html := `<div class="snippet"><a class="result-header" href="https://example.com"><span class="snippet-title">Hello &amp; World</span></a><p class="snippet-description">Fish &amp; Chips &lt;tasty&gt;</p></div>`
+	html := `<div class="snippet svelte-jmfu5f" data-pos="1" data-type="web"><a href="https://example.com"><div class="title search-snippet-title" title="Hello &amp; World">Hello &amp; World</div></a><div class="content">Fish &amp; Chips &lt;tasty&gt;</div></div>`
 
 	results, err := engine.parseResults(html, model.CategoryGeneral)
 	if err != nil {
@@ -337,12 +338,12 @@ func TestBraveParseResultsEmptyHTML(t *testing.T) {
 func TestBraveParseResultsMaxResultsCap(t *testing.T) {
 	engine := NewBrave()
 
-	// Build more single-line snippets than the default maxResults (10)
+	// Build more snippets than the default maxResults (10)
 	var sb strings.Builder
 	for i := 0; i < 15; i++ {
 		sb.WriteString(fmt.Sprintf(
-			`<div class="snippet"><a class="result-header" href="https://example%d.com"><span class="snippet-title">Title %d</span></a><p class="snippet-description">Desc %d</p></div>`,
-			i, i, i,
+			`<div class="snippet svelte-jmfu5f" data-pos="%d" data-type="web"><a href="https://example%d.com"><div class="title search-snippet-title" title="Title %d">Title %d</div></a><div class="content">Desc %d</div></div>`,
+			i, i, i, i, i,
 		))
 	}
 

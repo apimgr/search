@@ -80,22 +80,33 @@ func (e *Brave) Search(ctx context.Context, query *model.Query) ([]model.Result,
 	return e.parseResults(string(body), query.Category)
 }
 
-// parseResults parses HTML results from Brave
+// parseResults parses HTML results from Brave.
+//
+// Brave's markup is a Svelte-rendered SPA shell with no stable top-level
+// result container; the only reliable per-result anchor is the numeric
+// `data-pos` attribute on each result's wrapper (e.g.
+// `class="snippet svelte-jmfu5f" data-pos="1" data-type="web"`), so results
+// are isolated by splitting on that marker rather than a result-block class.
 func (e *Brave) parseResults(html string, category model.Category) ([]model.Result, error) {
 	results := make([]model.Result, 0)
 
-	// Pattern for result blocks
-	resultPattern := regexp.MustCompile(`<div[^>]*class="[^"]*snippet[^"]*"[^>]*>.*?</div>`)
-	titlePattern := regexp.MustCompile(`<a[^>]*class="[^"]*result-header[^"]*"[^>]*href="([^"]*)"[^>]*>.*?<span[^>]*class="[^"]*snippet-title[^"]*"[^>]*>([^<]*)</span>`)
-	descPattern := regexp.MustCompile(`<p[^>]*class="[^"]*snippet-description[^"]*"[^>]*>([^<]*)</p>`)
+	blockPattern := regexp.MustCompile(`class="snippet[^"]*"\s+data-pos="\d+"\s+data-type="web"`)
+	titlePattern := regexp.MustCompile(`(?s)<a[^>]*href="([^"]*)"[^>]*>.*?class="[^"]*search-snippet-title[^"]*"[^>]*title="([^"]*)"`)
+	descPattern := regexp.MustCompile(`(?s)class="content[^"]*"[^>]*>(.*?)</div>`)
+	tagPattern := regexp.MustCompile(`<[^>]*>`)
 
-	// Find all result blocks
-	matches := resultPattern.FindAllString(html, -1)
+	blockStarts := blockPattern.FindAllStringIndex(html, -1)
 
 	position := 0
-	for _, match := range matches {
+	for i, start := range blockStarts {
+		end := len(html)
+		if i+1 < len(blockStarts) {
+			end = blockStarts[i+1][0]
+		}
+		block := html[start[1]:end]
+
 		// Extract URL and title
-		titleMatch := titlePattern.FindStringSubmatch(match)
+		titleMatch := titlePattern.FindStringSubmatch(block)
 		if len(titleMatch) < 3 {
 			continue
 		}
@@ -103,11 +114,10 @@ func (e *Brave) parseResults(html string, category model.Category) ([]model.Resu
 		resultURL := titleMatch[1]
 		title := strings.TrimSpace(titleMatch[2])
 
-		// Extract description
+		// Extract description; strip inline tags (e.g. <strong>) from the content
 		content := ""
-		descMatch := descPattern.FindStringSubmatch(match)
-		if len(descMatch) >= 2 {
-			content = strings.TrimSpace(descMatch[1])
+		if descMatch := descPattern.FindStringSubmatch(block); len(descMatch) >= 2 {
+			content = strings.TrimSpace(tagPattern.ReplaceAllString(descMatch[1], ""))
 		}
 
 		// Skip empty results
