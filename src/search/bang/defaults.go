@@ -627,7 +627,7 @@ var defaultBangs = []*Bang{
 	{Shortcut: "pastebin", Name: "Pastebin", URL: "https://pastebin.com/search?q={query}", Category: "misc"},
 	{Shortcut: "wolfram", Name: "Wolfram", URL: "https://www.wolfram.com/search/?query={query}", Category: "misc"},
 	{Shortcut: "symbolab", Name: "Symbolab", URL: "https://www.symbolab.com/solver?or={query}", Category: "misc"},
-	{Shortcut: "desmos", Name: "Desmos", URL: "https://www.desmos.com/calculator?lang=en", Category: "misc"},
+	{Shortcut: "desmos", Name: "Desmos", URL: "https://www.desmos.com/calculator?lang=en", Category: "misc", Description: "Opens the Desmos calculator; Desmos has no public search/query endpoint, so search terms are ignored"},
 	{Shortcut: "geogebra", Name: "GeoGebra", URL: "https://www.geogebra.org/search/{query}", Category: "misc"},
 	{Shortcut: "timeanddate", Name: "Time and Date", URL: "https://www.timeanddate.com/worldclock/results.html?query={query}", Category: "misc"},
 	{Shortcut: "xe", Name: "XE Currency", URL: "https://www.xe.com/currencyconverter/convert/?Amount=1&From={query}&To=USD", Category: "misc"},
