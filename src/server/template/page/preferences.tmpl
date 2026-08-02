@@ -7,64 +7,65 @@
 
     <div class="preferences-section">
         <h2>{{t "preferences.general_settings"}}</h2>
-        <form id="general-settings" class="preferences-form">
+        <form action="/preferences/general" method="POST" id="general-settings" class="preferences-form">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <div class="form-group">
                 <label for="theme">{{t "preferences.theme"}}</label>
                 <select id="theme" name="theme">
-                    <option value="dark">{{t "preferences.theme_dark"}}</option>
-                    <option value="light">{{t "preferences.theme_light"}}</option>
-                    <option value="auto">{{t "preferences.theme_auto"}}</option>
+                    <option value="dark" {{if eq .Prefs.Theme "dark"}}selected{{end}}>{{t "preferences.theme_dark"}}</option>
+                    <option value="light" {{if eq .Prefs.Theme "light"}}selected{{end}}>{{t "preferences.theme_light"}}</option>
+                    <option value="auto" {{if eq .Prefs.Theme "auto"}}selected{{end}}>{{t "preferences.theme_auto"}}</option>
                 </select>
             </div>
 
             <div class="form-group">
                 <label for="default-category">{{t "preferences.default_category_label"}}</label>
                 <select id="default-category" name="default_category">
-                    <option value="general">{{t "preferences.default_category_general"}}</option>
-                    <option value="images">{{t "search.categories.images"}}</option>
-                    <option value="videos">{{t "search.categories.videos"}}</option>
-                    <option value="news">{{t "search.categories.news"}}</option>
-                    <option value="maps">{{t "search.categories.maps"}}</option>
-                    <option value="files">{{t "search.categories.files"}}</option>
-                    <option value="music">{{t "preferences.default_category_music"}}</option>
-                    <option value="science">{{t "search.categories.science"}}</option>
-                    <option value="it">{{t "search.categories.it"}}</option>
-                    <option value="social">{{t "search.categories.social"}}</option>
+                    <option value="general" {{if eq .Prefs.DefaultCategory "general"}}selected{{end}}>{{t "preferences.default_category_general"}}</option>
+                    <option value="images" {{if eq .Prefs.DefaultCategory "images"}}selected{{end}}>{{t "search.categories.images"}}</option>
+                    <option value="videos" {{if eq .Prefs.DefaultCategory "videos"}}selected{{end}}>{{t "search.categories.videos"}}</option>
+                    <option value="news" {{if eq .Prefs.DefaultCategory "news"}}selected{{end}}>{{t "search.categories.news"}}</option>
+                    <option value="maps" {{if eq .Prefs.DefaultCategory "maps"}}selected{{end}}>{{t "search.categories.maps"}}</option>
+                    <option value="files" {{if eq .Prefs.DefaultCategory "files"}}selected{{end}}>{{t "search.categories.files"}}</option>
+                    <option value="music" {{if eq .Prefs.DefaultCategory "music"}}selected{{end}}>{{t "preferences.default_category_music"}}</option>
+                    <option value="science" {{if eq .Prefs.DefaultCategory "science"}}selected{{end}}>{{t "search.categories.science"}}</option>
+                    <option value="it" {{if eq .Prefs.DefaultCategory "it"}}selected{{end}}>{{t "search.categories.it"}}</option>
+                    <option value="social" {{if eq .Prefs.DefaultCategory "social"}}selected{{end}}>{{t "search.categories.social"}}</option>
                 </select>
             </div>
 
             <div class="form-group">
                 <label for="safe-search">{{t "search.safe_search"}}</label>
                 <select id="safe-search" name="safe_search">
-                    <option value="0">{{t "search.safe_search_off"}}</option>
-                    <option value="1" selected>{{t "search.safe_search_moderate"}}</option>
-                    <option value="2">{{t "search.safe_search_strict"}}</option>
+                    <option value="0" {{if eq .Prefs.SafeSearch "0"}}selected{{end}}>{{t "search.safe_search_off"}}</option>
+                    <option value="1" {{if eq .Prefs.SafeSearch "1"}}selected{{end}}>{{t "search.safe_search_moderate"}}</option>
+                    <option value="2" {{if eq .Prefs.SafeSearch "2"}}selected{{end}}>{{t "search.safe_search_strict"}}</option>
                 </select>
             </div>
 
             <div class="form-group">
                 <label for="units">{{t "preferences.units_label"}}</label>
                 <select id="units" name="units">
-                    <option value="metric">{{t "preferences.units_metric"}}</option>
-                    <option value="imperial">{{t "preferences.units_imperial"}}</option>
+                    <option value="metric" {{if eq .Prefs.Units "metric"}}selected{{end}}>{{t "preferences.units_metric"}}</option>
+                    <option value="imperial" {{if eq .Prefs.Units "imperial"}}selected{{end}}>{{t "preferences.units_imperial"}}</option>
                 </select>
             </div>
 
             <div class="form-group">
                 <label for="results-per-page">{{t "preferences.results_per_page"}}</label>
                 <select id="results-per-page" name="results_per_page">
-                    <option value="10">10</option>
-                    <option value="20">20</option>
-                    <option value="30">30</option>
-                    <option value="50">50</option>
-                    <option value="100" selected>100</option>
+                    <option value="10" {{if eq .Prefs.ResultsPerPage "10"}}selected{{end}}>10</option>
+                    <option value="20" {{if eq .Prefs.ResultsPerPage "20"}}selected{{end}}>20</option>
+                    <option value="30" {{if eq .Prefs.ResultsPerPage "30"}}selected{{end}}>30</option>
+                    <option value="50" {{if eq .Prefs.ResultsPerPage "50"}}selected{{end}}>50</option>
+                    <option value="100" {{if eq .Prefs.ResultsPerPage "100"}}selected{{end}}>100</option>
                 </select>
             </div>
 
             <div class="form-group toggle-group">
                 <label for="new-tab">{{t "preferences.open_results_new_tab"}}</label>
                 <label class="toggle-switch">
-                    <input type="checkbox" id="new-tab" name="new_tab" checked>
+                    <input type="checkbox" id="new-tab" name="new_tab" {{if .Prefs.NewTab}}checked{{end}}>
                     <span class="slider"></span>
                 </label>
             </div>
@@ -72,7 +73,7 @@
             <div class="form-group toggle-group">
                 <label for="infinite-scroll">{{t "preferences.infinite_scroll"}}</label>
                 <label class="toggle-switch">
-                    <input type="checkbox" id="infinite-scroll" name="infinite_scroll" checked>
+                    <input type="checkbox" id="infinite-scroll" name="infinite_scroll" {{if .Prefs.InfiniteScroll}}checked{{end}}>
                     <span class="slider"></span>
                 </label>
             </div>
@@ -80,7 +81,7 @@
             <div class="form-group toggle-group">
                 <label for="keyboard-shortcuts">{{t "accessibility.keyboard_shortcuts_title"}}</label>
                 <label class="toggle-switch">
-                    <input type="checkbox" id="keyboard-shortcuts" name="keyboard_shortcuts" checked>
+                    <input type="checkbox" id="keyboard-shortcuts" name="keyboard_shortcuts" {{if .Prefs.KeyboardShortcuts}}checked{{end}}>
                     <span class="slider"></span>
                 </label>
             </div>
@@ -203,6 +204,8 @@
                     </div>
                 </div>
             </div>
+
+            <button type="submit" class="btn btn-primary">{{t "preferences.save_return"}}</button>
         </form>
 
         <p class="help-text mt-1">
@@ -297,7 +300,7 @@
 
     <div class="preferences-actions">
         <button type="button" id="cancel-preferences" class="btn btn-secondary" data-action="go-back">{{t "common.cancel"}}</button>
-        <button type="button" id="save-preferences" class="btn btn-primary">{{t "preferences.save_return"}}</button>
+        <button type="submit" form="general-settings" id="save-preferences" class="btn btn-primary">{{t "preferences.save_return"}}</button>
         <span id="save-status" class="save-status"></span>
     </div>
 </div>

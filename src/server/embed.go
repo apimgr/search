@@ -434,6 +434,22 @@ type PageData struct {
 	Extra            map[string]interface{}
 	ServerURL        string
 	PrefsQuery       string
+	Prefs            GeneralPrefs
+}
+
+// GeneralPrefs holds the general-settings preference values (theme, units,
+// default search category, safe search, results per page, and UI toggles)
+// resolved from server-side cookies, so the preferences page can render the
+// correct selected/checked state without requiring JavaScript.
+type GeneralPrefs struct {
+	Theme             string
+	DefaultCategory   string
+	SafeSearch        string
+	Units             string
+	ResultsPerPage    string
+	NewTab            bool
+	InfiniteScroll    bool
+	KeyboardShortcuts bool
 }
 
 // ErrorPageData extends PageData with error-specific fields.

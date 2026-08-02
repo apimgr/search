@@ -937,6 +937,7 @@ func (s *Server) setupRoutes() http.Handler {
 	r.HandleFunc("/preferences", s.handlePreferences)
 	r.HandleFunc("/server/preferences", s.handlePreferences)
 	r.Post("/preferences/widgets", s.handleWidgetPreferencesSave)
+	r.Post("/preferences/general", s.handleGeneralPreferencesSave)
 
 	// Cookie consent and CCPA per AI.md PART 16/PART 12
 	// POST /consent: sets cookieConsent JSON cookie (accept/decline/save), redirects back

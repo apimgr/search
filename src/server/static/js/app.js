@@ -2120,6 +2120,13 @@
 
             applyTheme(prefs.theme);
 
+            // preventDefault() on the submit button means the real POST to
+            // /preferences/general never fires for JS-enabled clients, so
+            // sync the same fields there via fetch to keep the server-side
+            // cookies (and thus .Prefs on next page render) consistent with
+            // what no-JS clients would have submitted.
+            syncGeneralPreferences(prefs);
+
             saveWidgetPreferences();
             applySearchPreferencesToForms();
             showPrefStatus(t('preferences.saved', 'Preferences saved'));
@@ -2133,6 +2140,34 @@
                     window.location.href = '/';
                 }
             }, 500);
+        }
+
+        // Persist the general preferences to the server-side cookies via AJAX
+        // so .Prefs on the next server-rendered page reflects the JS-enabled
+        // save path too, not just the no-JS form POST fallback.
+        function syncGeneralPreferences(prefs) {
+            var csrfInput = document.querySelector('#general-settings input[name="csrf_token"]');
+            var params = new URLSearchParams();
+            if (csrfInput) {
+                params.append('csrf_token', csrfInput.value);
+            }
+            params.append('theme', prefs.theme);
+            params.append('units', prefs.units);
+            params.append('default_category', prefs.default_category);
+            params.append('safe_search', prefs.safe_search);
+            params.append('results_per_page', prefs.results_per_page);
+            if (prefs.new_tab) params.append('new_tab', 'on');
+            if (prefs.infinite_scroll) params.append('infinite_scroll', 'on');
+            if (prefs.keyboard_shortcuts) params.append('keyboard_shortcuts', 'on');
+
+            fetch('/preferences/general', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: params.toString(),
+                redirect: 'follow'
+            }).catch(function(e) {
+                console.error('General preference save failed:', e);
+            });
         }
 
         // loadWidgetPreferences is a no-op — the server renders the correct
@@ -2241,8 +2276,12 @@
 
         // Event handlers via delegation
         prefsPage.addEventListener('click', function(e) {
-            // Save preferences button
+            // Save preferences button - the button is a real submit control
+            // (form="general-settings") so no-JS clients get a plain POST;
+            // when JS is available, prevent that default submit and instead
+            // save via cookies/localStorage + AJAX for a faster, no-reload UX.
             if (e.target.id === 'save-preferences') {
+                e.preventDefault();
                 savePreferences();
                 return;
             }

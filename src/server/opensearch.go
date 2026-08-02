@@ -227,6 +227,7 @@ func (s *Server) handlePreferences(w http.ResponseWriter, r *http.Request) {
 
 	data := s.newPageData(w, r, "Preferences", "preferences")
 	data.CSRFToken = s.getCSRFToken(r)
+	data.Prefs = resolveGeneralPrefs(r)
 
 	// Populate enabled widgets from the server-side cookie.
 	enabled := parseWidgetCookie(r)
@@ -258,6 +259,149 @@ func (s *Server) handlePreferencesSave(w http.ResponseWriter, r *http.Request) {
 		"ok":   true,
 		"data": map[string]string{},
 	})
+}
+
+// generalPrefCookieMaxAge matches widgetCookieMaxAge / theme+units cookies in
+// app.js (31536000 seconds = 1 year).
+const generalPrefCookieMaxAge = 31536000
+
+// validDefaultCategories mirrors the <option> values in preferences.tmpl's
+// #default-category select.
+var validDefaultCategories = map[string]bool{
+	"general": true, "images": true, "videos": true, "news": true,
+	"maps": true, "files": true, "music": true, "science": true,
+	"it": true, "social": true,
+}
+
+// validResultsPerPage mirrors the <option> values in preferences.tmpl's
+// #results-per-page select.
+var validResultsPerPage = map[string]bool{
+	"10": true, "20": true, "30": true, "50": true, "100": true,
+}
+
+// resolveGeneralPrefs reads the general-settings cookies set by
+// handleGeneralPreferencesSave (or by app.js) and returns the values to
+// pre-select on the preferences page, falling back to sane defaults when a
+// cookie is missing or holds an invalid value.
+func resolveGeneralPrefs(r *http.Request) GeneralPrefs {
+	prefs := GeneralPrefs{
+		Theme:             "auto",
+		DefaultCategory:   "general",
+		SafeSearch:        "1",
+		Units:             "imperial",
+		ResultsPerPage:    "100",
+		NewTab:            true,
+		InfiniteScroll:    true,
+		KeyboardShortcuts: true,
+	}
+
+	if c, err := r.Cookie("theme"); err == nil {
+		switch c.Value {
+		case "dark", "light", "auto":
+			prefs.Theme = c.Value
+		}
+	}
+	if c, err := r.Cookie("units"); err == nil {
+		if c.Value == "metric" || c.Value == "imperial" {
+			prefs.Units = c.Value
+		}
+	}
+	if c, err := r.Cookie("default_category"); err == nil && validDefaultCategories[c.Value] {
+		prefs.DefaultCategory = c.Value
+	}
+	if c, err := r.Cookie("safe_search"); err == nil {
+		switch c.Value {
+		case "0", "1", "2":
+			prefs.SafeSearch = c.Value
+		}
+	}
+	if c, err := r.Cookie("results_per_page"); err == nil && validResultsPerPage[c.Value] {
+		prefs.ResultsPerPage = c.Value
+	}
+	if c, err := r.Cookie("new_tab"); err == nil {
+		prefs.NewTab = c.Value == "1"
+	}
+	if c, err := r.Cookie("infinite_scroll"); err == nil {
+		prefs.InfiniteScroll = c.Value == "1"
+	}
+	if c, err := r.Cookie("keyboard_shortcuts"); err == nil {
+		prefs.KeyboardShortcuts = c.Value == "1"
+	}
+
+	return prefs
+}
+
+// handleGeneralPreferencesSave handles the general-settings form POST from the
+// preferences page (theme, units, default category, safe search, results per
+// page, and UI toggles). It validates submitted values, persists them as
+// server-side cookies (so the page pre-selects correctly on next load without
+// JavaScript), and redirects back to /preferences. See AI.md PART 16 "No
+// JavaScript-Disabled Broken State" - this is the no-JS fallback path;
+// app.js's savePreferences() intercepts the same form submit for a faster,
+// no-reload UX when JavaScript is available.
+func (s *Server) handleGeneralPreferencesSave(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, i18n.RequestString(r, "errors.bad_request"), http.StatusBadRequest)
+		return
+	}
+
+	theme := r.FormValue("theme")
+	if theme != "dark" && theme != "light" && theme != "auto" {
+		theme = "auto"
+	}
+
+	units := "imperial"
+	if r.FormValue("units") == "metric" {
+		units = "metric"
+	}
+
+	defaultCategory := r.FormValue("default_category")
+	if !validDefaultCategories[defaultCategory] {
+		defaultCategory = "general"
+	}
+
+	safeSearch := r.FormValue("safe_search")
+	if safeSearch != "0" && safeSearch != "1" && safeSearch != "2" {
+		safeSearch = "1"
+	}
+
+	resultsPerPage := r.FormValue("results_per_page")
+	if !validResultsPerPage[resultsPerPage] {
+		resultsPerPage = "100"
+	}
+
+	// Checkboxes are only present in the posted form when checked.
+	newTab := r.FormValue("new_tab") != ""
+	infiniteScroll := r.FormValue("infinite_scroll") != ""
+	keyboardShortcuts := r.FormValue("keyboard_shortcuts") != ""
+
+	setPrefCookie := func(name, value string) {
+		http.SetCookie(w, &http.Cookie{
+			Name:     name,
+			Value:    value,
+			Path:     "/",
+			MaxAge:   generalPrefCookieMaxAge,
+			SameSite: http.SameSiteLaxMode,
+			HttpOnly: false,
+		})
+	}
+	boolCookie := func(v bool) string {
+		if v {
+			return "1"
+		}
+		return "0"
+	}
+
+	setPrefCookie("theme", theme)
+	setPrefCookie("units", units)
+	setPrefCookie("default_category", defaultCategory)
+	setPrefCookie("safe_search", safeSearch)
+	setPrefCookie("results_per_page", resultsPerPage)
+	setPrefCookie("new_tab", boolCookie(newTab))
+	setPrefCookie("infinite_scroll", boolCookie(infiniteScroll))
+	setPrefCookie("keyboard_shortcuts", boolCookie(keyboardShortcuts))
+
+	http.Redirect(w, r, "/preferences", http.StatusSeeOther)
 }
 
 // handleWidgetPreferencesSave handles the widget selection form POST from the
