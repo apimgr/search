@@ -1,10 +1,8 @@
-## [ ] Add `.gitea/workflows/daily.yml` and `.gitea/workflows/docker.yml` to match `.github/workflows/`
-Read: AI.md PART 27
-Project already opted into `daily.yml` and `docker.yml` on GitHub — Gitea/Forgejo workflows are missing the equivalents, breaking provider parity. Must use Gitea Actions syntax (see AI.md PART 27 `.gitea/workflows/daily.yml` and `.gitea/workflows/docker.yml` reference sections), SHA-pinned third-party actions, and pass `act --list -W {file}` before commit.
+## [x] Add `.gitea/workflows/daily.yml` and `.gitea/workflows/docker.yml` to match `.github/workflows/`
+Done: added both files, adapted from the AI.md PART 27 Gitea templates to match this project's established Gitea conventions (GitHub-compatible `$GITHUB_ENV`/`$GITHUB_OUTPUT` env-file names as used in the existing `.gitea/workflows/ci.yml`/`release.yml`/`security.yml`, Docker-run-based builds via `casjaysdev/go:latest`, full Go import-path LDFLAGS, SHA-pinned third-party actions reused verbatim from `.github/workflows/`). `docker.yml` auto-detects the registry from `gitea.server_url` since Gitea is self-hostable with no fixed registry like `ghcr.io`. `act --list -W {file}` fails on both with "Unknown Variable Access gitea" — confirmed this is a pre-existing limitation of `act` (a GitHub-Actions-only runner that doesn't recognize the Gitea-specific `gitea.*` context) by reproducing the identical failure against the already-committed `.gitea/workflows/release.yml`; not a regression introduced by these two files.
 
-## [ ] Decide whether `beta.yml` is needed (GitHub and Gitea)
-Read: AI.md PART 27
-No `beta` branch currently exists in the repo. `beta.yml` is optional/project-specific per AI.md PART 27 — only add if a beta release channel is actually adopted. If adopted, add to both `.github/workflows/beta.yml` and `.gitea/workflows/beta.yml` with workflow concurrency per the branch-push auto-cancel policy.
+## [x] Decide whether `beta.yml` is needed (GitHub and Gitea)
+Decision: do not add. No `beta` branch exists in the repo (verified via `git branch -a`), so per AI.md PART 27 ("optional/project-specific — include only when the project requires them") no beta release channel has been adopted and `beta.yml` is correctly omitted on both GitHub and Gitea.
 
 ## [ ] Search engine test suite gives false confidence — no live-response verification exists
 Read: `src/search/engine/engines_test.go`, `engines2_test.go`, `engines3_test.go`, `engines4_test.go`, `duckduckgo_test.go`, `wolfram_test.go`
