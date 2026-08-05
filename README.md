@@ -251,7 +251,7 @@ GraphQL playground at: `https://scour.li/server/docs/graphql`
 
 ### Supported Search Engines
 
-Web: Google, Bing, DuckDuckGo, Yahoo, Brave Search, Startpage, Qwant, Wikipedia
+Web: Google, Bing, DuckDuckGo, Yahoo, Brave Search, Startpage, Wikipedia
 
 Video: YouTube
 

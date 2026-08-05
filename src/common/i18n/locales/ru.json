@@ -1532,7 +1532,7 @@
       "a_self_host_prefix": "Да! Это свободное и открытое программное обеспечение.",
       "a_self_host_repo": "Загляните в наш репозиторий исходного кода для инструкций по установке.",
       "q_engines": "Какие поисковые системы вы используете?",
-      "a_engines": "Мы агрегируем результаты из нескольких систем, включая Google, Bing, DuckDuckGo, Brave, Qwant, Mojeek, Yahoo, Yandex, Baidu, Startpage, Wikipedia, arXiv, PubMed, GitHub, Hacker News, Reddit, YouTube, OpenStreetMap и Wolfram Alpha.",
+      "a_engines": "Мы агрегируем результаты из нескольких систем, включая Google, Bing, DuckDuckGo, Brave, Mojeek, Yahoo, Yandex, Baidu, Startpage, Wikipedia, arXiv, PubMed, GitHub, Hacker News, Reddit, YouTube, OpenStreetMap.",
       "q_instant": "Как работают мгновенные ответы?",
       "a_instant": "Многие мгновенные ответы создаются локально для вычислений, форматирования, преобразований, парсинга и текстовых инструментов. Некоторые поиски запрашивают удалённые источники или ваши настроенные поисковые бэкенды, когда это необходимо для функции."
     },

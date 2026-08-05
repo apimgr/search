@@ -1532,7 +1532,7 @@
       "a_self_host_prefix": "Tak! To wolne i otwartoźródłowe oprogramowanie.",
       "a_self_host_repo": "Sprawdź nasze repozytorium kodu źródłowego, aby uzyskać instrukcje instalacji.",
       "q_engines": "Jakich wyszukiwarek używacie?",
-      "a_engines": "Agregujemy wyniki z wielu wyszukiwarek, w tym Google, Bing, DuckDuckGo, Brave, Qwant, Mojeek, Yahoo, Yandex, Baidu, Startpage, Wikipedia, arXiv, PubMed, GitHub, Hacker News, Reddit, YouTube, OpenStreetMap i Wolfram Alpha.",
+      "a_engines": "Agregujemy wyniki z wielu wyszukiwarek, w tym Google, Bing, DuckDuckGo, Brave, Mojeek, Yahoo, Yandex, Baidu, Startpage, Wikipedia, arXiv, PubMed, GitHub, Hacker News, Reddit, YouTube, OpenStreetMap.",
       "q_instant": "Jak działają natychmiastowe odpowiedzi?",
       "a_instant": "Wiele natychmiastowych odpowiedzi jest generowanych lokalnie dla obliczeń, formatowania, konwersji, parsowania i narzędzi tekstowych. Niektóre wyszukiwania zapytują zdalne źródła lub skonfigurowane silniki wyszukiwania, gdy jest to potrzebne dla danej funkcji."
     },

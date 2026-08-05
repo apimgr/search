@@ -1087,7 +1087,7 @@ func TestDefaultEngines(t *testing.T) {
 	cfg := DefaultConfig()
 
 	// Verify default engines are set
-	expectedEngines := []string{"google", "duckduckgo", "bing", "brave", "qwant", "startpage"}
+	expectedEngines := []string{"google", "duckduckgo", "bing", "brave", "startpage"}
 	for _, eng := range expectedEngines {
 		if _, ok := cfg.Engines[eng]; !ok {
 			t.Errorf("Engine %q should be in default config", eng)

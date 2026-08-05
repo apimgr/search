@@ -30,7 +30,7 @@ func (r *redirectToTestServer) RoundTrip(req *http.Request) (*http.Response, err
 
 // dialToTransport returns an *http.Transport whose DialContext always connects
 // to the given test server address, regardless of the requested host/port.
-// Used for engines (Qwant, Wikipedia) that create their own http.Client internally
+// Used for engines (Wikipedia) that create their own http.Client internally
 // using SharedTransport, which is typed as *http.Transport (not http.RoundTripper).
 // NOTE: only suitable for tests that expect an error, since TLS negotiation will
 // fail when the server speaks plain HTTP.
@@ -45,7 +45,7 @@ func dialToTransport(srv *httptest.Server) *http.Transport {
 
 // dialToTLSTransport returns an *http.Transport that always connects to the given
 // TLS test server. InsecureSkipVerify bypasses the hostname mismatch between the
-// test server's example.com cert and the real engine URLs (wikipedia.org, qwant.com).
+// test server's example.com cert and the real engine URLs (wikipedia.org).
 // Use with httptest.NewTLSServer for success-path tests on HTTPS engines.
 func dialToTLSTransport(srv *httptest.Server) *http.Transport {
 	addr := srv.Listener.Addr().String()
@@ -1025,182 +1025,6 @@ func TestWikipediaSearchPagination(t *testing.T) {
 	// page=2 → sroffset=20
 	if !strings.Contains(capturedURL, "sroffset=20") {
 		t.Errorf("expected sroffset=20 in URL, got: %q", capturedURL)
-	}
-}
-
-// --- Qwant ---
-
-// TestQwantSearchSuccess exercises the Qwant JSON API path with a mock server.
-func TestQwantSearchSuccess(t *testing.T) {
-	qwantResp := map[string]interface{}{
-		"data": map[string]interface{}{
-			"result": map[string]interface{}{
-				"items": []map[string]interface{}{
-					{
-						"title":     "Go programming",
-						"url":       "https://go.dev",
-						"desc":      "The Go programming language",
-						"source":    "go.dev",
-						"date":      "2024-01-01",
-						"thumbnail": "https://go.dev/logo.png",
-					},
-				},
-			},
-		},
-	}
-	respJSON, _ := json.Marshal(qwantResp)
-
-	// Qwant uses https:// URLs — use TLS server so the transport can negotiate.
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(respJSON)
-	}))
-	defer srv.Close()
-
-	e := NewQwantEngine()
-	origTransport := SharedTransport
-	SharedTransport = dialToTLSTransport(srv)
-	defer func() { SharedTransport = origTransport }()
-
-	q := &model.Query{Text: "go programming", Category: model.CategoryGeneral, Page: 0}
-	results, err := e.Search(context.Background(), q)
-	if err != nil {
-		t.Fatalf("Search() error = %v", err)
-	}
-	if len(results) != 1 {
-		t.Fatalf("Search() len = %d, want 1", len(results))
-	}
-	if results[0].Title != "Go programming" {
-		t.Errorf("result title = %q, want %q", results[0].Title, "Go programming")
-	}
-	if results[0].Thumbnail != "https://go.dev/logo.png" {
-		t.Errorf("result thumbnail = %q", results[0].Thumbnail)
-	}
-	if results[0].Author != "go.dev" {
-		t.Errorf("result author = %q, want %q", results[0].Author, "go.dev")
-	}
-}
-
-// TestQwantSearchMediaField verifies that the media field overrides thumbnail.
-func TestQwantSearchMediaField(t *testing.T) {
-	qwantResp := map[string]interface{}{
-		"data": map[string]interface{}{
-			"result": map[string]interface{}{
-				"items": []map[string]interface{}{
-					{
-						"title":     "Video result",
-						"url":       "https://example.com/video",
-						"thumbnail": "https://example.com/thumb.jpg",
-						"media":     "https://example.com/media.mp4",
-					},
-				},
-			},
-		},
-	}
-	respJSON, _ := json.Marshal(qwantResp)
-
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(respJSON)
-	}))
-	defer srv.Close()
-
-	e := NewQwantEngine()
-	origTransport := SharedTransport
-	SharedTransport = dialToTLSTransport(srv)
-	defer func() { SharedTransport = origTransport }()
-
-	results, err := e.Search(context.Background(), &model.Query{Text: "video", Category: model.CategoryVideos})
-	if err != nil {
-		t.Fatalf("Search() error = %v", err)
-	}
-	// media field overrides thumbnail
-	if results[0].Thumbnail != "https://example.com/media.mp4" {
-		t.Errorf("thumbnail should be media URL: %q", results[0].Thumbnail)
-	}
-}
-
-// TestQwantSearchCategoriesBasic verifies basic category-to-path mapping.
-func TestQwantSearchCategoriesBasic(t *testing.T) {
-	tests := []struct {
-		name     string
-		category model.Category
-		wantPath string
-	}{
-		{"images", model.CategoryImages, "/images"},
-		{"videos", model.CategoryVideos, "/videos"},
-		{"news", model.CategoryNews, "/news"},
-		{"general/web", model.CategoryGeneral, "/web"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var capturedPath string
-			emptyResp := map[string]interface{}{
-				"data": map[string]interface{}{
-					"result": map[string]interface{}{
-						"items": []interface{}{},
-					},
-				},
-			}
-			respJSON, _ := json.Marshal(emptyResp)
-
-			srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				capturedPath = r.URL.Path
-				w.Header().Set("Content-Type", "application/json")
-				w.Write(respJSON)
-			}))
-			defer srv.Close()
-
-			e := NewQwantEngine()
-			origTransport := SharedTransport
-			SharedTransport = dialToTLSTransport(srv)
-			defer func() { SharedTransport = origTransport }()
-
-			_, err := e.Search(context.Background(), &model.Query{Text: "test", Category: tt.category})
-			if err != nil {
-				t.Fatalf("Search() error = %v", err)
-			}
-			if !strings.HasSuffix(capturedPath, tt.wantPath) {
-				t.Errorf("path = %q, want suffix %q", capturedPath, tt.wantPath)
-			}
-		})
-	}
-}
-
-// TestQwantSearchNonOK verifies that a non-200 response returns an error.
-func TestQwantSearchNonOK(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusForbidden)
-	}))
-	defer srv.Close()
-
-	e := NewQwantEngine()
-	origTransport := SharedTransport
-	SharedTransport = dialToTransport(srv)
-	defer func() { SharedTransport = origTransport }()
-
-	_, err := e.Search(context.Background(), &model.Query{Text: "test"})
-	if err == nil {
-		t.Error("Search() expected error on non-200, got nil")
-	}
-}
-
-// TestQwantSearchInvalidJSON verifies that malformed JSON returns an error.
-func TestQwantSearchInvalidJSON(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{bad json`)
-	}))
-	defer srv.Close()
-
-	e := NewQwantEngine()
-	origTransport := SharedTransport
-	SharedTransport = dialToTransport(srv)
-	defer func() { SharedTransport = origTransport }()
-
-	_, err := e.Search(context.Background(), &model.Query{Text: "test"})
-	if err == nil {
-		t.Error("Search() expected error on invalid JSON, got nil")
 	}
 }
 

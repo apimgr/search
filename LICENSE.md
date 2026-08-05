@@ -42,6 +42,7 @@ SOFTWARE.
 | github.com/oschwald/maxminddb-golang | v1.13.1 | ISC | 2015 oschwald |
 | github.com/prometheus/client_golang | v1.23.2 | Apache-2.0 | 2012-2015 The Prometheus Authors |
 | github.com/redis/go-redis/v9 | v9.21.0 | BSD-2-Clause | 2013 The go-redis Authors |
+| github.com/refraction-networking/utls | v1.8.2 | BSD-3-Clause | The Go Authors |
 | github.com/rs/cors | v1.11.1 | MIT | 2014 Olivier Poitrey |
 | github.com/skip2/go-qrcode | v0.0.0-20200617195104 | MIT | 2014 Tom Harwood |
 | github.com/tursodatabase/libsql-client-go | v0.0.0-20240902231107 | MIT | 2023-2024 Turso Authors |

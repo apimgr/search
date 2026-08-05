@@ -112,7 +112,6 @@ func DefaultRegistry() *Registry {
 	registry.Register(NewGoogle())
 	registry.Register(NewBing())
 	registry.Register(NewWikipediaEngine())
-	registry.Register(NewQwantEngine())
 	registry.Register(NewBrave())
 	registry.Register(NewYahoo())
 	registry.Register(NewGitHub())
@@ -131,7 +130,6 @@ func DefaultRegistry() *Registry {
 	registry.Register(NewArXiv())
 
 	// Specialized engines
-	// WolframAlpha is omitted: JS-rendered page, no open API without key.
 	registry.Register(NewOpenStreetMap())
 
 	return registry

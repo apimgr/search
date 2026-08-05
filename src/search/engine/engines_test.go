@@ -173,7 +173,7 @@ func TestDefaultRegistry(t *testing.T) {
 	}
 
 	// Core engines should be present
-	coreEngines := []string{"google", "duckduckgo", "bing", "wikipedia", "qwant", "brave"}
+	coreEngines := []string{"google", "duckduckgo", "bing", "wikipedia", "brave"}
 	for _, name := range coreEngines {
 		if _, err := registry.Get(name); err != nil {
 			t.Errorf("DefaultRegistry() missing engine %q", name)
@@ -239,17 +239,6 @@ func TestNewWikipedia(t *testing.T) {
 	}
 	if engine.Name() != "wikipedia" {
 		t.Errorf("Name() = %q, want wikipedia", engine.Name())
-	}
-}
-
-func TestNewQwant(t *testing.T) {
-	engine := NewQwantEngine()
-
-	if engine == nil {
-		t.Fatal("NewQwantEngine() returned nil")
-	}
-	if engine.Name() != "qwant" {
-		t.Errorf("Name() = %q, want qwant", engine.Name())
 	}
 }
 
@@ -995,26 +984,6 @@ func TestParseDuration(t *testing.T) {
 
 // Test engine search URL building (without HTTP calls)
 
-func TestQwantEngine(t *testing.T) {
-	engine := NewQwantEngine()
-
-	if engine == nil {
-		t.Fatal("NewQwantEngine() returned nil")
-	}
-	if engine.Name() != "qwant" {
-		t.Errorf("Name() = %q, want qwant", engine.Name())
-	}
-	if !engine.SupportsCategory(model.CategoryGeneral) {
-		t.Error("Qwant should support CategoryGeneral")
-	}
-	if !engine.SupportsCategory(model.CategoryImages) {
-		t.Error("Qwant should support CategoryImages")
-	}
-	if !engine.SupportsCategory(model.CategoryNews) {
-		t.Error("Qwant should support CategoryNews")
-	}
-}
-
 func TestStartpageEngine(t *testing.T) {
 	engine := NewStartpageEngine()
 
@@ -1224,7 +1193,7 @@ func TestRegistryConcurrentAccess(t *testing.T) {
 		done <- true
 	}()
 	go func() {
-		registry.Register(NewQwantEngine())
+		registry.Register(NewBrave())
 		done <- true
 	}()
 
@@ -1657,7 +1626,6 @@ func TestEngineDisplayName(t *testing.T) {
 		{"reddit", NewReddit(), "Reddit"},
 		{"github", NewGitHub(), "GitHub"},
 		{"stackoverflow", NewStackOverflow(), "Stack Overflow"},
-		{"qwant", NewQwantEngine(), "Qwant"},
 		{"startpage", NewStartpageEngine(), "Startpage"},
 		{"mojeek", NewMojeek(), "Mojeek"},
 		{"yandex", NewYandex(), "Yandex"},
@@ -1689,7 +1657,6 @@ func TestEngineName(t *testing.T) {
 		{NewGitHub(), "github"},
 		{NewStackOverflow(), "stackoverflow"},
 		{NewReddit(), "reddit"},
-		{NewQwantEngine(), "qwant"},
 		{NewStartpageEngine(), "startpage"},
 		{NewYouTubeEngine(), "youtube"},
 		{NewMojeek(), "mojeek"},
@@ -2066,7 +2033,6 @@ func TestEnginePrioritiesOrdering(t *testing.T) {
 		"google":        NewGoogle().GetPriority(),
 		"bing":          NewBing().GetPriority(),
 		"brave":         NewBrave().GetPriority(),
-		"qwant":         NewQwantEngine().GetPriority(),
 		"wikipedia":     NewWikipediaEngine().GetPriority(),
 		"startpage":     NewStartpageEngine().GetPriority(),
 		"yahoo":         NewYahoo().GetPriority(),
@@ -3032,35 +2998,6 @@ func TestWikipediaSearch(t *testing.T) {
 	_, _ = engine.Search(ctx, query)
 }
 
-// Test Qwant Search categories
-func TestQwantSearchCategories(t *testing.T) {
-	engine := NewQwantEngine()
-
-	tests := []struct {
-		name     string
-		category model.Category
-	}{
-		{"general", model.CategoryGeneral},
-		{"images", model.CategoryImages},
-		{"videos", model.CategoryVideos},
-		{"news", model.CategoryNews},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
-			defer cancel()
-
-			query := &model.Query{
-				Text:     "test",
-				Page:     2,
-				Category: tt.category,
-			}
-			_, _ = engine.Search(ctx, query)
-		})
-	}
-}
-
 // Test Reddit Search
 func TestRedditSearch(t *testing.T) {
 	engine := NewReddit()
@@ -3793,46 +3730,6 @@ func TestSearchWithMockServer(t *testing.T) {
 	}
 }
 
-// Test Qwant response parsing
-func TestQwantResponseParsing(t *testing.T) {
-	// Test JSON unmarshaling of qwantResponse
-	jsonData := `{
-		"data": {
-			"result": {
-				"items": [
-					{
-						"title": "Test Title",
-						"url": "https://example.com",
-						"desc": "Test description",
-						"source": "example.com",
-						"date": "2024-01-01",
-						"media": "https://media.example.com/img.jpg",
-						"thumbnail": "https://thumb.example.com/img.jpg"
-					}
-				]
-			}
-		}
-	}`
-
-	var resp qwantResponse
-	err := json.Unmarshal([]byte(jsonData), &resp)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal: %v", err)
-	}
-
-	if len(resp.Data.Result.Items) != 1 {
-		t.Errorf("Expected 1 item, got %d", len(resp.Data.Result.Items))
-	}
-
-	item := resp.Data.Result.Items[0]
-	if item.Title != "Test Title" {
-		t.Errorf("Title = %q, want 'Test Title'", item.Title)
-	}
-	if item.URL != "https://example.com" {
-		t.Errorf("URL = %q, want 'https://example.com'", item.URL)
-	}
-}
-
 // Test Wikipedia response parsing (generator+extracts API)
 func TestWikipediaResponseParsing(t *testing.T) {
 	jsonData := `{
@@ -3881,7 +3778,6 @@ func TestAllEnginesImplementInterfaceFull(t *testing.T) {
 		NewBrave(),
 		NewYahoo(),
 		NewWikipediaEngine(),
-		NewQwantEngine(),
 		NewYouTubeEngine(),
 		NewReddit(),
 		NewGitHub(),
@@ -3986,7 +3882,6 @@ func TestAllEngineCategorySupport(t *testing.T) {
 		{"brave", NewBrave()},
 		{"yahoo", NewYahoo()},
 		{"wikipedia", NewWikipediaEngine()},
-		{"qwant", NewQwantEngine()},
 		{"youtube", NewYouTubeEngine()},
 		{"reddit", NewReddit()},
 		{"github", NewGitHub()},

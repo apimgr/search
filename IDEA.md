@@ -1,6 +1,6 @@
 ## Project description
 
-Search is a privacy-respecting, self-hosted metasearch engine that aggregates results directly from primary search engines (Google, Bing, DuckDuckGo, Brave, Qwant, Mojeek) without tracking users. It combines the best reliability and feature ideas from Whoogle, SearX, and SearXNG into a single, always-working solution — but queries source engines directly rather than through proxies or other metasearch engines.
+Search is a privacy-respecting, self-hosted metasearch engine that aggregates results directly from primary search engines (Google, Bing, DuckDuckGo, Brave, Mojeek) without tracking users. It combines the best reliability and feature ideas from Whoogle, SearX, and SearXNG into a single, always-working solution — but queries source engines directly rather than through proxies or other metasearch engines.
 
 Target users include privacy-conscious individuals who want web search without being tracked, self-hosters running their own search infrastructure, organizations requiring private internal search, Tor users seeking an .onion-accessible search engine, power users wanting keyboard-driven search with vim-style shortcuts, and developers needing structured API access to aggregated search results.
 
@@ -22,9 +22,9 @@ official_site:    https://scour.li
 
 ### Product scope & non-goals
 
-`search` aggregates results from primary search engines (Google, Bing, DuckDuckGo, Brave, Qwant, Mojeek, Yandex, Baidu) plus specialized engines (Wikipedia, YouTube, Reddit, StackOverflow, GitHub, Hacker News, arXiv, PubMed, OpenStreetMap). The full feature inventory lives in `### Features` below. Wolfram Alpha is deliberately excluded from the registry (JS-rendered page, no open API without a key) — see `src/search/engine/wolfram.go` and `TODO.AI.md`.
+`search` aggregates results from primary search engines (Google, Bing, DuckDuckGo, Brave, Mojeek, Yandex, Baidu) plus specialized engines (Wikipedia, YouTube, Reddit, StackOverflow, GitHub, Hacker News, arXiv, PubMed, OpenStreetMap). The full feature inventory lives in `### Features` below. Wolfram Alpha and Qwant are not implemented as search engines — Wolfram Alpha's page is JS-rendered with no open API without a key, and Qwant's public API is hard-blocked by DataDome anti-bot (403 CAPTCHA on every request); both were removed entirely rather than kept as dead code, per `TODO.AI.md`.
 
-Live testing (2026-08-01/02) found Mojeek, Qwant, Reddit, and Startpage hard-blocked in production (CAPTCHA/Cloudflare challenge, dead public API, or aggressive rate-limiting), and Yahoo blocked at the TLS/JA3 fingerprint level — code exists for all five but none currently return usable results. See `TODO.AI.md` for the pending product decisions on each.
+Live testing (2026-08-01/02) found Mojeek, Reddit, and Startpage hard-blocked in production (CAPTCHA/Cloudflare challenge, dead public API, or aggressive rate-limiting), and Yahoo blocked at the TLS/JA3 fingerprint level — code exists for all three but none currently return usable results. See `TODO.AI.md` for the pending product decisions on each.
 
 **Non-goals:**
 - No proxying through other metasearch engines — we hit primary sources directly.
@@ -64,7 +64,7 @@ Full provider list under `### Data Sources`. Trust assumptions and failure modes
 
 | External service | Trusted for | Failure mode |
 |------------------|-------------|--------------|
-| Primary search engines (Google, Bing, DuckDuckGo, Brave, Qwant, Mojeek, Yandex, Baidu) | Web/image/video/news/maps results | Engine health monitor disables on consecutive failures; failover to remaining engines; results cached briefly to mask transient outages |
+| Primary search engines (Google, Bing, DuckDuckGo, Brave, Mojeek, Yandex, Baidu) | Web/image/video/news/maps results | Engine health monitor disables on consecutive failures; failover to remaining engines; results cached briefly to mask transient outages |
 | Specialized engines (Wikipedia, YouTube, Reddit, StackOverflow, GitHub, HN, arXiv, PubMed, OpenStreetMap) | Domain-specific search/answers | Same as above |
 | Instant-answer providers (OpenWeatherMap/wttr.in, exchangerate.host, Wiktionary, ip-location-db, etc.) | Read-only widget data | Skip widget on failure; never block main search |
 | Outbound HTTP responses from any engine | Untrusted (responses parsed) | All HTML/JSON parsed defensively; user input never embedded in scraping requests; tracking parameters stripped |
@@ -1962,7 +1962,6 @@ Click → opens video in embedded player or source site
 │ │ ◉ Bing           [✓] Web [✓] Images [ ] Videos     │ │
 │ │ ◉ DuckDuckGo     [✓] Web [✓] Images                │ │
 │ │ ◉ Brave          [✓] Web [ ] Images [ ] Videos     │ │
-│ │ ○ Qwant          [ ] Web [ ] Images                │ │
 │ │ ○ Mojeek         [ ] Web                           │ │
 │ │                                                     │ │
 │ │ Drag to reorder priority                            │ │
@@ -2170,7 +2169,6 @@ Primary engines with their own indexes - no proxies or metasearch:
 | Bing | web, images, videos, news | Microsoft's index |
 | DuckDuckGo | web, images | Privacy-focused |
 | Brave | web, images, videos, news | Independent index |
-| Qwant | web, images, news | **Hard-blocked in production** — public API endpoint is dead (see `TODO.AI.md`) |
 | Mojeek | web | **Hard-blocked in production** — returns CAPTCHA/Cloudflare challenge to non-browser clients (see `TODO.AI.md`) |
 | Yandex | web, images | Russian index (optional); anti-bot block-page detection in place |
 | Baidu | web, images | Chinese index (optional); anti-bot block-page detection in place |
@@ -2194,7 +2192,7 @@ Primary engines with their own indexes - no proxies or metasearch:
 | PubMed | science | Medical research |
 | OpenStreetMap | maps | Open map data |
 
-**Not registered**: Wolfram Alpha (`src/search/engine/wolfram.go` exists and is tested, but is commented out of `DefaultRegistry()` — the page is JS-rendered with no open API without a key; see `TODO.AI.md`).
+**Not implemented**: Wolfram Alpha (page is JS-rendered with no open API without a key) and Qwant (public API is hard-blocked by DataDome anti-bot, 403 CAPTCHA on every request) — both removed entirely rather than kept as dead/stub code; see `TODO.AI.md`.
 
 #### Instant Answer Data
 | Type | Source | Update Frequency |

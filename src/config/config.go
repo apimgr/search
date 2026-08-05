@@ -1854,13 +1854,6 @@ func DefaultConfig() *Config {
 				Timeout:    10,
 				Weight:     1.0,
 			},
-			"qwant": {
-				Enabled:    true,
-				Priority:   70,
-				Categories: []string{"general", "images", "news"},
-				Timeout:    10,
-				Weight:     1.0,
-			},
 			"startpage": {
 				Enabled:    true,
 				Priority:   68,
