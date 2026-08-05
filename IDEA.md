@@ -22,7 +22,9 @@ official_site:    https://scour.li
 
 ### Product scope & non-goals
 
-`search` aggregates results from primary search engines (Google, Bing, DuckDuckGo, Brave, Qwant, Mojeek, Yandex, Baidu) plus specialized engines (Wikipedia, YouTube, Reddit, StackOverflow, GitHub, Hacker News, arXiv, PubMed, Wolfram Alpha, OpenStreetMap). The full feature inventory lives in `### Features` below.
+`search` aggregates results from primary search engines (Google, Bing, DuckDuckGo, Brave, Qwant, Mojeek, Yandex, Baidu) plus specialized engines (Wikipedia, YouTube, Reddit, StackOverflow, GitHub, Hacker News, arXiv, PubMed, OpenStreetMap). The full feature inventory lives in `### Features` below. Wolfram Alpha is deliberately excluded from the registry (JS-rendered page, no open API without a key) — see `src/search/engine/wolfram.go` and `TODO.AI.md`.
+
+Live testing (2026-08-01/02) found Mojeek, Qwant, Reddit, and Startpage hard-blocked in production (CAPTCHA/Cloudflare challenge, dead public API, or aggressive rate-limiting), and Yahoo blocked at the TLS/JA3 fingerprint level — code exists for all five but none currently return usable results. See `TODO.AI.md` for the pending product decisions on each.
 
 **Non-goals:**
 - No proxying through other metasearch engines — we hit primary sources directly.
@@ -63,7 +65,7 @@ Full provider list under `### Data Sources`. Trust assumptions and failure modes
 | External service | Trusted for | Failure mode |
 |------------------|-------------|--------------|
 | Primary search engines (Google, Bing, DuckDuckGo, Brave, Qwant, Mojeek, Yandex, Baidu) | Web/image/video/news/maps results | Engine health monitor disables on consecutive failures; failover to remaining engines; results cached briefly to mask transient outages |
-| Specialized engines (Wikipedia, YouTube, Reddit, StackOverflow, GitHub, HN, arXiv, PubMed, Wolfram Alpha, OpenStreetMap) | Domain-specific search/answers | Same as above |
+| Specialized engines (Wikipedia, YouTube, Reddit, StackOverflow, GitHub, HN, arXiv, PubMed, OpenStreetMap) | Domain-specific search/answers | Same as above |
 | Instant-answer providers (OpenWeatherMap/wttr.in, exchangerate.host, Wiktionary, ip-location-db, etc.) | Read-only widget data | Skip widget on failure; never block main search |
 | Outbound HTTP responses from any engine | Untrusted (responses parsed) | All HTML/JSON parsed defensively; user input never embedded in scraping requests; tracking parameters stripped |
 | SMTP for alert delivery | Trusted to deliver | Retry with backoff; pause channel on repeated failures (per AI.md PART 17) |
@@ -258,6 +260,7 @@ forecast london, temperature paris
 - Current: temp, feels like, conditions, humidity, wind
 - Forecast: 5-day outlook with highs/lows
 - Icon: sun, cloud, rain, snow, etc.
+**Settings**: per-widget units override (metric/imperial) with a third "Use global preference" auto option (default) that follows the user's global units preference from the Preferences page instead of locking to a stored value.
 
 ---
 
@@ -1687,7 +1690,7 @@ rules:all
 
 #### Bang Shortcuts
 
-Quick redirects to specific sites/engines. 180+ bangs implemented across categories:
+Quick redirects to specific sites/engines. 500+ bangs implemented across categories (519 built-in shortcuts as of `src/search/bang/defaults.go`, plus aliases):
 
 **General Search**: `!g` Google, `!b` Bing, `!ddg` DuckDuckGo, `!sp` Startpage, `!br` Brave, `!q` Qwant, `!ya` Yahoo, `!kagi` Kagi, `!you` You.com, `!perplexity` Perplexity
 
@@ -2163,34 +2166,35 @@ Primary engines with their own indexes - no proxies or metasearch:
 
 | Engine | Categories | Notes |
 |--------|-----------|-------|
-| Google | web, images, videos, news, maps | Largest index |
+| Google | web, images, videos, news, maps | Largest index; anti-bot block-page detection in place, occasionally challenges non-browser clients |
 | Bing | web, images, videos, news | Microsoft's index |
 | DuckDuckGo | web, images | Privacy-focused |
 | Brave | web, images, videos, news | Independent index |
-| Qwant | web, images, news | EU-based independent index |
-| Mojeek | web | UK-based independent index |
-| Yandex | web, images | Russian index (optional) |
-| Baidu | web, images | Chinese index (optional) |
+| Qwant | web, images, news | **Hard-blocked in production** — public API endpoint is dead (see `TODO.AI.md`) |
+| Mojeek | web | **Hard-blocked in production** — returns CAPTCHA/Cloudflare challenge to non-browser clients (see `TODO.AI.md`) |
+| Yandex | web, images | Russian index (optional); anti-bot block-page detection in place |
+| Baidu | web, images | Chinese index (optional); anti-bot block-page detection in place |
 
 **Not included** (metasearch only - we go direct):
 - Ecosia (Bing-powered)
 - SearXNG (metasearch)
 
-**Note**: Startpage and Yahoo ARE implemented - they provide alternative access paths.
+**Note**: Startpage and Yahoo code exists as alternative access paths, but both are currently non-functional in production — Startpage returns CAPTCHA/Cloudflare challenges, and Yahoo is blocked at the TLS/JA3 fingerprint level (not fixable by header changes alone). See `TODO.AI.md` for the pending decisions.
 
 #### Specialized Engines
 | Engine | Category | Notes |
 |--------|----------|-------|
 | Wikipedia | web, instant | Instant answers |
 | YouTube | videos | Video search |
-| Reddit | social | Discussions |
+| Reddit | social | **Hard-blocked in production** — public JSON endpoints aggressively rate-limited without an authenticated app (see `TODO.AI.md`) |
 | StackOverflow | it | Programming Q&A |
 | GitHub | it | Code/repositories |
 | Hacker News | it, news | Tech news |
 | arXiv | science | Academic papers |
 | PubMed | science | Medical research |
-| Wolfram Alpha | instant | Computational answers |
 | OpenStreetMap | maps | Open map data |
+
+**Not registered**: Wolfram Alpha (`src/search/engine/wolfram.go` exists and is tested, but is commented out of `DefaultRegistry()` — the page is JS-rendered with no open API without a key; see `TODO.AI.md`).
 
 #### Instant Answer Data
 | Type | Source | Update Frequency |
