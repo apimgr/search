@@ -118,10 +118,8 @@ func DefaultRegistry() *Registry {
 	registry.Register(NewStackOverflow())
 	registry.Register(NewReddit())
 	registry.Register(NewHackerNews())
-	registry.Register(NewStartpageEngine())
 	registry.Register(NewYouTubeEngine())
 	// Additional engines per IDEA.md
-	registry.Register(NewMojeek())
 	registry.Register(NewYandex())
 	registry.Register(NewBaidu())
 

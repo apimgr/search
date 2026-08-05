@@ -18,13 +18,14 @@ Read: `src/search/engine/qwant.go` line ~61
 Calls `api.qwant.com/v3/search/...` — Qwant's public search API was shut down years ago; this is likely a dead endpoint masked by fully-mocked tests. Decide: remove the qwant engine, or find/document a working replacement endpoint.
 Done: removed entirely, live-confirmed api.qwant.com returns 403 CAPTCHA (DataDome) on every request regardless of headers, not fixable without a paid CAPTCHA-bypass service.
 
-## [ ] Startpage, Mojeek scrape HTML from anti-bot-hardened search sites — high break risk
+## [x] Startpage, Mojeek scrape HTML from anti-bot-hardened search sites — high break risk
 Read: `src/search/engine/startpage.go`, `mojeek.go`
 Live comprehensive beta test (2026-08-01/02) confirmed Google/Yandex/Baidu now detect and surface anti-bot block pages as errors instead of failing silently (see `transport.go` `detectBlockPage`), and Brave's markup drift was root-caused and fixed. Startpage and Mojeek remain unverified against live responses and still regex/class-name-scrape brittle markup with no block-page detection. Decide a strategy per engine: switch to an official API where one exists, accept scraping with monitoring/alerting for silent breakage, or drop the engine.
+Done: removed both entirely, per AI.md's no-dead-code rule. Mojeek: live-confirmed `https://www.mojeek.com/search?q=test` returns HTTP 403 with explicit bot-block text ("Sorry your network appears to be sending automated queries..."); Mojeek's only real API is a paid commercial Search API with no free tier. Startpage: live-confirmed `https://www.startpage.com/sp/search?query=test` returns HTTP 200 but the body is an Anubis proof-of-work anti-bot challenge page (not real search results), requiring a JS-executed PoW solve not fixable via headers/UA; Startpage has no official public search API at all.
 
-## [ ] Mojeek, Reddit, Startpage hard-blocked in live testing — needs a product decision
-Read: `src/search/engine/mojeek.go`, `reddit.go`, `startpage.go`
-Live comprehensive beta test (2026-08-01/02) confirmed these engines are hard-blocked in practice: Mojeek and Startpage return CAPTCHA/Cloudflare challenge pages to non-browser clients regardless of header quality; Reddit's public JSON endpoints are aggressively rate-limited/blocked without an authenticated app. (Qwant had the same problem and was removed entirely — see the `qwant.go` item above, now resolved.) None of these are fixable by header/parser changes alone — each needs a decision: pay for/register an official API key, accept degraded reliability with monitoring, or remove the engine. Awaiting a decision from the user before further action.
+## [ ] Reddit hard-blocked in live testing — needs a fix
+Read: `src/search/engine/reddit.go`
+Live comprehensive beta test (2026-08-01/02) confirmed Reddit's public JSON endpoints (`old.reddit.com/search.json`) are aggressively rate-limited/blocked without an authenticated app. (Mojeek and Startpage had the same category of problem — hard-blocked with no viable free access path — and were removed entirely; see the item above. Reddit is different: it has a free official OAuth API, so removal is not the right call.) Fix path: add operator-configurable OAuth credentials as part of the separate "Several engines are unauthenticated..." TODO item below, rather than removing the engine.
 
 ## [x] Yahoo blocked at the TLS/JA3 fingerprint level, not just headers
 Read: `src/search/engine/yahoo.go`

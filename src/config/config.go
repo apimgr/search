@@ -1854,13 +1854,6 @@ func DefaultConfig() *Config {
 				Timeout:    10,
 				Weight:     1.0,
 			},
-			"startpage": {
-				Enabled:    true,
-				Priority:   68,
-				Categories: []string{"general", "images"},
-				Timeout:    10,
-				Weight:     1.0,
-			},
 			"yahoo": {
 				Enabled:    true,
 				Priority:   65,

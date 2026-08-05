@@ -1532,7 +1532,7 @@
       "a_self_host_prefix": "Ja! Dies ist freie und Open-Source-Software.",
       "a_self_host_repo": "Schauen Sie in unser Quellcode-Repository für Installationsanweisungen.",
       "q_engines": "Welche Suchmaschinen verwenden Sie?",
-      "a_engines": "Wir aggregieren Ergebnisse von mehreren Suchmaschinen, darunter Google, Bing, DuckDuckGo, Brave, Mojeek, Yahoo, Yandex, Baidu, Startpage, Wikipedia, arXiv, PubMed, GitHub, Hacker News, Reddit, YouTube, OpenStreetMap.",
+      "a_engines": "Wir aggregieren Ergebnisse von mehreren Suchmaschinen, darunter Google, Bing, DuckDuckGo, Brave, Yahoo, Yandex, Baidu, Wikipedia, arXiv, PubMed, GitHub, Hacker News, Reddit, YouTube, OpenStreetMap.",
       "q_instant": "Wie funktionieren Sofortantworten?",
       "a_instant": "Viele Sofortantworten werden lokal für Berechnungen, Formatierung, Konvertierungen, Parsing und Textwerkzeuge erzeugt. Einige Abfragen rufen entfernte Quellen oder Ihre konfigurierten Suchbackends auf, wenn dies für die Funktion erforderlich ist."
     },

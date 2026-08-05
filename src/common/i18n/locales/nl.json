@@ -1532,7 +1532,7 @@
       "a_self_host_prefix": "Ja! Dit is vrije en open source-software.",
       "a_self_host_repo": "Raadpleeg onze broncode-repository voor installatie-instructies.",
       "q_engines": "Welke zoekmachines gebruiken jullie?",
-      "a_engines": "We aggregeren resultaten van meerdere zoekmachines, waaronder Google, Bing, DuckDuckGo, Brave, Mojeek, Yahoo, Yandex, Baidu, Startpage, Wikipedia, arXiv, PubMed, GitHub, Hacker News, Reddit, YouTube, OpenStreetMap.",
+      "a_engines": "We aggregeren resultaten van meerdere zoekmachines, waaronder Google, Bing, DuckDuckGo, Brave, Yahoo, Yandex, Baidu, Wikipedia, arXiv, PubMed, GitHub, Hacker News, Reddit, YouTube, OpenStreetMap.",
       "q_instant": "Hoe werken directe antwoorden?",
       "a_instant": "Veel directe antwoorden worden lokaal gegenereerd voor berekeningen, opmaak, conversies, parsing en tekstgereedschappen. Sommige opzoekingen raadplegen externe bronnen of uw geconfigureerde zoekbackends wanneer dat nodig is voor de functie."
     },

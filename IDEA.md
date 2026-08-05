@@ -1,6 +1,6 @@
 ## Project description
 
-Search is a privacy-respecting, self-hosted metasearch engine that aggregates results directly from primary search engines (Google, Bing, DuckDuckGo, Brave, Mojeek) without tracking users. It combines the best reliability and feature ideas from Whoogle, SearX, and SearXNG into a single, always-working solution — but queries source engines directly rather than through proxies or other metasearch engines.
+Search is a privacy-respecting, self-hosted metasearch engine that aggregates results directly from primary search engines (Google, Bing, DuckDuckGo, Brave) without tracking users. It combines the best reliability and feature ideas from Whoogle, SearX, and SearXNG into a single, always-working solution — but queries source engines directly rather than through proxies or other metasearch engines.
 
 Target users include privacy-conscious individuals who want web search without being tracked, self-hosters running their own search infrastructure, organizations requiring private internal search, Tor users seeking an .onion-accessible search engine, power users wanting keyboard-driven search with vim-style shortcuts, and developers needing structured API access to aggregated search results.
 
@@ -22,9 +22,9 @@ official_site:    https://scour.li
 
 ### Product scope & non-goals
 
-`search` aggregates results from primary search engines (Google, Bing, DuckDuckGo, Brave, Mojeek, Yandex, Baidu) plus specialized engines (Wikipedia, YouTube, Reddit, StackOverflow, GitHub, Hacker News, arXiv, PubMed, OpenStreetMap). The full feature inventory lives in `### Features` below. Wolfram Alpha and Qwant are not implemented as search engines — Wolfram Alpha's page is JS-rendered with no open API without a key, and Qwant's public API is hard-blocked by DataDome anti-bot (403 CAPTCHA on every request); both were removed entirely rather than kept as dead code, per `TODO.AI.md`.
+`search` aggregates results from primary search engines (Google, Bing, DuckDuckGo, Brave, Yandex, Baidu) plus specialized engines (Wikipedia, YouTube, Reddit, StackOverflow, GitHub, Hacker News, arXiv, PubMed, OpenStreetMap). The full feature inventory lives in `### Features` below. Wolfram Alpha, Qwant, Mojeek, and Startpage are not implemented as search engines — Wolfram Alpha's page is JS-rendered with no open API without a key, Qwant's public API is hard-blocked by DataDome anti-bot (403 CAPTCHA on every request), Mojeek returns an explicit bot-block 403 and only offers a paid commercial Search API, and Startpage serves an Anubis proof-of-work anti-bot challenge page with no public API at all; all four were removed entirely rather than kept as dead code, per `TODO.AI.md`.
 
-Live testing (2026-08-01/02) found Mojeek, Reddit, and Startpage hard-blocked in production (CAPTCHA/Cloudflare challenge, dead public API, or aggressive rate-limiting), and Yahoo blocked at the TLS/JA3 fingerprint level — code exists for all three but none currently return usable results. See `TODO.AI.md` for the pending product decisions on each.
+Live testing (2026-08-01/02) found Reddit hard-blocked in production (aggressive rate-limiting without an authenticated app) — code exists but does not currently return usable results. Yahoo was previously blocked at the TLS/JA3 fingerprint level; this has since been fixed via a `utls`-based custom transport (see `TODO.AI.md`). See `TODO.AI.md` for the pending product decision on Reddit.
 
 **Non-goals:**
 - No proxying through other metasearch engines — we hit primary sources directly.
@@ -64,7 +64,7 @@ Full provider list under `### Data Sources`. Trust assumptions and failure modes
 
 | External service | Trusted for | Failure mode |
 |------------------|-------------|--------------|
-| Primary search engines (Google, Bing, DuckDuckGo, Brave, Mojeek, Yandex, Baidu) | Web/image/video/news/maps results | Engine health monitor disables on consecutive failures; failover to remaining engines; results cached briefly to mask transient outages |
+| Primary search engines (Google, Bing, DuckDuckGo, Brave, Yandex, Baidu) | Web/image/video/news/maps results | Engine health monitor disables on consecutive failures; failover to remaining engines; results cached briefly to mask transient outages |
 | Specialized engines (Wikipedia, YouTube, Reddit, StackOverflow, GitHub, HN, arXiv, PubMed, OpenStreetMap) | Domain-specific search/answers | Same as above |
 | Instant-answer providers (OpenWeatherMap/wttr.in, exchangerate.host, Wiktionary, ip-location-db, etc.) | Read-only widget data | Skip widget on failure; never block main search |
 | Outbound HTTP responses from any engine | Untrusted (responses parsed) | All HTML/JSON parsed defensively; user input never embedded in scraping requests; tracking parameters stripped |
@@ -1962,7 +1962,6 @@ Click → opens video in embedded player or source site
 │ │ ◉ Bing           [✓] Web [✓] Images [ ] Videos     │ │
 │ │ ◉ DuckDuckGo     [✓] Web [✓] Images                │ │
 │ │ ◉ Brave          [✓] Web [ ] Images [ ] Videos     │ │
-│ │ ○ Mojeek         [ ] Web                           │ │
 │ │                                                     │ │
 │ │ Drag to reorder priority                            │ │
 │ └─────────────────────────────────────────────────────┘ │
@@ -2169,15 +2168,16 @@ Primary engines with their own indexes - no proxies or metasearch:
 | Bing | web, images, videos, news | Microsoft's index |
 | DuckDuckGo | web, images | Privacy-focused |
 | Brave | web, images, videos, news | Independent index |
-| Mojeek | web | **Hard-blocked in production** — returns CAPTCHA/Cloudflare challenge to non-browser clients (see `TODO.AI.md`) |
 | Yandex | web, images | Russian index (optional); anti-bot block-page detection in place |
 | Baidu | web, images | Chinese index (optional); anti-bot block-page detection in place |
 
 **Not included** (metasearch only - we go direct):
 - Ecosia (Bing-powered)
 - SearXNG (metasearch)
+- Mojeek (bot-blocked, paid-API-only — removed entirely, see `TODO.AI.md`)
+- Startpage (Anubis PoW anti-bot challenge, no public API — removed entirely, see `TODO.AI.md`)
 
-**Note**: Startpage and Yahoo code exists as alternative access paths, but both are currently non-functional in production — Startpage returns CAPTCHA/Cloudflare challenges, and Yahoo is blocked at the TLS/JA3 fingerprint level (not fixable by header changes alone). See `TODO.AI.md` for the pending decisions.
+**Note**: Reddit code exists as an alternative access path but is currently non-functional in production — its public JSON endpoints are aggressively rate-limited/blocked without an authenticated app. Yahoo was previously blocked at the TLS/JA3 fingerprint level but this has since been fixed via a `utls`-based custom transport. See `TODO.AI.md` for the pending decision on Reddit.
 
 #### Specialized Engines
 | Engine | Category | Notes |

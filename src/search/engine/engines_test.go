@@ -301,17 +301,6 @@ func TestNewReddit(t *testing.T) {
 	}
 }
 
-func TestNewStartpage(t *testing.T) {
-	engine := NewStartpageEngine()
-
-	if engine == nil {
-		t.Fatal("NewStartpageEngine() returned nil")
-	}
-	if engine.Name() != "startpage" {
-		t.Errorf("Name() = %q, want startpage", engine.Name())
-	}
-}
-
 func TestNewYouTube(t *testing.T) {
 	engine := NewYouTubeEngine()
 
@@ -324,17 +313,6 @@ func TestNewYouTube(t *testing.T) {
 	// YouTube should support videos
 	if !engine.SupportsCategory(model.CategoryVideos) {
 		t.Error("YouTube should support CategoryVideos")
-	}
-}
-
-func TestNewMojeek(t *testing.T) {
-	engine := NewMojeek()
-
-	if engine == nil {
-		t.Fatal("NewMojeek() returned nil")
-	}
-	if engine.Name() != "mojeek" {
-		t.Errorf("Name() = %q, want mojeek", engine.Name())
 	}
 }
 
@@ -804,7 +782,6 @@ func TestEngineDisplayNames(t *testing.T) {
 		{"github", NewGitHub(), "GitHub"},
 		{"stackoverflow", NewStackOverflow(), "Stack Overflow"},
 		{"reddit", NewReddit(), "Reddit"},
-		{"startpage", NewStartpageEngine(), "Startpage"},
 		{"youtube", NewYouTubeEngine(), "YouTube"},
 	}
 
@@ -983,37 +960,6 @@ func TestParseDuration(t *testing.T) {
 }
 
 // Test engine search URL building (without HTTP calls)
-
-func TestStartpageEngine(t *testing.T) {
-	engine := NewStartpageEngine()
-
-	if engine == nil {
-		t.Fatal("NewStartpageEngine() returned nil")
-	}
-	if engine.Name() != "startpage" {
-		t.Errorf("Name() = %q, want startpage", engine.Name())
-	}
-	if !engine.SupportsCategory(model.CategoryGeneral) {
-		t.Error("Startpage should support CategoryGeneral")
-	}
-	if !engine.SupportsCategory(model.CategoryImages) {
-		t.Error("Startpage should support CategoryImages")
-	}
-}
-
-func TestMojeekEngine(t *testing.T) {
-	engine := NewMojeek()
-
-	if engine == nil {
-		t.Fatal("NewMojeek() returned nil")
-	}
-	if engine.Name() != "mojeek" {
-		t.Errorf("Name() = %q, want mojeek", engine.Name())
-	}
-	if engine.GetConfig().DisplayName != "Mojeek" {
-		t.Errorf("DisplayName = %q, want Mojeek", engine.GetConfig().DisplayName)
-	}
-}
 
 func TestYandexEngine(t *testing.T) {
 	engine := NewYandex()
@@ -1626,8 +1572,6 @@ func TestEngineDisplayName(t *testing.T) {
 		{"reddit", NewReddit(), "Reddit"},
 		{"github", NewGitHub(), "GitHub"},
 		{"stackoverflow", NewStackOverflow(), "Stack Overflow"},
-		{"startpage", NewStartpageEngine(), "Startpage"},
-		{"mojeek", NewMojeek(), "Mojeek"},
 		{"yandex", NewYandex(), "Yandex"},
 		{"baidu", NewBaidu(), "Baidu"},
 	}
@@ -1657,9 +1601,7 @@ func TestEngineName(t *testing.T) {
 		{NewGitHub(), "github"},
 		{NewStackOverflow(), "stackoverflow"},
 		{NewReddit(), "reddit"},
-		{NewStartpageEngine(), "startpage"},
 		{NewYouTubeEngine(), "youtube"},
-		{NewMojeek(), "mojeek"},
 		{NewYandex(), "yandex"},
 		{NewBaidu(), "baidu"},
 	}
@@ -1933,67 +1875,6 @@ func TestYahooParseResults(t *testing.T) {
 	}
 }
 
-// Test Startpage parseResults
-
-func TestStartpageParseResults(t *testing.T) {
-	engine := NewStartpageEngine()
-
-	tests := []struct {
-		name      string
-		html      string
-		wantCount int
-	}{
-		{
-			name:      "empty HTML",
-			html:      "",
-			wantCount: 0,
-		},
-		{
-			name: "generic link pattern",
-			html: `<a href="https://example.com/page">Example Page Title</a>
-<a href="https://test.org/article">Test Article Here</a>`,
-			wantCount: 2,
-		},
-		{
-			name: "skip startpage internal links",
-			html: `<a href="https://www.startpage.com/about">About</a>
-<a href="https://example.com/page">Example Page Title</a>`,
-			wantCount: 1,
-		},
-		{
-			name: "skip short titles",
-			html: `<a href="https://example.com/page">Hi</a>
-<a href="https://test.org/article">This is a valid title</a>`,
-			wantCount: 1,
-		},
-		{
-			name: "skip javascript links",
-			html: `<a href="javascript:void(0)">Click Me</a>
-<a href="https://example.com/page">Valid Link Title</a>`,
-			wantCount: 1,
-		},
-		{
-			name: "deduplicate URLs",
-			html: `<a href="https://example.com/page">First Title</a>
-<a href="https://example.com/page">Second Title</a>`,
-			wantCount: 1,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			query := &model.Query{Text: "test", Category: model.CategoryGeneral}
-			results, err := engine.parseResults(tt.html, query)
-			if err != nil {
-				t.Errorf("parseResults() error = %v", err)
-			}
-			if len(results) != tt.wantCount {
-				t.Errorf("parseResults() count = %d, want %d", len(results), tt.wantCount)
-			}
-		})
-	}
-}
-
 // Test engine SupportsTor configuration
 
 func TestEngineSupportsTor(t *testing.T) {
@@ -2005,7 +1886,6 @@ func TestEngineSupportsTor(t *testing.T) {
 		{"duckduckgo", NewDuckDuckGo(), true},
 		{"brave", NewBrave(), true},
 		{"reddit", NewReddit(), true},
-		{"startpage", NewStartpageEngine(), true},
 		{"stackoverflow", NewStackOverflow(), true},
 		{"github", NewGitHub(), true},
 		{"google", NewGoogle(), false},
@@ -2034,7 +1914,6 @@ func TestEnginePrioritiesOrdering(t *testing.T) {
 		"bing":          NewBing().GetPriority(),
 		"brave":         NewBrave().GetPriority(),
 		"wikipedia":     NewWikipediaEngine().GetPriority(),
-		"startpage":     NewStartpageEngine().GetPriority(),
 		"yahoo":         NewYahoo().GetPriority(),
 		"youtube":       NewYouTubeEngine().GetPriority(),
 		"stackoverflow": NewStackOverflow().GetPriority(),
@@ -3043,160 +2922,6 @@ func TestStackOverflowSearch(t *testing.T) {
 	_, _ = engine.Search(ctx, query)
 }
 
-// Test Startpage Search
-func TestStartpageSearch(t *testing.T) {
-	engine := NewStartpageEngine()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
-	defer cancel()
-
-	query := &model.Query{
-		Text:     "test search",
-		Page:     1,
-		Category: model.CategoryGeneral,
-	}
-	_, _ = engine.Search(ctx, query)
-}
-
-// Test Startpage parseResults comprehensive
-func TestStartpageParseResultsComprehensive(t *testing.T) {
-	engine := NewStartpageEngine()
-
-	tests := []struct {
-		name      string
-		html      string
-		wantCount int
-	}{
-		{
-			name: "standard pattern with class",
-			html: `<a class="w-gl__result-url" href="https://example.com">Link</a>
-<h3 class="w-gl__result-title">Title</h3>
-<p class="w-gl__description">Description</p>`,
-			wantCount: 1,
-		},
-		{
-			name: "fallback generic pattern",
-			html: `<a href="https://example.com/page">Valid Title Here</a>
-<a href="https://test.org/article">Another Valid Title</a>`,
-			wantCount: 2,
-		},
-		{
-			name: "skip google favicons",
-			html: `<a href="https://google.com/s2/favicons">Favicon</a>
-<a href="https://example.com/page">Valid Title Here</a>`,
-			wantCount: 1,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			query := &model.Query{Text: "test", Category: model.CategoryGeneral}
-			results, err := engine.parseResults(tt.html, query)
-			if err != nil {
-				t.Errorf("Unexpected error: %v", err)
-			}
-			if len(results) != tt.wantCount {
-				t.Errorf("Got %d results, want %d", len(results), tt.wantCount)
-			}
-		})
-	}
-}
-
-// Test Mojeek Search
-func TestMojeekSearch(t *testing.T) {
-	engine := NewMojeek()
-
-	tests := []struct {
-		name     string
-		category model.Category
-	}{
-		{"general", model.CategoryGeneral},
-		{"images", model.CategoryImages},
-		{"news", model.CategoryNews},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
-			defer cancel()
-
-			query := &model.Query{
-				Text:       "test",
-				Page:       2,
-				Category:   tt.category,
-				SafeSearch: 2,
-				Language:   "en",
-			}
-			_, _ = engine.Search(ctx, query)
-		})
-	}
-}
-
-// Test Mojeek SafeSearch values
-func TestMojeekSafeSearchValues(t *testing.T) {
-	engine := NewMojeek()
-
-	safeSearchValues := []int{0, 1, 2}
-
-	for _, ss := range safeSearchValues {
-		t.Run(fmt.Sprintf("safesearch_%d", ss), func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
-			defer cancel()
-
-			query := &model.Query{
-				Text:       "test",
-				Page:       1,
-				Category:   model.CategoryGeneral,
-				SafeSearch: ss,
-			}
-			_, _ = engine.Search(ctx, query)
-		})
-	}
-}
-
-// Test Mojeek parseResults comprehensive
-func TestMojeekParseResultsComprehensive(t *testing.T) {
-	engine := NewMojeek()
-
-	tests := []struct {
-		name      string
-		html      string
-		wantCount int
-	}{
-		{
-			name:      "empty html",
-			html:      "",
-			wantCount: 0,
-		},
-		{
-			name:      "no results pattern",
-			html:      "<html><body>No results</body></html>",
-			wantCount: 0,
-		},
-		{
-			name: "use display URL when main URL empty",
-			html: `<li class="results-standard">
-<a class="title" href="">Empty URL</a>
-<p class="u">https://display.url</p>
-</li>`,
-			// Title match fails due to empty href
-			wantCount: 0,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			results, err := engine.parseResults(tt.html, model.CategoryGeneral)
-			if err != nil {
-				t.Errorf("Unexpected error: %v", err)
-			}
-			if len(results) != tt.wantCount {
-				t.Errorf("Got %d results, want %d", len(results), tt.wantCount)
-			}
-		})
-	}
-}
-
 // Test Yandex Search
 func TestYandexSearch(t *testing.T) {
 	engine := NewYandex()
@@ -3675,8 +3400,6 @@ func TestAllEnginesHTTPClientInit(t *testing.T) {
 		{"reddit", NewReddit().client},
 		{"github", NewGitHub().client},
 		{"stackoverflow", NewStackOverflow().client},
-		{"startpage", NewStartpageEngine().client},
-		{"mojeek", NewMojeek().client},
 		{"yandex", NewYandex().client},
 		{"baidu", NewBaidu().client},
 	}
@@ -3782,8 +3505,6 @@ func TestAllEnginesImplementInterfaceFull(t *testing.T) {
 		NewReddit(),
 		NewGitHub(),
 		NewStackOverflow(),
-		NewStartpageEngine(),
-		NewMojeek(),
 		NewYandex(),
 		NewBaidu(),
 	}
@@ -3832,23 +3553,6 @@ func TestAllEnginesImplementInterfaceFull(t *testing.T) {
 	}
 }
 
-// Test Startpage CheckRedirect function
-func TestStartpageCheckRedirect(t *testing.T) {
-	engine := NewStartpageEngine()
-
-	// The client should be configured to not follow redirects
-	if engine.client.CheckRedirect == nil {
-		t.Error("CheckRedirect should be configured")
-	}
-
-	// Test that CheckRedirect returns http.ErrUseLastResponse
-	req, _ := http.NewRequest("GET", "http://example.com", nil)
-	err := engine.client.CheckRedirect(req, nil)
-	if err != http.ErrUseLastResponse {
-		t.Errorf("CheckRedirect should return ErrUseLastResponse, got %v", err)
-	}
-}
-
 // Test Bing Transport configuration
 func TestBingTransportConfig(t *testing.T) {
 	engine := NewBing()
@@ -3886,8 +3590,6 @@ func TestAllEngineCategorySupport(t *testing.T) {
 		{"reddit", NewReddit()},
 		{"github", NewGitHub()},
 		{"stackoverflow", NewStackOverflow()},
-		{"startpage", NewStartpageEngine()},
-		{"mojeek", NewMojeek()},
 		{"yandex", NewYandex()},
 		{"baidu", NewBaidu()},
 	}

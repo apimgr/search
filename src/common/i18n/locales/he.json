@@ -1532,7 +1532,7 @@
       "a_self_host_prefix": "Yes! This is free and open source software.",
       "a_self_host_repo": "Check our source code repository for installation instructions.",
       "q_engines": "What search engines do you use?",
-      "a_engines": "We aggregate results from multiple engines including Google, Bing, DuckDuckGo, Brave, Mojeek, Yahoo, Yandex, Baidu, Startpage, Wikipedia, arXiv, PubMed, GitHub, Hacker News, Reddit, YouTube, OpenStreetMap.",
+      "a_engines": "We aggregate results from multiple engines including Google, Bing, DuckDuckGo, Brave, Yahoo, Yandex, Baidu, Wikipedia, arXiv, PubMed, GitHub, Hacker News, Reddit, YouTube, OpenStreetMap.",
       "q_instant": "How do instant answers work?",
       "a_instant": "Many instant answers are generated locally for calculations, formatting, conversions, parsing, and text tools. Some lookups query remote sources or your configured search backends when that is required for the feature."
     },

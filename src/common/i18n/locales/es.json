@@ -1532,7 +1532,7 @@
       "a_self_host_prefix": "¡Sí! Este es software libre y de código abierto.",
       "a_self_host_repo": "Consulte nuestro repositorio de código fuente para instrucciones de instalación.",
       "q_engines": "¿Qué motores de búsqueda usan?",
-      "a_engines": "Agregamos resultados de múltiples motores, incluidos Google, Bing, DuckDuckGo, Brave, Mojeek, Yahoo, Yandex, Baidu, Startpage, Wikipedia, arXiv, PubMed, GitHub, Hacker News, Reddit, YouTube, OpenStreetMap.",
+      "a_engines": "Agregamos resultados de múltiples motores, incluidos Google, Bing, DuckDuckGo, Brave, Yahoo, Yandex, Baidu, Wikipedia, arXiv, PubMed, GitHub, Hacker News, Reddit, YouTube, OpenStreetMap.",
       "q_instant": "¿Cómo funcionan las respuestas instantáneas?",
       "a_instant": "Muchas respuestas instantáneas se generan localmente para cálculos, formateo, conversiones, análisis y herramientas de texto. Algunas búsquedas consultan fuentes remotas o sus motores de búsqueda configurados cuando es necesario para la función."
     },

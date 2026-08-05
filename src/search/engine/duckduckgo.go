@@ -111,7 +111,7 @@ func (e *DuckDuckGo) searchGeneral(ctx context.Context, query *model.Query) ([]m
 	bodyStr := string(respBody)
 	// Detect CAPTCHA / bot-challenge pages — DDG returns these from VPS IPs.
 	// Treating them as errors lets the circuit-breaker pause DDG and surface
-	// other engines (Brave, Startpage, Mojeek) instead of silently returning 0 results.
+	// other engines (Brave) instead of silently returning 0 results.
 	if isDDGBotChallenge(bodyStr) {
 		return nil, fmt.Errorf("duckduckgo bot challenge detected")
 	}
