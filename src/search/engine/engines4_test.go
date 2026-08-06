@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -1715,7 +1716,10 @@ func TestYouTubeParseJSONInvalidJSON(t *testing.T) {
 	}
 }
 
-// TestYouTubeParseJSONMissingStructure verifies that missing JSON structure returns empty results.
+// TestYouTubeParseJSONMissingStructure verifies that a missing top-level
+// JSON envelope is reported as schema drift (errYouTubeSchemaDrift) rather
+// than silently returning a nil error, so callers can distinguish "the
+// page schema changed" from "this query legitimately has zero videos".
 func TestYouTubeParseJSONMissingStructure(t *testing.T) {
 	tests := []struct {
 		name string
@@ -1724,6 +1728,8 @@ func TestYouTubeParseJSONMissingStructure(t *testing.T) {
 		{"empty object", `{}`},
 		{"no twoColumn", `{"contents":{}}`},
 		{"no primaryContents", `{"contents":{"twoColumnSearchResultsRenderer":{}}}`},
+		{"no sectionListRenderer", `{"contents":{"twoColumnSearchResultsRenderer":{"primaryContents":{}}}}`},
+		{"no sectionList contents", `{"contents":{"twoColumnSearchResultsRenderer":{"primaryContents":{"sectionListRenderer":{}}}}}`},
 	}
 
 	for _, tt := range tests {
@@ -1731,13 +1737,29 @@ func TestYouTubeParseJSONMissingStructure(t *testing.T) {
 			e := NewYouTubeEngine()
 			q := &model.Query{Text: "test"}
 			results, err := e.parseJSON(tt.json, q, 10)
-			if err != nil {
-				t.Fatalf("parseJSON() error = %v", err)
+			if !errors.Is(err, errYouTubeSchemaDrift) {
+				t.Fatalf("parseJSON() error = %v, want errYouTubeSchemaDrift", err)
 			}
 			if len(results) != 0 {
 				t.Errorf("expected 0 results for incomplete structure, got %d", len(results))
 			}
 		})
+	}
+}
+
+// TestYouTubeParseJSONNoDrift verifies that a fully-navigable envelope with
+// a genuinely empty (or non-video) section list is NOT reported as schema
+// drift, since that shape also occurs for legitimate zero-result searches.
+func TestYouTubeParseJSONNoDrift(t *testing.T) {
+	e := NewYouTubeEngine()
+	q := &model.Query{Text: "test"}
+	ytData := `{"contents":{"twoColumnSearchResultsRenderer":{"primaryContents":{"sectionListRenderer":{"contents":[{"itemSectionRenderer":{"contents":[]}}]}}}}}`
+	results, err := e.parseJSON(ytData, q, 10)
+	if err != nil {
+		t.Fatalf("parseJSON() error = %v, want nil (empty section is not schema drift)", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("expected 0 results, got %d", len(results))
 	}
 }
 

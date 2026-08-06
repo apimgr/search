@@ -3,8 +3,10 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -14,6 +16,15 @@ import (
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 )
+
+// errYouTubeSchemaDrift indicates that YouTube's ytInitialData JSON envelope
+// (contents -> twoColumnSearchResultsRenderer -> primaryContents ->
+// sectionListRenderer -> contents) did not match the shape this parser
+// expects. That envelope is undocumented and YouTube changes it without
+// notice; failing to navigate it is a schema-drift signal distinct from a
+// query that legitimately returned zero videos (which still yields this
+// envelope, just with empty/non-video section contents).
+var errYouTubeSchemaDrift = errors.New("youtube: ytInitialData schema drift detected")
 
 // YouTube implements YouTube Search engine
 type YouTube struct {
@@ -88,16 +99,27 @@ func (e *YouTube) parseResults(html string, query *model.Query) ([]model.Result,
 		jsonMatch = altPattern.FindStringSubmatch(html)
 	}
 
-	if len(jsonMatch) >= 2 {
+	switch {
+	case len(jsonMatch) >= 2:
 		// The JSON structure YouTube ships is undocumented and changes without
 		// notice. If decoding fails (e.g. the non-greedy regex above truncated
 		// the object early) or the expected renderer path yields nothing (schema
 		// drift), fall back to scanning the raw HTML for /watch?v= links instead
 		// of surfacing zero results.
 		results, err := e.parseJSON(jsonMatch[1], query, maxResults)
-		if err == nil && len(results) > 0 {
+		switch {
+		case err == nil && len(results) > 0:
 			return results, nil
+		case errors.Is(err, errYouTubeSchemaDrift):
+			log.Printf("youtube: schema drift detected in ytInitialData renderer path for query %q; falling back to HTML link scraping", query.Text)
+		case err != nil:
+			log.Printf("youtube: failed to decode ytInitialData JSON for query %q: %v; falling back to HTML link scraping", query.Text, err)
 		}
+	default:
+		// Neither pattern matched at all, meaning YouTube stopped embedding
+		// ytInitialData under either of the known markers - a stronger signal
+		// of schema/template drift than a failed nested-field navigation.
+		log.Printf("youtube: ytInitialData marker not found in response for query %q; falling back to HTML link scraping", query.Text)
 	}
 
 	// Fallback to HTML parsing
@@ -112,30 +134,33 @@ func (e *YouTube) parseJSON(jsonStr string, query *model.Query, maxResults int) 
 		return nil, err
 	}
 
-	// Navigate the complex YouTube JSON structure
+	// Navigate the complex YouTube JSON envelope. A cast failure at any of
+	// these five levels means the top-level page structure itself changed
+	// (schema drift) - even a genuinely empty search still ships this
+	// envelope, just with empty/non-video section contents below it.
 	contents, ok := data["contents"].(map[string]interface{})
 	if !ok {
-		return results, nil
+		return results, errYouTubeSchemaDrift
 	}
 
 	twoColumn, ok := contents["twoColumnSearchResultsRenderer"].(map[string]interface{})
 	if !ok {
-		return results, nil
+		return results, errYouTubeSchemaDrift
 	}
 
 	primaryContents, ok := twoColumn["primaryContents"].(map[string]interface{})
 	if !ok {
-		return results, nil
+		return results, errYouTubeSchemaDrift
 	}
 
 	sectionList, ok := primaryContents["sectionListRenderer"].(map[string]interface{})
 	if !ok {
-		return results, nil
+		return results, errYouTubeSchemaDrift
 	}
 
 	sectionContents, ok := sectionList["contents"].([]interface{})
 	if !ok {
-		return results, nil
+		return results, errYouTubeSchemaDrift
 	}
 
 	for _, section := range sectionContents {
