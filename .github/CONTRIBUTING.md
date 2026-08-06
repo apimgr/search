@@ -43,24 +43,15 @@ This project adheres to the [Code of Conduct](CODE_OF_CONDUCT.md). By participat
 
 ### Building
 
-Using Docker (recommended):
+All builds and tests run inside Docker via the Makefile — never `go build`/`go test` directly on the host:
 ```bash
-docker run --rm -v $(pwd):/app -w /app golang:latest go build -o binaries/search src/main.go
-```
-
-Local build:
-```bash
-go build -o binaries/search src/main.go
+make build
 ```
 
 ### Running Tests
 
 ```bash
-# Using Docker
-docker run --rm -v $(pwd):/app -w /app golang:latest go test ./...
-
-# Local
-go test ./...
+make test
 ```
 
 ### Running the Application
@@ -82,7 +73,7 @@ Access at http://localhost:64580
 2. **Make your changes** following the [Coding Standards](#coding-standards)
 
 3. **Test your changes** thoroughly:
-   - Run all tests: `go test ./...`
+   - Run all tests: `make test`
    - Test manually in browser
    - Test different search categories (web, images, videos, etc.)
 
@@ -129,7 +120,7 @@ Access at http://localhost:64580
 src/
 ├── main.go           # Entry point
 ├── config/           # Configuration management
-├── models/           # Data models
+├── model/            # Data models
 ├── search/           # Search logic
 │   └── engines/      # Search engine implementations
 └── server/           # HTTP server and handlers
