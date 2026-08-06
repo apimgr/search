@@ -679,6 +679,205 @@ func TestRedditSearchEmpty(t *testing.T) {
 	}
 }
 
+// TestRedditSearchAuthenticatedSuccess verifies that when client_id/client_secret
+// are configured, Search() fetches an OAuth2 token and queries oauth.reddit.com
+// with a Bearer token, using the shared listing-parsing path.
+func TestRedditSearchAuthenticatedSuccess(t *testing.T) {
+	redditResp := map[string]interface{}{
+		"data": map[string]interface{}{
+			"children": []map[string]interface{}{
+				{
+					"data": map[string]interface{}{
+						"title":        "OAuth result",
+						"permalink":    "/r/golang/comments/def456/oauth_result/",
+						"subreddit":    "golang",
+						"score":        42,
+						"num_comments": 3,
+					},
+				},
+			},
+		},
+	}
+	respJSON, _ := json.Marshal(redditResp)
+
+	var gotAuthHeader, gotTokenAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/access_token":
+			gotTokenAuth = r.Header.Get("Authorization")
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"access_token":"test-token-123","token_type":"bearer","expires_in":3600}`)
+		case "/search":
+			gotAuthHeader = r.Header.Get("Authorization")
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(respJSON)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	e := NewReddit()
+	e.client = &http.Client{Transport: &redirectToTestServer{base: srv.URL}}
+	e.GetConfig().Settings["client_id"] = "cid"
+	e.GetConfig().Settings["client_secret"] = "csecret"
+	e.GetConfig().Settings["contact_email"] = "ops@example.com"
+
+	results, err := e.Search(context.Background(), &model.Query{Text: "golang"})
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("Search() len = %d, want 1", len(results))
+	}
+	if results[0].Title != "OAuth result" {
+		t.Errorf("result title = %q, want %q", results[0].Title, "OAuth result")
+	}
+	if gotTokenAuth == "" || !strings.HasPrefix(gotTokenAuth, "Basic ") {
+		t.Errorf("access_token request missing Basic auth header, got %q", gotTokenAuth)
+	}
+	if gotAuthHeader != "Bearer test-token-123" {
+		t.Errorf("search request Authorization = %q, want %q", gotAuthHeader, "Bearer test-token-123")
+	}
+}
+
+// TestRedditGetAccessTokenNonOK verifies that a non-200 token response returns an error.
+func TestRedditGetAccessTokenNonOK(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	e := NewReddit()
+	e.client = &http.Client{Transport: &redirectToTestServer{base: srv.URL}}
+
+	_, err := e.getAccessToken(context.Background(), "cid", "csecret")
+	if err == nil {
+		t.Error("getAccessToken() expected error on non-200, got nil")
+	}
+}
+
+// TestRedditGetAccessTokenInvalidJSON verifies that malformed token JSON returns an error.
+func TestRedditGetAccessTokenInvalidJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `not json`)
+	}))
+	defer srv.Close()
+
+	e := NewReddit()
+	e.client = &http.Client{Transport: &redirectToTestServer{base: srv.URL}}
+
+	_, err := e.getAccessToken(context.Background(), "cid", "csecret")
+	if err == nil {
+		t.Error("getAccessToken() expected error on invalid JSON, got nil")
+	}
+}
+
+// TestRedditGetAccessTokenMissingToken verifies that a response with no access_token errors.
+func TestRedditGetAccessTokenMissingToken(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"token_type":"bearer","expires_in":3600}`)
+	}))
+	defer srv.Close()
+
+	e := NewReddit()
+	e.client = &http.Client{Transport: &redirectToTestServer{base: srv.URL}}
+
+	_, err := e.getAccessToken(context.Background(), "cid", "csecret")
+	if err == nil {
+		t.Error("getAccessToken() expected error on missing access_token, got nil")
+	}
+}
+
+// TestRedditGetAccessTokenCached verifies that a cached, non-expired token is reused
+// without issuing a second HTTP request.
+func TestRedditGetAccessTokenCached(t *testing.T) {
+	requests := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"access_token":"cached-token","token_type":"bearer","expires_in":3600}`)
+	}))
+	defer srv.Close()
+
+	e := NewReddit()
+	e.client = &http.Client{Transport: &redirectToTestServer{base: srv.URL}}
+
+	tok1, err := e.getAccessToken(context.Background(), "cid", "csecret")
+	if err != nil {
+		t.Fatalf("getAccessToken() error = %v", err)
+	}
+	tok2, err := e.getAccessToken(context.Background(), "cid", "csecret")
+	if err != nil {
+		t.Fatalf("getAccessToken() error = %v", err)
+	}
+	if tok1 != tok2 || tok1 != "cached-token" {
+		t.Errorf("expected cached token to be reused, got %q then %q", tok1, tok2)
+	}
+	if requests != 1 {
+		t.Errorf("expected 1 token request (cached on 2nd call), got %d", requests)
+	}
+}
+
+// TestRedditSearchAuthenticatedTokenError verifies that a token-fetch failure
+// propagates as a Search() error.
+func TestRedditSearchAuthenticatedTokenError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+
+	e := NewReddit()
+	e.client = &http.Client{Transport: &redirectToTestServer{base: srv.URL}}
+	e.GetConfig().Settings["client_id"] = "cid"
+	e.GetConfig().Settings["client_secret"] = "csecret"
+
+	_, err := e.Search(context.Background(), &model.Query{Text: "test"})
+	if err == nil {
+		t.Error("Search() expected error when token fetch fails, got nil")
+	}
+}
+
+// TestRedditSearchAuthenticatedNonOK verifies that a non-200 oauth search response errors.
+func TestRedditSearchAuthenticatedNonOK(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/access_token" {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"access_token":"tok","token_type":"bearer","expires_in":3600}`)
+			return
+		}
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer srv.Close()
+
+	e := NewReddit()
+	e.client = &http.Client{Transport: &redirectToTestServer{base: srv.URL}}
+	e.GetConfig().Settings["client_id"] = "cid"
+	e.GetConfig().Settings["client_secret"] = "csecret"
+
+	_, err := e.Search(context.Background(), &model.Query{Text: "test"})
+	if err == nil {
+		t.Error("Search() expected error on non-200 oauth search response, got nil")
+	}
+}
+
+// TestRedditUserAgentFallback verifies the descriptive UA falls back when no
+// contact_email is configured.
+func TestRedditUserAgentFallback(t *testing.T) {
+	e := NewReddit()
+	ua := e.userAgent()
+	if !strings.Contains(ua, "contact not configured") {
+		t.Errorf("expected fallback UA, got %q", ua)
+	}
+
+	e.GetConfig().Settings["contact_email"] = "ops@example.com"
+	ua = e.userAgent()
+	if !strings.Contains(ua, "ops@example.com") {
+		t.Errorf("expected UA to contain contact email, got %q", ua)
+	}
+}
+
 // --- StackOverflow ---
 
 // TestSOSearchSuccess exercises the full Stack Overflow JSON path.
@@ -865,6 +1064,31 @@ func TestSOSearchTagsCapped(t *testing.T) {
 	// Content must start with at least the first tag
 	if !strings.HasPrefix(results[0].Content, "[go]") {
 		t.Errorf("content should start with first tag: %q", results[0].Content)
+	}
+}
+
+// TestSOSearchWithAPIKey asserts an operator-configured api_key setting is
+// sent as the Stack Exchange "key" query parameter to raise the shared-IP quota.
+func TestSOSearchWithAPIKey(t *testing.T) {
+	respJSON := []byte(`{"items":[{"question_id":1,"title":"q","link":"https://stackoverflow.com/q/1","tags":["go"],"is_answered":true,"answer_count":1}]}`)
+
+	var gotKey string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotKey = r.URL.Query().Get("key")
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(respJSON)
+	}))
+	defer srv.Close()
+
+	e := NewStackOverflow()
+	e.client = &http.Client{Transport: &redirectToTestServer{base: srv.URL}}
+	e.GetConfig().Settings["api_key"] = "so-key"
+
+	if _, err := e.Search(context.Background(), &model.Query{Text: "test"}); err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if gotKey != "so-key" {
+		t.Errorf("key query param = %q, want %q", gotKey, "so-key")
 	}
 }
 

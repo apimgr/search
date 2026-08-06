@@ -1336,6 +1336,14 @@ type EngineConfig struct {
 	Timeout    int      `yaml:"timeout"`
 	Weight     float64  `yaml:"weight"`
 	APIKey     string   `yaml:"api_key,omitempty"`
+
+	// ClientID/ClientSecret are used by engines requiring OAuth2 client-credentials
+	// authentication (e.g. reddit's oauth.reddit.com API).
+	ClientID     string `yaml:"client_id,omitempty"`
+	ClientSecret string `yaml:"client_secret,omitempty"`
+	// ContactEmail identifies the operator to engines whose usage policy requires
+	// a descriptive contact (e.g. pubmed's E-utilities email param, reddit's User-Agent).
+	ContactEmail string `yaml:"contact_email,omitempty"`
 }
 
 // DefaultConfig returns a default configuration

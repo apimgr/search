@@ -114,6 +114,11 @@ func NewServer(cfg *config.Config) *Server {
 	// Create engine registry with default engines
 	registry := engine.DefaultRegistry()
 
+	// Apply any operator-configured engine credentials (API keys, OAuth
+	// client_id/client_secret, contact email) from server.yml onto the
+	// matching registered engine's config so they take effect at runtime.
+	applyEngineCredentials(registry, cfg.Engines)
+
 	// Get all enabled engines (already filtered by IsEnabled())
 	enabledEngines := registry.GetEnabled()
 
@@ -473,6 +478,38 @@ func NewServer(cfg *config.Config) *Server {
 	s.initScheduler(schedulerDB)
 
 	return s
+}
+
+// applyEngineCredentials copies operator-configured credentials (API keys, OAuth
+// client_id/client_secret, contact email) from server.yml's `engines:` section onto
+// the matching registered engine's model.EngineConfig.Settings map, so engines that
+// support authenticated/higher-rate-limit access (github, stackoverflow, pubmed,
+// reddit) can read them at search time. Engines/keys not present in cfg are left
+// untouched — this never disables or reconfigures an engine's enabled/priority state.
+func applyEngineCredentials(registry *engine.Registry, engines map[string]config.EngineConfig) {
+	for name, ov := range engines {
+		eng, err := registry.Get(name)
+		if err != nil {
+			continue
+		}
+
+		mc := eng.GetConfig()
+		if mc.Settings == nil {
+			mc.Settings = make(map[string]interface{})
+		}
+		if ov.APIKey != "" {
+			mc.Settings["api_key"] = ov.APIKey
+		}
+		if ov.ClientID != "" {
+			mc.Settings["client_id"] = ov.ClientID
+		}
+		if ov.ClientSecret != "" {
+			mc.Settings["client_secret"] = ov.ClientSecret
+		}
+		if ov.ContactEmail != "" {
+			mc.Settings["contact_email"] = ov.ContactEmail
+		}
+	}
 }
 
 // TorAddress returns the active .onion address, or empty string if Tor is not running.

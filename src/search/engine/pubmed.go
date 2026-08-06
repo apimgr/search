@@ -133,6 +133,16 @@ func (e *PubMed) searchIDs(ctx context.Context, query *model.Query) ([]string, e
 	params.Set("retmode", "xml")
 	params.Set("retmax", "20")
 	params.Set("sort", "relevance")
+	// NCBI E-utilities usage policy: identify the calling tool and, if the
+	// operator provides one, a contact email and API key (raises the rate
+	// limit from 3 req/sec to 10 req/sec). See TODO.AI.md.
+	params.Set("tool", "search")
+	if email := e.GetConfig().GetSetting("contact_email"); email != "" {
+		params.Set("email", email)
+	}
+	if key := e.GetConfig().GetSetting("api_key"); key != "" {
+		params.Set("api_key", key)
+	}
 
 	// Handle pagination
 	if query.Page > 1 {
@@ -202,6 +212,13 @@ func (e *PubMed) fetchArticles(ctx context.Context, ids []string) ([]pubmedArtic
 	params.Set("id", strings.Join(ids, ","))
 	params.Set("retmode", "xml")
 	params.Set("rettype", "abstract")
+	params.Set("tool", "search")
+	if email := e.GetConfig().GetSetting("contact_email"); email != "" {
+		params.Set("email", email)
+	}
+	if key := e.GetConfig().GetSetting("api_key"); key != "" {
+		params.Set("api_key", key)
+	}
 
 	reqURL := fmt.Sprintf("%s?%s", baseURL, params.Encode())
 

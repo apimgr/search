@@ -501,6 +501,30 @@ func TestGitHubSearchEmptyDescription(t *testing.T) {
 	}
 }
 
+func TestGitHubSearchWithAPIKey(t *testing.T) {
+	payload := `{"items":[{"full_name":"owner/repo","html_url":"https://github.com/owner/repo","description":"d","stargazers_count":1,"forks_count":0,"language":"Go","updated_at":"2023-09-01T00:00:00Z"}]}`
+
+	var gotAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, payload)
+	}))
+	defer server.Close()
+
+	engine := NewGitHub()
+	engine.client = &http.Client{Transport: redirectToServer(server.URL)}
+	engine.GetConfig().Settings["api_key"] = "gh-token"
+
+	if _, err := engine.Search(context.Background(), &model.Query{Text: "test", Page: 1}); err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if gotAuth != "Bearer gh-token" {
+		t.Errorf("Authorization header = %q, want %q", gotAuth, "Bearer gh-token")
+	}
+}
+
 func TestGitHubSearchNon200(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
@@ -1740,6 +1764,42 @@ func TestPubMedSearchEfetchNon200(t *testing.T) {
 	_, err := engine.Search(context.Background(), &model.Query{Text: "test", Page: 1})
 	if err == nil {
 		t.Error("Search() should return error when efetch returns non-200")
+	}
+}
+
+func TestPubMedSearchWithContactEmailAndAPIKey(t *testing.T) {
+	esearchXML := buildPubMedEsearchXML([]string{"12345678"})
+	efetchXML := buildPubMedEfetchXML("12345678", "A study", "A Journal")
+
+	var esearchEmail, esearchKey, efetchEmail, efetchKey string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		w.WriteHeader(http.StatusOK)
+		if strings.Contains(r.URL.Path, "esearch") {
+			esearchEmail = r.URL.Query().Get("email")
+			esearchKey = r.URL.Query().Get("api_key")
+			fmt.Fprint(w, esearchXML)
+			return
+		}
+		efetchEmail = r.URL.Query().Get("email")
+		efetchKey = r.URL.Query().Get("api_key")
+		fmt.Fprint(w, efetchXML)
+	}))
+	defer server.Close()
+
+	engine := NewPubMed()
+	engine.client = &http.Client{Transport: redirectToServer(server.URL)}
+	engine.GetConfig().Settings["contact_email"] = "ops@example.com"
+	engine.GetConfig().Settings["api_key"] = "pm-key"
+
+	if _, err := engine.Search(context.Background(), &model.Query{Text: "test", Page: 1}); err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if esearchEmail != "ops@example.com" || esearchKey != "pm-key" {
+		t.Errorf("esearch email/api_key = %q/%q, want ops@example.com/pm-key", esearchEmail, esearchKey)
+	}
+	if efetchEmail != "ops@example.com" || efetchKey != "pm-key" {
+		t.Errorf("efetch email/api_key = %q/%q, want ops@example.com/pm-key", efetchEmail, efetchKey)
 	}
 }
 

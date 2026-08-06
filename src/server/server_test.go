@@ -11,6 +11,7 @@ import (
 	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/direct"
+	"github.com/apimgr/search/src/search/engine"
 	"github.com/apimgr/search/src/version"
 	"github.com/go-chi/chi/v5"
 )
@@ -2886,3 +2887,73 @@ func (r *testChiRouter) Routes() []chi.Route                                { re
 func (r *testChiRouter) Middlewares() chi.Middlewares                       { return nil }
 func (r *testChiRouter) Match(rctx *chi.Context, method, path string) bool  { return false }
 func (r *testChiRouter) Find(rctx *chi.Context, method, path string) string { return "" }
+
+// Tests for applyEngineCredentials
+
+func TestApplyEngineCredentialsSetsSettings(t *testing.T) {
+	registry := engine.DefaultRegistry()
+
+	engines := map[string]config.EngineConfig{
+		"github": {
+			APIKey: "gh-token",
+		},
+		"reddit": {
+			ClientID:     "cid",
+			ClientSecret: "csecret",
+			ContactEmail: "ops@example.com",
+		},
+	}
+
+	applyEngineCredentials(registry, engines)
+
+	gh, err := registry.Get("github")
+	if err != nil {
+		t.Fatalf("registry.Get(github) error = %v", err)
+	}
+	if got := gh.GetConfig().GetSetting("api_key"); got != "gh-token" {
+		t.Errorf("github api_key = %q, want %q", got, "gh-token")
+	}
+
+	rd, err := registry.Get("reddit")
+	if err != nil {
+		t.Fatalf("registry.Get(reddit) error = %v", err)
+	}
+	if got := rd.GetConfig().GetSetting("client_id"); got != "cid" {
+		t.Errorf("reddit client_id = %q, want %q", got, "cid")
+	}
+	if got := rd.GetConfig().GetSetting("client_secret"); got != "csecret" {
+		t.Errorf("reddit client_secret = %q, want %q", got, "csecret")
+	}
+	if got := rd.GetConfig().GetSetting("contact_email"); got != "ops@example.com" {
+		t.Errorf("reddit contact_email = %q, want %q", got, "ops@example.com")
+	}
+}
+
+func TestApplyEngineCredentialsUnknownEngineSkipped(t *testing.T) {
+	registry := engine.DefaultRegistry()
+
+	engines := map[string]config.EngineConfig{
+		"does-not-exist": {APIKey: "irrelevant"},
+	}
+
+	// Must not panic when the configured engine name has no registered engine.
+	applyEngineCredentials(registry, engines)
+}
+
+func TestApplyEngineCredentialsEmptyFieldsLeftUntouched(t *testing.T) {
+	registry := engine.DefaultRegistry()
+
+	engines := map[string]config.EngineConfig{
+		"github": {},
+	}
+
+	applyEngineCredentials(registry, engines)
+
+	gh, err := registry.Get("github")
+	if err != nil {
+		t.Fatalf("registry.Get(github) error = %v", err)
+	}
+	if got := gh.GetConfig().GetSetting("api_key"); got != "" {
+		t.Errorf("github api_key = %q, want empty", got)
+	}
+}

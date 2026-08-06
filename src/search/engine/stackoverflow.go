@@ -47,6 +47,10 @@ func (e *StackOverflow) Search(ctx context.Context, query *model.Query) ([]model
 	params.Set("sort", "relevance")
 	params.Set("pagesize", "10")
 	params.Set("filter", "withbody")
+	// An operator-configured key raises Stack Exchange's strict shared-IP quota.
+	if key := e.GetConfig().GetSetting("api_key"); key != "" {
+		params.Set("key", key)
+	}
 
 	reqURL := fmt.Sprintf("%s?%s", searchURL, params.Encode())
 

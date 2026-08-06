@@ -79,3 +79,20 @@ func (ec *EngineConfig) GetMaxResults() int {
 func (ec *EngineConfig) GetPriority() int {
 	return ec.Priority
 }
+
+// GetSetting returns an engine-specific string setting (e.g. an operator-configured
+// API key or OAuth credential), or "" if the key is absent or not a string.
+func (ec *EngineConfig) GetSetting(key string) string {
+	if ec.Settings == nil {
+		return ""
+	}
+	v, ok := ec.Settings[key]
+	if !ok {
+		return ""
+	}
+	s, ok := v.(string)
+	if !ok {
+		return ""
+	}
+	return s
+}
