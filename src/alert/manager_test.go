@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/email"
 	"github.com/apimgr/search/src/model"
 	"github.com/apimgr/search/src/search"
 	_ "modernc.org/sqlite"
@@ -1367,6 +1369,339 @@ func TestProcessDueWeeklyFrequency(t *testing.T) {
 }
 
 // --- JSON round-trip sanity on AlertResult ---
+
+// --- Email delivery validation ---
+
+// TestCreateEmailDeliveryRequiresMailer covers the branch in Create where
+// DeliverEmail is requested but the Manager has no mailer at all (nil).
+func TestCreateEmailDeliveryRequiresMailer(t *testing.T) {
+	manager, db := newTestManager(t, newTestEngine("google", "general"))
+	defer db.Close()
+
+	_, err := manager.Create(context.Background(), CreateRequest{
+		Query:        "email test",
+		Category:     "general",
+		Frequency:    FrequencyDaily,
+		Email:        "test@example.com",
+		DeliverEmail: true,
+		BaseURL:      "https://search.test",
+	})
+	if !errors.Is(err, ErrEmailRequired) {
+		t.Fatalf("Create() with nil mailer and DeliverEmail = %v, want ErrEmailRequired", err)
+	}
+}
+
+// TestCreateEmailDeliveryRequiresEnabledMailer covers the branch where a
+// mailer exists but SMTP has not been configured (IsEnabled() == false).
+func TestCreateEmailDeliveryRequiresEnabledMailer(t *testing.T) {
+	db := setupAlertTestDB(t)
+	defer db.Close()
+	cfg := config.DefaultConfig()
+	aggregator := search.NewAggregator([]search.Engine{newTestEngine("google", "general")}, search.AggregatorConfig{Timeout: 5 * time.Second, MaxConcurrent: 1})
+	mailer := email.NewMailer(&email.Config{Enabled: false})
+	manager := NewManager(db, cfg, aggregator, mailer)
+
+	_, err := manager.Create(context.Background(), CreateRequest{
+		Query:        "email test",
+		Category:     "general",
+		Frequency:    FrequencyDaily,
+		Email:        "test@example.com",
+		DeliverEmail: true,
+		BaseURL:      "https://search.test",
+	})
+	if !errors.Is(err, ErrEmailRequired) {
+		t.Fatalf("Create() with disabled mailer and DeliverEmail = %v, want ErrEmailRequired", err)
+	}
+}
+
+// TestCreateEmailDeliverySucceedsWithEnabledMailer verifies that Create()
+// accepts DeliverEmail once the mailer reports IsEnabled() == true.
+func TestCreateEmailDeliverySucceedsWithEnabledMailer(t *testing.T) {
+	db := setupAlertTestDB(t)
+	defer db.Close()
+	cfg := config.DefaultConfig()
+	aggregator := search.NewAggregator([]search.Engine{newTestEngine("google", "general")}, search.AggregatorConfig{Timeout: 5 * time.Second, MaxConcurrent: 1})
+	mailer := email.NewMailer(&email.Config{Enabled: true})
+	manager := NewManager(db, cfg, aggregator, mailer)
+
+	resp, err := manager.Create(context.Background(), CreateRequest{
+		Query:        "email test",
+		Category:     "general",
+		Frequency:    FrequencyDaily,
+		Email:        "test@example.com",
+		DeliverEmail: true,
+		BaseURL:      "https://search.test",
+	})
+	if err != nil {
+		t.Fatalf("Create() with enabled mailer should succeed, got: %v", err)
+	}
+	if !resp.Alert.DeliverEmail {
+		t.Fatal("resp.Alert.DeliverEmail should be true")
+	}
+}
+
+// TestUpdateEmailDeliveryRequiresEnabledMailer covers the same branch in
+// Update() where the mailer is present but disabled.
+func TestUpdateEmailDeliveryRequiresEnabledMailer(t *testing.T) {
+	manager, db := newTestManager(t, newTestEngine("google", "general"))
+	defer db.Close()
+
+	resp, err := manager.Create(context.Background(), CreateRequest{
+		Query:      "update email test",
+		Category:   "general",
+		Frequency:  FrequencyDaily,
+		Email:      "test@example.com",
+		DeliverRSS: true,
+		BaseURL:    "https://search.test",
+	})
+	if err != nil {
+		t.Fatalf("Create() error: %v", err)
+	}
+
+	_, err = manager.Update(context.Background(), resp.ManageToken, UpdateRequest{
+		Query:        "updated",
+		Category:     "general",
+		Frequency:    FrequencyDaily,
+		DeliverEmail: true,
+	})
+	if !errors.Is(err, ErrEmailRequired) {
+		t.Fatalf("Update() with nil mailer and DeliverEmail = %v, want ErrEmailRequired", err)
+	}
+}
+
+// TestProcessDueEmailSendFailurePropagates exercises sendDigestEmail's
+// failure path: an enabled mailer with no reachable SMTP host must cause
+// processAlert (and therefore ProcessDue) to report the send failure and
+// persist it as last_error.
+func TestProcessDueEmailSendFailurePropagates(t *testing.T) {
+	db := setupAlertTestDB(t)
+	defer db.Close()
+	cfg := config.DefaultConfig()
+
+	google := newTestEngine("google", "general")
+	google.results = []model.Result{{URL: "https://example.com/email", Title: "Email Result", Engine: "google"}}
+	aggregator := search.NewAggregator([]search.Engine{google}, search.AggregatorConfig{Timeout: 5 * time.Second, MaxConcurrent: 1})
+	// Enabled but pointed at an unreachable host so Send() fails fast.
+	mailer := email.NewMailer(&email.Config{Enabled: true, SMTP: email.SMTPConfig{Host: "", Port: 0}})
+	manager := NewManager(db, cfg, aggregator, mailer)
+
+	resp, err := manager.Create(context.Background(), CreateRequest{
+		Query:        "email failure",
+		Category:     "general",
+		Frequency:    FrequencyDaily,
+		Email:        "test@example.com",
+		DeliverEmail: true,
+		BaseURL:      "https://search.test",
+	})
+	if err != nil {
+		t.Fatalf("Create() error: %v", err)
+	}
+
+	err = manager.ProcessDue(context.Background(), FrequencyDaily)
+	if err == nil {
+		t.Fatal("ProcessDue() should surface the email send failure")
+	}
+
+	stored, getErr := manager.GetByManageToken(context.Background(), resp.ManageToken)
+	if getErr != nil {
+		t.Fatalf("GetByManageToken() error: %v", getErr)
+	}
+	if stored.LastError == "" {
+		t.Fatal("LastError should be recorded after a failed email delivery")
+	}
+}
+
+// --- ListAll ---
+
+func TestListAllReturnsAlertsOrdered(t *testing.T) {
+	manager, db := newTestManager(t, newTestEngine("google", "general"))
+	defer db.Close()
+
+	for _, q := range []string{"first", "second", "third"} {
+		if _, err := manager.Create(context.Background(), CreateRequest{
+			Query:      q,
+			Category:   "general",
+			Frequency:  FrequencyDaily,
+			Email:      "test@example.com",
+			DeliverRSS: true,
+			BaseURL:    "https://search.test",
+		}); err != nil {
+			t.Fatalf("Create(%q) error: %v", q, err)
+		}
+	}
+
+	all, err := manager.ListAll(context.Background())
+	if err != nil {
+		t.Fatalf("ListAll() error: %v", err)
+	}
+	if len(all) != 3 {
+		t.Fatalf("ListAll() returned %d alerts, want 3", len(all))
+	}
+}
+
+func TestListAllEmptyDB(t *testing.T) {
+	manager, db := newTestManager(t)
+	defer db.Close()
+
+	all, err := manager.ListAll(context.Background())
+	if err != nil {
+		t.Fatalf("ListAll() on empty DB error: %v", err)
+	}
+	if len(all) != 0 {
+		t.Fatalf("ListAll() on empty DB returned %d alerts, want 0", len(all))
+	}
+}
+
+// --- enforceCreateRateLimit direct edge cases ---
+
+func TestEnforceCreateRateLimitDisabledIsNoop(t *testing.T) {
+	db := setupAlertTestDB(t)
+	defer db.Close()
+	cfg := config.DefaultConfig()
+	cfg.Search.Alerts.CreateRateLimitPerHour = 0
+	manager := NewManager(db, cfg, nil, nil)
+
+	if err := manager.enforceCreateRateLimit(context.Background(), "10.0.0.9"); err != nil {
+		t.Fatalf("enforceCreateRateLimit() with limit=0 should be a no-op, got: %v", err)
+	}
+}
+
+func TestEnforceCreateRateLimitEmptyIPIsNoop(t *testing.T) {
+	db := setupAlertTestDB(t)
+	defer db.Close()
+	cfg := config.DefaultConfig()
+	cfg.Search.Alerts.CreateRateLimitPerHour = 1
+	manager := NewManager(db, cfg, nil, nil)
+
+	if err := manager.enforceCreateRateLimit(context.Background(), ""); err != nil {
+		t.Fatalf("enforceCreateRateLimit() with empty IP should be a no-op, got: %v", err)
+	}
+}
+
+// --- normalizeAlertEngines with no known engines ---
+
+// TestNormalizeAlertEnginesNoAggregatorEnginesSkipsValidation documents that
+// when the aggregator reports zero registered engines, unknown engine names
+// are passed through rather than rejected (the "allowed" set is empty).
+func TestNormalizeAlertEnginesNoAggregatorEnginesSkipsValidation(t *testing.T) {
+	manager, db := newTestManager(t)
+	defer db.Close()
+
+	result, err := manager.normalizeAlertEngines([]string{"totally-unknown-engine"})
+	if err != nil {
+		t.Fatalf("normalizeAlertEngines() with no registered engines should not error, got: %v", err)
+	}
+	if len(result) != 1 || result[0] != "totally-unknown-engine" {
+		t.Fatalf("normalizeAlertEngines() = %v, want [totally-unknown-engine]", result)
+	}
+}
+
+// TestNormalizeAlertEnginesNilAggregator covers the m.aggregator == nil branch.
+func TestNormalizeAlertEnginesNilAggregator(t *testing.T) {
+	db := setupAlertTestDB(t)
+	defer db.Close()
+	cfg := config.DefaultConfig()
+	manager := NewManager(db, cfg, nil, nil)
+
+	result, err := manager.normalizeAlertEngines([]string{"anything"})
+	if err != nil {
+		t.Fatalf("normalizeAlertEngines() with nil aggregator should not error, got: %v", err)
+	}
+	if len(result) != 1 || result[0] != "anything" {
+		t.Fatalf("normalizeAlertEngines() = %v, want [anything]", result)
+	}
+}
+
+// --- Feed limit clamping ---
+
+func TestFeedLimitAbove100DefaultsTo50(t *testing.T) {
+	manager, db := newTestManager(t, newTestEngine("google", "general"))
+	defer db.Close()
+
+	resp, err := manager.Create(context.Background(), CreateRequest{
+		Query:      "feed clamp",
+		Category:   "general",
+		Frequency:  FrequencyDaily,
+		Email:      "test@example.com",
+		DeliverRSS: true,
+		BaseURL:    "https://search.test",
+	})
+	if err != nil {
+		t.Fatalf("Create() error: %v", err)
+	}
+
+	feed, err := manager.Feed(context.Background(), resp.RSSToken, 150)
+	if err != nil {
+		t.Fatalf("Feed() with limit=150 should not error: %v", err)
+	}
+	if feed == nil {
+		t.Fatal("Feed() returned nil feed")
+	}
+}
+
+// --- webhookSecret / manageURL error paths ---
+
+func TestWebhookSecretUnknownAlertReturnsError(t *testing.T) {
+	manager, db := newTestManager(t)
+	defer db.Close()
+
+	_, err := manager.webhookSecret(&Alert{ID: "does-not-exist"})
+	if err == nil {
+		t.Fatal("webhookSecret() for unknown alert ID should return error")
+	}
+}
+
+func TestManageURLUnknownAlertReturnsError(t *testing.T) {
+	manager, db := newTestManager(t)
+	defer db.Close()
+
+	_, err := manager.manageURL(context.Background(), &Alert{ID: "does-not-exist", BaseURL: "https://search.test"})
+	if err == nil {
+		t.Fatal("manageURL() for unknown alert ID should return error")
+	}
+}
+
+// --- Update retains existing webhook URL when not supplied ---
+
+func TestUpdateKeepsExistingWebhookURLWhenEmpty(t *testing.T) {
+	allowLoopbackWebhooks = true
+	defer func() { allowLoopbackWebhooks = false }()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	manager, db := newTestManager(t, newTestEngine("google", "general"))
+	defer db.Close()
+
+	resp, err := manager.Create(context.Background(), CreateRequest{
+		Query:          "keep webhook",
+		Category:       "general",
+		Frequency:      FrequencyDaily,
+		Email:          "test@example.com",
+		DeliverWebhook: true,
+		WebhookURL:     srv.URL,
+		BaseURL:        "https://search.test",
+	})
+	if err != nil {
+		t.Fatalf("Create() error: %v", err)
+	}
+
+	updated, err := manager.Update(context.Background(), resp.ManageToken, UpdateRequest{
+		Query:          "keep webhook updated",
+		Category:       "general",
+		Frequency:      FrequencyDaily,
+		DeliverWebhook: true,
+		WebhookURL:     "",
+	})
+	if err != nil {
+		t.Fatalf("Update() with empty webhook URL should retain the existing one, got error: %v", err)
+	}
+	if updated.WebhookURL != srv.URL {
+		t.Fatalf("updated.WebhookURL = %q, want retained %q", updated.WebhookURL, srv.URL)
+	}
+}
 
 func TestAlertResultJSONRoundTrip(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)

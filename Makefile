@@ -203,7 +203,8 @@ docker:
 # =============================================================================
 # TEST - Run all tests with coverage enforcement (via Docker per AI.md PART 25)
 # =============================================================================
-# Server template projects: 80% minimum coverage threshold
+# Per AI.md PART 25: 60% minimum coverage threshold (no coverage_minimum
+# override present in IDEA.md, so the spec default floor applies)
 # Per AI.md PART 28: test artifacts go to /tmp/apimgr/search-XXXXXX/, NEVER project dir
 test:
 	@mkdir -p "/tmp/$(PROJECTORG)" $(GO_CACHE) $(GO_BUILD)
@@ -219,7 +220,7 @@ test:
 		-e CGO_ENABLED=0 \
 		-e GOFLAGS=-buildvcs=false \
 		casjaysdev/go:latest \
-		ash -c 'set -e; apk add --no-cache tor >/dev/null 2>&1 || true; go mod download; go test -v -cover -coverprofile=/tmp/covout/coverage.out ./...; COVERAGE=$$(go tool cover -func=/tmp/covout/coverage.out | grep total | awk "{print \$$3}" | sed "s/%//"); echo "Coverage: $$COVERAGE%"; if [ $$(echo "$$COVERAGE < 80" | bc -l) -eq 1 ]; then echo "ERROR: Coverage is $$COVERAGE%, must be >= 80%"; exit 1; fi'
+		ash -c 'set -e; apk add --no-cache tor >/dev/null 2>&1 || true; go mod download; go test -v -cover -coverprofile=/tmp/covout/coverage.out ./...; COVERAGE=$$(go tool cover -func=/tmp/covout/coverage.out | grep total | awk "{print \$$3}" | sed "s/%//"); echo "Coverage: $$COVERAGE%"; if [ $$(echo "$$COVERAGE < 60" | bc -l) -eq 1 ]; then echo "ERROR: Coverage is $$COVERAGE%, must be >= 60%"; exit 1; fi'
 	@echo "Tests complete"
 
 # =============================================================================
