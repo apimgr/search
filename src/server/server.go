@@ -484,7 +484,7 @@ func NewServer(cfg *config.Config) *Server {
 // client_id/client_secret, contact email) from server.yml's `engines:` section onto
 // the matching registered engine's model.EngineConfig.Settings map, so engines that
 // support authenticated/higher-rate-limit access (github, stackoverflow, pubmed,
-// reddit) can read them at search time. Engines/keys not present in cfg are left
+// reddit, openstreetmap) can read them at search time. Engines/keys not present in cfg are left
 // untouched — this never disables or reconfigures an engine's enabled/priority state.
 func applyEngineCredentials(registry *engine.Registry, engines map[string]config.EngineConfig) {
 	for name, ov := range engines {

@@ -14,7 +14,16 @@ import (
 	"github.com/apimgr/search/src/search"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+	"golang.org/x/time/rate"
 )
+
+// nominatimLimiter enforces Nominatim's usage policy of at most 1 request
+// per second across the entire application, per
+// https://operations.osmfoundation.org/policies/nominatim/. It is a package
+// (not per-engine-instance) limiter because the policy applies to all
+// traffic this application sends to nominatim.openstreetmap.org, regardless
+// of how many OpenStreetMap engine instances exist.
+var nominatimLimiter = rate.NewLimiter(rate.Every(time.Second), 1)
 
 // OpenStreetMap implements OpenStreetMap/Nominatim search engine
 // Uses the Nominatim API for geocoding and location search
@@ -71,8 +80,25 @@ type nominatimResult struct {
 	} `json:"address,omitempty"`
 }
 
+// userAgent returns an app-identifying User-Agent for Nominatim's usage
+// policy, which requires "a valid HTTP Referer or User-Agent identifying
+// the application" (not a generic browser UA) and recommends contact
+// information. Uses an operator-configured contact email when available.
+func (e *OpenStreetMap) userAgent() string {
+	contact := e.GetConfig().GetSetting("contact_email")
+	if contact != "" {
+		return fmt.Sprintf("search/1.0 (+%s)", contact)
+	}
+	return "search/1.0 (contact not configured)"
+}
+
 // Search performs an OpenStreetMap/Nominatim search
 func (e *OpenStreetMap) Search(ctx context.Context, query *model.Query) ([]model.Result, error) {
+	// Nominatim's usage policy caps traffic at 1 request/second application-wide.
+	if err := nominatimLimiter.Wait(ctx); err != nil {
+		return nil, err
+	}
+
 	// Nominatim search API endpoint
 	baseURL := "https://nominatim.openstreetmap.org/search"
 
@@ -97,9 +123,9 @@ func (e *OpenStreetMap) Search(ctx context.Context, query *model.Query) ([]model
 		return nil, err
 	}
 
-	// Nominatim requires a valid User-Agent with contact info per their usage policy
-	// Using the standard UserAgent which includes application name
-	req.Header.Set("User-Agent", UserAgent)
+	// Nominatim requires an app-identifying User-Agent per their usage policy,
+	// not the shared generic browser UserAgent used by scraping engines.
+	req.Header.Set("User-Agent", e.userAgent())
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := e.client.Do(req)

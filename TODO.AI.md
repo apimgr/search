@@ -42,9 +42,10 @@ Done: removed `Qwant, ` and the trailing `, and Wolfram Alpha`/language-specific
 Read: `src/search/engine/youtube.go` lines ~82-95
 Regex-extracts the `ytInitialData` JSON blob from HTML (the code's own comment at lines 92-95 admits this is fragile); YouTube changes this schema without notice. No schema-drift detection exists — tests use static offline JSON fixtures only.
 
-## [ ] `openstreetmap.go` violates Nominatim usage policy (User-Agent + rate limiting)
+## [x] `openstreetmap.go` violates Nominatim usage policy (User-Agent + rate limiting)
 Read: `src/search/engine/registry.go` line ~12, `src/search/engine/openstreetmap.go`
 Sends the shared generic browser `UserAgent` (registry.go:12) instead of an app-identifying one, and implements no 1-req/sec throttling — both required by Nominatim's usage policy and risk an IP ban.
+Done: added a `userAgent()` method (same operator-configured `contact_email` Setting pattern as `reddit.go`) sending `search/1.0 (+<contact_email>)` instead of the shared generic browser UA, and a package-level `nominatimLimiter` (`golang.org/x/time/rate`, already a project dependency) capping `Search()` to 1 request/second application-wide per Nominatim's policy (`nominatimLimiter.Wait(ctx)` at the top of `Search()`). `server.go`'s `applyEngineCredentials()` already generically copies `contact_email` from `server.yml` onto any matching engine, so no server-side logic change was needed beyond a docstring update listing openstreetmap as a credentialed engine. Verified: existing `engines2_test.go` OpenStreetMap tests already mock via `httptest`/`redirectToServer` (no false-confidence live-domain issue in this file), and all still pass against the new rate limiter/UA — `go build ./...`, `go vet ./...` clean; `go test ./src/search/engine/... -cover` passes at 89.3% coverage.
 
 ## [x] Several engines are unauthenticated and subject to strict rate limits under real traffic
 Read: `src/search/engine/github.go`, `stackoverflow.go`, `pubmed.go`, `reddit.go`
