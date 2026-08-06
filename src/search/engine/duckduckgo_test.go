@@ -365,8 +365,13 @@ func TestDuckDuckGoParseWebResultsScore(t *testing.T) {
 
 // TestDuckDuckGoSearchDispatch verifies that Search() dispatches to the correct
 // sub-method for each category without panicking.
+// TestDuckDuckGoSearchDispatch verifies Search() routes each category to the
+// right handler and returns real parsed results, using ddgFixtureHandler
+// (defined in engines_test.go) served over httptest and redirected via
+// redirectToServer — no real network calls.
 func TestDuckDuckGoSearchDispatch(t *testing.T) {
-	engine := NewDuckDuckGo()
+	server := httptest.NewServer(ddgFixtureHandler())
+	defer server.Close()
 
 	categories := []model.Category{
 		model.CategoryGeneral,
@@ -377,35 +382,55 @@ func TestDuckDuckGoSearchDispatch(t *testing.T) {
 
 	for _, cat := range categories {
 		t.Run(string(cat), func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+			engine := NewDuckDuckGo()
+			engine.client = &http.Client{Transport: redirectToServer(server.URL)}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
 			q := &model.Query{Text: "test", Category: cat}
-			_, _ = engine.Search(ctx, q)
+			results, err := engine.Search(ctx, q)
+			if err != nil {
+				t.Fatalf("Search() error = %v", err)
+			}
+			if len(results) != 1 {
+				t.Fatalf("Search() returned %d results, want 1", len(results))
+			}
 		})
 	}
 }
 
 // TestDuckDuckGoSearchGeneralSafeSearchValues exercises all SafeSearch branches
-// in searchGeneral (values 0, 1, 2) via instant timeouts.
+// in searchGeneral (values 0, 1, 2) against a mock server, asserting real results.
 func TestDuckDuckGoSearchGeneralSafeSearchValues(t *testing.T) {
-	engine := NewDuckDuckGo()
+	server := httptest.NewServer(ddgFixtureHandler())
+	defer server.Close()
 
 	for _, ss := range []int{0, 1, 2} {
 		t.Run(fmt.Sprintf("safesearch_%d", ss), func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+			engine := NewDuckDuckGo()
+			engine.client = &http.Client{Transport: redirectToServer(server.URL)}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
 			q := &model.Query{Text: "test", Category: model.CategoryGeneral, SafeSearch: ss}
-			_, _ = engine.searchGeneral(ctx, q)
+			results, err := engine.searchGeneral(ctx, q)
+			if err != nil {
+				t.Fatalf("searchGeneral() error = %v", err)
+			}
+			if len(results) != 1 {
+				t.Fatalf("searchGeneral() returned %d results, want 1", len(results))
+			}
 		})
 	}
 }
 
-// TestDuckDuckGoImageFilters exercises image size and type filter branches via
-// instant timeouts so no real network requests are made.
+// TestDuckDuckGoImageFilters exercises image size and type filter branches
+// against a mock server, asserting real results for each filter combination.
 func TestDuckDuckGoImageFilters(t *testing.T) {
-	engine := NewDuckDuckGo()
+	server := httptest.NewServer(ddgFixtureHandler())
+	defer server.Close()
 
 	tests := []struct {
 		size      string
@@ -420,7 +445,10 @@ func TestDuckDuckGoImageFilters(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("size=%s_type=%s", tt.size, tt.imageType), func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+			engine := NewDuckDuckGo()
+			engine.client = &http.Client{Transport: redirectToServer(server.URL)}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
 			q := &model.Query{
@@ -429,31 +457,48 @@ func TestDuckDuckGoImageFilters(t *testing.T) {
 				ImageSize: tt.size,
 				ImageType: tt.imageType,
 			}
-			_, _ = engine.searchImages(ctx, q)
+			results, err := engine.searchImages(ctx, q)
+			if err != nil {
+				t.Fatalf("searchImages() error = %v", err)
+			}
+			if len(results) != 1 {
+				t.Fatalf("searchImages() returned %d results, want 1", len(results))
+			}
 		})
 	}
 }
 
-// TestDuckDuckGoSearchImagesImagesSafeSearch exercises the images safe-search
-// branches (values 0, 1, 2) via instant timeouts.
+// TestDuckDuckGoSearchImagesSafeSearch exercises the images safe-search
+// branches (values 0, 1, 2) against a mock server, asserting real results.
 func TestDuckDuckGoSearchImagesSafeSearch(t *testing.T) {
-	engine := NewDuckDuckGo()
+	server := httptest.NewServer(ddgFixtureHandler())
+	defer server.Close()
 
 	for _, ss := range []int{0, 1, 2} {
 		t.Run(fmt.Sprintf("safesearch_%d", ss), func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+			engine := NewDuckDuckGo()
+			engine.client = &http.Client{Transport: redirectToServer(server.URL)}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
 			q := &model.Query{Text: "cats", Category: model.CategoryImages, SafeSearch: ss}
-			_, _ = engine.searchImages(ctx, q)
+			results, err := engine.searchImages(ctx, q)
+			if err != nil {
+				t.Fatalf("searchImages() error = %v", err)
+			}
+			if len(results) != 1 {
+				t.Fatalf("searchImages() returned %d results, want 1", len(results))
+			}
 		})
 	}
 }
 
 // TestDuckDuckGoSearchVideosDurationAndQuality exercises the video duration and
-// quality filter branches via instant timeouts.
+// quality filter branches against a mock server, asserting real results.
 func TestDuckDuckGoSearchVideosDurationAndQuality(t *testing.T) {
-	engine := NewDuckDuckGo()
+	server := httptest.NewServer(ddgFixtureHandler())
+	defer server.Close()
 
 	tests := []struct {
 		name         string
@@ -469,7 +514,10 @@ func TestDuckDuckGoSearchVideosDurationAndQuality(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+			engine := NewDuckDuckGo()
+			engine.client = &http.Client{Transport: redirectToServer(server.URL)}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
 			q := &model.Query{
@@ -479,44 +527,86 @@ func TestDuckDuckGoSearchVideosDurationAndQuality(t *testing.T) {
 				VideoQuality: tt.videoQuality,
 				SafeSearch:   tt.safeSearch,
 			}
-			_, _ = engine.searchVideos(ctx, q)
+			results, err := engine.searchVideos(ctx, q)
+			if err != nil {
+				t.Fatalf("searchVideos() error = %v", err)
+			}
+			if len(results) != 1 {
+				t.Fatalf("searchVideos() returned %d results, want 1", len(results))
+			}
 		})
 	}
 }
 
-// TestDuckDuckGoSearchNewsTimeRanges exercises the news time-range branches via
-// instant timeouts.
+// TestDuckDuckGoSearchNewsTimeRanges exercises the news time-range branches
+// against a mock server, asserting real results.
 func TestDuckDuckGoSearchNewsTimeRanges(t *testing.T) {
-	engine := NewDuckDuckGo()
+	server := httptest.NewServer(ddgFixtureHandler())
+	defer server.Close()
 
 	timeRanges := []string{"day", "week", "month", "year", ""}
 
 	for _, tr := range timeRanges {
 		t.Run("timerange_"+tr, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+			engine := NewDuckDuckGo()
+			engine.client = &http.Client{Transport: redirectToServer(server.URL)}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
 			q := &model.Query{Text: "test", Category: model.CategoryNews, TimeRange: tr}
-			_, _ = engine.searchNews(ctx, q)
+			results, err := engine.searchNews(ctx, q)
+			if err != nil {
+				t.Fatalf("searchNews() error = %v", err)
+			}
+			if len(results) != 1 {
+				t.Fatalf("searchNews() returned %d results, want 1", len(results))
+			}
 		})
 	}
 }
 
-// TestDuckDuckGoGetVQDTokenTimeout exercises both VQD extraction paths (double
-// and single quote) through instant timeouts so no real requests are made.
+// TestDuckDuckGoGetVQDTokenTimeout verifies both VQD extraction paths (double
+// and single quote) against a mock server.
 func TestDuckDuckGoGetVQDTokenTimeout(t *testing.T) {
-	engine := NewDuckDuckGo()
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"double quote", `<html><body>vqd="3-double-quote-token"</body></html>`, "3-double-quote-token"},
+		{"single quote", `<html><body>vqd='3-single-quote-token'</body></html>`, "3-single-quote-token"},
+	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
-	defer cancel()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/html")
+				fmt.Fprint(w, tt.body)
+			}))
+			defer server.Close()
 
-	_, _ = engine.getVQDToken(ctx, "test query")
+			engine := NewDuckDuckGo()
+			engine.client = &http.Client{Transport: redirectToServer(server.URL)}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			token, err := engine.getVQDToken(ctx, "test query")
+			if err != nil {
+				t.Fatalf("getVQDToken() error = %v", err)
+			}
+			if token != tt.want {
+				t.Errorf("getVQDToken() = %q, want %q", token, tt.want)
+			}
+		})
+	}
 }
 
 // TestDuckDuckGoSearchImagesWithMockVQD exercises the image-search path with a
-// mock server that provides both the VQD token and the images JSON response.
-// Since the engine hardcodes the target URL, we use a minimal timeout so the
-// server-to-real-DDG path errors out cleanly, verifying no panic occurs.
+// mock server that provides both the VQD token and the images JSON response,
+// redirected via redirectToServer so the engine's hardcoded target URLs are
+// rewritten to the test server. Asserts real parsed results.
 func TestDuckDuckGoSearchImagesWithMockVQD(t *testing.T) {
 	imgJSON, _ := json.Marshal(map[string]interface{}{
 		"results": []map[string]interface{}{
@@ -532,43 +622,55 @@ func TestDuckDuckGoSearchImagesWithMockVQD(t *testing.T) {
 		},
 	})
 
-	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		callCount++
-		if callCount == 1 {
-			w.Header().Set("Content-Type", "text/html")
+		if r.URL.Path == "/i.js" {
+			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			fmt.Fprint(w, `<html><body>vqd="3-mock-token-abc"</body></html>`)
+			w.Write(imgJSON)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusOK)
-		w.Write(imgJSON)
+		fmt.Fprint(w, `<html><body>vqd="3-mock-token-abc"</body></html>`)
 	}))
 	defer server.Close()
 
 	engine := NewDuckDuckGo()
-	engine.client = server.Client()
+	engine.client = &http.Client{Transport: redirectToServer(server.URL)}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// We cannot rewrite the target URL, so the request fails with a timeout.
-	// The test verifies no panic or nil-pointer dereference occurs.
-	_, _ = engine.searchImages(ctx, &model.Query{
+	results, err := engine.searchImages(ctx, &model.Query{
 		Text:      "cats",
 		Category:  model.CategoryImages,
 		ImageSize: "large",
 		ImageType: "photo",
 	})
+	if err != nil {
+		t.Fatalf("searchImages() error = %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("searchImages() returned %d results, want 1", len(results))
+	}
+	if results[0].Title != "Test Image" {
+		t.Errorf("Title = %q, want %q", results[0].Title, "Test Image")
+	}
 }
 
-// TestDuckDuckGoSearchVideosStatusError verifies that a non-200 news response
-// produces an error via an instant-timeout path.
+// TestDuckDuckGoSearchVideosStatusError verifies that a non-200 response from
+// the VQD-token request produces an error, using a real mock server (not a
+// timeout race) so the failure is deterministic.
 func TestDuckDuckGoSearchVideosStatusError(t *testing.T) {
-	engine := NewDuckDuckGo()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	engine := NewDuckDuckGo()
+	engine.client = &http.Client{Transport: redirectToServer(server.URL)}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	_, err := engine.searchVideos(ctx, &model.Query{
@@ -576,16 +678,22 @@ func TestDuckDuckGoSearchVideosStatusError(t *testing.T) {
 		Category: model.CategoryVideos,
 	})
 	if err == nil {
-		t.Error("searchVideos() expected error for unavailable server, got nil")
+		t.Error("searchVideos() expected error for non-200 response, got nil")
 	}
 }
 
-// TestDuckDuckGoSearchNewsStatusError verifies that a missing network path
-// produces an error via an instant-timeout.
+// TestDuckDuckGoSearchNewsStatusError verifies that a non-200 response from
+// the VQD-token request produces an error, using a real mock server.
 func TestDuckDuckGoSearchNewsStatusError(t *testing.T) {
-	engine := NewDuckDuckGo()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	engine := NewDuckDuckGo()
+	engine.client = &http.Client{Transport: redirectToServer(server.URL)}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	_, err := engine.searchNews(ctx, &model.Query{
@@ -593,6 +701,6 @@ func TestDuckDuckGoSearchNewsStatusError(t *testing.T) {
 		Category: model.CategoryNews,
 	})
 	if err == nil {
-		t.Error("searchNews() expected error for unavailable server, got nil")
+		t.Error("searchNews() expected error for non-200 response, got nil")
 	}
 }

@@ -14,6 +14,13 @@ import (
 	"github.com/apimgr/search/src/model"
 )
 
+// Testing policy: all engine tests in this package are self-contained unit
+// tests that mock upstream HTTP responses via httptest.Server + redirectToServer
+// (or a SharedTransport swap for engines with no .client field, e.g. Wikipedia).
+// There is no opt-in "live" test tier and no build tag for hitting real search
+// engines from CI or local runs — tests must be fast, deterministic, and make
+// zero outbound network calls, per AI.md PART 28.
+
 // Tests for Registry
 
 func TestNewRegistry(t *testing.T) {
@@ -2062,49 +2069,87 @@ func TestEngineCategoryStrings(t *testing.T) {
 // COMPREHENSIVE HTTP MOCK TESTS FOR 100% COVERAGE
 // ============================================================================
 
-// Test Google Search with mock server
-func TestGoogleSearch(t *testing.T) {
-	// Create mock server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// googleFixtureHandler returns a single mock handler that serves realistic
+// Google-format HTML for every category, dispatching on the "tbm" query
+// parameter the way real Google does (""=web, isch=images, nws=news,
+// vid=videos). redirectToServer rewrites only scheme/host and preserves
+// path/query, so this one handler transparently backs every
+// TestGoogleSearch* test below.
+func googleFixtureHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusOK)
-		// Return minimal HTML that triggers parsing
-		html := `<h3>Test Title</h3><a href="/url?q=https://example.com&sa=U">Link</a><div class="VwiC3b">Test description</div>`
-		w.Write([]byte(html))
-	}))
+		switch r.URL.Query().Get("tbm") {
+		case "isch":
+			// parseImageResults scrapes embedded JSON arrays: ["url",width,height]
+			w.Write([]byte(`["https://example.com/photo.jpg",100,200]`))
+		case "nws":
+			// parseNewsResults pairs role="heading" divs with the next non-Google href.
+			w.Write([]byte(`<div role="heading">News Title</div><a href="https://example.com/news/story">link</a>`))
+		case "vid":
+			// parseVideoResults reuses gResultRe (anchor-wrapping-h3) but keeps only
+			// known video-host URLs.
+			w.Write([]byte(`<a href="/url?q=https://www.youtube.com/watch?v=abc&sa=U"><h3>Video Title</h3></a>`))
+		default:
+			w.Write([]byte(`<a href="/url?q=https://example.com&sa=U"><h3>Test Title</h3></a><div class="VwiC3b">Test description</div>`))
+		}
+	}
+}
+
+// Test Google Search with mock server
+func TestGoogleSearch(t *testing.T) {
+	server := httptest.NewServer(googleFixtureHandler())
 	defer server.Close()
 
 	engine := NewGoogle()
-	// Override client for testing
-	engine.client = server.Client()
+	// redirectToServer rewrites scheme/host only, so Google's real
+	// query-string dispatch logic (tbm=isch/nws/vid) still reaches our mock,
+	// instead of the previous bug where server.Client() left the URL pointed
+	// at the real google.com.
+	engine.client = &http.Client{Transport: redirectToServer(server.URL)}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	query := &model.Query{Text: "test", Page: 1, Category: model.CategoryGeneral}
-	_, err := engine.Search(ctx, query)
-	// We don't check err because the actual google.com will be called, not our mock
-	// This test exercises the code path
-	_ = err
+	results, err := engine.Search(ctx, query)
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Title != "Test Title" {
+		t.Errorf("Title = %q, want %q", results[0].Title, "Test Title")
+	}
+	if results[0].URL != "https://example.com" {
+		t.Errorf("URL = %q, want %q", results[0].URL, "https://example.com")
+	}
 }
 
 // Test Google Search categories
 func TestGoogleSearchCategories(t *testing.T) {
-	engine := NewGoogle()
+	server := httptest.NewServer(googleFixtureHandler())
+	defer server.Close()
 
 	tests := []struct {
-		name     string
-		category model.Category
+		name      string
+		category  model.Category
+		wantTitle string
+		wantURL   string
 	}{
-		{"general", model.CategoryGeneral},
-		{"images", model.CategoryImages},
-		{"news", model.CategoryNews},
-		{"videos", model.CategoryVideos},
+		{"general", model.CategoryGeneral, "Test Title", "https://example.com"},
+		{"images", model.CategoryImages, "Image 1", "https://example.com/photo.jpg"},
+		{"news", model.CategoryNews, "News Title", "https://example.com/news/story"},
+		{"videos", model.CategoryVideos, "Video Title", "https://www.youtube.com/watch?v=abc"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+			engine := NewGoogle()
+			engine.client = &http.Client{Transport: redirectToServer(server.URL)}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
 			query := &model.Query{
@@ -2115,21 +2160,36 @@ func TestGoogleSearchCategories(t *testing.T) {
 				Language:   "en",
 				TimeRange:  "day",
 			}
-			// This will timeout but exercises the code path
-			_, _ = engine.Search(ctx, query)
+			results, err := engine.Search(ctx, query)
+			if err != nil {
+				t.Fatalf("Search() error = %v", err)
+			}
+			if len(results) != 1 {
+				t.Fatalf("expected 1 result, got %d", len(results))
+			}
+			if results[0].Title != tt.wantTitle {
+				t.Errorf("Title = %q, want %q", results[0].Title, tt.wantTitle)
+			}
+			if results[0].URL != tt.wantURL {
+				t.Errorf("URL = %q, want %q", results[0].URL, tt.wantURL)
+			}
 		})
 	}
 }
 
 // Test Google time ranges
 func TestGoogleSearchTimeRanges(t *testing.T) {
-	engine := NewGoogle()
+	server := httptest.NewServer(googleFixtureHandler())
+	defer server.Close()
 
 	timeRanges := []string{"day", "week", "month", "year", ""}
 
 	for _, tr := range timeRanges {
 		t.Run("timerange_"+tr, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+			engine := NewGoogle()
+			engine.client = &http.Client{Transport: redirectToServer(server.URL)}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
 			query := &model.Query{
@@ -2139,7 +2199,16 @@ func TestGoogleSearchTimeRanges(t *testing.T) {
 				Category:  model.CategoryGeneral,
 				TimeRange: tr,
 			}
-			_, _ = engine.Search(ctx, query)
+			results, err := engine.Search(ctx, query)
+			if err != nil {
+				t.Fatalf("Search() error = %v", err)
+			}
+			if len(results) != 1 {
+				t.Fatalf("expected 1 result, got %d", len(results))
+			}
+			if results[0].Title != "Test Title" {
+				t.Errorf("Title = %q, want %q", results[0].Title, "Test Title")
+			}
 		})
 	}
 }
@@ -2278,22 +2347,58 @@ func TestBingParseResultsComprehensive(t *testing.T) {
 }
 
 // Test DuckDuckGo Search categories
+// ddgFixtureHandler serves realistic DuckDuckGo responses for every code
+// path exercised by Search(): the VQD-token page ("/"), the general HTML
+// results page ("/html/"), and the images/videos/news JSON endpoints.
+func ddgFixtureHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/html/":
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte(`<html><body>
+				<div class="result">
+					<a class="result__a" href="https://example.com/page">Example Result</a>
+					<a class="result__snippet" href="https://example.com/page">This is an example snippet describing the page.</a>
+				</div>
+			</body></html>`))
+		case "/i.js":
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"results":[{"title":"Example Image","url":"https://example.com/img.html","image":"https://example.com/img.jpg","thumbnail":"https://example.com/thumb.jpg","width":800,"height":600,"source":"example.com"}]}`))
+		case "/v.js":
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"results":[{"title":"Example Video","content":"https://example.com/video.html","description":"An example video description.","duration":"3:45","views":1000,"published":"1 day ago","publisher":"ExampleTube","images":"https://example.com/vthumb.jpg"}]}`))
+		case "/news.js":
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"results":[{"title":"Example News","url":"https://example.com/news.html","excerpt":"An example news excerpt.","source":"Example News Wire","image":"https://example.com/news.jpg","date":1700000000}]}`))
+		default:
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte(`<html><body>vqd="3-abc123xyz789"</body></html>`))
+		}
+	}
+}
+
 func TestDuckDuckGoSearchCategories(t *testing.T) {
-	engine := NewDuckDuckGo()
+	server := httptest.NewServer(ddgFixtureHandler())
+	defer server.Close()
 
 	tests := []struct {
-		name     string
-		category model.Category
+		name      string
+		category  model.Category
+		wantTitle string
+		wantURL   string
 	}{
-		{"general", model.CategoryGeneral},
-		{"images", model.CategoryImages},
-		{"videos", model.CategoryVideos},
-		{"news", model.CategoryNews},
+		{"general", model.CategoryGeneral, "Example Result", "https://example.com/page"},
+		{"images", model.CategoryImages, "Example Image", "https://example.com/img.html"},
+		{"videos", model.CategoryVideos, "Example Video", "https://example.com/video.html"},
+		{"news", model.CategoryNews, "Example News", "https://example.com/news.html"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+			engine := NewDuckDuckGo()
+			engine.client = &http.Client{Transport: redirectToServer(server.URL)}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
 			query := &model.Query{
@@ -2307,7 +2412,19 @@ func TestDuckDuckGoSearchCategories(t *testing.T) {
 				VideoQuality: "hd",
 				TimeRange:    "week",
 			}
-			_, _ = engine.Search(ctx, query)
+			results, err := engine.Search(ctx, query)
+			if err != nil {
+				t.Fatalf("Search() error = %v", err)
+			}
+			if len(results) != 1 {
+				t.Fatalf("Search() returned %d results, want 1", len(results))
+			}
+			if results[0].Title != tt.wantTitle {
+				t.Errorf("Title = %q, want %q", results[0].Title, tt.wantTitle)
+			}
+			if results[0].URL != tt.wantURL {
+				t.Errorf("URL = %q, want %q", results[0].URL, tt.wantURL)
+			}
 		})
 	}
 }
@@ -2325,12 +2442,34 @@ func TestDuckDuckGoGetVQDToken(t *testing.T) {
 	defer server.Close()
 
 	engine := NewDuckDuckGo()
-	engine.client = server.Client()
+	engine.client = &http.Client{Transport: redirectToServer(server.URL)}
 
-	// Test will timeout trying real URL, but exercises code path
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_, _ = engine.getVQDToken(ctx, "test")
+	token, err := engine.getVQDToken(ctx, "test")
+	if err != nil {
+		t.Fatalf("getVQDToken() error = %v", err)
+	}
+	if token != "3-abc123xyz789" {
+		t.Errorf("getVQDToken() = %q, want %q", token, "3-abc123xyz789")
+	}
+}
+
+// Test DuckDuckGo getVQDToken error path (no token in response)
+func TestDuckDuckGoGetVQDTokenMissing(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<html><body>No token here</body></html>`))
+	}))
+	defer server.Close()
+
+	engine := NewDuckDuckGo()
+	engine.client = &http.Client{Transport: redirectToServer(server.URL)}
+
+	_, err := engine.getVQDToken(context.Background(), "test")
+	if err == nil {
+		t.Error("getVQDToken() should return error when no vqd token is present")
+	}
 }
 
 // Test DuckDuckGo VQD token extraction patterns
@@ -2364,13 +2503,17 @@ func TestDuckDuckGoVQDTokenPatterns(t *testing.T) {
 
 // Test DuckDuckGo SafeSearch values
 func TestDuckDuckGoSafeSearchValues(t *testing.T) {
-	engine := NewDuckDuckGo()
+	server := httptest.NewServer(ddgFixtureHandler())
+	defer server.Close()
 
 	safeSearchValues := []int{0, 1, 2}
 
 	for _, ss := range safeSearchValues {
 		t.Run(fmt.Sprintf("safesearch_%d", ss), func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+			engine := NewDuckDuckGo()
+			engine.client = &http.Client{Transport: redirectToServer(server.URL)}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
 			query := &model.Query{
@@ -2379,14 +2522,34 @@ func TestDuckDuckGoSafeSearchValues(t *testing.T) {
 				Category:   model.CategoryImages,
 				SafeSearch: ss,
 			}
-			_, _ = engine.Search(ctx, query)
+			results, err := engine.Search(ctx, query)
+			if err != nil {
+				t.Fatalf("Search() error = %v", err)
+			}
+			if len(results) != 1 {
+				t.Fatalf("Search() returned %d results, want 1", len(results))
+			}
+			if results[0].Title != "Example Image" {
+				t.Errorf("Title = %q, want %q", results[0].Title, "Example Image")
+			}
 		})
 	}
 }
 
 // Test Brave Search
 func TestBraveSearch(t *testing.T) {
-	engine := NewBrave()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<html><body>
+			<div class="snippet" data-pos="1" data-type="web">
+				<a href="https://example.com/page">
+					<div class="search-snippet-title" title="Example Title">Example Title</div>
+				</a>
+				<div class="content">Example description snippet.</div>
+			</div>
+		</body></html>`))
+	}))
+	defer server.Close()
 
 	tests := []struct {
 		name     string
@@ -2399,7 +2562,10 @@ func TestBraveSearch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+			engine := NewBrave()
+			engine.client = &http.Client{Transport: redirectToServer(server.URL)}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
 			query := &model.Query{
@@ -2407,7 +2573,19 @@ func TestBraveSearch(t *testing.T) {
 				Page:     1,
 				Category: tt.category,
 			}
-			_, _ = engine.Search(ctx, query)
+			results, err := engine.Search(ctx, query)
+			if err != nil {
+				t.Fatalf("Search() error = %v", err)
+			}
+			if len(results) != 1 {
+				t.Fatalf("Search() returned %d results, want 1", len(results))
+			}
+			if results[0].Title != "Example Title" {
+				t.Errorf("Title = %q, want %q", results[0].Title, "Example Title")
+			}
+			if results[0].URL != "https://example.com/page" {
+				t.Errorf("URL = %q, want %q", results[0].URL, "https://example.com/page")
+			}
 		})
 	}
 }
@@ -2457,7 +2635,13 @@ func TestBraveParseResultsComprehensive(t *testing.T) {
 
 // Test Yahoo Search
 func TestYahooSearch(t *testing.T) {
-	engine := NewYahoo()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<html><body>
+			<a href="https://example.com/page"><h3>Example Title</h3></a>
+		</body></html>`))
+	}))
+	defer server.Close()
 
 	tests := []struct {
 		name     string
@@ -2470,7 +2654,10 @@ func TestYahooSearch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+			engine := NewYahoo()
+			engine.client = &http.Client{Transport: redirectToServer(server.URL)}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
 			query := &model.Query{
@@ -2478,7 +2665,19 @@ func TestYahooSearch(t *testing.T) {
 				Page:     1,
 				Category: tt.category,
 			}
-			_, _ = engine.Search(ctx, query)
+			results, err := engine.Search(ctx, query)
+			if err != nil {
+				t.Fatalf("Search() error = %v", err)
+			}
+			if len(results) != 1 {
+				t.Fatalf("Search() returned %d results, want 1", len(results))
+			}
+			if results[0].Title != "Example Title" {
+				t.Errorf("Title = %q, want %q", results[0].Title, "Example Title")
+			}
+			if results[0].URL != "https://example.com/page" {
+				t.Errorf("URL = %q, want %q", results[0].URL, "https://example.com/page")
+			}
 		})
 	}
 }
@@ -2554,9 +2753,18 @@ func TestExtractYahooRedirectURLComprehensive(t *testing.T) {
 
 // Test YouTube Search
 func TestYouTubeSearch(t *testing.T) {
-	engine := NewYouTubeEngine()
+	ytJSON := `{"contents":{"twoColumnSearchResultsRenderer":{"primaryContents":{"sectionListRenderer":{"contents":[{"itemSectionRenderer":{"contents":[{"videoRenderer":{"videoId":"abc123XYZ_9","title":{"runs":[{"text":"Example Video"}]},"descriptionSnippet":{"runs":[{"text":"An example video description."}]},"thumbnail":{"thumbnails":[{"url":"https://i.ytimg.com/vi/abc123XYZ_9/default.jpg"}]},"ownerText":{"runs":[{"text":"Example Channel"}]},"viewCountText":{"simpleText":"1,000 views"},"publishedTimeText":{"simpleText":"1 day ago"}}}]}}]}}}}}`
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, `<html><body><script>var ytInitialData = %s;</script></body></html>`, ytJSON)
+	}))
+	defer server.Close()
+
+	engine := NewYouTubeEngine()
+	engine.client = &http.Client{Transport: redirectToServer(server.URL)}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	query := &model.Query{
@@ -2564,7 +2772,19 @@ func TestYouTubeSearch(t *testing.T) {
 		Page:     1,
 		Category: model.CategoryVideos,
 	}
-	_, _ = engine.Search(ctx, query)
+	results, err := engine.Search(ctx, query)
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("Search() returned %d results, want 1", len(results))
+	}
+	if results[0].Title != "Example Video" {
+		t.Errorf("Title = %q, want %q", results[0].Title, "Example Video")
+	}
+	if results[0].URL != "https://www.youtube.com/watch?v=abc123XYZ_9" {
+		t.Errorf("URL = %q, want %q", results[0].URL, "https://www.youtube.com/watch?v=abc123XYZ_9")
+	}
 }
 
 // Test YouTube parseJSON comprehensive
@@ -2864,9 +3084,22 @@ func TestYouTubeParseResultsPatterns(t *testing.T) {
 
 // Test Wikipedia Search
 func TestWikipediaSearch(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"query":{"pages":{"12345":{"title":"Test Article","pageid":12345,"extract":"This is the article introduction text.","index":0}}}}`))
+	}))
+	defer server.Close()
+
+	// WikipediaEngine has no .client field — it builds an *http.Client inline
+	// from the package-level SharedTransport var, so mocking requires
+	// swapping that var for the duration of the test.
+	origTransport := SharedTransport
+	SharedTransport = dialToTLSTransport(server)
+	defer func() { SharedTransport = origTransport }()
+
 	engine := NewWikipediaEngine()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	query := &model.Query{
@@ -2874,14 +3107,33 @@ func TestWikipediaSearch(t *testing.T) {
 		Page:     1,
 		Category: model.CategoryGeneral,
 	}
-	_, _ = engine.Search(ctx, query)
+	results, err := engine.Search(ctx, query)
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("Search() returned %d results, want 1", len(results))
+	}
+	if results[0].Title != "Test Article" {
+		t.Errorf("Title = %q, want %q", results[0].Title, "Test Article")
+	}
+	if results[0].URL != "https://en.wikipedia.org/?curid=12345" {
+		t.Errorf("URL = %q, want %q", results[0].URL, "https://en.wikipedia.org/?curid=12345")
+	}
 }
 
 // Test Reddit Search
 func TestRedditSearch(t *testing.T) {
-	engine := NewReddit()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"data":{"children":[{"data":{"title":"Test Post","permalink":"/r/test/comments/abc/post/","subreddit":"test","score":10,"num_comments":5,"selftext":""}}]}}`))
+	}))
+	defer server.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	engine := NewReddit()
+	engine.client = &http.Client{Transport: redirectToServer(server.URL)}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	query := &model.Query{
@@ -2889,14 +3141,33 @@ func TestRedditSearch(t *testing.T) {
 		Page:     1,
 		Category: model.CategoryGeneral,
 	}
-	_, _ = engine.Search(ctx, query)
+	results, err := engine.Search(ctx, query)
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("Search() returned %d results, want 1", len(results))
+	}
+	if results[0].Title != "Test Post" {
+		t.Errorf("Title = %q, want %q", results[0].Title, "Test Post")
+	}
+	if results[0].URL != "https://old.reddit.com/r/test/comments/abc/post/" {
+		t.Errorf("URL = %q, want %q", results[0].URL, "https://old.reddit.com/r/test/comments/abc/post/")
+	}
 }
 
 // Test GitHub Search
 func TestGitHubSearch(t *testing.T) {
-	engine := NewGitHub()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"items":[{"full_name":"example/repo","html_url":"https://github.com/example/repo","description":"An example repository.","stargazers_count":100,"language":"Go"}]}`))
+	}))
+	defer server.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	engine := NewGitHub()
+	engine.client = &http.Client{Transport: redirectToServer(server.URL)}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	query := &model.Query{
@@ -2904,14 +3175,36 @@ func TestGitHubSearch(t *testing.T) {
 		Page:     1,
 		Category: model.CategoryGeneral,
 	}
-	_, _ = engine.Search(ctx, query)
+	results, err := engine.Search(ctx, query)
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("Search() returned %d results, want 1", len(results))
+	}
+	if results[0].Title != "example/repo" {
+		t.Errorf("Title = %q, want %q", results[0].Title, "example/repo")
+	}
+	if results[0].URL != "https://github.com/example/repo" {
+		t.Errorf("URL = %q, want %q", results[0].URL, "https://github.com/example/repo")
+	}
 }
 
-// Test StackOverflow Search
+// Test StackOverflow Search. Response-parsing edge cases (unanswered,
+// no-answers, tag-capping, non-OK status, invalid JSON, API key) are already
+// covered exhaustively in engines4_test.go; this is a light smoke test of
+// the happy path through Search() itself.
 func TestStackOverflowSearch(t *testing.T) {
-	engine := NewStackOverflow()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"items":[{"question_id":1,"title":"Test Question","link":"https://stackoverflow.com/questions/1/test-question","tags":["go"],"score":5,"answer_count":2,"is_answered":true}]}`))
+	}))
+	defer server.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	engine := NewStackOverflow()
+	engine.client = &http.Client{Transport: redirectToServer(server.URL)}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	query := &model.Query{
@@ -2919,12 +3212,37 @@ func TestStackOverflowSearch(t *testing.T) {
 		Page:     1,
 		Category: model.CategoryGeneral,
 	}
-	_, _ = engine.Search(ctx, query)
+	results, err := engine.Search(ctx, query)
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("Search() returned %d results, want 1", len(results))
+	}
+	if results[0].Title != "Test Question" {
+		t.Errorf("Title = %q, want %q", results[0].Title, "Test Question")
+	}
+	if results[0].URL != "https://stackoverflow.com/questions/1/test-question" {
+		t.Errorf("URL = %q, want %q", results[0].URL, "https://stackoverflow.com/questions/1/test-question")
+	}
 }
+
+// yandexFixtureHTML is realistic Yandex SERP markup matching the anchor and
+// snippet regexes in yandex.go (confirmed against TestYandexParseResultsPrimary).
+const yandexFixtureHTML = `<html><body>
+	<li class="serp-item">
+		<a class="organic__title-link" href="https://example.com/page">Example Title</a>
+		<div class="OrganicTextContentSpan">Example snippet text.</div>
+	</li>
+</body></html>`
 
 // Test Yandex Search
 func TestYandexSearch(t *testing.T) {
-	engine := NewYandex()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(yandexFixtureHTML))
+	}))
+	defer server.Close()
 
 	tests := []struct {
 		name     string
@@ -2938,7 +3256,10 @@ func TestYandexSearch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+			engine := NewYandex()
+			engine.client = &http.Client{Transport: redirectToServer(server.URL)}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
 			query := &model.Query{
@@ -2948,20 +3269,36 @@ func TestYandexSearch(t *testing.T) {
 				SafeSearch: 2,
 				Language:   "ru",
 			}
-			_, _ = engine.Search(ctx, query)
+			results, err := engine.Search(ctx, query)
+			if err != nil {
+				t.Fatalf("Search() error = %v", err)
+			}
+			if len(results) != 1 {
+				t.Fatalf("Search() returned %d results, want 1", len(results))
+			}
+			if results[0].Title != "Example Title" {
+				t.Errorf("Title = %q, want %q", results[0].Title, "Example Title")
+			}
 		})
 	}
 }
 
 // Test Yandex SafeSearch values
 func TestYandexSafeSearchValues(t *testing.T) {
-	engine := NewYandex()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(yandexFixtureHTML))
+	}))
+	defer server.Close()
 
 	safeSearchValues := []int{0, 1, 2}
 
 	for _, ss := range safeSearchValues {
 		t.Run(fmt.Sprintf("safesearch_%d", ss), func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+			engine := NewYandex()
+			engine.client = &http.Client{Transport: redirectToServer(server.URL)}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
 			query := &model.Query{
@@ -2970,7 +3307,13 @@ func TestYandexSafeSearchValues(t *testing.T) {
 				Category:   model.CategoryGeneral,
 				SafeSearch: ss,
 			}
-			_, _ = engine.Search(ctx, query)
+			results, err := engine.Search(ctx, query)
+			if err != nil {
+				t.Fatalf("Search() error = %v", err)
+			}
+			if len(results) != 1 {
+				t.Fatalf("Search() returned %d results, want 1", len(results))
+			}
 		})
 	}
 }
@@ -3079,7 +3422,20 @@ func TestYandexParseResultsComprehensive(t *testing.T) {
 
 // Test Baidu Search
 func TestBaiduSearch(t *testing.T) {
-	engine := NewBaidu()
+	// baiduFixtureHTML matches the mu="..." container plus c-title/c-abstract
+	// regexes in baidu.go (confirmed against TestBaiduParseResultsValidHTML).
+	const baiduFixtureHTML = `<html><body>
+		<div mu="https://example.com/page">
+			<h3 class="c-title">Example <em>Title</em></h3>
+			<div class="c-abstract">This is the snippet text.</div>
+		</div>
+	</body></html>`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(baiduFixtureHTML))
+	}))
+	defer server.Close()
 
 	tests := []struct {
 		name     string
@@ -3093,7 +3449,10 @@ func TestBaiduSearch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+			engine := NewBaidu()
+			engine.client = &http.Client{Transport: redirectToServer(server.URL)}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
 			query := &model.Query{
@@ -3101,7 +3460,16 @@ func TestBaiduSearch(t *testing.T) {
 				Page:     2,
 				Category: tt.category,
 			}
-			_, _ = engine.Search(ctx, query)
+			results, err := engine.Search(ctx, query)
+			if err != nil {
+				t.Fatalf("Search() error = %v", err)
+			}
+			if len(results) != 1 {
+				t.Fatalf("Search() returned %d results, want 1", len(results))
+			}
+			if results[0].URL != "https://example.com/page" {
+				t.Errorf("URL = %q, want %q", results[0].URL, "https://example.com/page")
+			}
 		})
 	}
 }
