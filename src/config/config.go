@@ -1496,7 +1496,10 @@ func DefaultConfig() *Config {
 					Enabled:    true,
 					CookieName: "csrf_token",
 					HeaderName: "X-CSRF-Token",
-					FieldName:  "_csrf",
+					// Per AI.md PART 16 CSRF Implementation Rules: forms carry the
+					// token in a hidden `csrf_token` field - must match the field
+					// name templates actually render, or ValidateToken never finds it.
+					FieldName: "csrf_token",
 				},
 				Headers: SecurityHeadersConfig{
 					XFrameOptions:       "SAMEORIGIN",
