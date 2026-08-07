@@ -714,13 +714,13 @@ html:not([data-theme-mode]) .theme-label-auto { display: none; }
 /* Tablet+ (768px): show inline links, hide hamburger per AI.md PART 16 */
 @media (min-width: 768px) {
     .nav-toggle {
-        display: none !important;
+        display: none;
     }
 
     .nav-panel,
     .nav-overlay,
     .nav-close {
-        display: none !important;
+        display: none;
     }
 
     .nav-links {
@@ -1552,7 +1552,7 @@ html:not([data-theme-mode]) .theme-label-auto { display: none; }
 
 .result-favicon img[src=""]:not([src]) + .favicon-placeholder,
 .result-favicon:has(img[src=""]) .favicon-placeholder {
-    display: flex !important;
+    display: flex;
 }
 
 .result-favicon .favicon-placeholder {
@@ -4906,7 +4906,7 @@ html:not([data-theme-mode]) .theme-label-auto { display: none; }
 }
 
 .video-preview-container {
-    display: none !important;
+    display: none;
 }
 
 .keyboard-help-content {
@@ -4932,7 +4932,7 @@ html:not([data-theme-mode]) .theme-label-auto { display: none; }
     }
 
     .video-preview-container {
-        display: block !important;
+        display: block;
     }
 
     .keyboard-help-content {
@@ -7001,10 +7001,6 @@ html:not([data-theme-mode]) .theme-label-auto { display: none; }
     flex-wrap: wrap;
 }
 
-.hidden {
-    display: none !important;
-}
-
 /* Password Strength Indicator */
 .password-strength {
     height: 4px;
@@ -8543,9 +8539,9 @@ html:not([data-theme-mode]) .theme-label-auto { display: none; }
         margin-top: 0.5rem;
         padding: 0.75rem;
         min-height: var(--touch-target, 44px);
-        border: 2px solid var(--color-border) !important;
-        border-right: none !important;
-        border-radius: 28px 0 0 28px !important;
+        border: 2px solid var(--color-border);
+        border-right: none;
+        border-radius: 28px 0 0 28px;
         background: var(--color-bg-active);
         display: flex;
         align-items: center;
