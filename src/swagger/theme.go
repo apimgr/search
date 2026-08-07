@@ -176,78 +176,78 @@ const swaggerDarkTheme = `
 `
 
 // swaggerLightTheme provides light theme CSS for Swagger UI
-// Per AI.md PART 19: Light theme colors
+// Per AI.md PART 19: Light theme colors (Unified Color Palette / GitHub-Light-based)
 const swaggerLightTheme = `
 /* Swagger UI - Light Theme */
 /* Per AI.md PART 19: Swagger & GraphQL Theming */
 
 .swagger-ui {
 	background: #ffffff;
-	color: #1a1a1a;
+	color: #1f2328;
 }
 
 .swagger-ui .topbar {
-	background: #f5f5f5;
-	border-bottom: 1px solid #e0e0e0;
+	background: #f6f8fa;
+	border-bottom: 1px solid #d1d9e0;
 }
 
 .swagger-ui .info .title,
 .swagger-ui .opblock-tag {
-	color: #1a1a1a;
+	color: #1f2328;
 }
 
 .swagger-ui .info .title small {
-	background: #e0e0e0;
-	color: #1a1a1a;
+	background: #d1d9e0;
+	color: #1f2328;
 }
 
 .swagger-ui .opblock.opblock-get {
-	background: rgba(0, 102, 204, 0.05);
-	border-color: #0066cc;
+	background: rgba(9, 105, 218, 0.05);
+	border-color: #0969da;
 }
 
 .swagger-ui .opblock.opblock-get .opblock-summary-method {
-	background: #0066cc;
+	background: #0969da;
 	color: #ffffff;
 }
 
 .swagger-ui .opblock.opblock-post {
-	background: rgba(0, 128, 0, 0.05);
-	border-color: #008000;
+	background: rgba(26, 127, 55, 0.05);
+	border-color: #1a7f37;
 }
 
 .swagger-ui .opblock.opblock-post .opblock-summary-method {
-	background: #008000;
+	background: #1a7f37;
 	color: #ffffff;
 }
 
 .swagger-ui .opblock.opblock-put {
-	background: rgba(255, 140, 0, 0.05);
-	border-color: #ff8c00;
+	background: rgba(154, 103, 0, 0.05);
+	border-color: #9a6700;
 }
 
 .swagger-ui .opblock.opblock-put .opblock-summary-method {
-	background: #ff8c00;
+	background: #9a6700;
 	color: #ffffff;
 }
 
 .swagger-ui .opblock.opblock-delete {
-	background: rgba(204, 0, 0, 0.05);
-	border-color: #cc0000;
+	background: rgba(209, 36, 47, 0.05);
+	border-color: #d1242f;
 }
 
 .swagger-ui .opblock.opblock-delete .opblock-summary-method {
-	background: #cc0000;
+	background: #d1242f;
 	color: #ffffff;
 }
 
 .swagger-ui .opblock.opblock-patch {
-	background: rgba(102, 0, 204, 0.05);
-	border-color: #6600cc;
+	background: rgba(130, 80, 223, 0.05);
+	border-color: #8250df;
 }
 
 .swagger-ui .opblock.opblock-patch .opblock-summary-method {
-	background: #6600cc;
+	background: #8250df;
 	color: #ffffff;
 }
 
@@ -255,82 +255,82 @@ const swaggerLightTheme = `
 .swagger-ui textarea,
 .swagger-ui select {
 	background: #ffffff;
-	color: #1a1a1a;
-	border: 1px solid #cccccc;
+	color: #1f2328;
+	border: 1px solid #d1d9e0;
 }
 
 .swagger-ui input:focus,
 .swagger-ui textarea:focus,
 .swagger-ui select:focus {
-	border-color: #0066cc;
+	border-color: #0969da;
 	outline: none;
 }
 
 .swagger-ui .btn {
-	background: #0066cc;
+	background: #0969da;
 	color: #ffffff;
 	border: none;
 }
 
 .swagger-ui .btn:hover {
-	background: #0052a3;
+	background: #0757ba;
 }
 
 .swagger-ui .btn.execute {
-	background: #008000;
+	background: #1a7f37;
 	color: #ffffff;
 }
 
 .swagger-ui .btn.execute:hover {
-	background: #006600;
+	background: #156a2e;
 }
 
 .swagger-ui .scheme-container {
-	background: #f5f5f5;
-	border: 1px solid #cccccc;
+	background: #f6f8fa;
+	border: 1px solid #d1d9e0;
 }
 
 .swagger-ui .model-box {
-	background: #f5f5f5;
-	color: #1a1a1a;
+	background: #f6f8fa;
+	color: #1f2328;
 }
 
 .swagger-ui section.models {
-	border-color: #cccccc;
+	border-color: #d1d9e0;
 }
 
 .swagger-ui .model {
-	color: #1a1a1a;
+	color: #1f2328;
 }
 
 .swagger-ui .model-title {
-	color: #0066cc;
+	color: #0969da;
 }
 
 .swagger-ui table thead tr th,
 .swagger-ui table thead tr td {
-	color: #1a1a1a;
-	border-bottom-color: #cccccc;
+	color: #1f2328;
+	border-bottom-color: #d1d9e0;
 }
 
 .swagger-ui table tbody tr td {
-	color: #1a1a1a;
-	border-color: #cccccc;
+	color: #1f2328;
+	border-color: #d1d9e0;
 }
 
 .swagger-ui .parameter__name {
-	color: #0066cc;
+	color: #0969da;
 }
 
 .swagger-ui .parameter__type {
-	color: #008000;
+	color: #1a7f37;
 }
 
 .swagger-ui .response-col_status {
-	color: #6600cc;
+	color: #8250df;
 }
 
 .swagger-ui .response-col_description {
-	color: #1a1a1a;
+	color: #1f2328;
 }
 `

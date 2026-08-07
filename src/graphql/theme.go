@@ -192,7 +192,7 @@ const graphiqlDarkTheme = `
 `
 
 // graphiqlLightTheme provides light theme CSS for GraphiQL
-// Per AI.md PART 19: Light theme colors
+// Per AI.md PART 19: Light theme colors (Unified Color Palette / GitHub-Light-based)
 const graphiqlLightTheme = `
 /* GraphiQL - Light Theme */
 /* Per AI.md PART 19: Swagger & GraphQL Theming */
@@ -203,117 +203,117 @@ const graphiqlLightTheme = `
 
 .graphiql-container {
 	background: #ffffff;
-	color: #1a1a1a;
+	color: #1f2328;
 }
 
 .graphiql-container .topBar {
-	background: #f5f5f5;
-	border-bottom: 1px solid #e0e0e0;
+	background: #f6f8fa;
+	border-bottom: 1px solid #d1d9e0;
 }
 
 .graphiql-container .title {
-	color: #1a1a1a;
+	color: #1f2328;
 }
 
 .graphiql-container .CodeMirror {
 	background: #ffffff;
-	color: #1a1a1a;
+	color: #1f2328;
 }
 
 .graphiql-container .CodeMirror-gutters {
-	background: #f5f5f5;
-	border-right: 1px solid #e0e0e0;
+	background: #f6f8fa;
+	border-right: 1px solid #d1d9e0;
 }
 
 .graphiql-container .CodeMirror-linenumber {
-	color: #666666;
+	color: #59636e;
 }
 
 .graphiql-container .CodeMirror-cursor {
-	border-left-color: #1a1a1a;
+	border-left-color: #1f2328;
 }
 
 .graphiql-container .CodeMirror-selected {
-	background: #e0e0e0;
+	background: #d1d9e0;
 }
 
 .graphiql-container .result-window {
 	background: #ffffff;
-	color: #1a1a1a;
+	color: #1f2328;
 }
 
 .graphiql-container .execute-button {
-	background: #008000;
+	background: #1a7f37;
 	color: #ffffff;
 	border: none;
 }
 
 .graphiql-container .execute-button:hover {
-	background: #006600;
+	background: #156a2e;
 }
 
 .graphiql-container .toolbar-button {
-	background: #f5f5f5;
-	color: #1a1a1a;
-	border: 1px solid #cccccc;
+	background: #f6f8fa;
+	color: #1f2328;
+	border: 1px solid #d1d9e0;
 }
 
 .graphiql-container .toolbar-button:hover {
-	background: #e0e0e0;
+	background: #d1d9e0;
 }
 
 .graphiql-container input,
 .graphiql-container select {
 	background: #ffffff;
-	color: #1a1a1a;
-	border: 1px solid #cccccc;
+	color: #1f2328;
+	border: 1px solid #d1d9e0;
 }
 
 .graphiql-container input:focus,
 .graphiql-container select:focus {
-	border-color: #0066cc;
+	border-color: #0969da;
 	outline: none;
 }
 
 /* Syntax highlighting for GraphQL queries */
 .cm-s-graphiql .cm-property {
-	color: #0066cc;
+	color: #0969da;
 }
 
 .cm-s-graphiql .cm-keyword {
-	color: #6600cc;
+	color: #8250df;
 }
 
 .cm-s-graphiql .cm-def {
-	color: #008000;
+	color: #1a7f37;
 }
 
 .cm-s-graphiql .cm-variable {
-	color: #1a1a1a;
+	color: #1f2328;
 }
 
 .cm-s-graphiql .cm-string {
-	color: #cc6600;
+	color: #9a6700;
 }
 
 .cm-s-graphiql .cm-number {
-	color: #6600cc;
+	color: #8250df;
 }
 
 .cm-s-graphiql .cm-comment {
-	color: #666666;
+	color: #59636e;
 }
 
 .cm-s-graphiql .cm-punctuation {
-	color: #1a1a1a;
+	color: #1f2328;
 }
 
 .cm-s-graphiql .cm-attribute {
-	color: #008000;
+	color: #1a7f37;
 }
 
 .cm-s-graphiql .cm-type {
-	color: #0066cc;
+	color: #0969da;
 }
 
 /* Response pane */
@@ -324,45 +324,45 @@ const graphiqlLightTheme = `
 /* Documentation explorer */
 .graphiql-container .doc-explorer {
 	background: #ffffff;
-	color: #1a1a1a;
-	border-left: 1px solid #e0e0e0;
+	color: #1f2328;
+	border-left: 1px solid #d1d9e0;
 }
 
 .graphiql-container .doc-explorer-title {
-	background: #f5f5f5;
-	color: #1a1a1a;
-	border-bottom: 1px solid #e0e0e0;
+	background: #f6f8fa;
+	color: #1f2328;
+	border-bottom: 1px solid #d1d9e0;
 }
 
 .graphiql-container .doc-type-description {
-	color: #1a1a1a;
+	color: #1f2328;
 }
 
 .graphiql-container .doc-category-title {
-	color: #6600cc;
+	color: #8250df;
 }
 
 .graphiql-container .field-name {
-	color: #0066cc;
+	color: #0969da;
 }
 
 .graphiql-container .type-name {
-	color: #008000;
+	color: #1a7f37;
 }
 
 .graphiql-container .arg-name {
-	color: #ff8c00;
+	color: #9a6700;
 }
 
 /* History pane */
 .graphiql-container .history-contents {
 	background: #ffffff;
-	color: #1a1a1a;
+	color: #1f2328;
 }
 
 .graphiql-container .history-title {
-	background: #f5f5f5;
-	color: #1a1a1a;
-	border-bottom: 1px solid #e0e0e0;
+	background: #f6f8fa;
+	color: #1f2328;
+	border-bottom: 1px solid #d1d9e0;
 }
 `
