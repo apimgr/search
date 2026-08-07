@@ -1887,7 +1887,7 @@
             passwordInput.addEventListener('input', function() {
                 const password = this.value;
                 var strength = 0;
-                var color = 'var(--accent-error)';
+                var color = 'var(--color-error)';
 
                 if (password.length >= 8) strength += 25;
                 if (password.length >= 12) strength += 15;
@@ -1896,8 +1896,8 @@
                 if (/[0-9]/.test(password)) strength += 15;
                 if (/[^a-zA-Z0-9]/.test(password)) strength += 15;
 
-                if (strength >= 80) color = 'var(--accent-success)';
-                else if (strength >= 50) color = 'var(--accent-warning)';
+                if (strength >= 80) color = 'var(--color-success)';
+                else if (strength >= 50) color = 'var(--color-warning)';
 
                 strengthIndicator.style.setProperty('--strength', strength + '%');
                 strengthIndicator.style.setProperty('--strength-color', color);
@@ -2255,7 +2255,7 @@
             var status = document.getElementById('save-status');
             if (!status) return;
             status.textContent = message;
-            status.style.color = isError ? 'var(--accent-error)' : 'var(--accent-success)';
+            status.style.color = isError ? 'var(--color-error)' : 'var(--color-success)';
             setTimeout(function() {
                 status.textContent = '';
             }, 3000);
@@ -2522,7 +2522,7 @@
             newPassword.addEventListener('input', function() {
                 var password = this.value;
                 var score = 0;
-                var color = 'var(--accent-error)';
+                var color = 'var(--color-error)';
 
                 if (password.length >= 8) score += 25;
                 if (password.length >= 12) score += 15;
@@ -2531,8 +2531,8 @@
                 if (/[0-9]/.test(password)) score += 15;
                 if (/[^a-zA-Z0-9]/.test(password)) score += 15;
 
-                if (score >= 80) color = 'var(--accent-success)';
-                else if (score >= 50) color = 'var(--accent-warning)';
+                if (score >= 80) color = 'var(--color-success)';
+                else if (score >= 50) color = 'var(--color-warning)';
 
                 strengthIndicator.style.setProperty('--strength', score + '%');
                 strengthIndicator.style.setProperty('--strength-color', color);
@@ -4276,7 +4276,7 @@
                             if (!isSecure) {
                                 useLocationCheckbox.checked = false;
                                 statusEl.textContent = t('widgets_ui.settings_weather_location_requires_https', 'Location requires HTTPS. Please enter a city (e.g., "London" or "Paris, France").');
-                                statusEl.style.color = 'var(--accent-warning, #f1c40f)';
+                                statusEl.style.color = 'var(--color-warning, #ffb86c)';
                                 return;
                             }
 
@@ -4290,14 +4290,14 @@
                                         latInput.value = position.coords.latitude;
                                         lonInput.value = position.coords.longitude;
                                         statusEl.textContent = t('widgets_ui.settings_weather_location_acquired', 'Location acquired!') + ' (' + position.coords.latitude.toFixed(2) + ', ' + position.coords.longitude.toFixed(2) + ')';
-                                        statusEl.style.color = 'var(--accent-success, #2ecc71)';
+                                        statusEl.style.color = 'var(--color-success, #50fa7b)';
                                     },
                                     function(error) {
                                         useLocationCheckbox.checked = false;
                                         cityInput.disabled = false;
                                         latInput.value = '';
                                         lonInput.value = '';
-                                        statusEl.style.color = 'var(--accent-warning, #f1c40f)';
+                                        statusEl.style.color = 'var(--color-warning, #ffb86c)';
                                         switch(error.code) {
                                             case error.PERMISSION_DENIED:
                                                 statusEl.textContent = t('widgets_ui.settings_weather_location_permission_denied', 'Location permission denied. Enter a city (e.g., "Albany, NY").');
@@ -4318,7 +4318,7 @@
                                 useLocationCheckbox.checked = false;
                                 cityInput.disabled = false;
                                 statusEl.textContent = t('widgets_ui.settings_weather_location_unsupported', 'Geolocation not supported. Enter a city (e.g., "New York, NY").');
-                                statusEl.style.color = 'var(--accent-warning, #f1c40f)';
+                                statusEl.style.color = 'var(--color-warning, #ffb86c)';
                             }
                         } else {
                             cityInput.disabled = false;
@@ -4634,7 +4634,7 @@
 
             suggestionBox = document.createElement('div');
             suggestionBox.className = 'bang-suggestions';
-            suggestionBox.style.cssText = 'position:absolute;background:var(--bg-secondary,#1e1e2e);border:1px solid var(--border-color,#313244);border-radius:4px;max-height:300px;overflow-y:auto;z-index:1000;display:none;width:100%;box-shadow:0 4px 6px rgba(0,0,0,0.3);';
+            suggestionBox.style.cssText = 'position:absolute;background:var(--color-bg-active,#44475a);border:1px solid var(--color-border,#44475a);border-radius:4px;max-height:300px;overflow-y:auto;z-index:1000;display:none;width:100%;box-shadow:0 4px 6px rgba(0,0,0,0.3);';
 
             var parent = searchInput.parentElement;
             parent.style.position = 'relative';
@@ -4722,13 +4722,13 @@
                 if (selected) selected.classList.remove('selected');
                 index = (index + 1) % items.length;
                 items[index].classList.add('selected');
-                items[index].style.background = 'var(--bg-tertiary,#313244)';
+                items[index].style.background = 'var(--color-bg-secondary,#21222c)';
             } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
                 if (selected) selected.classList.remove('selected');
                 index = index <= 0 ? items.length - 1 : index - 1;
                 items[index].classList.add('selected');
-                items[index].style.background = 'var(--bg-tertiary,#313244)';
+                items[index].style.background = 'var(--color-bg-secondary,#21222c)';
             } else if (e.key === 'Enter' && selected) {
                 e.preventDefault();
                 selected.click();

@@ -4,7 +4,7 @@
  */
 
 /* CSS Variables - Dracula Theme (Dark) - Default */
-/* Per AI.md PART 16: Apply theme class to <html> element: theme-light, theme-dark */
+/* Per AI.md PART 16: CSS Variable Reference - Apply theme class to <html> element: theme-light, theme-dark, theme-auto */
 :root,
 html.theme-dark {
     /* Spacing scale (8px base) - per AI.md PART 16 */
@@ -19,7 +19,7 @@ html.theme-dark {
     /* Touch target minimum - per AI.md PART 16 (44px) */
     --touch-target: 44px;
 
-    /* Dracula palette colors */
+    /* Dracula palette colors (raw, for one-off use outside the theme variables below) */
     --cyan: #8be9fd;
     --green: #50fa7b;
     --orange: #ffb86c;
@@ -28,37 +28,47 @@ html.theme-dark {
     --red: #ff5555;
     --yellow: #f1fa8c;
 
-    /* Theme colors */
-    --bg-primary: #282a36;
-    --bg-secondary: #44475a;
-    --bg-tertiary: #1e1f29;
-    --text-primary: #f8f8f2;
-    --text-secondary: #6272a4;
-    --text-muted: #6272a4;
-    --accent-primary: #bd93f9;
-    --accent-secondary: #ff79c6;
-    --accent-success: #50fa7b;
-    --accent-warning: #ffb86c;
-    --accent-error: #ff5555;
-    --accent-error-hover: #ff3333;
-    --accent-info: #8be9fd;
-    --border-color: #44475a;
-    --shadow-color: rgba(0, 0, 0, 0.3);
-    --input-bg: #44475a;
-    --input-border: #6272a4;
-    --input-focus: #bd93f9;
-    --link-color: #8be9fd;
-    --link-hover: #bd93f9;
+    /* Backgrounds - dark palette, based on Dracula - per AI.md PART 16 CSS Variable Reference */
+    --color-bg: #282a36;
+    --color-bg-secondary: #21222c;
+    --color-bg-card: #2b2d3a;
+    --color-bg-hover: #343746;
+    --color-bg-active: #44475a;
+    --color-code-bg: rgba(255, 255, 255, 0.1);
+
+    /* Text */
+    --color-text: #f8f8f2;
+    --color-muted: #6272a4;
+
+    /* Borders */
+    --color-border: #44475a;
+    --color-border-hover: #6272a4;
+
+    /* Status colors */
+    --color-success: #50fa7b;
+    --color-success-bg: rgba(80, 250, 123, 0.15);
+    --color-error: #ff5555;
+    --color-error-bg: rgba(255, 85, 85, 0.15);
+    --color-error-hover: #ff3333;
+    --color-warning: #ffb86c;
+    --color-warning-bg: rgba(255, 184, 108, 0.15);
+    --color-warning-text: #ffb86c;
+    --color-primary: #bd93f9;
+    --color-primary-bg: rgba(189, 147, 249, 0.15);
+    --color-secondary: #ff79c6;
+    --color-info: #8be9fd;
+    --color-info-bg: rgba(139, 233, 253, 0.15);
+    --color-info-text: #8be9fd;
+
+    /* Shadows and form inputs (project-specific, not in the shared reference palette) */
+    --color-shadow: rgba(0, 0, 0, 0.3);
+    --color-input-border: #6272a4;
 
     /* Tor accent color */
-    --tor-accent: #7D4698;
-
-    /* Contrast colors for icons on colored backgrounds */
-    --icon-on-dark: #282a36;
-    --icon-on-light: #f8f8f2;
+    --color-tor-accent: #7D4698;
 }
 
-/* Light Theme */
+/* Light Theme - based on GitHub Light - per AI.md PART 16 CSS Variable Reference */
 /* Per AI.md PART 16: Apply theme class to <html> element */
 html.theme-light {
     /* Light theme palette colors */
@@ -70,34 +80,80 @@ html.theme-light {
     --red: #dc2626;
     --yellow: #ca8a04;
 
-    /* Theme colors */
-    --bg-primary: #f8f8f2;
-    --bg-secondary: #ffffff;
-    --bg-tertiary: #e8e8e8;
-    --text-primary: #282a36;
-    --text-secondary: #44475a;
-    --text-muted: #6272a4;
-    --accent-primary: #7c3aed;
-    --accent-secondary: #db2777;
-    --accent-success: #059669;
-    --accent-warning: #d97706;
-    --accent-error: #dc2626;
-    --accent-error-hover: #b91c1c;
-    --accent-info: #0284c7;
-    --border-color: #e5e7eb;
-    --shadow-color: rgba(0, 0, 0, 0.1);
-    --input-bg: #ffffff;
-    --input-border: #d1d5db;
-    --input-focus: #7c3aed;
-    --link-color: #0284c7;
-    --link-hover: #7c3aed;
+    /* Backgrounds */
+    --color-bg: #ffffff;
+    --color-bg-secondary: #f6f8fa;
+    --color-bg-card: #ffffff;
+    --color-bg-hover: #eff2f5;
+    --color-bg-active: #e6eaef;
+    --color-code-bg: rgba(0, 0, 0, 0.05);
+
+    /* Text */
+    --color-text: #1f2328;
+    --color-muted: #59636e;
+
+    /* Borders */
+    --color-border: #d1d9e0;
+    --color-border-hover: #818b98;
+
+    /* Status colors */
+    --color-success: #1a7f37;
+    --color-success-bg: rgba(26, 127, 55, 0.12);
+    --color-error: #d1242f;
+    --color-error-bg: rgba(209, 36, 47, 0.12);
+    --color-error-hover: #b91c1c;
+    --color-warning: #9a6700;
+    --color-warning-bg: rgba(154, 103, 0, 0.12);
+    --color-warning-text: #9a6700;
+    --color-primary: #0969da;
+    --color-primary-bg: rgba(9, 105, 218, 0.12);
+    --color-secondary: #db2777;
+    --color-info: #0284c7;
+    --color-info-bg: rgba(2, 132, 199, 0.12);
+    --color-info-text: #0284c7;
+
+    /* Shadows and form inputs (project-specific, not in the shared reference palette) */
+    --color-shadow: rgba(0, 0, 0, 0.1);
+    --color-input-border: #d1d5db;
 
     /* Tor accent color */
-    --tor-accent: #6B3A82;
+    --color-tor-accent: #6B3A82;
+}
 
-    /* Contrast colors for icons on colored backgrounds */
-    --icon-on-dark: #f8f8f2;
-    --icon-on-light: #282a36;
+/* Auto Theme - No-JS fallback via prefers-color-scheme - per AI.md PART 16 Theme Detection Flow
+ * html.theme-auto inherits the dark values from :root by default; this media query
+ * overrides them to the light palette when the OS/browser reports a light preference.
+ * Explicit theme-dark / theme-light user choices are never affected by this query. */
+@media (prefers-color-scheme: light) {
+    html.theme-auto {
+        --color-bg: #ffffff;
+        --color-bg-secondary: #f6f8fa;
+        --color-bg-card: #ffffff;
+        --color-bg-hover: #eff2f5;
+        --color-bg-active: #e6eaef;
+        --color-code-bg: rgba(0, 0, 0, 0.05);
+        --color-text: #1f2328;
+        --color-muted: #59636e;
+        --color-border: #d1d9e0;
+        --color-border-hover: #818b98;
+        --color-success: #1a7f37;
+        --color-success-bg: rgba(26, 127, 55, 0.12);
+        --color-error: #d1242f;
+        --color-error-bg: rgba(209, 36, 47, 0.12);
+        --color-error-hover: #b91c1c;
+        --color-warning: #9a6700;
+        --color-warning-bg: rgba(154, 103, 0, 0.12);
+        --color-warning-text: #9a6700;
+        --color-primary: #0969da;
+        --color-primary-bg: rgba(9, 105, 218, 0.12);
+        --color-secondary: #db2777;
+        --color-info: #0284c7;
+        --color-info-bg: rgba(2, 132, 199, 0.12);
+        --color-info-text: #0284c7;
+        --color-shadow: rgba(0, 0, 0, 0.1);
+        --color-input-border: #d1d5db;
+        --color-tor-accent: #6B3A82;
+    }
 }
 
 /* Reset */
@@ -132,8 +188,8 @@ html {
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    background-color: var(--bg-primary);
-    color: var(--text-primary);
+    background-color: var(--color-bg);
+    color: var(--color-text);
     line-height: 1.6;
     min-height: 100vh;
     display: flex;
@@ -141,13 +197,13 @@ body {
 }
 
 a {
-    color: var(--link-color);
+    color: var(--color-info);
     text-decoration: none;
     transition: color 0.2s ease;
 }
 
 a:hover {
-    color: var(--link-hover);
+    color: var(--color-primary);
     text-decoration: underline;
 }
 

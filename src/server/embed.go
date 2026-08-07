@@ -433,6 +433,9 @@ type PageData struct {
 	HasConsentCookie bool
 	Extra            map[string]interface{}
 	ServerURL        string
+	// RequestPath is the current request's path+query, used to redirect the browser
+	// back to the same page after a no-JS form POST (e.g. the header theme-switch form).
+	RequestPath string
 	PrefsQuery       string
 	Prefs            GeneralPrefs
 }

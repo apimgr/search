@@ -779,20 +779,20 @@ func (s *Server) newPageData(w http.ResponseWriter, r *http.Request, title, page
 	data.AvailableLanguages = i18nManager.SupportedLanguages()
 	prefsQuery := strings.TrimSpace(r.URL.Query().Get("prefs"))
 	prefs := parseSearchPreferences(prefsQuery)
-	// Per AI.md PART 16: Theme read from cookie; resolve "auto" to "dark" server-side
-	// JS overrides with system preference on page load when mode is "auto"
+	// Per AI.md PART 16: Theme read from cookie. "auto" renders the theme-auto class so
+	// the no-JS CSS fallback (@media (prefers-color-scheme: light)) can resolve it; JS
+	// additionally applies the live system preference on page load when mode is "auto".
 	themeMode := GetTheme(r)
 	if prefs.Theme != "" {
 		themeMode = prefs.Theme
 	}
 	data.ThemeMode = themeMode
-	if themeMode == ThemeAuto {
-		// server-side fallback; JS handles system preference
-		data.Theme = ThemeDark
-	} else {
-		data.Theme = themeMode
-	}
+	data.Theme = themeMode
 	data.PrefsQuery = prefsQuery
+	// CSRF token needed by the no-JS theme-switch form in the header partial, which
+	// renders on every page that uses newPageData.
+	data.CSRFToken = s.getCSRFToken(r)
+	data.RequestPath = r.URL.RequestURI()
 	// Per AI.md URL & FQDN Detection: embedded template URLs must use {proto}://{fqdn}/path,
 	// never a bare /path — set once here so every page template can build full URLs.
 	data.ServerURL = s.getBaseURL(r)
@@ -975,6 +975,9 @@ func (s *Server) setupRoutes() http.Handler {
 	r.HandleFunc("/server/preferences", s.handlePreferences)
 	r.Post("/preferences/widgets", s.handleWidgetPreferencesSave)
 	r.Post("/preferences/general", s.handleGeneralPreferencesSave)
+
+	// No-JS theme switch (header partial fallback per AI.md PART 16)
+	r.Post("/theme", s.handleThemeSet)
 
 	// Cookie consent and CCPA per AI.md PART 16/PART 12
 	// POST /consent: sets cookieConsent JSON cookie (accept/decline/save), redirects back

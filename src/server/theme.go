@@ -2,6 +2,9 @@ package server
 
 import (
 	"net/http"
+	"strings"
+
+	"github.com/apimgr/search/src/common/i18n"
 )
 
 // Theme constants
@@ -104,6 +107,27 @@ type ThemeInfo struct {
 	IsDark    bool
 	IsLight   bool
 	IsAuto    bool
+}
+
+// handleThemeSet is the no-JS fallback for the theme toggle in the header partial.
+// It persists the submitted theme in a cookie and redirects back to the page the
+// form was submitted from. Per AI.md PART 16: progressive enhancement — the JS
+// theme toggle sets the cookie client-side and never hits this endpoint; this
+// route only runs for browsers with JavaScript disabled.
+func (s *Server) handleThemeSet(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, i18n.RequestString(r, "errors.bad_request"), http.StatusBadRequest)
+		return
+	}
+
+	SetTheme(w, r.FormValue("theme"))
+
+	redirectTo := "/"
+	if p := r.FormValue("redirect"); strings.HasPrefix(p, "/") && !strings.HasPrefix(p, "//") {
+		redirectTo = p
+	}
+
+	http.Redirect(w, r, redirectTo, http.StatusSeeOther)
 }
 
 // GetThemeInfo returns complete theme information for template rendering

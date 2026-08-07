@@ -11,8 +11,8 @@ dialog.modal {
     max-width: 95vw;
     margin: 1rem;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-    background: var(--bg-secondary);
-    color: var(--text-primary);
+    background: var(--color-bg-active);
+    color: var(--color-text);
 }
 
 /* Tablet+ modal enhancement */
@@ -38,7 +38,7 @@ dialog.modal .modal-header {
     justify-content: space-between;
     align-items: center;
     padding: 1rem 1.5rem;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--color-border);
 }
 
 dialog.modal .modal-title {
@@ -58,12 +58,12 @@ dialog.modal .modal-close {
     align-items: center;
     justify-content: center;
     border-radius: 0.25rem;
-    color: var(--text-muted);
+    color: var(--color-muted);
 }
 
 dialog.modal .modal-close:hover {
     background: rgba(0, 0, 0, 0.1);
-    color: var(--text-primary);
+    color: var(--color-text);
 }
 
 dialog.modal .modal-body {
@@ -77,16 +77,16 @@ dialog.modal .modal-body p {
 dialog.modal .modal-body input {
     width: 100%;
     padding: 0.5rem 0.75rem;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--color-border);
     border-radius: 0.25rem;
     font-size: 1rem;
-    background: var(--bg-primary);
-    color: var(--text-primary);
+    background: var(--color-bg);
+    color: var(--color-text);
 }
 
 dialog.modal .modal-body input:focus {
     outline: none;
-    border-color: var(--accent-primary);
+    border-color: var(--color-primary);
     box-shadow: 0 0 0 3px rgba(189, 147, 249, 0.15);
 }
 
@@ -95,7 +95,7 @@ dialog.modal .modal-footer {
     justify-content: flex-end;
     gap: 0.5rem;
     padding: 1rem 1.5rem;
-    border-top: 1px solid var(--border-color);
+    border-top: 1px solid var(--color-border);
 }
 
 /* Modal responsive - mobile-first, see base dialog.modal styles above */
@@ -116,27 +116,27 @@ dialog.modal .modal-footer {
     gap: 0.5rem;
     padding: 0.5rem 1rem;
     font-size: 0.875rem;
-    background: rgba(139, 233, 253, 0.1);
-    border-bottom: 1px solid rgba(139, 233, 253, 0.2);
-    color: var(--accent-info);
+    background: var(--color-info-bg);
+    border-bottom: 1px solid var(--color-info);
+    color: var(--color-info-text);
 }
 
 .site-banner-warning {
-    background: rgba(255, 184, 108, 0.1);
-    border-bottom: 1px solid rgba(255, 184, 108, 0.2);
-    color: var(--accent-warning);
+    background: var(--color-warning-bg);
+    border-bottom: 1px solid var(--color-warning);
+    color: var(--color-warning-text);
 }
 
 .site-banner-error {
-    background: rgba(255, 85, 85, 0.1);
-    border-bottom: 1px solid rgba(255, 85, 85, 0.2);
-    color: var(--accent-error);
+    background: var(--color-error-bg);
+    border-bottom: 1px solid var(--color-error);
+    color: var(--color-error);
 }
 
 .site-banner-success {
-    background: rgba(80, 250, 123, 0.1);
-    border-bottom: 1px solid rgba(80, 250, 123, 0.2);
-    color: var(--accent-success);
+    background: var(--color-success-bg);
+    border-bottom: 1px solid var(--color-success);
+    color: var(--color-success);
 }
 
 .site-banner-text {
@@ -178,8 +178,8 @@ dialog.modal .modal-footer {
     bottom: 0;
     left: 0;
     right: 0;
-    background: var(--bg-secondary);
-    border-top: 1px solid var(--border-color);
+    background: var(--color-bg-active);
+    border-top: 1px solid var(--color-border);
     padding: 1rem;
     z-index: 1000;
 }
@@ -208,11 +208,11 @@ dialog.modal .modal-footer {
     margin: 0;
     flex: 1;
     font-size: 0.9rem;
-    color: var(--text-secondary);
+    color: var(--color-muted);
 }
 
 .policy-link {
-    color: var(--accent-primary);
+    color: var(--color-primary);
     text-decoration: underline;
 }
 
@@ -247,14 +247,14 @@ dialog.modal .modal-footer {
 }
 
 .btn-accept {
-    background: var(--accent-primary);
-    color: var(--bg-primary);
+    background: var(--color-primary);
+    color: var(--color-bg);
 }
 
 .btn-decline {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
+    background: var(--color-bg-secondary);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
 }
 
 .btn-accept:hover,

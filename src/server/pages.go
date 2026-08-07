@@ -726,6 +726,11 @@ func (s *Server) handleError(w http.ResponseWriter, r *http.Request, code int, t
 
 	// Use newPageData for TorAddress support per AI.md PART 32
 	baseData := s.newPageData(w, r, title, "error")
+	// Never echo the original request path/query back into an error page body -
+	// it may carry sensitive path segments or one-shot tokens (e.g. security
+	// report tracking IDs). The no-JS theme-switch form falls back to "/" when
+	// RequestPath is empty (see handleThemeSet).
+	baseData.RequestPath = ""
 
 	data := &ErrorPageData{
 		PageData:   *baseData,

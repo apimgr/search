@@ -38,6 +38,21 @@
                 <path d="M8 21h8M12 17v4"></path>
             </svg>
         </button>
+        {{/* No-JS fallback: the button above is JS-driven and inert without JavaScript.
+             Per AI.md PART 16, theme switching must still work with JS disabled. */}}
+        <noscript>
+            <form action="/theme" method="POST" class="header-theme-form">
+                <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                <input type="hidden" name="redirect" value="{{.RequestPath}}">
+                <label class="sr-only" for="header-theme-select">{{t "accessibility.toggle_theme"}}</label>
+                <select id="header-theme-select" name="theme" class="header-theme-select">
+                    <option value="dark"{{if eq .ThemeMode "dark"}} selected{{end}}>{{t "header.theme_label_dark"}}</option>
+                    <option value="light"{{if eq .ThemeMode "light"}} selected{{end}}>{{t "header.theme_label_light"}}</option>
+                    <option value="auto"{{if eq .ThemeMode "auto"}} selected{{end}}>{{t "header.theme_label_auto"}}</option>
+                </select>
+                <button type="submit" class="header-theme-submit">{{t "common.apply"}}</button>
+            </form>
+        </noscript>
         <a href="/preferences" class="header-icon-btn" aria-label="{{t "preferences.title"}}">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="3"></circle>
