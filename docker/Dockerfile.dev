@@ -28,7 +28,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
 # =============================================================================
 # Runtime Stage - Minimal Alpine image + debug tooling
 # =============================================================================
-FROM casjaysdev/alpine:latest
+FROM alpine:latest
 
 # ARGs for build-time values (set by docker build --build-arg)
 ARG VERSION=devel
@@ -36,12 +36,8 @@ ARG BUILD_DATE
 ARG COMMIT_ID
 ARG LICENSE=MIT
 
-# OCI Labels (required per docker-rules.md PART 27)
-# Dynamic labels (version, created, revision) injected via --label flags at build time
-LABEL org.opencontainers.image.title="search" \
-      org.opencontainers.image.description="Privacy-respecting self-hosted metasearch engine (development image)" \
-      org.opencontainers.image.source="https://github.com/apimgr/search" \
-      org.opencontainers.image.licenses="MIT"
+# No LABEL blocks — all image metadata is applied as OCI labels/annotations at
+# build time by CI via --label/--annotation flags (see AI.md PART 26).
 
 # Install required packages + debug tooling
 # NOTE: Tor binary installed but NOT configured here - binary handles all Tor setup (see PART 31)
@@ -73,11 +69,17 @@ COPY docker/Dockerfile.dev /root/Dockerfile.dev
 # Make all binaries/scripts in /usr/local/bin executable (755)
 RUN chmod 755 /usr/local/bin/*
 
+# Non-root runtime user: documented exception (see IDEA.md § Docker Non-Root
+# Exception) — binary binds privileged port 80 AND must create/chown
+# /config and /data on first run for the zero-config Docker Volume Mapping
+# contract (PART 26); entrypoint.sh is spec-prohibited from doing that setup
+# itself, so privilege drop cannot happen before exec. Runtime stays root.
+
 # Set environment
 # Note: Tor available (binary installed) but server binary controls Tor startup (see PART 31)
 # DATABASE_DIR: SQLite location (binary auto-detects container, but explicit is clearer)
-ENV MODE=development \
-    TZ=America/New_York \
+# MODE is never baked into the image — binary defaults to production; compose sets MODE explicitly
+ENV TZ=America/New_York \
     DATABASE_DIR=/data/db/sqlite
 
 # Expose internal port (always 80)
