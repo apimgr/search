@@ -33,7 +33,6 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := s.newPageData(w, r, "", "home")
-	data.CSRFToken = s.getCSRFToken(r)
 
 	// Text browsers receive a JavaScript-free home page (just a search form).
 	// Per AI.md PART 14: text browsers are INTERACTIVE, no JS.
@@ -73,7 +72,6 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
 	data := s.newPageData(w, r, "", "about")
 	data.Title = s.getI18nManager().T(data.Lang, "nav.about")
-	data.CSRFToken = s.getCSRFToken(r)
 
 	if err := s.renderer.Render(w, "about", data); err != nil {
 		s.handleInternalError(w, r, "template render", err)
@@ -84,7 +82,6 @@ func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handlePrivacy(w http.ResponseWriter, r *http.Request) {
 	data := s.newPageData(w, r, "", "privacy")
 	data.Title = s.getI18nManager().T(data.Lang, "footer.privacy_policy")
-	data.CSRFToken = s.getCSRFToken(r)
 
 	if err := s.renderer.Render(w, "privacy", data); err != nil {
 		s.handleInternalError(w, r, "template render", err)
@@ -139,7 +136,6 @@ func (s *Server) renderContactForm(w http.ResponseWriter, r *http.Request, secur
 	// Use newPageData for TorAddress support per AI.md PART 32
 	baseData := s.newPageData(w, r, "", "contact")
 	baseData.Title = s.getI18nManager().T(baseData.Lang, "contact.page_title")
-	baseData.CSRFToken = s.getCSRFToken(r)
 
 	data := &ContactPageData{
 		PageData:     *baseData,
@@ -406,7 +402,6 @@ func (s *Server) sendSecurityResearcherAck(r *http.Request, researcherEmail, res
 func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
 	data := s.newPageData(w, r, "", "help")
 	data.Title = s.getI18nManager().T(data.Lang, "help.page_title")
-	data.CSRFToken = s.getCSRFToken(r)
 
 	if err := s.renderer.Render(w, "help", data); err != nil {
 		s.handleInternalError(w, r, "template render", err)
@@ -417,7 +412,6 @@ func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleTerms(w http.ResponseWriter, r *http.Request) {
 	data := s.newPageData(w, r, "", "terms")
 	data.Title = s.getI18nManager().T(data.Lang, "footer.terms")
-	data.CSRFToken = s.getCSRFToken(r)
 
 	if err := s.renderer.Render(w, "terms", data); err != nil {
 		s.handleInternalError(w, r, "template render", err)
@@ -777,12 +771,15 @@ func (s *Server) signCaptcha(answer int) string {
 	return data + "." + sig
 }
 
-// getCSRFToken returns a CSRF token for the request
-func (s *Server) getCSRFToken(r *http.Request) string {
-	// Generate a simple CSRF token
-	tokenBytes := make([]byte, 32)
-	rand.Read(tokenBytes)
-	return base64.URLEncoding.EncodeToString(tokenBytes)
+// getCSRFToken returns the CSRF token for the request and ensures the matching
+// csrf_token cookie is set, using the stateless double-submit pattern per AI.md
+// PART 16. The returned value is echoed into the hidden csrf_token form field so
+// mutating POSTs can be validated against the cookie.
+func (s *Server) getCSRFToken(w http.ResponseWriter, r *http.Request) string {
+	if s.csrf == nil {
+		s.csrf = NewCSRFMiddleware(s.config)
+	}
+	return s.csrf.IssueToken(w, r)
 }
 
 // formatDuration formats a duration in a human-readable format

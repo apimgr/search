@@ -420,22 +420,48 @@ func TestCSRFValidateToken(t *testing.T) {
 	cfg.Server.Security.CSRF.FieldName = "csrf_token"
 	csrf := NewCSRFMiddleware(cfg)
 
-	// Generate and store a token
 	token := csrf.GenerateToken()
-	csrf.tokens.Store(token, time.Now())
 
-	// Create request with matching cookie and header
+	// Stateless double-submit: cookie value must equal the submitted header value.
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
 	req.AddCookie(&http.Cookie{Name: "csrf_token", Value: token})
 	req.Header.Set("X-CSRF-Token", token)
 
 	if !csrf.ValidateToken(req) {
-		t.Error("ValidateToken() should return true for valid token")
+		t.Error("ValidateToken() should return true when cookie matches header")
 	}
 
-	// Token should be consumed (single use)
-	if csrf.ValidateToken(req) {
-		t.Error("ValidateToken() should return false after token is consumed")
+	// Stateless — validation is idempotent, not single-use.
+	if !csrf.ValidateToken(req) {
+		t.Error("ValidateToken() should remain true on repeat (stateless double-submit)")
+	}
+
+	// Mismatched header must fail.
+	bad := httptest.NewRequest(http.MethodPost, "/", nil)
+	bad.AddCookie(&http.Cookie{Name: "csrf_token", Value: token})
+	bad.Header.Set("X-CSRF-Token", csrf.GenerateToken())
+	if csrf.ValidateToken(bad) {
+		t.Error("ValidateToken() should return false when cookie and header differ")
+	}
+
+	// Missing cookie must fail.
+	noCookie := httptest.NewRequest(http.MethodPost, "/", nil)
+	noCookie.Header.Set("X-CSRF-Token", token)
+	if csrf.ValidateToken(noCookie) {
+		t.Error("ValidateToken() should return false when the cookie is absent")
+	}
+
+	// Bearer-authenticated request bypasses CSRF (returns true, no token needed).
+	bearer := httptest.NewRequest(http.MethodPost, "/", nil)
+	bearer.Header.Set("Authorization", "Bearer abc123")
+	if !csrf.ValidateToken(bearer) {
+		t.Error("ValidateToken() should bypass (return true) for Bearer-auth requests")
+	}
+
+	// Safe methods bypass CSRF.
+	get := httptest.NewRequest(http.MethodGet, "/", nil)
+	if !csrf.ValidateToken(get) {
+		t.Error("ValidateToken() should return true for safe GET requests")
 	}
 }
 
@@ -2142,18 +2168,26 @@ func TestSignCaptcha(t *testing.T) {
 }
 
 func TestGetCSRFToken(t *testing.T) {
-	s := &Server{config: &config.Config{}}
+	cfg := &config.Config{}
+	cfg.Server.Security.CSRF.Enabled = true
+	cfg.Server.Security.CSRF.CookieName = "csrf_token"
+	s := &Server{config: cfg, csrf: NewCSRFMiddleware(cfg)}
+
+	// First render: no request cookie, so a fresh token is minted and set on w.
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
-
-	tok1 := s.getCSRFToken(r)
-	tok2 := s.getCSRFToken(r)
-
+	w := httptest.NewRecorder()
+	tok1 := s.getCSRFToken(w, r)
 	if tok1 == "" {
 		t.Error("getCSRFToken() returned empty token")
 	}
-	// Each call generates a new random token
-	if tok1 == tok2 {
-		t.Error("getCSRFToken() returned same token on consecutive calls (should be random)")
+
+	// Second render carrying the issued cookie: double-submit reuses the same value.
+	r2 := httptest.NewRequest(http.MethodGet, "/", nil)
+	r2.AddCookie(&http.Cookie{Name: "csrf_token", Value: tok1})
+	w2 := httptest.NewRecorder()
+	tok2 := s.getCSRFToken(w2, r2)
+	if tok2 != tok1 {
+		t.Errorf("getCSRFToken() should reuse the cookie value: got %q, want %q", tok2, tok1)
 	}
 }
 

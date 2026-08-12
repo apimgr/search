@@ -2,6 +2,7 @@ package widget
 
 import (
 	"context"
+	"sort"
 	"sync"
 	"time"
 
@@ -225,11 +226,20 @@ func (m *Manager) FetchWidgetData(ctx context.Context, widgetType WidgetType, pa
 	return data, nil
 }
 
-// buildCacheKey builds a cache key from widget type and params
+// buildCacheKey builds a cache key from widget type and params.
+// Params are sorted by key first because Go map iteration order is
+// randomized; without sorting, identical params could produce different
+// key strings across calls, defeating the cache.
 func (m *Manager) buildCacheKey(widgetType WidgetType, params map[string]string) string {
+	keys := make([]string, 0, len(params))
+	for k := range params {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
 	key := string(widgetType)
-	for k, v := range params {
-		key += ":" + k + "=" + v
+	for _, k := range keys {
+		key += ":" + k + "=" + params[k]
 	}
 	return key
 }

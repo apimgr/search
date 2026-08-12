@@ -226,7 +226,6 @@ func (s *Server) handlePreferences(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := s.newPageData(w, r, "Preferences", "preferences")
-	data.CSRFToken = s.getCSRFToken(r)
 	data.Prefs = resolveGeneralPrefs(r)
 
 	// Populate enabled widgets from the server-side cookie.

@@ -1428,12 +1428,12 @@ func TestYahooSearchCategories(t *testing.T) {
 
 // --- Yandex parseResults ---
 
-// TestYandexParseResultsPrimary exercises the organic__title-link anchor path.
+// TestYandexParseResultsPrimary exercises the OrganicTitle-Link anchor path.
 func TestYandexParseResultsPrimary(t *testing.T) {
 	html := `<div>
-<a class="organic__title-link" href="https://example.com/page1">Go Language Tutorial</a>
-<div class="OrganicTextContentSpan">Learn Go from scratch with examples</div>
-<a class="organic__title-link" href="https://example.org/page2">Advanced Go Patterns</a>
+<a class="OrganicTitle-Link" href="https://example.com/page1">Go Language Tutorial</a>
+<span class="OrganicTextContentSpan">Learn Go from scratch with examples</span>
+<a class="OrganicTitle-Link" href="https://example.org/page2">Advanced Go Patterns</a>
 </div>`
 
 	e := NewYandex()
@@ -1452,8 +1452,8 @@ func TestYandexParseResultsPrimary(t *testing.T) {
 
 // TestYandexParseResultsSnippet verifies that snippets are extracted from the OrganicTextContentSpan.
 func TestYandexParseResultsSnippet(t *testing.T) {
-	html := `<a class="organic__title-link" href="https://example.com/page1">Go Tutorial</a>
-<div class="OrganicTextContentSpan">Comprehensive guide to Go programming</div>`
+	html := `<a class="OrganicTitle-Link" href="https://example.com/page1">Go Tutorial</a>
+<span class="OrganicTextContentSpan">Comprehensive guide to Go programming</span>`
 
 	e := NewYandex()
 	results, err := e.parseResults(html, model.CategoryGeneral)
@@ -1470,8 +1470,8 @@ func TestYandexParseResultsSnippet(t *testing.T) {
 
 // TestYandexParseResultsSkipsYandexInternal verifies that yandex.* URLs are filtered out.
 func TestYandexParseResultsSkipsYandexInternal(t *testing.T) {
-	html := `<a class="organic__title-link" href="https://yandex.com/internal">Yandex Internal</a>
-<a class="organic__title-link" href="https://example.com/external">External Result</a>`
+	html := `<a class="OrganicTitle-Link" href="https://yandex.com/internal">Yandex Internal</a>
+<a class="OrganicTitle-Link" href="https://example.com/external">External Result</a>`
 
 	e := NewYandex()
 	results, err := e.parseResults(html, model.CategoryGeneral)
@@ -1487,8 +1487,10 @@ func TestYandexParseResultsSkipsYandexInternal(t *testing.T) {
 
 // TestYandexParseResultsFallbackH2 exercises the structural <h2> fallback path.
 func TestYandexParseResultsFallbackH2(t *testing.T) {
-	// No organic__title-link → triggers h2 fallback
-	html := `<h2><a href="https://fallback.example.com/result">Fallback Result Title</a></h2>`
+	// No OrganicTitle-Link → triggers h2 fallback. Real Yandex markup wraps
+	// the <h2> inside the anchor (<a href="..."><h2>...</h2></a>), not the
+	// reverse, so the fixture mirrors that structural relationship.
+	html := `<a href="https://fallback.example.com/result"><h2>Fallback Result Title</h2></a>`
 
 	e := NewYandex()
 	results, err := e.parseResults(html, model.CategoryGeneral)

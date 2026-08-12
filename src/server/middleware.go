@@ -495,10 +495,13 @@ func isTrustedProxy(ipStr string, additional []string) bool {
 	return false
 }
 
-// CSRF middleware handles Cross-Site Request Forgery protection
+// CSRF middleware handles Cross-Site Request Forgery protection.
+// Per AI.md PART 16 this uses the STATELESS double-submit cookie pattern: the
+// token is never stored server-side, so there is no token map here. Validation
+// compares the cookie value against the submitted header/form value in constant
+// time.
 type CSRFMiddleware struct {
 	config     *config.Config
-	tokens     sync.Map
 	logManager *logging.Manager
 }
 
@@ -512,121 +515,196 @@ func (c *CSRFMiddleware) SetLogManager(logMgr *logging.Manager) {
 	c.logManager = logMgr
 }
 
-// GenerateToken generates a new CSRF token
+// GenerateToken generates a new CSRF token of csrf.token_length bytes
+// (default 32) per AI.md PART 16.
 func (c *CSRFMiddleware) GenerateToken() string {
-	b := make([]byte, 32)
+	n := c.config.Server.Security.CSRF.TokenLength
+	if n <= 0 {
+		n = 32
+	}
+	b := make([]byte, n)
 	rand.Read(b)
 	return hex.EncodeToString(b)
 }
 
-// ValidateToken validates a CSRF token from the request
-func (c *CSRFMiddleware) ValidateToken(r *http.Request) bool {
-	csrf := c.config.Server.Security.CSRF
+// cookieSecure resolves the csrf.secure setting ("auto" | "true" | "false")
+// against the request per AI.md PART 16: "auto" sets Secure when the request is
+// served over HTTPS.
+func (c *CSRFMiddleware) cookieSecure(r *http.Request) bool {
+	switch strings.ToLower(strings.TrimSpace(c.config.Server.Security.CSRF.Secure)) {
+	case "true":
+		return true
+	case "false":
+		return false
+	default:
+		if r != nil && r.TLS != nil {
+			return true
+		}
+		return c.config.Server.SSL.Enabled
+	}
+}
 
-	// Skip validation if CSRF is disabled
-	if !csrf.Enabled {
+// IssueToken returns the request's CSRF token, reusing the existing csrf_token
+// cookie value when present and otherwise minting a fresh token and setting the
+// cookie. Per AI.md PART 16 the cookie is SameSite=Strict, NOT HttpOnly (the
+// form/JS must read it), and Secure per csrf.secure. The returned value is what
+// server-rendered templates echo into the hidden csrf_token field.
+func (c *CSRFMiddleware) IssueToken(w http.ResponseWriter, r *http.Request) string {
+	csrf := c.config.Server.Security.CSRF
+	cookieName := csrf.CookieName
+	if cookieName == "" {
+		cookieName = "csrf_token"
+	}
+
+	// Reuse the existing cookie value so the token stays stable across a page's
+	// GET and its subsequent form POST (double-submit requires cookie == field).
+	if cookie, err := r.Cookie(cookieName); err == nil && cookie.Value != "" {
+		return cookie.Value
+	}
+
+	token := c.GenerateToken()
+	http.SetCookie(w, &http.Cookie{
+		Name:     cookieName,
+		Value:    token,
+		Path:     "/",
+		HttpOnly: false,
+		Secure:   c.cookieSecure(r),
+		SameSite: http.SameSiteStrictMode,
+	})
+	return token
+}
+
+// hasBearerCredential reports whether the request carries a bearer-style
+// credential the browser cannot auto-attach (Authorization: Bearer or
+// X-API-Token). Such requests bypass CSRF per AI.md PART 16.
+func hasBearerCredential(r *http.Request) bool {
+	if strings.HasPrefix(strings.ToLower(r.Header.Get("Authorization")), "bearer ") {
 		return true
 	}
+	return r.Header.Get("X-API-Token") != ""
+}
 
-	// Get token from cookie
-	cookie, err := r.Cookie(csrf.CookieName)
-	if err != nil {
+// shouldValidate reports whether the CSRF token must be validated for this
+// request, per the "When CSRF Validation Runs" / bypass tables in AI.md PART 16.
+func (c *CSRFMiddleware) shouldValidate(r *http.Request) bool {
+	switch r.Method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+	default:
 		return false
 	}
-
-	// Get token from header or form
-	token := r.Header.Get(csrf.HeaderName)
-	if token == "" {
-		token = r.FormValue(csrf.FieldName)
-	}
-
-	// Validate token matches cookie (constant-time per AI.md PART 11)
-	if subtle.ConstantTimeCompare([]byte(token), []byte(cookie.Value)) != 1 {
+	if hasBearerCredential(r) {
 		return false
 	}
-
-	// Validate token exists in store
-	if _, ok := c.tokens.Load(token); !ok {
+	if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
 		return false
 	}
-
-	// Delete used token (single use)
-	c.tokens.Delete(token)
+	if c.isExempt(r.URL.Path) {
+		return false
+	}
 	return true
 }
 
-// Protect applies CSRF protection to handlers
+// isExempt reports whether path is in the CSRF exempt_paths allow-list. Glob
+// suffixes ("/prefix/*") and exact matches are supported per AI.md PART 16.
+func (c *CSRFMiddleware) isExempt(path string) bool {
+	for _, p := range c.config.Server.Security.CSRF.ExemptPaths {
+		if p == "" {
+			continue
+		}
+		if strings.HasSuffix(p, "/*") {
+			if strings.HasPrefix(path, strings.TrimSuffix(p, "*")) {
+				return true
+			}
+			continue
+		}
+		if path == p || strings.HasPrefix(path, strings.TrimSuffix(p, "/")+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// ValidateToken validates the CSRF token using the stateless double-submit
+// cookie pattern per AI.md PART 16: it compares the csrf_token cookie against
+// the X-CSRF-Token header (or csrf_token form field) in constant time. Requests
+// that bypass validation (safe methods, bearer auth, websockets, exempt paths)
+// return true. Returns false when the cookie is absent or the values mismatch.
+func (c *CSRFMiddleware) ValidateToken(r *http.Request) bool {
+	csrf := c.config.Server.Security.CSRF
+
+	if !csrf.Enabled {
+		return true
+	}
+	if !c.shouldValidate(r) {
+		return true
+	}
+
+	cookieName := csrf.CookieName
+	if cookieName == "" {
+		cookieName = "csrf_token"
+	}
+	headerName := csrf.HeaderName
+	if headerName == "" {
+		headerName = "X-CSRF-Token"
+	}
+	fieldName := csrf.FieldName
+	if fieldName == "" {
+		fieldName = "csrf_token"
+	}
+
+	cookie, err := r.Cookie(cookieName)
+	if err != nil || cookie.Value == "" {
+		return false
+	}
+
+	token := r.Header.Get(headerName)
+	if token == "" {
+		token = r.FormValue(fieldName)
+	}
+	if token == "" {
+		return false
+	}
+
+	return subtle.ConstantTimeCompare([]byte(token), []byte(cookie.Value)) == 1
+}
+
+// Protect applies CSRF protection to handlers. Safe/bypassed requests get a
+// freshly issued token cookie (so subsequent forms can echo it); mutating
+// browser requests are validated and rejected with the canonical 403 body on
+// failure.
 func (c *CSRFMiddleware) Protect(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		csrf := c.config.Server.Security.CSRF
-
-		if !csrf.Enabled {
+		if !c.config.Server.Security.CSRF.Enabled {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		// Skip for safe methods
-		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
-			// Generate token for GET requests
-			token := c.GenerateToken()
-			c.tokens.Store(token, time.Now())
-
-			// Set cookie — SameSite=Strict per AI.md PART 11 (blocks cross-site attachment,
-			// neutralizing CSRF before the double-submit check even runs).
-			http.SetCookie(w, &http.Cookie{
-				Name:     csrf.CookieName,
-				Value:    token,
-				Path:     "/",
-				HttpOnly: true,
-				Secure:   c.config.Server.SSL.Enabled,
-				SameSite: http.SameSiteStrictMode,
-			})
-
+		if !c.shouldValidate(r) {
+			// Ensure a token cookie exists for the page so its forms can submit.
+			c.IssueToken(w, r)
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		// Validate token for unsafe methods
-		cookie, err := r.Cookie(csrf.CookieName)
-		if err != nil {
+		if !c.ValidateToken(r) {
 			// Per AI.md PART 11: no IP logging — privacy is the product.
 			if c.logManager != nil {
 				c.logManager.Security().LogCSRFViolation("-", r.URL.Path)
 			}
-			localizedHTTPError(w, r, http.StatusForbidden, "errors.csrf_missing")
+			writeCSRFError(w)
 			return
 		}
-
-		// Get token from header or form
-		token := r.Header.Get(csrf.HeaderName)
-		if token == "" {
-			token = r.FormValue(csrf.FieldName)
-		}
-
-		if subtle.ConstantTimeCompare([]byte(token), []byte(cookie.Value)) != 1 {
-			// Per AI.md PART 11: no IP logging — privacy is the product.
-			if c.logManager != nil {
-				c.logManager.Security().LogCSRFViolation("-", r.URL.Path)
-			}
-			localizedHTTPError(w, r, http.StatusForbidden, "errors.csrf_invalid")
-			return
-		}
-
-		// Validate token exists in store
-		if _, ok := c.tokens.Load(token); !ok {
-			// Per AI.md PART 11: no IP logging — privacy is the product.
-			if c.logManager != nil {
-				c.logManager.Security().LogCSRFViolation("-", r.URL.Path)
-			}
-			localizedHTTPError(w, r, http.StatusForbidden, "errors.csrf_expired")
-			return
-		}
-
-		// Delete used token
-		c.tokens.Delete(token)
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// writeCSRFError writes the canonical CSRF failure response per AI.md PART 16:
+// 403 with body {"ok":false,"error":"CSRF_FAILED","message":"CSRF token validation failed"}.
+func writeCSRFError(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusForbidden)
+	_, _ = w.Write([]byte(`{"ok":false,"error":"CSRF_FAILED","message":"CSRF token validation failed"}`))
 }
 
 // isCSRFExempt reports whether path is in the CSRF exempt_paths allow-list.

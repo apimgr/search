@@ -314,6 +314,9 @@ type ServerConfig struct {
 	// Pages
 	Pages PagesConfig `yaml:"pages"`
 
+	// Privacy — server-wide privacy/data-handling policy (GDPR/CCPA) per AI.md PART 12
+	Privacy PrivacyConfig `yaml:"privacy"`
+
 	// Web (robots.txt, security.txt)
 	Web WebConfig `yaml:"web"`
 
@@ -583,6 +586,12 @@ type CSRFConfig struct {
 	CookieName string `yaml:"cookie_name"`
 	HeaderName string `yaml:"header_name"`
 	FieldName  string `yaml:"field_name"`
+	// TokenLength is the CSRF token size in bytes (default 32) per AI.md PART 16.
+	TokenLength int `yaml:"token_length"`
+	// Secure controls the Secure attribute on the csrf_token cookie: "auto"
+	// (default) sets Secure when the request is served over HTTPS, "true" always
+	// sets it, "false" never does. Per AI.md PART 16 Configuration.
+	Secure string `yaml:"secure"`
 	// ExemptPaths lists request paths that bypass CSRF token validation and the
 	// Sec-Fetch-Site cross-site rejection (webhooks, machine-to-machine callbacks).
 	// Per AI.md PART 11 Sec-Fetch-* Request Validation table.
@@ -795,6 +804,90 @@ type CookieConsentConfig struct {
 	Enabled   bool   `yaml:"enabled"`
 	Message   string `yaml:"message"`
 	PolicyURL string `yaml:"policy_url"`
+}
+
+// PrivacyConfig represents server-wide privacy/data-handling policy per AI.md
+// PART 12 "Privacy Settings". The Data.Sold flag drives dynamic privacy
+// messaging (consent banner text, privacy-page summary) and gates the CCPA
+// "Do Not Sell My Personal Information" opt-out toggle: when false the site
+// shows a "we do not sell" notice, when true it renders the opt-out form that
+// POSTs to /consent/ccpa.
+type PrivacyConfig struct {
+	// Data controls data-handling and CCPA compliance.
+	Data PrivacyDataPolicy `yaml:"data"`
+	// Retention controls how long data is kept and which user rights apply.
+	Retention PrivacyRetention `yaml:"retention"`
+	// Consent holds the dynamic cookie-consent banner messages.
+	Consent PrivacyConsent `yaml:"consent"`
+	// Cookies controls which cookie categories are advertised on the privacy page.
+	Cookies PrivacyCookies `yaml:"cookies"`
+	// ThirdParty lists third-party services that receive user data (if any).
+	ThirdParty PrivacyThirdParty `yaml:"third_party"`
+}
+
+// PrivacyDataPolicy controls data handling and CCPA compliance.
+type PrivacyDataPolicy struct {
+	// Sold reports whether user data may be sold to third parties.
+	// Default false. The MIT license permits downstream operators to set
+	// this true if they sell data — the UI adjusts accordingly.
+	Sold bool `yaml:"sold"`
+}
+
+// PrivacyRetention describes how long data is kept and which rights apply.
+type PrivacyRetention struct {
+	// Period is a human-readable retention description shown on the privacy
+	// page. Empty falls back to the translated default.
+	Period string `yaml:"period"`
+	// ExportAvailable enables the "Export your data" right on the privacy page.
+	ExportAvailable bool `yaml:"export_available"`
+	// DeletionAvailable enables the "Delete your account" right on the privacy page.
+	DeletionAvailable bool `yaml:"deletion_available"`
+}
+
+// PrivacyConsent holds the cookie-consent banner messages. MessageIfSold is
+// shown in place of Message when Data.Sold is true (dynamic privacy messaging
+// per AI.md PART 12). Empty values fall back to the translated default.
+type PrivacyConsent struct {
+	// Message is the consent banner text when Data.Sold is false.
+	Message string `yaml:"message"`
+	// MessageIfSold is the consent banner text when Data.Sold is true.
+	MessageIfSold string `yaml:"message_if_sold"`
+}
+
+// PrivacyCookies controls which cookie categories are advertised on the
+// privacy page. Essential is always shown; Preferences and Analytics are
+// shown only when enabled.
+type PrivacyCookies struct {
+	Essential   PrivacyCookieCategory `yaml:"essential"`
+	Preferences PrivacyCookieCategory `yaml:"preferences"`
+	Analytics   PrivacyCookieCategory `yaml:"analytics"`
+}
+
+// PrivacyCookieCategory represents one cookie category's enabled state.
+type PrivacyCookieCategory struct {
+	Enabled bool `yaml:"enabled"`
+}
+
+// PrivacyThirdParty lists third-party services that receive user data.
+type PrivacyThirdParty struct {
+	Services []PrivacyThirdPartyService `yaml:"services"`
+}
+
+// PrivacyThirdPartyService describes one third-party recipient of user data.
+type PrivacyThirdPartyService struct {
+	Name      string `yaml:"name"`
+	Purpose   string `yaml:"purpose"`
+	DataSent  string `yaml:"data_sent"`
+	PolicyURL string `yaml:"policy_url"`
+}
+
+// ConsentMessage returns the consent banner text for the current data-sold
+// state: MessageIfSold when data may be sold (and set), otherwise Message.
+func (p PrivacyConfig) ConsentMessage() string {
+	if p.Data.Sold && p.Consent.MessageIfSold != "" {
+		return p.Consent.MessageIfSold
+	}
+	return p.Consent.Message
 }
 
 // ActiveAnnouncements returns announcements that are currently active
@@ -1499,7 +1592,9 @@ func DefaultConfig() *Config {
 					// Per AI.md PART 16 CSRF Implementation Rules: forms carry the
 					// token in a hidden `csrf_token` field - must match the field
 					// name templates actually render, or ValidateToken never finds it.
-					FieldName: "csrf_token",
+					FieldName:   "csrf_token",
+					TokenLength: 32,
+					Secure:      "auto",
 				},
 				Headers: SecurityHeadersConfig{
 					XFrameOptions:       "SAMEORIGIN",
@@ -1610,6 +1705,17 @@ func DefaultConfig() *Config {
 					PolicyURL: "/server/privacy",
 				},
 				CORS: "*",
+			},
+			// Privacy defaults per AI.md PART 12: data is not sold, cookie
+			// categories advertised on the privacy page. Export/deletion rights
+			// default off (no user accounts by default) and the consent
+			// messages / retention period fall back to translated strings.
+			Privacy: PrivacyConfig{
+				Cookies: PrivacyCookies{
+					Essential:   PrivacyCookieCategory{Enabled: true},
+					Preferences: PrivacyCookieCategory{Enabled: true},
+					Analytics:   PrivacyCookieCategory{Enabled: true},
+				},
 			},
 			// Scheduler is ALWAYS RUNNING per AI.md PART 19
 			Scheduler: SchedulerConfig{

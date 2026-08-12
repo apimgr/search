@@ -1,0 +1,130 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns="http://www.w3.org/2005/Atom">
+  <id>https://arxiv.org/api/wT5sc43qGY2fLW85o33buizLMjw</id>
+  <title>arXiv Query: search_query=all:golang&amp;id_list=&amp;start=0&amp;max_results=5</title>
+  <updated>2026-08-12T04:07:22Z</updated>
+  <link href="https://arxiv.org/api/query?search_query=all:golang&amp;start=0&amp;max_results=5&amp;id_list=" type="application/atom+xml"/>
+  <opensearch:itemsPerPage>5</opensearch:itemsPerPage>
+  <opensearch:totalResults>30</opensearch:totalResults>
+  <opensearch:startIndex>0</opensearch:startIndex>
+  <entry>
+    <id>http://arxiv.org/abs/2304.09590v1</id>
+    <title>Parallel Neural Networks in Golang</title>
+    <updated>2023-04-19T11:56:36Z</updated>
+    <link href="https://arxiv.org/abs/2304.09590v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2304.09590v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>This paper describes the design and implementation of parallel neural networks (PNNs) with the novel programming language Golang. We follow in our approach the classical Single-Program Multiple-Data (SPMD) model where a PNN is composed of several sequential neural networks, which are trained with a proportional share of the training dataset. We used for this purpose the MNIST dataset, which contains binary images of handwritten digits. Our analysis focusses on different activation functions and optimizations in the form of stochastic gradients and initialization of weights and biases. We conduct a thorough performance analysis, where network configurations and different performance factors are analyzed and interpreted. Golang and its inherent parallelization support proved very well for parallel neural network simulation by considerable decreased processing times compared to sequential variants.</summary>
+    <category term="cs.NE" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.DC" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2023-04-19T11:56:36Z</published>
+    <arxiv:comment>Extended version of paper Daniela Kalwarowskyj and Erich Schikuta, SPMD-based Neural Network Simulation with Golang, published at International Conference on Computational Science (ICCS) 2023</arxiv:comment>
+    <arxiv:primary_category term="cs.NE"/>
+    <author>
+      <name>Daniela Kalwarowskyj</name>
+    </author>
+    <author>
+      <name>Erich Schikuta</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2401.00515v2</id>
+    <title>Empirical Analysis of Vulnerabilities Life Cycle in Golang Ecosystem</title>
+    <updated>2024-01-17T06:16:52Z</updated>
+    <link href="https://arxiv.org/abs/2401.00515v2" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2401.00515v2" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Open-source software (OSS) greatly facilitates program development for developers. However, the high number of vulnerabilities in open-source software is a major concern, including in Golang, a relatively new programming language. In contrast to other commonly used OSS package managers, Golang presents a distinctive feature whereby commits are prevalently used as dependency versions prior to their integration into official releases. This attribute can prove advantageous to users, as patch commits can be implemented in a timely manner before the releases. However, Golang employs a decentralized mechanism for managing dependencies, whereby dependencies are upheld and distributed in separate repositories. This approach can result in delays in the dissemination of patches and unresolved vulnerabilities.
+  To tackle the aforementioned concern, a comprehensive investigation was undertaken to examine the life cycle of vulnerability in Golang, commencing from its introduction and culminating with its rectification. To this end, a framework was established by gathering data from diverse sources and systematically amalgamating them with an algorithm to compute the lags in vulnerability patching. It turned out that 66.10% of modules in the Golang ecosystem were affected by vulnerabilities. Within the vulnerability life cycle, we found two kinds of lag impeding the propagation of vulnerability fixing. By analyzing reasons behind non-lagged and lagged vulnerabilities, timely releasing and indexing patch versions could significantly enhance ecosystem security.</summary>
+    <category term="cs.SE" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2023-12-31T14:53:51Z</published>
+    <arxiv:comment>12 pages, 10 figures, 2024 IEEE/ACM 46th International Conference on Software Engineering (ICSE '24)</arxiv:comment>
+    <arxiv:primary_category term="cs.SE"/>
+    <author>
+      <name>Jinchang Hu</name>
+      <arxiv:affiliation>College of Command and Control Engineering, Army Engineering University of PLA, NanJing, China</arxiv:affiliation>
+    </author>
+    <author>
+      <name>Lyuye Zhang</name>
+      <arxiv:affiliation>Continental-NTU Corporate Lab, Nanyang Technological University, Singapore, Singapore</arxiv:affiliation>
+    </author>
+    <author>
+      <name>Chengwei Liu</name>
+      <arxiv:affiliation>Continental-NTU Corporate Lab, Nanyang Technological University, Singapore, Singapore</arxiv:affiliation>
+    </author>
+    <author>
+      <name>Sen Yang</name>
+      <arxiv:affiliation>Academy of Military Science, BeiJing, China</arxiv:affiliation>
+    </author>
+    <author>
+      <name>Song Huang</name>
+      <arxiv:affiliation>College of Command and Control Engineering, Army Engineering University of PLA, NanJing, China</arxiv:affiliation>
+    </author>
+    <author>
+      <name>Yang Liu</name>
+      <arxiv:affiliation>Continental-NTU Corporate Lab, Nanyang Technological University, Singapore, Singapore</arxiv:affiliation>
+    </author>
+    <arxiv:doi>10.1145/3597503.3639230</arxiv:doi>
+    <link rel="related" href="https://doi.org/10.1145/3597503.3639230" title="doi"/>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2206.06401v1</id>
+    <title>GoAutoBash: Golang-based Multi-Thread Automatic Pull-Execute Framework with GitHub Webhooks And Queuing Strategy</title>
+    <updated>2022-06-13T18:11:25Z</updated>
+    <link href="https://arxiv.org/abs/2206.06401v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2206.06401v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Recently, more and more server tasks are done using full automation, including grading tasks for students in the college courses, integrating tasks for programmers in big projects and server-based transactions, and visualization tasks for researchers in a data-dense topic. Using automation on servers provides a great possibility for reducing the burden on manual tasks. Although server tools like CI/CD for continuous integration and Hexo for automated blog deployment have been developed, they're highly dedicated to certain functionalities and thus lack general usage. In this paper, we introduce a Golang-based automation framework that reacts to the events happening on GitHub in a multi-thread approach. This framework utilizes a queue to arrange the tasks submitted and execute each task with a thread in a preemptive manner. We then use the project GoAutoGrader to illustrate a specific implementation of this framework and its value in implementing high-freedom server applications. As Golang is developing in a rapid way because of its incredible parallel programming efficiency and a super-easy way to learn on the basis of C-like programming languages, we decide to develop this system in Golang.</summary>
+    <category term="cs.NI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="eess.SY" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2022-06-13T18:11:25Z</published>
+    <arxiv:comment>Accepted by EPCE'22</arxiv:comment>
+    <arxiv:primary_category term="cs.NI"/>
+    <author>
+      <name>Hao Bai</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2204.00764v2</id>
+    <title>A Study of Real-World Data Races in Golang</title>
+    <updated>2022-04-05T19:17:54Z</updated>
+    <link href="https://arxiv.org/abs/2204.00764v2" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2204.00764v2" rel="related" type="application/pdf" title="pdf"/>
+    <summary>The concurrent programming literature is rich with tools and techniques for data race detection. Less, however, has been known about real-world, industry-scale deployment, experience, and insights about data races. Golang (Go for short) is a modern programming language that makes concurrency a first-class citizen. Go offers both message passing and shared memory for communicating among concurrent threads. Go is gaining popularity in modern microservice-based systems. Data races in Go stand in the face of its emerging popularity.
+  In this paper, using our industrial codebase as an example, we demonstrate that Go developers embrace concurrency and show how the abundance of concurrency alongside language idioms and nuances make Go programs highly susceptible to data races. Google's Go distribution ships with a built-in dynamic data race detector based on ThreadSanitizer. However, dynamic race detectors pose scalability and flakiness challenges; we discuss various software engineering trade-offs to make this detector work effectively at scale. We have deployed this detector in Uber's 46 million lines of Go codebase hosting 2100 distinct microservices, found over 2000 data races, and fixed over 1000 data races, spanning 790 distinct code patches submitted by 210 unique developers over a six-month period. Based on a detailed investigation of these data race patterns in Go, we make seven high-level observations relating to the complex interplay between the Go language paradigm and data races.</summary>
+    <category term="cs.DC" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2022-04-02T05:13:38Z</published>
+    <arxiv:comment>To appear in the proceedings of the 43rd Programming Language Design and Implementation (PLDI 2022)</arxiv:comment>
+    <arxiv:primary_category term="cs.DC"/>
+    <author>
+      <name>Milind Chabbi</name>
+    </author>
+    <author>
+      <name>Murali Krishna Ramanathan</name>
+    </author>
+    <arxiv:doi>10.1145/3519939.3523720</arxiv:doi>
+    <link rel="related" href="https://doi.org/10.1145/3519939.3523720" title="doi"/>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2309.02894v2</id>
+    <title>A Large-Scale Empirical Study on Semantic Versioning in Golang Ecosystem</title>
+    <updated>2023-09-18T02:07:59Z</updated>
+    <link href="https://arxiv.org/abs/2309.02894v2" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2309.02894v2" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Third-party libraries (TPLs) have become an essential component of software, accelerating development and reducing maintenance costs. However, breaking changes often occur during the upgrades of TPLs and prevent client programs from moving forward. Semantic versioning (SemVer) has been applied to standardize the versions of releases according to compatibility, but not all releases follow SemVer compliance. Lots of work focuses on SemVer compliance in ecosystems such as Java and JavaScript beyond Golang (Go for short). Due to the lack of tools to detect breaking changes and dataset for Go, developers of TPLs do not know if breaking changes occur and affect client programs, and developers of client programs may hesitate to upgrade dependencies in terms of breaking changes.
+  To bridge this gap, we conduct the first large-scale empirical study in the Go ecosystem to study SemVer compliance in terms of breaking changes and their impact. In detail, we purpose GoSVI (Go Semantic Versioning Insight) to detect breaking changes and analyze their impact by resolving identifiers in client programs and comparing their types with breaking changes. Moreover, we collect the first large-scale Go dataset with a dependency graph from GitHub, including 124K TPLs and 532K client programs. Based on the dataset, our results show that 86.3% of library upgrades follow SemVer compliance and 28.6% of no-major upgrades introduce breaking changes. Furthermore, the tendency to comply with SemVer has improved over time from 63.7% in 2018/09 to 92.2% in 2023/03. Finally, we find 33.3% of downstream client programs may be affected by breaking changes. These findings provide developers and users of TPLs with valuable insights to help make decisions related to SemVer.</summary>
+    <category term="cs.SE" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2023-09-06T10:33:00Z</published>
+    <arxiv:comment>11 pages, 4 figures. This paper has been accepted by ASE'23</arxiv:comment>
+    <arxiv:primary_category term="cs.SE"/>
+    <author>
+      <name>Wenke Li</name>
+    </author>
+    <author>
+      <name>Feng Wu</name>
+    </author>
+    <author>
+      <name>Cai Fu</name>
+    </author>
+    <author>
+      <name>Fan Zhou</name>
+    </author>
+  </entry>
+</feed>

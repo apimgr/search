@@ -65,20 +65,23 @@ jobs:
       - name: Determine tags
         id: tags
         run: |
-          TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.COMMIT_ID }}"
+          PROD_TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.COMMIT_ID }}"
+          DEV_TAGS=""
           if [[ "${{ env.IS_TAG }}" == "true" ]]; then
-            TAGS="$TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}"
-            TAGS="$TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-            TAGS="$TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.YYMM }}"
+            PROD_TAGS="$PROD_TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}"
+            PROD_TAGS="$PROD_TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+            PROD_TAGS="$PROD_TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.YYMM }}"
           else
-            TAGS="$TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:devel"
+            DEV_TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:devel"
             if [[ "${{ gitea.ref }}" == refs/heads/beta ]]; then
-              TAGS="$TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:beta"
+              DEV_TAGS="$DEV_TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:beta"
             fi
           fi
-          echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
+          echo "prod_tags=$PROD_TAGS" >> "$GITHUB_OUTPUT"
+          echo "dev_tags=$DEV_TAGS" >> "$GITHUB_OUTPUT"
 
-      - name: Build and push
+      - name: Build and push production image
+        if: steps.tags.outputs.prod_tags != ''
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
         with:
           context: .
@@ -86,33 +89,89 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           provenance: false
-          tags: ${{ steps.tags.outputs.tags }}
+          tags: ${{ steps.tags.outputs.prod_tags }}
           build-args: |
             VERSION=${{ env.VERSION }}
             BUILD_DATE=${{ env.BUILD_DATE }}
             COMMIT_ID=${{ env.COMMIT_ID }}
           labels: |
+            maintainer=casjay <casjay@yahoo.com>
             org.opencontainers.image.vendor=apimgr
             org.opencontainers.image.authors=apimgr
             org.opencontainers.image.title=${{ env.PROJECTNAME }}
             org.opencontainers.image.base.name=${{ env.PROJECTNAME }}
             org.opencontainers.image.description=Privacy-respecting self-hosted metasearch engine
             org.opencontainers.image.version=${{ env.VERSION }}
+            org.opencontainers.image.schema-version=${{ env.VERSION }}
             org.opencontainers.image.created=${{ env.BUILD_DATE }}
             org.opencontainers.image.revision=${{ env.COMMIT_ID }}
             org.opencontainers.image.url=${{ gitea.server_url }}/${{ gitea.repository }}
             org.opencontainers.image.source=${{ gitea.server_url }}/${{ gitea.repository }}
             org.opencontainers.image.documentation=${{ gitea.server_url }}/${{ gitea.repository }}
+            org.opencontainers.image.vcs-type=Git
             org.opencontainers.image.licenses=MIT
+            com.github.containers.toolbox=false
           annotations: |
+            manifest:maintainer=casjay <casjay@yahoo.com>
             manifest:org.opencontainers.image.vendor=apimgr
             manifest:org.opencontainers.image.authors=apimgr
             manifest:org.opencontainers.image.title=${{ env.PROJECTNAME }}
             manifest:org.opencontainers.image.description=Privacy-respecting self-hosted metasearch engine
             manifest:org.opencontainers.image.version=${{ env.VERSION }}
+            manifest:org.opencontainers.image.schema-version=${{ env.VERSION }}
             manifest:org.opencontainers.image.created=${{ env.BUILD_DATE }}
             manifest:org.opencontainers.image.revision=${{ env.COMMIT_ID }}
             manifest:org.opencontainers.image.url=${{ gitea.server_url }}/${{ gitea.repository }}
             manifest:org.opencontainers.image.source=${{ gitea.server_url }}/${{ gitea.repository }}
             manifest:org.opencontainers.image.documentation=${{ gitea.server_url }}/${{ gitea.repository }}
+            manifest:org.opencontainers.image.vcs-type=Git
             manifest:org.opencontainers.image.licenses=MIT
+            manifest:com.github.containers.toolbox=false
+
+      - name: Build and push devel image
+        if: steps.tags.outputs.dev_tags != ''
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
+        with:
+          context: .
+          file: docker/Dockerfile.dev
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: false
+          tags: ${{ steps.tags.outputs.dev_tags }}
+          build-args: |
+            VERSION=${{ env.VERSION }}
+            BUILD_DATE=${{ env.BUILD_DATE }}
+            COMMIT_ID=${{ env.COMMIT_ID }}
+          labels: |
+            maintainer=casjay <casjay@yahoo.com>
+            org.opencontainers.image.vendor=apimgr
+            org.opencontainers.image.authors=apimgr
+            org.opencontainers.image.title=${{ env.PROJECTNAME }}
+            org.opencontainers.image.base.name=${{ env.PROJECTNAME }}
+            org.opencontainers.image.description=Privacy-respecting self-hosted metasearch engine
+            org.opencontainers.image.version=${{ env.VERSION }}
+            org.opencontainers.image.schema-version=${{ env.VERSION }}
+            org.opencontainers.image.created=${{ env.BUILD_DATE }}
+            org.opencontainers.image.revision=${{ env.COMMIT_ID }}
+            org.opencontainers.image.url=${{ gitea.server_url }}/${{ gitea.repository }}
+            org.opencontainers.image.source=${{ gitea.server_url }}/${{ gitea.repository }}
+            org.opencontainers.image.documentation=${{ gitea.server_url }}/${{ gitea.repository }}
+            org.opencontainers.image.vcs-type=Git
+            org.opencontainers.image.licenses=MIT
+            com.github.containers.toolbox=false
+          annotations: |
+            manifest:maintainer=casjay <casjay@yahoo.com>
+            manifest:org.opencontainers.image.vendor=apimgr
+            manifest:org.opencontainers.image.authors=apimgr
+            manifest:org.opencontainers.image.title=${{ env.PROJECTNAME }}
+            manifest:org.opencontainers.image.description=Privacy-respecting self-hosted metasearch engine
+            manifest:org.opencontainers.image.version=${{ env.VERSION }}
+            manifest:org.opencontainers.image.schema-version=${{ env.VERSION }}
+            manifest:org.opencontainers.image.created=${{ env.BUILD_DATE }}
+            manifest:org.opencontainers.image.revision=${{ env.COMMIT_ID }}
+            manifest:org.opencontainers.image.url=${{ gitea.server_url }}/${{ gitea.repository }}
+            manifest:org.opencontainers.image.source=${{ gitea.server_url }}/${{ gitea.repository }}
+            manifest:org.opencontainers.image.documentation=${{ gitea.server_url }}/${{ gitea.repository }}
+            manifest:org.opencontainers.image.vcs-type=Git
+            manifest:org.opencontainers.image.licenses=MIT
+            manifest:com.github.containers.toolbox=false

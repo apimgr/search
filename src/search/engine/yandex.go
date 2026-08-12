@@ -15,26 +15,35 @@ import (
 
 // Pre-compiled regexes for Yandex HTML parsing.
 //
-// Strategy: locate title anchors by the stable class fragment "organic__title-link"
-// (present since ~2018), then search ahead in the HTML for the nearest snippet.
-// Fall back to any <h2> that wraps an external https:// link.
+// Strategy: locate title anchors by the stable class fragment "OrganicTitle-Link"
+// (Yandex's 2024+ "Organic" result markup, replacing the older
+// "organic__title-link" BEM naming), then search ahead in the HTML for the
+// nearest snippet. Fall back to any <a href="..."> that directly wraps an
+// <h2>, since that structural relationship has held across Yandex's class
+// renames even when the class names themselves drift.
 var (
 	// yandexAnchorRe captures the full opening <a> tag and inner content for
 	// title anchors. Group 1 = opening tag (used to extract href).
 	// Group 2 = inner HTML (stripped to get title text).
-	yandexAnchorRe = regexp.MustCompile(`(?s)(<a\b[^>]*\bclass="[^"]*organic__title-link[^"]*"[^>]*>)([\s\S]{0,300}?)</a>`)
+	yandexAnchorRe = regexp.MustCompile(`(?s)(<a\b[^>]*\bclass="[^"]*\bOrganicTitle-Link\b[^"]*"[^>]*>)([\s\S]{0,600}?)</a>`)
 
-	// yandexH2Re is a structural fallback: any <h2> containing a direct https:// link.
-	yandexH2Re = regexp.MustCompile(`(?s)<h2[^>]*>([\s\S]{0,300}?href="(https?://[^"]{5,400})"[\s\S]{0,300}?)</h2>`)
+	// yandexH2Re is a structural fallback: an <a href="..."> directly
+	// wrapping an <h2>, regardless of class names.
+	yandexH2Re = regexp.MustCompile(`(?s)<a\b[^>]*\bhref="(https?://[^"]{5,400})"[^>]*>[\s\S]{0,80}?<h2[^>]*>([\s\S]{0,300}?)</h2>[\s\S]{0,80}?</a>`)
 
 	// yandexHrefRe extracts href from an opening <a> tag.
 	yandexHrefRe = regexp.MustCompile(`\bhref="(https?://[^"]{5,500})"`)
 
-	// yandexSnipRe matches the snippet <div> using several stable class fragments.
-	yandexSnipRe = regexp.MustCompile(`(?s)<div[^>]+class="[^"]*(?:OrganicTextContentSpan|organic__text|TextContainer)[^"]*"[^>]*>([\s\S]{0,700}?)</div>`)
+	// yandexSnipRe matches the snippet <span> using several stable class
+	// fragments observed across Yandex markup revisions.
+	yandexSnipRe = regexp.MustCompile(`(?s)<span[^>]+class="[^"]*(?:OrganicTextContentSpan|organic__text|TextContainer)[^"]*"[^>]*>([\s\S]{0,1000}?)</span>`)
 
 	// yandexTagRe strips HTML tags for plain-text extraction.
 	yandexTagRe = regexp.MustCompile(`<[^>]+>`)
+
+	// yandexSpaceRe collapses runs of whitespace left behind after inline
+	// tags (e.g. <b>...</b> around matched query terms) are stripped.
+	yandexSpaceRe = regexp.MustCompile(`\s+`)
 )
 
 // Yandex implements Yandex search engine
@@ -131,7 +140,7 @@ func (e *Yandex) parseResults(html string, category model.Category) ([]model.Res
 
 	var hits []hit
 
-	// Primary: class="organic__title-link" anchors.
+	// Primary: class="OrganicTitle-Link" anchors.
 	for _, m := range yandexAnchorRe.FindAllStringSubmatchIndex(html, -1) {
 		openTag := html[m[2]:m[3]]
 		inner := html[m[4]:m[5]]
@@ -145,22 +154,22 @@ func (e *Yandex) parseResults(html string, category model.Category) ([]model.Res
 		if strings.Contains(rawURL, "yandex.") {
 			continue
 		}
-		title := strings.TrimSpace(unescapeHTML(yandexTagRe.ReplaceAllString(inner, " ")))
+		title := yandexCleanText(inner)
 		if title == "" {
 			continue
 		}
 		hits = append(hits, hit{rawURL: rawURL, title: title, matchEnd: m[1]})
 	}
 
-	// Fallback: structural <h2> + external https link.
+	// Fallback: structural <a href="..."><h2>...</h2></a>.
 	if len(hits) == 0 {
 		for _, m := range yandexH2Re.FindAllStringSubmatchIndex(html, -1) {
-			block := html[m[2]:m[3]]
-			rawURL := html[m[4]:m[5]]
+			rawURL := html[m[2]:m[3]]
+			block := html[m[4]:m[5]]
 			if strings.Contains(rawURL, "yandex.") {
 				continue
 			}
-			title := strings.TrimSpace(unescapeHTML(yandexTagRe.ReplaceAllString(block, " ")))
+			title := yandexCleanText(block)
 			if title == "" {
 				continue
 			}
@@ -177,14 +186,14 @@ func (e *Yandex) parseResults(html string, category model.Category) ([]model.Res
 		if i+1 < len(hits) {
 			snippetEnd = hits[i+1].matchEnd
 		}
-		if snippetEnd > h.matchEnd+3000 {
-			snippetEnd = h.matchEnd + 3000
+		if snippetEnd > h.matchEnd+6000 {
+			snippetEnd = h.matchEnd + 6000
 		}
 		block := html[h.matchEnd:snippetEnd]
 
 		content := ""
 		if sm := yandexSnipRe.FindStringSubmatch(block); sm != nil {
-			content = strings.TrimSpace(unescapeHTML(yandexTagRe.ReplaceAllString(sm[1], " ")))
+			content = yandexCleanText(sm[1])
 		}
 
 		results = append(results, model.Result{
@@ -203,6 +212,15 @@ func (e *Yandex) parseResults(html string, category model.Category) ([]model.Res
 	}
 
 	return results, nil
+}
+
+// yandexCleanText strips HTML tags from a fragment, decodes HTML entities,
+// and collapses the whitespace left behind by removed inline tags (e.g.
+// <b>...</b> around matched query terms) into single spaces.
+func yandexCleanText(s string) string {
+	stripped := yandexTagRe.ReplaceAllString(s, " ")
+	collapsed := yandexSpaceRe.ReplaceAllString(stripped, " ")
+	return strings.TrimSpace(unescapeHTML(collapsed))
 }
 
 // getYandexRegion maps language codes to Yandex region codes.

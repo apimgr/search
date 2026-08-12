@@ -14,6 +14,7 @@
   </span>
   {{ if .Dismissible }}
   <form method="post" action="/announcements/dismiss" class="site-banner-dismiss">
+    <input type="hidden" name="csrf_token" value="{{ $.CSRFToken }}">
     <input type="hidden" name="id" value="{{ .ID }}">
     <button type="submit" class="site-banner-close" aria-label="{{t "common.dismiss"}}">&times;</button>
   </form>

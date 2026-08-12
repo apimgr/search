@@ -1,11 +1,23 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/apimgr/search/src/widget"
 )
+
+// widgetFetchTimeout bounds how long a single widget data fetch may run.
+// The weather fetcher can make up to two sequential upstream HTTP calls
+// (geocode, then forecast), each with its own 10s client timeout, so an
+// unbounded worst case (~20s) can exceed the HTTP server's 15s
+// WriteTimeout (src/server/server.go) and cause the server to hard-reset
+// the connection mid-response instead of returning a clean error. Capping
+// the whole fetch at 10s here leaves headroom under WriteTimeout for the
+// response to actually be written.
+const widgetFetchTimeout = 10 * time.Second
 
 // handleWidgets returns list of available widgets
 // Widgets are always enabled - users control via localStorage
@@ -97,8 +109,12 @@ func (h *Handler) handleWidgetData(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Fetch widget data
-	data, err := h.widgetManager.FetchWidgetData(r.Context(), widgetType, params)
+	// Fetch widget data, bounded well under the server's WriteTimeout so a
+	// slow upstream (e.g. weather geocode+forecast) fails cleanly with a
+	// JSON error instead of the server hard-resetting the connection.
+	ctx, cancel := context.WithTimeout(r.Context(), widgetFetchTimeout)
+	defer cancel()
+	data, err := h.widgetManager.FetchWidgetData(ctx, widgetType, params)
 	if err != nil {
 		h.errorResponse(w, http.StatusInternalServerError, "Failed to fetch widget data", err.Error())
 		return

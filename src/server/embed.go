@@ -428,6 +428,15 @@ type PageData struct {
 	WidgetsEnabled     bool
 	EnabledWidgets     []string
 	CookieConsent      *CookieConsentData
+	// DataSold reflects server.privacy.data.sold — drives dynamic privacy
+	// messaging and gates the CCPA "Do Not Sell" opt-out toggle on the privacy
+	// page (independent of whether the cookie-consent banner is enabled).
+	DataSold bool
+	// CCPAOptedOut reflects the ccpa_opt_out request cookie — true when the visitor
+	// has opted out of the sale of personal information on this device, so the
+	// privacy page renders the opt-in (re-enable) form instead of the opt-out form.
+	// Only meaningful when DataSold is true.
+	CCPAOptedOut bool
 	// HasConsentCookie is true when the request carries a valid cookieConsent cookie
 	// — when true the server skips rendering the cookie banner in the template.
 	HasConsentCookie bool
@@ -638,6 +647,11 @@ type CookieConsentData struct {
 	PolicyURL string
 	// DataSold reflects server.privacy.data.sold — true if user data may be sold
 	DataSold bool
+
+	// CCPAOptedOut reflects the ccpa_opt_out request cookie — true when the visitor
+	// has exercised the CCPA "Do Not Sell" opt-out. Drives which toggle state the
+	// privacy page renders. Only meaningful when DataSold is true.
+	CCPAOptedOut bool
 }
 
 // NewPageData creates a new PageData with defaults
@@ -667,13 +681,26 @@ func NewPageData(cfg *config.Config, title, page string) *PageData {
 		}
 	}
 
-	// Populate cookie consent if enabled
+	// server.privacy.data.sold drives dynamic privacy messaging and gates the
+	// CCPA opt-out toggle; surfaced on PageData for the privacy page.
+	dataSold := cfg.Server.Privacy.Data.Sold
+	pd.DataSold = dataSold
+
+	// Populate cookie consent if enabled. The banner message honors the dynamic
+	// privacy messaging per AI.md PART 12: server.privacy.consent.message_if_sold
+	// replaces the default message when data may be sold. Falls back to the
+	// server.web.cookie_consent message when no privacy consent text is set.
 	cc := cfg.Server.Web.CookieConsent
 	if cc.Enabled {
+		message := cfg.Server.Privacy.ConsentMessage()
+		if message == "" {
+			message = cc.Message
+		}
 		pd.CookieConsent = &CookieConsentData{
 			Enabled:   true,
-			Message:   cc.Message,
+			Message:   message,
 			PolicyURL: cc.PolicyURL,
+			DataSold:  dataSold,
 		}
 	}
 

@@ -790,8 +790,9 @@ func (s *Server) newPageData(w http.ResponseWriter, r *http.Request, title, page
 	data.Theme = themeMode
 	data.PrefsQuery = prefsQuery
 	// CSRF token needed by the no-JS theme-switch form in the header partial, which
-	// renders on every page that uses newPageData.
-	data.CSRFToken = s.getCSRFToken(r)
+	// renders on every page that uses newPageData. Issues the csrf_token cookie
+	// (stateless double-submit per AI.md PART 16) once per page render.
+	data.CSRFToken = s.getCSRFToken(w, r)
 	data.RequestPath = r.URL.RequestURI()
 	// Per AI.md URL & FQDN Detection: embedded template URLs must use {proto}://{fqdn}/path,
 	// never a bare /path — set once here so every page template can build full URLs.
@@ -816,6 +817,11 @@ func (s *Server) newPageData(w http.ResponseWriter, r *http.Request, title, page
 	// Set HasConsentCookie: skip banner when a valid cookieConsent cookie exists
 	if c, err := r.Cookie("cookieConsent"); err == nil && c.Value != "" {
 		data.HasConsentCookie = true
+	}
+	// Reflect the CCPA "Do Not Sell" opt-out cookie so the privacy page can render
+	// the correct toggle state (opt-out vs opt-in) without JavaScript.
+	if c, err := r.Cookie("ccpa_opt_out"); err == nil && c.Value == "true" {
+		data.CCPAOptedOut = true
 	}
 	// Filter out already-dismissed announcements from the dismissed_announcements cookie
 	if dc, err := r.Cookie("dismissed_announcements"); err == nil && dc.Value != "" {
@@ -870,6 +876,15 @@ func (s *Server) removePIDFile() {
 	}
 }
 
+// csrfProtect wraps a browser-facing handler with stateless double-submit CSRF
+// validation per AI.md PART 16. Safe methods and bypassed requests (bearer auth,
+// websockets, exempt paths) pass through and get a token cookie issued;
+// mutating browser requests that fail validation receive the canonical 403
+// CSRF_FAILED body.
+func (s *Server) csrfProtect(h http.HandlerFunc) http.HandlerFunc {
+	return s.csrf.Protect(h).ServeHTTP
+}
+
 // setupRoutes sets up HTTP routes with middleware
 func (s *Server) setupRoutes() http.Handler {
 	r := chi.NewRouter()
@@ -897,9 +912,10 @@ func (s *Server) setupRoutes() http.Handler {
 
 	// Search
 	r.HandleFunc("/search", s.handleSearch)
-	r.HandleFunc("/alerts/new", s.handleAlertNew)
-	r.HandleFunc("/alerts", s.handleAlerts)
-	r.HandleFunc("/alerts/*", s.handleAlertAction)
+	// Alert routes mutate on POST; CSRF-protect them (GET renders pass through).
+	r.HandleFunc("/alerts/new", s.csrfProtect(s.handleAlertNew))
+	r.HandleFunc("/alerts", s.csrfProtect(s.handleAlerts))
+	r.HandleFunc("/alerts/*", s.csrfProtect(s.handleAlertAction))
 
 	// Direct answers (full-page results for type:term queries per IDEA.md)
 	r.HandleFunc("/direct/*", s.handleDirect)
@@ -921,7 +937,7 @@ func (s *Server) setupRoutes() http.Handler {
 		http.Redirect(w, r, "/server/about", http.StatusMovedPermanently)
 	})
 	r.HandleFunc("/server/privacy", s.handlePrivacy)
-	r.HandleFunc("/server/contact", s.handleContact)
+	r.HandleFunc("/server/contact", s.csrfProtect(s.handleContact))
 	r.HandleFunc("/server/help", s.handleHelp)
 	r.HandleFunc("/server/terms", s.handleTerms)
 
@@ -971,21 +987,21 @@ func (s *Server) setupRoutes() http.Handler {
 	}
 
 	// Preferences
-	r.HandleFunc("/preferences", s.handlePreferences)
-	r.HandleFunc("/server/preferences", s.handlePreferences)
-	r.Post("/preferences/widgets", s.handleWidgetPreferencesSave)
-	r.Post("/preferences/general", s.handleGeneralPreferencesSave)
+	r.HandleFunc("/preferences", s.csrfProtect(s.handlePreferences))
+	r.HandleFunc("/server/preferences", s.csrfProtect(s.handlePreferences))
+	r.Post("/preferences/widgets", s.csrfProtect(s.handleWidgetPreferencesSave))
+	r.Post("/preferences/general", s.csrfProtect(s.handleGeneralPreferencesSave))
 
 	// No-JS theme switch (header partial fallback per AI.md PART 16)
-	r.Post("/theme", s.handleThemeSet)
+	r.Post("/theme", s.csrfProtect(s.handleThemeSet))
 
 	// Cookie consent and CCPA per AI.md PART 16/PART 12
 	// POST /consent: sets cookieConsent JSON cookie (accept/decline/save), redirects back
-	r.Post("/consent", s.handleConsent)
+	r.Post("/consent", s.csrfProtect(s.handleConsent))
 	// POST /consent/ccpa: sets/clears ccpa_opt_out cookie, redirects back
-	r.Post("/consent/ccpa", s.handleConsentCCPA)
+	r.Post("/consent/ccpa", s.csrfProtect(s.handleConsentCCPA))
 	// POST /announcements/dismiss: appends id to dismissed_announcements cookie, redirects back
-	r.Post("/announcements/dismiss", s.handleAnnouncementDismiss)
+	r.Post("/announcements/dismiss", s.csrfProtect(s.handleAnnouncementDismiss))
 
 	// Static files (served from embedded filesystem)
 	r.Handle("/static/*", http.StripPrefix("/static/", StaticFileServer()))

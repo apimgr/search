@@ -3228,11 +3228,13 @@ func TestStackOverflowSearch(t *testing.T) {
 }
 
 // yandexFixtureHTML is realistic Yandex SERP markup matching the anchor and
-// snippet regexes in yandex.go (confirmed against TestYandexParseResultsPrimary).
+// snippet regexes in yandex.go (confirmed against TestYandexParseResultsPrimary
+// and against a live-captured yandex.com/search response, see
+// testdata/yandex_search.html).
 const yandexFixtureHTML = `<html><body>
 	<li class="serp-item">
-		<a class="organic__title-link" href="https://example.com/page">Example Title</a>
-		<div class="OrganicTextContentSpan">Example snippet text.</div>
+		<a class="OrganicTitle-Link" href="https://example.com/page">Example Title</a>
+		<span class="OrganicTextContentSpan">Example snippet text.</span>
 	</li>
 </body></html>`
 
