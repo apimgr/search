@@ -1018,6 +1018,53 @@ func TestSchedulerRunTaskContextCancellation(t *testing.T) {
 	// Test should complete without hanging
 }
 
+func TestSchedulerRunTaskPanicIsRecovered(t *testing.T) {
+	s := NewScheduler(nil, "node1")
+
+	handled := make(chan bool, 1)
+	task := &Task{
+		ID:       "panic.test",
+		Name:     "Panic Test",
+		Schedule: "@every 1h",
+		TaskType: TaskTypeLocal,
+		Run: func(ctx context.Context) error {
+			defer func() { handled <- true }()
+			panic("simulated task handler panic")
+		},
+	}
+
+	s.Register(task)
+	s.StartTaskScheduler()
+	defer s.StopTaskScheduler()
+
+	if err := s.RunNow("panic.test"); err != nil {
+		t.Fatalf("RunNow() error = %v", err)
+	}
+
+	select {
+	case <-handled:
+		// Panic reached the handler as expected.
+	case <-time.After(2 * time.Second):
+		t.Fatal("panicking task did not run within timeout")
+	}
+
+	// The panic must not have crashed the test process (it would have,
+	// with no output past this point, if runTask's recover() were removed).
+	// Give runTask's deferred recovery a moment to update task state.
+	time.Sleep(50 * time.Millisecond)
+
+	got, err := s.GetTask("panic.test")
+	if err != nil {
+		t.Fatalf("GetTask() error = %v", err)
+	}
+	if got.LastStatus != string(StatusFailed) {
+		t.Errorf("LastStatus = %q, want %q", got.LastStatus, StatusFailed)
+	}
+	if got.LastError == "" {
+		t.Error("LastError is empty, want panic message recorded")
+	}
+}
+
 func TestSchedulerRunStartupTasks(t *testing.T) {
 	s := NewScheduler(nil, "node1")
 

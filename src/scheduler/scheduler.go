@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -519,9 +520,20 @@ func (s *Scheduler) StartTaskScheduler() {
 	slog.Info("Scheduler started - always running per AI.md PART 19")
 }
 
-// run is the main scheduler loop
+// run is the main scheduler loop.
+// Launched via `go s.run()` at startup with no other goroutine watching it —
+// an unrecovered panic here would silently kill the loop (and, since Go
+// terminates the whole process on any unrecovered panic, the entire server)
+// with no automatic restart. Recover and log instead of crashing.
 func (s *Scheduler) run() {
 	defer s.wg.Done()
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("Scheduler loop panicked - recovered to prevent server crash",
+				"panic", r,
+				"stack", string(debug.Stack()))
+		}
+	}()
 
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
@@ -554,7 +566,45 @@ func (s *Scheduler) checkAndRunTasks(now time.Time) {
 
 // runTask runs a single task with DB-level deduplication for global tasks.
 // Per AI.md PART 18: Implements exponential backoff retry policy.
+//
+// Always launched via `go s.runTask(task)`, so a panic here is on its own
+// goroutine — left unrecovered, Go terminates the entire process regardless
+// of which goroutine panicked, taking the whole server down. Recovering here
+// keeps a single misbehaving task handler from causing a full outage.
 func (s *Scheduler) runTask(task *Task) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("Task panicked - recovered to prevent server crash",
+				"task", task.ID,
+				"panic", r,
+				"stack", string(debug.Stack()))
+
+			s.mu.Lock()
+			task.LastStatus = StatusFailed
+			task.LastError = fmt.Sprintf("panic: %v", r)
+			task.FailCount++
+			task.NextRun = s.calculateNextRunLocked(task.Schedule)
+			notifyFn := s.notifyFunc
+			failCount := task.FailCount
+			s.mu.Unlock()
+
+			if s.db != nil {
+				s.saveTaskState(task)
+			}
+
+			if notifyFn != nil {
+				notifyFn(&TaskFailureNotification{
+					TaskID:    string(task.ID),
+					TaskName:  task.Name,
+					Error:     fmt.Sprintf("panic: %v", r),
+					Attempts:  1,
+					LastRun:   task.LastRun,
+					FailCount: failCount,
+				})
+			}
+		}
+	}()
+
 	// For global tasks, acquire a DB lock to prevent duplicate concurrent runs.
 	if task.TaskType == TaskTypeGlobal && s.db != nil {
 		if !s.acquireTaskLock(task) {
