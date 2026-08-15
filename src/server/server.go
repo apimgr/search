@@ -585,12 +585,16 @@ func (s *Server) startDualPortMode(mux http.Handler, httpPort int, readyCh chan<
 	}
 
 	// Create HTTP server
+	// Timeouts come from server.yml server.limits (AI.md "Request Limits"),
+	// defaulting to 30s/30s/120s. WriteTimeout must stay >= the search
+	// aggregator timeout or net/http resets the connection mid-request
+	// instead of the aggregator returning a proper error response.
 	s.httpServer = &http.Server{
 		Addr:         httpAddr,
 		Handler:      mux,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		ReadTimeout:  s.config.Server.Limits.GetReadTimeout(),
+		WriteTimeout: s.config.Server.Limits.GetWriteTimeout(),
+		IdleTimeout:  s.config.Server.Limits.GetIdleTimeout(),
 	}
 
 	// Create HTTPS server
@@ -601,9 +605,9 @@ func (s *Server) startDualPortMode(mux http.Handler, httpPort int, readyCh chan<
 	s.httpsServer = &http.Server{
 		Addr:         httpsAddr,
 		Handler:      httpsHandler,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		ReadTimeout:  s.config.Server.Limits.GetReadTimeout(),
+		WriteTimeout: s.config.Server.Limits.GetWriteTimeout(),
+		IdleTimeout:  s.config.Server.Limits.GetIdleTimeout(),
 	}
 	if s.tlsManager != nil {
 		s.httpsServer.TLSConfig = s.tlsManager.GetTLSConfig()
@@ -651,9 +655,9 @@ func (s *Server) startSinglePortMode(mux http.Handler, port int, readyCh chan<- 
 	s.httpServer = &http.Server{
 		Addr:         addr,
 		Handler:      mux,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		ReadTimeout:  s.config.Server.Limits.GetReadTimeout(),
+		WriteTimeout: s.config.Server.Limits.GetWriteTimeout(),
+		IdleTimeout:  s.config.Server.Limits.GetIdleTimeout(),
 	}
 
 	if s.tlsManager != nil && s.tlsManager.IsEnabled() {

@@ -1289,6 +1289,35 @@ func (l *LimitsConfig) GetMaxBodySizeBytes() int64 {
 	return n * multiplier
 }
 
+// GetReadTimeout parses ReadTimeout and returns a duration, falling back to
+// the spec default (30s per AI.md "Request Limits") on an empty or invalid value.
+func (l *LimitsConfig) GetReadTimeout() time.Duration {
+	if d, err := time.ParseDuration(l.ReadTimeout); err == nil {
+		return d
+	}
+	return 30 * time.Second
+}
+
+// GetWriteTimeout parses WriteTimeout and returns a duration, falling back to
+// the spec default (30s per AI.md "Request Limits") on an empty or invalid value.
+// Must stay >= the search aggregator timeout or in-flight searches get their
+// TCP connection reset by net/http instead of returning a proper response.
+func (l *LimitsConfig) GetWriteTimeout() time.Duration {
+	if d, err := time.ParseDuration(l.WriteTimeout); err == nil {
+		return d
+	}
+	return 30 * time.Second
+}
+
+// GetIdleTimeout parses IdleTimeout and returns a duration, falling back to
+// the spec default (120s per AI.md "Request Limits") on an empty or invalid value.
+func (l *LimitsConfig) GetIdleTimeout() time.Duration {
+	if d, err := time.ParseDuration(l.IdleTimeout); err == nil {
+		return d
+	}
+	return 120 * time.Second
+}
+
 // I18nConfig represents internationalization configuration
 type I18nConfig struct {
 	Enabled bool `yaml:"enabled"`

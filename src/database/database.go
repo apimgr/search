@@ -123,9 +123,11 @@ func (dm *DatabaseManager) connectDatabase(cfg *Config, dbName string) (*DB, err
 	var err error
 	switch normalizedDriver {
 	case "sqlite":
-		// Build DSN for SQLite (modernc.org/sqlite)
+		// Build DSN for SQLite (modernc.org/sqlite). PRAGMAs are embedded in the
+		// DSN (not just run once after Ping) so every connection the pool opens
+		// gets them — required now that MaxOpenConns is no longer hardcoded to 1.
 		db.dsn = filepath.Join(cfg.DataDir, dbName)
-		db.db, err = sql.Open("sqlite", db.dsn)
+		db.db, err = sql.Open("sqlite", sqliteDSNWithPragmas(db.dsn))
 		if err != nil {
 			return nil, fmt.Errorf("failed to open sqlite database: %w", err)
 		}
@@ -148,16 +150,14 @@ func (dm *DatabaseManager) connectDatabase(cfg *Config, dbName string) (*DB, err
 	}
 
 	// Configure connection pool.
-	// SQLite uses a single connection: it does not support concurrent writers and
-	// PRAGMA settings (foreign_keys, journal_mode, busy_timeout) are per-connection.
-	// Using MaxOpenConns(1) ensures PRAGMAs set below apply to all queries.
-	if normalizedDriver == "sqlite" {
-		db.db.SetMaxOpenConns(1)
-		db.db.SetMaxIdleConns(1)
-	} else {
-		db.db.SetMaxOpenConns(cfg.MaxOpen)
-		db.db.SetMaxIdleConns(cfg.MaxIdle)
-	}
+	// Per AI.md "Connection Pooling": SQLite allows 1 writer + concurrent WAL
+	// readers, so cfg.MaxOpen/MaxIdle apply to sqlite the same as other
+	// drivers — write conflicts are serialized by SQLite itself (busy_timeout
+	// PRAGMA, embedded in the DSN above) rather than by capping the Go pool
+	// at a single connection, which previously forced every read to queue
+	// behind unrelated in-flight queries.
+	db.db.SetMaxOpenConns(cfg.MaxOpen)
+	db.db.SetMaxIdleConns(cfg.MaxIdle)
 	db.db.SetConnMaxLifetime(time.Duration(cfg.Lifetime) * time.Second)
 
 	// Test connection
@@ -168,23 +168,23 @@ func (dm *DatabaseManager) connectDatabase(cfg *Config, dbName string) (*DB, err
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	// Enable foreign keys and WAL mode for SQLite
-	// busy_timeout allows concurrent access without immediate "database locked" errors
-	// Per AI.md PART 10: all DB calls must use context — reuse the ping context (5s)
-	if normalizedDriver == "sqlite" {
-		if _, err := db.db.ExecContext(ctx, "PRAGMA foreign_keys = ON"); err != nil {
-			return nil, fmt.Errorf("failed to enable foreign keys: %w", err)
-		}
-		if _, err := db.db.ExecContext(ctx, "PRAGMA journal_mode = WAL"); err != nil {
-			return nil, fmt.Errorf("failed to enable WAL mode: %w", err)
-		}
-		if _, err := db.db.ExecContext(ctx, "PRAGMA busy_timeout = 5000"); err != nil {
-			return nil, fmt.Errorf("failed to set busy timeout: %w", err)
-		}
-	}
-
 	db.ready = true
 	return db, nil
+}
+
+// sqliteDSNWithPragmas appends modernc.org/sqlite's shorthand _pragma query
+// parameters to a plain file path DSN so every pooled connection (not just
+// the one used for the startup Ping) gets foreign_keys/WAL/busy_timeout.
+// An empty path is left untouched: modernc.org/sqlite only strips the query
+// string from the DSN when '?' is not the first character, so appending the
+// pragma suffix to an empty path would make the literal string
+// "?_pragma=..." get opened as a filename instead of being parsed as query
+// parameters.
+func sqliteDSNWithPragmas(path string) string {
+	if path == "" {
+		return path
+	}
+	return path + "?_pragma=foreign_keys(ON)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
 }
 
 // ServerDB returns the server database connection
@@ -274,8 +274,9 @@ func (db *DB) connect(cfg *Config) error {
 
 	switch normalizedDriver {
 	case "sqlite":
-		// Use modernc.org/sqlite (pure Go SQLite)
-		db.db, err = sql.Open("sqlite", cfg.DSN)
+		// Use modernc.org/sqlite (pure Go SQLite). PRAGMAs embedded in the DSN
+		// so every pooled connection gets them (see sqliteDSNWithPragmas).
+		db.db, err = sql.Open("sqlite", sqliteDSNWithPragmas(cfg.DSN))
 	case "libsql":
 		// libSQL/Turso remote database
 		db.db, err = sql.Open("libsql", cfg.DSN)
@@ -297,16 +298,14 @@ func (db *DB) connect(cfg *Config) error {
 	}
 
 	// Configure connection pool.
-	// SQLite uses a single connection: it does not support concurrent writers and
-	// PRAGMA settings (foreign_keys, journal_mode, busy_timeout) are per-connection.
-	// Using MaxOpenConns(1) ensures PRAGMAs set below apply to all queries.
-	if normalizedDriver == "sqlite" {
-		db.db.SetMaxOpenConns(1)
-		db.db.SetMaxIdleConns(1)
-	} else {
-		db.db.SetMaxOpenConns(cfg.MaxOpen)
-		db.db.SetMaxIdleConns(cfg.MaxIdle)
-	}
+	// Per AI.md "Connection Pooling": SQLite allows 1 writer + concurrent WAL
+	// readers, so cfg.MaxOpen/MaxIdle apply to sqlite the same as other
+	// drivers — write conflicts are serialized by SQLite itself (busy_timeout
+	// PRAGMA, embedded in the DSN above) rather than by capping the Go pool
+	// at a single connection, which previously forced every read to queue
+	// behind unrelated in-flight queries.
+	db.db.SetMaxOpenConns(cfg.MaxOpen)
+	db.db.SetMaxIdleConns(cfg.MaxIdle)
 	db.db.SetConnMaxLifetime(time.Duration(cfg.Lifetime) * time.Second)
 
 	// Test connection
@@ -315,20 +314,6 @@ func (db *DB) connect(cfg *Config) error {
 
 	if err := db.db.PingContext(ctx); err != nil {
 		return fmt.Errorf("failed to ping database: %w", err)
-	}
-
-	// Enable foreign keys, WAL mode, and busy timeout for SQLite
-	// Per AI.md PART 10: all DB calls must use context — reuse the ping context (5s)
-	if normalizedDriver == "sqlite" {
-		if _, err := db.db.ExecContext(ctx, "PRAGMA foreign_keys = ON"); err != nil {
-			return fmt.Errorf("failed to enable foreign keys: %w", err)
-		}
-		if _, err := db.db.ExecContext(ctx, "PRAGMA journal_mode = WAL"); err != nil {
-			return fmt.Errorf("failed to enable WAL mode: %w", err)
-		}
-		if _, err := db.db.ExecContext(ctx, "PRAGMA busy_timeout = 5000"); err != nil {
-			return fmt.Errorf("failed to set busy timeout: %w", err)
-		}
 	}
 
 	db.ready = true
