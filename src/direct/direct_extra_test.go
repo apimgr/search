@@ -1059,7 +1059,7 @@ func TestFormatCountryContent(t *testing.T) {
 		"region":  "Europe",
 		"area":    357114,
 	}
-	content := formatCountryContent("DE", "", "Germany", "Federal Republic of Germany", data)
+	content := formatCountryContent("DE", "", "Germany", "Federal Republic of Germany", data, "metric")
 	if !strings.Contains(content, "Germany") {
 		t.Errorf("expected country name; got: %s", content)
 	}
@@ -2480,7 +2480,7 @@ func TestFormatCountryContentAllFields(t *testing.T) {
 		"drivingSide": "right",
 		"timezones":   []string{"UTC+01:00"},
 	}
-	result := formatCountryContent("DE", "https://flag.example.com/de.svg", "Germany", "Federal Republic of Germany", data)
+	result := formatCountryContent("DE", "https://flag.example.com/de.svg", "Germany", "Federal Republic of Germany", data, "metric")
 	if !strings.Contains(result, "Germany") {
 		t.Errorf("formatCountryContent should contain country name")
 	}
@@ -2492,6 +2492,53 @@ func TestFormatCountryContentAllFields(t *testing.T) {
 	}
 	if !strings.Contains(result, ".de") {
 		t.Errorf("formatCountryContent should contain TLD")
+	}
+}
+
+// TestFormatCountryContentImperialUnits verifies the Area field is rendered
+// in square miles (not hardcoded km²) when the resolved unit system is
+// imperial, per the visitor's units preference.
+func TestFormatCountryContentImperialUnits(t *testing.T) {
+	data := map[string]interface{}{
+		"cca2":    "DE",
+		"cca3":    "DEU",
+		"capital": []string{"Berlin"},
+		"region":  "Europe",
+		"area":    float64(357114),
+	}
+
+	metric := formatCountryContent("DE", "", "Germany", "Federal Republic of Germany", data, "metric")
+	if !strings.Contains(metric, "km²") {
+		t.Errorf("expected km² in metric output; got: %s", metric)
+	}
+	if strings.Contains(metric, "sq mi") {
+		t.Errorf("did not expect sq mi in metric output; got: %s", metric)
+	}
+
+	imperial := formatCountryContent("DE", "", "Germany", "Federal Republic of Germany", data, "imperial")
+	if !strings.Contains(imperial, "sq mi") {
+		t.Errorf("expected sq mi in imperial output; got: %s", imperial)
+	}
+	if strings.Contains(imperial, "km²") {
+		t.Errorf("did not expect km² in imperial output; got: %s", imperial)
+	}
+}
+
+// TestUnitsFromContext verifies the units context helper round-trips
+// values set by WithUnits and falls back to "imperial" when unset/invalid.
+func TestUnitsFromContext(t *testing.T) {
+	if got := UnitsFromContext(context.Background()); got != "imperial" {
+		t.Errorf("expected default imperial, got %q", got)
+	}
+
+	ctx := WithUnits(context.Background(), "metric")
+	if got := UnitsFromContext(ctx); got != "metric" {
+		t.Errorf("expected metric, got %q", got)
+	}
+
+	ctx = WithUnits(context.Background(), "bogus")
+	if got := UnitsFromContext(ctx); got != "imperial" {
+		t.Errorf("expected fallback imperial for invalid value, got %q", got)
 	}
 }
 

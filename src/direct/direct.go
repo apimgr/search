@@ -207,6 +207,28 @@ func LangFromContext(ctx context.Context) string {
 	return "en"
 }
 
+// unitsKeyType is an unexported type for the unit system context key.
+type unitsKeyType struct{}
+
+// unitsKey is the context key used to pass the resolved unit system to direct handlers.
+var unitsKey = unitsKeyType{}
+
+// WithUnits returns a new context carrying the resolved unit system
+// ("metric" or "imperial") so direct handlers can render unit-bearing
+// fields (area, distance, temperature, etc.) using the visitor's preference.
+func WithUnits(ctx context.Context, units string) context.Context {
+	return context.WithValue(ctx, unitsKey, units)
+}
+
+// UnitsFromContext retrieves the unit system stored by WithUnits.
+// Returns "imperial" (the project default) when not set or invalid.
+func UnitsFromContext(ctx context.Context) string {
+	if units, ok := ctx.Value(unitsKey).(string); ok && (units == "metric" || units == "imperial") {
+		return units
+	}
+	return "imperial"
+}
+
 // Handler interface for direct answer handlers
 type Handler interface {
 	// Type returns the answer type this handler provides

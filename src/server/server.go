@@ -1343,6 +1343,11 @@ func (s *Server) handleDirect(w http.ResponseWriter, r *http.Request) {
 	// translated Title/Content text.
 	ctx = direct.WithLang(ctx, s.getI18nManager().DetectLanguage(r))
 
+	// Inject the resolved unit system ("metric" or "imperial") so direct
+	// handlers can render unit-bearing fields (area, distance, etc.) using
+	// the visitor's preference instead of a hardcoded unit.
+	ctx = direct.WithUnits(ctx, s.resolveUnits(r))
+
 	// Process the direct answer
 	answer, err := s.directManager.ProcessType(ctx, answerType, term)
 	if err != nil {

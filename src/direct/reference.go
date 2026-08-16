@@ -742,14 +742,14 @@ func (h *CountryHandler) HandleDirectQuery(ctx context.Context, term string) (*A
 		Term:        term,
 		Title:       fmt.Sprintf("%s %s", country.Flag, country.Name.Common),
 		Description: country.Name.Official,
-		Content:     formatCountryContent(country.Flag, country.Flag, country.Name.Common, country.Name.Official, data),
+		Content:     formatCountryContent(country.Flag, country.Flag, country.Name.Common, country.Name.Official, data, UnitsFromContext(ctx)),
 		Source:      "mledoze/countries",
 		SourceURL:   "https://github.com/mledoze/countries",
 		Data:        data,
 	}, nil
 }
 
-func formatCountryContent(flagEmoji, flagURL, name, official string, data map[string]interface{}) string {
+func formatCountryContent(flagEmoji, flagURL, name, official string, data map[string]interface{}, units string) string {
 	var html strings.Builder
 	html.WriteString("<div class=\"country-content\">")
 
@@ -782,7 +782,12 @@ func formatCountryContent(flagEmoji, flagURL, name, official string, data map[st
 		html.WriteString(fmt.Sprintf("<tr><td>Population</td><td>%s</td></tr>", formatNumber(population)))
 	}
 	if area, ok := data["area"].(float64); ok {
-		html.WriteString(fmt.Sprintf("<tr><td>Area</td><td>%s km²</td></tr>", formatNumber(int(area))))
+		if units == "imperial" {
+			areaSqMi := area * 0.386102
+			html.WriteString(fmt.Sprintf("<tr><td>Area</td><td>%s sq mi</td></tr>", formatNumber(int(areaSqMi))))
+		} else {
+			html.WriteString(fmt.Sprintf("<tr><td>Area</td><td>%s km²</td></tr>", formatNumber(int(area))))
+		}
 	}
 	if currencies, ok := data["currencies"].([]string); ok && len(currencies) > 0 {
 		html.WriteString(fmt.Sprintf("<tr><td>Currency</td><td>%s</td></tr>", escapeHTML(strings.Join(currencies, ", "))))
