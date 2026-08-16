@@ -3191,9 +3191,10 @@
         links.forEach(function(link) {
             var hostname = '';
             try { hostname = new URL(link.url).hostname; } catch(e) {}
-            html += '<a href="' + escapeHtml(link.url) + '" class="quicklink-item" title="' + escapeHtml(link.name) + '">' +
+            var displayName = link.name || hostname || link.url;
+            html += '<a href="' + escapeHtml(link.url) + '" class="quicklink-item" title="' + escapeHtml(displayName) + '">' +
                 '<img src="https://www.google.com/s2/favicons?domain=' + encodeURIComponent(hostname) + '&sz=32" alt="" class="quicklink-favicon" data-quicklink-favicon>' +
-                '<span class="quicklink-name">' + escapeHtml(link.name) + '</span>' +
+                '<span class="quicklink-name">' + escapeHtml(displayName) + '</span>' +
             '</a>';
         });
         html += '<button class="quicklink-add" data-widget-action="add-quicklink" title="' + quicklinksAdd + '">+</button></div>';
@@ -4460,9 +4461,6 @@
 
         // Quick Links
         addQuickLink: async function() {
-            var name = await window.showPrompt(t('widgets_ui.quicklinks_prompt_name', 'Link name:'));
-            if (!name) return;
-
             var url = await window.showPrompt(t('widgets_ui.quicklinks_prompt_url', 'URL (include https://):'));
             if (!url) return;
 
@@ -4473,9 +4471,11 @@
                 return;
             }
 
+            var name = await window.showPrompt(t('widgets_ui.quicklinks_prompt_name', 'Link name (optional):'));
+
             var settings = getWidgetSettings('quicklinks');
             settings.links = settings.links || [];
-            settings.links.push({ name: name, url: url });
+            settings.links.push({ name: (name || '').trim(), url: url });
             saveWidgetSettings('quicklinks', settings);
             this.initWidget('quicklinks');
         },
