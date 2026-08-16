@@ -120,6 +120,41 @@ func TestMiddlewareSecurityHeaders(t *testing.T) {
 	}
 }
 
+// TestMiddlewareSecurityHeadersOnion verifies that the Tor hidden service
+// never receives headers that would force a browser to upgrade the .onion
+// site to HTTPS. Per AI.md PART 31 the hidden service only ever maps
+// .onion:{virtual_port} to the plain HTTP server port, so upgrade-insecure-requests
+// (CSP) and HSTS would break every form submission and link on the .onion site.
+func TestMiddlewareSecurityHeadersOnion(t *testing.T) {
+	cfg := &config.Config{}
+	cfg.Server.Security.Headers.ContentSecurityPolicy = "default-src 'self'; upgrade-insecure-requests; report-uri /csp"
+	cfg.Server.SSL.Enabled = true
+	cfg.Server.Security.HSTS.Enabled = true
+	cfg.Server.Security.HSTS.MaxAgeSeconds = 63072000
+	cfg.Server.Tor.OnionAddress = "5covb6tx42jiro3mdyseh5hclaynislnxlt2h7oqxptgidovzvl3cyqd.onion"
+
+	mw := NewMiddleware(cfg, nil)
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("OK"))
+	})
+
+	wrapped := mw.SecurityHeaders(handler)
+
+	req := httptest.NewRequest(http.MethodGet, "/search?q=test", nil)
+	req.Host = "5covb6tx42jiro3mdyseh5hclaynislnxlt2h7oqxptgidovzvl3cyqd.onion"
+	rec := httptest.NewRecorder()
+
+	wrapped.ServeHTTP(rec, req)
+
+	if csp := rec.Header().Get("Content-Security-Policy"); strings.Contains(csp, "upgrade-insecure-requests") {
+		t.Errorf("Content-Security-Policy must not contain upgrade-insecure-requests for onion requests, got %q", csp)
+	}
+	if hsts := rec.Header().Get("Strict-Transport-Security"); hsts != "" {
+		t.Errorf("Strict-Transport-Security must not be set for onion requests, got %q", hsts)
+	}
+}
+
 func TestMiddlewareCORS(t *testing.T) {
 	t.Run("wildcard_policy", func(t *testing.T) {
 		cfg := &config.Config{}

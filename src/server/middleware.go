@@ -61,10 +61,30 @@ func Chain(h http.Handler, middlewares ...func(http.Handler) http.Handler) http.
 	return h
 }
 
+// isOnionRequest reports whether the incoming request targets the Tor hidden
+// service. Per AI.md PART 31: the hidden service only maps .onion:{virtual_port}
+// to the plain HTTP server port — there is no HTTPS listener for .onion — so
+// headers that force an HTTPS upgrade must never be sent on these responses.
+func isOnionRequest(cfg *config.Config, r *http.Request) bool {
+	host := r.Host
+	if idx := strings.LastIndex(host, ":"); idx != -1 && !strings.Contains(host[idx:], "]") {
+		host = host[:idx]
+	}
+	host = strings.ToLower(host)
+	if host == "" {
+		return false
+	}
+	if onion := strings.ToLower(cfg.Server.Tor.OnionAddress); onion != "" && host == onion {
+		return true
+	}
+	return strings.HasSuffix(host, ".onion")
+}
+
 // SecurityHeaders adds security headers to all responses per AI.md PART 11.
 func (m *Middleware) SecurityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		headers := m.config.Server.Security.Headers
+		isOnion := isOnionRequest(m.config, r)
 
 		// X-Frame-Options prevents clickjacking
 		if headers.XFrameOptions != "" {
@@ -94,7 +114,14 @@ func (m *Middleware) SecurityHeaders(next http.Handler) http.Handler {
 			if m.config.Server.Mode == "development" {
 				cspHeader = "Content-Security-Policy-Report-Only"
 			}
-			w.Header().Set(cspHeader, headers.ContentSecurityPolicy)
+			csp := headers.ContentSecurityPolicy
+			if isOnion {
+				// Tor hidden service has no HTTPS listener — upgrading requests
+				// would break every form submission and link on the .onion site.
+				csp = strings.ReplaceAll(csp, "upgrade-insecure-requests;", "")
+				csp = strings.ReplaceAll(csp, "upgrade-insecure-requests", "")
+			}
+			w.Header().Set(cspHeader, csp)
 		}
 
 		// Permissions-Policy controls browser features
@@ -129,7 +156,7 @@ func (m *Middleware) SecurityHeaders(next http.Handler) http.Handler {
 
 		// HSTS — only when SSL is enabled per AI.md PART 11 (max-age 2 years + preload)
 		hsts := m.config.Server.Security.HSTS
-		if m.config.Server.SSL.Enabled && hsts.Enabled {
+		if m.config.Server.SSL.Enabled && hsts.Enabled && !isOnion {
 			maxAge := hsts.MaxAgeSeconds
 			if maxAge <= 0 {
 				maxAge = 63072000
