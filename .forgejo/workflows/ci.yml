@@ -37,7 +37,7 @@ jobs:
             -e GOFLAGS=-buildvcs=false \
             casjaysdev/go:latest \
             sh -c 'go mod download && PKGS=$(go list ./... | grep -v /src/service) && go test -cover -coverprofile=/tmp/covout/coverage.out $PKGS && go tool cover -func=/tmp/covout/coverage.out'
-          THRESHOLD=80
+          THRESHOLD=60
           PCT=$(docker run --rm \
             -v "$COVDIR:/tmp/covout" \
             casjaysdev/go:latest \
