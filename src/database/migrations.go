@@ -7,7 +7,11 @@ import (
 )
 
 // InitSchema creates all database tables idempotently on startup.
-// All statements use CREATE TABLE IF NOT EXISTS and ALTER TABLE ADD COLUMN IF NOT EXISTS.
+// All statements use CREATE TABLE IF NOT EXISTS / CREATE INDEX IF NOT EXISTS so
+// the schema is self-creating and safe to run on every startup. Per AI.md
+// PART 10, schema changes are additive and idempotent only: any future column
+// additions use ALTER TABLE ADD COLUMN with the "duplicate column" error
+// ignored — never DROP TABLE, DROP COLUMN, or DELETE.
 // Safe to call on every startup — never drops data.
 func InitSchema(ctx context.Context, dm *DatabaseManager) error {
 	if err := initServerSchema(ctx, dm.ServerDB()); err != nil {

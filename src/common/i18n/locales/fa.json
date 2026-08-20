@@ -1877,5 +1877,11 @@
     "report_status_state_patching": "در حال رفع",
     "report_status_state_disclosed": "افشا شد",
     "report_status_state_wont_fix": "رفع نخواهد شد"
+  },
+  "pwa": {
+    "update_available": "نسخه جدیدی در دسترس است",
+    "update_now": "اکنون به‌روزرسانی کنید",
+    "update_later": "بعداً",
+    "offline": "شما آفلاین هستید. برخی از امکانات ممکن است در دسترس نباشند."
   }
 }

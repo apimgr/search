@@ -1877,5 +1877,11 @@
     "report_status_state_patching": "قيد الإصلاح",
     "report_status_state_disclosed": "تم الإفصاح",
     "report_status_state_wont_fix": "لن يتم إصلاحه"
+  },
+  "pwa": {
+    "update_available": "يتوفر إصدار جديد",
+    "update_now": "التحديث الآن",
+    "update_later": "لاحقًا",
+    "offline": "أنت غير متصل بالإنترنت. قد تكون بعض الميزات غير متاحة."
   }
 }

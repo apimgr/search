@@ -2,7 +2,7 @@
   "name": "Search",
   "short_name": "Search",
   "description": "Privacy-respecting metasearch engine",
-  "start_url": "/",
+  "start_url": "/?source=pwa",
   "display": "standalone",
   "background_color": "#282a36",
   "theme_color": "#bd93f9",

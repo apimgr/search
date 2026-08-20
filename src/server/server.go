@@ -1007,6 +1007,13 @@ func (s *Server) setupRoutes() http.Handler {
 	// POST /announcements/dismiss: appends id to dismissed_announcements cookie, redirects back
 	r.Post("/announcements/dismiss", s.csrfProtect(s.handleAnnouncementDismiss))
 
+	// PWA root routes per AI.md PART 16: the service worker must be served from
+	// the root so its scope covers the whole origin; the manifest and offline
+	// page live at the root alongside it.
+	r.HandleFunc("/sw.js", s.handleServiceWorker)
+	r.HandleFunc("/manifest.json", s.handleManifest)
+	r.HandleFunc("/offline.html", s.handleOfflinePage)
+
 	// Static files (served from embedded filesystem)
 	r.Handle("/static/*", http.StripPrefix("/static/", StaticFileServer()))
 	r.HandleFunc("/locales/*", s.handleLocale)

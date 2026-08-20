@@ -1160,9 +1160,9 @@ func TestServerLoggerTextFormatWithFields(t *testing.T) {
 	defer logger.Close()
 
 	fields := map[string]interface{}{
-		"key1": "value1",
-		"key2": 42,
-		"key3": true,
+		"field1": "value1",
+		"field2": 42,
+		"field3": true,
 	}
 	logger.Info("message with fields", fields)
 
@@ -1171,8 +1171,45 @@ func TestServerLoggerTextFormatWithFields(t *testing.T) {
 		t.Fatalf("Failed to read log file: %v", err)
 	}
 	logContent := string(content)
-	if !strings.Contains(logContent, "key1=value1") {
-		t.Error("Log should contain field key1")
+	if !strings.Contains(logContent, "field1=value1") {
+		t.Error("Log should contain field field1")
+	}
+}
+
+// TestServerLoggerRedactsSensitiveFields verifies PART 11 log-layer redaction:
+// any field whose name contains secret, key, password, or token is redacted.
+func TestServerLoggerRedactsSensitiveFields(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "server-redact.log")
+	logger := NewServerLogger(path)
+	logger.SetStdout(false)
+	logger.SetFormat("text")
+	defer logger.Close()
+
+	fields := map[string]interface{}{
+		"api_key":  "supersecretvalue",
+		"password": "hunter2",
+		"token":    "tok_12345",
+		"secret":   "shh",
+		"plain":    "visible",
+	}
+	logger.Info("redaction check", fields)
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read log file: %v", err)
+	}
+	logContent := string(content)
+	for _, v := range []string{"supersecretvalue", "hunter2", "tok_12345", "shh"} {
+		if strings.Contains(logContent, v) {
+			t.Errorf("Sensitive value %q must not appear in log output", v)
+		}
+	}
+	if !strings.Contains(logContent, "[redacted]") {
+		t.Error("Log should contain [redacted] placeholder for sensitive fields")
+	}
+	if !strings.Contains(logContent, "plain=visible") {
+		t.Error("Non-sensitive field must not be redacted")
 	}
 }
 

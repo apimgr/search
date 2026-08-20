@@ -1728,12 +1728,172 @@
     // SERVICE WORKER
     // ========================================================================
     function initServiceWorker() {
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', function() {
-                navigator.serviceWorker.register('/sw.js').catch(function() {
-                    // Service worker registration failed
+        if (!('serviceWorker' in navigator)) {
+            return;
+        }
+        window.addEventListener('load', function() {
+            navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(function(registration) {
+                // Detect a new worker installing while an old one still controls the page
+                registration.addEventListener('updatefound', function() {
+                    var newWorker = registration.installing;
+                    if (!newWorker) {
+                        return;
+                    }
+                    newWorker.addEventListener('statechange', function() {
+                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            showUpdateNotification();
+                        }
+                    });
                 });
+
+                // Check for updates every hour while the app is active
+                setInterval(function() {
+                    registration.update();
+                }, 60 * 60 * 1000);
+            }).catch(function() {
+                // Service worker registration failed - the site still works without it
             });
+        });
+    }
+
+    // Show the PWA update banner. Per AI.md PART 16 the overlay stacking order is
+    // cookie consent -> announcements -> PWA update; the update banner sits above
+    // the cookie banner via its z-index (see .update-banner in public.css).
+    function showUpdateNotification() {
+        if (document.querySelector('.update-banner')) {
+            return;
+        }
+        var banner = document.createElement('div');
+        banner.className = 'update-banner';
+        banner.setAttribute('role', 'status');
+        banner.setAttribute('aria-live', 'polite');
+
+        var label = document.createElement('span');
+        label.className = 'update-banner-text';
+        label.textContent = t('pwa.update_available', 'A new version is available');
+
+        var updateBtn = document.createElement('button');
+        updateBtn.type = 'button';
+        updateBtn.className = 'btn update-banner-update';
+        updateBtn.textContent = t('pwa.update_now', 'Update Now');
+        updateBtn.addEventListener('click', updateApp);
+
+        var laterBtn = document.createElement('button');
+        laterBtn.type = 'button';
+        laterBtn.className = 'btn update-banner-later';
+        laterBtn.textContent = t('pwa.update_later', 'Later');
+        laterBtn.addEventListener('click', function() {
+            banner.remove();
+        });
+
+        banner.append(label, updateBtn, laterBtn);
+        document.body.appendChild(banner);
+    }
+
+    // Apply a waiting service-worker update and reload once it takes control
+    function updateApp() {
+        navigator.serviceWorker.ready.then(function(registration) {
+            if (registration.waiting) {
+                registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+            }
+        });
+        navigator.serviceWorker.addEventListener('controllerchange', function() {
+            window.location.reload();
+        });
+    }
+
+    // ========================================================================
+    // PWA INSTALL PROMPT
+    // Per AI.md PART 16: App Install Prompt
+    // ========================================================================
+    var deferredInstallPrompt = null;
+
+    function initInstallPrompt() {
+        // Already running as an installed PWA: no prompt UI is needed
+        if (isInstalledPWA()) {
+            hideInstallButton();
+            return;
+        }
+
+        window.addEventListener('beforeinstallprompt', function(event) {
+            // Prevent the automatic mini-infobar; show custom UI instead
+            event.preventDefault();
+            deferredInstallPrompt = event;
+            showInstallButton();
+        });
+
+        window.addEventListener('appinstalled', function() {
+            deferredInstallPrompt = null;
+            hideInstallButton();
+        });
+
+        // Delegate clicks so any [data-pwa-install] control triggers the prompt
+        document.querySelectorAll('[data-pwa-install]').forEach(function(btn) {
+            btn.addEventListener('click', installApp);
+        });
+    }
+
+    function isInstalledPWA() {
+        return window.matchMedia('(display-mode: standalone)').matches
+            || window.navigator.standalone === true;
+    }
+
+    function showInstallButton() {
+        document.querySelectorAll('[data-pwa-install]').forEach(function(btn) {
+            btn.hidden = false;
+        });
+    }
+
+    function hideInstallButton() {
+        document.querySelectorAll('[data-pwa-install]').forEach(function(btn) {
+            btn.hidden = true;
+        });
+    }
+
+    function installApp() {
+        if (!deferredInstallPrompt) {
+            return;
+        }
+        deferredInstallPrompt.prompt();
+        deferredInstallPrompt.userChoice.then(function() {
+            deferredInstallPrompt = null;
+            hideInstallButton();
+        });
+    }
+
+    // ========================================================================
+    // OFFLINE INDICATOR
+    // Per AI.md PART 16: Offline detection
+    // ========================================================================
+    function getOfflineIndicator() {
+        var indicator = document.getElementById('offline-indicator');
+        if (!indicator) {
+            indicator = document.createElement('div');
+            indicator.id = 'offline-indicator';
+            indicator.setAttribute('aria-live', 'polite');
+            document.body.appendChild(indicator);
+        }
+        return indicator;
+    }
+
+    function showOfflineIndicator() {
+        var indicator = getOfflineIndicator();
+        indicator.textContent = t('pwa.offline', 'You are offline. Some features may be unavailable.');
+        indicator.classList.add('visible');
+    }
+
+    function hideOfflineIndicator() {
+        var indicator = document.getElementById('offline-indicator');
+        if (indicator) {
+            indicator.classList.remove('visible');
+        }
+    }
+
+    function initOfflineIndicator() {
+        window.addEventListener('offline', showOfflineIndicator);
+        window.addEventListener('online', hideOfflineIndicator);
+        if (!navigator.onLine) {
+            showOfflineIndicator();
         }
     }
 
@@ -2748,6 +2908,8 @@
         initInfiniteScroll();
         initFormProtection();
         initServiceWorker();
+        initInstallPrompt();
+        initOfflineIndicator();
         initEventDelegation();
         initTabKeyboardNav();
         initAuthForms();
@@ -2817,6 +2979,8 @@
     window.copyToClipboard = copyToClipboard;
     window.getActiveSearchPreferences = getActiveSearchPreferences;
     window.applyTheme = applyTheme;
+    // Export the PWA install trigger so install controls anywhere can invoke it
+    window.installApp = installApp;
     // Export i18n lookup so the widget IIFE and other IIFEs can call t() globally
     window.t = t;
 

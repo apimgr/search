@@ -1070,8 +1070,10 @@ func (m *Middleware) MaintenanceMode(handler MaintenanceHandler) func(http.Handl
 				return
 			}
 
-			// Always allow static assets
-			if strings.HasPrefix(path, "/static/") {
+			// Always allow static assets and PWA root files (service worker,
+			// manifest, offline page) so the installed app keeps working
+			if strings.HasPrefix(path, "/static/") ||
+				path == "/sw.js" || path == "/manifest.json" || path == "/offline.html" {
 				next.ServeHTTP(w, r)
 				return
 			}

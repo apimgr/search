@@ -1877,5 +1877,11 @@
     "report_status_state_patching": "W trakcie naprawy",
     "report_status_state_disclosed": "Ujawniono",
     "report_status_state_wont_fix": "Nie zostanie naprawione"
+  },
+  "pwa": {
+    "update_available": "Dostępna jest nowa wersja",
+    "update_now": "Zaktualizuj teraz",
+    "update_later": "Później",
+    "offline": "Jesteś offline. Niektóre funkcje mogą być niedostępne."
   }
 }

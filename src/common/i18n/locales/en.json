@@ -1877,5 +1877,11 @@
     "report_status_state_patching": "Patching",
     "report_status_state_disclosed": "Disclosed",
     "report_status_state_wont_fix": "Won't Fix"
+  },
+  "pwa": {
+    "update_available": "A new version is available",
+    "update_now": "Update Now",
+    "update_later": "Later",
+    "offline": "You are offline. Some features may be unavailable."
   }
 }

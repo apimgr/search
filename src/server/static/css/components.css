@@ -261,3 +261,67 @@ dialog.modal .modal-footer {
 .btn-decline:hover {
     opacity: 0.9;
 }
+
+/* ==============================================================================
+ * PWA UPDATE BANNER
+ * Per AI.md PART 16: overlay stacking order is
+ * cookie consent (z-index 1000) -> announcements -> PWA update.
+ * The update banner sits above the cookie banner via a higher z-index.
+ * ============================================================================== */
+
+.update-banner {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: var(--color-bg-active);
+    border-top: 1px solid var(--color-primary);
+    color: var(--color-text);
+    z-index: 1002;
+}
+
+.update-banner-text {
+    font-size: 0.9rem;
+}
+
+.update-banner-update {
+    background: var(--color-primary);
+    color: var(--color-bg);
+}
+
+.update-banner-later {
+    background: var(--color-bg-secondary);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+}
+
+/* ==============================================================================
+ * PWA OFFLINE INDICATOR
+ * Per AI.md PART 16: shown when connectivity is lost, hidden when restored.
+ * ============================================================================== */
+
+#offline-indicator {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 0.5rem 1rem;
+    text-align: center;
+    font-size: 0.875rem;
+    background: var(--color-warning-bg);
+    color: var(--color-warning-text);
+    border-bottom: 1px solid var(--color-warning);
+    transform: translateY(-100%);
+    transition: transform 0.2s ease-in-out;
+    z-index: 1003;
+}
+
+#offline-indicator.visible {
+    transform: translateY(0);
+}

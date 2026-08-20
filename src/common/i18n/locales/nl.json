@@ -1877,5 +1877,11 @@
     "report_status_state_patching": "Wordt opgelost",
     "report_status_state_disclosed": "Openbaar gemaakt",
     "report_status_state_wont_fix": "Wordt niet opgelost"
+  },
+  "pwa": {
+    "update_available": "Er is een nieuwe versie beschikbaar",
+    "update_now": "Nu bijwerken",
+    "update_later": "Later",
+    "offline": "Je bent offline. Sommige functies zijn mogelijk niet beschikbaar."
   }
 }

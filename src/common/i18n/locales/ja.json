@@ -1877,5 +1877,11 @@
     "report_status_state_patching": "修正中",
     "report_status_state_disclosed": "開示済み",
     "report_status_state_wont_fix": "修正なし"
+  },
+  "pwa": {
+    "update_available": "新しいバージョンが利用可能です",
+    "update_now": "今すぐ更新",
+    "update_later": "後で",
+    "offline": "オフラインです。一部の機能が利用できない場合があります。"
   }
 }

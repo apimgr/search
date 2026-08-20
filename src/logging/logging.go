@@ -29,6 +29,8 @@ const (
 	LogTypeAccess   LogType = "access"
 	LogTypeServer   LogType = "server"
 	LogTypeError    LogType = "error"
+	LogTypeApp      LogType = "app"
+	LogTypeAuth     LogType = "auth"
 	LogTypeSecurity LogType = "security"
 	LogTypeAudit    LogType = "audit"
 	LogTypeDebug    LogType = "debug"
@@ -40,6 +42,8 @@ type Manager struct {
 	access   *AccessLogger
 	server   *ServerLogger
 	errorLog *ErrorLogger
+	app      *AppLogger
+	auth     *AuthLogger
 	security *SecurityLogger
 	audit    *AuditLogger
 	debug    *DebugLogger
@@ -61,6 +65,8 @@ func NewManager(logDir string) *Manager {
 	m.access = NewAccessLogger(filepath.Join(logDir, "access.log"))
 	m.server = NewServerLogger(filepath.Join(logDir, "server.log"))
 	m.errorLog = NewErrorLogger(filepath.Join(logDir, "error.log"))
+	m.app = NewAppLogger(filepath.Join(logDir, "app.log"))
+	m.auth = NewAuthLogger(filepath.Join(logDir, "auth.log"))
 	m.security = NewSecurityLogger(filepath.Join(logDir, "security.log"))
 	m.audit = NewAuditLogger(filepath.Join(logDir, "audit.log"))
 	m.debug = NewDebugLogger(filepath.Join(logDir, "debug.log"))
@@ -81,6 +87,16 @@ func (m *Manager) Server() *ServerLogger {
 // Error returns the error logger
 func (m *Manager) Error() *ErrorLogger {
 	return m.errorLog
+}
+
+// App returns the app logger
+func (m *Manager) App() *AppLogger {
+	return m.app
+}
+
+// Auth returns the auth logger
+func (m *Manager) Auth() *AuthLogger {
+	return m.auth
 }
 
 // Security returns the security logger
@@ -110,6 +126,12 @@ func (m *Manager) Close() error {
 	if err := m.errorLog.Close(); err != nil {
 		errs = append(errs, err)
 	}
+	if err := m.app.Close(); err != nil {
+		errs = append(errs, err)
+	}
+	if err := m.auth.Close(); err != nil {
+		errs = append(errs, err)
+	}
 	if err := m.security.Close(); err != nil {
 		errs = append(errs, err)
 	}
@@ -135,6 +157,12 @@ func (m *Manager) RotateAll() error {
 		errs = append(errs, err)
 	}
 	if err := m.errorLog.Rotate(); err != nil {
+		errs = append(errs, err)
+	}
+	if err := m.app.Rotate(); err != nil {
+		errs = append(errs, err)
+	}
+	if err := m.auth.Rotate(); err != nil {
 		errs = append(errs, err)
 	}
 	if err := m.security.Rotate(); err != nil {
@@ -686,6 +714,34 @@ func (l *ServerLogger) SetStdout(enabled bool) {
 	l.stdout = enabled
 }
 
+// redactSensitiveFields returns a copy of fields with any value whose key name
+// contains secret/key/password/token (case-insensitive) replaced by "[redacted]".
+// Per AI.md PART 11 project-level secrets are NEVER logged; this is the log-layer
+// enforcement of the Output Sanitization Pipeline. The original map is never mutated.
+func redactSensitiveFields(fields map[string]interface{}) map[string]interface{} {
+	if len(fields) == 0 {
+		return fields
+	}
+	sensitive := []string{"secret", "key", "password", "token"}
+	out := make(map[string]interface{}, len(fields))
+	for k, v := range fields {
+		lower := strings.ToLower(k)
+		redacted := false
+		for _, s := range sensitive {
+			if strings.Contains(lower, s) {
+				redacted = true
+				break
+			}
+		}
+		if redacted {
+			out[k] = "[redacted]"
+		} else {
+			out[k] = v
+		}
+	}
+	return out
+}
+
 func (l *ServerLogger) log(level LogLevel, msg string, fields map[string]interface{}) {
 	if level < l.level {
 		return
@@ -694,11 +750,14 @@ func (l *ServerLogger) log(level LogLevel, msg string, fields map[string]interfa
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	// Per AI.md PART 11 (Output Sanitization Pipeline / Cryptographic Keys):
+	// any field whose name contains secret/key/password/token is redacted at
+	// the log layer so project-level secrets can never leak into log files.
 	entry := ServerEntry{
 		Timestamp: time.Now(),
 		Level:     level.String(),
 		Message:   msg,
-		Fields:    fields,
+		Fields:    redactSensitiveFields(fields),
 	}
 
 	var line string
@@ -711,9 +770,9 @@ func (l *ServerLogger) log(level LogLevel, msg string, fields map[string]interfa
 			entry.Level,
 			entry.Message,
 		)
-		if len(fields) > 0 {
-			parts := make([]string, 0, len(fields))
-			for k, v := range fields {
+		if len(entry.Fields) > 0 {
+			parts := make([]string, 0, len(entry.Fields))
+			for k, v := range entry.Fields {
 				parts = append(parts, fmt.Sprintf("%s=%v", k, v))
 			}
 			line += " " + strings.Join(parts, " ")
@@ -826,6 +885,378 @@ func (w *serverLogWriter) Write(p []byte) (n int, err error) {
 }
 
 // ============================================================
+// App Logger - General application events in logfmt format
+// ============================================================
+
+// logfmtValue renders a value for a logfmt key=value pair. Values that contain
+// a space, an equals sign, or a double quote are double-quoted; empty values
+// render as "". Per AI.md PART 11 the output is raw text only (no ANSI/emoji).
+func logfmtValue(v interface{}) string {
+	s := fmt.Sprintf("%v", v)
+	if s == "" {
+		return `""`
+	}
+	if strings.ContainsAny(s, " =\"") {
+		return fmt.Sprintf("%q", s)
+	}
+	return s
+}
+
+// AppLogger logs general application events (info/warn) in logfmt format.
+// Per AI.md PART 11 the default format is logfmt; json is the only alternative.
+type AppLogger struct {
+	mu   sync.Mutex
+	file *os.File
+	path string
+	// "logfmt", "json"
+	format string
+}
+
+// AppEntry represents an app log entry
+type AppEntry struct {
+	Timestamp time.Time              `json:"time"`
+	Level     string                 `json:"level"`
+	Message   string                 `json:"msg"`
+	Fields    map[string]interface{} `json:"fields,omitempty"`
+}
+
+// NewAppLogger creates a new app logger defaulting to logfmt format
+func NewAppLogger(path string) *AppLogger {
+	l := &AppLogger{
+		path:   path,
+		format: "logfmt",
+	}
+	l.openFile()
+	return l
+}
+
+func (l *AppLogger) openFile() error {
+	if l.path == "" {
+		return nil
+	}
+
+	dir := filepath.Dir(l.path)
+	os.MkdirAll(dir, 0755)
+
+	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+	l.file = file
+	return nil
+}
+
+// SetFormat sets the app log format ("logfmt" or "json")
+func (l *AppLogger) SetFormat(format string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.format = format
+}
+
+func (l *AppLogger) log(level, msg string, fields map[string]interface{}) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	// Per AI.md PART 11 (Output Sanitization Pipeline): redact any field whose
+	// name contains secret/key/password/token so secrets never reach the file.
+	entry := AppEntry{
+		Timestamp: time.Now(),
+		Level:     level,
+		Message:   msg,
+		Fields:    redactSensitiveFields(fields),
+	}
+
+	var line string
+	if l.format == "json" {
+		data, _ := json.Marshal(entry)
+		line = string(data)
+	} else {
+		// logfmt: space-separated key=value pairs, RFC 3339 time with offset.
+		line = fmt.Sprintf("time=%s level=%s msg=%s",
+			entry.Timestamp.Format(time.RFC3339),
+			entry.Level,
+			logfmtValue(entry.Message),
+		)
+		if len(entry.Fields) > 0 {
+			keys := make([]string, 0, len(entry.Fields))
+			for k := range entry.Fields {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			for _, k := range keys {
+				line += fmt.Sprintf(" %s=%s", k, logfmtValue(entry.Fields[k]))
+			}
+		}
+	}
+
+	if l.file != nil {
+		l.file.WriteString(line + "\n")
+	}
+}
+
+// Info logs a general application info event
+func (l *AppLogger) Info(msg string, fields ...map[string]interface{}) {
+	var f map[string]interface{}
+	if len(fields) > 0 {
+		f = fields[0]
+	}
+	l.log("INFO", msg, f)
+}
+
+// Warn logs a general application warning event
+func (l *AppLogger) Warn(msg string, fields ...map[string]interface{}) {
+	var f map[string]interface{}
+	if len(fields) > 0 {
+		f = fields[0]
+	}
+	l.log("WARN", msg, f)
+}
+
+// Rotate rotates the app log file
+func (l *AppLogger) Rotate() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if l.file == nil {
+		return nil
+	}
+
+	l.file.Close()
+
+	timestamp := time.Now().Format("20060102")
+	rotatedPath := fmt.Sprintf("%s.%s", l.path, timestamp)
+
+	if _, err := os.Stat(rotatedPath); err == nil {
+		rotatedPath = fmt.Sprintf("%s.%s", l.path, time.Now().Format("20060102-150405"))
+	}
+
+	os.Rename(l.path, rotatedPath)
+	return l.openFile()
+}
+
+// Close closes the app logger
+func (l *AppLogger) Close() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.file != nil {
+		return l.file.Close()
+	}
+	return nil
+}
+
+// ============================================================
+// Auth Logger - Authentication events in syslog RFC 3164 format
+// ============================================================
+
+// syslogProgramName returns the program name used in the syslog header,
+// derived from the running binary's base name.
+func syslogProgramName() string {
+	if len(os.Args) > 0 && os.Args[0] != "" {
+		return filepath.Base(os.Args[0])
+	}
+	return "search"
+}
+
+// AuthLogger logs authentication events (token issue/revoke, failures) in
+// syslog RFC 3164 format. Per AI.md PART 11 json is the only alternative.
+type AuthLogger struct {
+	mu   sync.Mutex
+	file *os.File
+	path string
+	// "syslog", "json"
+	format string
+}
+
+// AuthEntry represents an authentication log entry. Result is "success" or
+// "fail"; Reason is a stable machine code (never a free-form message) so
+// Fail2ban / SIEM parsers stay stable per AI.md PART 11.
+type AuthEntry struct {
+	Timestamp time.Time              `json:"time"`
+	Event     string                 `json:"event"`
+	TokenID   string                 `json:"token_id,omitempty"`
+	IP        string                 `json:"ip,omitempty"`
+	User      string                 `json:"user,omitempty"`
+	Result    string                 `json:"result"`
+	Reason    string                 `json:"reason,omitempty"`
+	Fields    map[string]interface{} `json:"fields,omitempty"`
+}
+
+// NewAuthLogger creates a new auth logger defaulting to syslog RFC 3164 format
+func NewAuthLogger(path string) *AuthLogger {
+	l := &AuthLogger{
+		path:   path,
+		format: "syslog",
+	}
+	l.openFile()
+	return l
+}
+
+func (l *AuthLogger) openFile() error {
+	if l.path == "" {
+		return nil
+	}
+
+	dir := filepath.Dir(l.path)
+	os.MkdirAll(dir, 0755)
+
+	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+	l.file = file
+	return nil
+}
+
+// SetFormat sets the auth log format ("syslog" or "json")
+func (l *AuthLogger) SetFormat(format string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.format = format
+}
+
+// Log writes an authentication event
+func (l *AuthLogger) Log(entry AuthEntry) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if entry.Timestamp.IsZero() {
+		entry.Timestamp = time.Now()
+	}
+
+	var line string
+	if l.format == "json" {
+		data, _ := json.Marshal(entry)
+		line = string(data)
+	} else {
+		// RFC 3164 header: <MMM DD HH:MM:SS> <hostname> <program>[<pid>]:
+		// Day is space-padded to two columns per the RFC.
+		hostname, err := osHostname()
+		if err != nil || hostname == "" {
+			hostname = "localhost"
+		}
+		header := fmt.Sprintf("%s %s %s[%d]:",
+			entry.Timestamp.Format("Jan _2 15:04:05"),
+			hostname,
+			syslogProgramName(),
+			os.Getpid(),
+		)
+
+		msg := "auth:"
+		if entry.Event != "" {
+			msg += fmt.Sprintf(" event=%s", entry.Event)
+		}
+		if entry.TokenID != "" {
+			msg += fmt.Sprintf(" token_id=%s", entry.TokenID)
+		}
+		if entry.IP != "" {
+			msg += fmt.Sprintf(" ip=%s", entry.IP)
+		}
+		if entry.User != "" {
+			msg += fmt.Sprintf(" user=%s", entry.User)
+		}
+		if entry.Result != "" {
+			msg += fmt.Sprintf(" result=%s", entry.Result)
+		}
+		if entry.Reason != "" {
+			msg += fmt.Sprintf(" reason=%s", entry.Reason)
+		}
+		if len(entry.Fields) > 0 {
+			keys := make([]string, 0, len(entry.Fields))
+			for k := range entry.Fields {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			for _, k := range keys {
+				msg += fmt.Sprintf(" %s=%v", k, entry.Fields[k])
+			}
+		}
+
+		line = header + " " + msg
+	}
+
+	if l.file != nil {
+		l.file.WriteString(line + "\n")
+	}
+}
+
+// LogTokenIssue logs a token issuance event
+func (l *AuthLogger) LogTokenIssue(tokenID, user, ip string) {
+	l.Log(AuthEntry{
+		Event:   "token_issue",
+		TokenID: tokenID,
+		User:    user,
+		IP:      ip,
+		Result:  "success",
+	})
+}
+
+// LogTokenRevoke logs a token revocation event
+func (l *AuthLogger) LogTokenRevoke(tokenID, user, ip string) {
+	l.Log(AuthEntry{
+		Event:   "token_revoke",
+		TokenID: tokenID,
+		User:    user,
+		IP:      ip,
+		Result:  "success",
+	})
+}
+
+// LogAuthFailure logs a failed authentication attempt. Reason must be a stable
+// machine code (e.g. invalid_token, expired_token) per AI.md PART 11.
+func (l *AuthLogger) LogAuthFailure(tokenID, ip, reason string) {
+	l.Log(AuthEntry{
+		Event:   "auth_attempt",
+		TokenID: tokenID,
+		IP:      ip,
+		Result:  "fail",
+		Reason:  reason,
+	})
+}
+
+// LogAuthSuccess logs a successful authentication
+func (l *AuthLogger) LogAuthSuccess(tokenID, user, ip string) {
+	l.Log(AuthEntry{
+		Event:   "auth_attempt",
+		TokenID: tokenID,
+		User:    user,
+		IP:      ip,
+		Result:  "success",
+	})
+}
+
+// Rotate rotates the auth log file
+func (l *AuthLogger) Rotate() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if l.file == nil {
+		return nil
+	}
+
+	l.file.Close()
+
+	timestamp := time.Now().Format("20060102")
+	rotatedPath := fmt.Sprintf("%s.%s", l.path, timestamp)
+
+	if _, err := os.Stat(rotatedPath); err == nil {
+		rotatedPath = fmt.Sprintf("%s.%s", l.path, time.Now().Format("20060102-150405"))
+	}
+
+	os.Rename(l.path, rotatedPath)
+	return l.openFile()
+}
+
+// Close closes the auth logger
+func (l *AuthLogger) Close() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.file != nil {
+		return l.file.Close()
+	}
+	return nil
+}
+
+// ============================================================
 // Security Logger - Fail2ban compatible
 // ============================================================
 
@@ -858,11 +1289,14 @@ const (
 	SecurityEventCSPViolation SecurityEvent = "security.csp_violation"
 )
 
-// SecurityLogger logs security events (fail2ban compatible)
+// SecurityLogger logs security events. Per AI.md PART 11 the default format is
+// fail2ban; syslog (RFC 5424), cef, json, and text are also supported.
 type SecurityLogger struct {
 	mu   sync.Mutex
 	file *os.File
 	path string
+	// "fail2ban", "syslog", "cef", "json", "text"
+	format string
 }
 
 // SecurityEntry represents a security log entry
@@ -875,13 +1309,121 @@ type SecurityEntry struct {
 	Details   string        `json:"details,omitempty"`
 }
 
-// NewSecurityLogger creates a new security logger
+// NewSecurityLogger creates a new security logger defaulting to fail2ban format
 func NewSecurityLogger(path string) *SecurityLogger {
 	l := &SecurityLogger{
-		path: path,
+		path:   path,
+		format: "fail2ban",
 	}
 	l.openFile()
 	return l
+}
+
+// SetFormat sets the security log format
+// ("fail2ban", "syslog", "cef", "json", or "text")
+func (l *SecurityLogger) SetFormat(format string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.format = format
+}
+
+// cefEscape escapes a CEF extension value: backslashes and equals signs are
+// backslash-escaped and newlines removed, per the ArcSight CEF specification.
+func cefEscape(s string) string {
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	s = strings.ReplaceAll(s, "=", "\\=")
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "\r", " ")
+	return s
+}
+
+// formatEntry renders a security entry in the logger's configured format.
+// All formats emit a single raw-text line (no ANSI/emoji/control chars) per
+// AI.md PART 11.
+func (l *SecurityLogger) formatEntry(entry SecurityEntry) string {
+	switch l.format {
+	case "json":
+		data, _ := json.Marshal(entry)
+		return string(data)
+	case "syslog":
+		// RFC 5424: <PRI>1 TIMESTAMP HOSTNAME APP-NAME PROCID MSGID SD MSG.
+		// PRI 133 = facility 16 (local0) * 8 + severity 5 (notice).
+		hostname, err := osHostname()
+		if err != nil || hostname == "" {
+			hostname = "localhost"
+		}
+		sd := fmt.Sprintf("[security event=\"%s\" ip=\"%s\"", entry.Event, entry.IP)
+		if entry.User != "" {
+			sd += fmt.Sprintf(" user=\"%s\"", entry.User)
+		}
+		if entry.Path != "" {
+			sd += fmt.Sprintf(" path=\"%s\"", entry.Path)
+		}
+		if entry.Details != "" {
+			sd += fmt.Sprintf(" details=\"%s\"", entry.Details)
+		}
+		sd += "]"
+		return fmt.Sprintf("<133>1 %s %s %s %d %s %s -",
+			entry.Timestamp.Format(time.RFC3339),
+			hostname,
+			syslogProgramName(),
+			os.Getpid(),
+			entry.Event,
+			sd,
+		)
+	case "cef":
+		// CEF:0|Vendor|Product|Version|SignatureID|Name|Severity|Extension
+		ext := fmt.Sprintf("rt=%s src=%s", entry.Timestamp.Format(time.RFC3339), cefEscape(entry.IP))
+		if entry.User != "" {
+			ext += fmt.Sprintf(" suser=%s", cefEscape(entry.User))
+		}
+		if entry.Path != "" {
+			ext += fmt.Sprintf(" request=%s", cefEscape(entry.Path))
+		}
+		if entry.Details != "" {
+			ext += fmt.Sprintf(" msg=%s", cefEscape(entry.Details))
+		}
+		return fmt.Sprintf("CEF:0|apimgr|search|1.0|%s|%s|5|%s",
+			entry.Event,
+			entry.Event,
+			ext,
+		)
+	case "text":
+		line := fmt.Sprintf("%s [%s] from %s",
+			entry.Timestamp.Format(time.RFC3339),
+			entry.Event,
+			entry.IP,
+		)
+		if entry.User != "" {
+			line += fmt.Sprintf(" user=%s", entry.User)
+		}
+		if entry.Path != "" {
+			line += fmt.Sprintf(" path=%s", entry.Path)
+		}
+		if entry.Details != "" {
+			line += fmt.Sprintf(" details=%s", entry.Details)
+		}
+		return line
+	// fail2ban (default)
+	default:
+		// Fail2ban compatible format:
+		// YYYY-MM-DD HH:MM:SS [EVENT] IP=x.x.x.x USER=xxx PATH=/xxx DETAILS=xxx
+		line := fmt.Sprintf("%s [%s] IP=%s",
+			entry.Timestamp.Format("2006-01-02 15:04:05"),
+			entry.Event,
+			entry.IP,
+		)
+		if entry.User != "" {
+			line += fmt.Sprintf(" USER=%s", entry.User)
+		}
+		if entry.Path != "" {
+			line += fmt.Sprintf(" PATH=%s", entry.Path)
+		}
+		if entry.Details != "" {
+			line += fmt.Sprintf(" DETAILS=%s", entry.Details)
+		}
+		return line
+	}
 }
 
 func (l *SecurityLogger) openFile() error {
@@ -905,23 +1447,9 @@ func (l *SecurityLogger) Log(entry SecurityEntry) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	// Fail2ban compatible format:
-	// YYYY-MM-DD HH:MM:SS [EVENT] IP=x.x.x.x USER=xxx PATH=/xxx DETAILS=xxx
-	line := fmt.Sprintf("%s [%s] IP=%s",
-		entry.Timestamp.Format("2006-01-02 15:04:05"),
-		entry.Event,
-		entry.IP,
-	)
-
-	if entry.User != "" {
-		line += fmt.Sprintf(" USER=%s", entry.User)
-	}
-	if entry.Path != "" {
-		line += fmt.Sprintf(" PATH=%s", entry.Path)
-	}
-	if entry.Details != "" {
-		line += fmt.Sprintf(" DETAILS=%s", entry.Details)
-	}
+	// Render in the logger's configured format (fail2ban default; also
+	// syslog/cef/json/text) per AI.md PART 11.
+	line := l.formatEntry(entry)
 
 	if l.file != nil {
 		l.file.WriteString(line + "\n")

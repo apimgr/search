@@ -1877,5 +1877,11 @@
     "report_status_state_patching": "修复中",
     "report_status_state_disclosed": "已披露",
     "report_status_state_wont_fix": "不予修复"
+  },
+  "pwa": {
+    "update_available": "有新版本可用",
+    "update_now": "立即更新",
+    "update_later": "稍后",
+    "offline": "您已离线。部分功能可能不可用。"
   }
 }

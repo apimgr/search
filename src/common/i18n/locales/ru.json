@@ -1877,5 +1877,11 @@
     "report_status_state_patching": "Исправляется",
     "report_status_state_disclosed": "Раскрыто",
     "report_status_state_wont_fix": "Не будет исправлено"
+  },
+  "pwa": {
+    "update_available": "Доступна новая версия",
+    "update_now": "Обновить сейчас",
+    "update_later": "Позже",
+    "offline": "Вы не в сети. Некоторые функции могут быть недоступны."
   }
 }

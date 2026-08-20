@@ -29,9 +29,14 @@
 {{end}}
 
 {{/* PWA Manifest - per AI.md PART 16: PWA Support */}}
-<link rel="manifest" href="/static/manifest.json">
+<link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#282a36">
 <link rel="apple-touch-icon" href="/static/img/icon-192.svg">
+
+{{/* iOS-specific PWA meta tags - per AI.md PART 16: iOS-Specific Considerations */}}
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="{{.Config.Server.Title}}">
 
 {{/* Per AI.md: Load order: common → components → public/admin */}}
 <link rel="stylesheet" href="/static/css/common.css">

@@ -1877,5 +1877,11 @@
     "report_status_state_patching": "בתיקון",
     "report_status_state_disclosed": "נחשף",
     "report_status_state_wont_fix": "לא יתוקן"
+  },
+  "pwa": {
+    "update_available": "גרסה חדשה זמינה",
+    "update_now": "עדכן עכשיו",
+    "update_later": "מאוחר יותר",
+    "offline": "אתה במצב לא מקוון. ייתכן שחלק מהתכונות לא יהיו זמינות."
   }
 }

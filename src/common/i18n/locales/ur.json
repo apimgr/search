@@ -1877,5 +1877,11 @@
     "report_status_state_patching": "اصلاح جاری ہے",
     "report_status_state_disclosed": "انکشاف شدہ",
     "report_status_state_wont_fix": "درست نہیں کیا جائے گا"
+  },
+  "pwa": {
+    "update_available": "نیا ورژن دستیاب ہے",
+    "update_now": "ابھی اپ ڈیٹ کریں",
+    "update_later": "بعد میں",
+    "offline": "آپ آف لائن ہیں۔ کچھ خصوصیات دستیاب نہیں ہو سکتیں۔"
   }
 }
