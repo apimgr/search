@@ -379,14 +379,14 @@ func TestManagerGetCertInfoWithLeafSet(t *testing.T) {
 }
 
 func TestManagerGetCertInfoExpiringSoon(t *testing.T) {
-	// Generate a cert that expires in less than 30 days
+	// Generate a cert that expires inside the 7-day renewal threshold
 	tempDir, err := os.MkdirTemp("", "tls-test-expiring-")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
 	defer os.RemoveAll(tempDir)
 
-	certFile, keyFile, err := generateTestCertWithExpiry(tempDir, 10*24*time.Hour)
+	certFile, keyFile, err := generateTestCertWithExpiry(tempDir, 5*24*time.Hour)
 	if err != nil {
 		t.Fatalf("Failed to generate test cert: %v", err)
 	}
@@ -408,7 +408,7 @@ func TestManagerGetCertInfoExpiringSoon(t *testing.T) {
 	}
 
 	if !info.IsExpiring {
-		t.Error("IsExpiring should be true for cert expiring in 10 days")
+		t.Error("IsExpiring should be true for cert expiring in 5 days")
 	}
 }
 

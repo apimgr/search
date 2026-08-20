@@ -209,8 +209,9 @@ func TestGetFQDNAlwaysNonEmpty(t *testing.T) {
 }
 
 // TestObtainCertificateDNS01LoadsExistingValidCert exercises the "load existing
-// certificate" early-return inside obtainCertificateDNS01.  The cert has >30 days
-// validity so the function returns nil before calling Certificate.Obtain on the client.
+// certificate" early-return inside obtainCertificateDNS01.  The cert is valid
+// well beyond the 7-day renewal threshold so the function returns nil before
+// calling Certificate.Obtain on the client.
 func TestObtainCertificateDNS01LoadsExistingValidCert(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "tls-obtain-existing-")
 	if err != nil {
@@ -224,7 +225,7 @@ func TestObtainCertificateDNS01LoadsExistingValidCert(t *testing.T) {
 	}
 
 	// generateTestCertWithExpiry is defined in ssl_test.go (same package).
-	// 90 days → cert is still valid for >30 days → early-return triggers.
+	// 90 days → cert is valid beyond the 7-day renewal threshold → early-return triggers.
 	certFile, keyFile, err := generateTestCertWithExpiry(certsDir, 90*24*time.Hour)
 	if err != nil {
 		t.Fatalf("generateTestCertWithExpiry: %v", err)
@@ -792,13 +793,13 @@ func containsSubstring(s, sub string) bool {
 }
 
 // TestRenewCertificateDNS01Expiring covers the "cert IS expiring" branch.
-// Certificate expires in 10 days so IsExpiring=true → obtainCertificateDNS01 is called.
+// Certificate expires in 5 days so IsExpiring=true → obtainCertificateDNS01 is called.
 // The fake client has no registered account so Certificate.Obtain fails — we just verify
 // the code path was reached (error is non-nil and is not "lego client not initialized").
 func TestRenewCertificateDNS01Expiring(t *testing.T) {
 	tempDir := t.TempDir()
 
-	certFile, keyFile, err := generateTestCertWithExpiry(tempDir, 10*24*time.Hour)
+	certFile, keyFile, err := generateTestCertWithExpiry(tempDir, 5*24*time.Hour)
 	if err != nil {
 		t.Fatalf("generateTestCertWithExpiry: %v", err)
 	}
@@ -822,7 +823,7 @@ func TestRenewCertificateDNS01Expiring(t *testing.T) {
 		legoClient: legoClient,
 	}
 
-	// Cert expires in 10 days → IsExpiring = true → enters renewal path.
+	// Cert expires in 5 days → IsExpiring = true → enters renewal path.
 	// Renewal will fail (no ACME server fully wired) but the path IS exercised.
 	// We only check it did NOT return the "not initialized" sentinel.
 	err = m.RenewCertificateDNS01(context.Background())
@@ -1086,10 +1087,10 @@ func TestGetCertInfoMalformedDERBytes(t *testing.T) {
 	}
 }
 
-// TestGetCertInfoExpiringFlag tests that IsExpiring is true for a cert expiring in 10 days.
+// TestGetCertInfoExpiringFlag tests that IsExpiring is true for a cert expiring in 5 days.
 func TestGetCertInfoExpiringFlag(t *testing.T) {
 	tempDir := t.TempDir()
-	certFile, keyFile, err := generateTestCertWithExpiry(tempDir, 10*24*time.Hour)
+	certFile, keyFile, err := generateTestCertWithExpiry(tempDir, 5*24*time.Hour)
 	if err != nil {
 		t.Fatalf("generateTestCertWithExpiry: %v", err)
 	}
@@ -1113,6 +1114,6 @@ func TestGetCertInfoExpiringFlag(t *testing.T) {
 		t.Fatalf("GetCertInfo() error = %v", err)
 	}
 	if !info.IsExpiring {
-		t.Error("GetCertInfo() IsExpiring should be true for cert expiring in 10 days")
+		t.Error("GetCertInfo() IsExpiring should be true for cert expiring in 5 days")
 	}
 }

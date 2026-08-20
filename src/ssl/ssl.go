@@ -27,6 +27,11 @@ import (
 	"github.com/apimgr/search/src/config"
 )
 
+// renewalThreshold is how long before expiry an app-managed certificate is
+// renewed. AI.md PART 15 (Renewal Rules) specifies 7 days before expiry for
+// {config_dir}/ssl/letsencrypt/{fqdn}/.
+const renewalThreshold = 7 * 24 * time.Hour
+
 // Manager handles TLS certificate management
 type Manager struct {
 	mu          sync.RWMutex
@@ -308,8 +313,8 @@ func (m *Manager) obtainCertificateDNS01() error {
 		// Check if certificate is still valid
 		if len(cert.Certificate) > 0 {
 			parsed, err := x509.ParseCertificate(cert.Certificate[0])
-			if err == nil && time.Until(parsed.NotAfter) > 30*24*time.Hour {
-				// Certificate is valid for more than 30 days
+			if err == nil && time.Until(parsed.NotAfter) > renewalThreshold {
+				// Certificate is valid beyond the renewal threshold
 				m.mu.Lock()
 				m.tlsConfig = m.createTLSConfig(cert)
 				m.mu.Unlock()
@@ -352,11 +357,17 @@ func (m *Manager) obtainCertificateDNS01() error {
 	return nil
 }
 
-// createTLSConfig creates a TLS config with the given certificate
+// createTLSConfig creates a TLS config with the given certificate.
+// GetCertificate resolves the active certificate at handshake time from the
+// live manager state, so a *tls.Config captured by an already-running
+// http.Server serves certificates renewed (DNS-01) or reloaded (manual)
+// after startup without requiring a process restart. Certificates is still
+// populated so GetCertInfo and manual reload continue to work.
 func (m *Manager) createTLSConfig(cert tls.Certificate) *tls.Config {
 	return &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		MinVersion:   tls.VersionTLS12,
+		Certificates:   []tls.Certificate{cert},
+		GetCertificate: m.getCertificate,
+		MinVersion:     tls.VersionTLS12,
 		CurvePreferences: []tls.CurveID{
 			tls.X25519,
 			tls.CurveP256,
@@ -387,7 +398,7 @@ func (m *Manager) RenewCertificateDNS01(ctx context.Context) error {
 		return m.obtainCertificateDNS01()
 	}
 
-	// Renew if expiring within 30 days
+	// Renew if expiring within the renewal threshold
 	if !info.IsExpiring {
 		return nil
 	}
@@ -414,6 +425,20 @@ func (m *Manager) GetTLSConfig() *tls.Config {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.tlsConfig
+}
+
+// getCertificate resolves the active certificate at TLS handshake time from
+// the live manager state. It is wired into every *tls.Config via
+// createTLSConfig so an already-running http.Server picks up certificates
+// renewed (DNS-01) or reloaded (manual) after startup without a restart.
+func (m *Manager) getCertificate(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.tlsConfig == nil || len(m.tlsConfig.Certificates) == 0 {
+		return nil, fmt.Errorf("no certificate available")
+	}
+	cert := m.tlsConfig.Certificates[0]
+	return &cert, nil
 }
 
 // GetHTTPSHandler returns an HTTP handler for ACME challenges
@@ -525,6 +550,6 @@ func (m *Manager) GetCertInfo() (*CertInfo, error) {
 		NotBefore:  leaf.NotBefore,
 		NotAfter:   leaf.NotAfter,
 		DNSNames:   leaf.DNSNames,
-		IsExpiring: time.Until(leaf.NotAfter) < 30*24*time.Hour,
+		IsExpiring: time.Until(leaf.NotAfter) < renewalThreshold,
 	}, nil
 }
