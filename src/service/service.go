@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -47,7 +48,7 @@ func (sm *ServiceManager) createServiceDirectories() error {
 		}
 		// Set ownership to service user (non-fatal: may fail when not root)
 		if err := runCmd("chown", "-R", "search:search", dir); err != nil {
-			_ = err
+			slog.Debug("Failed to chown service directory (non-fatal, expected when not root)", "dir", dir, "error", err)
 		}
 	}
 
@@ -63,7 +64,7 @@ func (sm *ServiceManager) createServiceDirectories() error {
 			return fmt.Errorf("failed to create %s: %w", dir, err)
 		}
 		if err := runCmd("chown", "-R", "search:search", dir); err != nil {
-			_ = err
+			slog.Debug("Failed to chown secure service directory (non-fatal, expected when not root)", "dir", dir, "error", err)
 		}
 	}
 
