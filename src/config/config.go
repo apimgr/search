@@ -2263,7 +2263,7 @@ func migrateYamlToYml(yamlPath, ymlPath string) error {
 	backupPath := yamlPath + ".bak"
 	if err := os.Rename(yamlPath, backupPath); err != nil {
 		// Non-fatal: file was copied successfully
-		_ = err
+		slog.Debug("Failed to rename legacy config to backup", "path", yamlPath, "error", err)
 	}
 
 	return nil
@@ -2480,8 +2480,9 @@ func Initialize() (*Config, error) {
 
 		// Save config with first-run overrides and resolved port applied
 		if err := cfg.Save(configPath); err != nil {
-			// Log but don't print to console - banner handles output
-			_ = err
+			// Non-fatal for first-run flow, but the operator must know the
+			// resolved config (including the chosen port) was not persisted.
+			slog.Warn("Failed to save config with first-run overrides", "path", configPath, "error", err)
 		}
 
 		// Mark as first run - banner will show setup token
