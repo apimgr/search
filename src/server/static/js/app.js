@@ -2970,6 +2970,10 @@
     // GLOBAL EXPORTS
     // ========================================================================
     window.showToast = showToast;
+    // Exposed for WidgetManager (a separate top-level IIFE below) which
+    // needs the global units preference when a widget has no per-widget
+    // override saved yet.
+    window.getPreferredUnits = getPreferredUnits;
     window.showConfirm = showConfirm;
     window.showPrompt = showPrompt;
     window.showAlert = showAlert;
@@ -4221,8 +4225,10 @@
             // silently renders metric. Fall back to the global units cookie
             // preference (set via the preferences page / other widgets) when
             // the weather widget hasn't set its own override yet.
+            // getPreferredUnits is declared in a different top-level IIFE
+            // and is only reachable here via its window export.
             if (widgetType === 'weather' && !settings.units) {
-                settings.units = getPreferredUnits();
+                settings.units = window.getPreferredUnits();
             }
 
             if (widget.category === 'data') {
