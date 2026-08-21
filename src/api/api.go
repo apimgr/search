@@ -20,6 +20,7 @@ import (
 
 	"github.com/apimgr/search/src/alert"
 	"github.com/apimgr/search/src/common/httputil"
+	"github.com/apimgr/search/src/common/i18n"
 	"github.com/apimgr/search/src/config"
 	"github.com/apimgr/search/src/direct"
 	"github.com/apimgr/search/src/geoip"
@@ -160,6 +161,8 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.HandleFunc(APIPrefix+"/server/terms", h.handleServerTerms)
 	r.HandleFunc(APIPrefix+"/server/contact", h.handleServerContact)
 	r.HandleFunc(APIPrefix+"/preferences", h.handlePreferences)
+	r.HandleFunc(APIPrefix+"/server/preferences/export", h.handleServerPreferencesExport)
+	r.HandleFunc(APIPrefix+"/server/preferences/import", h.handleServerPreferencesImport)
 
 	// Favicon proxy - privacy-preserving favicon fetching
 	// Per AI.md PART 16: NO external requests from client, server proxies content
@@ -1884,6 +1887,146 @@ func (h *Handler) handlePreferences(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", r.Method)
+}
+
+// isValidSyncTheme reports whether theme is one of the three allowed values.
+// Mirrors server.IsValidTheme; duplicated here because the api package must
+// not import the server package.
+func isValidSyncTheme(theme string) bool {
+	switch theme {
+	case "dark", "light", "auto":
+		return true
+	}
+	return false
+}
+
+// normalizeSyncLanguage lowercases and strips any region/script subtag
+// (e.g. "fr-CA" -> "fr") to match i18n.Manager's supported language codes.
+func normalizeSyncLanguage(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return ""
+	}
+	if idx := strings.IndexAny(value, "-_"); idx != -1 {
+		value = value[:idx]
+	}
+	return value
+}
+
+// syncI18nManager returns an i18n manager sufficient for language-code
+// validation. Loaded translations aren't needed here - only the supported
+// language list, which NewManager populates without loading locale files.
+func (h *Handler) syncI18nManager() *i18n.Manager {
+	return i18n.NewManager("en", i18n.DefaultSupportedLanguages())
+}
+
+// currentSyncPrefs reads the theme/lang cookies for the exportable
+// preference state, falling back to defaults per AI.md "Client-Side
+// Preferences".
+func (h *Handler) currentSyncPrefs(r *http.Request) (theme, lang string) {
+	theme = "dark"
+	if c, err := r.Cookie("theme"); err == nil && isValidSyncTheme(c.Value) {
+		theme = c.Value
+	}
+
+	mgr := h.syncI18nManager()
+	lang = mgr.DefaultLanguage()
+	if c, err := r.Cookie("lang"); err == nil {
+		if l := normalizeSyncLanguage(c.Value); l != "" && mgr.IsSupported(l) {
+			lang = l
+		}
+	}
+
+	return theme, lang
+}
+
+// handleServerPreferencesExport handles GET /api/v1/server/preferences/export
+// per AI.md "Cross-device preference sync": reads the current theme/lang
+// cookies and returns the full import URL plus a base64url short code for
+// the same state. Stateless - nothing is written or looked up server-side.
+func (h *Handler) handleServerPreferencesExport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", "Only GET is supported")
+		return
+	}
+
+	theme, lang := h.currentSyncPrefs(r)
+	query := url.Values{"theme": {theme}, "lang": {lang}}.Encode()
+
+	scheme := "https"
+	if r.TLS == nil && r.Header.Get("X-Forwarded-Proto") != "https" {
+		scheme = "http"
+	}
+	fullURL := scheme + "://" + r.Host + "/server/preferences/import?" + query
+	shortCode := base64.RawURLEncoding.EncodeToString([]byte(query))
+
+	h.jsonResponse(w, http.StatusOK, &APIResponse{
+		OK: true,
+		Data: map[string]string{
+			"theme":      theme,
+			"lang":       lang,
+			"full_url":   fullURL,
+			"short_code": shortCode,
+		},
+		Meta: &APIMeta{Version: APIVersion},
+	})
+}
+
+// handleServerPreferencesImport handles GET /api/v1/server/preferences/import
+// per AI.md "Cross-device preference sync": accepts theme/lang as a plain
+// query string, or a pasted base64url short code (in the "code" param,
+// optionally still carrying a "https://.../import?" prefix which is
+// stripped). Each value is validated against its normal enum/BCP-47
+// allowlist - unknown or malformed values are dropped rather than erroring.
+// Valid values are written as cookies and acknowledged in the JSON response;
+// unlike the WebUI mirror this never redirects, since API clients expect a
+// JSON body back.
+func (h *Handler) handleServerPreferencesImport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.errorResponse(w, http.StatusMethodNotAllowed, "Method not allowed", "Only GET is supported")
+		return
+	}
+
+	query := r.URL.Query()
+	if code := query.Get("code"); code != "" {
+		if idx := strings.Index(code, "?"); idx != -1 {
+			code = code[idx+1:]
+		}
+		if decoded, err := base64.RawURLEncoding.DecodeString(code); err == nil {
+			// The stripped text decoded as base64 - treat it as the short code form.
+			if decodedQuery, err := url.ParseQuery(string(decoded)); err == nil {
+				query = decodedQuery
+			}
+		} else if decodedQuery, err := url.ParseQuery(code); err == nil {
+			// Not valid base64 (e.g. the caller passed the plain "theme=dark&lang=fr"
+			// query string rather than the short code) - use it directly.
+			query = decodedQuery
+		}
+	}
+
+	applied := map[string]string{}
+
+	if theme := query.Get("theme"); theme != "" && isValidSyncTheme(theme) {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "theme",
+			Value:    theme,
+			Path:     "/",
+			MaxAge:   31536000,
+			SameSite: http.SameSiteLaxMode,
+		})
+		applied["theme"] = theme
+	}
+
+	if lang := normalizeSyncLanguage(query.Get("lang")); lang != "" && h.syncI18nManager().IsSupported(lang) {
+		i18n.SetLanguageCookie(w, lang)
+		applied["lang"] = lang
+	}
+
+	h.jsonResponse(w, http.StatusOK, &APIResponse{
+		OK:   true,
+		Data: applied,
+		Meta: &APIMeta{Version: APIVersion},
+	})
 }
 
 func (h *Handler) serveFaviconFallback(w http.ResponseWriter) {

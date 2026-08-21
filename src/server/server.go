@@ -995,6 +995,9 @@ func (s *Server) setupRoutes() http.Handler {
 	r.HandleFunc("/server/preferences", s.csrfProtect(s.handlePreferences))
 	r.Post("/preferences/widgets", s.csrfProtect(s.handleWidgetPreferencesSave))
 	r.Post("/preferences/general", s.csrfProtect(s.handleGeneralPreferencesSave))
+	// Cross-device preference sync (stateless export/import, no CSRF needed - GET only)
+	r.Get("/server/preferences/export", s.handlePreferencesExport)
+	r.Get("/server/preferences/import", s.handlePreferencesImport)
 
 	// No-JS theme switch (header partial fallback per AI.md PART 16)
 	r.Post("/theme", s.csrfProtect(s.handleThemeSet))

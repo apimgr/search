@@ -2525,6 +2525,43 @@
                 return;
             }
 
+            // Copy preferences (cross-device theme/lang sync per AI.md
+            // "Cross-device preference sync") - fetches the stateless
+            // server-side export endpoint and copies the full import URL.
+            if (e.target.id === 'copy-sync-prefs') {
+                fetch('/server/preferences/export', { headers: { 'Accept': 'application/json' } })
+                    .then(function(res) { return res.json(); })
+                    .then(function(json) {
+                        var data = json && json.data ? json.data : {};
+                        var urlField = document.getElementById('sync-url');
+                        var codeField = document.getElementById('sync-code');
+                        if (urlField) urlField.value = data.full_url || '';
+                        if (codeField) codeField.value = data.short_code || '';
+                        return navigator.clipboard.writeText(data.full_url || '');
+                    })
+                    .then(function() {
+                        showPrefStatus(t('preferences.sync_copied', 'Preferences copied!'));
+                    })
+                    .catch(function() {
+                        showPrefStatus(t('preferences.sync_export_failed', 'Could not copy preferences'), true);
+                    });
+                return;
+            }
+
+            // Apply a pasted sync URL or short code by navigating to the
+            // stateless import route, which validates, sets cookies, and
+            // redirects back here.
+            if (e.target.id === 'apply-sync-prefs') {
+                var pasteField = document.getElementById('sync-paste');
+                var pasted = pasteField ? pasteField.value.trim() : '';
+                if (!pasted) {
+                    showPrefStatus(t('preferences.sync_invalid', 'Enter a preferences code or URL first'), true);
+                    return;
+                }
+                window.location.href = '/server/preferences/import?code=' + encodeURIComponent(pasted) + '&redirect=' + encodeURIComponent(window.location.pathname);
+                return;
+            }
+
             if (e.target.id === 'copy-pref-link') {
                 updatePreferenceSharing();
                 var prefUrl = document.getElementById('preference-url');

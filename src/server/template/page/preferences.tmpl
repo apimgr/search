@@ -278,6 +278,34 @@
     </div>
 
     <div class="preferences-section">
+        <h2>{{t "preferences.sync_heading"}}</h2>
+        <p class="help-text">{{t "preferences.sync_help"}}</p>
+
+        <div class="form-group">
+            <label for="sync-url">{{t "preferences.sync_url_label"}}</label>
+            <input type="text" id="sync-url" readonly>
+        </div>
+
+        <div class="form-group">
+            <label for="sync-code">{{t "preferences.sync_code_label"}}</label>
+            <input type="text" id="sync-code" readonly>
+        </div>
+
+        <div class="data-actions">
+            <button type="button" id="copy-sync-prefs" class="btn btn-secondary">{{t "preferences.copy_preferences"}}</button>
+        </div>
+
+        <div class="form-group">
+            <label for="sync-paste">{{t "preferences.sync_paste_label"}}</label>
+            <input type="text" id="sync-paste" placeholder="{{t "preferences.sync_paste_placeholder"}}">
+        </div>
+
+        <div class="data-actions">
+            <button type="button" id="apply-sync-prefs" class="btn btn-secondary">{{t "preferences.apply_preferences"}}</button>
+        </div>
+    </div>
+
+    <div class="preferences-section">
         <h2>{{t "preferences.shareable_preference_link"}}</h2>
         <p class="help-text">{{t "preferences.shareable_link_help"}}</p>
 
