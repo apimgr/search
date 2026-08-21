@@ -3715,7 +3715,7 @@ html:not([data-theme-mode]) .theme-label-auto { display: none; }
 
 /* Visibility */
 .hidden {
-    display: none !important;
+    display: none;
 }
 
 .sr-only {
