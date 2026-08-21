@@ -12,6 +12,18 @@
     const THEMES = ['dark', 'light', 'auto'];
     let clientTranslations = null;
 
+    // Safe wrapper around Element.prototype.closest(). Event.target is not
+    // always an Element (e.g. a text node under Safari's text-click target
+    // resolution, or document/window on some drag/mouse edge cases), and
+    // those node types have no closest() method, throwing a TypeError.
+    // Delegated listeners across this file call this instead of
+    // e.target.closest() directly.
+    function closestFrom(target, selector) {
+        if (!target) return null;
+        const el = target.nodeType === 1 ? target : target.parentElement;
+        return el ? el.closest(selector) : null;
+    }
+
     function normalizeThemePreference(theme) {
         if (theme === 'system') return 'auto';
         return THEMES.includes(theme) ? theme : 'auto';
@@ -1254,8 +1266,8 @@
     // ========================================================================
     function initImageViewer() {
         document.addEventListener('click', function(e) {
-            const imageResult = e.target.closest('.image-result');
-            if (imageResult && !e.target.closest('a')) {
+            const imageResult = closestFrom(e.target, '.image-result');
+            if (imageResult && !closestFrom(e.target, 'a')) {
                 const fullUrl = imageResult.dataset.fullUrl;
                 if (fullUrl) {
                     window.open(fullUrl, '_blank', 'noopener,noreferrer');
@@ -2974,6 +2986,7 @@
     // needs the global units preference when a widget has no per-widget
     // override saved yet.
     window.getPreferredUnits = getPreferredUnits;
+    window.closestFrom = closestFrom;
     window.showConfirm = showConfirm;
     window.showPrompt = showPrompt;
     window.showAlert = showAlert;
@@ -4050,7 +4063,7 @@
 
             // Dragstart - when user starts dragging a widget
             grid.addEventListener('dragstart', function(e) {
-                var widget = e.target.closest('.widget');
+                var widget = window.closestFrom(e.target, '.widget');
                 if (!widget) return;
 
                 self.dragState.dragging = widget;
@@ -4966,7 +4979,7 @@
     }
 
     function handleMouseEnter(e) {
-        var videoResult = e.target.closest('.video-result, .video-item, [data-video-id]');
+        var videoResult = window.closestFrom(e.target, '.video-result, .video-item, [data-video-id]');
         if (!videoResult) return;
 
         clearTimeout(hoverTimeout);
@@ -4978,7 +4991,7 @@
     }
 
     function handleMouseLeave(e) {
-        var videoResult = e.target.closest('.video-result, .video-item, [data-video-id]');
+        var videoResult = window.closestFrom(e.target, '.video-result, .video-item, [data-video-id]');
         if (!videoResult) return;
 
         clearTimeout(hoverTimeout);
@@ -5107,7 +5120,7 @@
     var touchVideoResult = null;
 
     function handleTouchStart(e) {
-        var videoResult = e.target.closest('.video-result, .video-item, [data-video-id]');
+        var videoResult = window.closestFrom(e.target, '.video-result, .video-item, [data-video-id]');
         if (!videoResult) return;
 
         touchStartX = e.touches[0].clientX;
