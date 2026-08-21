@@ -334,7 +334,7 @@ func resolveGeneralPrefs(r *http.Request) GeneralPrefs {
 // preferences page (theme, units, default category, safe search, results per
 // page, and UI toggles). It validates submitted values, persists them as
 // server-side cookies (so the page pre-selects correctly on next load without
-// JavaScript), and redirects back to /preferences. See AI.md PART 16 "No
+// JavaScript), and redirects back to /server/preferences. See AI.md PART 16 "No
 // JavaScript-Disabled Broken State" - this is the no-JS fallback path;
 // app.js's savePreferences() intercepts the same form submit for a faster,
 // no-reload UX when JavaScript is available.
@@ -400,12 +400,12 @@ func (s *Server) handleGeneralPreferencesSave(w http.ResponseWriter, r *http.Req
 	setPrefCookie("infinite_scroll", boolCookie(infiniteScroll))
 	setPrefCookie("keyboard_shortcuts", boolCookie(keyboardShortcuts))
 
-	http.Redirect(w, r, "/preferences", http.StatusSeeOther)
+	http.Redirect(w, r, "/server/preferences", http.StatusSeeOther)
 }
 
 // handleWidgetPreferencesSave handles the widget selection form POST from the
 // preferences page. It validates submitted widget types and persists the
-// selection in a server-side cookie, then redirects back to /preferences.
+// selection in a server-side cookie, then redirects back to /server/preferences.
 func (s *Server) handleWidgetPreferencesSave(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, i18n.RequestString(r, "errors.bad_request"), http.StatusBadRequest)
@@ -442,7 +442,7 @@ func (s *Server) handleWidgetPreferencesSave(w http.ResponseWriter, r *http.Requ
 		HttpOnly: false,
 	})
 
-	http.Redirect(w, r, "/preferences", http.StatusSeeOther)
+	http.Redirect(w, r, "/server/preferences", http.StatusSeeOther)
 }
 
 // getBaseURL returns the base URL for the server.

@@ -7,7 +7,7 @@
 
     <div class="preferences-section">
         <h2>{{t "preferences.general_settings"}}</h2>
-        <form action="/preferences/general" method="POST" id="general-settings" class="preferences-form">
+        <form action="/server/preferences/general" method="POST" id="general-settings" class="preferences-form">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <div class="form-group">
                 <label for="theme">{{t "preferences.theme"}}</label>
@@ -122,7 +122,7 @@
         <h2>{{t "preferences.homepage_widgets_heading"}}</h2>
         <p class="help-text">{{t "preferences.homepage_widgets_help"}}</p>
 
-        <form action="/preferences/widgets" method="POST" id="widget-prefs-form">
+        <form action="/server/preferences/widgets" method="POST" id="widget-prefs-form">
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 
             <div class="widget-toggles" id="widget-toggles">

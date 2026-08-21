@@ -990,11 +990,12 @@ func (s *Server) setupRoutes() http.Handler {
 		r.HandleFunc("/bang", s.handleBangProxy)
 	}
 
-	// Preferences
-	r.HandleFunc("/preferences", s.csrfProtect(s.handlePreferences))
+	// Preferences. Per AI.md: canonical path is /server/preferences - a bare
+	// /preferences (or /prefs/*) alias must never be kept for "backward
+	// compatibility".
 	r.HandleFunc("/server/preferences", s.csrfProtect(s.handlePreferences))
-	r.Post("/preferences/widgets", s.csrfProtect(s.handleWidgetPreferencesSave))
-	r.Post("/preferences/general", s.csrfProtect(s.handleGeneralPreferencesSave))
+	r.Post("/server/preferences/widgets", s.csrfProtect(s.handleWidgetPreferencesSave))
+	r.Post("/server/preferences/general", s.csrfProtect(s.handleGeneralPreferencesSave))
 	// Cross-device preference sync (stateless export/import, no CSRF needed - GET only)
 	r.Get("/server/preferences/export", s.handlePreferencesExport)
 	r.Get("/server/preferences/import", s.handlePreferencesImport)

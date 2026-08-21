@@ -160,7 +160,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.HandleFunc(APIPrefix+"/server/help", h.handleServerHelp)
 	r.HandleFunc(APIPrefix+"/server/terms", h.handleServerTerms)
 	r.HandleFunc(APIPrefix+"/server/contact", h.handleServerContact)
-	r.HandleFunc(APIPrefix+"/preferences", h.handlePreferences)
+	r.HandleFunc(APIPrefix+"/server/preferences", h.handlePreferences)
 	r.HandleFunc(APIPrefix+"/server/preferences/export", h.handleServerPreferencesExport)
 	r.HandleFunc(APIPrefix+"/server/preferences/import", h.handleServerPreferencesImport)
 
@@ -1860,7 +1860,7 @@ func (h *Handler) handleServerContact(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handlePreferences handles GET|POST /api/v1/preferences per AI.md PART 1.
+// handlePreferences handles GET|POST /api/v1/server/preferences per AI.md PART 1.
 // Preferences are stored client-side (localStorage/cookies). The API endpoint
 // provides the schema and acknowledges client-submitted preference saves.
 func (h *Handler) handlePreferences(w http.ResponseWriter, r *http.Request) {

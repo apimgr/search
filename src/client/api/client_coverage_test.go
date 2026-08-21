@@ -952,8 +952,8 @@ func TestGetDirectAnswerInvalidDataJSON(t *testing.T) {
 
 func TestGetPreferences(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != version.APIPrefix+"/preferences" {
-			t.Errorf("path = %q, want %q", r.URL.Path, version.APIPrefix+"/preferences")
+		if r.URL.Path != version.APIPrefix+"/server/preferences" {
+			t.Errorf("path = %q, want %q", r.URL.Path, version.APIPrefix+"/server/preferences")
 		}
 		if r.Method != http.MethodGet {
 			t.Errorf("method = %q, want GET", r.Method)
@@ -1032,8 +1032,8 @@ func TestSetPreferences(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.URL.Path != version.APIPrefix+"/preferences" {
-					t.Errorf("path = %q, want %q", r.URL.Path, version.APIPrefix+"/preferences")
+				if r.URL.Path != version.APIPrefix+"/server/preferences" {
+					t.Errorf("path = %q, want %q", r.URL.Path, version.APIPrefix+"/server/preferences")
 				}
 				if r.Method != http.MethodPut {
 					t.Errorf("method = %q, want PUT", r.Method)

@@ -2740,7 +2740,7 @@ func TestHandleServerContactPOSTInvalidJSON(t *testing.T) {
 func TestHandlePreferencesGET(t *testing.T) {
 	handler := newTestHandler()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/preferences", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/server/preferences", nil)
 	w := httptest.NewRecorder()
 
 	handler.handlePreferences(w, req)
@@ -2773,7 +2773,7 @@ func TestHandlePreferencesPOST(t *testing.T) {
 	handler := newTestHandler()
 
 	body := `{"theme":"dark","language":"en"}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/preferences", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/server/preferences", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
@@ -2795,7 +2795,7 @@ func TestHandlePreferencesPOST(t *testing.T) {
 func TestHandlePreferencesMethodNotAllowed(t *testing.T) {
 	handler := newTestHandler()
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/preferences", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/server/preferences", nil)
 	w := httptest.NewRecorder()
 
 	handler.handlePreferences(w, req)

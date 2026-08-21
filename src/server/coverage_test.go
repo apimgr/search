@@ -2253,7 +2253,7 @@ func TestHandleBangProxy_LocalhostBlocked(t *testing.T) {
 // TestHandlePreferencesSave_JsonOk returns 200 with ok:true.
 func TestHandlePreferencesSave_JsonOk(t *testing.T) {
 	s := newTestServer(t)
-	req := httptest.NewRequest(http.MethodPost, "/preferences", nil)
+	req := httptest.NewRequest(http.MethodPost, "/server/preferences", nil)
 	rec := httptest.NewRecorder()
 	s.handlePreferencesSave(rec, req)
 	if rec.Code != http.StatusOK {
@@ -3026,7 +3026,7 @@ func TestCSRFProtect_PostInvalidToken(t *testing.T) {
 // TestHandlePreferences_GET exercises the GET branch of handlePreferences.
 func TestHandlePreferences_GET(t *testing.T) {
 	s := newTestServer(t)
-	req := httptest.NewRequest(http.MethodGet, "/preferences", nil)
+	req := httptest.NewRequest(http.MethodGet, "/server/preferences", nil)
 	rec := httptest.NewRecorder()
 	s.handlePreferences(rec, req)
 	if rec.Code != http.StatusOK && rec.Code != http.StatusInternalServerError {
@@ -3037,7 +3037,7 @@ func TestHandlePreferences_GET(t *testing.T) {
 // TestHandlePreferences_POST delegates to handlePreferencesSave and returns 200.
 func TestHandlePreferences_POST(t *testing.T) {
 	s := newTestServer(t)
-	req := httptest.NewRequest(http.MethodPost, "/preferences", nil)
+	req := httptest.NewRequest(http.MethodPost, "/server/preferences", nil)
 	rec := httptest.NewRecorder()
 	s.handlePreferences(rec, req)
 	if rec.Code != http.StatusOK {

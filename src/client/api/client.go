@@ -210,7 +210,7 @@ type DirectAnswer struct {
 	Found       bool                   `json:"found"`
 }
 
-// Preferences represents the user preferences schema from /api/v1/preferences
+// Preferences represents the user preferences schema from /api/v1/server/preferences
 type Preferences struct {
 	Storage string   `json:"storage,omitempty"`
 	Fields  []string `json:"fields,omitempty"`
@@ -572,9 +572,9 @@ func (c *Client) GetDirectAnswer(slug string) (*DirectAnswer, error) {
 	return &result, nil
 }
 
-// GetPreferences returns the user preferences schema from GET /api/v1/preferences
+// GetPreferences returns the user preferences schema from GET /api/v1/server/preferences
 func (c *Client) GetPreferences() (*Preferences, error) {
-	resp, err := c.get(searchapi.APIPrefix + "/preferences")
+	resp, err := c.get(searchapi.APIPrefix + "/server/preferences")
 	if err != nil {
 		return nil, err
 	}
@@ -592,9 +592,9 @@ func (c *Client) GetPreferences() (*Preferences, error) {
 	return &result, nil
 }
 
-// SetPreferences saves user preferences via PUT /api/v1/preferences
+// SetPreferences saves user preferences via PUT /api/v1/server/preferences
 func (c *Client) SetPreferences(prefs *Preferences) error {
-	resp, err := c.doRequest("PUT", searchapi.APIPrefix+"/preferences", prefs)
+	resp, err := c.doRequest("PUT", searchapi.APIPrefix+"/server/preferences", prefs)
 	if err != nil {
 		return err
 	}

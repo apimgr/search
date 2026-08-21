@@ -2850,7 +2850,7 @@ func TestHandleOpenSearchCustomName(t *testing.T) {
 
 func TestHandlePreferencesSave(t *testing.T) {
 	s := &Server{config: &config.Config{}, i18nManager: i18n.NewManager("en", []string{"en"})}
-	r := httptest.NewRequest(http.MethodPost, "/preferences", nil)
+	r := httptest.NewRequest(http.MethodPost, "/server/preferences", nil)
 	w := httptest.NewRecorder()
 
 	s.handlePreferencesSave(w, r)

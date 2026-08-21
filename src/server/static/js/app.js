@@ -2293,7 +2293,7 @@
             applyTheme(prefs.theme);
 
             // preventDefault() on the submit button means the real POST to
-            // /preferences/general never fires for JS-enabled clients, so
+            // /server/preferences/general never fires for JS-enabled clients, so
             // sync the same fields there via fetch to keep the server-side
             // cookies (and thus .Prefs on next page render) consistent with
             // what no-JS clients would have submitted.
@@ -2332,7 +2332,7 @@
             if (prefs.infinite_scroll) params.append('infinite_scroll', 'on');
             if (prefs.keyboard_shortcuts) params.append('keyboard_shortcuts', 'on');
 
-            fetch('/preferences/general', {
+            fetch('/server/preferences/general', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: params.toString(),
@@ -2361,7 +2361,7 @@
                 params.append('widget', input.value);
             });
 
-            fetch('/preferences/widgets', {
+            fetch('/server/preferences/widgets', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: params.toString(),
@@ -3256,7 +3256,7 @@
         widgets.forEach(function(wt) {
             params.append('widget', wt);
         });
-        fetch('/preferences/widgets', {
+        fetch('/server/preferences/widgets', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: params.toString(),

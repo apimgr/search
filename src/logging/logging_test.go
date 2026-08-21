@@ -3053,7 +3053,7 @@ func TestLogCSRFFailure(t *testing.T) {
 	logger := NewAuditLogger(path)
 	defer logger.Close()
 
-	logger.LogCSRFFailure("1.2.3.4", "/api/v1/preferences")
+	logger.LogCSRFFailure("1.2.3.4", "/api/v1/server/preferences")
 
 	result, err := logger.QueryAuditLogs(AuditQueryOptions{})
 	if err != nil {

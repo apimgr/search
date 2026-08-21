@@ -230,7 +230,7 @@ func (s *Server) handleLlmsTxt(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "- GET /api/%s/search - Search API (no auth, rate limited)\n", apiVersion)
 	fmt.Fprintf(w, "- GET /api/%s/engines - List search engines (no auth)\n", apiVersion)
 	fmt.Fprintf(w, "- GET /api/%s/instant - Instant answers (no auth)\n", apiVersion)
-	fmt.Fprintf(w, "- GET /api/%s/preferences - User preferences (no auth)\n", apiVersion)
+	fmt.Fprintf(w, "- GET /api/%s/server/preferences - User preferences (no auth)\n", apiVersion)
 	fmt.Fprintln(w)
 
 	// Capabilities

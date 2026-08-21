@@ -191,7 +191,7 @@ func (s *Server) renderNoJSHome(w http.ResponseWriter, r *http.Request, data *Pa
 	b.WriteString(`<ul>` + "\n")
 	b.WriteString(`<li><a href="/about">` + html.EscapeString(im.T(lang, "nav.about")) + `</a></li>` + "\n")
 	b.WriteString(`<li><a href="/privacy">` + html.EscapeString(im.T(lang, "footer.privacy_policy")) + `</a></li>` + "\n")
-	b.WriteString(`<li><a href="/preferences">` + html.EscapeString(im.T(lang, "nav.preferences")) + `</a></li>` + "\n")
+	b.WriteString(`<li><a href="/server/preferences">` + html.EscapeString(im.T(lang, "nav.preferences")) + `</a></li>` + "\n")
 	b.WriteString(`</ul>` + "\n")
 	b.WriteString("</footer>\n</body>\n</html>\n")
 

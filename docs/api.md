@@ -132,7 +132,7 @@ envelope (with `.txt` variants returning plain text where noted).
 | `/api/v1/bangs` | GET | Bang shortcut definitions (filter with `category`) |
 | `/api/v1/widgets` | GET | Available instant-answer widgets (filter with `category`) |
 | `/api/v1/widgets/{id}` | GET | Data for a single widget (e.g. `clock`, `weather`) |
-| `/api/v1/preferences` | GET | Default user preferences |
+| `/api/v1/server/preferences` | GET | Default user preferences |
 | `/api/v1/favicon` | GET | Privacy-preserving favicon proxy (`url` param) |
 | `/api/v1/server/about` | GET | Server about page (JSON) |
 | `/api/v1/server/privacy` | GET | Privacy policy (JSON) |
