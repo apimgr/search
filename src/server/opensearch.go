@@ -330,14 +330,18 @@ func resolveGeneralPrefs(r *http.Request) GeneralPrefs {
 	return prefs
 }
 
-// handleGeneralPreferencesSave handles the general-settings form POST from the
-// preferences page (theme, units, default category, safe search, results per
-// page, and UI toggles). It validates submitted values, persists them as
-// server-side cookies (so the page pre-selects correctly on next load without
-// JavaScript), and redirects back to /server/preferences. See AI.md PART 16 "No
-// JavaScript-Disabled Broken State" - this is the no-JS fallback path;
-// app.js's savePreferences() intercepts the same form submit for a faster,
-// no-reload UX when JavaScript is available.
+// handleGeneralPreferencesSave handles the single preferences-page form POST
+// (id="general-settings"): theme, units, default category, safe search,
+// results per page, UI toggles, and the homepage widget selection - the
+// widget checkboxes use the HTML form="general-settings" attribute so they
+// submit here too instead of needing a second form/button/route (see AI.md
+// PART 16 "Reuse Before Creating" - one Save action, not two). It validates
+// submitted values, persists them as server-side cookies (so the page
+// pre-selects correctly on next load without JavaScript), and redirects back
+// to /server/preferences. See AI.md PART 16 "No JavaScript-Disabled Broken
+// State" - this is the no-JS fallback path; app.js's savePreferences()
+// intercepts the same form submit for a faster, no-reload UX when JavaScript
+// is available.
 func (s *Server) handleGeneralPreferencesSave(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, i18n.RequestString(r, "errors.bad_request"), http.StatusBadRequest)
@@ -400,20 +404,20 @@ func (s *Server) handleGeneralPreferencesSave(w http.ResponseWriter, r *http.Req
 	setPrefCookie("infinite_scroll", boolCookie(infiniteScroll))
 	setPrefCookie("keyboard_shortcuts", boolCookie(keyboardShortcuts))
 
+	// Widget checkboxes use form="general-settings" so they submit in this
+	// same request instead of needing their own form/button/route.
+	setWidgetCookie(w, r.Form["widget"])
+
 	http.Redirect(w, r, "/server/preferences", http.StatusSeeOther)
 }
 
-// handleWidgetPreferencesSave handles the widget selection form POST from the
-// preferences page. It validates submitted widget types and persists the
-// selection in a server-side cookie, then redirects back to /server/preferences.
-func (s *Server) handleWidgetPreferencesSave(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, i18n.RequestString(r, "errors.bad_request"), http.StatusBadRequest)
-		return
-	}
-
-	// Collect and validate submitted widget types.
-	submitted := r.Form["widget"]
+// setWidgetCookie validates a list of submitted widget type strings against
+// knownWidgetTypes and persists the deduplicated selection as the widget
+// cookie. Shared by handleGeneralPreferencesSave (preferences-page form) and
+// handleWidgetOrderSave (homepage widget-grid drag-and-drop AJAX) so the
+// validation/cookie-encoding logic exists in exactly one place - see AI.md
+// PART 16 "Reuse Before Creating".
+func setWidgetCookie(w http.ResponseWriter, submitted []string) {
 	var valid []string
 	seen := make(map[string]bool)
 	for _, wt := range submitted {
@@ -441,6 +445,20 @@ func (s *Server) handleWidgetPreferencesSave(w http.ResponseWriter, r *http.Requ
 		SameSite: http.SameSiteLaxMode,
 		HttpOnly: false,
 	})
+}
+
+// handleWidgetOrderSave handles the AJAX-only POST used by the homepage
+// widget grid's drag-and-drop reorder (see app.js saveEnabledWidgets()) - it
+// has no associated <form> or page of its own, so it stays a dedicated
+// route/handler distinct from handleGeneralPreferencesSave, which owns the
+// preferences-page widget checkboxes.
+func (s *Server) handleWidgetOrderSave(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, i18n.RequestString(r, "errors.bad_request"), http.StatusBadRequest)
+		return
+	}
+
+	setWidgetCookie(w, r.Form["widget"])
 
 	http.Redirect(w, r, "/server/preferences", http.StatusSeeOther)
 }

@@ -2296,10 +2296,12 @@
             // /server/preferences/general never fires for JS-enabled clients, so
             // sync the same fields there via fetch to keep the server-side
             // cookies (and thus .Prefs on next page render) consistent with
-            // what no-JS clients would have submitted.
+            // what no-JS clients would have submitted. Widget toggles are
+            // form="general-settings" checkboxes rendered elsewhere on the
+            // page, so they are collected and sent in the same request -
+            // there is a single Save action, not a separate one per section.
             syncGeneralPreferences(prefs);
 
-            saveWidgetPreferences();
             applySearchPreferencesToForms();
             showPrefStatus(t('preferences.saved', 'Preferences saved'));
 
@@ -2314,9 +2316,11 @@
             }, 500);
         }
 
-        // Persist the general preferences to the server-side cookies via AJAX
-        // so .Prefs on the next server-rendered page reflects the JS-enabled
-        // save path too, not just the no-JS form POST fallback.
+        // Persist the general preferences (including the homepage widget
+        // toggles, which are form="general-settings" checkboxes rendered in
+        // a different section of the page) to the server-side cookies via
+        // AJAX, so .Prefs on the next server-rendered page reflects the
+        // JS-enabled save path too, not just the no-JS form POST fallback.
         function syncGeneralPreferences(prefs) {
             var csrfInput = document.querySelector('#general-settings input[name="csrf_token"]');
             var params = new URLSearchParams();
@@ -2332,6 +2336,13 @@
             if (prefs.infinite_scroll) params.append('infinite_scroll', 'on');
             if (prefs.keyboard_shortcuts) params.append('keyboard_shortcuts', 'on');
 
+            var toggles = document.getElementById('widget-toggles');
+            if (toggles) {
+                toggles.querySelectorAll('input[name="widget"]:checked').forEach(function(input) {
+                    params.append('widget', input.value);
+                });
+            }
+
             fetch('/server/preferences/general', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -2345,31 +2356,6 @@
         // loadWidgetPreferences is a no-op — the server renders the correct
         // checked state on each preference page load via the server-side cookie.
         function loadWidgetPreferences() {}
-
-        // Persist the checked widget toggles to the server-side cookie via AJAX,
-        // so they save together with the rest of the form under "Save & Return".
-        function saveWidgetPreferences() {
-            var toggles = document.getElementById('widget-toggles');
-            if (!toggles) return;
-
-            var csrfInput = document.querySelector('#widget-prefs-form input[name="csrf_token"]');
-            var params = new URLSearchParams();
-            if (csrfInput) {
-                params.append('csrf_token', csrfInput.value);
-            }
-            toggles.querySelectorAll('input[name="widget"]:checked').forEach(function(input) {
-                params.append('widget', input.value);
-            });
-
-            fetch('/server/preferences/widgets', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: params.toString(),
-                redirect: 'follow'
-            }).catch(function(e) {
-                console.error('Widget preference save failed:', e);
-            });
-        }
 
         // Load custom bangs
         function loadCustomBangs() {
@@ -2598,14 +2584,10 @@
             }
         });
 
-        // Widget toggle state is persisted by saveWidgetPreferences(), called from
-        // savePreferences() when the user clicks "Save & Return" — see above.
-        var widgetPrefsForm = document.getElementById('widget-prefs-form');
-        if (widgetPrefsForm) {
-            widgetPrefsForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-            });
-        }
+        // Widget toggle state is persisted by syncGeneralPreferences(), called
+        // from savePreferences() when the user clicks "Save & Return" — see
+        // above. The toggles are form="general-settings" checkboxes, not
+        // their own <form>, so there is nothing to intercept here.
 
         // Add custom bang form
         var addBangForm = document.getElementById('add-custom-bang');

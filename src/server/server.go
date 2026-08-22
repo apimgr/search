@@ -994,7 +994,11 @@ func (s *Server) setupRoutes() http.Handler {
 	// /preferences (or /prefs/*) alias must never be kept for "backward
 	// compatibility".
 	r.HandleFunc("/server/preferences", s.csrfProtect(s.handlePreferences))
-	r.Post("/server/preferences/widgets", s.csrfProtect(s.handleWidgetPreferencesSave))
+	// Preferences-page widget selection is submitted through the same
+	// general-settings form (form="general-settings" checkboxes) - one Save
+	// action, one route. /preferences/widgets remains for the homepage
+	// widget grid's drag-and-drop reorder, which has no form of its own.
+	r.Post("/server/preferences/widgets", s.csrfProtect(s.handleWidgetOrderSave))
 	r.Post("/server/preferences/general", s.csrfProtect(s.handleGeneralPreferencesSave))
 	// Cross-device preference sync (stateless export/import, no CSRF needed - GET only)
 	r.Get("/server/preferences/export", s.handlePreferencesExport)
