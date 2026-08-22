@@ -4267,17 +4267,12 @@
 
             var settings = getWidgetSettings(widgetType);
 
-            // The weather widget's own units field is only populated once the
-            // user opens its settings panel and saves; until then it's
-            // undefined, and URLSearchParams would stringify that as the
-            // literal "undefined" (not the global units preference), which
-            // src/widget/weather.go treats as anything-but-"imperial" and so
-            // silently renders metric. Fall back to the global units cookie
-            // preference (set via the preferences page / other widgets) when
-            // the weather widget hasn't set its own override yet.
-            // getPreferredUnits is declared in a different top-level IIFE
-            // and is only reachable here via its window export.
-            if (widgetType === 'weather' && !settings.units) {
+            // Units are a single global preference (set on the preferences
+            // page), never a per-widget override - avoids two redundant
+            // controls for the same setting. getPreferredUnits is declared
+            // in a different top-level IIFE and is only reachable here via
+            // its window export.
+            if (widgetType === 'weather') {
                 settings.units = window.getPreferredUnits();
             }
 
@@ -4403,21 +4398,12 @@
                     var cityHintText = escapeHtml(t('widgets_ui.settings_weather_city_hint', 'Enter a city (e.g., "Albany, NY" or "Paris, France")'));
                     var cityLabel = escapeHtml(t('widgets_ui.settings_weather_city_label', 'City'));
                     var cityPlaceholder = escapeHtml(t('widgets_ui.settings_weather_city_placeholder', 'Albany, NY or Paris, France'));
-                    var unitsLabel = escapeHtml(t('widgets_ui.settings_weather_units_label', 'Units'));
-                    var unitsAuto = escapeHtml(t('widgets_ui.settings_weather_units_auto', 'Use global preference'));
-                    var unitsMetric = escapeHtml(t('widgets_ui.settings_weather_units_metric', 'Celsius'));
-                    var unitsImperial = escapeHtml(t('widgets_ui.settings_weather_units_imperial', 'Fahrenheit'));
                     content =
                         '<div class="setting-group">' +
                             '<label class="setting-checkbox"><input type="checkbox" id="setting-use-location"' + (useGeolocation ? ' checked' : '') + '> ' + useLocationLabel + '</label>' +
                             '<p class="setting-help" id="geolocation-status">' + (useGeolocation && settings.lat ? usingLocationText : cityHintText) + '</p>' +
                         '</div>' +
                         '<label>' + cityLabel + ':<input type="text" id="setting-city" value="' + escapeHtml(settings.city || '') + '" placeholder="' + cityPlaceholder + '"' + (useGeolocation ? ' disabled' : '') + '></label>' +
-                        '<label>' + unitsLabel + ':<select id="setting-units">' +
-                            '<option value=""' + (!settings.units ? ' selected' : '') + '>' + unitsAuto + '</option>' +
-                            '<option value="metric"' + (settings.units === 'metric' ? ' selected' : '') + '>' + unitsMetric + '</option>' +
-                            '<option value="imperial"' + (settings.units === 'imperial' ? ' selected' : '') + '>' + unitsImperial + '</option>' +
-                        '</select></label>' +
                         '<input type="hidden" id="setting-lat" value="' + (settings.lat || '') + '">' +
                         '<input type="hidden" id="setting-lon" value="' + (settings.lon || '') + '">';
                     break;
@@ -4560,7 +4546,6 @@
                 case 'weather':
                     settings.useGeolocation = document.getElementById('setting-use-location')?.checked || false;
                     settings.city = document.getElementById('setting-city')?.value || '';
-                    settings.units = document.getElementById('setting-units')?.value || '';
                     settings.lat = document.getElementById('setting-lat')?.value || '';
                     settings.lon = document.getElementById('setting-lon')?.value || '';
                     break;
