@@ -1,0 +1,64 @@
+# nginx proxy address - http://172.17.0.1:64580
+# search - privacy-respecting metasearch engine
+
+name: search
+
+x-logging: &default-logging
+  options:
+    max-size: "5m"
+    max-file: "1"
+  driver: json-file
+
+services:
+  search:
+    image: ghcr.io/apimgr/search:latest
+    container_name: search-app
+    hostname: search
+    restart: always
+    pull_policy: always
+    logging: *default-logging
+    environment:
+      PORT: 80
+      TZ: ${TZ:-America/New_York}
+      CACHE_URL: valkey://search-cache:6379
+      # For remote libsql/Turso: set DATABASE_DRIVER=libsql and DATABASE_URL
+      # DATABASE_DRIVER: libsql
+      # DATABASE_URL: libsql://your-db.turso.io?authToken=${TURSO_AUTH_TOKEN}
+    volumes:
+      - ./volumes/config:/config:z
+      - ./volumes/data:/data:z
+    ports:
+      - "172.17.0.1:64580:80"
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/search", "--status"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+    depends_on:
+      search-cache:
+        condition: service_healthy
+    networks:
+      - search
+
+  search-cache:
+    image: valkey/valkey:alpine
+    pull_policy: always
+    container_name: search-cache
+    restart: always
+    logging: *default-logging
+    volumes:
+      - ./volumes/data/db/valkey:/data:z
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli ping || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - search
+
+networks:
+  search:
+    name: search
+    external: false

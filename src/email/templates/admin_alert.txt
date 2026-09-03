@@ -1,0 +1,14 @@
+Subject: [{alert_level}] {alert_type} - {app_name}
+---
+{heading}
+
+{label_from} {app_name} ({fqdn})
+{label_time} {timestamp}
+
+{label_level}   {alert_level}
+{label_type}    {alert_type}
+{label_message} {message}
+
+--
+{app_name}
+{app_url}

@@ -1,0 +1,111 @@
+// Package cmd implements CLI commands for the search client
+// Per AI.md PART 32: --status command for health check
+package cmd
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"time"
+)
+
+// ErrUnhealthy is returned by runStatus when the server reports an unhealthy
+// state or the health endpoint cannot be reached. main() converts this sentinel
+// into os.Exit(1) so that os.Exit never appears outside of main().
+var ErrUnhealthy = errors.New("server is unhealthy")
+
+// statusCmd is the "status" subcommand, registered on the root command.
+var statusCmd = newStatusCommand()
+
+// newStatusCommand constructs the status subcommand using the stdlib-flag
+// command tree, preserving the previous cobra metadata and behavior.
+func newStatusCommand() *command {
+	return &command{
+		Use:   "status",
+		Short: "Check server status and health",
+		Long: `Check server status and health.
+Exits with code 0 if healthy, 1 if unhealthy.
+
+Examples:
+  ` + getBinaryName() + ` status
+  ` + getBinaryName() + ` status --output json`,
+		run: func(args []string) error {
+			return runStatus()
+		},
+	}
+}
+
+func init() {
+	rootCmd.addCommand("status", statusCmd)
+}
+
+func runStatus() error {
+	// Initialize client if not already done
+	if apiClient == nil {
+		if err := initClient(); err != nil {
+			return err
+		}
+	}
+
+	// Measure response time
+	start := time.Now()
+	health, err := apiClient.Health()
+	elapsed := time.Since(start)
+
+	if err != nil {
+		// Output error in requested format
+		switch getOutputFormat() {
+		case "json":
+			resp := map[string]interface{}{
+				"status":        "error",
+				"error":         err.Error(),
+				"response_time": elapsed.Milliseconds(),
+			}
+			enc := json.NewEncoder(os.Stdout)
+			enc.SetIndent("", "  ")
+			enc.Encode(resp)
+		default:
+			fmt.Printf("Status: ERROR\n")
+			fmt.Printf("Error: %v\n", err)
+			fmt.Printf("Response time: %dms\n", elapsed.Milliseconds())
+		}
+		return ErrUnhealthy
+	}
+
+	// Output health in requested format
+	switch getOutputFormat() {
+	case "json":
+		resp := map[string]interface{}{
+			"status":        health.Status,
+			"version":       health.Version,
+			"uptime":        health.Uptime,
+			"response_time": elapsed.Milliseconds(),
+			"checks":        health.Checks,
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(resp)
+	default:
+		fmt.Printf("Status: %s\n", health.Status)
+		if health.Version != "" {
+			fmt.Printf("Version: %s\n", health.Version)
+		}
+		if health.Uptime != "" {
+			fmt.Printf("Uptime: %s\n", health.Uptime)
+		}
+		fmt.Printf("Response time: %dms\n", elapsed.Milliseconds())
+		if len(health.Checks) > 0 {
+			fmt.Println("\nHealth checks:")
+			for name, status := range health.Checks {
+				fmt.Printf("  %s: %s\n", name, status)
+			}
+		}
+	}
+
+	// Return ErrUnhealthy when status is not ok/healthy so main() can call os.Exit(1)
+	if health.Status != "ok" && health.Status != "healthy" {
+		return ErrUnhealthy
+	}
+	return nil
+}

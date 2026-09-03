@@ -1,0 +1,110 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ gitea.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secret-scan:
+    name: Secret scan (full history)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Scan secrets (push — incremental)
+        if: github.event_name == 'push'
+        uses: trufflesecurity/trufflehog@30d5bb91af1a771378349dbbb0c82129392acf70  # v3.95.6
+        with:
+          base: ${{ github.event.before }}
+          head: ${{ github.event.after }}
+          extra_args: --only-verified
+
+      - name: Scan secrets (scheduled — full history)
+        if: github.event_name != 'push'
+        uses: trufflesecurity/trufflehog@30d5bb91af1a771378349dbbb0c82129392acf70  # v3.95.6
+        with:
+          extra_args: --only-verified
+
+  vuln-scan:
+    name: Vulnerability scan
+    runs-on: ubuntu-latest
+    container:
+      image: casjaysdev/go:latest
+      options: "--user 0:0"
+    env:
+      CGO_ENABLED: "0"
+      GOFLAGS: -buildvcs=false
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Run govulncheck
+        run: |
+          go mod download
+          govulncheck ./...
+
+  workflow-policy:
+    name: Workflow SHA policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Check for tag-pinned actions
+        run: |
+          VIOLATIONS=$(grep -rn 'uses:.*@v[0-9]' \
+            .github/workflows/ .gitea/workflows/ .forgejo/workflows/ 2>/dev/null || true)
+          if [ -n "$VIOLATIONS" ]; then
+            echo "ERROR: Tag-pinned actions found — pin to full commit SHA:"
+            echo "$VIOLATIONS"
+            exit 1
+          fi
+          echo "OK: all actions pinned to SHA"
+
+  image-scan:
+    name: Image scan (Trivy)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
+
+      - name: Build image for scan
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: search:scan
+          build-args: |
+            VERSION=scan
+            BUILD_DATE=scan
+            COMMIT_ID=scan
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        with:
+          image-ref: 'search:scan'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+          # gosu is bundled by the casjaysdev/alpine base image, unused by
+          # this project (tini is our entrypoint/init) — we only scan our
+          # own binaries, not upstream base-image tooling
+          skip-files: '/usr/local/bin/gosu'

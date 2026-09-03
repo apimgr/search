@@ -1,0 +1,193 @@
+{{define "content"}}
+    <div class="search-results-page" data-query="{{.Query}}" data-category="{{.Category}}" data-page="{{if .Pagination}}{{.Pagination.CurrentPage}}{{else}}1{{end}}" data-per-page="{{.PerPage}}" data-safe-search="{{.SafeSearch}}"{{if .PrefsQuery}} data-prefs="{{.PrefsQuery}}"{{end}}>
+        <div class="search-actions">
+            <a class="create-alert-link" href="/alerts/new?q={{urlquery .Query}}&category={{.Category}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}">{{t "alerts.create_title"}}</a>
+        </div>
+        {{/* Category tabs */}}
+        <div class="search-categories">
+        <a href="/search?q={{urlquery .Query}}&category=general&per_page={{.PerPage}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}" class="category-link{{if eq .Category "general"}} active{{end}}">
+            <span class="cat-icon">🌐</span> {{t "preferences.default_category_general"}}
+        </a>
+        <a href="/search?q={{urlquery .Query}}&category=images&per_page={{.PerPage}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}" class="category-link{{if eq .Category "images"}} active{{end}}">
+            <span class="cat-icon">🖼️</span> {{t "search.categories.images"}}
+        </a>
+        <a href="/search?q={{urlquery .Query}}&category=videos&per_page={{.PerPage}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}" class="category-link{{if eq .Category "videos"}} active{{end}}">
+            <span class="cat-icon">🎥</span> {{t "search.categories.videos"}}
+        </a>
+        <a href="/search?q={{urlquery .Query}}&category=news&per_page={{.PerPage}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}" class="category-link{{if eq .Category "news"}} active{{end}}">
+            <span class="cat-icon">📰</span> {{t "search.categories.news"}}
+        </a>
+        <a href="/search?q={{urlquery .Query}}&category=maps&per_page={{.PerPage}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}" class="category-link{{if eq .Category "maps"}} active{{end}}">
+            <span class="cat-icon">🗺️</span> {{t "search.categories.maps"}}
+        </a>
+        <a href="/search?q={{urlquery .Query}}&category=files&per_page={{.PerPage}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}" class="category-link{{if eq .Category "files"}} active{{end}}">
+            <span class="cat-icon">📁</span> {{t "search.categories.files"}}
+        </a>
+        <a href="/search?q={{urlquery .Query}}&category=music&per_page={{.PerPage}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}" class="category-link{{if eq .Category "music"}} active{{end}}">
+            <span class="cat-icon">🎵</span> {{t "preferences.default_category_music"}}
+        </a>
+        <a href="/search?q={{urlquery .Query}}&category=science&per_page={{.PerPage}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}" class="category-link{{if eq .Category "science"}} active{{end}}">
+            <span class="cat-icon">🔬</span> {{t "search.categories.science"}}
+        </a>
+        <a href="/search?q={{urlquery .Query}}&category=it&per_page={{.PerPage}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}" class="category-link{{if eq .Category "it"}} active{{end}}">
+            <span class="cat-icon">💻</span> {{t "search.categories.it"}}
+        </a>
+        <a href="/search?q={{urlquery .Query}}&category=social&per_page={{.PerPage}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}" class="category-link{{if eq .Category "social"}} active{{end}}">
+            <span class="cat-icon">💬</span> {{t "search.categories.social"}}
+        </a>
+    </div>
+
+    {{/* Instant Answer Box */}}
+    {{if .InstantAnswer}}
+    <div class="instant-answer-box" data-type="{{.InstantAnswer.Type}}">
+        <div class="instant-answer-header">
+            <span class="instant-answer-title">{{.InstantAnswer.Title}}</span>
+            {{if .InstantAnswer.Source}}
+            <a href="{{.InstantAnswer.SourceURL}}" class="instant-answer-source" target="_blank" rel="noopener noreferrer">{{.InstantAnswer.Source}}</a>
+            {{end}}
+        </div>
+        <div class="instant-answer-content">
+            {{.InstantAnswer.Content | safeHTML}}
+        </div>
+    </div>
+    {{end}}
+
+    {{if .Error}}
+    <div class="search-error">
+        <p>{{.Error}}</p>
+    </div>
+    {{else if .Results}}
+    <div class="search-info">
+        <span class="result-count">{{if eq .TotalResults 1}}{{t "search.result_count_one" .TotalResults}}{{else}}{{t "search.result_count_other" .TotalResults}}{{end}}</span>
+        <span class="search-info-sep">·</span>
+        {{if .Engines}}
+        <span class="search-engines">{{if eq (len .Engines) 1}}{{t "search.engines_used_one" (len .Engines) (join .Engines ", ")}}{{else}}{{t "search.engines_used_other" (len .Engines) (join .Engines ", ")}}{{end}}</span>
+        <span class="search-info-sep">·</span>
+        {{end}}
+        <span class="search-time">{{humanDuration .SearchTime}}</span>
+    </div>
+
+    {{if eq .Category "images"}}
+    {{/* Image Grid Layout */}}
+    <div class="image-results" id="results-container">
+        {{range .Results}}
+        <div class="image-result" data-full-url="{{.URL}}">
+            <a href="{{.URL}}" target="_blank" rel="noopener noreferrer">
+                <div class="image-thumb-wrap">
+                    {{if .Thumbnail}}
+                    <img src="{{.Thumbnail}}" alt="{{.Title}}" loading="lazy">
+                    {{end}}
+                </div>
+            </a>
+            <div class="image-result-info">
+                <a href="{{.URL}}" class="image-title" target="_blank" rel="noopener noreferrer">{{.Title}}</a>
+                <div class="image-source">{{.Engine}}</div>
+            </div>
+        </div>
+        {{end}}
+    </div>
+    {{else if eq .Category "videos"}}
+    {{/* Video Grid Layout */}}
+    <div class="video-results" id="results-container">
+        {{range .Results}}
+        <div class="video-result">
+            <a href="{{.URL}}" class="video-thumbnail-link" target="_blank" rel="noopener noreferrer">
+                <div class="video-thumbnail-container">
+                    {{if .Thumbnail}}
+                    <img src="{{.Thumbnail}}" alt="{{.Title}}" loading="lazy" class="video-thumbnail">
+                    {{end}}
+                    <div class="video-play-overlay">
+                        <svg class="play-icon" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M8 5v14l11-7z"/>
+                        </svg>
+                    </div>
+                    {{if .Duration}}
+                    <span class="video-duration">{{formatVideoDuration .Duration}}</span>
+                    {{end}}
+                </div>
+            </a>
+            <div class="video-info">
+                <h3 class="video-title">
+                    <a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Title}}</a>
+                </h3>
+                <div class="video-meta">
+                    <span class="video-engine">{{.Engine}}</span>
+                    {{if .ViewCount}}
+                    <span class="video-views">{{t "search.views_count" (formatViewCount .ViewCount)}}</span>
+                    {{end}}
+                    {{if .Author}}
+                    <span class="video-author">{{.Author}}</span>
+                    {{end}}
+                </div>
+                {{if .Content}}
+                <p class="video-description">{{.Content}}</p>
+                {{end}}
+            </div>
+        </div>
+        {{end}}
+    </div>
+    {{else}}
+    {{/* Standard Results List */}}
+    <div class="results-list" id="results-container">
+        {{range .Results}}
+        <article class="result-item">
+            <div class="result-favicon">
+                <img src="/api/v1/favicon?url={{.URL}}"
+                     alt=""
+                     loading="lazy"
+                     data-favicon-fallback>
+                <span class="favicon-placeholder hidden">{{slice (printf "%s" .Title) 0 1}}</span>
+            </div>
+            <div class="result-body">
+                <h3 class="result-title">
+                    <a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Title}}</a>
+                </h3>
+                <div class="result-url">
+                    <span class="result-url-text">{{.URL}}</span>
+                </div>
+                <p class="result-description">{{.Content}}</p>
+                <div class="result-meta">
+                    <span class="result-engine">{{.Engine}}</span>
+                    {{if not (.PublishedAt.IsZero)}}
+                    <span class="result-date">{{formatSearchDate .PublishedAt}}</span>
+                    {{end}}
+                </div>
+            </div>
+        </article>
+        {{end}}
+    </div>
+    {{end}}
+
+    {{/* Infinite Scroll Trigger */}}
+    <div class="infinite-scroll-trigger" id="scroll-trigger"></div>
+    <div class="loading-more hidden" id="loading-indicator">
+        <div class="loading-spinner"></div>
+        <span>{{t "search.loading_more_results"}}</span>
+    </div>
+    <div class="end-of-results hidden" id="end-indicator">
+        {{t "search.no_more_results"}}
+    </div>
+
+    {{if and .Pagination (gt .Pagination.TotalPages 1)}}
+    <nav class="pagination" aria-label="{{t "search.pagination_label"}}">
+        {{if .Pagination.HasPrev}}
+        <a class="page-link pagination-prev" href="/search?q={{urlquery .Query}}&category={{.Category}}&page={{.Pagination.PrevPage}}&per_page={{.PerPage}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}" rel="prev">{{t "common.previous"}}</a>
+        {{end}}
+        {{range .Pagination.Pages}}
+        <a class="page-link{{if eq . $.Pagination.CurrentPage}} current{{end}}" href="/search?q={{urlquery $.Query}}&category={{$.Category}}&page={{.}}&per_page={{$.PerPage}}&safe_search={{$.SafeSearch}}{{if $.PrefsQuery}}&prefs={{urlquery $.PrefsQuery}}{{end}}"{{if eq . $.Pagination.CurrentPage}} aria-current="page"{{end}}>{{.}}</a>
+        {{end}}
+        {{if .Pagination.HasNext}}
+        <a class="page-link pagination-next" href="/search?q={{urlquery .Query}}&category={{.Category}}&page={{.Pagination.NextPage}}&per_page={{.PerPage}}&safe_search={{.SafeSearch}}{{if .PrefsQuery}}&prefs={{urlquery .PrefsQuery}}{{end}}" rel="next">{{t "common.next"}}</a>
+        {{end}}
+    </nav>
+    {{end}}
+
+    {{else}}
+    <div class="no-results">
+        <p>{{t "search.no_results_for" .Query}}</p>
+        <p class="no-results-hint">{{t "search.no_results_hint"}}</p>
+    </div>
+    {{end}}
+</div>
+{{/* Per AI.md PART 16: NO inline JS - all scripts in app.js */}}
+{{end}}

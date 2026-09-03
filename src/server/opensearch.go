@@ -1,0 +1,498 @@
+package server
+
+import (
+	"encoding/xml"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+
+	"github.com/apimgr/search/src/api"
+	"github.com/apimgr/search/src/common/httputil"
+	"github.com/apimgr/search/src/common/i18n"
+	"github.com/apimgr/search/src/version"
+)
+
+// OpenSearchDescription represents the OpenSearch XML format
+type OpenSearchDescription struct {
+	XMLName        xml.Name         `xml:"OpenSearchDescription"`
+	XMLNS          string           `xml:"xmlns,attr"`
+	ShortName      string           `xml:"ShortName"`
+	Description    string           `xml:"Description"`
+	Tags           string           `xml:"Tags,omitempty"`
+	Contact        string           `xml:"Contact,omitempty"`
+	LongName       string           `xml:"LongName,omitempty"`
+	Image          *OpenSearchImage `xml:"Image,omitempty"`
+	URLs           []OpenSearchURL  `xml:"Url"`
+	InputEncoding  string           `xml:"InputEncoding"`
+	OutputEncoding string           `xml:"OutputEncoding"`
+}
+
+// OpenSearchImage represents the search engine icon
+type OpenSearchImage struct {
+	Width  int    `xml:"width,attr"`
+	Height int    `xml:"height,attr"`
+	Type   string `xml:"type,attr"`
+	URL    string `xml:",chardata"`
+}
+
+// OpenSearchURL represents a search URL template
+type OpenSearchURL struct {
+	Type     string `xml:"type,attr"`
+	Method   string `xml:"method,attr,omitempty"`
+	Template string `xml:"template,attr"`
+	Rel      string `xml:"rel,attr,omitempty"`
+}
+
+// handleOpenSearch generates the OpenSearch XML description
+func (s *Server) handleOpenSearch(w http.ResponseWriter, r *http.Request) {
+	// Get base URL
+	baseURL := s.getBaseURL(r)
+
+	// Get custom name from query parameter if provided
+	customName := r.URL.Query().Get("name")
+
+	// Determine values
+	shortName := s.config.Search.OpenSearch.ShortName
+	if shortName == "" {
+		shortName = s.config.Server.Title
+	}
+	if customName != "" {
+		shortName = customName
+	}
+
+	description := s.config.Search.OpenSearch.Description
+	if description == "" {
+		description = s.config.Server.Description
+	}
+
+	longName := s.config.Search.OpenSearch.LongName
+	if longName == "" {
+		longName = shortName
+	}
+
+	contact := s.config.Search.OpenSearch.Contact
+	if contact == "" && s.config.Server.Contact.General.Email != "" {
+		contact = s.config.Server.Contact.General.Email
+	}
+	if contact == "" && s.config.Server.Contact.Admin.Email != "" {
+		contact = s.config.Server.Contact.Admin.Email
+	}
+
+	// Build OpenSearch description
+	osd := &OpenSearchDescription{
+		XMLNS:          "http://a9.com/-/spec/opensearch/1.1/",
+		ShortName:      shortName,
+		Description:    description,
+		Tags:           s.config.Search.OpenSearch.Tags,
+		Contact:        contact,
+		LongName:       longName,
+		InputEncoding:  "UTF-8",
+		OutputEncoding: "UTF-8",
+		URLs: []OpenSearchURL{
+			{
+				Type:     "text/html",
+				Method:   "get",
+				Template: baseURL + "/search?q={searchTerms}",
+			},
+			{
+				Type:     "application/x-suggestions+json",
+				Template: baseURL + api.APIPrefix + "/autocomplete?q={searchTerms}",
+				Rel:      "suggestions",
+			},
+		},
+	}
+
+	// Add image if configured
+	if s.config.Search.OpenSearch.Image != "" {
+		imageURL := s.config.Search.OpenSearch.Image
+		if !strings.HasPrefix(imageURL, "http") {
+			imageURL = baseURL + imageURL
+		}
+		osd.Image = &OpenSearchImage{
+			Width:  64,
+			Height: 64,
+			Type:   "image/png",
+			URL:    imageURL,
+		}
+	}
+
+	// Render XML
+	w.Header().Set("Content-Type", "application/opensearchdescription+xml; charset=utf-8")
+
+	// Write XML header
+	w.Write([]byte(xml.Header))
+
+	enc := xml.NewEncoder(w)
+	enc.Indent("", "  ")
+	if err := enc.Encode(osd); err != nil {
+		localizedHTTPError(w, r, http.StatusInternalServerError, "errors.server_error")
+		return
+	}
+}
+
+// handleBangProxy handles proxied bang requests for privacy
+func (s *Server) handleBangProxy(w http.ResponseWriter, r *http.Request) {
+	targetURL := r.URL.Query().Get("url")
+	if targetURL == "" {
+		localizedHTTPError(w, r, http.StatusBadRequest, "opensearch.missing_url")
+		return
+	}
+
+	// Validate URL
+	parsedURL, err := url.Parse(targetURL)
+	if err != nil {
+		localizedHTTPError(w, r, http.StatusBadRequest, "opensearch.invalid_url")
+		return
+	}
+
+	// Only allow HTTP/HTTPS
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		localizedHTTPError(w, r, http.StatusBadRequest, "opensearch.invalid_url_scheme")
+		return
+	}
+
+	// SSRF prevention: reject localhost and private/internal IPs
+	if err := validateNotPrivateProxy(parsedURL.Hostname()); err != nil {
+		localizedHTTPError(w, r, http.StatusBadRequest, "opensearch.url_not_allowed")
+		return
+	}
+
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			// Follow up to 10 redirects
+			if len(via) >= 10 {
+				return fmt.Errorf("too many redirects")
+			}
+			return nil
+		},
+	}
+
+	// Note: Tor SOCKS proxy support can be added here if needed
+	// For now, the proxy makes direct requests
+
+	// Create request
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, targetURL, nil)
+	if err != nil {
+		localizedHTTPError(w, r, http.StatusInternalServerError, "opensearch.request_create_failed")
+		return
+	}
+
+	// Set headers to appear as a normal browser
+	req.Header.Set("User-Agent", version.BrowserUserAgent)
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Accept-Encoding", "gzip, deflate")
+	req.Header.Set("DNT", "1")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+
+	// Execute request
+	resp, err := client.Do(req)
+	if err != nil {
+		// If proxy fails, fall back to redirect
+		http.Redirect(w, r, targetURL, http.StatusFound)
+		return
+	}
+	defer resp.Body.Close()
+
+	// Copy response headers (selective)
+	for _, header := range []string{"Content-Type", "Content-Disposition", "Cache-Control"} {
+		if val := resp.Header.Get(header); val != "" {
+			w.Header().Set(header, val)
+		}
+	}
+
+	// Remove tracking headers
+	w.Header().Del("Set-Cookie")
+
+	// Set status code
+	w.WriteHeader(resp.StatusCode)
+
+	// Copy body
+	io.Copy(w, resp.Body)
+}
+
+// handlePreferences handles the user preferences page
+func (s *Server) handlePreferences(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		s.handlePreferencesSave(w, r)
+		return
+	}
+
+	data := s.newPageData(w, r, "Preferences", "preferences")
+	data.Prefs = resolveGeneralPrefs(r)
+
+	// Populate enabled widgets from the server-side cookie.
+	enabled := parseWidgetCookie(r)
+	if len(enabled) == 0 {
+		enabled = []string{"clock", "calculator", "quicklinks", "notes"}
+		if s.widgetManager != nil {
+			if d := s.widgetManager.GetDefaultWidgets(); len(d) > 0 {
+				enabled = d
+			}
+		}
+	}
+	data.EnabledWidgets = enabled
+
+	// Get all available bangs for display
+	data.Data = map[string]interface{}{
+		"bangs":      s.bangManager.GetAll(),
+		"categories": s.bangManager.GetCategories(),
+		"builtins":   s.bangManager.GetBuiltins(),
+	}
+
+	if err := s.renderer.Render(w, "preferences", data); err != nil {
+		s.handleInternalError(w, r, "template render", err)
+	}
+}
+
+// handlePreferencesSave handles saving non-widget user preferences (acknowledged client-side).
+func (s *Server) handlePreferencesSave(w http.ResponseWriter, r *http.Request) {
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"ok":   true,
+		"data": map[string]string{},
+	})
+}
+
+// generalPrefCookieMaxAge matches widgetCookieMaxAge / theme+units cookies in
+// app.js (31536000 seconds = 1 year).
+const generalPrefCookieMaxAge = 31536000
+
+// validDefaultCategories mirrors the <option> values in preferences.tmpl's
+// #default-category select.
+var validDefaultCategories = map[string]bool{
+	"general": true, "images": true, "videos": true, "news": true,
+	"maps": true, "files": true, "music": true, "science": true,
+	"it": true, "social": true,
+}
+
+// validResultsPerPage mirrors the <option> values in preferences.tmpl's
+// #results-per-page select.
+var validResultsPerPage = map[string]bool{
+	"10": true, "20": true, "30": true, "50": true, "100": true,
+}
+
+// resolveGeneralPrefs reads the general-settings cookies set by
+// handleGeneralPreferencesSave (or by app.js) and returns the values to
+// pre-select on the preferences page, falling back to sane defaults when a
+// cookie is missing or holds an invalid value.
+func resolveGeneralPrefs(r *http.Request) GeneralPrefs {
+	prefs := GeneralPrefs{
+		Theme:             "auto",
+		DefaultCategory:   "general",
+		SafeSearch:        "1",
+		Units:             "imperial",
+		ResultsPerPage:    "100",
+		NewTab:            true,
+		InfiniteScroll:    true,
+		KeyboardShortcuts: true,
+	}
+
+	if c, err := r.Cookie("theme"); err == nil {
+		switch c.Value {
+		case "dark", "light", "auto":
+			prefs.Theme = c.Value
+		}
+	}
+	if c, err := r.Cookie("units"); err == nil {
+		if c.Value == "metric" || c.Value == "imperial" {
+			prefs.Units = c.Value
+		}
+	}
+	if c, err := r.Cookie("default_category"); err == nil && validDefaultCategories[c.Value] {
+		prefs.DefaultCategory = c.Value
+	}
+	if c, err := r.Cookie("safe_search"); err == nil {
+		switch c.Value {
+		case "0", "1", "2":
+			prefs.SafeSearch = c.Value
+		}
+	}
+	if c, err := r.Cookie("results_per_page"); err == nil && validResultsPerPage[c.Value] {
+		prefs.ResultsPerPage = c.Value
+	}
+	if c, err := r.Cookie("new_tab"); err == nil {
+		prefs.NewTab = c.Value == "1"
+	}
+	if c, err := r.Cookie("infinite_scroll"); err == nil {
+		prefs.InfiniteScroll = c.Value == "1"
+	}
+	if c, err := r.Cookie("keyboard_shortcuts"); err == nil {
+		prefs.KeyboardShortcuts = c.Value == "1"
+	}
+
+	return prefs
+}
+
+// handleGeneralPreferencesSave handles the single preferences-page form POST
+// (id="general-settings"): theme, units, default category, safe search,
+// results per page, UI toggles, and the homepage widget selection - the
+// widget checkboxes use the HTML form="general-settings" attribute so they
+// submit here too instead of needing a second form/button/route (see AI.md
+// PART 16 "Reuse Before Creating" - one Save action, not two). It validates
+// submitted values, persists them as server-side cookies (so the page
+// pre-selects correctly on next load without JavaScript), and redirects back
+// to /server/preferences. See AI.md PART 16 "No JavaScript-Disabled Broken
+// State" - this is the no-JS fallback path; app.js's savePreferences()
+// intercepts the same form submit for a faster, no-reload UX when JavaScript
+// is available.
+func (s *Server) handleGeneralPreferencesSave(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, i18n.RequestString(r, "errors.bad_request"), http.StatusBadRequest)
+		return
+	}
+
+	theme := r.FormValue("theme")
+	if theme != "dark" && theme != "light" && theme != "auto" {
+		theme = "auto"
+	}
+
+	units := "imperial"
+	if r.FormValue("units") == "metric" {
+		units = "metric"
+	}
+
+	defaultCategory := r.FormValue("default_category")
+	if !validDefaultCategories[defaultCategory] {
+		defaultCategory = "general"
+	}
+
+	safeSearch := r.FormValue("safe_search")
+	if safeSearch != "0" && safeSearch != "1" && safeSearch != "2" {
+		safeSearch = "1"
+	}
+
+	resultsPerPage := r.FormValue("results_per_page")
+	if !validResultsPerPage[resultsPerPage] {
+		resultsPerPage = "100"
+	}
+
+	// Checkboxes are only present in the posted form when checked.
+	newTab := r.FormValue("new_tab") != ""
+	infiniteScroll := r.FormValue("infinite_scroll") != ""
+	keyboardShortcuts := r.FormValue("keyboard_shortcuts") != ""
+
+	setPrefCookie := func(name, value string) {
+		http.SetCookie(w, &http.Cookie{
+			Name:     name,
+			Value:    value,
+			Path:     "/",
+			MaxAge:   generalPrefCookieMaxAge,
+			SameSite: http.SameSiteLaxMode,
+			HttpOnly: false,
+		})
+	}
+	boolCookie := func(v bool) string {
+		if v {
+			return "1"
+		}
+		return "0"
+	}
+
+	setPrefCookie("theme", theme)
+	setPrefCookie("units", units)
+	setPrefCookie("default_category", defaultCategory)
+	setPrefCookie("safe_search", safeSearch)
+	setPrefCookie("results_per_page", resultsPerPage)
+	setPrefCookie("new_tab", boolCookie(newTab))
+	setPrefCookie("infinite_scroll", boolCookie(infiniteScroll))
+	setPrefCookie("keyboard_shortcuts", boolCookie(keyboardShortcuts))
+
+	// Widget checkboxes use form="general-settings" so they submit in this
+	// same request instead of needing their own form/button/route.
+	setWidgetCookie(w, r.Form["widget"])
+
+	http.Redirect(w, r, "/server/preferences", http.StatusSeeOther)
+}
+
+// setWidgetCookie validates a list of submitted widget type strings against
+// knownWidgetTypes and persists the deduplicated selection as the widget
+// cookie. Shared by handleGeneralPreferencesSave (preferences-page form) and
+// handleWidgetOrderSave (homepage widget-grid drag-and-drop AJAX) so the
+// validation/cookie-encoding logic exists in exactly one place - see AI.md
+// PART 16 "Reuse Before Creating".
+func setWidgetCookie(w http.ResponseWriter, submitted []string) {
+	var valid []string
+	seen := make(map[string]bool)
+	for _, wt := range submitted {
+		wt = strings.TrimSpace(wt)
+		if wt != "" && knownWidgetTypes[wt] && !seen[wt] {
+			valid = append(valid, wt)
+			seen[wt] = true
+		}
+	}
+
+	// Build cookie value. An explicit empty selection is stored as the
+	// "none" sentinel so parseWidgetCookie can distinguish "user disabled
+	// all widgets" from "cookie never set, use defaults" (both would
+	// otherwise decode as an empty string).
+	cookieVal := strings.Join(valid, ",")
+	if cookieVal == "" {
+		cookieVal = widgetCookieDisabledValue
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     widgetCookieName,
+		Value:    cookieVal,
+		Path:     "/",
+		MaxAge:   widgetCookieMaxAge,
+		SameSite: http.SameSiteLaxMode,
+		HttpOnly: false,
+	})
+}
+
+// handleWidgetOrderSave handles the AJAX-only POST used by the homepage
+// widget grid's drag-and-drop reorder (see app.js saveEnabledWidgets()) - it
+// has no associated <form> or page of its own, so it stays a dedicated
+// route/handler distinct from handleGeneralPreferencesSave, which owns the
+// preferences-page widget checkboxes.
+func (s *Server) handleWidgetOrderSave(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, i18n.RequestString(r, "errors.bad_request"), http.StatusBadRequest)
+		return
+	}
+
+	setWidgetCookie(w, r.Form["widget"])
+
+	http.Redirect(w, r, "/server/preferences", http.StatusSeeOther)
+}
+
+// getBaseURL returns the base URL for the server.
+// Honors reverse-proxy headers only from trusted proxies (per AI.md PART 12).
+func (s *Server) getBaseURL(r *http.Request) string {
+	// Use configured base URL if available
+	if s.config.Server.BaseURL != "" {
+		return strings.TrimRight(s.config.Server.BaseURL, "/")
+	}
+	scheme := httputil.GetProtoFromRequest(r)
+	host := httputil.GetHostFromRequest(r)
+	return fmt.Sprintf("%s://%s", scheme, host)
+}
+
+// validateNotPrivateProxy rejects hostnames that resolve to private, loopback,
+// or link-local addresses, preventing SSRF attacks via the bang proxy endpoint.
+func validateNotPrivateProxy(hostname string) error {
+	lower := strings.ToLower(hostname)
+	if lower == "localhost" || lower == "127.0.0.1" || lower == "::1" {
+		return fmt.Errorf("localhost not allowed")
+	}
+	if strings.HasSuffix(lower, ".local") || strings.HasSuffix(lower, ".internal") || strings.HasSuffix(lower, ".localhost") {
+		return fmt.Errorf("internal hostname not allowed")
+	}
+	ips, err := net.LookupIP(hostname)
+	if err != nil {
+		return fmt.Errorf("DNS lookup failed: %w", err)
+	}
+	for _, ip := range ips {
+		if ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
+			return fmt.Errorf("private/local IP not allowed")
+		}
+	}
+	return nil
+}

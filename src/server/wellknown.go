@@ -1,0 +1,260 @@
+package server
+
+import (
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/apimgr/search/src/common/i18n"
+	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/security"
+)
+
+// handleWellKnownChangePassword handles /.well-known/change-password per RFC 8615.
+// Per IDEA.md, this project has no user accounts and no admin web UI — there is
+// nothing for an end user to change. Respond with 404 so clients fall back.
+func (s *Server) handleWellKnownChangePassword(w http.ResponseWriter, r *http.Request) {
+	http.NotFound(w, r)
+}
+
+// handleWellKnownCatchAll handles unknown /.well-known/* paths per AI.md PART 11.
+// Per spec: unsupported entries MUST return 404 Not Found.
+// Per spec: GET and HEAD are the only valid methods; other methods return 405.
+// Per spec: /.well-known/ itself MUST NOT list a directory index.
+func (s *Server) handleWellKnownCatchAll(w http.ResponseWriter, r *http.Request) {
+	// Only GET and HEAD are valid for /.well-known/**
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
+		http.Error(w, i18n.RequestString(r, "errors.method_not_allowed"), http.StatusMethodNotAllowed)
+		return
+	}
+	// Unknown well-known path — return 404
+	http.NotFound(w, r)
+}
+
+// handleRobotsTxt serves robots.txt per AI.md spec
+// This is the enhanced handler that replaces the basic one
+func (s *Server) handleRobotsTxt(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	// Cache for 1 day per AI.md spec
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+
+	web := s.config.Server.Web
+
+	// Header comment per AI.md spec
+	fmt.Fprintln(w, "# robots.txt - Search Engine Crawling Rules")
+	fmt.Fprintf(w, "# %s\n", s.config.Server.Title)
+	fmt.Fprintln(w)
+
+	fmt.Fprintln(w, "User-agent: *")
+
+	// Allow paths (default: /, /api)
+	allowPaths := web.Robots.Allow
+	if len(allowPaths) == 0 {
+		allowPaths = []string{"/", "/api"}
+	}
+	for _, path := range allowPaths {
+		fmt.Fprintf(w, "Allow: %s\n", path)
+	}
+
+	// Deny paths (no defaults — there is no admin panel in this project).
+	for _, path := range web.Robots.Deny {
+		fmt.Fprintf(w, "Disallow: %s\n", path)
+	}
+
+	// Add sitemap URL per AI.md spec
+	fmt.Fprintln(w)
+	baseURL := s.getBaseURL(r)
+	fmt.Fprintf(w, "Sitemap: %s/sitemap.xml\n", baseURL)
+}
+
+// handleSecurityTxtEnhanced serves security.txt per RFC 9116 and AI.md PART 11.
+// Required fields: Contact, Expires
+// Optional fields: Encryption, Preferred-Languages, Canonical
+// Per AI.md PART 11 "Security Reports — Coordinated Disclosure Pipeline", three
+// Contact: lines are emitted in RFC 9116 preference order: the project's
+// primary vulnerability-reporting channel (report_url), the rotating
+// {security_id} contact-form URL, then the mailto: fallback.
+func (s *Server) handleSecurityTxtEnhanced(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	// Cache for 1 day per AI.md spec
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+
+	webSecurity := s.config.Server.Web.Security
+	baseURL := s.getBaseURL(r)
+
+	// Contact 1 (REQUIRED per RFC 9116): primary vulnerability-reporting channel
+	if webSecurity.ReportURL != "" {
+		fmt.Fprintf(w, "Contact: %s\n", webSecurity.ReportURL)
+	}
+
+	// Contact 2: rotating {security_id} contact-form URL per AI.md PART 11
+	securityID := security.GenerateSecurityID(s.config.Server.Security.InstallationSecret, time.Now().Unix())
+	fmt.Fprintf(w, "Contact: %s/server/contact?security_id=%s\n", baseURL, securityID)
+
+	// Contact 3: mailto: fallback
+	// Uses security.contact then general.contact per AI.md PART 12 fallback chain
+	contact := webSecurity.Contact
+	if contact == "" && s.config.Server.Contact.Security.Email != "" {
+		contact = s.config.Server.Contact.Security.Email
+	}
+	if contact == "" && s.config.Server.Contact.General.Email != "" {
+		contact = s.config.Server.Contact.General.Email
+	}
+	if contact == "" {
+		// Fallback to fqdn-based security email
+		fqdn := extractHostFromURL(baseURL)
+		contact = "security@" + fqdn
+	}
+	// Ensure mailto: prefix for email addresses
+	if strings.Contains(contact, "@") && !strings.HasPrefix(contact, "mailto:") && !strings.HasPrefix(contact, "https://") && !strings.HasPrefix(contact, "tel:") {
+		contact = "mailto:" + contact
+	}
+	fmt.Fprintf(w, "Contact: %s\n", contact)
+
+	// Expires (REQUIRED per RFC 9116)
+	// Must be in ISO 8601 format (YYYY-MM-DDTHH:MM:SSZ)
+	expires := webSecurity.Expires
+	if expires == "" {
+		// Default: 1 year from now (auto-renewed yearly per AI.md)
+		expiryTime := time.Now().AddDate(1, 0, 0)
+		expires = expiryTime.UTC().Format(time.RFC3339)
+	}
+	fmt.Fprintf(w, "Expires: %s\n", expires)
+
+	// Encryption (OPTIONAL per RFC 9116): only when a keypair exists and
+	// publishing is enabled, per AI.md PART 11 GPG Keypair Management.
+	if webSecurity.PublishPGPKey {
+		if _, err := security.LoadPublicKey(config.GetConfigDir()); err == nil {
+			fmt.Fprintf(w, "Encryption: %s/.well-known/pgp-key.asc\n", baseURL)
+		}
+	}
+
+	// Preferred-Languages (OPTIONAL per RFC 9116)
+	// Auto-generated from i18n config per AI.md
+	languages := s.getPreferredLanguages()
+	if len(languages) > 0 {
+		fmt.Fprintf(w, "Preferred-Languages: %s\n", strings.Join(languages, ", "))
+	}
+
+	// Canonical (OPTIONAL per RFC 9116)
+	// Canonical URL of the security.txt file
+	fmt.Fprintf(w, "Canonical: %s/.well-known/security.txt\n", baseURL)
+}
+
+// handlePGPKeyAsc serves the project's PGP public key per AI.md PART 11
+// Public Pages table: "/.well-known/pgp-key.asc" — 404 if no keypair has been
+// generated yet, or if publishing is disabled via web.security.publish_pgp_key.
+func (s *Server) handlePGPKeyAsc(w http.ResponseWriter, r *http.Request) {
+	if !s.config.Server.Web.Security.PublishPGPKey {
+		http.NotFound(w, r)
+		return
+	}
+
+	pubArmor, err := security.LoadPublicKey(config.GetConfigDir())
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/pgp-keys")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	fmt.Fprint(w, pubArmor)
+}
+
+// getPreferredLanguages returns the list of supported languages for security.txt
+// Per AI.md: auto-generated from i18n config
+func (s *Server) getPreferredLanguages() []string {
+	// Get supported languages from i18n manager
+	if s.i18nManager != nil {
+		return s.i18nManager.SupportedLanguageCodes()
+	}
+
+	// Fallback to default supported languages
+	return i18n.DefaultSupportedLanguages()
+}
+
+// extractHostFromURL extracts the hostname from a URL
+func extractHostFromURL(urlStr string) string {
+	host := urlStr
+	host = strings.TrimPrefix(host, "https://")
+	host = strings.TrimPrefix(host, "http://")
+
+	// Remove port if present
+	if colonIdx := strings.Index(host, ":"); colonIdx != -1 {
+		host = host[:colonIdx]
+	}
+
+	// Remove path if present
+	if slashIdx := strings.Index(host, "/"); slashIdx != -1 {
+		host = host[:slashIdx]
+	}
+
+	return host
+}
+
+// handleLlmsTxt serves /.well-known/llms.txt and /llms.txt per AI.md spec.
+// Tells AI agents what the application does and what API endpoints are available.
+func (s *Server) handleLlmsTxt(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	// Cache for 1 day per AI.md spec
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+
+	baseURL := s.getBaseURL(r)
+	apiVersion := s.config.Server.APIVersion
+	if apiVersion == "" {
+		apiVersion = "v1"
+	}
+
+	// Header
+	fmt.Fprintf(w, "# %s\n", s.config.Server.Title)
+	if s.config.Server.Branding.Tagline != "" {
+		fmt.Fprintf(w, "> %s\n", s.config.Server.Branding.Tagline)
+	}
+	fmt.Fprintln(w)
+
+	// API section
+	fmt.Fprintln(w, "## API")
+	fmt.Fprintf(w, "Base URL: %s/api/%s\n", baseURL, apiVersion)
+	fmt.Fprintln(w, "Authentication: Bearer token (operator token for admin endpoints)")
+	fmt.Fprintf(w, "Rate limit: %d requests per %ds (read), %d requests per %ds (write)\n",
+		s.config.Server.RateLimit.Read.Requests, s.config.Server.RateLimit.Read.Window,
+		s.config.Server.RateLimit.Write.Requests, s.config.Server.RateLimit.Write.Window)
+	fmt.Fprintln(w)
+
+	// Endpoints section - public API endpoints
+	fmt.Fprintln(w, "## Endpoints")
+	fmt.Fprintln(w, "- GET /server/healthz - Health check (no auth)")
+	fmt.Fprintln(w, "- GET /server/status - Server status (operator auth)")
+	fmt.Fprintf(w, "- GET /api/%s/search - Search API (no auth, rate limited)\n", apiVersion)
+	fmt.Fprintf(w, "- GET /api/%s/engines - List search engines (no auth)\n", apiVersion)
+	fmt.Fprintf(w, "- GET /api/%s/instant - Instant answers (no auth)\n", apiVersion)
+	fmt.Fprintf(w, "- GET /api/%s/server/preferences - User preferences (no auth)\n", apiVersion)
+	fmt.Fprintln(w)
+
+	// Capabilities
+	fmt.Fprintln(w, "## Capabilities")
+	fmt.Fprintln(w, "- Privacy-respecting metasearch across multiple engines")
+	fmt.Fprintln(w, "- Instant answers (calculator, unit conversion, definitions)")
+	fmt.Fprintln(w, "- Direct answers (wiki:, dns:, http:, tldr:, port:)")
+	fmt.Fprintln(w, "- No tracking, no ads, no user accounts required")
+	fmt.Fprintln(w)
+
+	// Contact
+	fmt.Fprintln(w, "## Contact")
+	security := s.config.Server.Web.Security
+	contact := security.Contact
+	if contact == "" && s.config.Server.Contact.Security.Email != "" {
+		contact = s.config.Server.Contact.Security.Email
+	}
+	if contact == "" && s.config.Server.Contact.General.Email != "" {
+		contact = s.config.Server.Contact.General.Email
+	}
+	if contact == "" {
+		fqdn := extractHostFromURL(baseURL)
+		contact = "security@" + fqdn
+	}
+	fmt.Fprintf(w, "Security: %s\n", contact)
+	fmt.Fprintf(w, "Source: https://github.com/apimgr/search\n")
+}

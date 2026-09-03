@@ -1,0 +1,17 @@
+Subject: Update Installed - {app_name}
+---
+UPDATE INSTALLED
+
+From: {app_name} ({fqdn})
+Time: {timestamp}
+
+A self-update has completed successfully.
+
+Previous version: {previous_version}
+New version:      {new_version}
+
+The service may need to be restarted to apply the update if it has not restarted automatically.
+
+--
+{app_name}
+{app_url}

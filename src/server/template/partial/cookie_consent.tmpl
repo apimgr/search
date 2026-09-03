@@ -1,0 +1,35 @@
+{{/* Cookie consent banner partial - server-rendered per AI.md PART 16 */}}
+{{/* Banner renders only when no valid cookie_consent cookie exists (HasConsentCookie = false) */}}
+{{/* Forms POST to /server/consent — works with zero JS; app.js intercepts to skip the reload */}}
+{{ define "cookie_consent" }}
+{{ if and .CookieConsent .CookieConsent.Enabled }}
+{{ if not .HasConsentCookie }}
+<div id="cookie-consent" class="cookie-banner" data-sold="{{ if .CookieConsent.DataSold }}true{{ else }}false{{ end }}">
+  <div class="cookie-banner-content">
+    <span class="cookie-message">
+      {{ if .CookieConsent.Message }}
+        {{ .CookieConsent.Message }}
+      {{ else }}
+        {{t "cookie_consent.default_message"}}
+      {{ end }}
+      {{ if .CookieConsent.PolicyURL }}
+      — <a href="{{ .CookieConsent.PolicyURL }}" class="policy-link">{{t "cookie_consent.learn_more"}}</a>
+      {{ end }}
+    </span>
+    <div class="cookie-buttons">
+      <form method="post" action="/server/consent">
+        <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+        <input type="hidden" name="choice" value="decline">
+        <button type="submit" class="btn-decline">{{t "common.decline"}}</button>
+      </form>
+      <form method="post" action="/server/consent">
+        <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+        <input type="hidden" name="choice" value="accept">
+        <button type="submit" class="btn-accept">{{t "common.accept"}}</button>
+      </form>
+    </div>
+  </div>
+</div>
+{{ end }}
+{{ end }}
+{{ end }}

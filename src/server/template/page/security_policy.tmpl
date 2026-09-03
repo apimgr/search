@@ -1,0 +1,48 @@
+{{define "content"}}
+<div class="static-page security-policy-page">
+    <header class="page-header">
+        <h1>{{t "security.policy_title"}}</h1>
+    </header>
+
+    <div class="page-content">
+        <section class="security-section">
+            <h2>{{t "security.policy_scope_heading"}}</h2>
+            <p>{{t "security.policy_scope_description"}}</p>
+        </section>
+
+        <section class="security-section">
+            <h2>{{t "security.policy_disclosure_window_heading"}}</h2>
+            <p>{{t "security.policy_disclosure_window_description"}}</p>
+        </section>
+
+        <section class="security-section">
+            <h2>{{t "security.policy_in_scope_heading"}}</h2>
+            <ul>
+                <li>{{t "security.policy_in_scope_item_deployed"}}</li>
+                <li>{{t "security.policy_in_scope_item_api"}}</li>
+                <li>{{t "security.policy_in_scope_item_auth"}}</li>
+            </ul>
+        </section>
+
+        <section class="security-section">
+            <h2>{{t "security.policy_out_of_scope_heading"}}</h2>
+            <ul>
+                <li>{{t "security.policy_out_of_scope_item_dos"}}</li>
+                <li>{{t "security.policy_out_of_scope_item_social"}}</li>
+                <li>{{t "security.policy_out_of_scope_item_physical"}}</li>
+                <li>{{t "security.policy_out_of_scope_item_third_party"}}</li>
+            </ul>
+        </section>
+
+        <section class="security-section">
+            <h2>{{t "security.policy_safe_harbor_heading"}}</h2>
+            <p>{{t "security.policy_safe_harbor_description"}}</p>
+        </section>
+
+        <section class="security-section">
+            <h2>{{t "contact.page_title"}}</h2>
+            <p>{{t "security.policy_contact_prefix"}} <a href="/server/security">{{t "security.overview_title"}}</a>{{t "security.policy_contact_suffix"}}</p>
+        </section>
+    </div>
+</div>
+{{end}}

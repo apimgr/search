@@ -1,0 +1,55 @@
+{{define "content"}}
+<div class="direct-answer-page" data-type="{{.Answer.Type}}" data-term="{{.Answer.Term}}">
+    {{/* Header with answer type badge and title */}}
+    <header class="direct-header">
+        <div class="direct-type-badge">{{.Answer.Type}}</div>
+        <h1 class="direct-title">{{.Answer.Title}}</h1>
+        {{if .Answer.Description}}
+        <p class="direct-description">{{.Answer.Description}}</p>
+        {{end}}
+    </header>
+
+    {{/* Main content area */}}
+    <div class="direct-content{{if .Answer.Error}} has-error{{end}}">
+        {{if .Answer.Error}}
+        <div class="direct-error">
+            <span class="error-icon">!</span>
+            <span class="error-message">{{.Answer.Error}}</span>
+        </div>
+        {{end}}
+        {{/* Content is pre-formatted HTML from handlers */}}
+        {{.Answer.Content | safeHTML}}
+    </div>
+
+    {{/* Source attribution */}}
+    {{if or .Answer.Source .Answer.SourceURL}}
+    <footer class="direct-source">
+        <span class="source-label">{{t "direct.source_label"}}</span>
+        {{if .Answer.SourceURL}}
+        <a href="{{.Answer.SourceURL}}" class="source-link" target="_blank" rel="noopener noreferrer">
+            {{if .Answer.Source}}{{.Answer.Source}}{{else}}{{.Answer.SourceURL}}{{end}}
+        </a>
+        {{else}}
+        <span class="source-text">{{.Answer.Source}}</span>
+        {{end}}
+    </footer>
+    {{end}}
+
+    {{/* Navigation back to home - links to home since direct answer queries
+         would redirect back to this page (wiki:Python → /direct/wiki/Python) */}}
+    <nav class="direct-nav">
+        <a href="/" class="back-to-search">
+            <span class="back-icon">&larr;</span> {{t "direct.back_to_search"}}
+        </a>
+        {{/* Quick reference to other direct answer types */}}
+        <div class="direct-types-hint">
+            {{t "direct.try_examples_label"}}
+            <code>tldr:git</code>,
+            <code>dns:example.com</code>,
+            <code>wiki:Python</code>,
+            <code>http:404</code>
+        </div>
+    </nav>
+</div>
+{{/* Per AI.md PART 16: NO inline CSS - all styles in main.css */}}
+{{end}}

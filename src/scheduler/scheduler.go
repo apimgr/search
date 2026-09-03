@@ -1,0 +1,1299 @@
+// Package scheduler provides a built-in task scheduler per AI.md PART 19
+// The scheduler is ALWAYS RUNNING - there is no enable/disable option.
+// All scheduled tasks are managed internally, never via external cron/schedulers.
+package scheduler
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"log/slog"
+	"runtime/debug"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+)
+
+// defaultTimezone is the default timezone for the scheduler (allows testing)
+var defaultTimezone = "America/New_York"
+
+// TaskID represents a unique task identifier
+type TaskID string
+
+// Built-in task IDs per AI.md PART 18 (canonical underscore names)
+const (
+	TaskSSLRenewal      TaskID = "ssl_renewal"
+	TaskGeoIPUpdate     TaskID = "geoip_update"
+	TaskBlocklistUpdate TaskID = "blocklist_update"
+	TaskCVEUpdate       TaskID = "cve_update"
+	TaskUpdateCheck     TaskID = "update_check"
+	TaskTokenCleanup    TaskID = "token_cleanup"
+	TaskLogRotation     TaskID = "log_rotation"
+	TaskBackupDaily     TaskID = "backup_daily"
+	TaskBackupHourly    TaskID = "backup_hourly"
+	TaskHealthcheckSelf TaskID = "healthcheck_self"
+	TaskTorHealth       TaskID = "tor_health"
+	TaskAlertsImmediate TaskID = "alerts_immediate"
+	TaskAlertsDaily     TaskID = "alerts_daily"
+	TaskAlertsWeekly    TaskID = "alerts_weekly"
+	// TaskPublicIPRefresh refreshes the cached server public IP per
+	// AI.md PART 8 step 16 (startup + every 12h, hardcoded — not configurable).
+	TaskPublicIPRefresh TaskID = "public_ip_refresh"
+)
+
+// TaskStatus represents task execution status
+type TaskStatus string
+
+const (
+	StatusSuccess  TaskStatus = "success"
+	StatusFailed   TaskStatus = "failed"
+	StatusSkipped  TaskStatus = "skipped"
+	StatusRunning  TaskStatus = "running"
+	StatusRetrying TaskStatus = "retrying"
+)
+
+// TaskType determines how a task acquires a run lock.
+// Per AI.md line 2055: single-instance only; TaskType is used for DB-level deduplication.
+type TaskType string
+
+const (
+	// TaskTypeGlobal uses a database lock to prevent concurrent duplicate runs.
+	TaskTypeGlobal TaskType = "global"
+	// TaskTypeLocal runs without acquiring a database lock.
+	TaskTypeLocal TaskType = "local"
+)
+
+// Default retry policy values per AI.md PART 19
+const (
+	DefaultMaxRetries = 3
+	DefaultRetryDelay = 5 * time.Minute
+)
+
+// lockRetryCooldown bounds how soon a TaskTypeGlobal task becomes eligible
+// again after a failed lock acquisition (another node holds it, or the lock
+// query itself errored, e.g. DB contention/timeout). Without this, the 1s
+// scheduler ticker re-selects the task as "due" on every tick (NextRun is
+// never advanced on this path), launching a fresh goroutine that hammers
+// acquireTaskLock every second — which can itself cause and perpetuate the
+// very DB contention ("context deadline exceeded") that caused the first
+// failure. Per AI.md PART 18 retry_delay intent, back off instead.
+const lockRetryCooldown = 30 * time.Second
+
+// Task represents a scheduled task per AI.md PART 19
+type Task struct {
+	ID          TaskID
+	Name        string
+	Description string
+	// Cron expression or @every interval
+	Schedule string
+	// Global or Local
+	TaskType TaskType
+	Run      func(ctx context.Context) error
+	// Can admin disable this task?
+	Skippable bool
+	// Run immediately on scheduler start?
+	RunOnStart bool
+
+	// Retry policy per AI.md PART 19
+	// Default: max_retries=3, retry_delay=5m, backoff=exponential (5m, 10m, 20m)
+	// Maximum retry attempts (default: 3)
+	MaxRetries int
+	// Base delay between retries (default: 5m)
+	RetryDelay time.Duration
+
+	// Runtime state (persisted to database)
+	LastRun    time.Time
+	LastStatus TaskStatus
+	LastError  string
+	NextRun    time.Time
+	RunCount   int64
+	FailCount  int64
+	Enabled    bool
+
+	// Retry state
+	// Current retry attempt (0 = first run)
+	RetryCount int
+	// Scheduled retry time (if retrying)
+	NextRetry time.Time
+
+	// DB-level deduplication lock (per AI.md line 2055: single instance)
+	LockedBy string
+	LockedAt time.Time
+}
+
+// TaskState represents persisted task state in database
+type TaskState struct {
+	TaskID     string
+	TaskName   string
+	Schedule   string
+	LastRun    time.Time
+	LastStatus string
+	LastError  string
+	NextRun    time.Time
+	RunCount   int64
+	FailCount  int64
+	Enabled    bool
+	LockedBy   string
+	LockedAt   time.Time
+}
+
+// TaskFailureNotification contains details about a failed task
+// Per AI.md PART 19: Failed tasks trigger notifications (if configured)
+type TaskFailureNotification struct {
+	TaskID    string
+	TaskName  string
+	Error     string
+	Attempts  int
+	LastRun   time.Time
+	FailCount int64
+}
+
+// NotifyFunc is a callback function for task failure notifications
+// Per AI.md PART 19: Failed tasks trigger notifications (if configured)
+type NotifyFunc func(notification *TaskFailureNotification)
+
+// Scheduler manages periodic tasks per AI.md PART 19
+// The scheduler is ALWAYS RUNNING - no enable/disable option exists
+type Scheduler struct {
+	mu            sync.RWMutex
+	tasks         map[TaskID]*Task
+	db            *sql.DB
+	nodeID        string
+	ctx           context.Context
+	cancel        context.CancelFunc
+	running       bool
+	wg            sync.WaitGroup
+	timezone      *time.Location
+	catchUpWindow time.Duration
+	// Per AI.md PART 19: Task failure notifications
+	notifyFunc NotifyFunc
+	// inFlight tracks tasks with a runTask goroutine currently executing
+	// (including one still blocked trying to acquire the DB lock). Without
+	// this, a slow/contended lock query (up to its own context timeout)
+	// leaves NextRun unchanged for that whole window, so every 1s tick in
+	// between dispatches ANOTHER goroutine for the same still-"due" task —
+	// a thundering herd that saturates the DB further and can perpetuate
+	// the very contention that caused the first failure.
+	inFlight map[TaskID]bool
+}
+
+// NewScheduler creates a new scheduler
+// Per AI.md PART 19: Scheduler is ALWAYS RUNNING
+func NewScheduler(db *sql.DB, nodeID string) *Scheduler {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Default to America/New_York per spec
+	tz, err := time.LoadLocation(defaultTimezone)
+	if err != nil {
+		tz = time.Local
+	}
+
+	s := &Scheduler{
+		tasks:    make(map[TaskID]*Task),
+		db:       db,
+		nodeID:   nodeID,
+		ctx:      ctx,
+		cancel:   cancel,
+		timezone: tz,
+		// Default catch-up window
+		catchUpWindow: 1 * time.Hour,
+		inFlight:      make(map[TaskID]bool),
+	}
+
+	// Initialize database tables early so Register() can save state
+	if db != nil {
+		s.initDatabase()
+	}
+
+	return s
+}
+
+// SetTimezone sets the timezone for scheduled tasks
+func (s *Scheduler) SetTimezone(tz string) error {
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		return fmt.Errorf("invalid timezone %s: %w", tz, err)
+	}
+	s.mu.Lock()
+	s.timezone = loc
+	s.mu.Unlock()
+	return nil
+}
+
+// SetCatchUpWindow sets the catch-up window for missed tasks
+func (s *Scheduler) SetCatchUpWindow(d time.Duration) {
+	s.mu.Lock()
+	s.catchUpWindow = d
+	s.mu.Unlock()
+}
+
+// SetNotifyFunc sets the callback function for task failure notifications
+// Per AI.md PART 19: Failed tasks trigger notifications (if configured)
+func (s *Scheduler) SetNotifyFunc(fn NotifyFunc) {
+	s.mu.Lock()
+	s.notifyFunc = fn
+	s.mu.Unlock()
+}
+
+// Register adds a task to the scheduler
+func (s *Scheduler) Register(task *Task) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if task.ID == "" {
+		return fmt.Errorf("task ID is required")
+	}
+
+	if task.Schedule == "" {
+		return fmt.Errorf("task schedule is required")
+	}
+
+	if task.Run == nil {
+		return fmt.Errorf("task run function is required")
+	}
+
+	// Calculate next run time. We already hold s.mu (write) here, so use
+	// the lock-free variant — the non-recursive RWMutex would otherwise
+	// self-deadlock when calculateNextRun re-acquires the read lock.
+	task.NextRun = s.calculateNextRunLocked(task.Schedule)
+	task.Enabled = true
+
+	s.tasks[task.ID] = task
+
+	// Load persisted state if available
+	if s.db != nil {
+		s.loadTaskState(task)
+	}
+
+	return nil
+}
+
+// RegisterBuiltinTasks registers all required tasks per AI.md PART 19
+func (s *Scheduler) RegisterBuiltinTasks(handlers *TaskHandlers) {
+	// SSL Renewal - Daily at 03:00, NOT skippable
+	if handlers.SSLRenewal != nil {
+		s.Register(&Task{
+			ID:          TaskSSLRenewal,
+			Name:        "SSL Certificate Renewal",
+			Description: "Check and renew SSL certificates 7 days before expiry",
+			Schedule:    "0 3 * * *",
+			TaskType:    TaskTypeGlobal,
+			Run:         handlers.SSLRenewal,
+			Skippable:   false,
+			RunOnStart:  true,
+			Enabled:     true,
+		})
+	}
+
+	// GeoIP Update - Weekly Sunday at 03:00, skippable
+	if handlers.GeoIPUpdate != nil {
+		s.Register(&Task{
+			ID:          TaskGeoIPUpdate,
+			Name:        "GeoIP Database Update",
+			Description: "Download and update MaxMind GeoLite2 databases",
+			Schedule:    "0 3 * * 0",
+			TaskType:    TaskTypeGlobal,
+			Run:         handlers.GeoIPUpdate,
+			Skippable:   true,
+			Enabled:     true,
+		})
+	}
+
+	// Blocklist Update - Daily at 04:00, skippable
+	if handlers.BlocklistUpdate != nil {
+		s.Register(&Task{
+			ID:          TaskBlocklistUpdate,
+			Name:        "Blocklist Update",
+			Description: "Download and update IP/domain blocklists",
+			Schedule:    "0 4 * * *",
+			TaskType:    TaskTypeGlobal,
+			Run:         handlers.BlocklistUpdate,
+			Skippable:   true,
+			Enabled:     true,
+		})
+	}
+
+	// CVE Update - Daily at 05:00, skippable
+	if handlers.CVEUpdate != nil {
+		s.Register(&Task{
+			ID:          TaskCVEUpdate,
+			Name:        "CVE Database Update",
+			Description: "Download and update CVE/security databases",
+			Schedule:    "0 5 * * *",
+			TaskType:    TaskTypeGlobal,
+			Run:         handlers.CVEUpdate,
+			Skippable:   true,
+			Enabled:     true,
+		})
+	}
+
+	// Update Check - Daily at 06:00, skippable
+	// Per AI.md PART 18/22: notify-only check for a newer release; honors
+	// update.defer_days and stays notify-only unless update.auto_install is set.
+	if handlers.UpdateCheck != nil {
+		s.Register(&Task{
+			ID:          TaskUpdateCheck,
+			Name:        "Update Check",
+			Description: "Check release channel for a newer version (notify-only by default)",
+			Schedule:    "0 6 * * *",
+			TaskType:    TaskTypeGlobal,
+			Run:         handlers.UpdateCheck,
+			Skippable:   true,
+			Enabled:     true,
+		})
+	}
+
+	// Token Cleanup - Every 15 minutes, NOT skippable
+	if handlers.TokenCleanup != nil {
+		s.Register(&Task{
+			ID:          TaskTokenCleanup,
+			Name:        "Token Cleanup",
+			Description: "Remove expired tokens",
+			Schedule:    "@every 15m",
+			TaskType:    TaskTypeLocal,
+			Run:         handlers.TokenCleanup,
+			Skippable:   false,
+			Enabled:     true,
+		})
+	}
+
+	// Log Rotation - Daily at 00:00, NOT skippable
+	if handlers.LogRotation != nil {
+		s.Register(&Task{
+			ID:          TaskLogRotation,
+			Name:        "Log Rotation",
+			Description: "Rotate and compress old logs",
+			Schedule:    "0 0 * * *",
+			TaskType:    TaskTypeLocal,
+			Run:         handlers.LogRotation,
+			Skippable:   false,
+			Enabled:     true,
+		})
+	}
+
+	// Backup Daily - Daily at 02:00, skippable
+	if handlers.BackupDaily != nil {
+		s.Register(&Task{
+			ID:          TaskBackupDaily,
+			Name:        "Daily Backup",
+			Description: "Full backup with daily incremental",
+			Schedule:    "0 2 * * *",
+			TaskType:    TaskTypeGlobal,
+			Run:         handlers.BackupDaily,
+			Skippable:   true,
+			Enabled:     true,
+		})
+	}
+
+	// Backup Hourly - Hourly, skippable, disabled by default
+	if handlers.BackupHourly != nil {
+		task := &Task{
+			ID:          TaskBackupHourly,
+			Name:        "Hourly Backup",
+			Description: "Hourly incremental backup",
+			Schedule:    "@hourly",
+			TaskType:    TaskTypeGlobal,
+			Run:         handlers.BackupHourly,
+			Skippable:   true,
+		}
+		s.Register(task)
+		// Disable after registration (Register sets Enabled=true by default)
+		task.Enabled = false
+	}
+
+	// Health Check Self - Every 5 minutes, NOT skippable
+	if handlers.HealthcheckSelf != nil {
+		s.Register(&Task{
+			ID:          TaskHealthcheckSelf,
+			Name:        "Self Health Check",
+			Description: "Self-health verification",
+			Schedule:    "@every 5m",
+			TaskType:    TaskTypeLocal,
+			Run:         handlers.HealthcheckSelf,
+			Skippable:   false,
+			RunOnStart:  true,
+			Enabled:     true,
+		})
+	}
+
+	// Tor Health - Every 10 minutes, NOT skippable when Tor installed
+	if handlers.TorHealth != nil {
+		s.Register(&Task{
+			ID:          TaskTorHealth,
+			Name:        "Tor Health Check",
+			Description: "Check Tor connectivity, restart if needed",
+			Schedule:    "@every 10m",
+			TaskType:    TaskTypeLocal,
+			Run:         handlers.TorHealth,
+			Skippable:   false,
+			RunOnStart:  true,
+			Enabled:     true,
+		})
+	}
+
+	if handlers.AlertsImmediate != nil {
+		s.Register(&Task{
+			ID:          TaskAlertsImmediate,
+			Name:        "Immediate Search Alerts",
+			Description: "Check and deliver immediate search alerts",
+			Schedule:    "@every 10m",
+			TaskType:    TaskTypeGlobal,
+			Run:         handlers.AlertsImmediate,
+			Skippable:   false,
+			RunOnStart:  true,
+			Enabled:     true,
+		})
+	}
+
+	if handlers.AlertsDaily != nil {
+		s.Register(&Task{
+			ID:          TaskAlertsDaily,
+			Name:        "Daily Search Alerts",
+			Description: "Check and deliver daily search alerts",
+			Schedule:    "0 8 * * *",
+			TaskType:    TaskTypeGlobal,
+			Run:         handlers.AlertsDaily,
+			Skippable:   false,
+			Enabled:     true,
+		})
+	}
+
+	if handlers.AlertsWeekly != nil {
+		s.Register(&Task{
+			ID:          TaskAlertsWeekly,
+			Name:        "Weekly Search Alerts",
+			Description: "Check and deliver weekly search alerts",
+			Schedule:    "0 8 * * 1",
+			TaskType:    TaskTypeGlobal,
+			Run:         handlers.AlertsWeekly,
+			Skippable:   false,
+			Enabled:     true,
+		})
+	}
+
+	// Public IP Refresh - Startup + every 12 hours, hardcoded per AI.md
+	// PART 8 step 16. NOT skippable; FQDN detection depends on it.
+	if handlers.PublicIPRefresh != nil {
+		s.Register(&Task{
+			ID:          TaskPublicIPRefresh,
+			Name:        "Public IP Refresh",
+			Description: "Detect and cache the server's public IPv4 address (every 12h, hardcoded)",
+			Schedule:    "@every 12h",
+			TaskType:    TaskTypeLocal,
+			Run:         handlers.PublicIPRefresh,
+			Skippable:   false,
+			RunOnStart:  true,
+			Enabled:     true,
+		})
+	}
+
+}
+
+// TaskHandlers holds handler functions for built-in tasks
+type TaskHandlers struct {
+	SSLRenewal      func(ctx context.Context) error
+	GeoIPUpdate     func(ctx context.Context) error
+	BlocklistUpdate func(ctx context.Context) error
+	CVEUpdate       func(ctx context.Context) error
+	UpdateCheck     func(ctx context.Context) error
+	TokenCleanup    func(ctx context.Context) error
+	LogRotation     func(ctx context.Context) error
+	BackupDaily     func(ctx context.Context) error
+	BackupHourly    func(ctx context.Context) error
+	HealthcheckSelf func(ctx context.Context) error
+	TorHealth       func(ctx context.Context) error
+	AlertsImmediate func(ctx context.Context) error
+	AlertsDaily     func(ctx context.Context) error
+	AlertsWeekly    func(ctx context.Context) error
+	// PublicIPRefresh refreshes the cached public IP per AI.md PART 8
+	// step 16. Schedule and cadence are hardcoded (startup + every 12h).
+	PublicIPRefresh func(ctx context.Context) error
+}
+
+// Start starts the scheduler
+// Per AI.md PART 19: Scheduler is ALWAYS RUNNING
+func (s *Scheduler) StartTaskScheduler() {
+	s.mu.Lock()
+	if s.running {
+		s.mu.Unlock()
+		return
+	}
+	s.running = true
+	s.mu.Unlock()
+
+	// Initialize database tables
+	if s.db != nil {
+		s.initDatabase()
+	}
+
+	// Check for missed tasks (catch-up logic)
+	s.catchUpMissedTasks()
+
+	// Run tasks marked with RunOnStart
+	s.runStartupTasks()
+
+	s.wg.Add(1)
+	go s.run()
+
+	slog.Info("Scheduler started - always running per AI.md PART 19")
+}
+
+// run is the main scheduler loop.
+// Launched via `go s.run()` at startup with no other goroutine watching it —
+// an unrecovered panic here would silently kill the loop (and, since Go
+// terminates the whole process on any unrecovered panic, the entire server)
+// with no automatic restart. Recover and log instead of crashing.
+func (s *Scheduler) run() {
+	defer s.wg.Done()
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("Scheduler loop panicked - recovered to prevent server crash",
+				"panic", r,
+				"stack", string(debug.Stack()))
+		}
+	}()
+
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case now := <-ticker.C:
+			s.checkAndRunTasks(now)
+		}
+	}
+}
+
+// checkAndRunTasks checks and runs due tasks
+func (s *Scheduler) checkAndRunTasks(now time.Time) {
+	s.mu.Lock()
+	var dueTasks []*Task
+	for _, task := range s.tasks {
+		if task.Enabled && now.After(task.NextRun) && !s.inFlight[task.ID] {
+			dueTasks = append(dueTasks, task)
+			// Mark in-flight now, under the same lock, so a lock query that
+			// blocks for several seconds can't let subsequent ticks pile up
+			// more goroutines for the same task before it finishes.
+			s.inFlight[task.ID] = true
+		}
+	}
+	s.mu.Unlock()
+
+	for _, task := range dueTasks {
+		go s.runTask(task)
+	}
+}
+
+// runTask runs a single task with DB-level deduplication for global tasks.
+// Per AI.md PART 18: Implements exponential backoff retry policy.
+//
+// Always launched via `go s.runTask(task)`, so a panic here is on its own
+// goroutine — left unrecovered, Go terminates the entire process regardless
+// of which goroutine panicked, taking the whole server down. Recovering here
+// keeps a single misbehaving task handler from causing a full outage.
+func (s *Scheduler) runTask(task *Task) {
+	// Clear the in-flight marker on every exit path (success, failure, lock
+	// not acquired, or panic) so the task becomes eligible for pickup again.
+	defer func() {
+		s.mu.Lock()
+		delete(s.inFlight, task.ID)
+		s.mu.Unlock()
+	}()
+
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("Task panicked - recovered to prevent server crash",
+				"task", task.ID,
+				"panic", r,
+				"stack", string(debug.Stack()))
+
+			s.mu.Lock()
+			task.LastStatus = StatusFailed
+			task.LastError = fmt.Sprintf("panic: %v", r)
+			task.FailCount++
+			task.NextRun = s.calculateNextRunLocked(task.Schedule)
+			notifyFn := s.notifyFunc
+			failCount := task.FailCount
+			s.mu.Unlock()
+
+			if s.db != nil {
+				s.saveTaskState(task)
+			}
+
+			if notifyFn != nil {
+				notifyFn(&TaskFailureNotification{
+					TaskID:    string(task.ID),
+					TaskName:  task.Name,
+					Error:     fmt.Sprintf("panic: %v", r),
+					Attempts:  1,
+					LastRun:   task.LastRun,
+					FailCount: failCount,
+				})
+			}
+		}
+	}()
+
+	// For global tasks, acquire a DB lock to prevent duplicate concurrent runs.
+	if task.TaskType == TaskTypeGlobal && s.db != nil {
+		if !s.acquireTaskLock(task) {
+			// Lock not acquired — either another node is already running the
+			// task, or the lock query itself failed (e.g. DB contention).
+			// Back off instead of leaving NextRun untouched, which would let
+			// the 1s ticker re-select and re-attempt this task on every
+			// single tick (see lockRetryCooldown).
+			s.mu.Lock()
+			task.NextRun = time.Now().Add(lockRetryCooldown)
+			s.mu.Unlock()
+			return
+		}
+		defer s.releaseTaskLock(task)
+	}
+
+	// Get retry settings with defaults
+	maxRetries := task.MaxRetries
+	if maxRetries <= 0 {
+		maxRetries = DefaultMaxRetries
+	}
+	retryDelay := task.RetryDelay
+	if retryDelay <= 0 {
+		retryDelay = DefaultRetryDelay
+	}
+
+	// Execute with retry logic
+	var lastErr error
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			// Exponential backoff: 5m, 10m, 20m per spec
+			backoffDelay := retryDelay * time.Duration(1<<(attempt-1))
+			s.mu.Lock()
+			task.LastStatus = StatusRetrying
+			task.RetryCount = attempt
+			task.NextRetry = time.Now().Add(backoffDelay)
+			s.mu.Unlock()
+
+			if s.db != nil {
+				s.saveTaskState(task)
+			}
+
+			slog.Info("Task retry scheduled", "task", task.ID, "attempt", attempt, "max_retries", maxRetries, "backoff", backoffDelay)
+
+			// Wait for backoff duration or context cancellation
+			select {
+			case <-s.ctx.Done():
+				return
+			case <-time.After(backoffDelay):
+			}
+		}
+
+		// Update task state to running
+		s.mu.Lock()
+		task.LastRun = time.Now()
+		task.LastStatus = StatusRunning
+		task.RetryCount = attempt
+		task.NextRetry = time.Time{}
+		s.mu.Unlock()
+
+		// Execute task with timeout
+		ctx, cancel := context.WithTimeout(s.ctx, 30*time.Minute)
+		lastErr = task.Run(ctx)
+		cancel()
+
+		if lastErr == nil {
+			// Success - update state and return
+			s.mu.Lock()
+			task.LastStatus = StatusSuccess
+			task.LastError = ""
+			task.RetryCount = 0
+			task.RunCount++
+			task.NextRun = s.calculateNextRunLocked(task.Schedule)
+			s.mu.Unlock()
+
+			if s.db != nil {
+				s.saveTaskState(task)
+			}
+
+			slog.Info("Task completed successfully", "task", task.ID)
+			return
+		}
+
+		slog.Warn("Task attempt failed", "task", task.ID, "attempt", attempt+1, "max_attempts", maxRetries+1, "err", lastErr)
+	}
+
+	// All retries exhausted - task failed
+	s.mu.Lock()
+	task.LastStatus = StatusFailed
+	task.LastError = lastErr.Error()
+	task.RetryCount = 0
+	task.FailCount++
+	failCount := task.FailCount
+	task.NextRun = s.calculateNextRunLocked(task.Schedule)
+	notifyFn := s.notifyFunc
+	s.mu.Unlock()
+
+	if s.db != nil {
+		s.saveTaskState(task)
+	}
+
+	slog.Error("Task failed after all attempts", "task", task.ID, "attempts", maxRetries+1, "err", lastErr)
+
+	// Per AI.md PART 19: Failed tasks trigger notifications (if configured)
+	if notifyFn != nil {
+		notifyFn(&TaskFailureNotification{
+			TaskID:    string(task.ID),
+			TaskName:  task.Name,
+			Error:     lastErr.Error(),
+			Attempts:  maxRetries + 1,
+			LastRun:   task.LastRun,
+			FailCount: failCount,
+		})
+	}
+}
+
+// calculateNextRun calculates the next run time from a cron expression or
+// @descriptor (handles @every Xm, @hourly, @daily, @weekly, @monthly, and
+// standard 5-field cron) using only Go's standard library.
+// Per AI.md PART 18: "Use Go's time/ticker — No external cron libraries required."
+// On a parse error the scheduler falls back to a 1-hour interval so a bad
+// schedule entry never wedges the loop.
+//
+// Acquires s.mu.RLock for the timezone read. Callers that already hold
+// s.mu must use calculateNextRunLocked to avoid a self-deadlock on the
+// non-recursive RWMutex.
+func (s *Scheduler) calculateNextRun(schedule string) time.Time {
+	s.mu.RLock()
+	loc := s.timezone
+	s.mu.RUnlock()
+	return calculateNextRunWithLoc(schedule, loc)
+}
+
+// calculateNextRunLocked is the lock-free variant. Caller must already
+// hold s.mu (read or write). Used from Register / RegisterBuiltinTasks
+// which hold the write lock for the whole insertion.
+func (s *Scheduler) calculateNextRunLocked(schedule string) time.Time {
+	return calculateNextRunWithLoc(schedule, s.timezone)
+}
+
+// parseCronField parses a single cron field and returns a boolean bitmap indexed
+// from fieldMin. Supports: * (any), n (single), a-b (range), */n (step), and
+// comma-separated combinations of the above.
+func parseCronField(field string, fieldMin, fieldMax int) ([]bool, error) {
+	size := fieldMax - fieldMin + 1
+	result := make([]bool, size)
+
+	for _, part := range strings.Split(field, ",") {
+		if part == "*" {
+			for i := range result {
+				result[i] = true
+			}
+			return result, nil
+		}
+		// */step
+		if strings.HasPrefix(part, "*/") {
+			step, err := strconv.Atoi(part[2:])
+			if err != nil || step <= 0 {
+				return nil, fmt.Errorf("invalid step %q", part)
+			}
+			for v := fieldMin; v <= fieldMax; v += step {
+				result[v-fieldMin] = true
+			}
+			continue
+		}
+		// range: a-b
+		if dashIdx := strings.IndexByte(part, '-'); dashIdx >= 0 {
+			a, err1 := strconv.Atoi(part[:dashIdx])
+			b, err2 := strconv.Atoi(part[dashIdx+1:])
+			if err1 != nil || err2 != nil || a > b {
+				return nil, fmt.Errorf("invalid range %q", part)
+			}
+			for v := a; v <= b; v++ {
+				if v >= fieldMin && v <= fieldMax {
+					result[v-fieldMin] = true
+				}
+			}
+			continue
+		}
+		// single integer
+		v, err := strconv.Atoi(part)
+		if err != nil || v < fieldMin || v > fieldMax {
+			return nil, fmt.Errorf("invalid value %q (range %d-%d)", part, fieldMin, fieldMax)
+		}
+		result[v-fieldMin] = true
+	}
+	return result, nil
+}
+
+// calculateNextRunWithLoc computes the next execution time for a cron schedule
+// using only Go's standard library — no external cron library.
+// Per AI.md PART 18: "Use Go's time/ticker — No external cron libraries required."
+// Supports @every <duration>, @hourly, @daily, @weekly, @monthly, and standard
+// 5-field cron expressions (minute hour day-of-month month day-of-week).
+func calculateNextRunWithLoc(schedule string, loc *time.Location) time.Time {
+	if loc == nil {
+		loc = time.Local
+	}
+	now := time.Now().In(loc)
+
+	// Handle @every <duration> directly.
+	if strings.HasPrefix(schedule, "@every ") {
+		d, err := time.ParseDuration(strings.TrimPrefix(schedule, "@every "))
+		if err != nil {
+			slog.Warn("Invalid @every duration", "schedule", schedule, "err", err)
+			return now.Add(time.Hour)
+		}
+		return now.Add(d)
+	}
+
+	// Map @descriptor aliases to standard 5-field cron expressions.
+	switch schedule {
+	case "@hourly":
+		schedule = "0 * * * *"
+	case "@daily":
+		schedule = "0 0 * * *"
+	case "@weekly":
+		schedule = "0 0 * * 0"
+	case "@monthly":
+		schedule = "0 0 1 * *"
+	}
+
+	// Parse 5-field cron: minute hour day-of-month month day-of-week
+	fields := strings.Fields(schedule)
+	if len(fields) != 5 {
+		slog.Warn("Invalid cron expression (expected 5 fields)", "schedule", schedule)
+		return now.Add(time.Hour)
+	}
+
+	// minute 0-59, hour 0-23, dom 1-31, month 1-12, dow 0-6 (0=Sunday)
+	minBits, err0 := parseCronField(fields[0], 0, 59)
+	hrBits, err1 := parseCronField(fields[1], 0, 23)
+	domBits, err2 := parseCronField(fields[2], 1, 31)
+	monBits, err3 := parseCronField(fields[3], 1, 12)
+	dowBits, err4 := parseCronField(fields[4], 0, 6)
+
+	for _, err := range []error{err0, err1, err2, err3, err4} {
+		if err != nil {
+			slog.Warn("Invalid cron field", "schedule", schedule, "err", err)
+			return now.Add(time.Hour)
+		}
+	}
+
+	// Walk forward minute by minute from now+1 (max ~1 year = 525600 minutes).
+	t := now.Truncate(time.Minute).Add(time.Minute)
+	for range 525600 {
+		mo := int(t.Month())   // 1-12
+		d := t.Day()           // 1-31
+		dw := int(t.Weekday()) // 0=Sunday
+		h := t.Hour()          // 0-23
+		mi := t.Minute()       // 0-59
+
+		// Skip invalid days-of-month (e.g., Feb 30) — jump to next month.
+		if d > 28 {
+			lastDay := time.Date(t.Year(), t.Month()+1, 0, 0, 0, 0, 0, loc).Day()
+			if d > lastDay {
+				t = time.Date(t.Year(), t.Month()+1, 1, 0, 0, 0, 0, loc)
+				continue
+			}
+		}
+
+		if monBits[mo-1] && domBits[d-1] && dowBits[dw] && hrBits[h] && minBits[mi] {
+			return t
+		}
+		t = t.Add(time.Minute)
+	}
+
+	slog.Warn("Could not determine next run within 1 year", "schedule", schedule)
+	return now.Add(time.Hour)
+}
+
+// catchUpMissedTasks runs tasks that were missed during downtime
+func (s *Scheduler) catchUpMissedTasks() {
+	if s.db == nil {
+		return
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	now := time.Now()
+	catchUpDeadline := now.Add(-s.catchUpWindow)
+
+	for _, task := range s.tasks {
+		if !task.Enabled {
+			continue
+		}
+
+		// Check if task was missed (last run before catch-up window and next run in the past)
+		if task.LastRun.Before(catchUpDeadline) && task.NextRun.Before(now) {
+			slog.Info("Catching up missed task", "task", task.ID, "last_run", task.LastRun)
+			go s.runTask(task)
+		}
+	}
+}
+
+// runStartupTasks runs tasks marked with RunOnStart
+// Per AI.md PART 19 line 28760-28761: Tasks execute "in order of original scheduled time"
+func (s *Scheduler) runStartupTasks() {
+	s.mu.RLock()
+	startupTasks := make([]*Task, 0)
+	for _, task := range s.tasks {
+		if task.Enabled && task.RunOnStart {
+			startupTasks = append(startupTasks, task)
+		}
+	}
+	s.mu.RUnlock()
+
+	// Run startup tasks sequentially per spec (in order of original scheduled time)
+	for _, task := range startupTasks {
+		slog.Info("Running startup task", "task", task.ID)
+		s.runTask(task)
+	}
+}
+
+// Database operations for persistent state
+
+// initDatabase creates the scheduler_tasks table if not exists
+func (s *Scheduler) initDatabase() {
+	// Per AI.md PART 10: bulk/DDL operations use 60s context timeout
+	initCtx, initCancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer initCancel()
+
+	query := `
+		CREATE TABLE IF NOT EXISTS scheduler_tasks (
+			task_id TEXT PRIMARY KEY,
+			task_name TEXT NOT NULL,
+			schedule TEXT NOT NULL,
+			last_run DATETIME,
+			last_status TEXT,
+			last_error TEXT,
+			next_run DATETIME,
+			run_count INTEGER DEFAULT 0,
+			fail_count INTEGER DEFAULT 0,
+			enabled INTEGER DEFAULT 1,
+			retry_count INTEGER DEFAULT 0,
+			next_retry DATETIME,
+			locked_by TEXT,
+			locked_at DATETIME
+		)
+	`
+	if _, err := s.db.ExecContext(initCtx, query); err != nil {
+		slog.Error("Failed to create tasks table", "err", err)
+	}
+
+	// Idempotent migrations — add columns missing from older schema versions
+	// SQLite silently errors if the column already exists; errors are intentionally ignored
+	s.db.ExecContext(initCtx, "ALTER TABLE scheduler_tasks ADD COLUMN task_name TEXT")
+	s.db.ExecContext(initCtx, "ALTER TABLE scheduler_tasks ADD COLUMN schedule TEXT")
+	s.db.ExecContext(initCtx, "ALTER TABLE scheduler_tasks ADD COLUMN last_status TEXT")
+	s.db.ExecContext(initCtx, "ALTER TABLE scheduler_tasks ADD COLUMN fail_count INTEGER DEFAULT 0")
+	s.db.ExecContext(initCtx, "ALTER TABLE scheduler_tasks ADD COLUMN retry_count INTEGER DEFAULT 0")
+	s.db.ExecContext(initCtx, "ALTER TABLE scheduler_tasks ADD COLUMN next_retry DATETIME")
+	s.db.ExecContext(initCtx, "ALTER TABLE scheduler_tasks ADD COLUMN locked_by TEXT")
+	s.db.ExecContext(initCtx, "ALTER TABLE scheduler_tasks ADD COLUMN locked_at DATETIME")
+}
+
+// loadTaskState loads persisted state for a task
+func (s *Scheduler) loadTaskState(task *Task) {
+	query := `SELECT last_run, last_status, last_error, next_run, run_count, fail_count, enabled, retry_count, next_retry
+		FROM scheduler_tasks WHERE task_id = ?`
+
+	var lastRun, nextRun, nextRetry sql.NullTime
+	var lastStatus, lastError sql.NullString
+	var runCount, failCount int64
+	var retryCount int
+	var enabled bool
+
+	// Per AI.md PART 10: SELECT queries must use context with 5s timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := s.db.QueryRowContext(ctx, query, string(task.ID)).Scan(
+		&lastRun, &lastStatus, &lastError, &nextRun, &runCount, &failCount, &enabled, &retryCount, &nextRetry,
+	)
+
+	if err == sql.ErrNoRows {
+		// New task, insert initial state
+		s.saveTaskState(task)
+		return
+	}
+
+	if err != nil {
+		slog.Warn("Failed to load task state", "task", task.ID, "err", err)
+		return
+	}
+
+	// Only restore enabled state for skippable tasks
+	if task.Skippable {
+		task.Enabled = enabled
+	}
+
+	if lastRun.Valid {
+		task.LastRun = lastRun.Time
+	}
+	if lastStatus.Valid {
+		task.LastStatus = TaskStatus(lastStatus.String)
+	}
+	if lastError.Valid {
+		task.LastError = lastError.String
+	}
+	if nextRun.Valid && nextRun.Time.After(time.Now()) {
+		task.NextRun = nextRun.Time
+	}
+	if nextRetry.Valid {
+		task.NextRetry = nextRetry.Time
+	}
+	task.RunCount = runCount
+	task.FailCount = failCount
+	task.RetryCount = retryCount
+}
+
+// saveTaskState persists task state to database
+func (s *Scheduler) saveTaskState(task *Task) {
+	query := `INSERT OR REPLACE INTO scheduler_tasks
+		(task_id, task_name, schedule, last_run, last_status, last_error, next_run, run_count, fail_count, enabled, retry_count, next_retry)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+	// Handle zero time for next_retry
+	var nextRetry interface{}
+	if task.NextRetry.IsZero() {
+		nextRetry = nil
+	} else {
+		nextRetry = task.NextRetry
+	}
+
+	// Per AI.md PART 10: INSERT/UPDATE queries must use context with 10s timeout
+	saveCtx, saveCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer saveCancel()
+	_, err := s.db.ExecContext(saveCtx, query,
+		string(task.ID),
+		task.Name,
+		task.Schedule,
+		task.LastRun,
+		string(task.LastStatus),
+		task.LastError,
+		task.NextRun,
+		task.RunCount,
+		task.FailCount,
+		task.Enabled,
+		task.RetryCount,
+		nextRetry,
+	)
+
+	if err != nil {
+		slog.Error("Failed to save task state", "task", task.ID, "err", err)
+	}
+}
+
+// acquireTaskLock attempts to acquire a distributed lock for a task
+func (s *Scheduler) acquireTaskLock(task *Task) bool {
+	// Lock timeout is 5 minutes per spec
+	lockTimeout := 5 * time.Minute
+	now := time.Now()
+
+	// Try to acquire lock or take over expired lock
+	query := `UPDATE scheduler_tasks
+		SET locked_by = ?, locked_at = ?
+		WHERE task_id = ? AND (locked_by IS NULL OR locked_by = ? OR locked_at < ?)`
+
+	// Per AI.md PART 10: UPDATE queries must use context with 10s timeout
+	lockCtx, lockCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer lockCancel()
+	result, err := s.db.ExecContext(lockCtx, query, s.nodeID, now, string(task.ID), s.nodeID, now.Add(-lockTimeout))
+	if err != nil {
+		slog.Warn("Failed to acquire lock", "task", task.ID, "err", err)
+		return false
+	}
+
+	rows, _ := result.RowsAffected()
+	return rows > 0
+}
+
+// releaseTaskLock releases the distributed lock for a task
+func (s *Scheduler) releaseTaskLock(task *Task) {
+	query := `UPDATE scheduler_tasks SET locked_by = NULL, locked_at = NULL WHERE task_id = ? AND locked_by = ?`
+	// Per AI.md PART 10: UPDATE queries must use context with 10s timeout
+	relCtx, relCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer relCancel()
+	s.db.ExecContext(relCtx, query, string(task.ID), s.nodeID)
+}
+
+// Enable enables a task
+func (s *Scheduler) Enable(id TaskID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	task, ok := s.tasks[id]
+	if !ok {
+		return fmt.Errorf("task not found: %s", id)
+	}
+
+	if !task.Skippable {
+		return fmt.Errorf("task %s cannot be enabled/disabled", id)
+	}
+
+	task.Enabled = true
+	// Already holding s.mu (write) — use the lock-free variant to avoid
+	// self-deadlock on the non-recursive RWMutex.
+	task.NextRun = s.calculateNextRunLocked(task.Schedule)
+
+	if s.db != nil {
+		s.saveTaskState(task)
+	}
+
+	return nil
+}
+
+// Disable disables a task
+func (s *Scheduler) Disable(id TaskID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	task, ok := s.tasks[id]
+	if !ok {
+		return fmt.Errorf("task not found: %s", id)
+	}
+
+	if !task.Skippable {
+		return fmt.Errorf("task %s cannot be disabled - it is required", id)
+	}
+
+	task.Enabled = false
+
+	if s.db != nil {
+		s.saveTaskState(task)
+	}
+
+	return nil
+}
+
+// RunNow runs a task immediately
+func (s *Scheduler) RunNow(id TaskID) error {
+	s.mu.RLock()
+	task, ok := s.tasks[id]
+	s.mu.RUnlock()
+
+	if !ok {
+		return fmt.Errorf("task not found: %s", id)
+	}
+
+	go s.runTask(task)
+	return nil
+}
+
+// Stop stops the scheduler
+func (s *Scheduler) StopTaskScheduler() {
+	s.mu.Lock()
+	if !s.running {
+		s.mu.Unlock()
+		return
+	}
+	s.running = false
+	s.mu.Unlock()
+
+	s.cancel()
+	s.wg.Wait()
+	slog.Info("Scheduler stopped")
+}
+
+// IsRunning returns whether the scheduler is running
+func (s *Scheduler) IsRunning() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.running
+}
+
+// GetTasks returns all registered tasks
+func (s *Scheduler) GetTasks() []*TaskInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	tasks := make([]*TaskInfo, 0, len(s.tasks))
+	for _, task := range s.tasks {
+		maxRetries := task.MaxRetries
+		if maxRetries <= 0 {
+			maxRetries = DefaultMaxRetries
+		}
+		tasks = append(tasks, &TaskInfo{
+			ID:          string(task.ID),
+			Name:        task.Name,
+			Description: task.Description,
+			Schedule:    task.Schedule,
+			TaskType:    string(task.TaskType),
+			LastRun:     task.LastRun,
+			LastStatus:  string(task.LastStatus),
+			LastError:   task.LastError,
+			NextRun:     task.NextRun,
+			RunCount:    task.RunCount,
+			FailCount:   task.FailCount,
+			Enabled:     task.Enabled,
+			Skippable:   task.Skippable,
+			RetryCount:  task.RetryCount,
+			NextRetry:   task.NextRetry,
+			MaxRetries:  maxRetries,
+		})
+	}
+	return tasks
+}
+
+// Status returns the current status of all registered tasks.
+// Used by the debug /scheduler endpoint per AI.md PART 6.
+func (s *Scheduler) Status() []*TaskInfo {
+	return s.GetTasks()
+}
+
+// GetTask returns a specific task
+func (s *Scheduler) GetTask(id TaskID) (*TaskInfo, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	task, ok := s.tasks[id]
+	if !ok {
+		return nil, fmt.Errorf("task not found: %s", id)
+	}
+
+	maxRetries := task.MaxRetries
+	if maxRetries <= 0 {
+		maxRetries = DefaultMaxRetries
+	}
+
+	return &TaskInfo{
+		ID:          string(task.ID),
+		Name:        task.Name,
+		Description: task.Description,
+		Schedule:    task.Schedule,
+		TaskType:    string(task.TaskType),
+		LastRun:     task.LastRun,
+		LastStatus:  string(task.LastStatus),
+		LastError:   task.LastError,
+		NextRun:     task.NextRun,
+		RunCount:    task.RunCount,
+		FailCount:   task.FailCount,
+		Enabled:     task.Enabled,
+		Skippable:   task.Skippable,
+		RetryCount:  task.RetryCount,
+		NextRetry:   task.NextRetry,
+		MaxRetries:  maxRetries,
+	}, nil
+}
+
+// TaskInfo represents task information for API/UI
+type TaskInfo struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Schedule    string    `json:"schedule"`
+	TaskType    string    `json:"task_type"`
+	LastRun     time.Time `json:"last_run"`
+	LastStatus  string    `json:"last_status"`
+	LastError   string    `json:"last_error,omitempty"`
+	NextRun     time.Time `json:"next_run"`
+	RunCount    int64     `json:"run_count"`
+	FailCount   int64     `json:"fail_count"`
+	Enabled     bool      `json:"enabled"`
+	Skippable   bool      `json:"skippable"`
+
+	// Retry state per AI.md PART 19
+	RetryCount int       `json:"retry_count"`
+	NextRetry  time.Time `json:"next_retry,omitempty"`
+	MaxRetries int       `json:"max_retries"`
+}

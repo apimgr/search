@@ -1,0 +1,112 @@
+package instant
+
+import (
+	"context"
+	"fmt"
+	"net/url"
+	"regexp"
+	"strings"
+
+	"github.com/apimgr/search/src/common/i18n"
+)
+
+// URLHandler handles URL encoding/decoding and parsing
+type URLHandler struct {
+	patterns []*regexp.Regexp
+}
+
+func NewURLHandler() *URLHandler {
+	return &URLHandler{
+		patterns: []*regexp.Regexp{
+			regexp.MustCompile(`(?i)^url\s+encode[:\s]+(.+)$`),
+			regexp.MustCompile(`(?i)^url\s+decode[:\s]+(.+)$`),
+			regexp.MustCompile(`(?i)^urlencode[:\s]+(.+)$`),
+			regexp.MustCompile(`(?i)^urldecode[:\s]+(.+)$`),
+			regexp.MustCompile(`(?i)^parse\s+url[:\s]+(.+)$`),
+		},
+	}
+}
+
+func (h *URLHandler) Name() string               { return "url" }
+func (h *URLHandler) Patterns() []*regexp.Regexp { return h.patterns }
+
+func (h *URLHandler) CanHandle(query string) bool {
+	for _, p := range h.patterns {
+		if p.MatchString(query) {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *URLHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
+	lowerQuery := strings.ToLower(query)
+	isDecode := strings.Contains(lowerQuery, "decode")
+	isParse := strings.Contains(lowerQuery, "parse")
+
+	var text string
+	for _, p := range h.patterns {
+		if matches := p.FindStringSubmatch(query); len(matches) > 1 {
+			text = matches[1]
+			break
+		}
+	}
+
+	if text == "" {
+		return nil, nil
+	}
+
+	lang := LangFromContext(ctx)
+
+	if isParse {
+		parsed, err := url.Parse(text)
+		if err != nil {
+			return &Answer{
+				Type:    AnswerTypeURL,
+				Query:   query,
+				Title:   i18n.T(lang, "instant.url_parser_title"),
+				Content: i18n.T(lang, "instant.url_invalid"),
+			}, nil
+		}
+
+		var content strings.Builder
+		content.WriteString(fmt.Sprintf("<strong>URL:</strong> %s<br><br>", escapeHTML(text)))
+		content.WriteString(fmt.Sprintf("<strong>Scheme:</strong> %s<br>", escapeHTML(parsed.Scheme)))
+		content.WriteString(fmt.Sprintf("<strong>Host:</strong> %s<br>", escapeHTML(parsed.Host)))
+		content.WriteString(fmt.Sprintf("<strong>Path:</strong> %s<br>", escapeHTML(parsed.Path)))
+		if parsed.RawQuery != "" {
+			content.WriteString(fmt.Sprintf("<strong>Query:</strong> %s<br>", escapeHTML(parsed.RawQuery)))
+		}
+		if parsed.Fragment != "" {
+			content.WriteString(fmt.Sprintf("<strong>Fragment:</strong> %s<br>", escapeHTML(parsed.Fragment)))
+		}
+
+		return &Answer{
+			Type:    AnswerTypeURL,
+			Query:   query,
+			Title:   i18n.T(lang, "instant.url_parser_title"),
+			Content: content.String(),
+		}, nil
+	}
+
+	var result, operation string
+	if isDecode {
+		decoded, err := url.QueryUnescape(text)
+		if err != nil {
+			result = text
+		} else {
+			result = decoded
+		}
+		operation = i18n.T(lang, "instant.url_operation_decoded")
+	} else {
+		result = url.QueryEscape(text)
+		operation = i18n.T(lang, "instant.url_operation_encoded")
+	}
+
+	return &Answer{
+		Type:    AnswerTypeURL,
+		Query:   query,
+		Title:   i18n.T(lang, "instant.url_operation_title", operation),
+		Content: fmt.Sprintf("<strong>Input:</strong> %s<br><br><strong>%s:</strong> <code>%s</code>", escapeHTML(text), operation, escapeHTML(result)),
+	}, nil
+}

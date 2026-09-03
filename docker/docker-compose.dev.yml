@@ -1,0 +1,43 @@
+# nginx proxy address - http://172.17.0.1:64580
+# search - development
+
+name: search-dev
+
+x-logging: &default-logging
+  options:
+    max-size: "5m"
+    max-file: "1"
+  driver: json-file
+
+services:
+  search:
+    image: ghcr.io/apimgr/search:devel
+    container_name: search-app
+    hostname: search
+    restart: always
+    pull_policy: always
+    logging: *default-logging
+    environment:
+      PORT: 80
+      DEBUG: 1
+      MODE: dev
+      TZ: ${TZ:-America/New_York}
+    volumes:
+      - ./volumes/config:/config:z
+      - ./volumes/data:/data:z
+    ports:
+      # Development: accessible from all interfaces, no 172.17.0.1 bind
+      - "64580:80"
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/search", "--status"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+    networks:
+      - search-dev
+
+networks:
+  search-dev:
+    name: search-dev
+    external: false

@@ -1,0 +1,85 @@
+{{define "content"}}
+<div class="static-page terms-page">
+    <header class="page-header">
+        <h1>{{t "footer.terms"}}</h1>
+    </header>
+
+    {{if .Config.Server.Pages.Terms.Content}}
+    <div class="page-content markdown">
+        {{.Config.Server.Pages.Terms.Content | safe}}
+    </div>
+    {{else}}
+    <div class="page-content">
+        <p class="last-updated">{{t "terms.last_updated" .BuildDate}}</p>
+
+        <section class="terms-section">
+            <h2>{{t "terms.acceptance_heading"}}</h2>
+            <p>{{t "terms.acceptance_description" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}}</p>
+        </section>
+
+        <section class="terms-section">
+            <h2>{{t "terms.description_heading"}}</h2>
+            <p>{{t "terms.description_body" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}}</p>
+        </section>
+
+        <section class="terms-section">
+            <h2>{{t "terms.user_conduct_heading"}}</h2>
+            <p>{{t "terms.user_conduct_intro"}}</p>
+            <ul>
+                <li>{{t "terms.user_conduct_item_unlawful"}}</li>
+                <li>{{t "terms.user_conduct_item_access"}}</li>
+                <li>{{t "terms.user_conduct_item_disrupt"}}</li>
+                <li>{{t "terms.user_conduct_item_automated"}}</li>
+                <li>{{t "terms.user_conduct_item_reverse_engineering"}}</li>
+            </ul>
+        </section>
+
+        <section class="terms-section">
+            <h2>{{t "terms.privacy_heading"}}</h2>
+            <p>{{t "terms.privacy_prefix"}} <a href="/server/privacy">{{t "footer.privacy_policy"}}</a>{{t "terms.privacy_suffix"}}</p>
+        </section>
+
+        <section class="terms-section">
+            <h2>{{t "terms.intellectual_property_heading"}}</h2>
+            <p>{{t "terms.intellectual_property_description" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}}</p>
+            <p>{{t "terms.intellectual_property_followup"}}</p>
+        </section>
+
+        <section class="terms-section">
+            <h2>{{t "terms.third_party_content_heading"}}</h2>
+            <p>{{t "terms.third_party_content_description"}}</p>
+        </section>
+
+        <section class="terms-section">
+            <h2>{{t "terms.disclaimer_heading"}}</h2>
+            <p>{{t "terms.disclaimer_intro"}}</p>
+            <ul>
+                <li>{{t "terms.disclaimer_item_uninterrupted"}}</li>
+                <li>{{t "terms.disclaimer_item_accurate"}}</li>
+                <li>{{t "terms.disclaimer_item_defects"}}</li>
+            </ul>
+        </section>
+
+        <section class="terms-section">
+            <h2>{{t "terms.limitation_heading"}}</h2>
+            <p>{{t "terms.limitation_description" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}}</p>
+        </section>
+
+        <section class="terms-section">
+            <h2>{{t "terms.modifications_heading"}}</h2>
+            <p>{{t "terms.modifications_description"}}</p>
+        </section>
+
+        <section class="terms-section">
+            <h2>{{t "terms.changes_heading"}}</h2>
+            <p>{{t "terms.changes_description"}}</p>
+        </section>
+
+        <section class="terms-section">
+            <h2>{{t "contact.page_title"}}</h2>
+            <p>{{t "terms.contact_prefix"}} <a href="/server/contact">{{t "contact.title"}}</a>{{t "terms.contact_suffix"}}</p>
+        </section>
+    </div>
+    {{end}}
+</div>
+{{end}}

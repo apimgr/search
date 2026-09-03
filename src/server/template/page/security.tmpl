@@ -1,0 +1,54 @@
+{{define "content"}}
+<div class="static-page security-page">
+    <header class="page-header">
+        <h1>{{t "security.overview_title"}}</h1>
+    </header>
+
+    <div class="page-content">
+        <section class="security-section">
+            <h2>{{t "security.reporting_heading"}}</h2>
+            <p>{{t "security.reporting_intro"}}</p>
+            <ul>
+                {{if .ReportURL}}
+                <li>
+                    <strong>{{t "security.channel_primary"}}</strong>
+                    <a href="{{.ReportURL}}">{{.ReportURL}}</a>
+                </li>
+                {{end}}
+                <li>
+                    <strong>{{t "security.channel_form"}}</strong>
+                    <a href="{{.ContactURL}}">{{t "security.channel_form_link_text"}}</a>
+                </li>
+                {{if .MailtoContact}}
+                <li>
+                    <strong>{{t "security.channel_email"}}</strong>
+                    <a href="{{.MailtoContact}}">{{.MailtoContact}}</a>
+                </li>
+                {{end}}
+            </ul>
+        </section>
+
+        <section class="security-section">
+            <h2>{{t "security.details_heading"}}</h2>
+            <dl>
+                <dt>{{t "security.expires_label"}}</dt>
+                <dd>{{.Expires}}</dd>
+                {{if .HasPGPKey}}
+                <dt>{{t "security.encryption_label"}}</dt>
+                <dd><a href="{{.PGPKeyURL}}">{{.PGPKeyURL}}</a></dd>
+                {{end}}
+                <dt>{{t "security.machine_readable_label"}}</dt>
+                <dd><a href="{{.SecurityTxtURL}}">{{.SecurityTxtURL}}</a></dd>
+            </dl>
+        </section>
+
+        <section class="security-section">
+            <h2>{{t "security.links_heading"}}</h2>
+            <ul>
+                <li><a href="/server/security/policy">{{t "security.policy_title"}}</a></li>
+                <li><a href="/server/security/thanks">{{t "security.thanks_title"}}</a></li>
+            </ul>
+        </section>
+    </div>
+</div>
+{{end}}

@@ -1,0 +1,2416 @@
+package main
+
+import (
+	"context"
+	cryptoRand "crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"flag"
+	"fmt"
+	"log/slog"
+	"os"
+	"os/exec"
+	"os/user"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"syscall"
+	"time"
+
+	"golang.org/x/term"
+
+	"github.com/apimgr/search/src/backup"
+	"github.com/apimgr/search/src/common/banner"
+	"github.com/apimgr/search/src/common/display"
+	"github.com/apimgr/search/src/config"
+	"github.com/apimgr/search/src/email"
+	"github.com/apimgr/search/src/mode"
+	"github.com/apimgr/search/src/model"
+	"github.com/apimgr/search/src/search"
+	"github.com/apimgr/search/src/search/engine"
+	"github.com/apimgr/search/src/server"
+	"github.com/apimgr/search/src/service"
+	sigsvc "github.com/apimgr/search/src/signal"
+	"github.com/apimgr/search/src/update"
+
+	_ "modernc.org/sqlite"
+)
+
+// CLI flags (per AI.md PART 8: SERVER BINARY CLI)
+var (
+	flagVersion     bool
+	flagHelp        bool
+	flagInit        bool
+	flagConfigInfo  bool
+	flagStatus      bool
+	flagDaemon      bool
+	flagDebug       bool
+	flagTest        string
+	flagService     string
+	flagMaintenance string
+	flagUpdate      string
+	flagBuild       string
+	flagShell       string
+
+	// Required flags per AI.md PART 6 (NON-NEGOTIABLE)
+	flagMode    string
+	flagData    string
+	flagConfig  string
+	flagCache   string
+	flagLog     string
+	flagBackup  string
+	flagPID     string
+	flagAddress string
+	flagPort    int
+	flagBaseURL string
+	flagColor   string
+	flagLang    string
+)
+
+// exitFunc is the function used to exit the process.
+// Overriding this in tests prevents os.Exit from terminating the test process.
+var exitFunc = os.Exit
+
+func init() {
+	// Simple commands
+	flag.BoolVar(&flagVersion, "version", false, "Show version information")
+	flag.BoolVar(&flagVersion, "v", false, "Show version information (shorthand)")
+	flag.BoolVar(&flagHelp, "help", false, "Show help message")
+	flag.BoolVar(&flagHelp, "h", false, "Show help message (shorthand)")
+	flag.BoolVar(&flagInit, "init", false, "Initialize configuration")
+	flag.BoolVar(&flagConfigInfo, "config-info", false, "Show configuration paths and status")
+	flag.BoolVar(&flagStatus, "status", false, "Show server status")
+	flag.BoolVar(&flagDaemon, "daemon", false, "Daemonize (detach from terminal)")
+	flag.BoolVar(&flagDebug, "debug", false, "Enable debug mode (verbose logging, debug endpoints)")
+
+	// Commands with optional arguments
+	flag.StringVar(&flagTest, "test", "", "Test search engines with optional query")
+	flag.StringVar(&flagService, "service", "", "Service management: start|stop|restart|reload|status|--install|--uninstall|--disable|--help")
+	flag.StringVar(&flagMaintenance, "maintenance", "", "Maintenance: backup|restore|update|mode")
+	flag.StringVar(&flagUpdate, "update", "", "Update management: check|yes|branch")
+	flag.StringVar(&flagBuild, "build", "", "Build for platforms: all|linux|darwin|windows|freebsd")
+	flag.StringVar(&flagShell, "shell", "", "Shell integration: completions|init|--help")
+
+	// Configuration override flags (NON-NEGOTIABLE per AI.md PART 6)
+	flag.StringVar(&flagMode, "mode", "", "Set application mode (production|development)")
+	flag.StringVar(&flagData, "data", "", "Set data directory")
+	flag.StringVar(&flagConfig, "config", "", "Set config directory")
+	flag.StringVar(&flagCache, "cache", "", "Set cache directory")
+	flag.StringVar(&flagLog, "log", "", "Set log directory")
+	flag.StringVar(&flagBackup, "backup", "", "Set backup directory")
+	flag.StringVar(&flagPID, "pid", "", "Set PID file path")
+	flag.StringVar(&flagAddress, "address", "", "Set listen address")
+	flag.IntVar(&flagPort, "port", 0, "Set listen port")
+	flag.StringVar(&flagBaseURL, "baseurl", "", "Set URL path prefix for reverse proxy (default: /)")
+	// Per AI.md PART 8: --color {auto|yes|no}
+	flag.StringVar(&flagColor, "color", "auto", "Set color output mode (auto|yes|no)")
+	// Per AI.md PART 8: --lang sets language for output (default: auto, from LANG env)
+	flag.StringVar(&flagLang, "lang", "", "Set language for output (default: auto)")
+}
+
+func main() {
+	// Custom usage function
+	flag.Usage = func() {
+		printHelp()
+	}
+
+	// Parse flags
+	flag.Parse()
+
+	// Initialize display output (colors and emojis) based on NO_COLOR, TERM, and --color flag
+	// Per AI.md PART 8: Must be called early, before any output
+	display.InitOutput(flagColor)
+
+	// Apply CLI overrides to config (before any other operations)
+	applyCliOverrides()
+
+	// Handle commands
+	switch {
+	case flagVersion:
+		printVersion()
+		return
+	case flagHelp:
+		printHelp()
+		return
+	case flagInit:
+		runInit()
+		return
+	case flagConfigInfo:
+		showConfigInfo()
+		return
+	case flagStatus:
+		showStatus()
+		return
+	case flagTest != "" || (len(os.Args) > 1 && os.Args[1] == "--test"):
+		runTest()
+		return
+	case flagService != "":
+		runService(flagService)
+		return
+	case flagMaintenance != "":
+		runMaintenance(flagMaintenance)
+		return
+	case flagUpdate != "" || (len(os.Args) > 1 && os.Args[1] == "--update"):
+		subCmd := flagUpdate
+		if subCmd == "" {
+			subCmd = "yes"
+		}
+		runUpdate(subCmd)
+		return
+	case flagBuild != "" || (len(os.Args) > 1 && os.Args[1] == "--build"):
+		platform := flagBuild
+		if platform == "" {
+			platform = "all"
+		}
+		runBuild(platform)
+		return
+	case flagShell != "" || (len(os.Args) > 1 && os.Args[1] == "--shell"):
+		subCmd := flagShell
+		if subCmd == "" && len(os.Args) > 2 {
+			subCmd = os.Args[2]
+		}
+		if subCmd == "" {
+			subCmd = "--help"
+		}
+		runShell(subCmd)
+		return
+	case len(os.Args) > 1 && os.Args[1] == "tor":
+		runTor(os.Args[2:])
+		return
+	case len(os.Args) > 1 && os.Args[1] == "email":
+		runEmail(os.Args[2:])
+		return
+	}
+
+	// Handle legacy argument style (for backwards compatibility)
+	// Skip if runtime flags are set (--port, --address, --mode, etc. are handled by flag.Parse())
+	if len(os.Args) > 1 && strings.HasPrefix(os.Args[1], "--") && !strings.Contains(os.Args[1], "=") {
+		// Don't call handleLegacyArgs for runtime configuration flags
+		// These are already handled by flag.Parse() and applyCliOverrides()
+		runtimeFlags := map[string]bool{
+			"--port": true, "--address": true, "--mode": true, "--data": true,
+			"--config": true, "--cache": true, "--log": true, "--backup": true,
+			"--pid": true, "--debug": true, "--daemon": true,
+			"--baseurl": true, "--color": true, "--lang": true,
+		}
+		if !runtimeFlags[os.Args[1]] {
+			handleLegacyArgs()
+			return
+		}
+	}
+
+	// Start server
+	runServer()
+}
+
+// applyCliOverrides applies CLI flag overrides to the config system
+// Per AI.md PART 6: Directory flags MUST create directories if they don't exist
+func applyCliOverrides() {
+	// Set mode from CLI flag or environment
+	// Per AI.md PART 6: Mode Detection Priority
+	if flagMode != "" {
+		os.Setenv("SEARCH_MODE", flagMode)
+		os.Setenv("MODE", flagMode)
+		mode.SetAppMode(flagMode)
+	} else {
+		// Initialize mode from environment
+		mode.FromEnv()
+	}
+
+	// Set debug mode from CLI flag
+	// Per AI.md PART 6: --debug enables debug mode (verbose logging, debug endpoints)
+	if flagDebug {
+		os.Setenv("DEBUG", "true")
+		os.Setenv("SEARCH_DEBUG", "true")
+		mode.SetDebugEnabled(true)
+	}
+
+	if flagData != "" {
+		os.Setenv("SEARCH_DATA_DIR", flagData)
+		config.SetDataDirOverride(flagData)
+	}
+	if flagConfig != "" {
+		os.Setenv("SEARCH_CONFIG_DIR", flagConfig)
+		config.SetConfigDirOverride(flagConfig)
+	}
+	if flagCache != "" {
+		os.Setenv("SEARCH_CACHE_DIR", flagCache)
+		config.SetCacheDirOverride(flagCache)
+	}
+	if flagLog != "" {
+		os.Setenv("SEARCH_LOG_DIR", flagLog)
+		config.SetLogDirOverride(flagLog)
+	}
+	if flagBackup != "" {
+		os.Setenv("SEARCH_BACKUP_DIR", flagBackup)
+		config.SetBackupDirOverride(flagBackup)
+	}
+	if flagPID != "" {
+		os.Setenv("SEARCH_PID_FILE", flagPID)
+		config.SetPIDFileOverride(flagPID)
+	}
+	if flagAddress != "" {
+		os.Setenv("SEARCH_ADDRESS", flagAddress)
+	}
+	if flagPort != 0 {
+		os.Setenv("SEARCH_PORT", fmt.Sprintf("%d", flagPort))
+		os.Setenv("PORT", fmt.Sprintf("%d", flagPort))
+	}
+	// Per AI.md PART 6: --baseurl sets URL path prefix for reverse proxy
+	if flagBaseURL != "" {
+		os.Setenv("SEARCH_BASE_URL", flagBaseURL)
+		config.SetBaseURLOverride(flagBaseURL)
+	}
+	// Per AI.md PART 8: Color priority: CLI flag > Config > NO_COLOR env > Auto-detect
+	if flagColor != "" {
+		os.Setenv("SEARCH_COLOR", flagColor)
+		config.SetColorMode(flagColor)
+	}
+	// Per AI.md PART 8: --lang sets language for CLI output
+	if flagLang != "" {
+		os.Setenv("SEARCH_LANG", flagLang)
+		os.Setenv("LANG", flagLang)
+	}
+
+	// Ensure directories exist after CLI overrides are applied
+	// Per AI.md PART 6: All directory flags MUST create directories if they don't exist
+	if flagData != "" || flagConfig != "" || flagCache != "" || flagLog != "" || flagBackup != "" || flagPID != "" {
+		if err := config.EnsureDirectories(); err != nil {
+			slog.Warn("Failed to create directories", "err", err)
+		}
+	}
+}
+
+// handleLegacyArgs handles old-style arguments for backwards compatibility
+func handleLegacyArgs() {
+	switch os.Args[1] {
+	case "--version", "-v":
+		printVersion()
+	case "--help", "-h":
+		printHelp()
+	case "--test":
+		runTest()
+	case "--init":
+		runInit()
+	case "--config-info":
+		showConfigInfo()
+	case "--status":
+		showStatus()
+	case "--service":
+		if len(os.Args) > 2 {
+			runService(os.Args[2])
+		} else {
+			slog.Error("Missing service subcommand", "usage", "search --service {start,stop,restart,reload,status,--install,--uninstall,--disable,--help}")
+		}
+	case "--maintenance":
+		if len(os.Args) > 2 {
+			runMaintenance(os.Args[2])
+		} else {
+			slog.Error("Missing maintenance subcommand", "usage", "search --maintenance <backup|restore|update|mode>")
+		}
+	case "--update":
+		subCmd := "yes"
+		if len(os.Args) > 2 {
+			subCmd = os.Args[2]
+		}
+		runUpdate(subCmd)
+	case "--build":
+		platform := "all"
+		if len(os.Args) > 2 {
+			platform = os.Args[2]
+		}
+		runBuild(platform)
+	case "--shell":
+		subCmd := "--help"
+		if len(os.Args) > 2 {
+			subCmd = os.Args[2]
+		}
+		runShell(subCmd)
+	case "--daemon":
+		// Per AI.md PART 8: Only -h and -v may have short flags
+		flagDaemon = true
+		runServer()
+	default:
+		slog.Error("Unknown command", "cmd", os.Args[1], "hint", "Use --help for usage information")
+	}
+}
+
+func runServer() {
+	// Handle daemonization per AI.md PART 6
+	// Check if we should daemonize (only for manual starts, not --service start)
+	if flagDaemon && os.Getenv("_DAEMON_CHILD") != "1" {
+		if err := daemonize(); err != nil {
+			slog.Error("Failed to daemonize", "err", err)
+			exitFunc(1)
+		}
+		// Parent exits in daemonize(), only child continues
+	}
+
+	// Per AI.md PART 8: If running as root, setup system resources then drop privileges
+	// Skip privilege dropping in container mode - container entrypoint handles this
+	if service.IsRunningAsRoot() && !config.IsRunningInContainer() {
+		slog.Info("Running as root - performing privileged setup")
+
+		// Step 8a: Create system user
+		svcUser, err := service.CreateSystemUser(config.InternalName)
+		if err != nil {
+			slog.Error("Failed to create system user", "err", err)
+			exitFunc(1)
+		}
+		slog.Info("System user ready", "user", svcUser.Name, "uid", svcUser.UID, "gid", svcUser.GID)
+
+		// Step 8b-d: Create directories and set ownership (while still root)
+		if err := config.EnsureSystemDirectories("search"); err != nil {
+			slog.Error("Failed to create system directories", "err", err)
+			exitFunc(1)
+		}
+		slog.Info("System directories created")
+
+		// Step 8b-c: Create and chown the ACTUAL resolved runtime directories
+		// (these honor --data/--config/--cache/--log/--backup/--pid CLI flags
+		// per PART 8 step 7; EnsureSystemDirectories above only covers the
+		// hardcoded default system paths). Without this, directories created
+		// via custom flags stay root-owned after the privilege drop below and
+		// the service user cannot write to them (PID file, database, etc.)
+		if err := config.EnsureDirectories(); err != nil {
+			slog.Error("Failed to create runtime directories", "err", err)
+			exitFunc(1)
+		}
+		if err := config.ChownRuntimeDirectories("search"); err != nil {
+			slog.Error("Failed to chown runtime directories", "err", err)
+			exitFunc(1)
+		}
+
+		// Set environment for the service user (HOME points to data dir)
+		// This ensures config.Initialize() uses the correct paths after privilege drop
+		// Only applies to the default system paths — custom overrides (already
+		// applied via config.SetXDirOverride above) take precedence and are
+		// left untouched here.
+		if flagData == "" {
+			os.Setenv("SEARCH_DATA_DIR", "/var/lib/apimgr/search")
+		}
+		if flagConfig == "" {
+			os.Setenv("SEARCH_CONFIG_DIR", "/etc/apimgr/search")
+		}
+		if flagLog == "" {
+			os.Setenv("SEARCH_LOG_DIR", "/var/log/apimgr/search")
+		}
+		if flagCache == "" {
+			os.Setenv("SEARCH_CACHE_DIR", "/var/cache/apimgr/search")
+		}
+		os.Setenv("HOME", config.GetDataDir())
+
+		// Step 8e-f: Privileged ports (<1024) are bound in server.Start() after
+		// the privilege drop, relying on the systemd AmbientCapabilities grant
+		// (CAP_NET_BIND_SERVICE) so the unprivileged search user can bind them.
+
+		// Step 8g: Drop privileges to search user
+		slog.Info("Dropping privileges", "user", svcUser.Name)
+		if err := service.DropPrivileges(svcUser.Name); err != nil {
+			slog.Error("Failed to drop privileges", "err", err)
+			exitFunc(1)
+		}
+
+		// Step 8h: Verify privilege drop succeeded
+		if err := service.VerifyPrivilegesDropped(); err != nil {
+			slog.Error("Privilege verification failed", "err", err)
+			exitFunc(1)
+		}
+		slog.Info("Privileges dropped successfully")
+	}
+
+	// Step 11: Check PID file for existing running instance (stale PID detection)
+	// Per AI.md PART 8: Startup sequence step 11 — check before writing
+	pidFile := config.GetPIDFile()
+	if running, existingPID, err := server.CheckPIDFile(pidFile); err != nil {
+		slog.Error("PID file check failed", "err", err)
+		exitFunc(1)
+	} else if running {
+		slog.Error("Server already running", "pid", existingPID)
+		exitFunc(1)
+	}
+
+	// Step 12: Write PID file
+	// Per AI.md PART 8: Startup sequence step 12 — write after stale check passes
+	if err := server.WritePIDFile(pidFile); err != nil {
+		slog.Error("Failed to write PID file", "err", err)
+		exitFunc(1)
+	}
+	defer server.RemovePIDFile(pidFile)
+
+	// Initialize configuration
+	cfg, err := config.Initialize()
+	if err != nil {
+		slog.Error("Configuration failed", "err", err)
+		exitFunc(1)
+	}
+
+	// On first run, display the auto-generated operator token (server.token)
+	// so the operator can save it. The token lives in server.yml and is the
+	// only credential the application has — there is no admin web UI.
+	var setupToken string
+	showSetup := cfg.IsFirstRun()
+	if showSetup {
+		setupToken = cfg.Server.Token
+	}
+
+	// Create server (initialises DB, scheduler, etc. — steps 13-16 per AI.md PART 8)
+	srv := server.NewServer(cfg)
+
+	// Step 19: Setup signal handling per AI.md PART 7.
+	// Registered before the server goroutine so signals arriving during Tor startup
+	// (step 17, up to 3 min) are handled correctly.
+	shutdownDone := sigsvc.Setup(sigsvc.ShutdownConfig{
+		ShutdownFunc: srv.Shutdown,
+		PIDFile:      config.GetPIDFile(),
+	})
+
+	// Steps 17-18: Start Tor then bind HTTP socket in a goroutine.
+	// readyCh is closed once the TCP socket is accepting connections.
+	// Per AI.md PART 8: banner (step 20) must be printed after binding (step 18).
+	readyCh := make(chan struct{})
+	serverErrCh := make(chan error, 1)
+	go func() {
+		if err := srv.StartHTTPServer(readyCh); err != nil {
+			serverErrCh <- err
+		}
+		close(serverErrCh)
+	}()
+
+	// Wait for server to signal readiness (timeout after 5 min to allow Tor bootstrap)
+	select {
+	case <-readyCh:
+		// Socket is bound and accepting connections
+	case err := <-serverErrCh:
+		if err != nil {
+			slog.Error("Server failed to start", "err", err)
+		}
+		exitFunc(1)
+	case <-time.After(5 * time.Minute):
+		slog.Error("Server failed to start within 5-minute timeout")
+		exitFunc(1)
+	}
+
+	// Step 20: Print responsive startup banner per AI.md PART 7 and PART 8.
+	// Now the server is listening; Tor address (if any) is available from srv.TorAddress().
+	urls := buildListenURLs(cfg)
+	if torAddr := srv.TorAddress(); torAddr != "" {
+		// Add live Tor address — buildListenURLs reads cfg.Server.Tor.OnionAddress which
+		// may be empty on first run before the address is persisted.
+		alreadyHasOnion := false
+		for _, u := range urls {
+			if strings.Contains(u, ".onion") {
+				alreadyHasOnion = true
+				break
+			}
+		}
+		if !alreadyHasOnion {
+			urls = append(urls, "http://"+torAddr)
+		}
+	}
+
+	banner.Print(banner.Config{
+		AppName:    "Search",
+		Version:    config.Version,
+		Mode:       cfg.Server.Mode,
+		Debug:      mode.IsDebugEnabled(),
+		URLs:       urls,
+		ShowSetup:  showSetup,
+		SetupToken: setupToken,
+	})
+
+	// Step 21: Block until graceful shutdown completes.
+	// Per AI.md PART 7: os.Exit() belongs only in main().
+	<-shutdownDone
+	<-serverErrCh
+	exitFunc(0)
+}
+
+func printVersion() {
+	// Per AI.md PART 13: --version format
+	// Format:
+	//   {binary} {version}
+	//   Built: {BUILD_DATE}
+	//   Go: {GO_VERSION}
+	//   OS/Arch: {GOOS}/{GOARCH}
+	// Note: No v prefix in version string
+	binaryName := filepath.Base(os.Args[0])
+
+	fmt.Printf("%s %s\n", binaryName, config.Version)
+	fmt.Printf("Built: %s\n", config.BuildDate)
+	fmt.Printf("Go: %s\n", runtime.Version())
+	fmt.Printf("OS/Arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+}
+
+func printHelp() {
+	// Per AI.md PART 6: Use actual binary name in help
+	binaryName := filepath.Base(os.Args[0])
+
+	fmt.Printf(`%s - Privacy-Respecting Metasearch Engine
+
+Usage:
+  %s [options]             Start the server with optional flags
+  %s [command]             Execute a command
+
+Runtime Flags:
+  --mode <mode>            Set application mode (production|development)
+  --data <dir>             Set data directory
+  --config <dir>           Set config directory
+  --cache <dir>            Set cache directory
+  --log <dir>              Set log directory
+  --backup <dir>           Set backup directory
+  --pid <file>             Set PID file path
+  --address <addr>         Set listen address
+  --port <port>            Set listen port
+  --baseurl <path>         Set URL path prefix for reverse proxy (default: /)
+  --color <mode>           Set color output mode (auto|yes|no)
+  --lang <code>            Set language for output (default: auto, from LANG env)
+  --daemon                 Daemonize (detach from terminal, Unix only)
+  --debug                  Enable debug mode (verbose logging, debug endpoints)
+
+Information:
+  --help, -h               Show this help message
+  --version, -v            Show version information
+  --status                 Show server status and health
+  --config-info            Show configuration paths and status
+
+Shell Integration:
+  --shell completions [SHELL]  Print shell completions script
+  --shell init [SHELL]         Print shell init command for eval
+  --shell --help               Show shell help
+
+Setup:
+  --init                   Initialize configuration
+  --test [query]           Test search engines with optional query
+
+Service Management:
+  --service <action>       Service management (requires privileges):
+    install                Install as system service
+    uninstall              Remove system service
+    start                  Start the service
+    stop                   Stop the service
+    status                 Check service status
+    restart                Restart the service
+    reload                 Reload configuration (SIGHUP)
+    enable                 Enable service autostart
+    disable                Disable service autostart
+
+Maintenance:
+  --maintenance <action>   Maintenance commands:
+    backup [file]          Create backup archive
+                           Use BACKUP_PASSWORD env var for encryption
+    restore <file>         Restore from backup
+                           Use BACKUP_PASSWORD env var if encrypted
+    update                 Alias for --update yes
+    mode                   Toggle maintenance mode
+    setup                  Reset configuration to defaults
+    pgp <action>           PGP keypair management (generate/export/import)
+    rotate-token           Rotate the operator bearer token (server.token)
+
+Updates:
+  --update [subcommand]    Update management:
+    check                  Check for available updates
+    yes                    Download and install update (default)
+    branch <name>          Set update branch (stable|beta|daily)
+    rollback               Rollback to previous version
+    list                   List available versions
+
+Tor Hidden Service:
+  tor <subcommand>         Tor hidden service management (talks to a running
+                           server over its loopback control endpoint):
+    status                 View Tor hidden service status
+    validate               Validate Tor configuration
+    restart                Restart the Tor process
+    regenerate             Regenerate the .onion address
+    vanity start <prefix>  Start vanity address search
+    vanity apply           Apply the found vanity address
+    import-keys <path>     Import an existing Tor key file
+
+Email:
+  email test <address>     Send a test email to verify SMTP configuration
+
+Build:
+  --build [platform]       Build binaries (requires Docker):
+    all                    Build for all 8 platforms (default)
+    linux                  Build for Linux (amd64, arm64)
+    darwin                 Build for macOS (amd64, arm64)
+    windows                Build for Windows (amd64, arm64)
+    freebsd                Build for FreeBSD (amd64, arm64)
+    host                   Build for current OS/ARCH only
+    linux/amd64            Build for specific OS/ARCH
+
+Environment Variables:
+  SEARCH_SETTINGS_PATH     Path to configuration file
+  SEARCH_CONFIG_DIR        Configuration directory
+  SEARCH_DATA_DIR          Data directory
+  SEARCH_LOG_DIR           Log directory
+  DEBUG, SEARCH_DEBUG      Enable debug mode (0/1, true/false)
+  SECRET_KEY               Secret key for in-memory caches (not sessions)
+  PORT, SEARCH_PORT        Server port
+  MODE, SEARCH_MODE        Application mode (production|development)
+  INSTANCE_NAME            Instance display name
+  SEARCH_COLOR             Color output mode (always|never|auto)
+  NO_COLOR                 Disable colors when set (standard)
+  DISABLE_TOR              Disable Tor (auto-enabled if tor binary installed)
+  BACKUP_PASSWORD          Password for backup encryption (AES-256-GCM)
+
+Examples:
+  %s                                 Start server with defaults
+  %s --port 8080                     Start on port 8080
+  %s --mode development              Start in dev mode
+  %s --config /etc/search --data /var/lib/search  Custom directories
+  %s --init                          Create configuration files
+  %s --test "golang"                 Test search with "golang" query
+  %s --service --install             Install as system service
+  %s --service reload                Reload configuration
+  %s --update check                  Check for updates
+  %s --maintenance rotate-token      Rotate the operator bearer token
+  %s --build all                     Build for all platforms
+  %s --build host                    Build for current platform
+
+For more information: https://github.com/apimgr/search
+`, binaryName, binaryName, binaryName,
+		binaryName, binaryName, binaryName, binaryName,
+		binaryName, binaryName, binaryName, binaryName,
+		binaryName, binaryName, binaryName, binaryName)
+}
+
+func runInit() {
+	fmt.Println(display.Emoji("🔧", "[*]") + " Initializing Search configuration...")
+	fmt.Println()
+
+	cfg, err := config.Initialize()
+	if err != nil {
+		slog.Error("Initialization failed", "err", err)
+		exitFunc(1)
+		return
+	}
+
+	fmt.Println(display.Emoji("✅", "[OK]") + " Configuration initialized successfully!")
+	fmt.Println()
+	fmt.Println(display.Emoji("📁", "[DIR]") + " Configuration Paths:")
+	fmt.Println("   Config: ", config.GetConfigDir())
+	fmt.Println("   Data:   ", config.GetDataDir())
+	fmt.Println("   Logs:   ", config.GetLogDir())
+	fmt.Println("   Cache:  ", config.GetCacheDir())
+	fmt.Println("   Backup: ", config.GetBackupDir())
+	fmt.Println("   SSL:    ", config.GetSSLDir())
+	fmt.Println("   Tor:    ", config.GetTorDir())
+	fmt.Println()
+	fmt.Println(display.Emoji("⚙️", "[CFG]") + "  Server Configuration:")
+	fmt.Println("   Title:  ", cfg.Server.Title)
+	fmt.Printf("   Port:   %d\n", cfg.Server.Port)
+	fmt.Println("   Mode:   ", cfg.Server.Mode)
+	fmt.Println("   Tor:     (auto-detect at startup)")
+	fmt.Println()
+	fmt.Println(display.Emoji("🔍", "[SEARCH]") + " Search Engines:")
+	for name, engine := range cfg.Engines {
+		status := display.Emoji("❌", "[X]") + " disabled"
+		if engine.Enabled {
+			status = fmt.Sprintf(display.Emoji("✅", "[OK]")+" enabled (priority: %d)", engine.Priority)
+		}
+		fmt.Printf("   %s: %s\n", name, status)
+	}
+}
+
+func showConfigInfo() {
+	fmt.Println(display.Emoji("📁", "[DIR]") + " Configuration Information")
+	fmt.Println()
+
+	env := config.LoadFromEnv()
+
+	fmt.Println("System:")
+	fmt.Printf("  OS:           %s\n", config.GetOS())
+	fmt.Printf("  Architecture: %s\n", config.GetArch())
+	fmt.Printf("  Privileged:   %v\n", config.IsPrivileged())
+	fmt.Printf("  Container:    %v\n", config.IsRunningInContainer())
+	fmt.Println()
+	fmt.Println("Mode:", env.GetMode())
+	fmt.Println()
+	fmt.Println("Directories:")
+	fmt.Println("  Config:   ", config.GetConfigDir())
+	fmt.Println("  Data:     ", config.GetDataDir())
+	fmt.Println("  Logs:     ", config.GetLogDir())
+	fmt.Println("  Cache:    ", config.GetCacheDir())
+	fmt.Println("  Backup:   ", config.GetBackupDir())
+	fmt.Println("  Database: ", config.GetDatabaseDir())
+	fmt.Println("  GeoIP:    ", config.GetGeoIPDir())
+	fmt.Println("  Tor:      ", config.GetTorDir())
+	fmt.Println("  SSL:      ", config.GetSSLDir())
+	fmt.Println("  Templates:", config.GetTemplatesDir())
+	fmt.Println("  Web Data: ", config.GetWebDataDir())
+	fmt.Println()
+	fmt.Println("Files:")
+	fmt.Println("  Config:   ", config.GetConfigPath())
+	fmt.Println("  PID:      ", config.GetPIDFile())
+	fmt.Println("  Service:  ", config.GetServiceFile())
+	fmt.Println("  Binary:   ", config.GetBinaryPath())
+	fmt.Println()
+
+	// Check if config exists
+	configPath := config.GetConfigPath()
+	if _, err := os.Stat(configPath); err == nil {
+		fmt.Println("Configuration Status: " + display.Emoji("✅", "[OK]") + " exists")
+	} else {
+		fmt.Println("Configuration Status: " + display.Emoji("⚠️", "[WARN]") + " not found (run --init to create)")
+	}
+
+	fmt.Println()
+	fmt.Println("Environment Variables (per AI.md PART 5):")
+
+	// Runtime Variables (Always Checked)
+	if env.Domain != "" {
+		fmt.Println("  DOMAIN:", env.Domain)
+	}
+	if env.Mode != "production" {
+		fmt.Println("  MODE:", env.Mode)
+	}
+	if config.IsNoColor() {
+		fmt.Println("  NO_COLOR: set")
+	}
+	if config.IsDumbTerminal() {
+		fmt.Println("  TERM: dumb")
+	}
+	if config.GetDatabaseDriver() != "" {
+		fmt.Println("  DATABASE_DRIVER:", config.GetDatabaseDriver())
+	}
+	if config.GetDatabaseURL() != "" {
+		fmt.Println("  DATABASE_URL: [set]")
+	}
+	if env.SMTPHost != "" {
+		fmt.Println("  SMTP_HOST:", env.SMTPHost)
+	}
+
+	// Init-Only Variables (First Run Only)
+	if env.ConfigDir != "" {
+		fmt.Println("  CONFIG_DIR:", env.ConfigDir)
+	}
+	if env.DataDir != "" {
+		fmt.Println("  DATA_DIR:", env.DataDir)
+	}
+	if env.LogDir != "" {
+		fmt.Println("  LOG_DIR:", env.LogDir)
+	}
+	if env.Port != "" {
+		fmt.Println("  PORT:", env.Port)
+	}
+	if env.Listen != "" {
+		fmt.Println("  LISTEN:", env.Listen)
+	}
+	if env.ApplicationName != "" {
+		fmt.Println("  APPLICATION_NAME:", env.ApplicationName)
+	}
+}
+
+func showStatus() {
+	// Per AI.md PART 31 - --status output format
+	binaryName := filepath.Base(os.Args[0])
+
+	// Check PID file and process status
+	pidFile := config.GetPIDFile()
+	isRunning := false
+	var pid int
+	var startTime time.Time
+
+	if pidData, err := os.ReadFile(pidFile); err == nil {
+		pidStr := strings.TrimSpace(string(pidData))
+		if p, err := fmt.Sscanf(pidStr, "%d", &pid); err == nil && p == 1 {
+			// Check if process is actually running
+			if isProcessRunning(pid) {
+				isRunning = true
+				// Try to get process start time for uptime calculation
+				startTime = getProcessStartTime(pid)
+			}
+		}
+	}
+
+	fmt.Println()
+
+	if isRunning {
+		fmt.Println("Server Status: Running")
+	} else {
+		fmt.Println("Server Status: Not Running")
+		fmt.Println()
+		fmt.Printf("Start the server with: %s\n", binaryName)
+		fmt.Printf("Or install as service: %s --service --install\n", binaryName)
+		return
+	}
+
+	// Load config to show settings
+	var port int
+	var mode string
+	var torEnabled bool
+	var torAddress string
+
+	configPath := config.GetConfigPath()
+	if cfg, err := config.Load(configPath); err == nil {
+		port = cfg.Server.Port
+		mode = cfg.Server.Mode
+		torEnabled = cfg.Server.Tor.Enabled
+		torAddress = cfg.Server.Tor.OnionAddress
+	} else {
+		// Try to get from env or defaults
+		port = 64580
+		mode = "production"
+	}
+
+	// Calculate uptime
+	uptime := "unknown"
+	if !startTime.IsZero() {
+		uptime = formatUptime(time.Since(startTime))
+	}
+
+	fmt.Printf("  PID: %d\n", pid)
+	fmt.Printf("  Port: %d\n", port)
+	fmt.Printf("  Mode: %s\n", mode)
+	fmt.Printf("  Uptime: %s\n", uptime)
+	fmt.Println()
+
+	// Instance mode (single-instance per AI.md line 2055)
+	fmt.Println("Mode: standalone")
+	fmt.Println()
+
+	// Tor Hidden Service status
+	if torEnabled {
+		if torAddress != "" {
+			fmt.Println("Tor Hidden Service: Connected")
+			// Truncate address for display
+			displayAddr := torAddress
+			if len(torAddress) > 16 {
+				displayAddr = torAddress[:8] + "..." + torAddress[len(torAddress)-10:]
+			}
+			fmt.Printf("  Address: %s\n", displayAddr)
+		} else {
+			fmt.Println("Tor Hidden Service: Enabled (waiting for address)")
+		}
+	} else {
+		fmt.Println("Tor Hidden Service: Disabled")
+	}
+}
+
+// isProcessRunning checks if a process with given PID exists
+func isProcessRunning(pid int) bool {
+	if runtime.GOOS == "windows" {
+		// On Windows, try to open the process
+		process, err := os.FindProcess(pid)
+		if err != nil {
+			return false
+		}
+		// On Windows, FindProcess always succeeds, so we need another check
+		// Try to send signal 0 (doesn't work on Windows, but process handle is valid)
+		return process != nil
+	}
+
+	// On Unix, send signal 0 to check if process exists
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	err = process.Signal(syscall.Signal(0))
+	return err == nil
+}
+
+// getProcessStartTime attempts to get the start time of a process
+func getProcessStartTime(pid int) time.Time {
+	if runtime.GOOS == "linux" {
+		// Read /proc/{pid}/stat to get start time
+		statPath := fmt.Sprintf("/proc/%d/stat", pid)
+		data, err := os.ReadFile(statPath)
+		if err != nil {
+			return time.Time{}
+		}
+
+		// Parse stat file - field 22 is starttime in clock ticks since boot
+		fields := strings.Fields(string(data))
+		if len(fields) < 22 {
+			return time.Time{}
+		}
+
+		// Get system uptime
+		uptimeData, err := os.ReadFile("/proc/uptime")
+		if err != nil {
+			return time.Time{}
+		}
+		var systemUptime float64
+		fmt.Sscanf(string(uptimeData), "%f", &systemUptime)
+
+		// Parse process start time (in clock ticks)
+		var startTicks int64
+		fmt.Sscanf(fields[21], "%d", &startTicks)
+
+		// Convert to seconds (assuming 100 Hz clock, sysconf(_SC_CLK_TCK) is usually 100)
+		clkTck := int64(100)
+		processStartSeconds := float64(startTicks) / float64(clkTck)
+
+		// Calculate actual start time
+		bootTime := time.Now().Add(-time.Duration(systemUptime * float64(time.Second)))
+		return bootTime.Add(time.Duration(processStartSeconds * float64(time.Second)))
+	}
+
+	// For other platforms, return zero time (uptime will show as "unknown")
+	return time.Time{}
+}
+
+// formatUptime formats a duration as human-readable uptime string
+func formatUptime(d time.Duration) string {
+	days := int(d.Hours() / 24)
+	hours := int(d.Hours()) % 24
+	minutes := int(d.Minutes()) % 60
+
+	if days > 0 {
+		return fmt.Sprintf("%dd %dh %dm", days, hours, minutes)
+	}
+	if hours > 0 {
+		return fmt.Sprintf("%dh %dm", hours, minutes)
+	}
+	return fmt.Sprintf("%dm", minutes)
+}
+
+func runService(action string) {
+	fmt.Printf(display.Emoji("🔧", "[*]")+" Service Management: %s\n\n", action)
+
+	// Load configuration
+	cfg, err := config.Initialize()
+	if err != nil {
+		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to load config: %v\n", err)
+		exitFunc(1)
+		return
+	}
+
+	// Create service manager
+	sm := service.NewServiceManager(cfg)
+
+	switch action {
+	case "--install", "install":
+		if !config.IsPrivileged() {
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " This command requires elevated privileges")
+			fmt.Println("   Run with sudo/admin rights")
+			exitFunc(1)
+		}
+		fmt.Printf("Installing service for %s...\n", runtime.GOOS)
+		if err := sm.Install(); err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to install service: %v\n", err)
+			exitFunc(1)
+		}
+		fmt.Println(display.Emoji("✅", "[OK]") + " Service installed successfully")
+		fmt.Println("   Run 'search --service start' to start the service")
+
+	case "--uninstall", "uninstall":
+		if !config.IsPrivileged() {
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " This command requires elevated privileges")
+			exitFunc(1)
+		}
+		fmt.Println("Uninstalling service...")
+		if err := sm.Uninstall(); err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to uninstall service: %v\n", err)
+			exitFunc(1)
+		}
+		fmt.Println(display.Emoji("✅", "[OK]") + " Service uninstalled successfully")
+
+	case "start":
+		if !config.IsPrivileged() {
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " This command requires elevated privileges")
+			exitFunc(1)
+		}
+		fmt.Println("Starting service...")
+		if err := sm.StartAllServices(); err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to start service: %v\n", err)
+			exitFunc(1)
+		}
+		fmt.Println(display.Emoji("✅", "[OK]") + " Service started successfully")
+
+	case "stop":
+		if !config.IsPrivileged() {
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " This command requires elevated privileges")
+			exitFunc(1)
+		}
+		fmt.Println("Stopping service...")
+		if err := sm.StopAllServices(); err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to stop service: %v\n", err)
+			exitFunc(1)
+		}
+		fmt.Println(display.Emoji("✅", "[OK]") + " Service stopped successfully")
+
+	case "status":
+		status, err := sm.Status()
+		if err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to get service status: %v\n", err)
+			exitFunc(1)
+		}
+		fmt.Printf("Service status: %s\n", status)
+
+	case "restart":
+		if !config.IsPrivileged() {
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " This command requires elevated privileges")
+			exitFunc(1)
+		}
+		fmt.Println("Restarting service...")
+		if err := sm.RestartAllServices(); err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to restart service: %v\n", err)
+			exitFunc(1)
+		}
+		fmt.Println(display.Emoji("✅", "[OK]") + " Service restarted successfully")
+
+	case "reload":
+		fmt.Println("Reloading service configuration...")
+		if err := sm.Reload(); err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to reload service: %v\n", err)
+			exitFunc(1)
+		}
+		fmt.Println(display.Emoji("✅", "[OK]") + " Service configuration reloaded")
+
+	case "--disable", "disable":
+		if !config.IsPrivileged() {
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " This command requires elevated privileges")
+			exitFunc(1)
+		}
+		fmt.Println("Disabling service autostart...")
+		if err := sm.Disable(); err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to disable service: %v\n", err)
+			exitFunc(1)
+		}
+		fmt.Println(display.Emoji("✅", "[OK]") + " Service autostart disabled")
+
+	case "--enable", "enable":
+		if !config.IsPrivileged() {
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " This command requires elevated privileges")
+			exitFunc(1)
+		}
+		fmt.Println("Enabling service autostart...")
+		if err := sm.Enable(); err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to enable service: %v\n", err)
+			exitFunc(1)
+		}
+		fmt.Println(display.Emoji("✅", "[OK]") + " Service autostart enabled")
+
+	case "--help", "help":
+		fmt.Println("Service Management Commands:")
+		fmt.Println()
+		fmt.Println("  --install     Install as system service")
+		fmt.Println("  --uninstall   Remove system service")
+		fmt.Println("  start         Start the service")
+		fmt.Println("  stop          Stop the service")
+		fmt.Println("  restart       Restart the service")
+		fmt.Println("  reload        Reload configuration (SIGHUP)")
+		fmt.Println("  --enable      Enable service autostart")
+		fmt.Println("  --disable     Disable service autostart")
+		fmt.Println("  status        Show service status")
+		fmt.Println("  --help        Show this help")
+
+	default:
+		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown action: %s\n", action)
+		fmt.Println("Valid actions: start, stop, restart, reload, status, --install, --uninstall, --enable, --disable, --help")
+	}
+}
+
+// authorizeRestore implements the AI.md PART 21 restore authorization tiers:
+// first-run (empty database) and root are always allowed; the service user
+// must present a valid operator token; every other caller is denied. It is a
+// pure function so the tiering can be unit tested without real root/user state.
+func authorizeRestore(isFirstRun, isRoot, isServiceUser bool, expectedToken, presentedToken string) error {
+	switch {
+	case isFirstRun:
+		return nil
+	case isRoot:
+		return nil
+	case isServiceUser:
+		if expectedToken == "" {
+			return errors.New("no operator token is configured")
+		}
+		expectedSum := sha256.Sum256([]byte(expectedToken))
+		presentedSum := sha256.Sum256([]byte(presentedToken))
+		if presentedToken == "" || subtle.ConstantTimeCompare(expectedSum[:], presentedSum[:]) != 1 {
+			return errors.New("invalid operator token")
+		}
+		return nil
+	default:
+		return errors.New("this operation requires root or the operator token")
+	}
+}
+
+// readBackupPassword resolves the backup encryption password for CLI use.
+// Per AI.md PART 21: the CLI has no password flag (a flag would leak the
+// password via shell history and process lists) — BACKUP_PASSWORD remains
+// honored for scripted/non-interactive use, and the CLI otherwise falls back
+// to the documented interactive masked prompt ("Enter backup password:").
+func readBackupPassword(prompt string) string {
+	if password := os.Getenv("BACKUP_PASSWORD"); password != "" {
+		return password
+	}
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		return ""
+	}
+	fmt.Print(prompt)
+	passwordBytes, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Println()
+	if err != nil {
+		return ""
+	}
+	return string(passwordBytes)
+}
+
+func runMaintenance(action string) {
+	fmt.Printf(display.Emoji("🔧", "[*]")+" Maintenance: %s\n\n", action)
+
+	bm := backup.NewManager()
+
+	switch action {
+	case "backup":
+		filename := ""
+		if len(os.Args) > 3 {
+			filename = os.Args[3]
+		}
+
+		// Per AI.md PART 21: encryption is required under compliance mode and
+		// otherwise applies only if a backup password was configured during
+		// setup (server.backup.encryption.enabled) — the password itself is
+		// never stored and is resolved via BACKUP_PASSWORD or an interactive
+		// prompt.
+		cfg, cfgErr := config.Initialize()
+		complianceEnabled := cfgErr == nil && cfg.Server.Compliance.Enabled
+		encryptionEnabled := (cfgErr == nil && cfg.Server.Backup.Encryption.Enabled) || complianceEnabled
+
+		var password string
+		if encryptionEnabled {
+			password = readBackupPassword("Enter backup password: ")
+			if password == "" && complianceEnabled {
+				fmt.Println(display.Emoji("❌", "[ERROR]") + " Compliance mode requires backup encryption")
+				fmt.Println("   Set BACKUP_PASSWORD or enter a password when prompted, and try again.")
+				exitFunc(1)
+				return
+			}
+		}
+		if password != "" {
+			fmt.Println(display.Emoji("🔐", "[ENCRYPTED]") + " Backup encryption: ENABLED")
+			bm.SetPassword(password)
+		} else {
+			fmt.Println(display.Emoji("🔓", "[PLAIN]") + " Backup encryption: DISABLED (set BACKUP_PASSWORD to enable)")
+		}
+
+		fmt.Println("Creating backup...")
+		// Per AI.md PART 21: every backup must pass the full verification
+		// checklist immediately after creation — a failed backup is deleted
+		// and any existing backups are preserved.
+		var backupPath string
+		var verifyResult *backup.VerificationResult
+		var err error
+		if password != "" {
+			backupPath, verifyResult, err = bm.CreateEncryptedAndVerify(filename)
+		} else {
+			backupPath, verifyResult, err = bm.CreateAndVerify(filename)
+		}
+		if err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Backup failed: %v\n", err)
+			exitFunc(1)
+			return
+		}
+		fmt.Printf(display.Emoji("✅", "[OK]")+" Backup created and verified: %s\n", backupPath)
+		if verifyResult != nil {
+			fmt.Printf("   Verified: file=%v size=%v checksum=%v manifest=%v decrypt=%v\n",
+				verifyResult.FileExists, verifyResult.SizeValid, verifyResult.ChecksumValid,
+				verifyResult.ManifestValid, verifyResult.DecryptValid)
+		}
+
+		// Show backup info. GetMetadata reads the manifest via a plain gzip
+		// reader, so it cannot be used on an encrypted (.enc) archive.
+		if !backup.IsEncrypted(backupPath) {
+			metadata, err := bm.GetMetadata(backupPath)
+			if err == nil {
+				fmt.Printf("   Version: %s\n", metadata.Version)
+				fmt.Printf("   Files:   %d\n", len(metadata.Contents))
+				fmt.Println("   Encrypted: NO")
+			}
+		} else {
+			fmt.Println("   Encrypted: YES (AES-256-GCM)")
+		}
+
+	case "restore":
+		if len(os.Args) < 4 {
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " Please specify backup file to restore")
+			fmt.Println("Usage: search --maintenance restore <backup-file>")
+			fmt.Println()
+
+			// List available backups
+			backups, _ := bm.List()
+			if len(backups) > 0 {
+				fmt.Println("Available backups:")
+				for _, b := range backups {
+					fmt.Printf("  - %s (%s, %s)\n", b.Filename, b.FormatSize(), b.CreatedAt.Format("2006-01-02 15:04"))
+				}
+			}
+			return
+		}
+		filename := os.Args[3]
+
+		// Per AI.md PART 21 Restore Authorization: restore is destructive and requires
+		// authorization — database empty (first-run) or root is allowed; the service
+		// user needs the operator token (server.token); any other user is denied.
+		authCfg, err := config.Initialize()
+		if err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to load config: %v\n", err)
+			exitFunc(1)
+			return
+		}
+		isFirstRun := authCfg.IsFirstRun()
+		isRoot := config.IsPrivileged()
+		isServiceUser := false
+		if currentUser, userErr := user.Current(); userErr == nil {
+			isServiceUser = currentUser.Username == "search"
+		}
+
+		// Only the service-user tier requires an interactive prompt; the other
+		// tiers are decided without any further input.
+		var presentedToken string
+		if isServiceUser && !isFirstRun && !isRoot {
+			presentedToken = readBackupPassword("Enter operator token: ")
+		}
+
+		if authErr := authorizeRestore(isFirstRun, isRoot, isServiceUser, authCfg.Server.Token, presentedToken); authErr != nil {
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " Restore denied: " + authErr.Error())
+			exitFunc(1)
+			return
+		}
+
+		fmt.Printf("Restoring from: %s\n", filename)
+
+		// Per AI.md PART 21: the CLI prompts "Enter backup password:" when the
+		// backup is encrypted and no password was provided via BACKUP_PASSWORD.
+		isEncryptedFile := backup.IsEncrypted(filename)
+		var password string
+		if isEncryptedFile {
+			password = readBackupPassword("Enter backup password: ")
+			if password == "" {
+				fmt.Println(display.Emoji("❌", "[ERROR]") + " This backup is encrypted — a password is required")
+				fmt.Println("   Set BACKUP_PASSWORD or enter a password when prompted, and try again.")
+				exitFunc(1)
+				return
+			}
+			bm.SetPassword(password)
+		}
+
+		// Per AI.md PART 21: every check in the restore verification checklist
+		// must pass before the restore proceeds.
+		fmt.Println("Verifying backup integrity...")
+		verifyResult, err := bm.VerifyBackup(filename)
+		if err != nil || verifyResult == nil || !verifyResult.AllPassed {
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " Backup verification failed")
+			if err != nil {
+				fmt.Printf("   %v\n", err)
+			}
+			if verifyResult != nil {
+				for _, verifyErr := range verifyResult.Errors {
+					fmt.Printf("   - %s\n", verifyErr)
+				}
+			}
+			exitFunc(1)
+			return
+		}
+		fmt.Println(display.Emoji("✅", "[OK]") + " Verifying backup integrity... OK")
+
+		// Confirm restore
+		fmt.Print("This will overwrite current configuration. Continue? (yes/no): ")
+		var confirm string
+		fmt.Scanln(&confirm)
+		if confirm != "yes" {
+			fmt.Println("Restore cancelled.")
+			return
+		}
+
+		fmt.Println("Restoring...")
+		if isEncryptedFile {
+			err = bm.RestoreEncrypted(filename)
+		} else {
+			err = bm.Restore(filename)
+		}
+		if err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Restore failed: %v\n", err)
+			exitFunc(1)
+			return
+		}
+		fmt.Println(display.Emoji("✅", "[OK]") + " Restore completed successfully")
+		fmt.Println("   Please restart the server to apply changes.")
+
+	case "list":
+		backups, err := bm.List()
+		if err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to list backups: %v\n", err)
+			return
+		}
+		if len(backups) == 0 {
+			fmt.Println("No backups found.")
+			return
+		}
+		fmt.Println("Available backups:")
+		for _, b := range backups {
+			fmt.Printf("  - %s\n", b.Filename)
+			fmt.Printf("      Size:    %s\n", b.FormatSize())
+			fmt.Printf("      Created: %s\n", b.CreatedAt.Format("2006-01-02 15:04:05"))
+			if b.Version != "" {
+				fmt.Printf("      Version: %s\n", b.Version)
+			}
+		}
+
+	case "update":
+		runUpdate("yes")
+
+	case "mode":
+		fmt.Println("Toggling maintenance mode...")
+		cfg, err := config.Initialize()
+		if err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to load config: %v\n", err)
+			exitFunc(1)
+			return
+		}
+		// Toggle maintenance mode
+		cfg.Server.MaintenanceMode = !cfg.Server.MaintenanceMode
+		if err := cfg.Save(config.GetConfigPath()); err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to save config: %v\n", err)
+			exitFunc(1)
+		}
+		if cfg.Server.MaintenanceMode {
+			fmt.Println(display.Emoji("✅", "[OK]") + " Maintenance mode: ENABLED")
+			fmt.Println("   The server will show a maintenance page to users")
+		} else {
+			fmt.Println(display.Emoji("✅", "[OK]") + " Maintenance mode: DISABLED")
+			fmt.Println("   The server is now accepting normal requests")
+		}
+
+	case "rotate-token":
+		// Rotate the operator bearer token (server.token) and persist it.
+		// This is the only credential the application has — there is no admin
+		// web UI, no sessions, and no user accounts.
+		fmt.Println(display.Emoji("🔧", "[*]") + " Rotate Operator Token")
+		fmt.Println()
+
+		cfg, err := config.Initialize()
+		if err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to load config: %v\n", err)
+			exitFunc(1)
+			return
+		}
+
+		fmt.Print("Rotate server.token? Existing operator clients will need the new token. (yes/no): ")
+		var confirm string
+		fmt.Scanln(&confirm)
+		if confirm != "yes" {
+			fmt.Println("Cancelled.")
+			return
+		}
+
+		newToken, err := generateSetupToken()
+		if err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to generate token: %v\n", err)
+			exitFunc(1)
+		}
+		cfg.Server.Token = newToken
+		if err := cfg.Save(config.GetConfigPath()); err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to save config: %v\n", err)
+			exitFunc(1)
+		}
+
+		fmt.Println()
+		fmt.Println(display.Emoji("✅", "[OK]") + " Token rotated. New value:")
+		fmt.Println()
+		fmt.Println("    " + newToken)
+		fmt.Println()
+		fmt.Println("Send as: Authorization: Bearer " + newToken)
+		fmt.Println("Also written to: " + config.GetConfigPath())
+
+	case "setup":
+		// Per AI.md PART 8: --maintenance setup resets server configuration to defaults
+		// Authorization: first-run only OR root
+		fmt.Println(display.Emoji("🔧", "[*]") + " Setup / Reset Configuration")
+		fmt.Println()
+
+		// Check authorization
+		cfg, err := config.Initialize()
+		if err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to load config: %v\n", err)
+			exitFunc(1)
+			return
+		}
+
+		isFirstRun := cfg.IsFirstRun()
+		isRoot := config.IsPrivileged()
+
+		if !isFirstRun && !isRoot {
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " Setup already completed.")
+			fmt.Println()
+			fmt.Println("To reconfigure:")
+			fmt.Println("  1. Edit server.yml directly and restart the server")
+			fmt.Println("  2. Run as root: sudo search --maintenance setup")
+			exitFunc(1)
+			return
+		}
+
+		if !isFirstRun {
+			// Root user re-running setup - confirm
+			fmt.Println(display.Emoji("⚠️", "[WARN]") + " This will reset configuration to defaults!")
+			fmt.Print("Type 'RESET' to confirm: ")
+			var confirm string
+			fmt.Scanln(&confirm)
+			if confirm != "RESET" {
+				fmt.Println("Cancelled.")
+				return
+			}
+		}
+
+		// Reset to defaults
+		newCfg := config.DefaultConfig()
+		// Preserve token if regenerating (operator must have it)
+		if !isFirstRun {
+			newCfg.Server.Token = cfg.Server.Token
+		}
+		if err := newCfg.Save(config.GetConfigPath()); err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to save config: %v\n", err)
+			exitFunc(1)
+			return
+		}
+
+		fmt.Println(display.Emoji("✅", "[OK]") + " Configuration reset to defaults")
+		fmt.Println("   Config: " + config.GetConfigPath())
+
+	case "pgp":
+		// Per AI.md PART 8 and SECURITY.txt spec: PGP keypair management
+		// Subcommands: generate, rotate, publish, export, import, delete
+		pgpAction := ""
+		if len(os.Args) > 3 {
+			pgpAction = os.Args[3]
+		}
+
+		switch pgpAction {
+		case "generate":
+			runPGPGenerate()
+
+		case "rotate":
+			runPGPRotate()
+
+		case "publish":
+			runPGPPublish()
+
+		case "export":
+			keyType := ""
+			if len(os.Args) > 4 {
+				keyType = os.Args[4]
+			}
+			exportPath := ""
+			if len(os.Args) > 5 {
+				exportPath = os.Args[5]
+			}
+			switch keyType {
+			case "public":
+				runPGPExportPublic(exportPath)
+			case "private":
+				runPGPExportPrivate(exportPath)
+			default:
+				fmt.Println(display.Emoji("❌", "[ERROR]") + " Please specify key type: public or private")
+				fmt.Println("Usage: search --maintenance pgp export <public|private> [path]")
+			}
+
+		case "import":
+			importFile := ""
+			if len(os.Args) > 4 {
+				importFile = os.Args[4]
+			}
+			runPGPImport(importFile)
+
+		case "delete":
+			runPGPDelete()
+
+		case "help", "--help", "":
+			fmt.Println("PGP Keypair Management:")
+			fmt.Println()
+			fmt.Println("  generate              Generate a new Ed25519/Curve25519 keypair")
+			fmt.Println("  rotate                Rotate keypair (signs new with old)")
+			fmt.Println("  publish               Publish public key to configured keyservers")
+			fmt.Println("  export public [path]  Export public key to stdout or file")
+			fmt.Println("  export private <path> Export private key (requires confirmation)")
+			fmt.Println("  import <file>         Import existing keypair from file")
+			fmt.Println("  delete                Delete keypair (requires confirmation)")
+			fmt.Println()
+			fmt.Println("Keys are stored in: " + config.GetConfigDir() + "/security/")
+			fmt.Println("Public key served at: /.well-known/pgp-key.asc")
+
+		default:
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown PGP action: %s\n", pgpAction)
+			fmt.Println("Valid actions: generate, rotate, publish, export, import, delete, help")
+		}
+
+	case "help", "--help":
+		fmt.Println("Maintenance Commands:")
+		fmt.Println()
+		fmt.Println("  backup [file]     Create backup archive")
+		fmt.Println("                    Set BACKUP_PASSWORD env var for encryption")
+		fmt.Println("  restore <file>    Restore from backup")
+		fmt.Println("                    Set BACKUP_PASSWORD env var if encrypted")
+		fmt.Println("  list              List available backups")
+		fmt.Println("  update            Check and install updates")
+		fmt.Println("  mode              Toggle maintenance mode")
+		fmt.Println("  setup             Reset configuration to defaults (first-run or root)")
+		fmt.Println("  pgp <action>      PGP keypair management (run 'pgp help' for details)")
+		fmt.Println("  rotate-token      Rotate server.token (operator bearer token)")
+		fmt.Println("  help              Show this help")
+		fmt.Println()
+		fmt.Println("Backup Encryption:")
+		fmt.Println("  BACKUP_PASSWORD=secret search --maintenance backup")
+		fmt.Println("  BACKUP_PASSWORD=secret search --maintenance restore backup.tar.gz")
+
+	default:
+		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown action: %s\n", action)
+		fmt.Println("Valid actions: backup, restore, list, update, mode, setup, pgp, rotate-token, help")
+	}
+}
+
+func runUpdate(subCmd string) {
+	fmt.Println(display.Emoji("🔄", "[UPDATE]") + " Update Management")
+	fmt.Println()
+
+	um := update.NewManager()
+
+	switch subCmd {
+	case "check":
+		fmt.Println("Checking for updates...")
+		fmt.Printf("Current version: %s\n", config.Version)
+		fmt.Println()
+
+		info, err := um.CheckForUpdates(false)
+		if err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to check for updates: %v\n", err)
+			return
+		}
+
+		if !info.Available {
+			fmt.Println(display.Emoji("✅", "[OK]") + " You are running the latest version")
+		} else {
+			fmt.Printf(display.Emoji("🆕", "[NEW]")+" New version available: %s\n", info.LatestVersion)
+			fmt.Printf("   Published: %s\n", info.PublishedAt.Format("Jan 2, 2006"))
+			if info.AssetSize > 0 {
+				fmt.Printf("   Size: %.1f MB\n", float64(info.AssetSize)/(1024*1024))
+			}
+			fmt.Println()
+			fmt.Println("Release Notes:")
+			fmt.Println(info.ReleaseNotes)
+			fmt.Println()
+			fmt.Println("Run 'search --update yes' to install the update")
+		}
+
+	case "yes", "":
+		if !config.IsPrivileged() {
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " Update installation requires elevated privileges")
+			fmt.Println("   Use --update check to check without privileges")
+			exitFunc(1)
+		}
+
+		fmt.Println("Checking for updates...")
+		info, err := um.CheckForUpdates(false)
+		if err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to check for updates: %v\n", err)
+			exitFunc(1)
+			return
+		}
+
+		if !info.Available {
+			fmt.Println(display.Emoji("✅", "[OK]") + " You are running the latest version")
+			return
+		}
+
+		fmt.Printf("Downloading version %s...\n", info.LatestVersion)
+
+		archivePath, err := um.DownloadUpdate(info.DownloadURL, func(downloaded, total int64) {
+			if total > 0 {
+				pct := float64(downloaded) / float64(total) * 100
+				fmt.Printf("\r   Progress: %.1f%%", pct)
+			}
+		})
+		fmt.Println()
+
+		if err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Download failed: %v\n", err)
+			exitFunc(1)
+		}
+
+		fmt.Println("Installing update...")
+		if err := um.InstallUpdate(archivePath, info.ChecksumURL); err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Installation failed: %v\n", err)
+			fmt.Println("   Run 'search --update rollback' to restore previous version")
+			exitFunc(1)
+		}
+
+		fmt.Println(display.Emoji("✅", "[OK]") + " Update installed successfully!")
+		fmt.Println("   Please restart the service to apply the update")
+
+		// Per AI.md PART 17 "Default Templates" -> update_installed and the
+		// Operator Notifications matrix ("Update installed | INFO | ✓ |
+		// Important change record"): notify admins on successful self-update.
+		if cfg, cfgErr := config.Load(config.GetConfigPath()); cfgErr == nil {
+			if mailer, ok := email.NewMailerFromConfig(cfg); ok {
+				if sendErr := mailer.SendUpdateInstalled(config.Version, info.LatestVersion); sendErr != nil {
+					slog.Error("failed to send update installed notification email", "err", sendErr)
+				}
+			}
+		}
+
+	case "rollback":
+		fmt.Println("Rolling back to previous version...")
+		if err := um.Rollback(); err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Rollback failed: %v\n", err)
+			exitFunc(1)
+		}
+		fmt.Println(display.Emoji("✅", "[OK]") + " Rollback completed successfully!")
+		fmt.Println("   Please restart the service to apply the change")
+
+	case "list":
+		fmt.Println("Fetching available versions...")
+		versions, err := um.ListAvailableVersions()
+		if err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to fetch versions: %v\n", err)
+			return
+		}
+		fmt.Printf("Current version: %s\n", config.Version)
+		fmt.Println()
+		fmt.Println("Available versions:")
+		for _, v := range versions {
+			marker := "  "
+			if v == "v"+config.Version || v == config.Version {
+				marker = "→ "
+			}
+			fmt.Printf("%s%s\n", marker, v)
+		}
+
+	case "branch":
+		if len(os.Args) < 4 {
+			fmt.Println(display.Emoji("❌", "[ERROR]") + " Please specify branch name")
+			fmt.Println("Usage: search --update branch <stable|beta|daily>")
+			return
+		}
+		branch := os.Args[3]
+		switch branch {
+		case "stable":
+			fmt.Println("Update branch set to: stable (releases only)")
+		case "beta":
+			fmt.Println("Update branch set to: beta (includes pre-releases)")
+		case "daily":
+			fmt.Println("Update branch set to: daily (bleeding edge)")
+		default:
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Invalid branch: %s\n", branch)
+			fmt.Println("Valid branches: stable, beta, daily")
+		}
+
+	case "help", "--help":
+		fmt.Println("Update Management Commands:")
+		fmt.Println()
+		fmt.Println("  check              Check for available updates")
+		fmt.Println("  yes                Download and install update")
+		fmt.Println("  rollback           Rollback to previous version")
+		fmt.Println("  list               List available versions")
+		fmt.Println("  branch <name>      Set update branch (stable|beta|daily)")
+		fmt.Println("  help               Show this help")
+		fmt.Println()
+		fmt.Println("Examples:")
+		fmt.Println("  search --update check")
+		fmt.Println("  search --update yes")
+		fmt.Println("  search --update branch beta")
+
+	default:
+		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown subcommand: %s\n", subCmd)
+		fmt.Println("Valid subcommands: check, yes, rollback, list, branch <name>, help")
+	}
+}
+
+func runTest() {
+	fmt.Println(display.Emoji("🧪", "[TEST]") + " Testing Search Engines...")
+	fmt.Println()
+
+	// Create engine registry
+	registry := engine.DefaultRegistry()
+
+	fmt.Printf(display.Emoji("✅", "[OK]")+" Registered %d engines\n\n", registry.Count())
+
+	// List engines
+	fmt.Println(display.Emoji("📋", "[LIST]") + " Available Engines:")
+	for _, engine := range registry.GetEnabled() {
+		fmt.Printf("  • %s (priority: %d)\n", engine.DisplayName(), engine.GetPriority())
+	}
+	fmt.Println()
+
+	// Test search
+	testQuery := "golang programming"
+	if len(os.Args) > 2 {
+		testQuery = os.Args[2]
+	}
+
+	fmt.Printf(display.Emoji("🔎", "[SEARCH]")+" Searching for: \"%s\"\n\n", testQuery)
+
+	query := model.NewQuery(testQuery)
+	query.Category = model.CategoryGeneral
+
+	// Get engines for category
+	searchEngines := registry.GetForCategory(query.Category)
+	fmt.Printf("Using %d engines for category '%s'\n\n", len(searchEngines), query.Category)
+
+	// Create aggregator
+	aggregator := search.NewAggregatorSimple(searchEngines, 30*time.Second)
+
+	// Perform search
+	ctx := context.Background()
+	results, err := aggregator.Search(ctx, query)
+
+	if err != nil {
+		if err == model.ErrNoResults {
+			fmt.Println(display.Emoji("⚠️", "[WARN]") + "  No results found")
+			return
+		}
+		slog.Error("Search failed", "err", err)
+		exitFunc(1)
+	}
+
+	// Display results
+	fmt.Printf(display.Emoji("✅", "[OK]")+" Found %d results in %.2f seconds\n", results.TotalResults, results.SearchTime)
+	fmt.Printf(display.Emoji("📊", "[STATS]")+" Engines used: %v\n\n", results.Engines)
+
+	fmt.Println(display.Emoji("🎯", "[>]") + " Top Results:")
+	fmt.Println(strings.Repeat("─", 80))
+
+	displayCount := 10
+	if len(results.Results) < displayCount {
+		displayCount = len(results.Results)
+	}
+
+	for i := 0; i < displayCount; i++ {
+		result := results.Results[i]
+		fmt.Printf("\n%d. %s\n", i+1, result.Title)
+		fmt.Printf("   "+display.Emoji("🔗", "-")+" %s\n", result.URL)
+		if result.Content != "" {
+			content := result.Content
+			if len(content) > 150 {
+				content = content[:150] + "..."
+			}
+			fmt.Printf("   "+display.Emoji("📝", ">")+"%s\n", content)
+		}
+		fmt.Printf("   "+display.Emoji("🏷️", "*")+" Engine: %s | Score: %.0f\n", result.Engine, result.Score)
+	}
+
+	fmt.Println(strings.Repeat("─", 80))
+
+	// Export as JSON
+	if len(os.Args) > 3 && os.Args[3] == "--json" {
+		jsonData, _ := json.MarshalIndent(results, "", "  ")
+		filename := fmt.Sprintf("search_results_%d.json", time.Now().Unix())
+		os.WriteFile(filename, jsonData, 0644)
+		fmt.Printf("\n"+display.Emoji("💾", "[SAVED]")+" Results saved to: %s\n", filename)
+	}
+}
+
+// ============================================================
+// Operator Token Helper
+// ============================================================
+
+// generateSetupToken creates a cryptographically secure 32-char hex token.
+// Used to seed server.token on first run and for the rotate-token command.
+// Returns an error if the OS CSPRNG is unavailable — never falls back to a
+// non-CSPRNG, since the token must be unguessable.
+func generateSetupToken() (string, error) {
+	randomBytes := make([]byte, 16)
+	if _, err := cryptoRand.Read(randomBytes); err != nil {
+		return "", fmt.Errorf("read crypto/rand: %w", err)
+	}
+	return hex.EncodeToString(randomBytes), nil
+}
+
+// buildListenURLs builds the list of URLs the server is listening on
+func buildListenURLs(cfg *config.Config) []string {
+	var urls []string
+
+	// Get listen address
+	addr := cfg.Server.Address
+	if addr == "" {
+		addr = "0.0.0.0"
+	}
+
+	// Primary HTTP URL - use GetHTTPPort which resolves port 0 based on environment
+	// Per AI.md PART 27: Container defaults to port 80, local dev to random 64xxx
+	port := cfg.Server.GetHTTPPort()
+
+	// Use localhost for display if binding to all interfaces
+	displayAddr := addr
+	if addr == "0.0.0.0" || addr == "" || addr == "::" {
+		displayAddr = "localhost"
+	}
+
+	urls = append(urls, fmt.Sprintf("http://%s:%d", displayAddr, port))
+
+	// Add HTTPS if configured
+	if cfg.Server.SSL.Enabled && cfg.Server.HTTPSPort > 0 {
+		urls = append(urls, fmt.Sprintf("https://%s:%d", displayAddr, cfg.Server.HTTPSPort))
+	}
+
+	// Add Tor onion address if available
+	if cfg.Server.Tor.Enabled && cfg.Server.Tor.OnionAddress != "" {
+		urls = append(urls, fmt.Sprintf("http://%s", cfg.Server.Tor.OnionAddress))
+	}
+
+	return urls
+}
+
+// ============================================================
+// Build Command (per AI.md PART 23)
+// ============================================================
+
+// BuildTarget represents a build target platform
+type BuildTarget struct {
+	OS   string
+	Arch string
+}
+
+// runBuild builds the binary for specified platforms using Docker
+// Per AI.md PART 23: Binary must be able to build itself
+func runBuild(platform string) {
+	fmt.Println(display.Emoji("🔧", "[*]") + " Build Command")
+	fmt.Printf("   Version: %s\n", config.Version)
+	fmt.Println()
+
+	// Check if Docker is available
+	if _, err := exec.LookPath("docker"); err != nil {
+		fmt.Println(display.Emoji("❌", "[ERROR]") + " Docker is required for cross-platform builds")
+		fmt.Println("   Please install Docker and try again")
+		exitFunc(1)
+	}
+
+	// Find the source directory
+	srcDir, err := findSourceDir()
+	if err != nil {
+		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Cannot find source directory: %v\n", err)
+		fmt.Println("   The build command requires access to the source code")
+		exitFunc(1)
+	}
+
+	// Define build targets
+	allTargets := []BuildTarget{
+		{"linux", "amd64"},
+		{"linux", "arm64"},
+		{"darwin", "amd64"},
+		{"darwin", "arm64"},
+		{"windows", "amd64"},
+		{"windows", "arm64"},
+		{"freebsd", "amd64"},
+		{"freebsd", "arm64"},
+	}
+
+	// Filter targets based on platform argument
+	var targets []BuildTarget
+	switch platform {
+	case "all", "":
+		targets = allTargets
+	case "linux":
+		targets = []BuildTarget{{"linux", "amd64"}, {"linux", "arm64"}}
+	case "darwin":
+		targets = []BuildTarget{{"darwin", "amd64"}, {"darwin", "arm64"}}
+	case "windows":
+		targets = []BuildTarget{{"windows", "amd64"}, {"windows", "arm64"}}
+	case "freebsd":
+		targets = []BuildTarget{{"freebsd", "amd64"}, {"freebsd", "arm64"}}
+	case "host":
+		targets = []BuildTarget{{runtime.GOOS, runtime.GOARCH}}
+	case "macos", "mac", "osx":
+		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown platform: %s\n", platform)
+		fmt.Println("   Use \"darwin\" instead — GOOS aliases (macos/mac/osx) are not accepted")
+		exitFunc(1)
+	default:
+		// Check for OS/ARCH format
+		parts := strings.Split(platform, "/")
+		if len(parts) == 2 {
+			targets = []BuildTarget{{parts[0], parts[1]}}
+		} else {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown platform: %s\n", platform)
+			fmt.Println("   Valid options: all, linux, darwin, windows, freebsd, host, or OS/ARCH")
+			exitFunc(1)
+		}
+	}
+
+	// Create output directory
+	outputDir := filepath.Join(srcDir, "binaries")
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Failed to create output directory: %v\n", err)
+		exitFunc(1)
+	}
+
+	fmt.Printf(display.Emoji("📁", "[DIR]")+" Source: %s\n", srcDir)
+	fmt.Printf(display.Emoji("📁", "[DIR]")+" Output: %s\n", outputDir)
+	fmt.Printf(display.Emoji("🎯", "[>]")+" Targets: %d platforms\n\n", len(targets))
+
+	// Build for each target
+	failed := 0
+	for _, target := range targets {
+		ext := ""
+		if target.OS == "windows" {
+			ext = ".exe"
+		}
+		outputName := fmt.Sprintf("search-%s-%s%s", target.OS, target.Arch, ext)
+		outputPath := filepath.Join(outputDir, outputName)
+
+		fmt.Printf("   Building %s/%s... ", target.OS, target.Arch)
+
+		if err := buildWithDocker(srcDir, outputPath, target.OS, target.Arch); err != nil {
+			fmt.Printf(display.Emoji("❌", "[ERROR]")+" %v\n", err)
+			failed++
+		} else {
+			// Get file size
+			if info, err := os.Stat(outputPath); err == nil {
+				fmt.Printf(display.Emoji("✅", "[OK]")+" (%s)\n", formatBytes(info.Size()))
+			} else {
+				fmt.Println(display.Emoji("✅", "[OK]") + "")
+			}
+		}
+	}
+
+	fmt.Println()
+	if failed > 0 {
+		fmt.Printf(display.Emoji("⚠️", "[WARN]")+"  %d/%d builds failed\n", failed, len(targets))
+		exitFunc(1)
+	}
+	fmt.Printf(display.Emoji("✅", "[OK]")+" Build complete: %d binaries in %s/\n", len(targets), outputDir)
+}
+
+// findSourceDir locates the source directory
+func findSourceDir() (string, error) {
+	// Try current directory first
+	if _, err := os.Stat("go.mod"); err == nil {
+		return ".", nil
+	}
+
+	// Try to find based on executable path
+	execPath, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+
+	// Check if we're in the binaries directory
+	dir := filepath.Dir(execPath)
+	parentDir := filepath.Dir(dir)
+	if _, err := os.Stat(filepath.Join(parentDir, "go.mod")); err == nil {
+		return parentDir, nil
+	}
+
+	// Check common development paths
+	homeDir, _ := os.UserHomeDir()
+	commonPaths := []string{
+		filepath.Join(homeDir, "Projects/github/apimgr/search"),
+		"/root/Projects/github/apimgr/search",
+		"/app",
+	}
+
+	for _, p := range commonPaths {
+		if _, err := os.Stat(filepath.Join(p, "go.mod")); err == nil {
+			return p, nil
+		}
+	}
+
+	return "", fmt.Errorf("could not find go.mod in any expected location")
+}
+
+// buildWithDocker builds a binary using Docker
+func buildWithDocker(srcDir, outputPath, goos, goarch string) error {
+	outputName := filepath.Base(outputPath)
+
+	// Docker command to build using the required build image per AI.md PART 7
+	cmd := exec.Command("docker", "run", "--rm",
+		"-v", srcDir+":/app",
+		"-w", "/app",
+		"-e", "CGO_ENABLED=0",
+		"-e", "GOOS="+goos,
+		"-e", "GOARCH="+goarch,
+		"-e", "GOFLAGS=-buildvcs=false",
+		"casjaysdev/go:latest",
+		"go", "build",
+		"-ldflags", fmt.Sprintf("-s -w -X github.com/apimgr/search/src/config.Version=%s -X github.com/apimgr/search/src/config.BuildEpoch=%d",
+			config.Version, time.Now().Unix()),
+		"-o", "/app/binaries/"+outputName,
+		"./src",
+	)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%v: %s", err, string(output))
+	}
+
+	return nil
+}
+
+// formatBytes formats bytes as human-readable size
+func formatBytes(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// daemonize forks the process and detaches from terminal
+// Per AI.md PART 6 - Daemonization
+func daemonize() error {
+	// Windows doesn't support traditional Unix daemonization
+	if runtime.GOOS == "windows" {
+		fmt.Fprintln(os.Stderr, "Warning: --daemon is not supported on Windows")
+		fmt.Fprintln(os.Stderr, "Use --service --install && --service start for Windows Service")
+		// Continue in foreground on Windows
+		return nil
+	}
+
+	// Already daemonized? Check if parent is init (PID 1)
+	if os.Getppid() == 1 {
+		return nil
+	}
+
+	// Check if we're already a daemon child
+	if os.Getenv("_DAEMON_CHILD") == "1" {
+		return nil
+	}
+
+	// Get executable path
+	execPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("getting executable path: %w", err)
+	}
+
+	// Build command with same args (minus --daemon to prevent loop)
+	args := filterDaemonFlag(os.Args[1:])
+
+	cmd := exec.Command(execPath, args...)
+	cmd.Env = append(os.Environ(), "_DAEMON_CHILD=1")
+
+	// Detach from parent's file descriptors
+	cmd.Stdin = nil
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+
+	// Start child process
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("starting daemon: %w", err)
+	}
+
+	// Parent exits, child continues
+	fmt.Printf("Daemon started with PID %d\n", cmd.Process.Pid)
+	exitFunc(0)
+	return nil
+}
+
+// filterDaemonFlag removes --daemon from args to prevent infinite loop
+// Per AI.md PART 8: Only -h and -v may have short flags, so no -d
+func filterDaemonFlag(args []string) []string {
+	filtered := make([]string, 0, len(args))
+	for _, arg := range args {
+		if arg != "--daemon" {
+			filtered = append(filtered, arg)
+		}
+	}
+	return filtered
+}
+
+// ============================================================
+// Shell Integration (per AI.md PART 8)
+// ============================================================
+
+// runShell handles shell integration commands
+// Per AI.md PART 8: --shell completions [SHELL], --shell init [SHELL]
+func runShell(subCmd string) {
+	binaryName := filepath.Base(os.Args[0])
+
+	// Determine shell type
+	shell := detectShell()
+	if len(os.Args) > 3 {
+		shell = os.Args[3]
+	}
+
+	switch subCmd {
+	case "completions":
+		printCompletions(binaryName, shell)
+	case "init":
+		printShellInit(binaryName, shell)
+	case "help", "--help":
+		printShellHelp(binaryName)
+	default:
+		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unknown shell subcommand: %s\n", subCmd)
+		fmt.Println("Valid subcommands: completions, init, --help")
+		exitFunc(1)
+	}
+}
+
+// detectShell detects the current shell from environment
+func detectShell() string {
+	// Check SHELL environment variable
+	shell := os.Getenv("SHELL")
+	if shell != "" {
+		shell = filepath.Base(shell)
+		switch shell {
+		case "bash", "zsh", "fish", "powershell", "pwsh":
+			return shell
+		}
+	}
+
+	// Check parent process on Unix
+	if runtime.GOOS != "windows" {
+		// Default to bash
+		return "bash"
+	}
+
+	// Windows default
+	return "powershell"
+}
+
+// printCompletions prints shell completions script
+func printCompletions(binaryName, shell string) {
+	switch shell {
+	case "bash":
+		fmt.Printf(`# Bash completions for %s
+# Add to ~/.bashrc: eval "$(%s --shell init bash)"
+
+_%s_completions() {
+    local cur prev opts
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+    opts="--help --version --status --init --config-info --test --daemon --debug"
+    opts="$opts --mode --config --data --cache --log --backup --pid --address --port"
+    opts="$opts --service --maintenance --update --build --shell tor email"
+
+    case "${prev}" in
+        tor)
+            COMPREPLY=( $(compgen -W "status validate restart regenerate vanity import-keys" -- ${cur}) )
+            return 0
+            ;;
+        vanity)
+            COMPREPLY=( $(compgen -W "start apply" -- ${cur}) )
+            return 0
+            ;;
+        email)
+            COMPREPLY=( $(compgen -W "test" -- ${cur}) )
+            return 0
+            ;;
+        --service)
+            COMPREPLY=( $(compgen -W "install uninstall start stop restart reload enable disable status help" -- ${cur}) )
+            return 0
+            ;;
+        --maintenance)
+            COMPREPLY=( $(compgen -W "backup restore list update mode setup help" -- ${cur}) )
+            return 0
+            ;;
+        --update)
+            COMPREPLY=( $(compgen -W "check yes rollback list branch" -- ${cur}) )
+            return 0
+            ;;
+        --build)
+            COMPREPLY=( $(compgen -W "all linux darwin windows freebsd host" -- ${cur}) )
+            return 0
+            ;;
+        --shell)
+            COMPREPLY=( $(compgen -W "completions init --help" -- ${cur}) )
+            return 0
+            ;;
+        --mode)
+            COMPREPLY=( $(compgen -W "production development" -- ${cur}) )
+            return 0
+            ;;
+        --config|--data|--cache|--log|--backup)
+            COMPREPLY=( $(compgen -d -- ${cur}) )
+            return 0
+            ;;
+        --pid)
+            COMPREPLY=( $(compgen -f -- ${cur}) )
+            return 0
+            ;;
+    esac
+
+    COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
+}
+complete -F _%s_completions %s
+`, binaryName, binaryName, binaryName, binaryName, binaryName)
+
+	case "zsh":
+		fmt.Printf(`#compdef %s
+# Zsh completions for %s
+# Add to ~/.zshrc: eval "$(%s --shell init zsh)"
+
+_%s() {
+    local -a commands
+    local -a opts
+
+    opts=(
+        '--help[Show help message]'
+        '-h[Show help message]'
+        '--version[Show version]'
+        '-v[Show version]'
+        '--status[Show server status]'
+        '--init[Initialize configuration]'
+        '--config-info[Show configuration paths]'
+        '--test[Test search engines]:query:'
+        '--daemon[Run as daemon]'
+        '--debug[Enable debug mode]'
+        '--mode[Application mode]:mode:(production development)'
+        '--config[Config directory]:directory:_files -/'
+        '--data[Data directory]:directory:_files -/'
+        '--cache[Cache directory]:directory:_files -/'
+        '--log[Log directory]:directory:_files -/'
+        '--backup[Backup directory]:directory:_files -/'
+        '--pid[PID file]:file:_files'
+        '--address[Listen address]:address:'
+        '--port[Listen port]:port:'
+        '--service[Service management]:action:(install uninstall start stop restart reload enable disable status help)'
+        '--maintenance[Maintenance]:action:(backup restore list update mode setup help)'
+        '--update[Update management]:action:(check yes rollback list branch)'
+        '--build[Build binaries]:platform:(all linux darwin windows freebsd host)'
+        '--shell[Shell integration]:subcommand:(completions init --help)'
+        'tor[Tor hidden service management]:subcommand:(status validate restart regenerate vanity import-keys)'
+        'email[Email management]:subcommand:(test)'
+    )
+
+    _arguments -s $opts
+}
+
+compdef _%s %s
+`, binaryName, binaryName, binaryName, binaryName, binaryName, binaryName)
+
+	case "fish":
+		fmt.Printf(`# Fish completions for %s
+# Add to ~/.config/fish/config.fish: %s --shell init fish | source
+
+complete -c %s -f
+complete -c %s -s h -l help -d 'Show help message'
+complete -c %s -s v -l version -d 'Show version'
+complete -c %s -l status -d 'Show server status'
+complete -c %s -l init -d 'Initialize configuration'
+complete -c %s -l config-info -d 'Show configuration paths'
+complete -c %s -l test -d 'Test search engines'
+complete -c %s -l daemon -d 'Run as daemon'
+complete -c %s -l debug -d 'Enable debug mode'
+complete -c %s -l mode -d 'Application mode' -xa 'production development'
+complete -c %s -l config -d 'Config directory' -xa '(__fish_complete_directories)'
+complete -c %s -l data -d 'Data directory' -xa '(__fish_complete_directories)'
+complete -c %s -l cache -d 'Cache directory' -xa '(__fish_complete_directories)'
+complete -c %s -l log -d 'Log directory' -xa '(__fish_complete_directories)'
+complete -c %s -l backup -d 'Backup directory' -xa '(__fish_complete_directories)'
+complete -c %s -l pid -d 'PID file'
+complete -c %s -l address -d 'Listen address'
+complete -c %s -l port -d 'Listen port'
+complete -c %s -l service -d 'Service management' -xa 'install uninstall start stop restart reload enable disable status help'
+complete -c %s -l maintenance -d 'Maintenance' -xa 'backup restore list update mode setup help'
+complete -c %s -l update -d 'Update management' -xa 'check yes rollback list branch'
+complete -c %s -l build -d 'Build binaries' -xa 'all linux darwin windows freebsd host'
+complete -c %s -l shell -d 'Shell integration' -xa 'completions init --help'
+complete -c %s -n '__fish_use_subcommand' -a 'tor' -d 'Tor hidden service management' -xa 'status validate restart regenerate vanity import-keys'
+complete -c %s -n '__fish_use_subcommand' -a 'email' -d 'Email management' -xa 'test'
+`, binaryName, binaryName,
+			binaryName, binaryName, binaryName, binaryName, binaryName,
+			binaryName, binaryName, binaryName, binaryName, binaryName,
+			binaryName, binaryName, binaryName, binaryName, binaryName,
+			binaryName, binaryName, binaryName, binaryName, binaryName,
+			binaryName, binaryName, binaryName, binaryName, binaryName)
+
+	case "powershell", "pwsh":
+		fmt.Printf(`# PowerShell completions for %s
+# Add to $PROFILE: Invoke-Expression (&%s --shell init powershell)
+
+Register-ArgumentCompleter -CommandName %s -ScriptBlock {
+    param($commandName, $wordToComplete, $cursorPosition)
+
+    $commands = @(
+        @{Name='--help'; Description='Show help message'}
+        @{Name='-h'; Description='Show help message'}
+        @{Name='--version'; Description='Show version'}
+        @{Name='-v'; Description='Show version'}
+        @{Name='--status'; Description='Show server status'}
+        @{Name='--init'; Description='Initialize configuration'}
+        @{Name='--config-info'; Description='Show configuration paths'}
+        @{Name='--test'; Description='Test search engines'}
+        @{Name='--daemon'; Description='Run as daemon'}
+        @{Name='--debug'; Description='Enable debug mode'}
+        @{Name='--mode'; Description='Application mode'}
+        @{Name='--config'; Description='Config directory'}
+        @{Name='--data'; Description='Data directory'}
+        @{Name='--cache'; Description='Cache directory'}
+        @{Name='--log'; Description='Log directory'}
+        @{Name='--backup'; Description='Backup directory'}
+        @{Name='--pid'; Description='PID file'}
+        @{Name='--address'; Description='Listen address'}
+        @{Name='--port'; Description='Listen port'}
+        @{Name='--service'; Description='Service management'}
+        @{Name='--maintenance'; Description='Maintenance'}
+        @{Name='--update'; Description='Update management'}
+        @{Name='--build'; Description='Build binaries'}
+        @{Name='--shell'; Description='Shell integration'}
+        @{Name='tor'; Description='Tor hidden service management'}
+        @{Name='email'; Description='Email management'}
+    )
+
+    $commands | Where-Object { $_.Name -like "$wordToComplete*" } | ForEach-Object {
+        [System.Management.Automation.CompletionResult]::new($_.Name, $_.Name, 'ParameterValue', $_.Description)
+    }
+}
+`, binaryName, binaryName, binaryName)
+
+	default:
+		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unsupported shell: %s\n", shell)
+		fmt.Println("Supported shells: bash, zsh, fish, powershell")
+		exitFunc(1)
+	}
+}
+
+// printShellInit prints the shell initialization command
+func printShellInit(binaryName, shell string) {
+	switch shell {
+	case "bash":
+		fmt.Printf("source <(%s --shell completions bash)\n", binaryName)
+	case "zsh":
+		fmt.Printf("source <(%s --shell completions zsh)\n", binaryName)
+	case "fish":
+		fmt.Printf("%s --shell completions fish | source\n", binaryName)
+	case "powershell", "pwsh":
+		fmt.Printf("Invoke-Expression (&%s --shell completions powershell)\n", binaryName)
+	default:
+		fmt.Printf(display.Emoji("❌", "[ERROR]")+" Unsupported shell: %s\n", shell)
+		fmt.Println("Supported shells: bash, zsh, fish, powershell")
+		exitFunc(1)
+	}
+}
+
+// printShellHelp prints shell integration help
+func printShellHelp(binaryName string) {
+	fmt.Printf(`Shell Integration for %s
+
+Usage:
+  %s --shell completions [SHELL]   Print shell completions script
+  %s --shell init [SHELL]          Print shell init command for eval
+  %s --shell --help                Show this help
+
+Supported Shells:
+  bash        Bash shell (default on Linux)
+  zsh         Zsh shell (default on macOS)
+  fish        Fish shell
+  powershell  PowerShell (Windows)
+
+Setup Instructions:
+
+  Bash (~/.bashrc):
+    eval "$(%s --shell init bash)"
+
+  Zsh (~/.zshrc):
+    eval "$(%s --shell init zsh)"
+
+  Fish (~/.config/fish/config.fish):
+    %s --shell init fish | source
+
+  PowerShell ($PROFILE):
+    Invoke-Expression (&%s --shell init powershell)
+
+The shell will be auto-detected if not specified.
+`, binaryName, binaryName, binaryName, binaryName,
+		binaryName, binaryName, binaryName, binaryName)
+}

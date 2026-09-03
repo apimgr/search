@@ -1,0 +1,19 @@
+Subject: SSL Renewal Failed - {app_name}
+---
+SSL CERTIFICATE RENEWAL FAILED
+
+From: {app_name} ({fqdn})
+Time: {timestamp}
+
+An attempt to renew your SSL certificate has failed.
+
+Domain:            {domain}
+Error:             {error}
+Days until expiry: {days_left}
+Next retry:        {next_retry}
+
+Please check your DNS-01 challenge configuration and certificate provider credentials.
+
+--
+{app_name}
+{app_url}

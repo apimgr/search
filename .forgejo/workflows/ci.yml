@@ -1,0 +1,141 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ gitea.ref }}
+  cancel-in-progress: ${{ gitea.ref != 'refs/heads/main' }}
+
+env:
+  PROJECTNAME: search
+  PROJECTORG: apimgr
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    container:
+      image: casjaysdev/go:latest
+      options: "--user 0:0"
+    env:
+      CGO_ENABLED: "0"
+      GOFLAGS: -buildvcs=false
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Run tests with coverage
+        run: |
+          mkdir -p "/tmp/${PROJECTORG}"
+          COVDIR=$(mktemp -d "/tmp/${PROJECTORG}/${PROJECTNAME}-XXXXXX")
+          go mod download
+          PKGS=$(go list ./... | grep -v /src/service)
+          go test -cover -coverprofile="${COVDIR}/coverage.out" ${PKGS}
+          THRESHOLD=60
+          PCT=$(go tool cover -func="${COVDIR}/coverage.out" | awk '/^total:/ {gsub("%","",$3); print int($3)}')
+          if [ "$PCT" -lt "$THRESHOLD" ]; then
+            echo "::error::coverage ${PCT}% is below threshold ${THRESHOLD}%"
+            exit 1
+          fi
+          echo "Coverage: ${PCT}% (threshold: ${THRESHOLD}%)"
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    container:
+      image: casjaysdev/go:latest
+      options: "--user 0:0"
+    env:
+      CGO_ENABLED: "0"
+      GOFLAGS: -buildvcs=false
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: go vet
+        run: |
+          go mod download
+          go vet ./...
+
+      - name: staticcheck
+        run: |
+          go mod download
+          staticcheck ./...
+
+  build:
+    name: Build
+    needs: [test, lint]
+    runs-on: ubuntu-latest
+    container:
+      image: casjaysdev/go:latest
+      options: "--user 0:0"
+    env:
+      CGO_ENABLED: "0"
+      GOFLAGS: -buildvcs=false
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Set build info
+        run: |
+          echo "VERSION=$(cat release.txt 2>/dev/null || echo "devel")" >> "$GITHUB_ENV"
+          echo "COMMIT_ID=$(git rev-parse --short=7 HEAD 2>/dev/null || echo "unknown")" >> "$GITHUB_ENV"
+          echo "BUILD_EPOCH=$(date -u +%s)" >> "$GITHUB_ENV"
+          if [ -f site.txt ]; then
+            echo "OFFICIALSITE=$(cat site.txt)" >> "$GITHUB_ENV"
+          else
+            echo "OFFICIALSITE=${{ secrets.OFFICIALSITE }}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build binaries
+        run: |
+          go mod download
+          LDFLAGS="-s -w \
+            -X 'github.com/apimgr/search/src/config.Version=${VERSION}' \
+            -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT_ID}' \
+            -X 'github.com/apimgr/search/src/config.BuildEpoch=${BUILD_EPOCH}' \
+            -X 'github.com/apimgr/search/src/config.OfficialSite=${OFFICIALSITE}' \
+            -X 'github.com/apimgr/search/src/version.Version=${VERSION}' \
+            -X 'github.com/apimgr/search/src/version.CommitID=${COMMIT_ID}' \
+            -X 'github.com/apimgr/search/src/version.BuildEpoch=${BUILD_EPOCH}'"
+          CLI_LDFLAGS="-s -w \
+            -X 'github.com/apimgr/search/src/client/cmd.ProjectName=${PROJECTNAME}' \
+            -X 'github.com/apimgr/search/src/client/cmd.Version=${VERSION}' \
+            -X 'github.com/apimgr/search/src/client/cmd.CommitID=${COMMIT_ID}' \
+            -X 'github.com/apimgr/search/src/client/cmd.BuildEpoch=${BUILD_EPOCH}' \
+            -X 'github.com/apimgr/search/src/client/cmd.OfficialSite=${OFFICIALSITE}' \
+            -X 'github.com/apimgr/search/src/client/api.ProjectName=${PROJECTNAME}' \
+            -X 'github.com/apimgr/search/src/client/api.Version=${VERSION}'"
+          GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath \
+            -ldflags "$LDFLAGS" -o /tmp/search-linux-amd64 ./src
+          GOOS=linux GOARCH=arm64 go build -buildvcs=false -trimpath \
+            -ldflags "$LDFLAGS" -o /tmp/search-linux-arm64 ./src
+          if [ -d src/client ]; then
+            GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath \
+              -ldflags "$CLI_LDFLAGS" -o /tmp/search-cli-linux-amd64 ./src/client
+            GOOS=linux GOARCH=arm64 go build -buildvcs=false -trimpath \
+              -ldflags "$CLI_LDFLAGS" -o /tmp/search-cli-linux-arm64 ./src/client
+          fi
+          echo "Build OK"
+
+  vuln-scan:
+    name: Vulnerability scan
+    runs-on: ubuntu-latest
+    container:
+      image: casjaysdev/go:latest
+      options: "--user 0:0"
+    env:
+      CGO_ENABLED: "0"
+      GOFLAGS: -buildvcs=false
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Run govulncheck
+        run: |
+          go mod download
+          govulncheck ./...

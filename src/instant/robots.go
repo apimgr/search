@@ -1,0 +1,343 @@
+package instant
+
+import (
+	"bufio"
+	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"regexp"
+	"strings"
+	"time"
+
+	"github.com/apimgr/search/src/common/i18n"
+	"github.com/apimgr/search/src/version"
+)
+
+// AnswerTypeRobots is the answer type for robots.txt analysis
+const AnswerTypeRobots AnswerType = "robots"
+
+// RobotDirective represents a parsed robots.txt directive
+type RobotDirective struct {
+	// "allow", "disallow", "crawl-delay", "sitemap"
+	Type string `json:"type"`
+	// the path or value
+	Value string `json:"value"`
+}
+
+// RobotUserAgent represents rules for a specific user agent
+type RobotUserAgent struct {
+	Agent      string           `json:"agent"`
+	Directives []RobotDirective `json:"directives"`
+}
+
+// RobotsHandler handles robots.txt fetching and parsing
+type RobotsHandler struct {
+	client   *http.Client
+	patterns []*regexp.Regexp
+}
+
+// NewRobotsHandler creates a new robots.txt handler
+func NewRobotsHandler() *RobotsHandler {
+	return &RobotsHandler{
+		client: &http.Client{
+			Timeout: 10 * time.Second,
+		},
+		patterns: []*regexp.Regexp{
+			regexp.MustCompile(`(?i)^robots[:\s]+(.+)$`),
+			regexp.MustCompile(`(?i)^robots\.txt[:\s]+(.+)$`),
+			regexp.MustCompile(`(?i)^get\s+robots[:\s]+(.+)$`),
+			regexp.MustCompile(`(?i)^fetch\s+robots[:\s]+(.+)$`),
+			regexp.MustCompile(`(?i)^check\s+robots[:\s]+(.+)$`),
+		},
+	}
+}
+
+func (h *RobotsHandler) Name() string {
+	return "robots"
+}
+
+func (h *RobotsHandler) Patterns() []*regexp.Regexp {
+	return h.patterns
+}
+
+func (h *RobotsHandler) CanHandle(query string) bool {
+	for _, p := range h.patterns {
+		if p.MatchString(query) {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *RobotsHandler) HandleInstantQuery(ctx context.Context, query string) (*Answer, error) {
+	// Extract domain from query
+	domain := ""
+	for _, p := range h.patterns {
+		if matches := p.FindStringSubmatch(query); len(matches) > 1 {
+			domain = strings.TrimSpace(matches[1])
+			break
+		}
+	}
+
+	if domain == "" {
+		return nil, nil
+	}
+
+	// Clean up domain
+	domain = strings.TrimPrefix(domain, "https://")
+	domain = strings.TrimPrefix(domain, "http://")
+	domain = strings.TrimSuffix(domain, "/")
+	if idx := strings.Index(domain, "/"); idx != -1 {
+		domain = domain[:idx]
+	}
+
+	lang := LangFromContext(ctx)
+
+	// Build robots.txt URL
+	robotsURL := fmt.Sprintf("https://%s/robots.txt", domain)
+
+	// Fetch robots.txt
+	req, err := http.NewRequestWithContext(ctx, "GET", robotsURL, nil)
+	if err != nil {
+		return &Answer{
+			Type:    AnswerTypeRobots,
+			Query:   query,
+			Title:   fmt.Sprintf("robots.txt: %s", domain),
+			Content: fmt.Sprintf("<strong>%s:</strong> %s<br><br>%s", i18n.T(lang, "instant.robots_error_label"), i18n.T(lang, "instant.robots_invalid_domain"), escapeHTML(err.Error())),
+		}, nil
+	}
+
+	req.Header.Set("User-Agent", version.BrowserUserAgent)
+
+	resp, err := h.client.Do(req)
+	if err != nil {
+		// Try HTTP if HTTPS fails
+		robotsURL = fmt.Sprintf("http://%s/robots.txt", domain)
+		req, _ = http.NewRequestWithContext(ctx, "GET", robotsURL, nil)
+		req.Header.Set("User-Agent", version.BrowserUserAgent)
+		resp, err = h.client.Do(req)
+		if err != nil {
+			return &Answer{
+				Type:    AnswerTypeRobots,
+				Query:   query,
+				Title:   fmt.Sprintf("robots.txt: %s", domain),
+				Content: fmt.Sprintf("<strong>%s:</strong> %s<br><br>%s", i18n.T(lang, "instant.robots_error_label"), i18n.T(lang, "instant.robots_fetch_failed"), escapeHTML(err.Error())),
+				Data: map[string]interface{}{
+					"domain": domain,
+					"error":  err.Error(),
+				},
+			}, nil
+		}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return &Answer{
+			Type:    AnswerTypeRobots,
+			Query:   query,
+			Title:   fmt.Sprintf("robots.txt: %s", domain),
+			Content: fmt.Sprintf("<strong>%s</strong><br><br>%s", i18n.T(lang, "instant.robots_not_found_label"), i18n.T(lang, "instant.robots_not_found_detail", escapeHTML(domain))),
+			Data: map[string]interface{}{
+				"domain":      domain,
+				"status_code": resp.StatusCode,
+				"found":       false,
+			},
+		}, nil
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return &Answer{
+			Type:    AnswerTypeRobots,
+			Query:   query,
+			Title:   fmt.Sprintf("robots.txt: %s", domain),
+			Content: fmt.Sprintf("<strong>%s:</strong> %s", i18n.T(lang, "instant.robots_error_label"), i18n.T(lang, "instant.robots_bad_status", resp.StatusCode)),
+			Data: map[string]interface{}{
+				"domain":      domain,
+				"status_code": resp.StatusCode,
+			},
+		}, nil
+	}
+
+	// Read and parse robots.txt
+	// Limit to 1MB
+	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, 1024*1024))
+	if err != nil {
+		return &Answer{
+			Type:    AnswerTypeRobots,
+			Query:   query,
+			Title:   fmt.Sprintf("robots.txt: %s", domain),
+			Content: fmt.Sprintf("<strong>%s:</strong> %s<br><br>%s", i18n.T(lang, "instant.robots_error_label"), i18n.T(lang, "instant.robots_read_failed"), escapeHTML(err.Error())),
+		}, nil
+	}
+
+	robotsContent := string(bodyBytes)
+	parsed := parseRobotsTxt(robotsContent)
+
+	// Build content
+	var content strings.Builder
+	content.WriteString("<div class=\"robots-result\">")
+	content.WriteString(fmt.Sprintf("<strong>URL:</strong> <a href=\"%s\" target=\"_blank\">%s</a><br><br>", escapeHTML(robotsURL), escapeHTML(robotsURL)))
+
+	// Summary
+	content.WriteString("<strong>Summary:</strong><br>")
+	content.WriteString(fmt.Sprintf("&nbsp;&nbsp;User-Agent sections: %d<br>", len(parsed.UserAgents)))
+	content.WriteString(fmt.Sprintf("&nbsp;&nbsp;Sitemaps: %d<br><br>", len(parsed.Sitemaps)))
+
+	// Show sitemaps first
+	if len(parsed.Sitemaps) > 0 {
+		content.WriteString("<strong>Sitemaps:</strong><br>")
+		for _, sitemap := range parsed.Sitemaps {
+			content.WriteString(fmt.Sprintf("&nbsp;&nbsp;<a href=\"%s\" target=\"_blank\">%s</a><br>", escapeHTML(sitemap), escapeHTML(sitemap)))
+		}
+		content.WriteString("<br>")
+	}
+
+	// Show user agents and their rules
+	if len(parsed.UserAgents) > 0 {
+		content.WriteString("<strong>Rules by User-Agent:</strong><br>")
+		for _, ua := range parsed.UserAgents {
+			content.WriteString(fmt.Sprintf("<br><em>User-Agent: %s</em><br>", escapeHTML(ua.Agent)))
+			for _, directive := range ua.Directives {
+				icon := ""
+				switch directive.Type {
+				case "disallow":
+					icon = "<span style=\"color: red;\">Disallow:</span>"
+				case "allow":
+					icon = "<span style=\"color: green;\">Allow:</span>"
+				case "crawl-delay":
+					icon = "<span style=\"color: blue;\">Crawl-Delay:</span>"
+				default:
+					icon = directive.Type + ":"
+				}
+				content.WriteString(fmt.Sprintf("&nbsp;&nbsp;%s %s<br>", icon, escapeHTML(directive.Value)))
+			}
+		}
+	}
+
+	// Raw content (truncated)
+	content.WriteString("<br><strong>Raw Content:</strong><br>")
+	content.WriteString("<pre style=\"max-height: 300px; overflow-y: auto; background: #f5f5f5; padding: 10px; font-size: 0.85em;\">")
+	rawContent := robotsContent
+	if len(rawContent) > 5000 {
+		rawContent = rawContent[:5000] + "\n... (truncated)"
+	}
+	content.WriteString(escapeHTML(rawContent))
+	content.WriteString("</pre>")
+
+	content.WriteString("</div>")
+
+	data := map[string]interface{}{
+		"domain":       domain,
+		"url":          robotsURL,
+		"status_code":  resp.StatusCode,
+		"found":        true,
+		"user_agents":  parsed.UserAgents,
+		"sitemaps":     parsed.Sitemaps,
+		"content_size": len(robotsContent),
+	}
+
+	return &Answer{
+		Type:      AnswerTypeRobots,
+		Query:     query,
+		Title:     fmt.Sprintf("robots.txt: %s", domain),
+		Content:   content.String(),
+		Source:    domain,
+		SourceURL: robotsURL,
+		Data:      data,
+	}, nil
+}
+
+// ParsedRobots represents parsed robots.txt content
+type ParsedRobots struct {
+	UserAgents []RobotUserAgent
+	Sitemaps   []string
+}
+
+// parseRobotsTxt parses robots.txt content
+func parseRobotsTxt(content string) ParsedRobots {
+	result := ParsedRobots{
+		UserAgents: make([]RobotUserAgent, 0),
+		Sitemaps:   make([]string, 0),
+	}
+
+	scanner := bufio.NewScanner(strings.NewReader(content))
+
+	// group holds the User-agent names accumulated since the last directive
+	// block. Per RFC 9309, consecutive "User-agent:" lines with no
+	// intervening directive lines form a single group, and the directive
+	// block that follows applies to every agent in that group.
+	var group []*RobotUserAgent
+	groupHasDirectives := false
+
+	flushGroup := func() {
+		for _, ua := range group {
+			result.UserAgents = append(result.UserAgents, *ua)
+		}
+		group = nil
+		groupHasDirectives = false
+	}
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+
+		// Skip empty lines and comments
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Split on first colon
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		directive := strings.ToLower(strings.TrimSpace(parts[0]))
+		value := strings.TrimSpace(parts[1])
+
+		switch directive {
+		case "user-agent":
+			// A User-agent line seen after directives were already recorded
+			// for the current group starts a new group; a User-agent line
+			// with no intervening directives joins the current group.
+			if groupHasDirectives {
+				flushGroup()
+			}
+			group = append(group, &RobotUserAgent{
+				Agent:      value,
+				Directives: make([]RobotDirective, 0),
+			})
+		case "disallow":
+			groupHasDirectives = true
+			for _, ua := range group {
+				ua.Directives = append(ua.Directives, RobotDirective{
+					Type:  "disallow",
+					Value: value,
+				})
+			}
+		case "allow":
+			groupHasDirectives = true
+			for _, ua := range group {
+				ua.Directives = append(ua.Directives, RobotDirective{
+					Type:  "allow",
+					Value: value,
+				})
+			}
+		case "crawl-delay":
+			groupHasDirectives = true
+			for _, ua := range group {
+				ua.Directives = append(ua.Directives, RobotDirective{
+					Type:  "crawl-delay",
+					Value: value,
+				})
+			}
+		case "sitemap":
+			result.Sitemaps = append(result.Sitemaps, value)
+		}
+	}
+
+	// Don't forget the last group
+	flushGroup()
+
+	return result
+}

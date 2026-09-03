@@ -1,0 +1,24 @@
+{{/* Site banner announcements partial - server-rendered per AI.md PART 16 */}}
+{{/* Each active announcement whose id is absent from dismissed_announcements cookie renders here */}}
+{{/* Forms POST to /announcements/dismiss — works with zero JS; app.js intercepts to skip the reload */}}
+{{ define "announcements" }}
+{{ range .Announcements }}
+<div class="site-banner site-banner-{{ .Type }}"
+  {{ if or (eq .Type "warning") (eq .Type "error") }}role="alert"{{ else }}role="status"{{ end }}
+  data-announcement-id="{{ .ID }}">
+  <span class="site-banner-icon" aria-hidden="true">
+    {{ if eq .Type "warning" }}⚠{{ else if eq .Type "error" }}✖{{ else if eq .Type "success" }}✓{{ else }}ℹ{{ end }}
+  </span>
+  <span class="site-banner-text">
+    {{ if .Title }}<strong>{{ .Title }}</strong> {{ end }}{{ .Message }}
+  </span>
+  {{ if .Dismissible }}
+  <form method="post" action="/announcements/dismiss" class="site-banner-dismiss">
+    <input type="hidden" name="csrf_token" value="{{ $.CSRFToken }}">
+    <input type="hidden" name="id" value="{{ .ID }}">
+    <button type="submit" class="site-banner-close" aria-label="{{t "common.dismiss"}}">&times;</button>
+  </form>
+  {{ end }}
+</div>
+{{ end }}
+{{ end }}

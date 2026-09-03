@@ -1,0 +1,178 @@
+{{define "content"}}
+<div class="static-page privacy-page">
+    <header class="page-header">
+        <h1>{{t "footer.privacy_policy"}}</h1>
+    </header>
+
+    {{if .Config.Server.Pages.Privacy.Content}}
+    <div class="page-content markdown">
+        {{.Config.Server.Pages.Privacy.Content | safe}}
+    </div>
+    {{else}}
+    <div class="page-content">
+        {{/* Summary key points — the sold/not-sold point swaps on server.privacy.data.sold */}}
+        <section class="privacy-section privacy-summary" id="summary">
+            <h2>{{t "privacy.summary_heading"}}</h2>
+            <ul class="key-points">
+                <li><strong>{{t "privacy.summary_stored_title"}}</strong> — {{t "privacy.summary_stored_desc"}}</li>
+                {{if .DataSold}}
+                <li class="key-point-warning"><strong>{{t "privacy.summary_sold_title"}}</strong> — {{t "privacy.summary_sold_desc"}} <a href="#ccpa-opt-out">{{t "privacy.summary_sold_optout"}}</a></li>
+                {{else}}
+                <li><strong>{{t "privacy.summary_not_sold_title"}}</strong> — {{t "privacy.summary_not_sold_desc"}}</li>
+                {{end}}
+                <li><strong>{{t "privacy.summary_control_title"}}</strong> — {{t "privacy.summary_control_desc"}}</li>
+            </ul>
+        </section>
+
+        <section class="privacy-section">
+            <h2>{{t "privacy.data_collection_heading"}}</h2>
+            <p>{{t "privacy.data_collection_description" (default (t "home.brand_fallback") .Config.Server.Branding.Title)}}</p>
+            <ul>
+                <li><strong>{{t "privacy.search_queries_label"}}:</strong> {{t "privacy.search_queries_description"}}</li>
+                <li><strong>{{t "privacy.ip_addresses_label"}}:</strong> {{t "privacy.ip_addresses_description"}}</li>
+                <li><strong>{{t "privacy.cookies_label"}}:</strong> {{t "privacy.cookies_description"}}</li>
+            </ul>
+        </section>
+
+        {{/* Data usage copy swaps on server.privacy.data.sold (data_usage vs data_usage_if_sold) */}}
+        <section class="privacy-section">
+            <h2>{{t "privacy.data_usage_heading"}}</h2>
+            {{if .DataSold}}
+            <p>{{t "privacy.data_usage_if_sold_description"}}</p>
+            <ul>
+                <li>{{t "privacy.data_usage_item_forward"}}</li>
+                <li>{{t "privacy.data_usage_item_aggregate"}}</li>
+                <li>{{t "privacy.data_usage_if_sold_item_share"}}</li>
+            </ul>
+            {{else}}
+            <p>{{t "privacy.data_usage_description"}}</p>
+            <ul>
+                <li>{{t "privacy.data_usage_item_forward"}}</li>
+                <li>{{t "privacy.data_usage_item_aggregate"}}</li>
+                <li>{{t "privacy.data_usage_item_preferences"}}</li>
+            </ul>
+            <p>{{t "privacy.data_usage_never_sold_note"}}</p>
+            {{end}}
+        </section>
+
+        {{/* Cookie categories from server.privacy.cookies; analytics description swaps on data.sold */}}
+        <section class="privacy-section" id="cookies">
+            <h2>{{t "privacy.cookies_heading"}}</h2>
+            <p>{{t "privacy.cookies_intro"}}</p>
+            <ul>
+                {{if .Config.Server.Privacy.Cookies.Essential.Enabled}}
+                <li><strong>{{t "privacy.session_cookie_label"}}:</strong> {{t "privacy.session_cookie_description"}}</li>
+                {{end}}
+                {{if .Config.Server.Privacy.Cookies.Preferences.Enabled}}
+                <li><strong>{{t "privacy.preference_cookie_label"}}:</strong> {{t "privacy.preference_cookie_description"}}</li>
+                {{end}}
+            </ul>
+            {{if .Config.Server.Privacy.Cookies.Analytics.Enabled}}
+            <h3>{{t "privacy.analytics_heading"}}</h3>
+            {{if and .Config.Server.Tracking.Type (ne .Config.Server.Tracking.Type "none")}}
+            <p>{{if .DataSold}}{{t "privacy.analytics_suffix_sold"}}{{else}}{{t "privacy.analytics_suffix_not_sold"}}{{end}}</p>
+            <p>{{t "privacy.analytics_provider" (title .Config.Server.Tracking.Type)}}</p>
+            {{else}}
+            <p>{{t "privacy.analytics_none"}}</p>
+            {{end}}
+            {{end}}
+            <p>{{t "privacy.cookies_followup"}}</p>
+        </section>
+
+        {{/* Data storage note swaps on server.privacy.data.sold */}}
+        <section class="privacy-section" id="data-storage">
+            <h2>{{t "privacy.data_storage_heading"}}</h2>
+            <p>{{t "privacy.data_storage_intro"}}</p>
+            <p>{{if .DataSold}}{{t "privacy.data_storage_may_sell"}}{{else}}{{t "privacy.data_storage_never_sold"}}{{end}}</p>
+        </section>
+
+        {{/* Retention period from server.privacy.retention.period (falls back to translated default) */}}
+        <section class="privacy-section">
+            <h2>{{t "privacy.data_retention_heading"}}</h2>
+            <p>{{default (t "privacy.data_retention_description") .Config.Server.Privacy.Retention.Period}}</p>
+        </section>
+
+        {{/* Third-party services from server.privacy.third_party.services */}}
+        <section class="privacy-section">
+            <h2>{{t "privacy.third_parties_heading"}}</h2>
+            {{if .Config.Server.Privacy.ThirdParty.Services}}
+            <p>{{t "privacy.third_parties_intro"}}</p>
+            <table class="third-party-table">
+                <thead>
+                    <tr>
+                        <th>{{t "privacy.third_parties_col_service"}}</th>
+                        <th>{{t "privacy.third_parties_col_purpose"}}</th>
+                        <th>{{t "privacy.third_parties_col_data"}}</th>
+                        <th>{{t "privacy.third_parties_col_policy"}}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Config.Server.Privacy.ThirdParty.Services}}
+                    <tr>
+                        <td>{{.Name}}</td>
+                        <td>{{.Purpose}}</td>
+                        <td>{{.DataSent}}</td>
+                        <td>{{if .PolicyURL}}<a href="{{.PolicyURL}}" target="_blank" rel="noopener">{{t "privacy.third_parties_view_policy"}}</a>{{end}}</td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+            {{else}}
+            <p>{{t "privacy.third_parties_description"}}</p>
+            <p>{{t "privacy.third_parties_followup"}}</p>
+            {{end}}
+        </section>
+
+        {{/* Your rights — export/deletion items gated by server.privacy.retention flags */}}
+        <section class="privacy-section">
+            <h2>{{t "privacy.your_rights_heading"}}</h2>
+            {{if or .Config.Server.Privacy.Retention.ExportAvailable .Config.Server.Privacy.Retention.DeletionAvailable}}
+            <p>{{t "privacy.your_rights_intro"}}</p>
+            <ul>
+                <li><strong>{{t "privacy.your_rights_access_label"}}:</strong> {{t "privacy.your_rights_access_desc"}}</li>
+                {{if .Config.Server.Privacy.Retention.ExportAvailable}}
+                <li><strong>{{t "privacy.your_rights_export_label"}}:</strong> {{t "privacy.your_rights_export_desc"}}</li>
+                {{end}}
+                {{if .Config.Server.Privacy.Retention.DeletionAvailable}}
+                <li><strong>{{t "privacy.your_rights_deletion_label"}}:</strong> {{t "privacy.your_rights_deletion_desc"}}</li>
+                {{end}}
+                <li><strong>{{t "privacy.your_rights_correction_label"}}:</strong> {{t "privacy.your_rights_correction_desc"}}</li>
+            </ul>
+            {{else}}
+            <p>{{t "privacy.your_rights_description"}}</p>
+            {{end}}
+        </section>
+
+        <section class="privacy-section">
+            <h2>{{t "contact.page_title"}}</h2>
+            <p>{{t "privacy.contact_prefix"}} <a href="/server/contact">{{t "contact.title"}}</a>{{t "privacy.contact_suffix"}}</p>
+        </section>
+    </div>
+    {{end}}
+
+    <section class="privacy-section ccpa-section" id="ccpa-opt-out">
+        <h2>{{t "privacy.ccpa_opt_out_heading"}}</h2>
+        {{if .DataSold}}
+        <p>{{t "privacy.ccpa_opt_out_description"}}</p>
+        {{if .CCPAOptedOut}}
+        <p class="ccpa-status">{{t "privacy.ccpa_opt_out_status_active"}}</p>
+        <form method="post" action="/server/ccpa">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <input type="hidden" name="action" value="opt-in">
+            <input type="hidden" name="optout" value="false">
+            <button type="submit" class="btn">{{t "privacy.ccpa_opt_in_button"}}</button>
+        </form>
+        {{else}}
+        <form method="post" action="/server/ccpa">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <input type="hidden" name="action" value="opt-out">
+            <input type="hidden" name="optout" value="true">
+            <button type="submit" class="btn btn-decline">{{t "privacy.ccpa_opt_out_button"}}</button>
+        </form>
+        {{end}}
+        {{else}}
+        <p>{{t "privacy.ccpa_no_sell_notice"}}</p>
+        {{end}}
+    </section>
+</div>
+{{end}}

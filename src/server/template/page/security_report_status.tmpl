@@ -1,0 +1,16 @@
+{{define "content"}}
+<div class="static-page security-report-status-page">
+    <header class="page-header">
+        <h1>{{t "security.report_status_title"}}</h1>
+    </header>
+
+    <div class="page-content">
+        <dl>
+            <dt>{{t "security.report_status_tracking_id_label"}}</dt>
+            <dd>{{.TrackingID}}</dd>
+            <dt>{{t "security.report_status_state_label"}}</dt>
+            <dd>{{t (printf "security.report_status_state_%s" .Status)}}</dd>
+        </dl>
+    </div>
+</div>
+{{end}}

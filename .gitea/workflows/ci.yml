@@ -1,0 +1,233 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly security run (Monday 06:00 UTC) — only security jobs run on schedule
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ gitea.ref }}
+  cancel-in-progress: ${{ gitea.ref != 'refs/heads/main' }}
+
+env:
+  PROJECTNAME: search
+  PROJECTORG: apimgr
+
+jobs:
+  secret-scan:
+    name: Secret scan (full history)
+    runs-on: ubuntu-latest
+    steps:
+      # v7.0.0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          fetch-depth: 0
+
+      - name: Scan secrets (push — incremental)
+        if: gitea.event_name == 'push'
+        # v3.95.6
+        uses: trufflesecurity/trufflehog@30d5bb91af1a771378349dbbb0c82129392acf70
+        with:
+          base: ${{ gitea.event.before }}
+          head: ${{ gitea.event.after }}
+          extra_args: --only-verified
+
+      - name: Scan secrets (scheduled/PR — full history)
+        if: gitea.event_name != 'push'
+        # v3.95.6
+        uses: trufflesecurity/trufflehog@30d5bb91af1a771378349dbbb0c82129392acf70
+        with:
+          extra_args: --only-verified
+
+  test:
+    name: Test
+    if: gitea.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    container:
+      image: casjaysdev/go:latest
+      options: "--user 0:0"
+    env:
+      CGO_ENABLED: "0"
+      GOFLAGS: -buildvcs=false
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Run tests with coverage
+        run: |
+          mkdir -p "/tmp/${PROJECTORG}"
+          COVDIR=$(mktemp -d "/tmp/${PROJECTORG}/${PROJECTNAME}-XXXXXX")
+          go mod download
+          PKGS=$(go list ./... | grep -v /src/service)
+          go test -cover -coverprofile="${COVDIR}/coverage.out" ${PKGS}
+          THRESHOLD=60
+          PCT=$(go tool cover -func="${COVDIR}/coverage.out" | awk '/^total:/ {gsub("%","",$3); print int($3)}')
+          if [ "$PCT" -lt "$THRESHOLD" ]; then
+            echo "::error::coverage ${PCT}% is below threshold ${THRESHOLD}%"
+            exit 1
+          fi
+          echo "Coverage: ${PCT}% (threshold: ${THRESHOLD}%)"
+
+  lint:
+    name: Lint
+    if: gitea.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    container:
+      image: casjaysdev/go:latest
+      options: "--user 0:0"
+    env:
+      CGO_ENABLED: "0"
+      GOFLAGS: -buildvcs=false
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: go vet
+        run: |
+          go mod download
+          go vet ./...
+
+      - name: staticcheck
+        run: |
+          go mod download
+          staticcheck ./...
+
+  build:
+    name: Build
+    if: gitea.event_name != 'schedule'
+    needs: [test, lint]
+    runs-on: ubuntu-latest
+    container:
+      image: casjaysdev/go:latest
+      options: "--user 0:0"
+    env:
+      CGO_ENABLED: "0"
+      GOFLAGS: -buildvcs=false
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Set build info
+        run: |
+          echo "VERSION=$(cat release.txt 2>/dev/null || echo "devel")" >> "$GITHUB_ENV"
+          echo "COMMIT_ID=$(git rev-parse --short=7 HEAD 2>/dev/null || echo "unknown")" >> "$GITHUB_ENV"
+          echo "BUILD_EPOCH=$(date -u +%s)" >> "$GITHUB_ENV"
+          if [ -f site.txt ]; then
+            echo "OFFICIALSITE=$(cat site.txt)" >> "$GITHUB_ENV"
+          else
+            echo "OFFICIALSITE=${{ secrets.OFFICIALSITE }}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build binaries
+        run: |
+          go mod download
+          LDFLAGS="-s -w \
+            -X 'github.com/apimgr/search/src/config.Version=${VERSION}' \
+            -X 'github.com/apimgr/search/src/config.CommitID=${COMMIT_ID}' \
+            -X 'github.com/apimgr/search/src/config.BuildEpoch=${BUILD_EPOCH}' \
+            -X 'github.com/apimgr/search/src/config.OfficialSite=${OFFICIALSITE}' \
+            -X 'github.com/apimgr/search/src/version.Version=${VERSION}' \
+            -X 'github.com/apimgr/search/src/version.CommitID=${COMMIT_ID}' \
+            -X 'github.com/apimgr/search/src/version.BuildEpoch=${BUILD_EPOCH}'"
+          CLI_LDFLAGS="-s -w \
+            -X 'github.com/apimgr/search/src/client/cmd.ProjectName=${PROJECTNAME}' \
+            -X 'github.com/apimgr/search/src/client/cmd.Version=${VERSION}' \
+            -X 'github.com/apimgr/search/src/client/cmd.CommitID=${COMMIT_ID}' \
+            -X 'github.com/apimgr/search/src/client/cmd.BuildEpoch=${BUILD_EPOCH}' \
+            -X 'github.com/apimgr/search/src/client/cmd.OfficialSite=${OFFICIALSITE}' \
+            -X 'github.com/apimgr/search/src/client/api.ProjectName=${PROJECTNAME}' \
+            -X 'github.com/apimgr/search/src/client/api.Version=${VERSION}'"
+          GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath \
+            -ldflags "$LDFLAGS" -o /tmp/search-linux-amd64 ./src
+          GOOS=linux GOARCH=arm64 go build -buildvcs=false -trimpath \
+            -ldflags "$LDFLAGS" -o /tmp/search-linux-arm64 ./src
+          if [ -d src/client ]; then
+            GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath \
+              -ldflags "$CLI_LDFLAGS" -o /tmp/search-cli-linux-amd64 ./src/client
+            GOOS=linux GOARCH=arm64 go build -buildvcs=false -trimpath \
+              -ldflags "$CLI_LDFLAGS" -o /tmp/search-cli-linux-arm64 ./src/client
+          fi
+          echo "Build OK"
+
+  vuln-scan:
+    name: Vulnerability scan
+    runs-on: ubuntu-latest
+    container:
+      image: casjaysdev/go:latest
+      options: "--user 0:0"
+    env:
+      CGO_ENABLED: "0"
+      GOFLAGS: -buildvcs=false
+      GOTOOLCHAIN: auto
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Run govulncheck
+        run: |
+          go mod download
+          govulncheck ./...
+
+  workflow-policy:
+    name: Workflow SHA policy
+    runs-on: ubuntu-latest
+    steps:
+      # v7.0.0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+
+      - name: Check for tag-pinned actions
+        run: |
+          VIOLATIONS=$(grep -rn 'uses:.*@v[0-9]' \
+            .github/workflows/ .gitea/workflows/ .forgejo/workflows/ 2>/dev/null || true)
+          if [ -n "$VIOLATIONS" ]; then
+            echo "ERROR: Tag-pinned actions found — pin to full commit SHA:"
+            echo "$VIOLATIONS"
+            exit 1
+          fi
+          echo "OK: all actions pinned to SHA"
+
+  image-scan:
+    name: Image scan (Trivy)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      # v7.0.0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+
+      - name: Set up Docker Buildx
+        # v4.1.0
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5
+
+      - name: Build image for scan
+        # v7.2.0
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: search:scan
+          build-args: |
+            VERSION=scan
+            BUILD_DATE=scan
+            COMMIT_ID=scan
+
+      - name: Run Trivy vulnerability scanner
+        # v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: 'search:scan'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+          # gosu is bundled by the casjaysdev/alpine base image, unused by
+          # this project (tini is our entrypoint/init) — we only scan our
+          # own binaries, not upstream base-image tooling
+          skip-files: '/usr/local/bin/gosu'

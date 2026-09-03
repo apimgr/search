@@ -1,0 +1,323 @@
+{{define "content"}}
+<div class="static-page preferences-page">
+    <header class="page-header">
+        <h1>{{t "preferences.title"}}</h1>
+        <p class="subtitle">{{t "preferences.subtitle"}}</p>
+    </header>
+
+    <div class="preferences-section">
+        <h2>{{t "preferences.general_settings"}}</h2>
+        <form action="/server/preferences/general" method="POST" id="general-settings" class="preferences-form">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <div class="form-group">
+                <label for="theme">{{t "preferences.theme"}}</label>
+                <select id="theme" name="theme">
+                    <option value="dark" {{if eq .Prefs.Theme "dark"}}selected{{end}}>{{t "preferences.theme_dark"}}</option>
+                    <option value="light" {{if eq .Prefs.Theme "light"}}selected{{end}}>{{t "preferences.theme_light"}}</option>
+                    <option value="auto" {{if eq .Prefs.Theme "auto"}}selected{{end}}>{{t "preferences.theme_auto"}}</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="default-category">{{t "preferences.default_category_label"}}</label>
+                <select id="default-category" name="default_category">
+                    <option value="general" {{if eq .Prefs.DefaultCategory "general"}}selected{{end}}>{{t "preferences.default_category_general"}}</option>
+                    <option value="images" {{if eq .Prefs.DefaultCategory "images"}}selected{{end}}>{{t "search.categories.images"}}</option>
+                    <option value="videos" {{if eq .Prefs.DefaultCategory "videos"}}selected{{end}}>{{t "search.categories.videos"}}</option>
+                    <option value="news" {{if eq .Prefs.DefaultCategory "news"}}selected{{end}}>{{t "search.categories.news"}}</option>
+                    <option value="maps" {{if eq .Prefs.DefaultCategory "maps"}}selected{{end}}>{{t "search.categories.maps"}}</option>
+                    <option value="files" {{if eq .Prefs.DefaultCategory "files"}}selected{{end}}>{{t "search.categories.files"}}</option>
+                    <option value="music" {{if eq .Prefs.DefaultCategory "music"}}selected{{end}}>{{t "preferences.default_category_music"}}</option>
+                    <option value="science" {{if eq .Prefs.DefaultCategory "science"}}selected{{end}}>{{t "search.categories.science"}}</option>
+                    <option value="it" {{if eq .Prefs.DefaultCategory "it"}}selected{{end}}>{{t "search.categories.it"}}</option>
+                    <option value="social" {{if eq .Prefs.DefaultCategory "social"}}selected{{end}}>{{t "search.categories.social"}}</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="safe-search">{{t "search.safe_search"}}</label>
+                <select id="safe-search" name="safe_search">
+                    <option value="0" {{if eq .Prefs.SafeSearch "0"}}selected{{end}}>{{t "search.safe_search_off"}}</option>
+                    <option value="1" {{if eq .Prefs.SafeSearch "1"}}selected{{end}}>{{t "search.safe_search_moderate"}}</option>
+                    <option value="2" {{if eq .Prefs.SafeSearch "2"}}selected{{end}}>{{t "search.safe_search_strict"}}</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="units">{{t "preferences.units_label"}}</label>
+                <select id="units" name="units">
+                    <option value="metric" {{if eq .Prefs.Units "metric"}}selected{{end}}>{{t "preferences.units_metric"}}</option>
+                    <option value="imperial" {{if eq .Prefs.Units "imperial"}}selected{{end}}>{{t "preferences.units_imperial"}}</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="results-per-page">{{t "preferences.results_per_page"}}</label>
+                <select id="results-per-page" name="results_per_page">
+                    <option value="10" {{if eq .Prefs.ResultsPerPage "10"}}selected{{end}}>10</option>
+                    <option value="20" {{if eq .Prefs.ResultsPerPage "20"}}selected{{end}}>20</option>
+                    <option value="30" {{if eq .Prefs.ResultsPerPage "30"}}selected{{end}}>30</option>
+                    <option value="50" {{if eq .Prefs.ResultsPerPage "50"}}selected{{end}}>50</option>
+                    <option value="100" {{if eq .Prefs.ResultsPerPage "100"}}selected{{end}}>100</option>
+                </select>
+            </div>
+
+            <div class="form-group toggle-group">
+                <label class="toggle">
+                    <input type="checkbox" id="new-tab" name="new_tab" role="switch" aria-checked="{{if .Prefs.NewTab}}true{{else}}false{{end}}" {{if .Prefs.NewTab}}checked{{end}}>
+                    <span class="toggle-track">
+                        <span class="toggle-thumb"></span>
+                    </span>
+                    <span class="toggle-label">{{t "preferences.open_results_new_tab"}}</span>
+                </label>
+            </div>
+
+            <div class="form-group toggle-group">
+                <label class="toggle">
+                    <input type="checkbox" id="infinite-scroll" name="infinite_scroll" role="switch" aria-checked="{{if .Prefs.InfiniteScroll}}true{{else}}false{{end}}" {{if .Prefs.InfiniteScroll}}checked{{end}}>
+                    <span class="toggle-track">
+                        <span class="toggle-thumb"></span>
+                    </span>
+                    <span class="toggle-label">{{t "preferences.infinite_scroll"}}</span>
+                </label>
+            </div>
+
+            <div class="form-group toggle-group">
+                <label class="toggle">
+                    <input type="checkbox" id="keyboard-shortcuts" name="keyboard_shortcuts" role="switch" aria-checked="{{if .Prefs.KeyboardShortcuts}}true{{else}}false{{end}}" {{if .Prefs.KeyboardShortcuts}}checked{{end}}>
+                    <span class="toggle-track">
+                        <span class="toggle-thumb"></span>
+                    </span>
+                    <span class="toggle-label">{{t "accessibility.keyboard_shortcuts_title"}}</span>
+                </label>
+            </div>
+        </form>
+    </div>
+
+    <div class="preferences-section">
+        <h2>{{t "preferences.search_bangs_heading"}}</h2>
+        <p class="help-text">
+            {{t "preferences.search_bangs_help_prefix"}} <code>!g</code> {{t "preferences.search_bangs_help_google"}},
+            <code>!w</code> {{t "preferences.search_bangs_help_wikipedia"}}, <code>!yt</code> {{t "preferences.search_bangs_help_youtube"}}.
+        </p>
+
+        <div class="bang-categories">
+            <h3>{{t "preferences.available_bangs"}}</h3>
+            <div class="category-filter">
+                <button class="filter-btn active" data-category="all">{{t "common.all"}}</button>
+                {{range .Data.categories}}
+                <button class="filter-btn" data-category="{{.}}">{{. | title}}</button>
+                {{end}}
+            </div>
+
+            <div class="bang-list" id="bang-list">
+                {{range .Data.bangs}}
+                <div class="bang-item" data-category="{{.Category}}">
+                    <span class="bang-shortcut">!{{.Shortcut}}</span>
+                    <span class="bang-name">{{.Name}}</span>
+                    {{if .Description}}
+                    <span class="bang-description">{{.Description}}</span>
+                    {{end}}
+                </div>
+                {{end}}
+            </div>
+        </div>
+    </div>
+
+    <div class="preferences-section">
+        <h2>{{t "preferences.homepage_widgets_heading"}}</h2>
+        <p class="help-text">{{t "preferences.homepage_widgets_help"}}</p>
+
+        {{/* Widget toggles are associated with the general-settings form via
+             the form="general-settings" attribute on each checkbox below,
+             rather than being their own <form>, so there is a single Save
+             action for the whole preferences page (see AI.md PART 16 "Reuse
+             Before Creating") - no-JS clients still submit these fields
+             because the browser includes form-associated controls in the
+             referenced form's POST regardless of DOM position. */}}
+        <div class="widget-toggles" id="widget-toggles">
+                <div class="widget-category">
+                    <h3>{{t "preferences.widget_category_tools"}}</h3>
+                    <div class="widget-toggle-group">
+                        <label class="widget-toggle">
+                            <input type="checkbox" name="widget" value="clock" form="general-settings" {{if inSlice .EnabledWidgets "clock"}}checked{{end}}>
+                            <span class="widget-icon">🕐</span>
+                            <span class="widget-name">{{t "widgets.clock"}}</span>
+                        </label>
+                        <label class="widget-toggle">
+                            <input type="checkbox" name="widget" value="calculator" form="general-settings" {{if inSlice .EnabledWidgets "calculator"}}checked{{end}}>
+                            <span class="widget-icon">🔢</span>
+                            <span class="widget-name">{{t "widgets.calculator"}}</span>
+                        </label>
+                        <label class="widget-toggle">
+                            <input type="checkbox" name="widget" value="calendar" form="general-settings" {{if inSlice .EnabledWidgets "calendar"}}checked{{end}}>
+                            <span class="widget-icon">📅</span>
+                            <span class="widget-name">{{t "widgets.calendar"}}</span>
+                        </label>
+                        <label class="widget-toggle">
+                            <input type="checkbox" name="widget" value="converter" form="general-settings" {{if inSlice .EnabledWidgets "converter"}}checked{{end}}>
+                            <span class="widget-icon">🔄</span>
+                            <span class="widget-name">{{t "widgets.unit_converter"}}</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="widget-category">
+                    <h3>{{t "preferences.widget_category_data"}}</h3>
+                    <div class="widget-toggle-group">
+                        <label class="widget-toggle">
+                            <input type="checkbox" name="widget" value="weather" form="general-settings" {{if inSlice .EnabledWidgets "weather"}}checked{{end}}>
+                            <span class="widget-icon">🌤️</span>
+                            <span class="widget-name">{{t "widgets.weather"}}</span>
+                        </label>
+                        <label class="widget-toggle">
+                            <input type="checkbox" name="widget" value="news" form="general-settings" {{if inSlice .EnabledWidgets "news"}}checked{{end}}>
+                            <span class="widget-icon">📰</span>
+                            <span class="widget-name">{{t "search.categories.news"}}</span>
+                        </label>
+                        <label class="widget-toggle">
+                            <input type="checkbox" name="widget" value="stocks" form="general-settings" {{if inSlice .EnabledWidgets "stocks"}}checked{{end}}>
+                            <span class="widget-icon">📈</span>
+                            <span class="widget-name">{{t "widgets_ui.widget_name_stocks"}}</span>
+                        </label>
+                        <label class="widget-toggle">
+                            <input type="checkbox" name="widget" value="crypto" form="general-settings" {{if inSlice .EnabledWidgets "crypto"}}checked{{end}}>
+                            <span class="widget-icon">💰</span>
+                            <span class="widget-name">{{t "widgets_ui.widget_name_crypto"}}</span>
+                        </label>
+                        <label class="widget-toggle">
+                            <input type="checkbox" name="widget" value="sports" form="general-settings" {{if inSlice .EnabledWidgets "sports"}}checked{{end}}>
+                            <span class="widget-icon">⚽</span>
+                            <span class="widget-name">{{t "widgets_ui.widget_name_sports"}}</span>
+                        </label>
+                        <label class="widget-toggle">
+                            <input type="checkbox" name="widget" value="rss" form="general-settings" {{if inSlice .EnabledWidgets "rss"}}checked{{end}}>
+                            <span class="widget-icon">📡</span>
+                            <span class="widget-name">{{t "widgets_ui.widget_name_rss"}}</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="widget-category">
+                    <h3>{{t "preferences.widget_category_user"}}</h3>
+                    <div class="widget-toggle-group">
+                        <label class="widget-toggle">
+                            <input type="checkbox" name="widget" value="quicklinks" form="general-settings" {{if inSlice .EnabledWidgets "quicklinks"}}checked{{end}}>
+                            <span class="widget-icon">🔗</span>
+                            <span class="widget-name">{{t "widgets_ui.widget_name_quicklinks"}}</span>
+                        </label>
+                        <label class="widget-toggle">
+                            <input type="checkbox" name="widget" value="notes" form="general-settings" {{if inSlice .EnabledWidgets "notes"}}checked{{end}}>
+                            <span class="widget-icon">📝</span>
+                            <span class="widget-name">{{t "widgets_ui.widget_name_notes"}}</span>
+                        </label>
+                    </div>
+                </div>
+        </div>
+
+        <p class="help-text mt-1">
+            {{t "preferences.homepage_widgets_tip"}}
+        </p>
+    </div>
+
+    <div class="preferences-section">
+        <h2>{{t "preferences.custom_bangs_heading"}}</h2>
+        <p class="help-text">{{t "preferences.custom_bangs_help"}}</p>
+
+        <div id="custom-bangs-list" class="custom-bangs-list">
+            <!-- Custom bangs will be populated by JavaScript -->
+        </div>
+
+        <form id="add-custom-bang" class="add-bang-form">
+            <h3>{{t "preferences.add_custom_bang"}}</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="bang-shortcut">{{t "preferences.shortcut_label"}}</label>
+                    <input type="text" id="bang-shortcut" name="shortcut" placeholder="{{t "preferences.shortcut_placeholder"}}" required pattern="[a-zA-Z0-9_-]+">
+                </div>
+                <div class="form-group">
+                    <label for="bang-name">{{t "preferences.name_label"}}</label>
+                    <input type="text" id="bang-name" name="name" placeholder="{{t "preferences.name_placeholder"}}" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="bang-url">{{t "preferences.url_template_label"}}</label>
+                <input type="url" id="bang-url" name="url" placeholder="{{t "preferences.url_template_placeholder"}}" required>
+                <small>{{t "preferences.url_template_help_prefix"}} <code>{query}</code> {{t "preferences.url_template_help_suffix"}}</small>
+            </div>
+            <div class="form-group">
+                <label for="bang-category">{{t "search.category"}}</label>
+                <input type="text" id="bang-category" name="category" placeholder="{{t "preferences.category_placeholder"}}" value="custom">
+            </div>
+            <button type="submit" class="btn btn-primary">{{t "preferences.add_bang"}}</button>
+        </form>
+    </div>
+
+    <div class="preferences-section">
+        <h2>{{t "preferences.add_to_browser_heading"}}</h2>
+        <p class="help-text">{{t "preferences.add_to_browser_help"}}</p>
+
+        <div class="browser-add">
+            <p>
+                {{t "preferences.add_to_browser_instructions"}}
+            </p>
+            <p>
+                <strong>{{t "preferences.opensearch_url_label"}}:</strong>
+                <code id="opensearch-url">{{.ServerURL}}/opensearch.xml</code>
+            </p>
+            <div class="form-group">
+                <label for="custom-engine-name">{{t "preferences.custom_engine_name_optional"}}</label>
+                <input type="text" id="custom-engine-name" placeholder="{{.Config.Server.Title}}">
+                <button type="button" id="copy-opensearch" class="btn btn-secondary">{{t "preferences.copy_opensearch_url"}}</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="preferences-section">
+        <h2>{{t "preferences.data_management_heading"}}</h2>
+        <p class="help-text">{{t "preferences.data_management_help"}}</p>
+        <div class="data-actions">
+            <button type="button" id="export-prefs" class="btn btn-secondary">{{t "preferences.export_preferences"}}</button>
+            <button type="button" id="import-prefs" class="btn btn-secondary">{{t "preferences.import_preferences"}}</button>
+            <button type="button" id="reset-prefs" class="btn btn-danger">{{t "preferences.reset_all_preferences"}}</button>
+        </div>
+        <input type="file" id="import-file" accept=".json" class="hidden">
+    </div>
+
+    <div class="preferences-section">
+        <h2>{{t "preferences.sync_heading"}}</h2>
+        <p class="help-text">{{t "preferences.sync_help"}}</p>
+
+        <div class="form-group">
+            <label for="sync-url">{{t "preferences.sync_url_label"}}</label>
+            <input type="text" id="sync-url" readonly>
+        </div>
+
+        <div class="form-group">
+            <label for="sync-code">{{t "preferences.sync_code_label"}}</label>
+            <input type="text" id="sync-code" readonly>
+        </div>
+
+        <div class="data-actions">
+            <button type="button" id="copy-sync-prefs" class="btn btn-secondary">{{t "preferences.copy_preferences"}}</button>
+            <a id="qr-sync-prefs" class="btn btn-secondary" href="/direct/qr/" target="_blank" rel="noopener noreferrer">{{t "preferences.qr_code"}}</a>
+        </div>
+
+        <div class="form-group">
+            <label for="sync-paste">{{t "preferences.sync_paste_label"}}</label>
+            <input type="text" id="sync-paste" placeholder="{{t "preferences.sync_paste_placeholder"}}">
+        </div>
+
+        <div class="data-actions">
+            <button type="button" id="apply-sync-prefs" class="btn btn-secondary">{{t "preferences.apply_preferences"}}</button>
+        </div>
+    </div>
+
+    <div class="preferences-actions">
+        <button type="button" id="cancel-preferences" class="btn btn-secondary" data-action="go-back">{{t "common.cancel"}}</button>
+        <button type="submit" form="general-settings" id="save-preferences" class="btn btn-primary">{{t "preferences.save_return"}}</button>
+        <span id="save-status" class="save-status"></span>
+    </div>
+</div>
+{{/* Per AI.md PART 16: NO inline CSS/JS - all styles in main.css, scripts in app.js */}}
+{{end}}

@@ -1,0 +1,21 @@
+Subject: {subject_prefix} - {app_name}
+---
+{heading}
+
+{label_from} {app_name} ({fqdn})
+{label_time} {timestamp}
+
+{intro}
+
+{label_current_version} {current_version}
+{label_new_version}     {new_version}
+{label_release_date}    {release_date}
+
+{label_release_notes}
+{release_notes}
+
+{label_view_update} {update_url}
+
+--
+{app_name}
+{app_url}

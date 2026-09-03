@@ -1,0 +1,17 @@
+# CODEOWNERS for apimgr/search
+# All paths relative to repository root.
+# Last matching pattern wins.
+
+# Catch-all: all files require review from maintainers
+* @apimgr/maintainers
+
+# Security-sensitive paths require additional review
+docker/Dockerfile @apimgr/maintainers
+docker/Dockerfile.aio @apimgr/maintainers
+.github/workflows/ @apimgr/maintainers
+src/auth/ @apimgr/maintainers
+src/admin/ @apimgr/maintainers
+src/ssl/ @apimgr/maintainers
+src/config/ @apimgr/maintainers
+src/server/middleware.go @apimgr/maintainers
+src/server/auth.go @apimgr/maintainers

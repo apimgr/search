@@ -1,0 +1,2149 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Search API",
+    "description": "Privacy-respecting metasearch engine API",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Search Support"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "/api/v1",
+      "description": "API v1"
+    }
+  ],
+  "tags": [
+    {
+      "name": "System",
+      "description": "System health and information"
+    },
+    {
+      "name": "Search",
+      "description": "Search operations"
+    },
+    {
+      "name": "Engines",
+      "description": "Search engine management"
+    },
+    {
+      "name": "Categories",
+      "description": "Search categories"
+    },
+    {
+      "name": "Widgets",
+      "description": "Homepage widgets"
+    },
+    {
+      "name": "Server",
+      "description": "Server information pages"
+    },
+    {
+      "name": "Auth",
+      "description": "Authentication operations"
+    },
+    {
+      "name": "Users",
+      "description": "User account management"
+    }
+  ],
+  "paths": {
+    "/healthz": {
+      "get": {
+        "summary": "Health check",
+        "description": "Returns the health status of the API. Supports .txt extension for plain text output.",
+        "operationId": "getHealthz",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "API is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "example": "OK"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/info": {
+      "get": {
+        "summary": "Server information",
+        "description": "Returns detailed information about the server. Supports .txt extension for plain text output.",
+        "operationId": "getInfo",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "Server information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InfoResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/search": {
+      "get": {
+        "summary": "Search",
+        "description": "Perform a search query across multiple engines",
+        "operationId": "search",
+        "tags": [
+          "Search"
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "Search query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "description": "Search category",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "general",
+                "images",
+                "videos",
+                "news",
+                "maps"
+              ],
+              "default": "general"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page number",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Results per page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "safe_search",
+            "in": "query",
+            "description": "Safe search level",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "off",
+                "moderate",
+                "strict"
+              ],
+              "default": "moderate"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Language preference",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "engines",
+            "in": "query",
+            "description": "Comma-separated list of engines to use",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Search (POST)",
+        "description": "Perform a search query with JSON body",
+        "operationId": "searchPost",
+        "tags": [
+          "Search"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/search/related": {
+      "get": {
+        "summary": "Related searches",
+        "description": "Get related search suggestions for a query",
+        "operationId": "getRelatedSearches",
+        "tags": [
+          "Search"
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "Search query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Related searches",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelatedSearchesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/autocomplete": {
+      "get": {
+        "summary": "Autocomplete suggestions",
+        "description": "Get autocomplete suggestions for a partial query",
+        "operationId": "autocomplete",
+        "tags": [
+          "Search"
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "Partial search query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Autocomplete suggestions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutocompleteResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/engines": {
+      "get": {
+        "summary": "List search engines",
+        "description": "Get list of all available search engines",
+        "operationId": "listEngines",
+        "tags": [
+          "Engines"
+        ],
+        "responses": {
+          "200": {
+            "description": "List of engines",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnginesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/engines/{id}": {
+      "get": {
+        "summary": "Get engine by ID",
+        "description": "Get information about a specific search engine",
+        "operationId": "getEngine",
+        "tags": [
+          "Engines"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Engine ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Engine information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EngineResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Engine not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/categories": {
+      "get": {
+        "summary": "List categories",
+        "description": "Get list of all search categories",
+        "operationId": "listCategories",
+        "tags": [
+          "Categories"
+        ],
+        "responses": {
+          "200": {
+            "description": "List of categories",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoriesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/bangs": {
+      "get": {
+        "summary": "List bang shortcuts",
+        "description": "Get all available bang shortcuts for quick navigation",
+        "operationId": "listBangs",
+        "tags": [
+          "Search"
+        ],
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "description": "Filter by category",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Search filter",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of bangs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BangsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/widgets": {
+      "get": {
+        "summary": "List available widgets",
+        "description": "Get list of all available homepage widgets",
+        "operationId": "listWidgets",
+        "tags": [
+          "Widgets"
+        ],
+        "responses": {
+          "200": {
+            "description": "List of widgets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WidgetsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/widgets/{type}": {
+      "get": {
+        "summary": "Get widget data",
+        "description": "Get data for a specific widget type",
+        "operationId": "getWidgetData",
+        "tags": [
+          "Widgets"
+        ],
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "description": "Widget type (weather, news, stocks, crypto, sports, rss)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Widget data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WidgetDataResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Widget not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/instant": {
+      "get": {
+        "summary": "Get instant answer",
+        "description": "Get instant answer for a query (calculator, definitions, unit conversion, etc.)",
+        "operationId": "getInstantAnswer",
+        "tags": [
+          "Search"
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "Query for instant answer",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Instant answer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstantAnswerResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/direct/{type}": {
+      "get": {
+        "summary": "Get direct answer",
+        "description": "Get full-page direct answer for specific content types",
+        "operationId": "getDirectAnswer",
+        "tags": [
+          "Search"
+        ],
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "description": "Direct answer type",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "Query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Direct answer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectAnswerResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/server/about": {
+      "get": {
+        "summary": "About page",
+        "description": "Get server about information",
+        "operationId": "getServerAbout",
+        "tags": [
+          "Server"
+        ],
+        "responses": {
+          "200": {
+            "description": "About information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerAboutResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/server/privacy": {
+      "get": {
+        "summary": "Privacy policy",
+        "description": "Get server privacy policy",
+        "operationId": "getServerPrivacy",
+        "tags": [
+          "Server"
+        ],
+        "responses": {
+          "200": {
+            "description": "Privacy policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerPageResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/server/help": {
+      "get": {
+        "summary": "Help page",
+        "description": "Get server help information",
+        "operationId": "getServerHelp",
+        "tags": [
+          "Server"
+        ],
+        "responses": {
+          "200": {
+            "description": "Help information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerPageResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/server/terms": {
+      "get": {
+        "summary": "Terms of service",
+        "description": "Get server terms of service",
+        "operationId": "getServerTerms",
+        "tags": [
+          "Server"
+        ],
+        "responses": {
+          "200": {
+            "description": "Terms of service",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerPageResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "Login",
+        "description": "Authenticate user and create session",
+        "operationId": "login",
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "summary": "Logout",
+        "description": "End current session",
+        "operationId": "logout",
+        "tags": [
+          "Auth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Logout successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/reset": {
+      "post": {
+        "summary": "Reset password",
+        "description": "Complete password reset with token",
+        "operationId": "resetPassword",
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password reset successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or expired token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/session": {
+      "get": {
+        "summary": "Get current session",
+        "description": "Get information about the current session",
+        "operationId": "getSession",
+        "tags": [
+          "Auth"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "cookieAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "API token authentication. Use token with prefix: usr_ for user tokens."
+      },
+      "cookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "session",
+        "description": "Session cookie authentication"
+      }
+    },
+    "schemas": {
+      "SuccessResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "example": true
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/APIMeta"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "example": false
+          },
+          "error": {
+            "type": "string",
+            "description": "Error code"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable error message"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/APIMeta"
+          }
+        }
+      },
+      "APIMeta": {
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string"
+          },
+          "process_time_ms": {
+            "type": "number"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "project": {
+                "$ref": "#/components/schemas/ProjectInfo"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "healthy",
+                  "unhealthy",
+                  "degraded"
+                ]
+              },
+              "version": {
+                "type": "string"
+              },
+              "go_version": {
+                "type": "string"
+              },
+              "build": {
+                "$ref": "#/components/schemas/BuildInfo"
+              },
+              "uptime": {
+                "type": "string"
+              },
+              "mode": {
+                "type": "string"
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "features": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "boolean"
+                }
+              },
+              "checks": {
+                "$ref": "#/components/schemas/ChecksInfo"
+              },
+              "stats": {
+                "$ref": "#/components/schemas/StatsInfo"
+              }
+            }
+          }
+        }
+      },
+      "ProjectInfo": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "tagline": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      },
+      "BuildInfo": {
+        "type": "object",
+        "properties": {
+          "commit": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          }
+        }
+      },
+      "ChecksInfo": {
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": "string"
+          },
+          "cache": {
+            "type": "string"
+          },
+          "disk": {
+            "type": "string"
+          },
+          "scheduler": {
+            "type": "string"
+          },
+          "tor": {
+            "type": "string"
+          }
+        }
+      },
+      "StatsInfo": {
+        "type": "object",
+        "properties": {
+          "requests_total": {
+            "type": "integer"
+          },
+          "requests_24h": {
+            "type": "integer"
+          },
+          "active_connections": {
+            "type": "integer"
+          }
+        }
+      },
+      "InfoResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "uptime": {
+                "type": "string"
+              },
+              "mode": {
+                "type": "string"
+              },
+              "engines": {
+                "type": "object",
+                "properties": {
+                  "total": {
+                    "type": "integer"
+                  },
+                  "enabled": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "system": {
+                "type": "object",
+                "properties": {
+                  "go_version": {
+                    "type": "string"
+                  },
+                  "num_cpu": {
+                    "type": "integer"
+                  },
+                  "num_goroutine": {
+                    "type": "integer"
+                  },
+                  "mem_alloc": {
+                    "type": "string"
+                  }
+                }
+              },
+              "features": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      },
+      "SearchRequest": {
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "general",
+              "images",
+              "videos",
+              "news",
+              "maps"
+            ],
+            "default": "general"
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 1
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20
+          },
+          "engines": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "safe_search": {
+            "type": "string",
+            "enum": [
+              "off",
+              "moderate",
+              "strict"
+            ]
+          },
+          "time_range": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          }
+        }
+      },
+      "SearchResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string"
+              },
+              "category": {
+                "type": "string"
+              },
+              "results": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/SearchResult"
+                }
+              },
+              "total_results": {
+                "type": "integer"
+              },
+              "page": {
+                "type": "integer"
+              },
+              "limit": {
+                "type": "integer"
+              },
+              "has_more": {
+                "type": "boolean"
+              },
+              "search_time_ms": {
+                "type": "number"
+              },
+              "engines_used": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/APIMeta"
+          }
+        }
+      },
+      "SearchResult": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "description": {
+            "type": "string"
+          },
+          "engine": {
+            "type": "string"
+          },
+          "score": {
+            "type": "number"
+          },
+          "category": {
+            "type": "string"
+          },
+          "thumbnail": {
+            "type": "string",
+            "format": "uri"
+          },
+          "date": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          }
+        }
+      },
+      "RelatedSearchesResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string"
+              },
+              "related": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "AutocompleteResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "EnginesResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EngineInfo"
+            }
+          }
+        }
+      },
+      "EngineResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "$ref": "#/components/schemas/EngineInfo"
+          }
+        }
+      },
+      "EngineInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "priority": {
+            "type": "integer"
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": {
+            "type": "string"
+          },
+          "homepage": {
+            "type": "string",
+            "format": "uri"
+          }
+        }
+      },
+      "CategoriesResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CategoryInfo"
+            }
+          }
+        }
+      },
+      "CategoryInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          }
+        }
+      },
+      "BangsResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "bangs": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/BangInfo"
+                }
+              },
+              "total": {
+                "type": "integer"
+              },
+              "categories": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "BangInfo": {
+        "type": "object",
+        "properties": {
+          "shortcut": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "category": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "WidgetsResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WidgetInfo"
+            }
+          }
+        }
+      },
+      "WidgetInfo": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          }
+        }
+      },
+      "WidgetDataResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "data": {
+                "type": "object"
+              },
+              "updated_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "InstantAnswerResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string"
+              },
+              "found": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "DirectAnswerResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "content": {
+                "type": "object"
+              },
+              "source": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "ServerAboutResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "tagline": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "features": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "links": {
+                "type": "object",
+                "properties": {
+                  "website": {
+                    "type": "string"
+                  },
+                  "documentation": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "ServerPageResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              },
+              "last_updated": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "RegisterRequest": {
+        "type": "object",
+        "required": [
+          "username",
+          "email",
+          "password"
+        ],
+        "properties": {
+          "username": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 32
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "properties": {
+          "username": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "remember_me": {
+            "type": "boolean",
+            "default": false
+          },
+          "totp_code": {
+            "type": "string",
+            "description": "6-digit TOTP code if 2FA is enabled"
+          }
+        }
+      },
+      "AuthResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "user": {
+                "$ref": "#/components/schemas/UserInfo"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "user": {
+                "$ref": "#/components/schemas/UserInfo"
+              },
+              "session_id": {
+                "type": "string"
+              },
+              "expires_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "requires_2fa": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "UserInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "username": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "avatar_url": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "email_verified": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_login": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ForgotPasswordRequest": {
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
+        }
+      },
+      "ResetPasswordRequest": {
+        "type": "object",
+        "required": [
+          "token",
+          "new_password"
+        ],
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "new_password": {
+            "type": "string",
+            "minLength": 8
+          }
+        }
+      },
+      "RecoveryKeyRequest": {
+        "type": "object",
+        "required": [
+          "username",
+          "recovery_key"
+        ],
+        "properties": {
+          "username": {
+            "type": "string"
+          },
+          "recovery_key": {
+            "type": "string"
+          }
+        }
+      },
+      "VerifyEmailRequest": {
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        }
+      },
+      "TwoFactorVerifyRequest": {
+        "type": "object",
+        "required": [
+          "code",
+          "session_id"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[0-9]{6}$"
+          },
+          "session_id": {
+            "type": "string"
+          }
+        }
+      },
+      "SessionResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "user": {
+                "$ref": "#/components/schemas/UserInfo"
+              },
+              "session": {
+                "$ref": "#/components/schemas/SessionInfo"
+              }
+            }
+          }
+        }
+      },
+      "SessionInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "device_name": {
+            "type": "string"
+          },
+          "ip_address": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_used": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "is_current": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UserProfileResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "user": {
+                "$ref": "#/components/schemas/UserInfo"
+              },
+              "email_info": {
+                "type": "object"
+              }
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/APIMeta"
+          }
+        }
+      },
+      "UpdateProfileRequest": {
+        "type": "object",
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "bio": {
+            "type": "string"
+          },
+          "avatar_url": {
+            "type": "string"
+          },
+          "notification_email": {
+            "type": "string",
+            "format": "email"
+          }
+        }
+      },
+      "ChangePasswordRequest": {
+        "type": "object",
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "properties": {
+          "current_password": {
+            "type": "string"
+          },
+          "new_password": {
+            "type": "string",
+            "minLength": 8
+          }
+        }
+      },
+      "SessionsResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessions": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/SessionInfo"
+                }
+              }
+            }
+          }
+        }
+      },
+      "TokensResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "tokens": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/TokenInfo"
+                }
+              }
+            }
+          }
+        }
+      },
+      "TokenInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "prefix": {
+            "type": "string",
+            "description": "Token prefix (e.g., usr_xxxx)"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_used": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CreateTokenRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "expires_in_days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 365
+          }
+        }
+      },
+      "NewTokenResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "token": {
+                "type": "string",
+                "description": "Full token value (only shown once)"
+              },
+              "token_info": {
+                "$ref": "#/components/schemas/TokenInfo"
+              }
+            }
+          }
+        }
+      },
+      "TwoFactorStatusResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "setup_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "recovery_keys_remaining": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "Setup2FARequest": {
+        "type": "object",
+        "required": [
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string"
+          }
+        }
+      },
+      "Setup2FAResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "secret": {
+                "type": "string",
+                "description": "TOTP secret key"
+              },
+              "qr_code": {
+                "type": "string",
+                "description": "Base64 encoded QR code image"
+              },
+              "otpauth_url": {
+                "type": "string",
+                "description": "otpauth:// URL for manual entry"
+              }
+            }
+          }
+        }
+      },
+      "Enable2FARequest": {
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[0-9]{6}$"
+          }
+        }
+      },
+      "Enable2FAResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "recovery_keys": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "One-time recovery keys (store safely)"
+              }
+            }
+          }
+        }
+      },
+      "Disable2FARequest": {
+        "type": "object",
+        "required": [
+          "password",
+          "code"
+        ],
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[0-9]{6}$"
+          }
+        }
+      },
+      "RecoveryKeysStatusResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "total": {
+                "type": "integer"
+              },
+              "remaining": {
+                "type": "integer"
+              },
+              "generated_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      },
+      "RegenerateRecoveryKeysRequest": {
+        "type": "object",
+        "required": [
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string"
+          }
+        }
+      },
+      "RecoveryKeysResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "recovery_keys": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "New recovery keys (store safely, old keys are invalidated)"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

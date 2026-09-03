@@ -1,0 +1,123 @@
+{{define "content"}}
+<div class="static-page about-page">
+    <header class="page-header about-header">
+        <h1>{{.Config.Server.Branding.Title}}</h1>
+        <p class="tagline">{{.Config.Server.Description}}</p>
+        <div class="version-info">
+            <span class="version-badge">{{version}}</span>
+        </div>
+    </header>
+
+    {{if .Config.Server.Pages.About.Content}}
+    <div class="page-content markdown">
+        {{.Config.Server.Pages.About.Content | safe}}
+    </div>
+    {{else}}
+    <div class="page-content">
+        {{/* Features section */}}
+        <section class="about-section">
+            <h2>{{t "about.features_heading"}}</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <span class="feature-icon">🔒</span>
+                    <h3>{{t "about.privacy_first_title"}}</h3>
+                    <p>{{t "about.privacy_first_description"}}</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">🌐</span>
+                    <h3>{{t "about.multiple_sources_title"}}</h3>
+                    <p>{{t "about.multiple_sources_description"}}</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">⚡</span>
+                    <h3>{{t "about.instant_answers_title"}}</h3>
+                    <p>{{t "about.instant_answers_description"}}</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">💨</span>
+                    <h3>{{t "about.bang_commands_title"}}</h3>
+                    <p>{{t "about.bang_commands_description_prefix"}} <code>!g</code>, <code>!w</code>, <code>!yt</code> {{t "about.bang_commands_description_suffix"}}</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">🎯</span>
+                    <h3>{{t "about.direct_answers_title"}}</h3>
+                    <p>{{t "about.direct_answers_description"}}</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">🧅</span>
+                    <h3>{{t "about.tor_support_title"}}</h3>
+                    <p>{{t "about.tor_support_description"}}</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">📱</span>
+                    <h3>{{t "about.responsive_design_title"}}</h3>
+                    <p>{{t "about.responsive_design_description"}}</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">🚫</span>
+                    <h3>{{t "about.no_javascript_title"}}</h3>
+                    <p>{{t "about.no_javascript_description"}}</p>
+                </div>
+            </div>
+        </section>
+
+        {{/* API Documentation */}}
+        <section class="about-section">
+            <h2>{{t "about.api_docs_heading"}}</h2>
+            <p>{{t "about.api_docs_description"}}</p>
+            <div class="api-links">
+                <a href="/openapi" class="api-link">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                    OpenAPI / Swagger
+                </a>
+                <a href="/graphql" class="api-link">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                    </svg>
+                    GraphQL
+                </a>
+                <a href="/server/help" class="api-link">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                    </svg>
+                    {{t "about.help_usage_guide"}}
+                </a>
+            </div>
+        </section>
+
+        {{/* Open Source */}}
+        <section class="about-section">
+            <h2>{{t "about.open_source_heading"}}</h2>
+            <p>{{t "about.open_source_description"}}</p>
+            {{if .Config.Server.Branding.SourceCodeURL}}
+            <div class="source-links">
+                <a href="{{.Config.Server.Branding.SourceCodeURL}}" target="_blank" rel="noopener" class="source-link">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+                    </svg>
+                    {{t "about.view_source_code"}}
+                </a>
+            </div>
+            {{end}}
+        </section>
+
+        {{/* Version & Build Info */}}
+        <section class="about-section version-section">
+            <h2>{{t "about.version_info_heading"}}</h2>
+            <dl class="version-grid">
+                <dt>{{t "about.version_label"}}</dt>
+                <dd><code>{{version}}</code></dd>
+                <dt>{{t "about.build_date_label"}}</dt>
+                <dd><time>{{.BuildDate}}</time></dd>
+            </dl>
+        </section>
+    </div>
+    {{end}}
+</div>
+{{end}}
