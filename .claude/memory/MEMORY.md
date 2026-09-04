@@ -1,3 +1,9 @@
+---
+name: memory-index
+description: Index of durable, project-specific knowledge for the search project
+type: project
+---
+
 # Project Memory Index
 
 Durable, project-specific knowledge for `search` that accumulates during

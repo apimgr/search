@@ -3,6 +3,7 @@
 [![CI](https://github.com/apimgr/search/actions/workflows/ci.yml/badge.svg)](https://github.com/apimgr/search/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/apimgr/search)](https://github.com/apimgr/search/releases)
 [![License](https://img.shields.io/github/license/apimgr/search)](LICENSE.md)
+[![Docs](https://readthedocs.org/projects/apimgr-search/badge/?version=latest)](https://apimgr-search.readthedocs.io)
 
 ## About
 

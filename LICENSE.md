@@ -26,6 +26,7 @@ SOFTWARE.
 
 | Library | Version | License | Copyright |
 |---------|---------|---------|-----------|
+| filippo.io/edwards25519 | v1.1.0 | BSD-3-Clause | 2009 The Go Authors |
 | github.com/ProtonMail/gopenpgp/v2 | v2.10.0 | MIT | 2020 Proton AG |
 | github.com/alicebob/miniredis/v2 | v2.38.0 | MIT | 2014 Harmen |
 | github.com/charmbracelet/bubbles | v1.0.0 | MIT | 2020-present Charm |
@@ -40,17 +41,18 @@ SOFTWARE.
 | github.com/graphql-go/graphql | v0.8.1 | MIT | 2015 GraphQL Contributors |
 | github.com/oklog/ulid/v2 | v2.1.1 | Apache-2.0 | 2016 The oklog authors |
 | github.com/oschwald/maxminddb-golang | v1.13.1 | ISC | 2015 oschwald |
+| github.com/pires/go-proxyproto | v0.15.0 | Apache-2.0 | 2019 Paulo Pires |
 | github.com/prometheus/client_golang | v1.23.2 | Apache-2.0 | 2012-2015 The Prometheus Authors |
 | github.com/redis/go-redis/v9 | v9.21.0 | BSD-2-Clause | 2013 The go-redis Authors |
 | github.com/refraction-networking/utls | v1.8.2 | BSD-3-Clause | The Go Authors |
 | github.com/rs/cors | v1.11.1 | MIT | 2014 Olivier Poitrey |
 | github.com/skip2/go-qrcode | v0.0.0-20200617195104 | MIT | 2014 Tom Harwood |
 | github.com/tursodatabase/libsql-client-go | v0.0.0-20240902231107 | MIT | 2023-2024 Turso Authors |
-| golang.org/x/crypto | v0.53.0 | BSD-3-Clause | 2009 The Go Authors |
-| golang.org/x/net | v0.56.0 | BSD-3-Clause | 2009 The Go Authors |
-| golang.org/x/sys | v0.46.0 | BSD-3-Clause | 2009 The Go Authors |
-| golang.org/x/term | v0.44.0 | BSD-3-Clause | 2009 The Go Authors |
-| golang.org/x/text | v0.39.0 | BSD-3-Clause | 2009 The Go Authors |
+| golang.org/x/crypto | v0.55.0 | BSD-3-Clause | 2009 The Go Authors |
+| golang.org/x/net | v0.58.0 | BSD-3-Clause | 2009 The Go Authors |
+| golang.org/x/sys | v0.47.0 | BSD-3-Clause | 2009 The Go Authors |
+| golang.org/x/term | v0.45.0 | BSD-3-Clause | 2009 The Go Authors |
+| golang.org/x/text | v0.41.0 | BSD-3-Clause | 2009 The Go Authors |
 | golang.org/x/time | v0.15.0 | BSD-3-Clause | 2009 The Go Authors |
 | gopkg.in/natefinch/lumberjack.v2 | v2.2.1 | MIT | 2014 Nate Finch |
 | gopkg.in/yaml.v3 | v3.0.1 | MIT | 2011-2019 Canonical Ltd |

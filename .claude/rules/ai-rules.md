@@ -42,9 +42,24 @@ Read: `AI.md` PART 0 (AI Assistant Rules), PART 1 (Critical Rules).
 | client | CLI binary `search-cli` - REQUIRED |
 | Operator | Person who deploys and manages the server via CLI and `server.yml` |
 
+## QUICK REFERENCE
+| File | Role |
+|------|------|
+| `AI.md` | THE HOW — read-only implementation spec, source of truth |
+| `IDEA.md` | THE WHAT — product definition and project variables |
+| `CLAUDE.md` | Short loader, auto-read every conversation |
+| `.claude/rules/*.md` | Per-topic condensed rules pointing back at PARTs |
+| `TODO.AI.md` | Current implementation backlog |
+
+Reading a PART: `grep -n "^# PART N" AI.md`, then read only that slice.
+
 ## COMPLIANCE CHECK
 Before completing ANY task:
 - [ ] Read relevant PART(s) in AI.md
 - [ ] Implementation matches spec EXACTLY
 - [ ] No guessing - all decisions from spec
 - [ ] Docs updated if code changed
+
+---
+
+For complete details, see AI.md PART 0, 1

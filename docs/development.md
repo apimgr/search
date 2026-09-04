@@ -133,28 +133,31 @@ func DefaultRegistry() *Registry {
 
 ### Linting
 
+Static analysis runs inside the project toolchain image, never on the host:
+
 ```bash
-make lint
+docker run --rm -v "$PWD:/app" -w /app -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false \
+  casjaysdev/go:latest sh -c 'go vet ./... && staticcheck ./...'
 ```
 
 ## Testing
 
-### Unit Tests
+`make test` is the single entry point. It runs the whole suite in Docker with
+coverage enforcement, and includes the translation-file validation
+(`TestKeyConsistency` / `TestLocalesFS` in `src/common/i18n`), the unit tests
+and the integration tests.
 
 ```bash
-go test ./src/...
+make test
 ```
 
-### Integration Tests
+Environment-specific runners are available in `tests/`:
 
 ```bash
-make test-integration
-```
-
-### Coverage
-
-```bash
-make coverage
+tests/run_tests.sh   # auto-detect environment
+tests/docker.sh      # Docker
+tests/incus.sh       # Incus
+tests/e2e.sh         # browser end-to-end, on demand
 ```
 
 ## Pull Request Process
