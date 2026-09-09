@@ -343,3 +343,14 @@ FIXED: removed the stray `tor-access` class from `help.tmpl:402`'s `<section>` (
 
 ## [x] Rate Limiting Metrics: verify cardinality-safe implementation
 Section relocated (not functionally changed) but reaffirms: `ratelimit_requests_total`/`ratelimit_blocked_total` use a `limit` label (`global`/`per_ip`/`per_user`/`per_endpoint`) as a **value**, never a raw per-IP label (unbounded cardinality / memory-DoS). Investigation found this was not a verify-only task: `ratelimit_requests_total`/`ratelimit_blocked_total` were entirely unimplemented (zero occurrences anywhere in `src/*.go`), not merely an existing implementation needing a cardinality check. FIXED — implemented per AI.md PART 20 "Rate Limiting Metrics": added `ratelimitRequestsTotal` (`search_ratelimit_requests_total`, counter, labels `limit`,`status`) and `ratelimitBlockedTotal` (`search_ratelimit_blocked_total`, counter, label `limit`) to `src/server/metrics.go`'s `Metrics` struct and `NewMetrics()`, plus a `RecordRateLimit(limit, status string)` method that increments both counters together (blocked-total only on `status=="limited"`). Wired into `src/server/middleware.go`: `RateLimiter` (per-IP global limiter) and `EndpointRateLimiter` (per-endpoint limiter) each got an optional `metrics *Metrics` field + `SetMetrics()` setter (nil-safe no-op when unset, so no existing `NewRateLimiter`/`NewEndpointRateLimiter`/`NewMiddleware` call site — including 30+ test call sites — needed to change), and their `Allow()` methods now call `RecordRateLimit("per_ip", status)` / `RecordRateLimit("per_endpoint", status)` respectively with `status` in `{allowed, limited}` — never a raw client IP as a label value, satisfying the cardinality note. `src/server/server.go` wires `rl.SetMetrics(metrics)` right after `NewMetrics(cfg)` is constructed. `EndpointRateLimiter` currently has no production call site (grepped, test-only), so its metrics wiring is dormant but correct and ready once/if a caller is added. Verified: scoped Docker build `go build ./src/server/... ./src/config/...` exits 0.
+
+## [ ] Gitea/Forgejo workflows use `$GITHUB_*` runner variables instead of PART 27's `$GITEA_*`/`$FORGEJO_*` mapping
+
+`.gitea/workflows/*.yml` and `.forgejo/workflows/*.yml` reference
+`$GITHUB_ENV`, `$GITHUB_OUTPUT`, `$GITHUB_REF_NAME` and `$GITHUB_WORKSPACE`
+rather than the provider-prefixed names in PART 27's mapping table. This is
+functionally correct today — Gitea and Forgejo runners set both sets — and it
+is the pre-existing convention across all of these files. Deferred rather than
+fixed because switching ten workflow files to the provider-prefixed names is an
+externally-visible behavior change on the runners and would need a live CI run
+on each provider to confirm, not just a local `act` check.
