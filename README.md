@@ -42,7 +42,7 @@ Single self-contained binary. Runs with zero configuration on first start. No ad
 
 ```bash
 # Download latest release
-curl -fsSL https://raw.githubusercontent.com/apimgr/search/main/scripts/install.sh | bash
+curl -q -LSsf https://raw.githubusercontent.com/apimgr/search/main/scripts/install.sh | bash
 
 # Start the server (auto-selects port in 64000-65535 range)
 search
@@ -103,12 +103,12 @@ A companion CLI/TUI client (`search-cli`) is available for interacting with the 
 
 ```bash
 # Linux
-curl -LO https://github.com/apimgr/search/releases/latest/download/search-cli-linux-amd64
+curl -q -LSsfO https://github.com/apimgr/search/releases/latest/download/search-cli-linux-amd64
 chmod +x search-cli-linux-amd64
 sudo mv search-cli-linux-amd64 /usr/local/bin/search-cli
 
 # macOS
-curl -LO https://github.com/apimgr/search/releases/latest/download/search-cli-darwin-arm64
+curl -q -LSsfO https://github.com/apimgr/search/releases/latest/download/search-cli-darwin-arm64
 chmod +x search-cli-darwin-arm64
 sudo mv search-cli-darwin-arm64 /usr/local/bin/search-cli
 ```
@@ -204,20 +204,20 @@ All API endpoints are under `/api/v1/`. Every web page has a corresponding JSON 
 
 ```bash
 # Search
-curl "https://scour.li/api/v1/search?q=golang&category=general"
+curl -q -LSsf "https://scour.li/api/v1/search?q=golang&category=general"
 
 # Autocomplete
-curl "https://scour.li/api/v1/autocomplete?q=gol"
+curl -q -LSsf "https://scour.li/api/v1/autocomplete?q=gol"
 
 # List engines
-curl "https://scour.li/api/v1/engines"
+curl -q -LSsf "https://scour.li/api/v1/engines"
 ```
 
 ### Alerts
 
 ```bash
 # Create an alert (accountless)
-curl -X POST "https://scour.li/api/v1/alerts" \
+curl -q -LSsf -X POST "https://scour.li/api/v1/alerts" \
   -H "Content-Type: application/json" \
   -d '{
     "query": "golang release notes",
@@ -228,17 +228,17 @@ curl -X POST "https://scour.li/api/v1/alerts" \
   }'
 
 # Manage alert with returned token
-curl "https://scour.li/api/v1/alerts/MANAGE_TOKEN"
+curl -q -LSsf "https://scour.li/api/v1/alerts/MANAGE_TOKEN"
 ```
 
 ### Health and Status
 
 ```bash
 # Public health (no auth)
-curl https://scour.li/server/healthz
+curl -q -LSsf https://scour.li/server/healthz
 
 # Engine status (operator token required)
-curl -H "Authorization: Bearer YOUR_TOKEN" \
+curl -q -LSsf -H "Authorization: Bearer YOUR_TOKEN" \
   https://scour.li/api/v1/server/engines
 ```
 
@@ -320,10 +320,10 @@ server:
 
 ```bash
 # Prometheus metrics
-curl https://scour.li/metrics
+curl -q -LSsf https://scour.li/metrics
 
 # Health check
-curl https://scour.li/server/healthz
+curl -q -LSsf https://scour.li/server/healthz
 ```
 
 ### Security Headers

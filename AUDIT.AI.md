@@ -5,6 +5,12 @@ Started: 2026-09-03
 Scope: full AI.md compliance audit, PART 0-32 plus FINAL COMPLIANCE CHECKLIST.
 AI.md is read-only source of truth. No SPEC.md exists, so no overrides apply.
 
+## Pass 5: Spec Compliance — PART 31 (Tor & I2P) — verified this session
+
+- [x] `src/service/tor.go`: `CheckTorConnection()` was a hardwired
+      `return true` stub (PART 1 forbids stubs; zero callers) — removed along
+      with its two always-pass tests in `src/service/tor_test.go`.
+
 ## Pass 5: Spec Compliance — PART 8 / 32 (Server CLI & Client)
 
 - [ ] `src/main.go`: 4 `--maintenance` subcommands missing (`secret`, `token`,
