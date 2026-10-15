@@ -2,6 +2,16 @@
 
 Search uses direct upstream search engines and combines their results. Search operators are normalized before a query is sent to each engine.
 
+## Image results
+
+Image thumbnails and full-size previews load through the signed same-origin
+image proxy by default. Selecting a thumbnail opens a preview panel with image
+dimensions when available, a link to the source page, and a download action.
+The REST and GraphQL search APIs expose the available image URL, dimensions,
+format, and file size; unknown metadata is omitted. The proxy rejects private
+destinations, redirects, unsupported media, and images above its configured
+byte limit or built-in dimension limits.
+
 ## Boolean operators
 
 `AND`, `OR`, and `NOT` are case-insensitive. Adjacent terms mean `AND`; `NOT` binds most tightly, followed by `AND`, then `OR`. Parentheses group expressions, and quoted phrases stay together as one search term.
@@ -24,7 +34,7 @@ Weather answers show current conditions and a five-day outlook from Open-Meteo. 
 
 Use a `type:term` prefix to open a full-page answer. Common types include `tldr:`, `man:`, `wiki:`, `pkg:`, `cve:`, `dns:`, `whois:`, `resolve:`, `cert:`, `headers:`, `safe:`, and `cache:`. See the project IDEA for the full list and each answer's data sources.
 
-`cache:` checks the Wayback Machine, Common Crawl, and Archive.today, shows available capture dates, and provides sanitized archived and live previews side by side when both are available. Archive.today dates come from its Memento timeline and open at Archive.today. Wayback captures include view and download links; Common Crawl captures include a bounded preview and attachment download. Previews are bounded, and live fetches reject private destinations and unsafe redirects. `safe:` checks only the domain root. Set `GOOGLE_SAFE_BROWSING_API_KEY` and/or `PHISHTANK_API_KEY` to enable those reputation providers. Every configured provider must return clean for a Safe rating; missing keys, unavailable providers, and inconclusive results remain Unknown.
+`cache:` checks the Wayback Machine, Common Crawl, and Archive.today, shows available capture dates, and provides sanitized archived and live previews side by side when both are available. Archive.today dates come from its Memento timeline and open at Archive.today. Wayback captures include view and download links; Common Crawl captures include a bounded preview and attachment download. Previews are bounded, and live fetches reject private destinations and unsafe redirects. `safe:` checks only the domain root and reports matches from configured, loaded domain blocklists. Set `GOOGLE_SAFE_BROWSING_API_KEY` and/or `PHISHTANK_API_KEY` to enable those reputation providers. Every configured reputation provider must return clean for a Safe rating; missing keys, unavailable providers, and inconclusive results remain Unknown.
 
 `asn:` reads current registration and observed routing data from the RIPEstat Data API. Results include announced prefixes and unique address counts, observed upstream/downstream positions, registry country when available, neighbor history, and looking-glass links. RIS observations can be delayed or incomplete; path positions do not prove commercial relationships. Optional routing sections are omitted when their data source is unavailable. See the [RIPEstat Data API documentation](https://stat.ripe.net/docs/data-api/ripestat-data-api).
 

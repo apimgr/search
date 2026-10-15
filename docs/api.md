@@ -83,6 +83,12 @@ curl "https://search.example.com/api/v1/search?q=privacy&per_page=10"
 }
 ```
 
+Image-category results also return `image_url`, `image_width`, `image_height`,
+`image_format`, and `file_size` when the upstream engine provides those values.
+With the image proxy enabled (the default), both `thumbnail` and `image_url`
+are signed same-origin `/image-proxy` URLs; clients should render those values
+directly instead of loading the upstream image hosts.
+
 ### Suggestions
 
 #### `GET /api/v1/autocomplete`
@@ -343,7 +349,9 @@ GraphQL uses the same live services and authorization checks as the correspondin
 - `geoIPPresets` and `geoIPPreset(name:)` read operator-authored country lists. `saveGeoIPPreset(input:)` and `deleteGeoIPPreset(name:)` persist preset changes to `server.yml`; saving or deleting a preset never changes the active allow/deny lists.
 
 Search results expose `title`, `url`, `content`, `engine`, `score`, `category`,
-`thumbnail`, `published`, `author`, and `domain`. Search response fields include
+`thumbnail`, `imageUrl`, `imageWidth`, `imageHeight`, `imageFormat`, `fileSize`,
+`published`, `author`, and `domain`. Image fields are zero/empty when the source
+does not provide them. Search response fields include
 `query`, `category`, `results`, `totalResults`, `page`, `perPage`, `totalPages`,
 `searchTime`, `engines`, and `suggestions`. Direct and instant answers expose
 `details: JSON` for the type-specific `data` object returned by REST.

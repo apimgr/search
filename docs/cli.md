@@ -106,8 +106,10 @@ search --update check
 # Update to latest version
 search --update yes
 
-# Update to specific branch
+# Update channels (stable | beta | devel)
+# Legacy channel aliases daily, rolling, dev, and development normalize to devel
 search --update branch beta
+search --update branch devel
 ```
 
 ### Tor Management

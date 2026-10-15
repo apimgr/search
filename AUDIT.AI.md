@@ -66,8 +66,9 @@ AI.md is read-only source of truth. No SPEC.md exists, so no overrides apply.
 ## Pass 5: Spec Compliance — PART 22 (Update Command)
 
 - [x] `--update branch <name>` writes `server.update.branch` to the config file.
-- [x] Stable/beta/daily channels are cumulative; the rolling daily tag is
-      compared by `buildEpoch`.
+- [x] Stable/beta/devel channels are cumulative; the rolling `devel` tag is
+      compared by `buildEpoch`. Legacy `daily`, `rolling`, `dev`, and
+      `development` inputs normalize to `devel`.
 - [x] Scheduled auto-install uses the normal update installation flow and
       records one notification per version.
 - [x] Release asset selection uses the canonical raw binary names.
@@ -109,12 +110,44 @@ AI.md is read-only source of truth. No SPEC.md exists, so no overrides apply.
   both HTML and API health. API health now shares component status/checks from
   the running server. Focused server/API tests pass.
 
-## NOT AUDITED — must be re-run
+## Pass 5: Spec Compliance — PART 13–15 (current pass)
 
-- [ ] Complete PART 13 health/versioning, PART 14 API/schema parity, and
-      PART 15 TLS/ACME audits. The 2026-10-12 pass fixed and tested inaccurate
-      traffic statistics and shared health checks/status; GraphQL/OpenAPI parity
-      and the full certificate/challenge matrix remain to be reviewed.
+- [x] `src/api/api.go`: API health JSON used the ordinary `{ok,data,meta}`
+      envelope and text returned only `OK`/`ERROR`; health routes now emit the
+      bare complete health structure in JSON or flattened text per PART 13/14.
+- [x] `src/api/api.go`, `src/server/middleware.go`,
+      `src/swagger/annotations.go`: removed the unsupported versioned
+      `/api/{api_version}/healthz` compatibility route; canonical and
+      unversioned direct health aliases remain.
+- [x] `src/swagger/annotations.go`: OpenAPI described health JSON as an
+      enveloped response and omitted most health fields; it now documents the
+      bare response and the full field set.
+- [x] `src/server/server.go`, `src/ssl/ssl.go`: HTTP-01 challenge handling was
+      attached to HTTPS instead of the port-80 listener, so ACME validation
+      could fail; it now wraps the cleartext listener and the HTTP redirect
+      listener when configured.
+- [x] `src/ssl/ssl.go`, `src/server/server.go`: TLS manager used an inferred
+      host instead of configured `server.fqdn` and accepted explicit
+      certificates without validating host and validity dates; it now uses the
+      configured host and validates on load/reload.
+- [x] `src/ssl/ssl.go`: a selected DNS-01 failure silently downgraded to
+      HTTP-01; it now leaves the selected challenge in force and reports the
+      initialization failure.
+- [x] `src/ssl/ssl.go`: certificate mirror failures and malformed/unreadable
+      ACME account keys were ignored; mirror errors now propagate and cached
+      certificate reads retry the mirror, while corrupt account keys fail
+      safely instead of being overwritten.
+- [x] `src/ssl/dns.go`, `src/ssl/dns_providers.json`: DNS-01 creation exposed
+      only six providers despite PART 15 requiring every lego provider. The
+      lego v4.35.2 provider factory and provider TOML credential names now drive
+      the full runtime catalog, form metadata, and provider construction.
+      Generic credentials use the exact lego environment names; the provider
+      constructor consumes them in a serialized, restored environment scope.
+      The seven providers with explicit project credential mappings preserve
+      those mappings.
+- [x] `src/ssl/ssl_test.go`: provider metadata tests rejected valid lego
+      providers that have no documented credential fields; they now check full
+      catalog coverage and validate each field that is present.
 
 ## Pass 2: Code Quality
 
@@ -240,7 +273,7 @@ AI.md is read-only source of truth. No SPEC.md exists, so no overrides apply.
 - `.forgejo/workflows/ci.yml`, `.gitea/workflows/ci.yml`: regenerated from
   `.github/workflows/ci.yml`; Forgejo was missing `secret-scan`,
   `workflow-policy`, `image-scan` and the weekly `schedule` trigger.
-- `.forgejo/workflows/{daily,release,docker}.yml`: used `${{ gitea.* }}` and
+- `.forgejo/workflows/{devel,release,docker}.yml`: used `${{ gitea.* }}` and
   `secrets.GITEA_TOKEN` inside the Forgejo tree -> `${{ forgejo.* }}` /
   `FORGEJO_TOKEN`.
 - `.github|.gitea|.forgejo/workflows/docker.yml`: `:devel` never rebuilt
