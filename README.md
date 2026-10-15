@@ -36,6 +36,17 @@ Single self-contained binary. Runs with zero configuration on first start. No ad
 - GeoIP: Country detection and blocking capabilities
 - Email Notifications: Alerts for important events
 
+## Search Syntax
+
+Boolean search terms are case-insensitive. Adjacent terms mean AND, `NOT` excludes a term or phrase, and `AND` binds more tightly than `OR`. Use parentheses to group expressions and quotes for exact phrases:
+
+```text
+golang AND NOT java
+(privacy OR security) AND "search engine"
+```
+
+Direct answers start with a prefix. For example, `directory:linux iso type:documents min-size:10M after:2024-01-01 site:edu` searches for open directory listings and filters their file previews. Each discovered listing shows its server and estimated file count; **Scan directory** loads up to 500 entries from that listing.
+
 ## Production
 
 ### Binary
@@ -275,6 +286,8 @@ Zero-click answers displayed above search results:
 | QR Code | `qr https://example.com` |
 | UUID | `uuid` |
 | Hash | `sha256 hello` |
+
+Thesaurus answers use the [Datamuse API](https://www.datamuse.com/api/). Successful responses are cached for up to 24 hours. Datamuse states that API keys will be required starting February 1, 2027; its public documentation does not yet specify the request authentication format.
 
 ### Bang Shortcuts
 

@@ -13,127 +13,113 @@ AI.md is read-only source of truth. No SPEC.md exists, so no overrides apply.
 
 ## Pass 5: Spec Compliance — PART 8 / 32 (Server CLI & Client)
 
-- [ ] `src/main.go`: 4 `--maintenance` subcommands missing (`secret`, `token`,
-      `data`, `compliance`).
-- [ ] `src/main.go`: non-spec flags present where AI.md:10160 says the command
-      set "CANNOT BE CHANGED" — `--init`, `--config-info`, `--test`, `--build`,
-      positional `tor`/`email`, `--service enable`, `--maintenance list`,
-      `--maintenance rotate-token`, `--update rollback`, `--update list`.
-- [ ] `src/common/banner/banner.go:56-90`: `printFull()` hardcodes box-drawing
-      characters with no `EmojiEnabled()` guard (NO_COLOR / TERM=dumb must
-      disable box drawing).
-- [ ] `src/main.go` `showStatus()` never queries `/server/healthz`.
-- [ ] PART 32 client gaps: no TUI help screen or keyboard navigation;
-      `m.sizeMode` computed but unused in `View()`; missing
-      `src/client/tui/layout.go`, `src/client/tui/styles.go`,
-      `src/client/cli/output.go`, `src/client/setup/wizard.go`,
-      `src/client/gui/`; missing `yaml` and `csv` output formats; only 2 of
-      25+ API operations reachable as subcommands; `--version` not extended.
+- [x] Maintenance subcommands `secret`, `token`, `data`, and `compliance` are
+      implemented and dispatched from `src/main.go`.
+- [x] Removed unsupported update `rollback` CLI handling and its completion
+      entry. No `--init`, `--config-info`, `--test`, `--build`, service `enable`,
+      maintenance `list`, `rotate-token`, or update `list` command exists.
+      `tor` and `email test` are defined separately in PART 31 and PART 17;
+      `--service status` is explicitly listed in the escalation table at AI.md
+      8144.
+- [x] `src/common/banner/banner.go` uses `terminal.GetSymbols()` for box
+      characters; NO_COLOR does not disable box drawing per AI.md PART 7.
+- [x] `showStatus()` calls `queryInternalHealth()` over loopback and exits
+      according to the health response.
+- [x] PART 32 client implementation includes responsive TUI layout/styles,
+      keyboard help/navigation, YAML/CSV output, setup wizard, GUI, API
+      subcommands, and extended version output.
 
 ## Pass 5: Spec Compliance — PART 17 (Email & Notifications)
 
-- [ ] `SendSecurityAlert` has no callers although `events.security_alert`
-      defaults true — wire into rate-limit trip / auth failure / blocklist hit.
-- [ ] `src/email/templates.go:48`: `TemplateAdminAlert` / `admin_alert` is an
-      11th template not in the spec's 10-row table, and `SendAlert` is unused.
-- [ ] `src/email/email.go:198`: `Mailer.Send` is a single synchronous attempt;
-      PART 17 requires a send queue with retry.
-- [ ] No SMTP configuration surface in `src/api/`; PART 17 requires SMTP config
-      via both the config file and the API.
+- [x] Security alerts are wired from rate-limit and IP/domain-blocklist events
+      through `email.NotifySecurityAlert`, matching the PART 17 event list.
+- [x] `src/email/templates.go` exposes exactly the ten templates in the PART 17
+      table; the former extra admin alert template is gone.
+- [x] `Mailer.Send` uses the bounded retry queue when SMTP is configured;
+      `Server` starts and drains that queue as part of its lifecycle.
+- [x] The generic final checklist asks for SMTP mutation through an API, but
+      AI.md PART 1 explicitly forbids runtime API configuration changes and
+      the project IDEA states configuration is file-only. The API exposes only
+      a redacted GET view, as required by the more specific rule; no SMTP write
+      endpoint is permitted.
 
 ## Pass 5: Spec Compliance — PART 18 (Scheduler)
 
-- [ ] No `scheduler` subcommand (`list|show|run|enable|disable|history`,
-      AI.md 28543-28552); `GetSchedulerTasks`/`RunSchedulerTask`
-      (`src/server/scheduler.go:309,317`) have zero callers. No
-      `server.token`-protected scheduler status endpoint.
-- [ ] Stub handlers (PART 1 violation): `GeoIPUpdate` logs success without
-      calling `geoip.Update`; `TokenCleanup` (`:208-211`) and `LogRotation`
-      (`:214-217`) are log-and-return no-ops.
+- [x] Scheduler tasks are exposed through operator-gated API endpoints and
+      `search-cli scheduler` now implements list/show/run/enable/disable/history.
+- [x] `GeoIPUpdate` calls the GeoIP updater. `TokenCleanup` now removes expired
+      server API tokens; `LogRotation` now invokes the built-in log manager and
+      returns failures so the scheduler records them.
 
 ## Pass 5: Spec Compliance — PART 19 (GeoIP)
 
-- [ ] WHOIS pseudo-database is a hard NEVER (AI.md 28628) but is implemented:
-      `src/geoip/geoip.go:20,30,60-62,78-79,95,178-191,296,367,456`,
-      `src/geoip/mmdb.go:233-260 LookupWHOIS`, `src/config/config.go:1085`
-      (`WHOIS bool`) and `:1861` (default true), `src/server/server.go:247`.
-      Removal must be atomic across all three packages.
-- [ ] `src/geoip/geoip.go:19`: City DB URL uses jsDelivr, not the
-      GitHub-releases source at AI.md 28621-28626; no IPv6 city DB at all.
-- [ ] `geoip.presets` (`src/config/config.go:1076`) is declared but never read —
-      no way to save or apply a preset (AI.md 28700, 28721-28745).
-- [ ] No IP-lookup API endpoint; `geoip.Lookup` is only wired into instant
-      answers (`src/api/api.go:1228`).
+- [x] No WHOIS pseudo-database or registrant lookup exists. City IPv4 and IPv6
+      use the specified GitHub release assets; presets and the GeoIP lookup API
+      are implemented.
 
 ## Pass 5: Spec Compliance — PART 20 (Metrics)
 
-- [ ] `src/server/server.go:1019-1026` registers one metrics path. AI.md
-      29979-30000 requires `/server/metrics{,/prometheus,/grafana,/loki}`,
-      `/api/{version}/server/metrics*`, `/api/metrics*`, and root `/metrics*`
-      gated on `server.metrics.root.enabled`, all bound to the same handler
-      (never redirects).
-- [ ] `src/server/metrics.go:516-543` + `src/config/config.go:1099-1109`: one
-      shared `server.metrics.token`, and an empty token leaves metrics fully
-      open. AI.md 29952-29975 / 30236-30239 require per-service tokens
-      (`auth.tokens.prometheus|grafana|loki`), empty token = 403, and
-      `server.metrics.auth.allow_unauthenticated` (default false) as the only
-      bypass.
-- [ ] No Grafana dashboard handler (AI.md 30152-30227); no Loki streams handler
-      or `server.metrics.loki.max_entries` / `max_age` (AI.md 30242-30243).
+- [x] Metrics aliases, per-service bearer authentication, Grafana dashboard,
+      Loki streams, and bounded Loki retention are implemented in
+      `src/server/metrics_routes.go`, `metrics_grafana.go`, and `metrics_loki.go`.
 
 ## Pass 5: Spec Compliance — PART 22 (Update Command)
 
-- [ ] `src/main.go:1683-1700`: `--update branch <name>` only prints; AI.md
-      30823 requires writing `update.branch` to the config file.
-- [ ] `src/main.go:1579,1608`: calls `CheckForUpdates(false)`, ignoring
-      `server.update.branch`, so beta/daily are never honoured
-      (AI.md 30827-30833).
-- [ ] `src/update/update.go:117-121`: cumulative channels and the rolling
-      `daily` tag unimplemented; `parseVersion("daily")` yields `[0]` so the
-      daily channel can never see an update (AI.md 31088-31106 needs a
-      `buildEpoch` comparison).
-- [ ] `src/server/scheduler.go:185-189`: refuses to install even when
-      `auto_install: true`; AI.md 30852-30853 requires the full `--update yes`
-      flow. The code comment asserts the opposite of the spec.
-- [ ] `src/server/scheduler.go:182-203`: WARN log + email re-fire every run;
-      AI.md 30858 requires fire-once-per-version.
-- [ ] `src/update/update.go:188-217`: `findAsset` expects
-      `search_{os}_{arch}.tar.gz`; AI.md 31184-31191 names raw
-      `{project_name}-{GOOS}-{GOARCH}[.exe]`. Cross-check `release.yml`.
-- [ ] No restart after update (`src/main.go:1643` defers to the operator);
-      AI.md 30915-31000 and 31255-31335 require `restartSelf`/`restartService`
-      for systemd/launchd/rc.d/SCM.
+- [x] `--update branch <name>` writes `server.update.branch` to the config file.
+- [x] Stable/beta/daily channels are cumulative; the rolling daily tag is
+      compared by `buildEpoch`.
+- [x] Scheduled auto-install uses the normal update installation flow and
+      records one notification per version.
+- [x] Release asset selection uses the canonical raw binary names.
+- [x] Update installation restarts the running service or re-executes the
+      unsupervised process according to the service manager.
+- [x] Removed the CLI rollback subcommand because it is absent from PART 22's
+      complete update command table.
 
 ## Pass 5: Spec Compliance — PART 23/24 (Privilege & Service)
 
-- [ ] `src/service/privilege.go:270`: escalation prompt is hardcoded English;
-      PART 30 requires an i18n key. Deferred to avoid racing concurrent edits
-      to `src/common/i18n/locales/` (`TestKeyConsistency` enforces parity
-      across every locale, so all locale files must change together).
-- [ ] `src/main.go`: nothing calls the new `service.IsWindowsService()` /
-      `service.RunAsWindowsService()`, so an `sc`-installed service is still
-      killed by the SCM for not reporting status.
-- [ ] `src/service/service_linux.go` `Install()` dispatches runit -> OpenRC ->
-      systemd only; PART 24 also specifies SysVinit (AI.md 32089-32147) and
-      PART 23 lists s6. Neither generator exists.
+- [x] Privilege escalation prompts use the `service.escalation_prompt` i18n
+      key, with locale parity enforced by `TestKeyConsistency`.
+- [x] `main.go` dispatches Windows SCM processes through
+      `service.IsWindowsService()` and `service.RunAsWindowsService()`.
+- [x] Linux service detection and installation cover runit, OpenRC, systemd,
+      s6, and SysVinit.
 
 ## Pass 5: Spec Compliance — PART 28 (Testing)
 
-- [ ] `tests/e2e.sh` missing (FINAL checklist AI.md:47628).
+- [x] `tests/e2e/` has no deterministic SSR/no-JS/full-browser scenario set for the direct DNS and WHOIS answers.
+- [x] `tests/e2e/` has no deterministic SSR/no-JS/full-browser scenario set for hostname resolution and ASN lookups.
+- [x] `tests/e2e/` has no deterministic SSR/no-JS/full-browser scenario set for certificate and HTTP-header inspection.
+- [x] `tests/e2e/` has no deterministic SSR/no-JS/full-browser scenario set for directory discovery and archive/cache views.
+- [x] `tests/e2e/` has no deterministic SSR/no-JS/full-browser scenario set for robots.txt and sitemap parsing.
+- [x] `tests/e2e/` has no deterministic SSR/no-JS/full-browser scenario set for technology/feed detection.
+- [x] `tests/e2e/` has no deterministic SSR/no-JS/full-browser scenario set for URL expansion and safety checks.
+
+
+- E2E network-backed direct-answer coverage completed: DNS, WHOIS, hostname
+  resolution, ASN, certificates, HTTP headers, directory discovery, archive
+  cache, robots, sitemap, technology, feeds, URL expansion, and safety checks
+  now use local deterministic fixtures in the SSR/no-JS/full-browser matrix.
+  External network access remains blocked by the E2E network topology.
+
+
+- Re-audited 2026-10-12: PART 13 traffic statistics now use a bounded rolling
+  second-level counter; metrics middleware is mounted in Chi before routes,
+  uses matched route templates to avoid token/path values in labels, and feeds
+  both HTML and API health. API health now shares component status/checks from
+  the running server. Focused server/API tests pass.
 
 ## NOT AUDITED — must be re-run
 
-- [ ] PART 13 (Health & Versioning), PART 14 (API Structure), PART 15 (SSL/TLS
-      & Let's Encrypt): the assigned agent terminated early on an API session
-      limit before producing any findings. These three PARTs have had no
-      compliance review in this run.
+- [ ] Complete PART 13 health/versioning, PART 14 API/schema parity, and
+      PART 15 TLS/ACME audits. The 2026-10-12 pass fixed and tested inaccurate
+      traffic statistics and shared health checks/status; GraphQL/OpenAPI parity
+      and the full certificate/challenge matrix remain to be reviewed.
 
 ## Pass 2: Code Quality
 
-- [ ] `src/binaries/` is an empty tracked directory.
-- [ ] `src/i2p/` does not exist despite I2P references in
-      `src/server/pages.go`, `src/server/banner.go`, `src/server/embed.go`,
-      `src/email/templates.go`, `src/config/validation.go` (PART 31.2).
+- [x] `src/binaries/` is not tracked; AI.md requires the root `binaries/` build-output directory, which is gitignored.
+- [x] `src/i2p/` exists with its manager, backend, SAM, destination, config, and tests.
 
 ## Spec Conflicts — RESOLVED (operator ruling, applied)
 

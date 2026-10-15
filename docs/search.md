@@ -1,0 +1,53 @@
+# Search syntax
+
+Search uses direct upstream search engines and combines their results. Search operators are normalized before a query is sent to each engine.
+
+## Boolean operators
+
+`AND`, `OR`, and `NOT` are case-insensitive. Adjacent terms mean `AND`; `NOT` binds most tightly, followed by `AND`, then `OR`. Parentheses group expressions, and quoted phrases stay together as one search term.
+
+```text
+golang AND concurrency
+golang OR rust AND concurrency
+(privacy OR security) AND "search engine"
+golang AND NOT java
+NOT (malware OR phishing)
+```
+
+Malformed expressions, such as a trailing `AND` or an unmatched parenthesis, are rejected before any search engine is called.
+
+## Instant answers
+
+Weather answers show current conditions and a five-day outlook from Open-Meteo. Currency answers use Frankfurter daily exchange rates, calculate conversions locally, and show a seven-day rate chart; currency amounts are not sent to the provider.
+
+## Direct answers
+
+Use a `type:term` prefix to open a full-page answer. Common types include `tldr:`, `man:`, `wiki:`, `pkg:`, `cve:`, `dns:`, `whois:`, `resolve:`, `cert:`, `headers:`, `safe:`, and `cache:`. See the project IDEA for the full list and each answer's data sources.
+
+`cache:` checks the Wayback Machine, Common Crawl, and Archive.today, shows available capture dates, and provides sanitized archived and live previews side by side when both are available. Archive.today dates come from its Memento timeline and open at Archive.today. Wayback captures include view and download links; Common Crawl captures include a bounded preview and attachment download. Previews are bounded, and live fetches reject private destinations and unsafe redirects. `safe:` checks only the domain root. Set `GOOGLE_SAFE_BROWSING_API_KEY` and/or `PHISHTANK_API_KEY` to enable those reputation providers. Every configured provider must return clean for a Safe rating; missing keys, unavailable providers, and inconclusive results remain Unknown.
+
+`asn:` reads current registration and observed routing data from the RIPEstat Data API. Results include announced prefixes and unique address counts, observed upstream/downstream positions, registry country when available, neighbor history, and looking-glass links. RIS observations can be delayed or incomplete; path positions do not prove commercial relationships. Optional routing sections are omitted when their data source is unavailable. See the [RIPEstat Data API documentation](https://stat.ripe.net/docs/data-api/ripestat-data-api).
+
+`dict:` renders pronunciation audio with native browser controls. Audio is fetched through `/direct/audio` from the supported HTTPS pronunciation hosts, without following redirects; the proxy accepts only audio media types and bounded response sizes.
+
+The beautifier accepts indentation options before the source, for example `beautify:js --indent=4 function run(){return 1}` or `beautify:json --minify {"ok": true}`. Minification is supported for JavaScript, TypeScript, CSS, HTML, XML, JSON, and PHP; languages without a parser-backed minifier report that the option is unavailable.
+
+### Open directory search
+
+Use `directory:` to find public directory listings. Optional filters are `type:`, `min-size:`, `after:`, `before:`, and `site:`.
+
+```text
+directory:ubuntu iso
+directory:programming books type:documents min-size:10M
+directory:linux textbook after:2024-01-01 before:2024-12-31 site:edu
+```
+
+Each result shows its server header and the count of file links found in the bounded listing response. The default preview shows up to 20 files. **Scan directory** expands one result to at most 500 files. The server validates public addresses and redirect destinations before fetching a listing.
+
+## QR codes
+
+Use `qr:https://example.com` to generate a QR code. The options form supports size, error correction, colors, and PNG/JPEG logo uploads. For URL payloads, **Shorten with this server** creates a random local `/s/{code}` link; no third-party shortener is contacted. Destinations are encrypted at rest with the server encryption key. The short link redirects only to an absolute HTTP or HTTPS URL without credentials.
+
+## Local search history
+
+Recent searches are kept in this browser's `localStorage`; Search does not send the history list to the server. The homepage shows recent queries as links. Disable **Save search history** in Preferences to stop recording and clear the stored list, or use **Clear history** to remove it at any time. When history saving is enabled, it is included in the downloadable preferences export and restored from that file's import. Importing preferences with history disabled clears imported history. History is not included in cross-device preference URLs.

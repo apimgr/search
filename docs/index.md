@@ -11,6 +11,7 @@ A privacy-respecting metasearch engine that aggregates results from multiple sea
 - **Mobile-Friendly**: Responsive design works on all devices
 - **API Access**: Full REST API and GraphQL support
 - **Bang Commands**: Quick shortcuts to search other sites (e.g., `!g` for Google, `!w` for Wikipedia)
+- **Search Syntax**: Boolean operators, exact phrases, and full-page direct answers
 - **Image Proxy**: Proxies images to protect your privacy
 - **Tor Support**: Built-in Tor hidden service support
 
@@ -43,6 +44,7 @@ Then open [http://localhost:64580](http://localhost:64580) in your browser.
 - [Configuration](configuration.md) - Configuration options and settings
 - [API](api.md) - REST and GraphQL API documentation
 - [CLI](cli.md) - Command-line interface reference
+- [Search](search.md) - Search operators and direct-answer syntax
 
 ## Requirements
 

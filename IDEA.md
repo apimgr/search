@@ -38,7 +38,7 @@ Live testing (2026-08-01/02) found Reddit hard-blocked in production (aggressive
 
 | Role | Authentication | Permissions |
 |------|---------------|-------------|
-| Anonymous public user | None | Search, view results, set client-side preferences, create/manage email-verified search alerts via signed manage links |
+| Anonymous public user | None | Search, view results, set client-side preferences, create/manage accountless search alerts via signed manage links |
 | Operator | Possession of `server.token` (operator bearer token from `server.yml`) | Operator-only API endpoints (engine state queries, alert moderation, maintenance). Configuration is file-only — all server settings are set in `server.yml` and managed via CLI / config-reload. |
 
 There is **no admin web UI** and **no end-user account system**. The operator manages the service entirely via `server.yml` plus the `search-cli` client. The spec (AI.md) has no regular-user accounts, organization tiers, or custom-domain features — these are simply not in scope.
@@ -51,7 +51,7 @@ Full schemas are documented under `### Data Models` below. Sensitivity classific
 |------|------------|---------|-----------|
 | Search queries (per request) | High (potentially identifying) | Memory only — never logged | Discarded after response |
 | User preferences | Low | Client-side (localStorage / URL param) | User-controlled |
-| Search alerts (email + query + tokens) | Medium (PII: email, signed tokens) | Server DB | Until user deletes; opt-in only with email verification |
+| Search alerts (email + query + tokens) | Medium (PII: email, signed tokens) | Server DB | Until user deletes; opt-in only |
 | Alert deduplication state (URL hashes) | Low | Server DB | Lifetime of alert |
 | Engine health metrics (response times, error rates) | None | Server DB / Prometheus | Per metrics retention |
 | Cached search results | None (no user attribution) | Server cache | 5 minutes default, configurable |
@@ -66,7 +66,8 @@ Full provider list under `### Data Sources`. Trust assumptions and failure modes
 |------------------|-------------|--------------|
 | Primary search engines (Google, Bing, DuckDuckGo, Brave, Yandex, Baidu) | Web/image/video/news/maps results | Engine health monitor disables on consecutive failures; failover to remaining engines; results cached briefly to mask transient outages |
 | Specialized engines (Wikipedia, YouTube, Reddit, StackOverflow, GitHub, HN, arXiv, PubMed, OpenStreetMap) | Domain-specific search/answers | Same as above |
-| Instant-answer providers (OpenWeatherMap/wttr.in, exchangerate.host, Wiktionary, ip-location-db, etc.) | Read-only widget data | Skip widget on failure; never block main search |
+| Instant-answer providers (Open-Meteo, Nominatim, Frankfurter, Wiktionary, ip-location-db, etc.) | Read-only widget data; conversion requests send currency codes, not amounts | Validate bounded responses; skip the widget on failure and never block main search |
+| RIPEstat Data API for `asn:` answers | Current public registration and RIS routing observations; data may be delayed or incomplete | Bounded JSON only; a failed core AS overview fails that direct answer, while unavailable optional prefixes, neighbors, history, or registry details are omitted; observed path positions do not prove commercial relationships. Operators using RIPEstat commercially must contact RIPE NCC. |
 | Outbound HTTP responses from any engine | Untrusted (responses parsed) | All HTML/JSON parsed defensively; user input never embedded in scraping requests; tracking parameters stripped |
 | SMTP for alert delivery | Trusted to deliver | Retry with backoff; pause channel on repeated failures (per AI.md PART 17) |
 | Webhook destinations (per-alert) | Untrusted (user-supplied URL) | Signed payload (HMAC); SSRF defenses on outbound URL (private CIDRs blocked, scheme allowlist); retry with backoff |
@@ -86,7 +87,7 @@ Full provider list under `### Data Sources`. Trust assumptions and failure modes
 |------|--------|-----------------------------|
 | De-anonymize a query to a specific user | Query logs, IP logs | No server-side query/IP logging (per AI.md PART 11). Image proxy strips Referer. |
 | Scrape the public service as free metasearch | High-volume bots | Rate limiting (per AI.md PART 1). Engine rotation. Optional CAPTCHA on abuse signals. |
-| Spam alert subscriptions / abuse for email amplification | Mass alert creation, bogus addresses | Rate limit alert creation. Email verification required before activation. Per-email cap. |
+| Spam alert subscriptions / abuse for email amplification | Mass alert creation, bogus addresses | Rate limit alert creation. Rate limit alert creation. Per-email cap. |
 | Phish via alert manage links | Signed-token forgery, link confusion | Alert manage tokens are cryptographically signed and unguessable; emails sent from the configured sender address. |
 | SSRF via webhook destinations | User-supplied webhook URL | Validate URL scheme; block private/loopback ranges; signed payload so target can verify origin; outbound timeout. |
 | Inject malicious content into result snippets | Hostile engine response | All result snippets HTML-escaped; CSP headers; result links never auto-clicked; tracking params stripped. |
@@ -99,7 +100,7 @@ Full provider list under `### Data Sources`. Trust assumptions and failure modes
 ### Security decisions & exceptions
 
 - **Anonymous-by-default public surface.** No user accounts on the public side; all preferences are client-side. Trade-off: cannot offer per-user history. Reason: privacy is the product.
-- **Email-verified accountless alerts.** Alerts require email + verification but no account. Reason: keeps the privacy posture while still letting users monitor queries. Manage tokens are signed, single-use confirm + long-term manage links.
+- **Accountless alerts without verification flows.** Alerts accept a contact email without creating an account or sending verification email, following AI.md PART 17. Cryptographically random manage and RSS tokens grant access.
 - **Direct querying of primary engines.** We query Google/Bing/etc. directly (no intermediary). Trade-off: engines may rate-limit or change their response format. Mitigation: per-engine health monitoring, parser fallback, engine rotation, brief result caching.
 - **Image proxy enabled by default.** Result thumbnails are proxied through this server to strip Referer and prevent third-party tracking when users hover/load images. Trade-off: bandwidth cost on the server. Reason: privacy.
 - **Tor integration is optional, off by default.** When the operator enables Tor integration (per AI.md PART 31), an `.onion` hidden service is published. Reason: optional anonymity for users on Tor.
@@ -117,7 +118,7 @@ Full provider list under `### Data Sources`. Trust assumptions and failure modes
 - **Multi-Engine Aggregation**: Query multiple engines simultaneously, merge and deduplicate results
 - **Smart Ranking**: Weight and rank results based on engine reliability, result position, and frequency across engines
 - **Multi-Category Search**: Web, images, videos, news, maps, files, music, science, IT, social media
-- **Search Operators**: AND, OR, NOT, quotes, site:, filetype:, intitle:, inurl:, daterange:
+- **Search Operators**: AND, OR, NOT, quotes, site:, filetype:, intitle:, inurl:, daterange:. Boolean operators are case-insensitive; adjacency means AND; NOT binds before AND, and AND binds before OR; parentheses group expressions. Quoted phrases are single terms. Negation applies to one term, phrase, or parenthesized expression. Queries are normalized to equivalent common syntax before they reach each upstream search engine.
 - **Advanced Search Form**: GUI for building complex queries without knowing operators
 - **Infinite Scroll / Pagination**: User choice between continuous loading or page-based navigation
 - **Related Searches**: Suggestions for similar or refined queries
@@ -174,7 +175,7 @@ Per AI.md "Cross-device preference sync": only `theme` and `lang` are portable a
 
 Google Alerts-style monitoring for saved queries without requiring user accounts.
 
-- **Accountless subscriptions**: Create alerts with email verification and a signed manage link
+- **Accountless subscriptions**: Create alerts with a contact email and signed manage link; they become active immediately without an email verification flow, following AI.md PART 17
 - **Delivery Channels**: Email notifications, private RSS feed, and webhook delivery
 - **Flexible Schedules**: Immediate, daily digest, or weekly digest
 - **New Results Only**: Only send newly discovered results since the last successful check
@@ -189,9 +190,8 @@ Google Alerts-style monitoring for saved queries without requiring user accounts
 3. Chooses delivery methods: email, RSS, webhook (one or more)
 4. Selects frequency: immediate, daily, weekly
 5. Submits email address and optional webhook URL
-6. Server sends verification email with one-time confirmation link
-7. After confirmation, server begins scheduled monitoring
-8. User manages the alert later via signed manage link or private RSS URL
+6. Server activates the alert and begins scheduled monitoring without an email verification flow, following AI.md PART 17
+7. User manages the alert later via signed manage link or private RSS URL
 
 **Alert Delivery Rules:**
 - **Email**: Summary of new results with direct links and unsubscribe/manage links
@@ -248,7 +248,7 @@ Zero-click answers displayed above search results. Each widget has trigger patte
 convert 500 euros to dollars
 ```
 **Displays**: Converted amount, exchange rate, last updated time
-**Features**: 150+ currencies, real-time rates, historical chart (7 days)
+**Features**: 150+ currencies, current daily rates, historical chart (7 days). Frankfurter supplies rates for 223 currencies without an API key; conversions are calculated locally, and only currency codes are sent upstream.
 
 ---
 
@@ -634,11 +634,7 @@ cache:https://news.ycombinator.com/item?id=12345
 - Multiple archive sources if available
 - Original URL link
 - "Save new snapshot" button
-**Sources** (checked in order):
-1. Google Cache (if available)
-2. Wayback Machine (archive.org)
-3. Archive.today
-4. Common Crawl
+**Sources**: Wayback Machine (archive.org), Common Crawl, and Archive.today. Google Cache is not offered because Google removed cached pages and the `cache:` operator.
 **Features**:
 - Timeline slider to view different archive dates
 - Side-by-side comparison with live site
@@ -825,7 +821,7 @@ qr:WIFI:T:WPA;S:MyNetwork;P:MyPassword;;
 - Download buttons (PNG/SVG)
 - Error correction level selector
 - Customization (colors, logo embed)
-**Features**: WiFi QR format, vCard format, URL shortening option
+**Features**: WiFi QR format, vCard format, optional local URL shortening through a private random redirect link; the destination is encrypted at rest and restricted to HTTP or HTTPS
 
 ---
 
@@ -1240,6 +1236,7 @@ safe:some-unknown-site.xyz
 - Phishing indicators
 - Related malicious domains
 **Privacy**: Only domain is checked, not full URLs with parameters
+**Reputation providers**: When `GOOGLE_SAFE_BROWSING_API_KEY` and/or `PHISHTANK_API_KEY` is configured, check only the domain root with Google Safe Browsing and/or PhishTank. A verified, active phishing match is Suspicious. A clean rating requires every configured provider to return a clean result; missing keys, failed requests, and inconclusive matches remain Unknown. Never report a clean result from local heuristics alone.
 
 ---
 
@@ -1692,7 +1689,7 @@ rules:all
 
 #### Bang Shortcuts
 
-Quick redirects to specific sites/engines. 500+ bangs implemented across categories (519 built-in shortcuts as of `src/search/bang/defaults.go`, plus aliases):
+Quick redirects to specific sites/engines. 500+ bangs implemented across categories (516 unique built-in shortcuts as of `src/search/bang/defaults.go`, plus aliases):
 
 **General Search**: `!g` Google, `!b` Bing, `!ddg` DuckDuckGo, `!sp` Startpage, `!br` Brave, `!q` Qwant, `!ya` Yahoo, `!kagi` Kagi, `!you` You.com, `!perplexity` Perplexity
 
@@ -2069,11 +2066,11 @@ Click → opens video in embedded player or source site
 - safe_search: string - off, moderate, strict
 - engines: []string - Optional engine subset for this alert
 - frequency: string - immediate, daily, weekly
-- email: string - Verified destination email
+- email: string - Contact destination email
 - rss_token: string - Private token for the alert RSS feed
 - webhook_url: string - Optional signed webhook target
 - webhook_secret: string - Secret used to sign webhook payloads
-- verified: bool - Alert activation state
+- active: bool - Alert activation state
 - paused: bool - Delivery temporarily disabled
 - last_checked: timestamp - Last search check time
 - last_sent: timestamp - Last successful delivery time
@@ -2110,10 +2107,10 @@ Click → opens video in embedded player or source site
 - Search queries never associated with user identifiers
 - Referrer headers stripped before following result links
 - Tracking parameters removed from result URLs
-- Search alerts are opt-in and store only the minimum data required for verification, scheduling, deduplication, and delivery
+- Search alerts are opt-in and store only the minimum data required for scheduling, deduplication, and delivery
 
 #### Search Alerts
-- Alerts require email verification before activation
+- Alerts activate at creation without email verification flows, following AI.md PART 17
 - Alerts may be delivered by email, private RSS, webhook, or any enabled combination
 - Each alert checks for newly matched results only; previously delivered results are suppressed
 - Manage/unsubscribe actions use signed, unguessable tokens instead of accounts
@@ -2151,7 +2148,6 @@ Route paths and HTTP methods are defined in AI.md PART 14 (HOW). This section de
 - Search results pages per category (web, images, videos, news)
 - User preferences settings page
 - Search alert creation from any search context
-- Alert email verification flow (confirm subscription)
 - Per-alert management page (update, pause, delete) — accountless, accessed via signed token
 - Private RSS feed per alert subscription
 - About page and public instance statistics
@@ -2164,7 +2160,7 @@ Route paths and HTTP methods are defined in AI.md PART 14 (HOW). This section de
 - Available search categories
 - Available bang shortcuts
 - Public instance configuration (non-sensitive settings only)
-- Alert subscription lifecycle: create, email-verify, update settings, pause/resume, delete
+- Alert subscription lifecycle: create, update settings, pause/resume, delete
 - RSS feed payload for a single alert subscription
 
 #### Autodiscovery
@@ -2212,9 +2208,12 @@ Primary engines with their own indexes - no proxies or metasearch:
 #### Instant Answer Data
 | Type | Source | Update Frequency |
 |------|--------|------------------|
-| Weather | OpenWeatherMap / wttr.in | 30 minutes |
-| Currency | exchangerate.host | 1 hour |
+| Weather | Open-Meteo | 15 minutes |
+| Currency | Frankfurter | 30 minutes |
 | Dictionary | Wiktionary API | On demand |
 | IP Geolocation | sapics/ip-location-db | Weekly |
 | Timezone | Built-in | Static |
 | Calculator | Built-in | Static |
+
+#### Direct ASN Answers
+`asn:` uses RIPEstat Data API endpoints for AS overview, announced prefixes, neighbors, neighbor history, and registry Whois records. It shows distinct announced IPv4/IPv6 address counts (overlapping prefixes are not double-counted), observed upstream/downstream path positions, registration country when supplied, looking-glass links, and observed neighbor history. RIPE RIS observations can be delayed or incomplete and do not establish business relationships. If optional endpoints fail, their section is omitted; failure of the core AS overview returns a direct-answer error. See the [RIPEstat Data API documentation](https://stat.ripe.net/docs/data-api/ripestat-data-api). Commercial use may require contacting RIPE NCC.

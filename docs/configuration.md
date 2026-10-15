@@ -158,6 +158,8 @@ server:
     timeout: 30
 ```
 
+Search and Wikipedia thumbnails use signed same-origin `/image-proxy` URLs when enabled, so the endpoint cannot be used as an open relay. It accepts public HTTPS sources on port 443, rejects redirects and private or reserved IP addresses, and only serves validated PNG, JPEG, GIF, or WebP images. The response limit is capped at 10 MiB and the request timeout at 30 seconds; the browser referrer is never forwarded to the image host.
+
 ## Environment Variables
 
 Server settings can be set via environment variables. Canonical names follow

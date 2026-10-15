@@ -120,7 +120,7 @@ See [Configuration](configuration.md) for `server.metrics` settings.
 Search exposes a GraphQL API. The interactive GraphiQL explorer is served at
 `GET /server/docs/graphql`, and queries are accepted at `POST /api/graphql`
 (unversioned alias) or `POST /api/v1/server/graphql` (versioned canonical).
-The schema mirrors the REST API and is documented in the embedded GraphiQL explorer.
+Core search, autocomplete, instant-answer, direct-answer, and health fields use the same services as REST; inspect the live GraphiQL schema for current query arguments and response fields. REST-only operations remain documented in the REST API reference.
 
 ```bash
 curl -X POST https://your-instance/api/graphql \

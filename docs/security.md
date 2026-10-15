@@ -79,6 +79,22 @@ server:
     burst: 10
 ```
 
+### IP and Domain Blocklists
+
+Missing enabled blocklist and CVE data is queued for a first-run refresh after the HTTP listener is ready; the refresh does not delay startup. GeoIP databases are loaded or downloaded during initialization. The built-in scheduler keeps the data updated daily. The default blocklist feeds cover IP addresses and CIDR ranges. Add operator-managed feeds under `server.security.blocklists` in `server.yml`:
+
+```yaml
+server:
+  security:
+    blocklists:
+      - name: phishing_domains
+        url: https://feeds.example.net/domains.txt
+        type: domain
+        enabled: true
+```
+
+Supported feed types are `ip`, `cidr`, and `domain`. Domain feeds accept one domain per line or hosts-file entries. A blocked domain applies to that exact host and its subdomains. Feed URLs must use HTTPS; invalid entries are ignored and logged without exposing their URL. Each download is limited to 64 MiB and persisted only after parsing succeeds with at least one usable rule. If any configured feed fails, the updater keeps the last known rules, merges newly downloaded entries conservatively, and reports an incomplete update for scheduler visibility. Changing or disabling feeds reloads only currently configured and enabled feed files, so removed rules do not remain active from stale files.
+
 ### Regular Updates
 
 Keep Search updated to receive security patches:
@@ -112,6 +128,12 @@ disclosure and health monitoring:
 | `/server/contact` | Contact form (supports `security_id` deep links) |
 | `/server/healthz` | Public health check |
 | `/api/v1/server/healthz` | Public health check (JSON) |
+
+The browser contact form uses a non-interactive honeypot and initially renders
+without a CAPTCHA. After a failed form attempt, it sets a short-lived signed
+cookie and requires the built-in arithmetic challenge on subsequent attempts.
+The cookie is scoped to `/server/contact`, HttpOnly, SameSite=Strict, and Secure
+when the server's cookie policy requires it.
 
 ## Well-Known Namespace
 

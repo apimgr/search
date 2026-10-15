@@ -45,10 +45,10 @@ search --daemon
 
 ```bash
 # Install as system service
-search --service install
+search --service --install
 
 # Uninstall system service
-search --service uninstall
+search --service --uninstall
 
 # Start service
 search --service start
@@ -62,8 +62,12 @@ search --service restart
 # Reload configuration
 search --service reload
 
+# Disable or remove service
+search --service --disable
+search --service --uninstall
+
 # Show service help
-search --service help
+search --service --help
 ```
 
 ### Maintenance Commands
@@ -75,8 +79,22 @@ search --maintenance backup
 # Restore from backup
 search --maintenance restore /path/to/backup.tar.gz
 
+# Rotate a server secret
+search --maintenance secret rotate installation_secret
+
+# Manage API tokens
+search --maintenance token list
+search --maintenance token revoke <prefix>
+
+# Export or delete a data subject's personal data
+search --maintenance data export <subject>
+search --maintenance data delete <subject>
+
+# Print compliance status
+search --maintenance compliance report
+
 # Show maintenance help
-search --maintenance help
+search --maintenance --help
 ```
 
 ### Update Management
@@ -89,22 +107,29 @@ search --update check
 search --update yes
 
 # Update to specific branch
-search --update branch=beta
+search --update branch beta
 ```
 
-### Build Commands
+### Tor Management
 
-For development:
+Tor is managed by the server over its loopback-only control endpoint:
 
 ```bash
-# Build all platforms
-search --build all
+search tor status
+search tor validate
+search tor restart
+search tor regenerate
+search tor vanity start <prefix>
+search tor vanity apply
+search tor import-keys <path>
+```
 
-# Build specific platform
-search --build linux/amd64
+### Email Testing
 
-# Build with custom version
-search --build all --build-version 1.2.3
+Send a test message using the SMTP configuration in `server.yml`:
+
+```bash
+search email test <address>
 ```
 
 ## CLI Client
@@ -124,27 +149,27 @@ sudo mv search-cli-linux-amd64 /usr/local/bin/search-cli
 
 ### Configuration
 
-Configure the CLI client by creating `~/.config/apimgr/search/cli.yml`:
+The client stores settings in `~/.config/apimgr/search/cli.yml` with owner-only
+permissions. On first launch, it opens a setup wizard when a terminal or local
+display is available.
 
 ```yaml
-# Server to connect to
-server: "https://search.example.com"
-
-# API token (optional, for authenticated access)
-api_token: "key_xxxxxxxxxxxxx"
-
-# Default output format
-format: text  # text, json
-
-# Results per page
-per_page: 10
-
-# Safe search level
-safe_search: moderate
-
-# Default category
-category: general
+server:
+  primary: https://search.example.com
+  api_version: v1
+  timeout: 30s
+auth:
+  token: ""
+display:
+  mode: auto  # auto, gui, or tui
+output:
+  format: table  # table, json, yaml, plain, csv
+  color: auto
 ```
+
+Set `auth.token` for operator-only commands. Public searches do not require a
+token. The client also accepts `--server`, `--token`, `--output`, `--page`, and
+`--limit` flags.
 
 ### Basic Usage
 
@@ -152,15 +177,43 @@ category: general
 # Search for something
 search-cli "privacy tools"
 
-# Search with specific category
-search-cli --category images "cats"
+# Select pagination and result count
+search-cli --page 2 --limit 5 "privacy"
 
-# Output as JSON
-search-cli --format json "privacy"
+# Render JSON output
+search-cli --output json "privacy"
 
-# Limit results
-search-cli --limit 5 "privacy"
+# Start the automatically selected GUI or TUI
+search-cli
 ```
+
+### GUI and TUI Modes
+
+The release CLI includes the native GUI on Linux, macOS, and Windows. A local
+display opens the GUI by default; a local terminal, SSH, or Mosh session opens
+the TUI. Set `display.mode: gui` or `display.mode: tui` in `cli.yml` to choose a
+mode explicitly. BSD builds use the TUI because the native GUI backend is not
+available there.
+
+Both interfaces support search, result browsing, and pagination. The GUI uses
+the operating system's light or dark theme. The TUI adapts to terminal size and
+provides keyboard help with `?`.
+
+### Scheduler Management
+
+Scheduler commands require the server operator token configured for the CLI.
+Tasks that the server marks as required cannot be enabled or disabled.
+
+```bash
+search-cli scheduler list
+search-cli scheduler show token_cleanup
+search-cli scheduler history token_cleanup
+search-cli scheduler run backup_daily
+search-cli scheduler disable backup_hourly
+search-cli scheduler enable backup_hourly
+```
+
+Results support `table`, `json`, `yaml`, `plain`, and `csv` output through `--output`.
 
 ### TUI Mode
 
@@ -182,12 +235,13 @@ TUI features:
 
 | Key | Action |
 |-----|--------|
-| `Enter` | Open selected result |
-| `↑/↓` | Navigate results |
-| `Tab` | Switch between input and results |
+| `Enter` | Submit the search or refresh the selected result view |
+| `↑/↓`, `j`/`k` | Navigate results |
+| `Page Up`/`Page Down`, `h`/`l` | Move through results by a page |
 | `/` | Focus search input |
+| `Esc` or `b` | Clear results and return to search |
 | `q` | Quit |
-| `?` | Show help |
+| `?` | Show keyboard help |
 
 ### Output Formats
 
