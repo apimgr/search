@@ -28,11 +28,17 @@ Malformed expressions, such as a trailing `AND` or an unmatched parenthesis, are
 
 ## Instant answers
 
-Weather answers show current conditions and a five-day outlook from Open-Meteo. Currency answers use Frankfurter daily exchange rates, calculate conversions locally, and show a seven-day rate chart; currency amounts are not sent to the provider.
+Weather answers show current conditions and a five-day outlook from Open-Meteo. In Preferences, the weather widget can follow the global units preference or use a metric/imperial override. Currency answers use Frankfurter daily exchange rates, calculate conversions locally, and show a seven-day rate chart; currency amounts are not sent to the provider.
+
+Video results keep their proxied static thumbnails until a same-origin WebM/MP4 preview clip is available. **Video previews** can be disabled in Preferences to avoid loading clips on hover or touch.
+
+URL safety answers report related domains only when a one-edit lookalike is present in a configured local domain blacklist. Reputation providers that cannot verify a result remain Unknown.
 
 ## Direct answers
 
 Use a `type:term` prefix to open a full-page answer. Common types include `tldr:`, `man:`, `wiki:`, `pkg:`, `cve:`, `dns:`, `whois:`, `resolve:`, `cert:`, `headers:`, `safe:`, and `cache:`. See the project IDEA for the full list and each answer's data sources.
+
+`wiki:` provides the article summary, a contents list, expandable text-only sections, infobox fields when present, related articles, and a language selector. Parsed Wikimedia markup is converted to escaped text before it reaches the page; if article details are unavailable, the summary remains available.
 
 `cache:` checks the Wayback Machine, Common Crawl, and Archive.today, shows available capture dates, and provides sanitized archived and live previews side by side when both are available. Archive.today dates come from its Memento timeline and open at Archive.today. Wayback captures include view and download links; Common Crawl captures include a bounded preview and attachment download. Previews are bounded, and live fetches reject private destinations and unsafe redirects. `safe:` checks only the domain root and reports matches from configured, loaded domain blocklists. Set `GOOGLE_SAFE_BROWSING_API_KEY` and/or `PHISHTANK_API_KEY` to enable those reputation providers. Every configured reputation provider must return clean for a Safe rating; missing keys, unavailable providers, and inconclusive results remain Unknown.
 

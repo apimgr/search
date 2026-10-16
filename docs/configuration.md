@@ -91,6 +91,37 @@ server:
     use_network: false
 ```
 
+### Contact Form CAPTCHA
+
+The contact form uses the built-in challenge by default. To use reCAPTCHA or
+hCaptcha after a failed submission, set its public site key and private server
+key in `server.yml`:
+
+```yaml
+server:
+  pages:
+    contact:
+      captcha: hcaptcha # simple, recaptcha, or hcaptcha
+      captcha_site_key: ""
+      captcha_secret_key: ""
+```
+
+Provider modes fail closed when either key is missing. Keep
+`captcha_secret_key` private and restrict access to the configuration file.
+Requests through the Tor hidden service use the built-in challenge and never
+send verification traffic to a clearnet provider.
+
+### Contact Notification Webhooks
+
+Contact notifications support `telegram`, `discord`, `slack`, `mattermost`,
+`pushover`, `gotify`, and `generic` transports for the `admin`, `security`,
+`abuse`, and `general` roles. Configure them with the operator-authenticated
+`POST /api/v1/server/config/contact/webhooks` endpoint using `role`,
+`transport`, and an HTTPS `url`. The generated signing secret is returned once
+when a URL is created or changed; save it in the receiving service. Later saves
+do not reveal it again. Requests are signed with HMAC-SHA256 and retried after
+1 minute, 5 minutes, 15 minutes, 1 hour, 6 hours, and 24 hours.
+
 ### Search Settings
 
 ```yaml

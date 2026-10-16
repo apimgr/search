@@ -12,6 +12,7 @@ internal_org:     apimgr
 # FROZEN — equals project_name on first install, never changes
 internal_name:    search
 app_name:         Search
+owner_token:      search_owner_token_xJ5yCXLv
 maintainer_name:  casjay
 maintainer_email: casjay@yahoo.com
 official_site:    https://scour.li
@@ -144,19 +145,18 @@ Full provider list under `### Data Sources`. Trust assumptions and failure modes
 
 #### User Preferences
 
-Preferences persist across sessions without accounts. Three storage methods:
+Preferences persist across sessions without accounts. Visitors can edit them from the preferences page, back them up as JSON, and transfer them to another device without creating an account. Search history is local to the browser and can be disabled or cleared independently.
 
-##### 1. localStorage (Default)
-- Automatic, seamless browser storage
-- Survives browser restarts
+Per AI.md "Cross-device preference sync", `theme`, `lang`, and the validated Search preferences below can be transferred through an import link, short code, or QR code. The allowed keys and values are:
 
-##### 2. Import/Export (Backup)
-- Download preferences as JSON file
-- Upload to restore on any device/browser
-- Useful for backup and migration
-
-##### 3. Cross-Device Sync (Portable, accountless)
-Per AI.md "Cross-device preference sync": only `theme` and `lang` are portable across devices. This is stateless — the server never stores anything; the exported URL/code *is* the preference values, decoded, validated, and written back as cookies on import.
+| Cookie key (`search_pref_{key}`) | Accepted values |
+|---|---|
+| `category` | `general`, `images`, `videos`, `news`, `maps`, `files`, `music`, `science`, `it`, `social` |
+| `safe_search` | `0`, `1`, `2` |
+| `results_per_page` | `10`, `20`, `30`, `50`, `100` |
+| `units` | `metric`, `imperial` |
+| `new_tab`, `infinite_scroll`, `keyboard_shortcuts` | `0`, `1` |
+| `save_history` | `0`, `1` |
 
 **Use Cases:**
 - **Sync URL**: `https://search.example.com/server/preferences/import?theme=dark&lang=fr`
@@ -165,7 +165,7 @@ Per AI.md "Cross-device preference sync": only `theme` and `lang` are portable a
 
 **Workflow:**
 1. Settings page → Cross-Device Sync section → "Copy Preferences"
-2. Fetches `GET /server/preferences/export`, which reads the current `theme`/`lang` cookies and returns the full URL, short code, and a QR link
+2. Fetches `GET /server/preferences/export`, which reads current `theme`, `lang`, and valid Search preference cookies and returns the full URL and short code
 3. On another device, paste the URL/code into "Paste a Sync Code or URL" → "Apply", which navigates to `GET /server/preferences/import`
 4. Import validates each value against its allowlist, sets the matching cookies, and redirects — no account, no server-side row
 

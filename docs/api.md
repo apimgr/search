@@ -33,8 +33,7 @@ Convenience aliases that map to the canonical versioned handlers:
 | Alias | Canonical | Description |
 |-------|-----------|-------------|
 | `/api/healthz` | `/api/v1/server/healthz` | Health check |
-| `/api/v1/healthz` | `/api/v1/server/healthz` | Health check |
-| `/api/v1/healthz.txt` | `/api/v1/server/healthz` | Health check (plain text) |
+| `/api/v1/server/healthz.txt` | `/api/v1/server/healthz` | Health check (plain text) |
 | `/api/graphql` | `/api/v1/server/graphql` | GraphQL query endpoint |
 | `/api/autodiscover` | — | Machine-readable server metadata (see [Integrations](integrations.md)) |
 
@@ -52,34 +51,53 @@ Perform a search query.
 |-----------|------|----------|-------------|
 | `q` | string | Yes | Search query |
 | `page` | int | No | Page number (default: 1) |
-| `per_page` | int | No | Results per page (default: 10, max: 100) |
-| `category` | string | No | Search category (general, images, videos, news) |
-| `lang` | string | No | Language code (e.g., "en") |
-| `safe` | string | No | Safe search level (off, moderate, strict) |
+| `limit` | int | No | Results per page (default: 20, max: 100) |
+| `category` | string | No | Search category |
+| `lang` | string | No | Language code (e.g., `en`) |
+| `region` | string | No | ISO country or region code |
+| `safe_search` | int | No | Safe search level: `0` off, `1` moderate (default), `2` strict |
+| `time_range` | string | No | `any`, `hour`, `day`, `week`, `month`, `year`, or `custom` |
+| `time_from`, `time_to` | date | For `custom` | Inclusive date bounds in `YYYY-MM-DD` format |
+| `engines` | string | No | Comma-separated or repeated engine names |
 
 **Example Request:**
 
 ```bash
-curl "https://search.example.com/api/v1/search?q=privacy&per_page=10"
+curl "https://search.example.com/api/v1/search?q=privacy&limit=10&region=us&time_range=week&engines=google,bing"
+```
+
+Use `POST /api/v1/search` to keep the query out of the request URL. Send a JSON
+object with `query` and any of `category`, `page`, `limit`, `language`,
+`region`, `safe_search`, `time_range`, `time_from`, `time_to`, and `engines`.
+Custom ranges require both date bounds, and the request body is capped
+at 1 MiB.
+
+```bash
+curl -X POST https://search.example.com/api/v1/search \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"privacy","limit":10,"region":"us","time_range":"week","engines":["google","bing"]}'
 ```
 
 **Example Response:**
 
 ```json
 {
-  "query": "privacy",
-  "results": [
-    {
-      "title": "Privacy - Wikipedia",
-      "url": "https://en.wikipedia.org/wiki/Privacy",
-      "description": "Privacy is the ability of an individual...",
-      "engine": "duckduckgo",
-      "position": 1
-    }
-  ],
-  "total": 100,
-  "page": 1,
-  "per_page": 10
+  "ok": true,
+  "data": {
+    "query": "privacy",
+    "category": "general",
+    "results": [
+      {
+        "title": "Privacy - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Privacy",
+        "description": "Privacy is the ability of an individual...",
+        "engine": "duckduckgo"
+      }
+    ],
+    "engines": ["duckduckgo"]
+  },
+  "pagination": {"page": 1, "limit": 10, "total": 100, "pages": 10},
+  "meta": {"version": "v1", "process_time": 12.5}
 }
 ```
 
@@ -88,6 +106,12 @@ Image-category results also return `image_url`, `image_width`, `image_height`,
 With the image proxy enabled (the default), both `thumbnail` and `image_url`
 are signed same-origin `/image-proxy` URLs; clients should render those values
 directly instead of loading the upstream image hosts.
+
+Video results also include `duration` (seconds), `view_count`, `author`, and
+`embed_url` when YouTube supplies the corresponding metadata. The embed URL is
+metadata for clients; video preview playback still requires an actual provider
+clip URL, and results fall back to their static thumbnails when none is
+available.
 
 ### Suggestions
 
@@ -322,6 +346,13 @@ Return the effective configuration with secrets masked (operator token required)
 
 GraphQL uses the same live services and authorization checks as the corresponding REST API. Alert creation, management, private RSS feeds, and operator inventory are available alongside search and server information. GeoIP preset and scheduler task operations are available to authenticated operators through GraphQL, using the same persisted configuration, task manager, and authorization checks as REST.
 
+`apiRequest(method:, path:, input:)` routes any non-GraphQL REST endpoint
+through the registered API router, preserving its HTTP method, bearer token,
+validation, and response status. Paths must be relative `/api/...` routes;
+GraphQL and MCP recursion is rejected. Request JSON is limited to 64 KiB and
+the response is limited to 4 MiB. Use a GraphQL mutation for this field,
+including when invoking a REST GET.
+
 - **GraphiQL UI** — `GET /server/docs/graphql`
 - **Queries** — `POST /api/graphql` (unversioned alias) or
   `POST /api/v1/server/graphql` (versioned canonical)
@@ -347,11 +378,13 @@ GraphQL uses the same live services and authorization checks as the correspondin
 - `createAlert(input:)`, `updateAlert(manageToken:, input:)`, `pauseAlert(manageToken:, paused:)`, and `deleteAlert(manageToken:)` use the same alert manager and lifecycle rules as REST. Supply `input` as a JSON variable object. `alertFeed(rssToken:)` returns only feed items and the feed URL.
 - `schedulerTasks`, `schedulerTask(task:)`, and `schedulerHistory(task:)` provide operator-only scheduler reads. `runSchedulerTask(task:)`, `enableSchedulerTask(task:)`, and `disableSchedulerTask(task:)` provide the REST scheduler controls; manual runs write the same audit event.
 - `geoIPPresets` and `geoIPPreset(name:)` read operator-authored country lists. `saveGeoIPPreset(input:)` and `deleteGeoIPPreset(name:)` persist preset changes to `server.yml`; saving or deleting a preset never changes the active allow/deny lists.
+- `apiRequest(method:, path:, input:)` exposes REST endpoints not otherwise represented by a dedicated GraphQL field through the same registered handler and authorization chain.
+- `saveContactWebhook(input:)` configures an operator contact webhook; a newly generated signing secret is returned once and the GraphQL response is marked `no-store`.
 
 Search results expose `title`, `url`, `content`, `engine`, `score`, `category`,
 `thumbnail`, `imageUrl`, `imageWidth`, `imageHeight`, `imageFormat`, `fileSize`,
-`published`, `author`, and `domain`. Image fields are zero/empty when the source
-does not provide them. Search response fields include
+`duration`, `viewCount`, `author`, `embedUrl`, `published`, and `domain`. Image
+and video fields are zero/empty when the source does not provide them. Search response fields include
 `query`, `category`, `results`, `totalResults`, `page`, `perPage`, `totalPages`,
 `searchTime`, `engines`, and `suggestions`. Direct and instant answers expose
 `details: JSON` for the type-specific `data` object returned by REST.
