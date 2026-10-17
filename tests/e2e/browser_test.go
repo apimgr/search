@@ -141,7 +141,7 @@ func TestBrowserCustomBangCanBeCreatedSuggestedAndUsed(t *testing.T) {
 	}
 	runStage("submit custom shortcut",
 		chromedp.Click(`.autocomplete-bang`, chromedp.ByQuery),
-		chromedp.SendKeys(`#searchQuery`, "cats", chromedp.ByQuery),
+		chromedp.SendKeys(`#searchQuery`, "cats & dogs", chromedp.ByQuery),
 		chromedp.Click(`.search-btn`, chromedp.ByQuery),
 		chromedp.WaitVisible(`.search-results-page`, chromedp.ByQuery),
 		chromedp.Location(&pageURL),
@@ -150,8 +150,22 @@ func TestBrowserCustomBangCanBeCreatedSuggestedAndUsed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse custom bang destination %q: %v", pageURL, err)
 	}
-	if parsed.Path != "/search" || parsed.Query().Get("q") != "cats" {
-		t.Fatalf("custom bang destination=%q, want local search for cats", pageURL)
+	if parsed.Path != "/search" || parsed.Query().Get("q") != "cats & dogs" {
+		t.Fatalf("custom bang destination=%q, want local search for cats & dogs", pageURL)
+	}
+	runStage("submit suffix custom shortcut",
+		chromedp.Navigate(site.URL+"/"),
+		chromedp.SetValue(`#searchQuery`, "cats & dogs !fixture", chromedp.ByQuery),
+		chromedp.Click(`.search-btn`, chromedp.ByQuery),
+		chromedp.WaitVisible(`.search-results-page`, chromedp.ByQuery),
+		chromedp.Location(&pageURL),
+	)
+	parsed, err = url.Parse(pageURL)
+	if err != nil {
+		t.Fatalf("parse suffix custom bang destination %q: %v", pageURL, err)
+	}
+	if parsed.Path != "/search" || parsed.Query().Get("q") != "cats & dogs" {
+		t.Fatalf("suffix custom bang destination=%q, want local search for cats & dogs", pageURL)
 	}
 	requireNoFailures(t, pf, "custom bang create, autocomplete, and redirect")
 }

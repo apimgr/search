@@ -398,7 +398,7 @@ Owner-token no-JS coverage now creates an owner through the API, injects its Htt
 
 The browser harness now gives each E2E test its own Chromium browser context, preventing language/theme/preference cookies from leaking between scenarios. The localized Wikipedia scenario previously left `lang=de` in the shared browser context and caused the later no-JS alert assertion to see German copy; the isolated alert flow and the full three-tier E2E suite both pass with the context isolation fix.
 
-Custom bang browser coverage now creates a custom shortcut in Preferences, rejects a `javascript:` target, verifies the stored HTTP(S) URL template remains valid, finds the shortcut through autocomplete, and confirms submitting it routes the encoded search terms to its configured target.
+Custom bang browser coverage now creates a custom shortcut in Preferences, rejects a `javascript:` target, verifies the stored HTTP(S) URL template remains valid, suggests the saved shortcut at the initial `!` prompt and while filtering by shortcut, and confirms both prefix and suffix syntax redirect encoded search terms (including `&`) to the configured target.
 
 Language switching now has named assertions in all three tiers: `/?lang=de` changes SSR strings, the no-JS preferences form saves German and renders the translated homepage, and the full-JS preferences flow does the same through the actual preference UI. The HTTP-only E2E fixture strips `upgrade-insecure-requests` from its CSP so its browser fetches remain on the test listener's HTTP scheme; the three language scenarios pass together.
 
