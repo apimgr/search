@@ -194,8 +194,8 @@ func TestOpenAPIDocumentsRegisteredAPIPaths(t *testing.T) {
 			if json.Unmarshal(directRecorder.Body.Bytes(), &directBody) != nil {
 				directBody = directRecorder.Body.String()
 			}
-			normalizeAPITimingMetadata(bridge["body"])
-			normalizeAPITimingMetadata(directBody)
+			normalizeAPIVolatileMetadata(bridge["body"])
+			normalizeAPIVolatileMetadata(directBody)
 			if !reflect.DeepEqual(bridge["body"], directBody) {
 				t.Errorf("GraphQL apiRequest %s %s body differs from direct REST response: bridge=%#v direct=%#v", method, path, bridge["body"], directBody)
 			}
@@ -203,16 +203,18 @@ func TestOpenAPIDocumentsRegisteredAPIPaths(t *testing.T) {
 	}
 }
 
-func normalizeAPITimingMetadata(value interface{}) {
+func normalizeAPIVolatileMetadata(value interface{}) {
 	switch value := value.(type) {
 	case map[string]interface{}:
-		delete(value, "process_time_ms")
+		for _, key := range []string{"process_time_ms", "mem_alloc", "num_goroutine", "uptime"} {
+			delete(value, key)
+		}
 		for _, child := range value {
-			normalizeAPITimingMetadata(child)
+			normalizeAPIVolatileMetadata(child)
 		}
 	case []interface{}:
 		for _, child := range value {
-			normalizeAPITimingMetadata(child)
+			normalizeAPIVolatileMetadata(child)
 		}
 	}
 }
